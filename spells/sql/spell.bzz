@@ -1,0 +1,24 @@
+// sql — SQL linting/fixing via sqlfluff.
+//
+// Authored source for the built-in "sql" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "sql"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.sql", "**/*.SQL", ".sqlfluff"];
+}
+
+fun sqlfluff(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "sqlfluff", "args": ["lint", "."], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "fix"}]},
+        "gha": {"ops": [{"op": "add", "path": "/1", "value": "--format=github-annotation-native"}]},
+    }});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"sqlfluff": sqlfluff};
+}

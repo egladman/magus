@@ -1,0 +1,3 @@
+// @expect: a,b,c
+const xs = ["a", "b", "c"];
+const __r = xs.join(",");

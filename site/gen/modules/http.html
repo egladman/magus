@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`http`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="http"><code>http</code></h1>
+<p>HTTP client with automatic retry on transient errors.</p>
+<blockquote>
+<p><strong>Naming convention:</strong> Teal/Lua binds each module per-import in <code>snake_case</code> (<code>local http = require(&quot;magus.extra.http&quot;)</code>, then <code>http.some_method</code>). Buzz reaches them off the <code>import &quot;magus/extra&quot;</code> aggregate in <code>camelCase</code> (<code>extra.http.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="get"><code>get</code></h3>
+<p>Send a GET request; returns (status_code, body).</p>
+<p><strong>Signature (Teal):</strong> <code>http.get(url, [headers]) → status, body</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.http.get(url, [headers]) → status, body</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td><code>map[string]string</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> status int, body string</p>
+<h3 id="post"><code>post</code></h3>
+<p>Send a POST request with body; returns (status_code, body).</p>
+<p><strong>Signature (Teal):</strong> <code>http.post(url, body, [headers]) → status, body</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.http.post(url, body, [headers]) → status, body</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td><code>map[string]string</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> status int, body string</p>
+<h3 id="request"><code>request</code></h3>
+<p>Send an HTTP request; returns (status_code, body).</p>
+<p><strong>Signature (Teal):</strong> <code>http.request(method, url, [body], [headers]) → status, body</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.http.request(method, url, [body], [headers]) → status, body</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>method</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td><code>string</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td><code>map[string]string</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> status int, body string</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/modules/http.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-05 22:30:55 UTC from commit <a href="https://github.com/egladman/tack/commit/221f3a22a00fa7536f35899700fc53e7be58f3c4"><code>221f3a2</code></a></small>
+  </footer>
+</body>
+</html>

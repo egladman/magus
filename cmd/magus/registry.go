@@ -1,0 +1,282 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
+	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus/types"
+)
+
+const defaultIdleTTL = 6 * time.Hour
+
+type wsEntry struct {
+	once       sync.Once
+	m          *magus.Magus
+	loadErr    error
+	root       string
+	loadedAt   time.Time
+	lastAccess atomic.Int64 // unix nanoseconds; updated on every acquire
+}
+
+func (e *wsEntry) load(_ context.Context, lim *cache.Limiter) {
+	e.once.Do(func() {
+		now := time.Now()
+		e.lastAccess.Store(now.UnixNano())
+		cfg, err := loadWorkspaceCfg(e.root)
+		if err != nil {
+			e.loadErr = fmt.Errorf("daemon: load config %s: %w", e.root, err)
+			return
+		}
+		// context.Background(): workspace goroutines must outlive individual RPC contexts.
+		m, err := magus.Open(
+			context.Background(), e.root,
+			magus.WithLoadedConfig(cfg),
+			wire.WithLimiter(lim),
+		)
+		if err != nil {
+			e.loadErr = fmt.Errorf("daemon: open workspace %s: %w", e.root, err)
+			return
+		}
+		e.m = m
+		e.loadedAt = now
+	})
+}
+
+//nolint:unparam // error return is intentional API surface (see callers)
+func loadWorkspaceCfg(root string) (config.Config, error) {
+	path := filepath.Join(root, "magus.yaml")
+	cfg, err := config.LoadFile(path, false)
+	if err != nil {
+		// Missing file is fine; use env-var defaults.
+		cfg = config.Defaults()
+	}
+	configgen.ApplyEnv(&cfg, os.Getenv)
+	return cfg, nil
+}
+
+// wsRegistry lazily loads and caches workspaces; when declared is non-empty only those roots are admissible.
+type wsRegistry struct {
+	mu       sync.Mutex
+	entries  map[string]*wsEntry
+	declared map[string]struct{} // nil/empty = legacy lazy mode (any workspace admissible)
+	lim      *cache.Limiter
+	ttl      time.Duration
+	now      func() time.Time // injectable for tests
+	stopCh   chan struct{}
+	wg       sync.WaitGroup
+}
+
+func newWSRegistry(ctx context.Context, lim *cache.Limiter, ttl time.Duration) *wsRegistry {
+	if ttl <= 0 {
+		ttl = defaultIdleTTL
+	}
+	r := &wsRegistry{
+		entries: make(map[string]*wsEntry),
+		lim:     lim,
+		ttl:     ttl,
+		now:     time.Now,
+		stopCh:  make(chan struct{}),
+	}
+	r.wg.Add(1)
+	go r.janitor(ctx)
+	return r
+}
+
+// resolveDeclaredWorkspaces merges cfg.Daemon.Workspaces and MAGUS_DAEMON_WORKSPACES into absolute paths.
+func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
+	var raw []string
+	raw = append(raw, cfgList...)
+	for _, p := range filepath.SplitList(envVal) {
+		if p != "" {
+			raw = append(raw, p)
+		}
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, p := range raw {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			slog.Warn("daemon: skipping declared workspace (cannot resolve absolute path)",
+				"path", p, "err", err)
+			continue
+		}
+		if _, ok := seen[abs]; ok {
+			continue
+		}
+		if st, err := os.Stat(abs); err != nil || !st.IsDir() {
+			slog.Warn("daemon: skipping declared workspace (not a directory)",
+				"path", abs)
+			continue
+		}
+		seen[abs] = struct{}{}
+		out = append(out, abs)
+	}
+	return out
+}
+
+// setDeclared records the explicit workspace allowlist; empty keeps legacy lazy mode.
+func (r *wsRegistry) setDeclared(roots []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(roots) == 0 {
+		r.declared = nil
+		return
+	}
+	r.declared = make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		r.declared[root] = struct{}{}
+	}
+}
+
+// preloadAndApplySandbox unions policies for all declared workspaces and applies landlock once.
+// The policy assembly/application lives behind the public library seam so the CLI
+// does not reach into internal/sandbox directly (CRIT-6).
+func (*wsRegistry) preloadAndApplySandbox(ctx context.Context, roots []string) error {
+	return magus.ApplyUnionSandbox(ctx, roots)
+}
+
+// acquire returns the *magus.Magus for root, loading on first use; rejects undeclared roots in declared mode.
+func (r *wsRegistry) acquire(ctx context.Context, root string) (*magus.Magus, error) {
+	r.mu.Lock()
+	if r.declared != nil {
+		if _, ok := r.declared[root]; !ok {
+			r.mu.Unlock()
+			return nil, fmt.Errorf("%w: workspace %q is not in this daemon's declared list; add it to daemon.workspaces (magus.yaml) or MAGUS_DAEMON_WORKSPACES and restart the daemon",
+				types.DiagnosticErrorf(types.SandboxPolicyMismatch, "workspace not declared"),
+				root)
+		}
+	}
+	e, ok := r.entries[root]
+	if !ok {
+		e = &wsEntry{root: root}
+		r.entries[root] = e
+	}
+	r.mu.Unlock()
+
+	e.load(ctx, r.lim)
+	if e.loadErr != nil {
+		// Remove failed entry so it can be retried after TTL eviction.
+		r.mu.Lock()
+		if cur, ok := r.entries[root]; ok && cur == e {
+			delete(r.entries, root)
+		}
+		r.mu.Unlock()
+		return nil, e.loadErr
+	}
+	e.lastAccess.Store(r.now().UnixNano())
+	return e.m, nil
+}
+
+// warmInBackground launches warm in a goroutine tracked by the WaitGroup so close() blocks until done.
+func (r *wsRegistry) warmInBackground(ctx context.Context, roots []string) {
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.warm(ctx, roots)
+	}()
+}
+
+// warm eagerly acquires all declared workspaces so readiness probes are meaningful before client traffic.
+func (r *wsRegistry) warm(ctx context.Context, roots []string) {
+	for _, root := range roots {
+		select {
+		case <-r.stopCh:
+			return
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if _, err := r.acquire(ctx, root); err != nil {
+			slog.WarnContext(ctx, "daemon: warm workspace failed (readiness probe may be delayed)",
+				"root", root, "err", err)
+		}
+	}
+}
+
+// dispatch acquires the workspace for root, injects it into ctx, and
+// forwards the adopted command to dispatchAdopted.
+func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, args []string) error {
+	m, err := r.acquire(ctx, root)
+	if err != nil {
+		return err
+	}
+	return dispatchAdopted(withMagus(ctx, m), root, rc, args)
+}
+
+// status returns a snapshot of loaded workspaces for the Status RPC.
+func (r *wsRegistry) status() []proc.Workspace {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]proc.Workspace, 0, len(r.entries))
+	for _, e := range r.entries {
+		if e.m == nil {
+			continue // still loading or failed
+		}
+		out = append(out, proc.Workspace{
+			Root:       e.root,
+			LoadedAt:   e.loadedAt,
+			LastAccess: time.Unix(0, e.lastAccess.Load()),
+		})
+	}
+	return out
+}
+
+// close stops the janitor and closes all loaded workspaces.
+func (r *wsRegistry) close() {
+	close(r.stopCh)
+	r.wg.Wait()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for root, e := range r.entries {
+		if e.m != nil {
+			_ = e.m.Close()
+		}
+		delete(r.entries, root)
+	}
+}
+
+// janitor periodically evicts workspaces that have been idle longer than ttl.
+func (r *wsRegistry) janitor(ctx context.Context) {
+	defer r.wg.Done()
+	tick := time.NewTicker(r.ttl / 2)
+	defer tick.Stop()
+	for {
+		select {
+		case <-r.stopCh:
+			return
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			r.evictIdle()
+		}
+	}
+}
+
+func (r *wsRegistry) evictIdle() {
+	cutoff := r.now().Add(-r.ttl).UnixNano()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for root, e := range r.entries {
+		if e.lastAccess.Load() < cutoff {
+			if e.m != nil {
+				_ = e.m.Close()
+			}
+			delete(r.entries, root)
+		}
+	}
+}

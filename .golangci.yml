@@ -1,0 +1,140 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # --- Core correctness ---
+    - govet           # standard go vet (shadow, printf, composite literals, ...)
+    - staticcheck     # SA/ST static analysis: bugs, deprecated usage, simplifications
+    - errcheck        # unchecked errors: every non-blank error return must be handled
+    - errorlint       # enforce %w wrapping; forbid == / type-assert on errors
+    - nilerr          # catch "return nil, err" when err is nil
+    - nilnil          # catch functions returning (nil, nil) — callers can't distinguish
+    - wastedassign    # assignments whose result is never used
+    - unused          # unused vars, consts, types, funcs (catches dead code package-wide)
+
+    # --- HTTP safety ---
+    - bodyclose       # HTTP response bodies must be closed (OTLP exporter)
+
+    # --- Type safety ---
+    - forcetypeassert # forbid unchecked type assertions (x.(T) without ok guard)
+    - unconvert       # remove redundant type conversions
+    - durationcheck   # catch time.Duration multiplication bugs
+
+    # --- Code quality ---
+    - gocritic        # broad set: performance, style, diagnostic checks
+    - unparam         # report unused function parameters
+    - prealloc        # suggest slice pre-allocations
+    - gosec           # security: subprocess safety, path traversal, etc.
+
+    # --- Style ---
+    - revive          # idiomatic naming, exported comments, error-string casing
+    - misspell        # common English spelling mistakes in comments and strings
+    - nolintlint      # enforce that //nolint directives include a reason
+    - whitespace      # flag unnecessary blank lines inside functions/blocks
+
+  settings:
+    # govet runs its default analyzer set. The 'shadow' pass is intentionally NOT
+    # enabled: it flags 100+ idiomatic `if err := f(); err != nil` re-declarations
+    # of err across the tree (all benign), which is pure noise. Re-enable only
+    # behind a per-site review.
+    revive:
+      rules:
+        - name: var-naming
+        - name: receiver-naming
+        - name: exported
+          arguments:
+            - "disableStutteringCheck"
+        - name: error-return
+        - name: error-strings
+        - name: unhandled-error
+          arguments:
+            - "fmt.Print"
+            - "fmt.Println"
+            - "fmt.Printf"
+            - "fmt.Fprintf"
+            - "fmt.Fprint"
+            - "fmt.Fprintln"
+            - "bytes.Buffer.Write"
+            - "bytes.Buffer.WriteByte"
+            - "bytes.Buffer.WriteString"
+            - "strings.Builder.Write"
+            - "strings.Builder.WriteByte"
+            - "strings.Builder.WriteString"
+            - "strings.Builder.WriteRune"
+            - "os.File.Close"
+            - "io.Closer.Close"
+            - "compress/gzip.Reader.Close"
+        - name: unused-parameter
+        # unused-receiver intentionally disabled: ~50 interface-implementation
+        # methods in the interp engines legitimately ignore their receiver, and
+        # renaming each to _ is churn with no correctness benefit.
+        - name: bare-return
+        - name: early-return
+          arguments:
+            - preserveScope: true
+        - name: confusing-naming
+
+    errcheck:
+      check-blank: false
+      check-type-assertions: false
+      exclude-functions:
+        - "(*os.File).Close"
+        - "(io.Closer).Close"
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+      disabled-checks:
+        - appendAssign
+        - unnamedResult
+        - ifElseChain
+
+    gosec:
+      # G204: subprocess with variable — intentional in CLI tools (runx, VCS runner).
+      # G304: file path from variable — intentional in cache/snapshot path building.
+      # G306: file permissions 0644 — fine for non-secret cache manifests.
+      # G115: integer overflow on conversion — every hit is a kernel-bounded
+      #       syscall/size conversion (fd, inotify wd, io_uring/landlock fields,
+      #       line numbers). It is gosec's noisiest check and false-positives here.
+      # G703/G706: experimental taint analysis (path traversal / log injection)
+      #       on trusted local config paths and filenames in a CLI — false positives
+      #       (the G304 rationale above applies to the taint variant too).
+      excludes:
+        - G204
+        - G304
+        - G306
+        - G115
+        - G703
+        - G706
+
+    unparam:
+      check-exported: false
+
+  exclusions:
+    # Restore the default exclusion set golangci-lint v1 applied automatically
+    # (v2 ships it off by default). Without this the codebase drowns in the
+    # standard fmt.Print/os.Setenv errcheck and gosec false positives.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test files — relax naming/comment/wrapping rules, plus security/perf/style
+      # checks (gosec, gocritic, prealloc) that are noise in test fixtures.
+      - path: _test\.go
+        linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc]
+
+      # Magefile targets use exec and intentional subprocess patterns.
+      - path: magefile/
+        linters: [gosec]
+        text: "subprocess"
+
+# Report every finding. golangci-lint defaults to max-issues-per-linter: 50 and
+# max-same-issues: 3, which silently hides repeated findings (e.g. a pervasive
+# pattern shows only its first 3 hits). Disabling the caps keeps CI honest — the
+# count you see locally is the count CI enforces.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

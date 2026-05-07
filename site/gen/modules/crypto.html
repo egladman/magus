@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`crypto`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="crypto"><code>crypto</code></h1>
+<p>Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</p>
+<blockquote>
+<p><strong>Naming convention:</strong> Teal/Lua binds each module per-import in <code>snake_case</code> (<code>local crypto = require(&quot;magus.extra.crypto&quot;)</code>, then <code>crypto.some_method</code>). Buzz reaches them off the <code>import &quot;magus/extra&quot;</code> aggregate in <code>camelCase</code> (<code>extra.crypto.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="sha256-hex"><code>sha256_hex</code></h3>
+<p>Return the lowercase hex SHA-256 digest of data.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.sha256_hex(data) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.sha256Hex(data) → string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>crypto.hash(HashAlgorithm.Sha256, …)</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="sha256-file"><code>sha256_file</code></h3>
+<p>Return the lowercase hex SHA-256 digest of the file at path.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.sha256_file(path) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.sha256File(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="sha512-hex"><code>sha512_hex</code></h3>
+<p>Return the lowercase hex SHA-512 digest of data.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.sha512_hex(data) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.sha512Hex(data) → string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>crypto.hash(HashAlgorithm.Sha512, …)</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="sha512-file"><code>sha512_file</code></h3>
+<p>Return the lowercase hex SHA-512 digest of the file at path.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.sha512_file(path) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.sha512File(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="sha1-hex"><code>sha1_hex</code></h3>
+<p>Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.sha1_hex(data) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.sha1Hex(data) → string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>crypto.hash(HashAlgorithm.Sha1, …)</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="sha1-file"><code>sha1_file</code></h3>
+<p>Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.sha1_file(path) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.sha1File(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="md5-hex"><code>md5_hex</code></h3>
+<p>Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.md5_hex(data) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.md5Hex(data) → string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>crypto.hash(HashAlgorithm.Md5, …)</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="md5-file"><code>md5_file</code></h3>
+<p>Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.</p>
+<p><strong>Signature (Teal):</strong> <code>crypto.md5_file(path) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.crypto.md5File(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/modules/crypto.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-07 21:25:56 UTC from commit <a href="https://github.com/egladman/tack/commit/43af46ebf375d061c270cb659e18670f7f6afdb2"><code>43af46e</code></a></small>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,4 @@
+// @expect: 9
+import "std";
+import "math";
+const __r = std.toInt(math.sqrt(81.0));

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS2005 — kernel landlock unavailable; interpreter-level only</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mgs2005--kernel-landlock-unavailable-interpreter-level-only">MGS2005 — kernel landlock unavailable; interpreter-level only</h1>
+<p>The sandbox is enabled but the host kernel does not support
+landlock LSM. Magus continues with interpreter-level enforcement only.</p>
+<pre><code>[MGS2005] kernel landlock unavailable; sandbox running with interpreter-level checks only
+  reason=sandbox: kernel sandbox unsupported on this host: …
+</code></pre>
+<h2 id="why">Why</h2>
+<p>The sandbox normally enforces filesystem confinement through two
+layers:</p>
+<ol>
+<li><strong>Kernel layer</strong>: Linux landlock LSM applies the policy via
+<code>landlock_restrict_self</code>, after which every child process inherits
+the restriction across <code>fork+exec</code>.</li>
+<li><strong>Interpreter layer</strong>: the Lua/Teal/JS <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code>
+bindings consult the policy in user space before performing any
+operation.</li>
+</ol>
+<p>When the kernel does not have landlock (macOS, Windows, or Linux
+older than 5.13 without the LSM compiled in), only layer 2 runs. The
+warning is emitted once per process so operators know that kernel-level
+enforcement is absent.</p>
+<h2 id="what-still-works">What still works</h2>
+<ul>
+<li>Lua/Teal/JS spells calling <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code> bindings are
+still blocked when they target out-of-workspace paths or secret env
+vars. This covers every spell magus ships and every magusfile
+written against the documented API.</li>
+<li>Env scrubbing still applies (it runs in pure Go).</li>
+</ul>
+<h2 id="what-does-not-work">What does not work</h2>
+<ul>
+<li>A spell that bypasses the binding layer cannot be confined by
+user-space checks alone. No such spells exist today; the spell API
+routes everything through the bindings. If a future spell type
+embeds native code (Go plugins, WASM with <code>wasi-fs</code>, embedded C via
+cgo) it must require landlock or be rejected up front.</li>
+</ul>
+<h2 id="resolution">Resolution</h2>
+<ul>
+<li>Upgrade to Linux 5.13 or newer and ensure landlock is compiled in
+(check <code>/sys/kernel/security/landlock</code>).</li>
+<li>On macOS or Windows, accept the warning. Filesystem-only attacks
+through documented bindings are still blocked; native-code attacks
+are not possible today.</li>
+<li>Set <code>MAGUS_SANDBOX_ENABLED=0</code> if you do not want the warning on platforms
+where you accept the reduced enforcement.</li>
+</ul>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/codes/sandbox/MGS2005.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:31:42 UTC from commit <a href="https://github.com/egladman/tack/commit/d57fdd68d37625f0b1f5ea75649a23f1f709e713"><code>d57fdd6</code></a></small>
+  </footer>
+</body>
+</html>

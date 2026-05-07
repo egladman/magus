@@ -1,0 +1,3 @@
+// @expect: fallback
+const x = null;
+const __r = x ?? "fallback";

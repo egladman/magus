@@ -1,0 +1,5 @@
+// @expect: Hello
+import "buffer";
+const b = buffer.Buffer.init();
+b.write([72, 101, 108, 108, 111]);
+const __r = b.toString();

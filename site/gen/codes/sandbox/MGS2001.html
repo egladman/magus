@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS2001 — path read denied by sandbox</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mgs2001--path-read-denied-by-sandbox">MGS2001 — path read denied by sandbox</h1>
+<p>A spell tried to read a file outside the workspace and outside the
+configured allowlist.</p>
+<pre><code>[MGS2001] fs read denied: /home/user/.aws/credentials
+</code></pre>
+<h2 id="why">Why</h2>
+<p>The sandbox confines every magus subprocess and every in-process spell
+to the workspace plus a curated allowlist of cache and system paths.
+Reads of dotfile-style credential stores in <code>$HOME</code> are exactly what
+compromised supply-chain packages target, so they are denied by default.</p>
+<h2 id="resolution">Resolution</h2>
+<ol>
+<li>
+<p><strong>If this is a malicious spell</strong> (the path is a credential file you
+never asked the spell to touch): do not lift the restriction. This is
+the system working as intended. Uninstall the spell and report it.</p>
+</li>
+<li>
+<p><strong>If this is a legitimate spell</strong> that needs to read an external path
+(e.g. it reads <code>~/.terraform.d/plugins</code> to discover providers): add
+the path to your workspace's <code>magus.yaml</code>:</p>
+<pre><code class="language-yaml">sandbox:
+  allow:
+    - path: ~/.terraform.d/plugins
+      mode: ro
+</code></pre>
+<p><code>mode: ro</code> is read-only; <code>mode: rw</code> permits writes. Use the
+narrowest mode that lets the workflow succeed.</p>
+</li>
+<li>
+<p><strong>If you want to disable sandbox</strong> for one invocation while you
+investigate:</p>
+<pre><code class="language-sh">MAGUS_SANDBOX_ENABLED=0 magus run build
+</code></pre>
+<p>Do not set <code>sandbox.enabled: false</code> in <code>magus.yaml</code> to silence a real warning.</p>
+</li>
+</ol>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/codes/sandbox/MGS2001.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:31:42 UTC from commit <a href="https://github.com/egladman/tack/commit/d57fdd68d37625f0b1f5ea75649a23f1f709e713"><code>d57fdd6</code></a></small>
+  </footer>
+</body>
+</html>

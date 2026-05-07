@@ -1,0 +1,28 @@
+// yaml — YAML formatting/linting via yamlfmt and yamllint.
+//
+// Authored source for the built-in "yaml" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "yaml"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.yaml", "**/*.yml", ".yamllint", ".yamllint.yaml"];
+}
+
+export fun mgs_listClaimedGlobs() > [str] {
+    return ["**/*.yaml", "**/*.yml"];
+}
+
+fun yamlfmt(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "yamlfmt", "args": ["-lint", "."], "charms": {
+        "rw": {"ops": [{"op": "remove", "path": "/0"}]},
+    }});
+    return true;
+}
+fun yamllint(target: Target, cb: fun(any)) > bool { cb({"cmd": "yamllint", "args": ["."]}); return true; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"yamlfmt": yamlfmt, "yamllint": yamllint};
+}

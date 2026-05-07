@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS4001 — filesystem race condition detected</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mgs4001--filesystem-race-condition-detected">MGS4001 — filesystem race condition detected</h1>
+<p>Two or more concurrently executing projects modified the same git-tracked file
+while running the same target. The build outcome may depend on which project
+finished last.</p>
+<pre><code>[MGS4001] 2 filesystem race finding(s) (see …/MGS4001.md)
+  path=go.work.sum projects=[api,worker] target=build tier=A overlap=34ms
+  path=go.sum projects=[api,worker] target=build tier=A overlap=28ms
+
+  Suppress with (.magus/race-allow.yaml):
+  - path_pattern: &quot;go.work.sum&quot;
+    project_pair: &quot;api,worker&quot;
+    reason: &quot;&quot;
+  - path_pattern: &quot;go.sum&quot;
+    project_pair: &quot;api,worker&quot;
+    reason: &quot;&quot;
+</code></pre>
+<h2 id="why">Why</h2>
+<p>Magus dispatches projects in parallel whenever the dependency graph allows it.
+When two projects both run <code>go mod tidy</code>, <code>go work sync</code>, or any other tool
+that rewrites a shared file (lock files, workspace sums, generated assets), the
+result depends on which project finishes last. In the best case the file ends up
+correct but with inconsistent intermediate state; in the worst case the two
+processes interleave their writes and produce a corrupt file.</p>
+<p>This warning fires when the <code>--race</code> observer sees that a git-tracked file was
+modified during the overlap window of two or more project execution intervals.
+It is <strong>observational</strong> — magus does not fail the build, roll back writes, or
+alter execution order. The user decides what to do.</p>
+<h3 id="tier-a-vs-tier-b">Tier A vs Tier B</h3>
+<ul>
+<li><strong>Tier A</strong> fires whenever concurrent writes to the same file are observed.
+This is the common case and fires on every affected run.</li>
+<li><strong>Tier B</strong> fires when the observed execution ordering of the two projects
+<em>changed</em> relative to a prior run. A flip means the file's final state was
+different from last time even though neither project changed — the classic
+&quot;flaky CI&quot; symptom.</li>
+</ul>
+<h2 id="resolution">Resolution</h2>
+<h3 id="1-suppress-a-known-safe-race">1. Suppress a known-safe race</h3>
+<p>If the file is always safe to write concurrently (e.g. an append-only log, or a
+file that all writers produce identically), add a suppression entry:</p>
+<pre><code class="language-yaml"># .magus/race-allow.yaml
+- path_pattern: &quot;go.work.sum&quot;
+  project_pair: &quot;api,worker&quot;
+  reason: &quot;go.work.sum is regenerated identically by both projects&quot;
+</code></pre>
+<p>The paste-ready YAML is printed alongside each finding (see example above).
+<code>path_pattern</code> accepts glob syntax or a bare basename. <code>project_pair</code> is
+order-independent. Omit <code>project_pair</code> to suppress the pattern for any pair.</p>
+<h3 id="2-serialise-the-conflicting-operations">2. Serialise the conflicting operations</h3>
+<p>If the race is real, run the conflicting spell sequentially instead of in
+parallel. The most common case is a workspace-level sync that must run before
+individual projects build:</p>
+<pre><code class="language-yaml"># magusfile.go — run go work sync before any build targets
+boosterpack.Bind(pack.Go, spec.Build).After(&quot;sync&quot;)
+</code></pre>
+<p>Or invoke the sync step explicitly before the parallel build:</p>
+<pre><code class="language-sh">magus run sync &amp;&amp; magus run build
+</code></pre>
+<h3 id="3-reduce-the-shared-surface">3. Reduce the shared surface</h3>
+<p>Restructure the workspace so each project owns its own lock or sum file. For Go
+modules: ensure each project has its own <code>go.mod</code> with a distinct module path
+and does not share a <code>go.work.sum</code> with projects that also run <code>go mod tidy</code>.</p>
+<h2 id="what-this-is-not">What this is NOT</h2>
+<ul>
+<li><strong>Not a data-race detector.</strong> This warning does not detect Go data races (use
+<code>go test -race</code> for that). It detects filesystem-level write conflicts between
+concurrently executing build commands.</li>
+<li><strong>Not a build failure.</strong> Magus does not block or abort the build when this
+warning fires. It is advisory, like a linter warning.</li>
+<li><strong>Not always actionable.</strong> Some files are safe to write concurrently by
+design. Use suppressions for those cases.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><code>magus/internal/race/</code> — the detector implementation.</li>
+<li><code>--race</code> flag on <code>magus run</code> — enables this detector.</li>
+<li><code>.magus/race-allow.yaml</code> — suppression list.</li>
+<li><code>.magus/cache/race-report.json</code> — full machine-readable findings from the
+last run (schema 2: includes <code>summary</code> counts and per-finding
+<code>suppression_snippet</code>).</li>
+<li><code>MGS4002.md</code> — eager declared-output overlap check (no <code>--race</code> required).</li>
+</ul>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/codes/race/MGS4001.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:31:42 UTC from commit <a href="https://github.com/egladman/tack/commit/d57fdd68d37625f0b1f5ea75649a23f1f709e713"><code>d57fdd6</code></a></small>
+  </footer>
+</body>
+</html>

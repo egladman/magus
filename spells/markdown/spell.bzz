@@ -1,0 +1,34 @@
+// md — Markdown linting/formatting via markdownlint and prettier.
+//
+// Authored source for the built-in "markdown" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "md"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"];
+}
+
+export fun mgs_listClaimedGlobs() > [str] {
+    return ["**/*.md", "**/*.mdx"];
+}
+
+fun markdownlint(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "markdownlint", "args": ["**/*.md", "**/*.mdx"]});
+    return true;
+}
+fun prettier(target: Target, cb: fun(any)) > bool {
+    // --no-error-on-unmatched-pattern: the claimed globs include **/*.mdx, but a
+    // project may have only .md files; without it prettier exits non-zero on the
+    // empty .mdx glob. --check stays at index 0 so the `write` charm can swap it.
+    cb({"cmd": "prettier", "args": ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "--write"}]},
+    }});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"markdownlint": markdownlint, "prettier": prettier};
+}

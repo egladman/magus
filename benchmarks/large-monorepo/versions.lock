@@ -1,0 +1,20 @@
+# Pinned versions for the large-monorepo benchmark.
+# The tool versions below are whatever the pinned upstream commit declares in
+# its package.json — we deliberately do NOT upgrade them, so the numbers are
+# reproducible and we don't fight config drift. bench.sh warns (does not fail)
+# if the installed version differs; set BENCH_SKIP_VERSION_CHECK=1 to suppress.
+#
+# Upstream: https://github.com/vsavkin/large-monorepo
+upstream_sha=264da142a8696e3647216eb0525c15bd61ab9da8
+
+# Host toolchain (used to build magus and run the JS tools).
+node=22.22.2
+npm=10.9.7
+hyperfine=1.18.0
+
+# Tool versions as pinned by the upstream package.json at upstream_sha.
+turbo=2.4.1
+nx=20.5.0-beta.2
+lage=2.12.19
+typescript=5.7.3
+next=12.0.3

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`time`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="time"><code>time</code></h1>
+<p>Timestamp formatting/parsing and duration parsing (Go time, UTC).</p>
+<blockquote>
+<p><strong>Naming convention:</strong> Teal/Lua binds each module per-import in <code>snake_case</code> (<code>local time = require(&quot;magus.extra.time&quot;)</code>, then <code>time.some_method</code>). Buzz reaches them off the <code>import &quot;magus/extra&quot;</code> aggregate in <code>camelCase</code> (<code>extra.time.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="format"><code>format</code></h3>
+<p>Render Unix-millis as a string using a Go reference layout (UTC).</p>
+<p><strong>Signature (Teal):</strong> <code>time.format(layout, unix_millis) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.time.format(layout, unix_millis) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>layout</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>unix_millis</code></td>
+<td><code>float64</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="parse"><code>parse</code></h3>
+<p>Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.</p>
+<p><strong>Signature (Teal):</strong> <code>time.parse(layout, value) → float64</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.time.parse(layout, value) → float64</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>layout</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> float64</p>
+<h3 id="parse-duration"><code>parse_duration</code></h3>
+<p>Parse a Go duration string (e.g. &quot;168h&quot;, &quot;1h30m&quot;) into milliseconds; errors on mismatch.</p>
+<p><strong>Signature (Teal):</strong> <code>time.parse_duration(duration) → float64</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.time.parseDuration(duration) → float64</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>duration</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> float64</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/modules/time.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-07 21:25:56 UTC from commit <a href="https://github.com/egladman/tack/commit/43af46ebf375d061c270cb659e18670f7f6afdb2"><code>43af46e</code></a></small>
+  </footer>
+</body>
+</html>

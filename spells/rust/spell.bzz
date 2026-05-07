@@ -1,0 +1,29 @@
+// rs — Rust toolchain spell via cargo (build, clippy, fmt, test).
+//
+// Authored source for the built-in "rust" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "rs"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.rs", "Cargo.toml", "Cargo.lock"];
+}
+
+export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
+
+fun cargoBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "cargo", "args": ["build", "--release"]}); return true; }
+fun cargoClean(target: Target, cb: fun(any)) > bool { cb({"cmd": "cargo", "args": ["clean"]}); return true; }
+fun cargoClippy(target: Target, cb: fun(any)) > bool { cb({"cmd": "cargo", "args": ["clippy", "--", "-D", "warnings"]}); return true; }
+fun cargoFmt(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "cargo", "args": ["fmt", "--", "--check"], "charms": {
+        "rw": {"ops": [{"op": "remove", "path": "/2"}, {"op": "remove", "path": "/1"}]},
+    }});
+    return true;
+}
+fun cargoTest(target: Target, cb: fun(any)) > bool { cb({"cmd": "cargo", "args": ["test"]}); return true; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest};
+}

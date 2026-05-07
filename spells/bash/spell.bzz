@@ -1,0 +1,24 @@
+// bash — shell script linting via shellcheck.
+//
+// Authored source for the built-in "bash" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "bash"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.sh", "**/*.bash", ".shellcheckrc"];
+}
+
+// One shellcheck invocation over every shell source: find feeds xargs with NUL
+// separators, and -r skips running shellcheck on an empty set.
+fun shellcheck(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "sh", "args": ["-c",
+        "find . \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"]});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"shellcheck": shellcheck};
+}

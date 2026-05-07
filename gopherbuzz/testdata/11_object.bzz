@@ -1,0 +1,10 @@
+// @expect: 7
+object Point {
+    x: int = 0,
+    y: int = 0,
+    fun sum() int {
+        return this.x + this.y;
+    }
+}
+const p = Point{ x = 3, y = 4 };
+const __r = p.sum();

@@ -1,0 +1,6 @@
+# Generated workspace (clone + magus config + node_modules, recreated by
+# setup.sh) and raw hyperfine output. gen/ also matches magus's ignore-dir list,
+# so the cloned repo's magusfile is never discovered by the surrounding
+# workspace. BENCHMARKS-large-monorepo.md is committed (the aggregated results).
+gen/
+results/

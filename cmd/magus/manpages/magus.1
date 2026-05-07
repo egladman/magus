@@ -1,0 +1,244 @@
+.TH MAGUS 1 "" "magus dev" "magus Manual"
+.SH NAME
+magus \- workspace-aware build orchestrator and content-addressed cache
+.SH SYNOPSIS
+.B magus
+.RI [ flags ]\ <subcommand>\ [ args ]
+.SH DESCRIPTION
+magus is a standalone build orchestrator and content\-addressed cache for
+multi\-language monorepos, and an evolution of Mage. It provides workspace\-aware
+subcommands for building, testing, linting, and inspecting projects without
+requiring Mage to be installed.
+.PP
+magus reads optional configuration from magus.yaml (XDG, workspace root, or
+CWD) and MAGUS_* environment variables. All configuration can be overridden
+with CLI flags.
+.SH GLOBAL FLAGS
+Global flags are accepted by every subcommand and may appear before or
+after the subcommand word. Last\-write\-wins, matching kubectl conventions.
+.TP
+\fB\-\-root\fR \fIpath\fR
+Workspace root. Default: walk up from cwd until go.mod is found. Must precede the subcommand.
+.TP
+\fB\-\-config\fR \fIpath\fR
+Config file path. Default: search for magus.yaml in CWD, workspace root, and $XDG_CONFIG_HOME/magus/. Must precede the subcommand.
+.TP
+\fB\-\-output\fR \fIfmt\fR, \fB\-o\fR \fIfmt\fR
+Output format: text (default), json, yaml, name, wide, or template=<go\-template>. Honoured by subcommands that emit structured data.
+.TP
+\fB\-\-concurrency\fR \fIN\fR
+Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).
+.TP
+\fB\-v\fR
+Increase log verbosity. Repeat for more detail (\-v, \-vv, \-vvv).
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBls\fR
+List all discovered projects. See \fBmagus\-ls\fR(1).
+.TP
+\fBdescribe\fR
+Explain why a project is in the affected set. See \fBmagus\-describe\fR(1).
+.TP
+\fBrun\fR
+Run a target for selected projects. See \fBmagus\-run\fR(1).
+.TP
+\fBx\fR
+Interactive shorthand: pick project + target. See \fBmagus\-x\fR(1).
+.TP
+\fBwhere\fR
+Print the absolute path of a project. See \fBmagus\-where\fR(1).
+.TP
+\fBtail\fR
+Stream the most recent cached log (interactive only). See \fBmagus\-tail\fR(1).
+.TP
+\fBaffected\fR
+Run a target for VCS\-diff affected projects. See \fBmagus\-affected\fR(1).
+.TP
+\fBwatch\fR
+Emit changed file paths to stdout. See \fBmagus\-watch\fR(1).
+.TP
+\fBstatus\fR
+Inspect concurrency pool and configuration. See \fBmagus\-status\fR(1).
+.TP
+\fBdoctor\fR
+Validate the workspace. See \fBmagus\-doctor\fR(1).
+.TP
+\fBconfig\fR
+View or update magus configuration. See \fBmagus\-config\fR(1).
+.TP
+\fBserver\fR
+Manage the persistent magus daemon. See \fBmagus\-server\fR(1).
+.TP
+\fBcompletion\fR
+Print a shell completion script. See \fBmagus\-completion\fR(1).
+.TP
+\fBinit\fR
+Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver). See \fBmagus\-init\fR(1).
+.TP
+\fBself\fR
+Manage the magus binary (update/install need \-tags selfmanage). See \fBmagus\-self\fR(1).
+.TP
+\fBversion\fR
+Print version, commit, and build date. See \fBmagus\-version\fR(1).
+.RE
+.SH ENVIRONMENT
+.RS
+.TP
+\fBMAGUS_CACHE_DIR\fR
+Override the default cache location (.magus/ in the workspace root). Equivalent magus.yaml key: \fBcache.dir\fR.
+.TP
+\fBMAGUS_CACHE_IMMUTABLE\fR
+When true (or 1), open the cache in read\-only mode: replay hits but never write new entries (default: false). Equivalent magus.yaml key: \fBcache.immutable\fR.
+.TP
+\fBMAGUS_CACHE_SIZE_MB\fR
+Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBcache.size_mb\fR.
+.TP
+\fBMAGUS_LOG_FORMAT\fR
+Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: \fBlog.format\fR.
+.TP
+\fBMAGUS_LOG_LEVEL\fR
+Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: \fBlog.level\fR.
+.TP
+\fBMAGUS_CONCURRENCY\fR
+Maximum number of concurrently running per\-project build steps (default: min(NumCPU,8)). Equivalent magus.yaml key: \fBconcurrency\fR.
+.TP
+\fBMAGUS_HISTORY_PATH\fR
+Path to the runtime\-history JSON shared by flake detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: \fBhistory_path\fR.
+.TP
+\fBMAGUS_DRY_RUN\fR
+When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: \fBdry_run\fR.
+.TP
+\fBMAGUS_STRICT\fR
+When 1 or true, workspace correctness warnings (e.g. unregistered dependencies) become errors that fail the run (default: false). Equivalent magus.yaml key: \fBstrict\fR.
+.TP
+\fBMAGUS_VCS_ENABLED\fR
+Master switch for VCS\-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: \fBvcs.enabled\fR.
+.TP
+\fBMAGUS_VCS_NAME\fR
+Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj. Equivalent magus.yaml key: \fBvcs.name\fR.
+.TP
+\fBMAGUS_VCS_BASE_REF\fR
+Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalent magus.yaml key: \fBvcs.base_ref\fR.
+.TP
+\fBMAGUS_VCS_<NAME>_BASE_REF\fR
+Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
+.TP
+\fBMAGUS_DAEMON_SOCKET\fR
+Runtime proc\-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: \fBdaemon.socket\fR.
+.TP
+\fBMAGUS_CI_MAX_SHARDS\fR
+Maximum number of parallel CI shards; \-1 means unlimited (default: 8). Equivalent magus.yaml key: \fBci.max_shards\fR.
+.TP
+\fBMAGUS_CI_RUNNER_POOL_BUDGET\fR
+Cross\-shard concurrency cap at the GHA matrix level; 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBci.runner_pool_budget\fR.
+.TP
+\fBMAGUS_SHARD\fR
+CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github/actions/magus
+.TP
+\fBMAGUS_N_SHARDS\fR
+Total shard count for this matrix run; equivalent to magus run \-\-n\-shards; set by .github/actions/magus
+.TP
+\fBMAGUS_GRAPH_DIRECTION\fR
+Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: \fBgraph.direction\fR.
+.TP
+\fBMAGUS_GRAPH_SPELL\fR
+Filter graph output to a single spell. Equivalent magus.yaml key: \fBgraph.spell\fR.
+.TP
+\fBMAGUS_GRAPH_DEPTH\fR
+Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: \fBgraph.depth\fR.
+.TP
+\fBMAGUS_GRAPH_ROOTS\fR
+Comma\-separated starting nodes for graph traversal. Equivalent magus.yaml key: \fBgraph.roots\fR.
+.TP
+\fBMAGUS_TELEMETRY_ENABLED\fR
+Turn OTLP export on; magus connects to telemetry.endpoint when true (default: false). Equivalent magus.yaml key: \fBtelemetry.enabled\fR.
+.TP
+\fBMAGUS_TELEMETRY_ENDPOINT\fR
+OTLP collector address as host:port (no scheme); required when telemetry is enabled. Equivalent magus.yaml key: \fBtelemetry.endpoint\fR.
+.TP
+\fBMAGUS_TELEMETRY_PROTOCOL\fR
+OTLP wire protocol: grpc or http (default: grpc). Equivalent magus.yaml key: \fBtelemetry.protocol\fR.
+.TP
+\fBMAGUS_TELEMETRY_INSECURE\fR
+Disable TLS for the OTLP exporter (plaintext local\-collector setups) (default: false). Equivalent magus.yaml key: \fBtelemetry.insecure\fR.
+.TP
+\fBMAGUS_TELEMETRY_SERVICE_NAME\fR
+Value of the resource attribute service.name on emitted spans/metrics (default: magus). Equivalent magus.yaml key: \fBtelemetry.service_name\fR.
+.TP
+\fBMAGUS_TELEMETRY_SAMPLE_RATIO\fR
+Head\-based trace sampling ratio in [0,1] (default: 1.0). Equivalent magus.yaml key: \fBtelemetry.sample_ratio\fR.
+.TP
+\fBMAGUS_DAEMON_ADDRESS\fR
+Adopt\-server socket as a unix:// URL; empty auto\-generates a per\-process socket. Equivalent magus.yaml key: \fBdaemon.address\fR.
+.TP
+\fBMAGUS_DAEMON_IDLE_TTL\fR
+Idle workspace eviction TTL for the multi\-workspace daemon; e.g. "6h", "30m" (default: 6h). Equivalent magus.yaml key: \fBdaemon.idle_ttl\fR.
+.TP
+\fBMAGUS_DAEMON_WORKSPACES\fR
+Colon\-separated list of workspace roots the daemon will serve; non\-empty list triggers eager union of sandbox policies and rejection of out\-of\-list workspaces (MGS2010). Equivalent magus.yaml key: \fBdaemon.workspaces\fR.
+.TP
+\fBMAGUS_ASSUME_INTERACTIVE\fR
+When 1 or true, assume an interactive terminal even if detection says otherwise (default: false). Equivalent magus.yaml key: \fBassume_interactive\fR.
+.TP
+\fBMAGUS_INTERPRETER_LUA_ENGINE\fR
+Select the Lua scripting backend: luajit (cgo) or gopherlua (pure\-Go); empty picks the best compiled\-in engine. Equivalent magus.yaml key: \fBinterpreter.lua.engine\fR.
+.TP
+\fBMAGUS_MCP_ENABLED\fR
+When 0 or false, refuse to start the MCP server even when the binary was built with \-tags mcp (default: true). Equivalent magus.yaml key: \fBmcp.enabled\fR.
+.TP
+\fBMAGUS_MCP_ADDRESS\fR
+host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: \fBmcp.address\fR.
+.TP
+\fBMAGUS_HINTS_ENABLED\fR
+When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: \fBhints.enabled\fR.
+.TP
+\fBMAGUS_FLAKE_ENABLED\fR
+Master switch for flakiness detection and auto\-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: \fBflake.enabled\fR.
+.TP
+\fBMAGUS_FLAKE_BOOTSTRAP_SAMPLES\fR
+Number of outcomes below which all failures are retried once (bootstrap phase) (default: 20). Equivalent magus.yaml key: \fBflake.bootstrap_samples\fR.
+.TP
+\fBMAGUS_FLAKE_MIN_SAMPLES\fR
+Minimum outcomes required before Wilson\-score flake rate gates retry decisions (default: 20). Equivalent magus.yaml key: \fBflake.min_samples\fR.
+.TP
+\fBMAGUS_FLAKE_THRESHOLD\fR
+Wilson lower\-bound flake rate above which a project+target is considered flaky (default: 0.05). Equivalent magus.yaml key: \fBflake.threshold\fR.
+.TP
+\fBMAGUS_FLAKE_ANNOTATE_GHA\fR
+When true, emit ::warning annotations and flake summary to $GITHUB_STEP_SUMMARY (default: true). Equivalent magus.yaml key: \fBflake.annotate_gha\fR.
+.TP
+\fBMAGUS_REPORT_FILTER\fR
+Comma\-separated +type/\-type terms restricting JSONL event emission (e.g. \-graph.build,\-graph.query). Equivalent magus.yaml key: \fBreport.filter\fR.
+.TP
+\fBMAGUS_SANDBOX_ENABLED\fR
+When 1 or true, confine every subprocess and in\-process spell to the workspace + a curated allowlist, scrub the child\-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: false). Equivalent magus.yaml key: \fBsandbox.enabled\fR.
+.RE
+.SH FILES
+.TP
+\fBmagus.yaml\fR, \fB.magus.yaml\fR
+Configuration file. Searched in CWD, workspace root, and
+$XDG_CONFIG_HOME/magus/ in ascending priority order. Both plain and
+dot\-prefixed names are accepted; having both in the same directory is an error.
+.TP
+\fB.magus\-cache/\fR
+Content\-addressed build cache in the workspace root. Override with
+MAGUS_CACHE_DIR.
+.SH SEE ALSO
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-tail\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

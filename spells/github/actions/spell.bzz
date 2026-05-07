@@ -1,0 +1,138 @@
+// GitHub integration spell for magus. Provides a remote cache backend over the
+// GitHub Actions Cache, written as an ordinary magus spell. Wire it in a magusfile:
+//
+//   import "spells/github/actions" as github
+//   magus.cache.remote(github)
+//
+// magus knows nothing about GitHub Actions: it speaks only the generic spell
+// contract. This spell exposes function-ops: mgs_listTargets returns the op
+// handlers by value, typed {str: fun(Target, fun(any)) bool}, so the checker
+// verifies each handler exists with the right signature. The remote-cache subsystem
+// invokes them with the work-unit Target and an input callback cb, and reads the
+// boolean result of:
+//
+//   enabled(target, cb)   -> bool   active here? (gates fetch/push; ignores cb)
+//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit
+//   put_artifact(target, cb) -> bool   upload artifact at src;     true=stored
+//
+// An op reads its inputs by calling cb(io) with an empty map: the host writes the
+// cache inputs ({project, hash, dest/src}) into io, which the op then reads. The
+// input shape varies per op (and a handler may skip cb entirely), so io is typed
+// `any`.
+//
+// The GitHub Actions Cache v1 protocol is implemented here in Buzz using the
+// magus host utilities (extra.http/extra.env), Buzz's serialize for JSON, plus
+// the byte-level primitives in magus/extra/http — so everything GitHub-specific
+// stays out of the Go tree.
+//
+// Auth and endpoint come from the runner environment:
+//   GITHUB_ACTIONS         — "true" only under GitHub Actions (gates the backend)
+//   ACTIONS_CACHE_URL      — base API URL (always ends in "/")
+//   ACTIONS_RUNTIME_TOKEN  — bearer token
+
+import "magus/extra"
+import "magus/extra/http" as xhttp
+import "magus/target"
+import "serialize"
+import "os"
+
+// --- spell contract -------------------------------------------------------
+
+export fun mgs_getName() > str { return "actions"; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {
+        "enabled": enabled,
+        "get_artifact": get_artifact,
+        "put_artifact": put_artifact,
+    };
+}
+
+// enabled gates the whole backend on running under GitHub Actions. The cache
+// probes this once and skips fetch/push entirely when false, so wiring this spell
+// in a magusfile is a no-op everywhere except GHA — no remote calls, no exports.
+export fun enabled(target: Target, cb: fun(any)) > bool {
+    return getenv("GITHUB_ACTIONS") == "true";
+}
+
+// getenv reads one environment variable, returning "" when unset (os.env returns
+// null for an unset var; the callers below test against "").
+fun getenv(name: str) > str {
+    const v = os.env(name);
+    if (v == null) { return ""; }
+    return "" + v;
+}
+
+// --- implementation -------------------------------------------------------
+
+// Version salt mixed into every key; bump to invalidate all artifacts at once.
+const CACHE_VERSION = "magus-remote-v1";
+// Accept header carrying the API version the v1 cache service expects.
+const API_ACCEPT = "application/json;api-version=6.0-preview.1";
+// 32 MiB: the GitHub Actions Cache per-PATCH ceiling.
+const CHUNK = 33554432;
+
+fun base() > str { return getenv("ACTIONS_CACHE_URL"); }
+fun token() > str { return getenv("ACTIONS_RUNTIME_TOKEN"); }
+
+// cache_key derives a GitHub Actions Cache key from the spec hash. The hash
+// already folds in the project path (see cache/hash.go), so it is unique per
+// project and needs no extra namespacing — and being hex, it is URL-safe.
+fun cache_key(hash: str) > str { return "magus-" + hash; }
+
+fun auth_headers() > any {
+    return {"Authorization": "Bearer " + token(), "Accept": API_ACCEPT};
+}
+
+// get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
+// true on a hit (dest written), false on a miss or when not running under Actions.
+export fun get_artifact(target: Target, cb: fun(any)) > bool {
+    if (base() == "" or token() == "") { return false; }
+    var io = {};
+    cb(io);
+    const hash = "" + io["hash"];
+    const dest = "" + io["dest"];
+    const key = cache_key(hash);
+    const url = base() + "_apis/artifactcache/cache?keys=" + key + "&version=" + CACHE_VERSION;
+    const res = extra.http.get(url, auth_headers());
+    if (res[0] != 200) { return false; }  // 204 = miss
+    // jsonDecode returns a Boxed tree: navigate with .q(key) and read the leaf
+    // with a typed accessor (.string() → the str, or null if absent/wrong type).
+    const loc = serialize.jsonDecode(res[1]).q("archiveLocation").string();
+    if (loc == null or loc == "") { return false; }
+    // The archive location is a pre-signed blob URL; it needs no auth header.
+    return xhttp.download("" + loc, dest, {}) == 200;
+}
+
+// put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
+// success or when another runner already stored the same key (409), else false.
+export fun put_artifact(target: Target, cb: fun(any)) > bool {
+    if (base() == "" or token() == "") { return false; }
+    var io = {};
+    cb(io);
+    const hash = "" + io["hash"];
+    const src = "" + io["src"];
+    const key = cache_key(hash);
+
+    // 1. Reserve the artifact.
+    var json_headers = auth_headers();
+    json_headers["Content-Type"] = "application/json";
+    const reserve = serialize.jsonEncode({"key": key, "version": CACHE_VERSION});
+    const rres = extra.http.post(base() + "_apis/artifactcache/caches", reserve, json_headers);
+    if (rres[0] == 409) { return true; }   // another runner won the race
+    if (rres[0] != 201) { return false; }
+    const cache_id = serialize.jsonDecode(rres[1]).q("cacheId").integer();
+    const url = base() + "_apis/artifactcache/caches/" + cache_id;
+
+    // 2. Upload the file in Content-Range chunks.
+    var bin_headers = auth_headers();
+    bin_headers["Content-Type"] = "application/octet-stream";
+    const ures = xhttp.upload_chunked("PATCH", url, src, CHUNK, bin_headers);
+    if (ures[0] != 204) { return false; }
+
+    // 3. Commit with the exact byte size.
+    const commit = serialize.jsonEncode({"size": xhttp.byteSize(src)});
+    const cres = extra.http.post(url, commit, json_headers);
+    const code = cres[0];
+    return code == 200 or code == 201 or code == 204;
+}

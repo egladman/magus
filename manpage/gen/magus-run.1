@@ -1,0 +1,131 @@
+.TH MAGUS-RUN 1 "" "magus dev" "magus Manual"
+.SH NAME
+magus\-run \- Run a target for selected projects
+.SH SYNOPSIS
+.B magus
+.RI "run <target> [flags] [project...]"
+.SH DESCRIPTION
+Run a named target for the selected projects. With no project
+arguments, selects the project containing the current directory, or all projects
+if the current directory is not inside a project. Explicit project paths on the
+command line select exactly those projects.
+.PP
+The target ci is an ordinary magusfile\-defined target — magus does not hardcode
+its steps; your magusfile composes them with magus.depends_on. magus keeps ci as
+the anchor that the affected set keys off, and always runs it read\-only; apply
+the rw charm (e.g. 'magus run format:rw') to mutate files.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-depth\fR \fIint\fR
+With \-\-graph: cap displayed depth (0 = unlimited)
+.TP
+\fB\-\-dry\-run\fR
+Print what would run without executing
+.TP
+\fB\-\-graph\fR
+Render the dependency graph for the selected scope instead of executing
+.TP
+\fB\-\-upstream\fR
+With \-\-graph: show dependents instead of dependencies
+.RE
+.SH TARGETS
+.RS
+.TP
+\fBls\fR
+Print selected projects without executing anything
+.TP
+\fBbuild\fR
+Build selected projects
+.TP
+\fBtest\fR
+Test selected projects
+.TP
+\fBlint\fR
+Lint selected projects (read\-only)
+.TP
+\fBformat\fR
+Format source files in selected projects
+.TP
+\fBclean\fR
+Remove build artefacts from selected projects
+.TP
+\fBgenerate\fR
+Run code generation for selected projects
+.TP
+\fBci\fR
+Run the magusfile's ci target read\-only (affected\-set anchor)
+.RE
+.SH EXAMPLES
+\fIBuild everything\fR
+.PP
+.EX
+magus run build
+.EE
+.PP
+\fITest one project\fR
+.PP
+.EX
+magus run test api/gateway
+.EE
+.PP
+\fIBuild two specific projects\fR
+.PP
+.EX
+magus run build api/gateway web/studio
+.EE
+.PP
+\fIDry\-run: show what would run\fR
+.PP
+.EX
+magus run build --dry-run
+.EE
+.PP
+\fIFull CI pipeline\fR
+.PP
+.EX
+magus run ci
+.EE
+.PP
+\fIShow dependency graph for build target\fR
+.PP
+.EX
+magus run build --graph
+.EE
+.PP
+\fIGraph in Mermaid format\fR
+.PP
+.EX
+magus run build --graph -o mermaid
+.EE
+.PP
+\fIGraph dependents of api/gateway\fR
+.PP
+.EX
+magus run build api/gateway --graph --upstream
+.EE
+.PP
+\fIStream JSONL target events to a file\fR
+.PP
+.EX
+magus run build -o jsonl --tee build.jsonl
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-tail\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

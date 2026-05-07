@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS4003 — non-deterministic output</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mgs4003--non-deterministic-output">MGS4003 — non-deterministic output</h1>
+<p>A project's declared outputs produced different content across two consecutive
+runs of the same dispatch. Determinism is a build-system invariant: the same
+inputs should always yield the same outputs.</p>
+<pre><code>[MGS4003] non-deterministic output (see …/MGS4003.md)
+  project=api target=build differing_paths=[api/dist/bundle.js api/dist/manifest.json]
+</code></pre>
+<h2 id="why">Why</h2>
+<p>This warning is only emitted by <code>--race=replay</code>, which:</p>
+<ol>
+<li>Runs the affected set normally (concurrent, cache-aware).</li>
+<li>Content-hashes every declared output of every project.</li>
+<li>Re-executes the same set sequentially, bypassing the cache.</li>
+<li>Content-hashes the outputs again.</li>
+<li>Compares the two hash sets per project.</li>
+</ol>
+<p>Any project whose outputs differ between the two runs is non-deterministic.
+Common causes:</p>
+<ul>
+<li><strong>Embedded timestamps.</strong> A build that injects <code>time.Now()</code> or <code>__DATE__</code>
+into the artifact (linker build IDs, <code>pkg/build.go</code> ldflags, source maps with
+generation timestamps).</li>
+<li><strong>Map iteration order.</strong> Go and Python iterate maps in random order; a
+generator that emits code from a map without sorting keys will produce
+different bytes each run.</li>
+<li><strong>Parallel work-stealing leaking into output.</strong> Worker IDs, goroutine IDs, or
+the order of fan-in results landing in a manifest.</li>
+<li><strong>PID / hostname / cwd in the output.</strong> Some toolchains embed these by
+default (e.g. <code>pip</code> embeds the build tempdir path into compiled <code>.pyc</code>).</li>
+<li><strong>Random salt / nonce.</strong> Crypto helpers used at build time without a fixed
+seed.</li>
+</ul>
+<p>This check is <strong>expensive</strong> — it doubles the wall-clock time of the affected
+build, and the second pass cannot benefit from the cache. Intended for CI
+nightly or a manual audit, not every push.</p>
+<h2 id="resolution">Resolution</h2>
+<h3 id="1-identify-the-source">1. Identify the source</h3>
+<p>The <code>differing_paths</code> list narrows the search. Open one of the differing files
+in both runs and diff them — the divergence is often visible at first glance
+(a timestamp, a permuted list, a tempdir path).</p>
+<p>For binary outputs, use <code>diffoscope</code> (the reproducible-builds.org tool) which
+unpacks archives, decompresses sections, and diffs the contents recursively:</p>
+<pre><code class="language-sh">magus run build
+cp -r api/dist /tmp/run1
+magus run build --race=replay   # second run rebuilds
+diffoscope /tmp/run1/bundle.js api/dist/bundle.js
+</code></pre>
+<h3 id="2-remove-the-source-of-non-determinism">2. Remove the source of non-determinism</h3>
+<p>Common fixes:</p>
+<ul>
+<li><strong>Embedded timestamps:</strong> ldflag the build time to a fixed value
+(<code>-X main.BuildTime=$(git log -1 --format=%cI)</code> ties it to the commit
+timestamp, which is deterministic).</li>
+<li><strong>Map iteration:</strong> sort keys before emitting (<code>slices.Sort(maps.Keys(m))</code>).</li>
+<li><strong>Tempdir paths:</strong> use a fixed relative path or strip the absolute prefix.</li>
+<li><strong>Build IDs / PIDs:</strong> pass <code>-buildid=</code> to <code>go build</code> and <code>-Wl,--build-id=none</code>
+to the linker.</li>
+</ul>
+<h3 id="3-if-non-determinism-is-unavoidable">3. If non-determinism is unavoidable</h3>
+<p>Some artifacts (e.g. compiler outputs with debug info on Windows) are
+non-deterministic by design. For these, exclude the path from the project's
+declared outputs so the cache doesn't track them.</p>
+<h2 id="what-this-is-not">What this is NOT</h2>
+<ul>
+<li><strong>Not a runtime crash detector.</strong> It only checks that outputs are bit-for-bit
+identical, not that they behave the same.</li>
+<li><strong>Not run by default.</strong> You must pass <code>--race=replay</code> explicitly.</li>
+<li><strong>Not a substitute for <code>reproducible-builds.org</code> tooling.</strong> That community
+has stronger guarantees (cross-machine, cross-time, cross-locale). MGS4003 is
+a same-machine same-session check.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><code>MGS4001.md</code> — runtime filesystem race detector.</li>
+<li><a href="https://reproducible-builds.org/">reproducible-builds.org</a> — the gold
+standard for build determinism, plus <code>diffoscope</code> for inspecting differences.</li>
+<li><code>--race=replay</code> mode on <code>magus run</code>.</li>
+</ul>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/codes/race/MGS4003.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:31:42 UTC from commit <a href="https://github.com/egladman/tack/commit/d57fdd68d37625f0b1f5ea75649a23f1f709e713"><code>d57fdd6</code></a></small>
+  </footer>
+</body>
+</html>

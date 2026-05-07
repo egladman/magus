@@ -1,0 +1,428 @@
+package manpage
+
+import (
+	"flag"
+	"time"
+)
+
+// All is the ordered list of magus top-level segments consumed by the
+// man-page generator (internal/manpage).
+var All = []Segment{
+	listSegment,
+	describeSegment,
+	runSegment,
+	xSegment,
+	whereSegment,
+	tailSegment,
+	affectedSegment,
+	watchSegment,
+	statusSegment,
+	doctorSegment,
+	configSegment,
+	serverSegment,
+	completionSegment,
+	initSegment,
+	selfSegment,
+	versionSegment,
+}
+
+// CommonSubcommands is the canonical set of project-scoped targets shared by
+// the "run" and "affected" segments.
+var CommonSubcommands = []Subcommand{
+	{Name: "ls", Short: "Print selected projects without executing anything"},
+	{Name: "build", Short: "Build selected projects"},
+	{Name: "test", Short: "Test selected projects"},
+	{Name: "lint", Short: "Lint selected projects (read-only)"},
+	{Name: "format", Short: "Format source files in selected projects"},
+	{Name: "clean", Short: "Remove build artefacts from selected projects"},
+	{Name: "generate", Short: "Run code generation for selected projects"},
+	{Name: "ci", Short: "Run the magusfile's ci target read-only (affected-set anchor)"},
+}
+
+var listSegment = Segment{
+	Name:  "ls",
+	Short: "List all discovered projects",
+	Long: `Print every discovered project in the workspace along with its language
+pack, source files, outputs, dependencies, and tool requirements.
+
+Output defaults to a human-readable text format. Use the global -o flag with
+json or yaml for structured output suitable for scripting. -o name prints one
+project path per line. -o template accepts a Go text/template evaluated
+against the same struct that -o json emits.`,
+	Usage: "magus ls [flags]",
+	Examples: []Example{
+		{"List all projects", "magus ls"},
+		{"Pipe-friendly: one path per line", "magus ls -o name"},
+		{"JSON output", "magus ls -o json"},
+		{"Custom Go template", `magus ls -o template='{{range .Projects}}{{.Path}}{{"\n"}}{{end}}'`},
+	},
+}
+
+var describeSegment = Segment{
+	Name:  "describe",
+	Short: "Explain why a project is in the affected set",
+	Long: `Show the changed files and dependency chains that cause a given project
+to appear in the affected set computed by magus affected.
+
+Each path section shows the seed project whose files changed, the chain of
+dependency edges leading from that seed to the target, and the list of changed
+files under the seed.`,
+	Usage: "magus describe <project> [flags]",
+	Examples: []Example{
+		{"Describe why api/gateway is affected", "magus describe api/gateway"},
+		{"JSON output", "magus describe api/gateway -o json"},
+	},
+}
+
+var runSegment = Segment{
+	Name:  "run",
+	Short: "Run a target for selected projects",
+	Long: `Run a named target for the selected projects. With no project
+arguments, selects the project containing the current directory, or all projects
+if the current directory is not inside a project. Explicit project paths on the
+command line select exactly those projects.
+
+The target ci is an ordinary magusfile-defined target — magus does not hardcode
+its steps; your magusfile composes them with magus.depends_on. magus keeps ci as
+the anchor that the affected set keys off, and always runs it read-only; apply
+the rw charm (e.g. 'magus run format:rw') to mutate files.`,
+	Usage: "magus run <target> [flags] [project...]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("dry-run", false, "Print what would run without executing")
+		fs.Bool("graph", false, "Render the dependency graph for the selected scope instead of executing")
+		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
+		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
+	},
+	Targets: CommonSubcommands,
+	Examples: []Example{
+		{"Build everything", "magus run build"},
+		{"Test one project", "magus run test api/gateway"},
+		{"Build two specific projects", "magus run build api/gateway web/studio"},
+		{"Dry-run: show what would run", "magus run build --dry-run"},
+		{"Full CI pipeline", "magus run ci"},
+		{"Show dependency graph for build target", "magus run build --graph"},
+		{"Graph in Mermaid format", "magus run build --graph -o mermaid"},
+		{"Graph dependents of api/gateway", "magus run build api/gateway --graph --upstream"},
+		{"Stream JSONL target events to a file", "magus run build -o jsonl --tee build.jsonl"},
+	},
+}
+
+var whereSegment = Segment{
+	Name:  "where",
+	Short: "Print the absolute path of a project",
+	Long: `Fuzzy-match a project by leaf-anchored substring and print its
+absolute path to stdout. Designed for shell substitution:
+
+  cd "$(magus where api)"
+  code "$(magus where dash)"
+
+Filters are AND-combined substrings. On a unique top score the path is
+printed and the command exits 0. On ambiguity, candidates are listed on
+stderr and the command exits 2. No interactive picker — use magus x for
+that.`,
+	Usage: "magus where [filter...]",
+	Examples: []Example{
+		{"Navigate to a project", `cd "$(magus where api)"`},
+		{"Open in editor", `code "$(magus where dash)"`},
+		{"AND-filter: must match both tokens", "magus where api gateway"},
+	},
+}
+
+var tailSegment = Segment{
+	Name:  "tail",
+	Short: "Stream the most recent cached log (interactive only)",
+	Long: `Stream the captured build log of the most recent cache entry for a
+project. The log was written during a cache miss (when the build actually
+ran). Subsequent cache hits replay the same log without re-running the build.
+
+Requires an interactive terminal (like magus x). Set assume_interactive: true
+in magus.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override.
+
+target follows the canonical path:target form used by magus run:
+  (none)     cwd project, latest run of any target
+  :build     cwd project, latest build run
+  api        api project, latest run of any target
+  api:test   api project, latest test run
+
+Exits non-zero when the project is not found, or when no cache entries
+exist yet (run a build first).`,
+	Usage: "magus tail [-f] [-n N] [target]",
+	Examples: []Example{
+		{"Stream last log for cwd project", "magus tail"},
+		{"Follow (stream new output as it arrives)", "magus tail -f"},
+		{"Show last 50 lines", "magus tail -n 50"},
+		{"Show entire log", "magus tail -n 0"},
+		{"Last test run for the api project", "magus tail api:test"},
+		{"Last build run for cwd project", "magus tail :build"},
+	},
+}
+
+var xSegment = Segment{
+	Name:  "x",
+	Short: "Interactive shorthand: pick project + target",
+	Long: `Interactive shorthand for magus run. Filters are AND-combined
+substrings matched against project paths; ranking is leaf-anchored
+longest-match-wins, so "magus x dash" prefers a project named "dashboard"
+over one named "dashboards-deprecated/foo". Additional filter args narrow
+the candidate set: "magus x dash mobile" requires both substrings.
+
+When the filtered set is unique, the project picker is skipped. Otherwise
+a TTY picker opens, seeded with the survivors, sorted by score. After a
+project is chosen, a second picker offers the target set
+(build/test/lint/format/clean/generate/ci); the last target used for that
+project (persisted in $XDG_STATE_HOME/magus/x-state.json, defaulting to
+$HOME/.local/state/magus/) is pre-highlighted.
+
+x refuses to run when stdin or stderr is not a terminal: shorthand is for
+humans. Scripts should call magus run directly.`,
+	Usage: "magus x [filter...]",
+	Examples: []Example{
+		{"Browse all projects in a picker", "magus x"},
+		{"Resolve by leaf substring", "magus x dash"},
+		{"AND-narrow with a second filter", "magus x dash mobile"},
+	},
+}
+
+var affectedSegment = Segment{
+	Name:  "affected",
+	Short: "Run a target for VCS-diff affected projects",
+	Long: `Run a named target for every project that is affected by changes in
+version control. The active VCS adapter is picked by autodetect from .git, .hg,
+or .jj at the workspace root, or pinned with MAGUS_VCS_COMMAND_NAME /
+vcs.command_name. MAGUS_VCS_COMMAND overrides the command entirely. When
+MAGUS_VCS_ENABLED=false (or vcs.enabled: false) affected detection
+short-circuits and falls back to the full project set with the source label
+"vcs disabled".
+
+A project is affected if any of its source files changed directly, or if a
+project it depends on is affected (transitive closure over the dependency graph).
+
+Use --stdin to read changed paths from a pipe instead of running a VCS diff.
+This pairs with magus watch for continuous-build workflows:
+
+  magus watch | magus affected --stdin build
+
+Forensic modes reason about the affected set instead of executing a target.
+--explain shows why a project is in the set. --plan emits a provider-neutral
+JSON CI shard plan for the affected set (for CI fan-out; always keys off the ci
+anchor). --bisect drives VCS bisect using run history to find the commit that
+introduced a regression.`,
+	Usage: "magus affected <target> [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("dry-run", false, "Print what would run without executing")
+		fs.String("base", "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
+		fs.Bool("stdin", false, "Read changed file paths from stdin instead of running a VCS diff")
+		fs.Bool("null", false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
+		fs.Bool("graph", false, "Render the dependency graph for the affected scope instead of executing")
+		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
+		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
+		fs.String("explain", "", "Show why <project> is in the affected set instead of executing")
+		fs.Bool("plan", false, "Emit a provider-neutral JSON CI shard plan for the affected set")
+		fs.Int("max-shards", 8, "With --plan: maximum CI shards (-1 = unlimited)")
+		fs.Int("max-parallel-budget", 0, "With --plan: cross-shard concurrency cap; 0 = unlimited")
+		fs.String("bisect", "", "Drive VCS bisect to find the commit that broke <project>")
+		fs.String("good", "", "With --bisect: known-good commit SHA (auto-detected from history when empty)")
+		fs.String("target", "test", "With --bisect: magus target to bisect")
+	},
+	Targets: CommonSubcommands,
+	Examples: []Example{
+		{"Build projects changed since the default base ref", "magus affected build"},
+		{"Use a different base ref", "magus affected build --base main"},
+		{"Pipe from watch for continuous builds", "magus watch | magus affected --stdin build"},
+		{"List affected projects without building", "magus affected list"},
+		{"Show dependency graph for the affected scope", "magus affected build --graph"},
+		{"Graph as DOT for piping to Graphviz", "magus affected build --graph -o dot | dot -Tsvg > graph.svg"},
+		{"Emit a CI shard plan for the affected set", "magus affected --plan"},
+		{"Shard plan limited to four shards", "magus affected --plan --max-shards 4"},
+		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
+	},
+}
+
+var watchSegment = Segment{
+	Name:  "watch",
+	Short: "Emit changed file paths to stdout",
+	Long: `Watch the workspace for file-system changes and emit batches of changed
+repo-relative paths to stdout. Each path is on its own line; a blank line
+separates batches. This output format is compatible with git diff --name-only
+so the two are interchangeable on either side of a pipe.
+
+Use --null for binary-safe output: paths are NUL-separated and batches end
+with a double-NUL, matching the --null flag of magus affected --stdin.
+
+On startup an --all sentinel batch is emitted (unless --initial=false) to
+trigger a full initial build in the downstream magus affected --stdin.`,
+	Usage: "magus watch [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Duration("debounce", 200*time.Millisecond, "Quiet window before emitting a batch")
+		fs.Bool("initial", true, "Emit an --all batch on startup before watching")
+		fs.Bool("null", false, "NUL-separate paths; double-NUL between batches")
+		fs.String("backend", "fsnotify", "Notification backend: fsnotify or poll")
+	},
+	Examples: []Example{
+		{"Continuous build pipeline", "magus watch | magus affected --stdin build"},
+		{"Increase debounce for slow editors", "magus watch --debounce 500ms | magus affected --stdin test"},
+		{"Polling backend (when inotify is unavailable)", "magus watch --backend poll | magus affected --stdin build"},
+	},
+}
+
+var statusSegment = Segment{
+	Name:  "status",
+	Short: "Inspect concurrency pool and configuration",
+	Long: `Show the magus configuration that affects this process — telemetry, cache
+settings — and, when a parent magus process is running, the live state of its
+concurrency pool (current slot usage, queued waiters).
+
+When --watch is non-zero, status polls and reprints at that interval. On a
+TTY the screen is cleared between reprints; piped output appends each
+snapshot on its own line for log capture.`,
+	Usage: "magus status [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Duration("watch", 0, "Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot")
+		fs.Bool("compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
+		fs.String("socket", "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
+	},
+	Examples: []Example{
+		{"One-shot status snapshot", "magus status"},
+		{"Live updates every second", "magus status --watch=1s"},
+		{"Single-line snapshot for a multiplexer sidebar", "magus status --compact --watch=1s"},
+		{"Inspect a specific running parent", "magus status --socket=unix:///run/user/1000/magus/daemon.sock"},
+	},
+}
+
+var doctorSegment = Segment{
+	Name:  "doctor",
+	Short: "Validate the workspace",
+	Long: `Run a suite of diagnostic checks against the workspace and report the
+results. Checks include:
+
+  - Project discoverability and language coverage
+  - Dependency graph cycles
+  - Required tools on PATH
+  - Recognised MAGUS_* environment variables (typo detection)
+  - Magusfile form consistency
+  - Binary provenance (signature and git-tree freshness)
+
+Exits non-zero if any check fails. Warnings are informational and do not
+affect the exit code.`,
+	Usage: "magus doctor [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("fix", false, "Apply fixable remediation in-place")
+		fs.Bool("strict", false, "Exit non-zero on warnings as well as failures")
+	},
+	Examples: []Example{
+		{"Run all checks", "magus doctor"},
+		{"JSON report", "magus doctor -o json"},
+		{"Apply fixable remediation in-place", "magus doctor --fix"},
+		{"Fail on warnings (useful in CI)", "magus doctor --strict"},
+	},
+}
+
+var configSegment = Segment{
+	Name:  "config",
+	Short: "View or update magus configuration",
+	Long: `Inspect or modify the magus configuration. Configuration is loaded in
+priority order: built-in defaults → user-global file → workspace file →
+project-local file → MAGUS_* environment variables → CLI flags.
+
+The view sub-command prints the effective merged configuration. The set
+sub-command writes a key-value pair to the local (or global) config file.
+The init sub-command materialises the built-in defaults to a magus.yaml so
+they can be edited by hand.
+
+Configuration is stored in magus.yaml (or .magus.yaml). The canonical
+locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
+	Usage: "magus config <view|set|init> [flags]",
+	Children: []Segment{
+		{Name: "view", Short: "Print the effective configuration (defaults + file + env)"},
+		{Name: "set", Short: "Write a key to the local (or global) config file"},
+		{Name: "init", Short: "Materialise built-in defaults to magus.yaml"},
+		{Name: "cache", Short: "Manage the build cache (prune --older-than)"},
+	},
+	Examples: []Example{
+		{"Show effective config", "magus config view"},
+		{"Show config as JSON", "magus config view -o json"},
+		{"Set cache to read-only", "magus config set cache.immutable true"},
+		{"Initialise magus.yaml from defaults", "magus config init"},
+	},
+}
+
+var serverSegment = Segment{
+	Name:  "server",
+	Short: "Manage the persistent magus daemon",
+	Long: `Start, stop, or check the liveness of a persistent magus daemon.
+
+By default every magus invocation starts a short-lived proc server that dies
+when the command exits. The persistent daemon keeps the server alive across
+invocations so workspace discovery, config loading, and the content-addressed
+cache are paid for once. Nested magus calls (from build scripts, editor
+integrations, etc.) forward work to the daemon automatically.
+
+The socket address is resolved in priority order:
+  --socket flag  >  MAGUS_DAEMON_ADDRESS env  >  daemon.address in magus.yaml  >
+  stable default ($XDG_RUNTIME_DIR/magus/magus-daemon.sock)
+
+The socket file acts as the lock: present means a daemon is running, absent
+means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
+check for the file with [ -S "$socket" ] before starting one.`,
+	Usage: "magus server <start|stop> [flags]",
+	Children: []Segment{
+		{Name: "start", Short: "Start a persistent daemon (foreground; use & or a supervisor to background)"},
+		{Name: "stop", Short: "Send a graceful shutdown request to a running daemon"},
+	},
+	Examples: []Example{
+		{"Start daemon in the background", "magus server start &"},
+		{"Stop the running daemon", "magus server stop"},
+		{"Inspect daemon pool state", "magus status"},
+		{"Use a custom socket path", "magus --daemon-address unix:///tmp/m.sock server start"},
+	},
+}
+
+var completionSegment = Segment{
+	Name:  "completion",
+	Short: "Print a shell completion script",
+	Long:  `Print a shell completion script to stdout and append it to your shell's startup file.`,
+	Usage: "magus completion <bash|zsh|fish>",
+	Examples: []Example{
+		{"Bash", "magus completion bash >> ~/.bashrc"},
+		{"Zsh", "magus completion zsh >> ~/.zshrc"},
+		{"Fish", "magus completion fish >> ~/.config/fish/config.fish"},
+	},
+}
+
+// initSegment documents `magus init`. Defined here (untagged) so it can be
+// embedded in the registry's All list regardless of build tags.
+var initSegment = Segment{
+	Name:  "init",
+	Short: "Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)",
+	Long: `Bootstrap a magus workspace in the current directory.
+
+By default, magus.yaml is written to $XDG_CONFIG_HOME/magus/ (the global user
+config location). Use --local to write it into the repo instead (useful for
+checked-in, team-shared config). The magusfile stub and VCS merge driver are
+always wired in the repo.
+
+With --global only the global config is written; the per-clone workspace
+bootstrap (magusfile stub + merge driver) is skipped.
+
+The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.`,
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("global", false, "Write only the global config; skip the workspace bootstrap")
+		fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
+		fs.Bool("force", false, "Overwrite an existing config file")
+		fs.String("vcs", "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
+		fs.String("lang", "teal", "Magusfile language to scaffold (teal|buzz)")
+	},
+	Examples: []Example{
+		{"Bootstrap the current repo", "magus init"},
+		{"Non-interactive (CI): pick the VCS explicitly", "magus init --vcs git"},
+		{"Write only the global config", "magus init --global"},
+		{"Write config into the repo instead of XDG", "magus init --local"},
+	},
+}
+
+var versionSegment = Segment{
+	Name:  "version",
+	Short: "Print version, commit, and build date",
+	Long:  `Print the magus version string, git commit hash, and build date.`,
+	Usage: "magus version",
+}

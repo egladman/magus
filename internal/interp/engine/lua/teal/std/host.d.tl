@@ -1,0 +1,6 @@
+-- The host module (goos/goarch) has been removed.
+-- Use the os module for host OS/arch detection:
+--
+--   local os = require("magus.extra.os")
+--   local osname, arch, variant = os.platform()
+--   -- ("linux", "amd64", ""), ("linux", "arm64", "v8"), ("darwin", "arm64", "v8")

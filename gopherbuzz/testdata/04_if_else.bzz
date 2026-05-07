@@ -1,0 +1,10 @@
+// @expect: medium
+var x = 7;
+var __r = "other";
+if (x > 10) {
+    __r = "big";
+} else if (x > 3) {
+    __r = "medium";
+} else {
+    __r = "small";
+}

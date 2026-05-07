@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anatomy of a magus Target</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="anatomy-of-a-magus-target">Anatomy of a magus Target</h1>
+<p>A <strong>Target</strong> is the addressable unit of work in magus: <em>what project</em> (Path) and <em>what operation</em> (Name). Everything else (shards, spell filters, charms) is configuration layered on top, not part of the Target's identity.</p>
+<p>A target is <em>what</em> you run (<code>magus run lint</code>); a spell is <em>how</em> a tool does it. See <a href="spells.html#spells-vs-targets">Spells vs Targets</a>.</p>
+<h2 id="the-struct">The struct</h2>
+<pre><code class="language-go">type Target struct {
+    Path   string   // project path relative to workspace root
+    Name   string   // the target name; the operation to run
+    Charms []string // execution charms (modifiers); see docs/charms.md
+    Files  []string // changed files; populated only by ExpandAffected
+}
+</code></pre>
+<p><code>Path</code> and <code>Name</code> are the two durable identities. <code>Charms</code> modify <em>how</em> the target runs (see <a href="charms.html">charms.md</a>). <code>Files</code> is metadata populated automatically by the VCS-affected engine; nil for explicitly constructed targets.</p>
+<h2 id="cli-grammar">CLI grammar</h2>
+<pre><code>[spell::]op-or-name[:charm,...]  [project ...]
+   │       │           │              │
+   │       │           │              └── projects, positional (omit = cwd/all)
+   │       │           └───────────────── charms, comma-separated modifiers
+   │       └───────────────────────────── a target name, or (with spell::) a spell op
+   └───────────────────────────────────── spell, CLI-only op-direct qualifier
+</code></pre>
+<p>The project is a <strong>positional</strong> argument, not embedded in the target token. <code>:</code> introduces <a href="charms.html">charms</a>; <code>spell::op</code> invokes one spell's op directly (see <a href="#cli-extension-spell-qualified-targets">spell-qualified targets</a>).</p>
+<p>Examples:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Project(s)</th>
+<th>Name</th>
+<th>Charms</th>
+<th>Spell</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus run build</code></td>
+<td>cwd / all</td>
+<td><code>build</code></td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>magus run test api</code></td>
+<td><code>api</code></td>
+<td><code>test</code></td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>magus run format:rw api</code></td>
+<td><code>api</code></td>
+<td><code>format</code></td>
+<td><code>rw</code></td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>magus run lint:rw,debug /</code></td>
+<td>all</td>
+<td><code>lint</code></td>
+<td><code>rw</code>, <code>debug</code></td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>magus run go::go-test</code></td>
+<td>all</td>
+<td><code>go-test</code> (op)</td>
+<td>-</td>
+<td><code>go</code></td>
+</tr>
+</tbody>
+</table>
+<p>Invalid forms:</p>
+<table>
+<thead>
+<tr>
+<th>String</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&quot;&quot;</code></td>
+<td>empty target rejected</td>
+</tr>
+<tr>
+<td><code>lint:</code></td>
+<td>charm must not be empty</td>
+</tr>
+<tr>
+<td><code>web/studio:test</code></td>
+<td><code>/</code> not allowed in a target name (project is positional)</td>
+</tr>
+</tbody>
+</table>
+<p>The canonical serialized form of a resolved Target (what <code>Target.String()</code> emits and what <code>describe</code>/logs show) is <code>path:name</code> (e.g. <code>web/studio:test</code>). That is the output form; the grammar above is how you type it.</p>
+<h2 id="path-resolution-on-the-cli">Path resolution on the CLI</h2>
+<p><code>Path</code> is stored <strong>relative to the workspace root</strong>, but the CLI accepts project names from anywhere in the tree. Arguments to <code>magus run</code>, <code>magus list</code>, and <code>magus clean</code> resolve as follows:</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Resolved against</th>
+<th>Example (cwd = <code>web/studio</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>bare (<code>api</code>, <code>web/studio</code>)</td>
+<td>workspace root</td>
+<td><code>api</code> → <code>api</code></td>
+</tr>
+<tr>
+<td>dot-relative (<code>./x</code>, <code>../x</code>)</td>
+<td>current working directory</td>
+<td><code>../api</code> → <code>web/api</code></td>
+</tr>
+<tr>
+<td><code>.</code></td>
+<td>the project containing cwd</td>
+<td><code>.</code> → <code>web/studio</code></td>
+</tr>
+<tr>
+<td>empty or <code>/</code></td>
+<td>all projects</td>
+<td>n/a</td>
+</tr>
+</tbody>
+</table>
+<p>So <code>../foo</code> behaves as a shell user expects: from <code>web/studio</code>, <code>magus run build ../foo</code> targets <code>web/foo</code>. Bare paths stay workspace-relative regardless of cwd. Two inputs are always rejected:</p>
+<ul>
+<li><strong>Absolute paths</strong> (<code>/etc</code>, <code>C:\foo</code>): project paths must be repo-relative.</li>
+<li><strong>Paths that escape the workspace root</strong> (<code>../../outside</code>): magus never operates outside the workspace it discovered.</li>
+</ul>
+<p>Resolution is implemented by <code>internal/file/path.Resolve(input, anchor)</code>, where the anchor is the cwd expressed relative to the workspace root. The same helper backs <code>WithDependsOn</code> in a magusfile, so dependency paths and CLI arguments obey identical rules.</p>
+<h3 id="symlinks">Symlinks</h3>
+<p>The workspace root is canonicalised (symlinks resolved) at discovery, and the sandbox enforces access against <strong>real, resolved paths</strong> on Linux via the kernel landlock LSM. A symlink inside the workspace pointing at <code>/etc</code> grants no access to <code>/etc</code>.</p>
+<p>Two consequences:</p>
+<ul>
+<li><strong>Symlinked directories are not discovered as projects.</strong> Discovery does not follow symlinks; a symlinked directory is silently skipped.</li>
+<li><strong>Workspace-escaping symlinks are a hard error.</strong> <code>magus doctor</code> fails if it finds a symlink whose resolved target lands outside the workspace root. On platforms without landlock (macOS, Windows, kernels &lt; 5.13) such a link is the only path by which a spell subprocess could reach outside the tree, so it is treated as a <code>fail</code>, not a warning.</li>
+</ul>
+<h2 id="the-target-name">The target name</h2>
+<p>A target name is one of the seven canonical operations. The type is <code>project.Target</code> (a <code>string</code> alias).</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>preflight</code></td>
+<td>pre-run checks (workspace health, missing tools)</td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td>compile / produce artefacts</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>run the test suite</td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td>static analysis, type-check</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>format source files</td>
+</tr>
+<tr>
+<td><code>clean</code></td>
+<td>remove local build artefacts</td>
+</tr>
+<tr>
+<td><code>generate</code></td>
+<td>run code generators</td>
+</tr>
+</tbody>
+</table>
+<p>There is also <code>ci</code>: a composite pipeline (preflight → generate → format → lint → build → test) handled specially by <code>Magus.RunCI</code>. It is not in the <code>project.Targets</code> list and is not a valid name for <code>ParseTarget</code>.</p>
+<p>Custom target names must use the target-name charset: letters, digits, <code>-</code>, <code>_</code> (<code>types.ValidateTargetName</code>). <code>:</code>, <code>@</code>, and <code>/</code> are reserved for the grammar above.</p>
+<h3 id="name-normalization-casing--delimiters">Name normalization (casing &amp; delimiters)</h3>
+<p>Target names are matched <strong>case- and delimiter-insensitively</strong>. magus normalizes every name to canonical kebab-case (<code>lo.KebabCase</code>, via <code>types.DefaultTargetNameNormalizer</code>) on <strong>both</strong> sides: when a magusfile <em>declares</em> a target and when you <em>reference</em> one on the CLI or in <code>depends_on</code>. A target declared as <code>go_build</code> is reachable by any spelling that normalizes to <code>go-build</code>:</p>
+<pre><code class="language-sh">magus run go-build      # kebab
+magus run go_build      # snake
+magus run goBuild       # camel
+magus run GoBuild       # pascal
+</code></pre>
+<p>This is <em>normalize-both-sides</em>, not an alias table: there is exactly one registered target (<code>go-build</code>), and the same normalizer runs over your input before lookup.</p>
+<ul>
+<li><strong>Collisions are a hard error.</strong> Two declarations that collapse to the same canonical name (e.g. <code>fooBar</code> and <code>foo_bar</code>, both normalizing to <code>foo-bar</code>) cause magus to refuse the magusfile, naming the offending pair.</li>
+<li><strong>Convention drift is a <code>doctor</code> warning.</strong> Mixed conventions still resolve, but <code>magus doctor</code> warns when a workspace uses more than one naming convention, since call sites across CI YAML, scripts, and docs can drift.</li>
+</ul>
+<p><strong>Terminology note:</strong> Target is magus's own term, distinct from Mage's vocabulary. In Mage, <code>extensions:build</code> is a single function name. In magus, <code>extensions</code> is a project Path and <code>build</code> is the target name: two orthogonal axes. Do not substitute Action, Operation, Task, Command, or Verb for Target in code, comments, or documentation.</p>
+<h2 id="cli-extension-spell-qualified-targets">CLI extension: spell-qualified targets</h2>
+<p>On the command line only, a double-colon prefix invokes one spell's op <strong>directly</strong>, bypassing your composed targets. The token after <code>::</code> is a spell <strong>op</strong> (its CLI-command name), not a lifecycle target name:</p>
+<pre><code class="language-sh">magus run typescript::eslint api    # the eslint op of the typescript spell, in api/
+magus run go::go-vet                # the go-vet op of the go spell, all projects
+magus run go::golangci-lint         # the golangci-lint op of the go spell
+</code></pre>
+<p>This is an <strong>escape hatch</strong> for ad-hoc runs and introspection, not the everyday surface (compose ops into <a href="spells.html#spells-vs-targets">targets</a> instead). Because it is op-direct, the name after <code>::</code> is matched against the spell's op keys verbatim (no kebab/case normalization, unlike target names — see <a href="spells.html#naming-operations">Naming operations</a>):</p>
+<ul>
+<li><code>go::golangci-lint</code> runs that op.</li>
+<li><code>go::lint</code> is a graceful <strong>no-op</strong>: the go spell has no op named <code>lint</code> (its linter op is <code>golangci-lint</code>), so nothing runs.</li>
+</ul>
+<p>The prefix is <strong>not</strong> stored in <code>Target</code>. The CLI strips it via <code>parseTarget</code> and passes it as a <code>WithSpellFilter</code> <code>RunOption</code>. The <code>ci</code> target does not support spell-qualified syntax.</p>
+<h2 id="what-is-not-part-of-a-targets-identity">What is not part of a Target's identity</h2>
+<p>These modify execution but are <strong>not</strong> durable identity. Charms parse into <code>Target.Charms</code> but propagate via context; the rest travel as <code>RunOption</code> values alongside the target list.</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>:charm,...</code></td>
+<td>shared execution modifiers (see <a href="charms.html">charms.md</a>)</td>
+</tr>
+<tr>
+<td><code>--shard</code> / <code>--n-shards</code></td>
+<td>CI matrix sharding (distributes projects across runners)</td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>prints what would run without executing</td>
+</tr>
+<tr>
+<td>extra args after <code>--</code></td>
+<td>forwarded to the underlying tool via <code>WithExtraArgs</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="lifecycle-parse--expand--run">Lifecycle: parse → expand → run</h2>
+<p>A target string goes through three stages before any tool is invoked:</p>
+<pre><code>&quot;web/studio:test&quot;  (or: name token + positional projects)
+      │
+      ▼
+ParseTarget(s)          → Target{Name:&quot;test&quot;, Charms:[...]}
+      │                   magus/types/target.go
+      ▼
+Workspace.ExpandPath(t) → []Target (one concrete entry per matched project)
+      │                   magus/select.go
+      │
+      │   (alternative: ExpandCwd resolves for the project under cwd)
+      │   (alternative: ExpandAffected uses VCS diff to select projects,
+      │                 and populates Target.Files)
+      ▼
+Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
+                          ride along on the context (WithCharms)
+</code></pre>
+<p>Key invariant: targets passed to <code>Run</code> should be concrete (each Path resolves to exactly one project). <code>ExpandPath</code>, <code>ExpandCwd</code>, and <code>ExpandAffected</code> enforce this.</p>
+<h2 id="glossary">Glossary</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Target</strong></td>
+<td>An addressed unit of work: <code>Path + Name + Charms + Files</code>. The <code>Target</code> struct in <code>magus/types/target.go</code>.</td>
+</tr>
+<tr>
+<td><strong>Path</strong></td>
+<td>Project path relative to the workspace root. Empty or <code>/</code> means all projects.</td>
+</tr>
+<tr>
+<td><strong>Name</strong></td>
+<td>The target name: the operation to run. One of: <code>preflight</code>, <code>build</code>, <code>test</code>, <code>lint</code>, <code>format</code>, <code>clean</code>, <code>generate</code>.</td>
+</tr>
+<tr>
+<td><strong>Charm</strong></td>
+<td>A shared execution modifier (e.g. <code>rw</code>). Carried in context; see <a href="charms.html">charms.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Files</strong></td>
+<td>Repo-relative changed paths within a project. Populated by <code>ExpandAffected</code>; nil for explicit targets.</td>
+</tr>
+<tr>
+<td><strong>Spell</strong></td>
+<td>A library of tool-native operations a target composes. Separate from Target; see <a href="spells.html">spells.md</a>.</td>
+</tr>
+<tr>
+<td><strong><code>ci</code></strong></td>
+<td>The composite CI pipeline. Not a target name; handled by <code>Magus.RunCI</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="spells.html">spells.md</a>: the operations a target composes, and <a href="spells.html#spells-vs-targets">Spells vs Targets</a>.</li>
+<li><a href="charms.html">charms.md</a>: the execution modifiers attached after <code>:</code>.</li>
+<li><a href="engines.html">engines.md</a>: the Lua/Buzz engines a magusfile runs on.</li>
+</ul>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/targets.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-08 21:30:01 UTC from commit <a href="https://github.com/egladman/tack/commit/3a0cc28e2f320ebf35e51e721ab7d891005bb74e"><code>3a0cc28</code></a></small>
+  </footer>
+</body>
+</html>

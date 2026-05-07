@@ -1,0 +1,306 @@
+// magusfile.bzz — the magus documentation site, a standalone magus project.
+//
+// Renders the sibling magus/docs tree (Markdown) into ./gen as a static HTML
+// site. The render is dry — Buzz stdlib (fs/io/os/std) plus the magus host
+// aggregate (extra.markdown.toHtml for GFM->HTML, extra.os/fs for the rest) —
+// so it lives in this project's `generate` target and needs no separate
+// `magus buzz` script. Source docs live one level up (../docs, ../README.md);
+// git runs as `git -C ..` so the per-page commit footer keys off the same
+// magus/-relative paths the source tree uses.
+//
+// It renders the committed Markdown under ../docs (including the module/manpage
+// reference the root project generates); the root's own drift gate keeps that
+// Markdown fresh, so the site just renders whatever is checked in.
+//
+//   magus run generate site   -- render docs/ -> gen/ and gate on drift
+//   magus run generate:rw site -- render and keep the result (no gate)
+//   magus run serve site      -- watch ../docs and re-render on change
+
+import "magus";
+import "magus/extra";
+import "fs";
+import "io";
+import "os";
+import "std";
+
+magus.project.register("site", {
+    "outputs": ["gen/**"],
+    "targets": {
+        // generate renders the site and then gates on drift, mirroring the root
+        // project's generate: a cache hit would skip the render, and the gate
+        // must run every time. isolated so its git-status check isn't tripped by
+        // a peer target mutating the tree mid-check.
+        "generate": {"cachable": false, "isolated": true},
+        "serve": {"cachable": false},
+    },
+});
+
+// ── configuration ───────────────────────────────────────────────────────────
+const ROOT = "..";          // the magus/ workspace dir, relative to this project
+const DOCS = "docs";        // source docs subtree under ROOT
+const OUT  = "gen";          // generated site output, under this project
+const PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
+const GH   = "https://github.com/egladman/tack";
+
+// Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
+// magusfile load — these shell out to git, and a magusfile is parsed on every
+// `magus ls`). Buzz lets a function reassign a typed global, so the render
+// helpers read these like the consts the standalone generator used.
+var metaPrefix: str = "";
+var metaBranch: str = "";
+var metaFull: str = "";
+var metaShort: str = "";
+var metaStamp: str = "";
+var metaCommits: {str: any} = {};
+var metaLoaded: bool = false;
+
+// ── shell capture ─────────────────────────────────────────────────────────────
+fun capture(cmd: str) > str {
+    const tmp = os.tmpFilename("sitegen");
+    const code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
+    if (code != 0) {
+        fs.delete(tmp);
+        return "";
+    }
+    const f = io.File.open(tmp, io.FileMode.read);
+    const out = f.readAll();
+    f.close();
+    fs.delete(tmp);
+    return out.trim();
+}
+
+// ── build metadata ───────────────────────────────────────────────────────────
+fun gitBranch() > str {
+    const b = capture("git -C " + ROOT + " rev-parse --abbrev-ref HEAD");
+    if (b == "") { return "main"; }
+    return b;
+}
+
+// Map of repo-root-relative source path -> "full|short|date" of the most recent
+// commit that touched it, built from ONE git log (newest-first, so a file's first
+// sighting wins) instead of a git call per page. ">>>" can't begin a repo path,
+// so it cleanly marks each commit header; the file names follow until the next.
+// Run with `git -C ..` so the pathspecs (README.md, docs) and emitted paths are
+// magus/-relative, matching metaPrefix.
+fun buildCommits() > {str: any} {
+    var m = {};
+    const log = capture("TZ=UTC git -C " + ROOT + " log --first-parent --diff-merges=first-parent --name-only "
+        + "--date=format-local:'%Y-%m-%d %H:%M:%S UTC' "
+        + "--format='>>>%H|%h|%cd' -- README.md docs");
+    var cur = "";
+    foreach (line in log.split("\n")) {
+        if (line.startsWith(">>>")) {
+            cur = line.sub(3);
+        } else {
+            if (line != "" and cur != "") {
+                if (m[line] == null) { m[line] = cur; }
+            }
+        }
+    }
+    return m;
+}
+
+// loadMeta populates the metaXxx globals once. metaPrefix is ROOT's repo prefix
+// (e.g. "magus/"), so metaPrefix + a magus/-relative source path is the key into
+// metaCommits. metaFull/Short/Stamp are the HEAD fallback for a not-yet-committed
+// page; a committed page instead credits the last commit that touched its source.
+fun loadMeta() > void {
+    if (metaLoaded) { return; }
+    metaPrefix = capture("git -C " + ROOT + " rev-parse --show-prefix");
+    metaBranch = gitBranch();
+    metaFull = capture("git -C " + ROOT + " rev-parse HEAD");
+    metaShort = capture("git -C " + ROOT + " rev-parse --short HEAD");
+    metaStamp = capture("TZ=UTC git -C " + ROOT + " show -s --date=format-local:'%Y-%m-%d %H:%M:%S UTC' --format=%cd HEAD");
+    metaCommits = buildCommits();
+    metaLoaded = true;
+}
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+fun titleOf(md: str, rel: str) > str {
+    foreach (line in md.split("\n")) {
+        if (line.startsWith("# ")) { return line.sub(2).trim(); }
+    }
+    return rel;
+}
+
+fun outName(base: str) > str {
+    if (base == "README.md") { return "index.html"; }
+    return base.sub(0, base.len() - 3) + ".html";
+}
+
+// Footer crediting the last commit that touched a page's source (a magus/-relative
+// path), falling back to HEAD for a not-yet-committed file. Keying off the file's
+// own history means a page changes when its source does, not when any commit lands.
+fun commitFooter(path: str) > str {
+    var cFull = metaFull;
+    var cShort = metaShort;
+    var cStamp = metaStamp;
+    const rec = metaCommits[metaPrefix + path];
+    if (rec != null) {
+        const parts = rec.split("|");
+        cFull = parts[0];
+        cShort = parts[1];
+        cStamp = parts[2];
+    }
+    return "Generated " + cStamp + " from commit "
+        + "<a href=\"" + GH + "/commit/" + cFull + "\"><code>" + cShort + "</code></a>";
+}
+
+// srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
+// it drives both the per-page commit footer and the "Suggest an edit" link.
+fun page(title: str, content: str, srcRel: str) > str {
+    return "<!DOCTYPE html>\n"
+        + "<html lang=\"en\">\n"
+        + "<head>\n"
+        + "  <meta charset=\"utf-8\">\n"
+        + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        + "  <title>" + title + "</title>\n"
+        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "</head>\n"
+        + "<body>\n"
+        + "  <header class=\"container\">\n"
+        + "    <nav>\n"
+        + "      <ul><li><strong>magus docs</strong></li></ul>\n"
+        + "      <ul><li><a href=\"" + GH + "\">Source code</a></li></ul>\n"
+        + "    </nav>\n"
+        + "  </header>\n"
+        + "  <main class=\"container\">\n"
+        + "    <article>\n"
+        + content
+        + "    </article>\n"
+        + "    <p><a href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a></p>\n"
+        + "  </main>\n"
+        + "  <footer class=\"container\">\n"
+        + "    <small>" + commitFooter(srcRel) + "</small>\n"
+        + "  </footer>\n"
+        + "</body>\n"
+        + "</html>\n";
+}
+
+// ── renderers ─────────────────────────────────────────────────────────────────
+// Render the repo's top-level README.md as the site landing page (index.html).
+// Links of the form href="docs/X" (relative from the repo root) resolve from
+// gen/index.html as href="X" — strip the docs/ prefix.
+fun renderRoot() > void {
+    const f = io.File.open(ROOT + "/README.md", io.FileMode.read);
+    const md = f.readAll();
+    f.close();
+
+    var html = extra.markdown.toHtml(md);
+    while (html.indexOf("href=\"docs/") != null) {
+        html = html.replace("href=\"docs/", "href=\"");
+    }
+
+    const doc = page(titleOf(md, "README.md"), html, "README.md");
+    const of = io.File.open(OUT + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    std.print("  README.md -> " + OUT + "/index.html");
+}
+
+// Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
+// docs/ subtree; srcRel (DOCS/rel) is magus/-relative for the footer/edit link.
+fun renderFile(rel: str) > void {
+    const f = io.File.open(ROOT + "/" + DOCS + "/" + rel, io.FileMode.read);
+    const md = f.readAll();
+    f.close();
+
+    const html = extra.markdown.toHtml(md);
+    const doc = page(titleOf(md, rel), html, DOCS + "/" + rel);
+
+    const parts = rel.split("/");
+    const base = parts[parts.len() - 1];
+    var dir = OUT;
+    if (parts.len() > 1) { dir = OUT + "/" + parts.sub(0, parts.len() - 1).join("/"); }
+    fs.makeDirectory(dir);
+
+    const of = io.File.open(dir + "/" + outName(base), io.FileMode.write);
+    of.write(doc);
+    of.close();
+    std.print("  " + rel + " -> " + dir + "/" + outName(base));
+}
+
+// True if path is a directory.
+fun isDir(path: str) > bool {
+    return os.execute(["test", "-d", path]) == 0;
+}
+
+// Recursively walk ../docs (the output lives outside it, under gen).
+fun walk(rel: str) > void {
+    var dir = ROOT + "/" + DOCS;
+    if (rel != "") { dir = ROOT + "/" + DOCS + "/" + rel; }
+
+    foreach (name in fs.list(dir)) {
+        var childRel = name;
+        if (rel != "") { childRel = rel + "/" + name; }
+
+        if (isDir(ROOT + "/" + DOCS + "/" + childRel)) {
+            walk(childRel);
+        } else {
+            if (name.endsWith(".md")) { renderFile(childRel); }
+        }
+    }
+}
+
+// site_render rebuilds gen/ from ../docs and the root README. Pure function of
+// git history (footers) and the source tree — reproducible and gate-stable.
+fun site_render() > void {
+    loadMeta();
+    fs.delete(OUT);
+    fs.makeDirectory(OUT);
+    std.print("generating site from " + ROOT + "/" + DOCS + "/ -> " + OUT + "/");
+
+    // Copy static assets referenced by the root README (images, badges).
+    os.execute(["sh", "-c", "[ -d " + ROOT + "/assets ] && cp -r " + ROOT + "/assets " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -f " + ROOT + "/coverage.svg ] && cp " + ROOT + "/coverage.svg " + OUT + "/ || true"]);
+
+    renderRoot();
+    walk("");
+    std.print("done");
+}
+
+// ── targets ──────────────────────────────────────────────────────────────────
+export fun preflight(_args: [str]) > void {}
+
+// generate renders the site then gates on drift: a clean checkout only goes dirty
+// when gen/ actually changed (i.e. a doc edit wasn't re-rendered and committed).
+// Run the `rw` charm (`generate:rw`) to keep the result instead of gating.
+export fun generate(_args: [str]) > void {
+    magus.depends_on(["preflight"]);
+    site_render();
+    if (magus.has_charm("rw")) { return; }
+
+    const drift = extra.os.exec("git", ["status", "--porcelain", "--", OUT]).stdout;
+    if (drift != "") {
+        throw "generate: " + OUT + " drifted after render; re-run `magus run generate:rw site` and commit:\n" + drift;
+    }
+}
+
+export fun format(_args: [str]) > void { magus.depends_on(["generate"]); }
+export fun lint(_args: [str]) > void { magus.depends_on(["format"]); }
+export fun build(_args: [str]) > void { magus.depends_on(["generate"]); }
+export fun test(_args: [str]) > void { magus.depends_on(["format"]); }
+
+// 'ci' is the conventional anchor `magus affected ci` keys off; it fans out
+// lint/build/test, each of which waits for the render via generate.
+export fun ci(_args: [str]) > void {
+    magus.depends_on(["lint", "build", "test"]);
+}
+
+// serve watches ../docs and re-renders gen/ on change — handy for local docs
+// work. extra.fs.watch BLOCKS until interrupted (Ctrl-C); the output lives
+// outside the watched tree (under gen), so a render can't retrigger the watch.
+// try/catch keeps a bad render from ending the watch; returning false keeps watching.
+export fun serve(_args: [str]) > void {
+    site_render();
+    magus.info("watching " + ROOT + "/" + DOCS + " — re-rendering " + OUT + " on change (Ctrl-C to stop)");
+    extra.fs.watch([ROOT + "/" + DOCS], fun(_changed: [str]) > bool {
+        magus.info("change detected — re-rendering");
+        try {
+            site_render();
+        } catch (e) {
+            magus.warn("render failed, still watching: " + e);
+        }
+        return false;
+    });
+}

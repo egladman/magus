@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`fs`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="fs"><code>fs</code></h1>
+<p>Filesystem and path primitives.</p>
+<blockquote>
+<p><strong>Naming convention:</strong> Teal/Lua binds each module per-import in <code>snake_case</code> (<code>local fs = require(&quot;magus.extra.fs&quot;)</code>, then <code>fs.some_method</code>). Buzz reaches them off the <code>import &quot;magus/extra&quot;</code> aggregate in <code>camelCase</code> (<code>extra.fs.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="glob"><code>glob</code></h3>
+<p>Return paths matching pattern (doublestar-style).</p>
+<p><strong>Signature (Teal):</strong> <code>fs.glob(pattern) → []string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.glob(pattern) → []string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pattern</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> []string</p>
+<h3 id="dirname"><code>dirname</code></h3>
+<p>Directory portion of path.</p>
+<p><strong>Signature (Teal):</strong> <code>fs.dirname(path) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.dirname(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="basename"><code>basename</code></h3>
+<p>Final element of path.</p>
+<p><strong>Signature (Teal):</strong> <code>fs.basename(path) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.basename(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="exists"><code>exists</code></h3>
+<p>True iff path exists.</p>
+<p><strong>Signature (Teal):</strong> <code>fs.exists(path) → bool</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.exists(path) → bool</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.exists</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> bool</p>
+<h3 id="read-file"><code>read_file</code></h3>
+<p>Return the contents of path as a string.</p>
+<p><strong>Signature (Teal):</strong> <code>fs.read_file(path) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.readFile(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="write-file"><code>write_file</code></h3>
+<p>Write content to path (mode 0644).</p>
+<p><strong>Signature (Teal):</strong> <code>fs.write_file(path, content)</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.writeFile(path, content)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="mkdirall"><code>mkdirall</code></h3>
+<p>Create path and parents (default mode 0755).</p>
+<p><strong>Signature (Teal):</strong> <code>fs.mkdirall(path, [perm])</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.mkdirall(path, [perm])</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.makeDirectory</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>perm</code></td>
+<td><code>int</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="join"><code>join</code></h3>
+<p>Join path elements with the OS separator.</p>
+<p><strong>Signature (Teal):</strong> <code>fs.join(parts...) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.join(parts...) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>parts</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="remove-all"><code>remove_all</code></h3>
+<p>Recursively remove path (no error if missing).</p>
+<p><strong>Signature (Teal):</strong> <code>fs.remove_all(path)</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.removeAll(path)</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.delete</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="list-dir"><code>list_dir</code></h3>
+<p>Return directory entries; empty if path does not exist.</p>
+<p><strong>Signature (Teal):</strong> <code>fs.list_dir(path) → []string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.listDir(path) → []string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.list</code> — the <code>extra</code> form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> []string</p>
+<h3 id="watch"><code>watch</code></h3>
+<p>Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.</p>
+<p><strong>Signature (Teal):</strong> <code>fs.watch(paths, callback)</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.fs.watch(paths, callback)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>paths</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>callback</code></td>
+<td><code>Callback</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/modules/fs.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-07 21:25:56 UTC from commit <a href="https://github.com/egladman/tack/commit/43af46ebf375d061c270cb659e18670f7f6afdb2"><code>43af46e</code></a></small>
+  </footer>
+</body>
+</html>

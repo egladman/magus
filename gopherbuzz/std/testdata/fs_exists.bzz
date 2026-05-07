@@ -1,0 +1,3 @@
+// @expect: false
+import "fs";
+const __r = fs.exists("/this/path/should/not/exist/buzz-test-42");

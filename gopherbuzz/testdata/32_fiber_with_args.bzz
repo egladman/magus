@@ -1,0 +1,7 @@
+// @expect: 15
+fun adder(n: int) {
+    yield n + 5;
+    yield n + 10;
+}
+const f = &adder(10);
+const __r = resume f;

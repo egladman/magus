@@ -1,0 +1,607 @@
+// Command magus-bindings-gen emits per-VM trampoline code from std.Module
+// declarations. Run via `go generate` from each module's source file:
+//
+//	//go:generate go run ../../cmd/magus-bindings-gen -module fs -lang lua  -out gen/lua/fs.go
+//	//go:generate go run ../../cmd/magus-bindings-gen -module fs -lang buzz -out gen/buzz/fs.go
+//
+// The generated file registers the module's methods on a backend Session by
+// decoding args, calling the Impl in the host package, and encoding results.
+package main
+
+import (
+	"bytes"
+	"flag"
+	"fmt"
+	"go/format"
+	"os"
+	"strings"
+
+	"github.com/egladman/magus/internal/std"
+)
+
+func main() {
+	moduleName := flag.String("module", "", "module name to generate (e.g. fs)")
+	lang := flag.String("lang", "", "codegen target: lua|buzz")
+	outPath := flag.String("out", "", "output file path")
+	flag.Parse()
+
+	if *moduleName == "" || *lang == "" || *outPath == "" {
+		fmt.Fprintln(os.Stderr, "usage: magus-bindings-gen -module <name> -lang <lua|buzz> -out <path>")
+		os.Exit(2)
+	}
+
+	m, ok := std.Get(*moduleName)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "magus-bindings-gen: unknown module %q\n", *moduleName)
+		os.Exit(1)
+	}
+
+	var (
+		out []byte
+		err error
+	)
+	switch *lang {
+	case "lua":
+		out, err = emitLua(m)
+	case "buzz":
+		out, err = emitBuzz(m)
+	default:
+		fmt.Fprintf(os.Stderr, "magus-bindings-gen: unknown lang %q (have: lua, buzz)\n", *lang)
+		os.Exit(2)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus-bindings-gen: emit: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "magus-bindings-gen: write %s: %v\n", *outPath, err)
+		os.Exit(1)
+	}
+}
+
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	if s[0] >= 'a' && s[0] <= 'z' {
+		return string(s[0]-'a'+'A') + s[1:]
+	}
+	return s
+}
+
+func trampolineName(module, method string) string {
+	return module + titleCase(std.CamelCase(method))
+}
+
+func registerName(module string) string {
+	return "Register" + titleCase(module)
+}
+
+func luaCheckCall(t std.TypeTag) string {
+	switch t {
+	case std.TypeString:
+		return "CheckString"
+	case std.TypeInt, std.TypeIndex:
+		return "CheckInt"
+	case std.TypeFloat:
+		return "CheckNumber"
+	case std.TypeBool:
+		return "CheckAny"
+	case std.TypeStringSlice, std.TypeStringMap, std.TypeAnyMap:
+		return "CheckTable"
+	case std.TypeFunc:
+		return "CheckFunction"
+	default:
+		return "CheckAny"
+	}
+}
+
+func goLiteral(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return "nil"
+	case string:
+		return fmt.Sprintf("%q", x)
+	case int:
+		return fmt.Sprintf("%d", x)
+	case int64:
+		return fmt.Sprintf("%d", x)
+	case float64:
+		return fmt.Sprintf("%g", x)
+	case bool:
+		if x {
+			return "true"
+		}
+		return "false"
+	}
+	return fmt.Sprintf("%#v", v)
+}
+
+func zeroLiteral(t std.TypeTag) string {
+	switch t {
+	case std.TypeString:
+		return `""`
+	case std.TypeInt, std.TypeFloat:
+		return "0"
+	case std.TypeBool:
+		return "false"
+	default:
+		return "nil"
+	}
+}
+
+// toLuaPushStmts returns the Go statements that push a return value (held in
+// the variable named `src`) onto r's stack. For complex types (slices, maps)
+// this is multi-line.
+func toLuaPushStmts(t std.TypeTag, src string, indent string) string {
+	switch t {
+	case std.TypeString:
+		return indent + fmt.Sprintf("r.Push(engine.StringValue(%s))", src)
+	case std.TypeInt:
+		return indent + fmt.Sprintf("r.Push(engine.NumberValue(float64(%s)))", src)
+	case std.TypeIndex:
+		// Go Impl returns 0-based; Lua is 1-based. -1 ("not found") becomes 0.
+		return indent + fmt.Sprintf("r.Push(engine.NumberValue(float64(%s + 1)))", src)
+	case std.TypeFloat:
+		return indent + fmt.Sprintf("r.Push(engine.NumberValue(%s))", src)
+	case std.TypeBool:
+		return indent + fmt.Sprintf("r.Push(engine.BoolValue(%s))", src)
+	case std.TypeStringSlice:
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s{\n", indent)
+		fmt.Fprintf(&b, "%s\ttbl := r.NewTable()\n", indent)
+		fmt.Fprintf(&b, "%s\tfor i, v := range %s {\n", indent, src)
+		fmt.Fprintf(&b, "%s\t\ttbl.RawSetInt(i+1, engine.StringValue(v))\n", indent)
+		fmt.Fprintf(&b, "%s\t}\n", indent)
+		fmt.Fprintf(&b, "%s\tr.Push(tbl)\n", indent)
+		fmt.Fprintf(&b, "%s}", indent)
+		return b.String()
+	case std.TypeStringMap:
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s{\n", indent)
+		fmt.Fprintf(&b, "%s\ttbl := r.NewTable()\n", indent)
+		fmt.Fprintf(&b, "%s\tfor k, v := range %s {\n", indent, src)
+		fmt.Fprintf(&b, "%s\t\ttbl.RawSetString(k, engine.StringValue(v))\n", indent)
+		fmt.Fprintf(&b, "%s\t}\n", indent)
+		fmt.Fprintf(&b, "%s\tr.Push(tbl)\n", indent)
+		fmt.Fprintf(&b, "%s}", indent)
+		return b.String()
+	case std.TypeAnyMap:
+		return indent + fmt.Sprintf("pushAnyMap(r, %s)", src)
+	default:
+		return indent + fmt.Sprintf("/* TODO: push %s */ _ = %s", t.GoType(), src)
+	}
+}
+
+func emitLua(m std.Module) ([]byte, error) {
+	var b bytes.Buffer
+
+	fmt.Fprintln(&b, "// Code generated by magus-bindings-gen. DO NOT EDIT.")
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "package luagen")
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, `import (`)
+	fmt.Fprintln(&b, `	"context"`)
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/std"`)
+	fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/engine"`)
+	fmt.Fprintln(&b, `	lua "github.com/egladman/magus/internal/interp/engine/lua"`)
+	fmt.Fprintln(&b, `)`)
+	fmt.Fprintln(&b)
+
+	fmt.Fprintf(&b, "var _ = context.Background\n")
+	fmt.Fprintf(&b, "var _ lua.Session\n\n")
+
+	regFn := registerName(m.Name)
+	fmt.Fprintf(&b, "// %s builds the %q module table and returns it.\n", regFn, m.Name)
+	if m.Doc != "" {
+		fmt.Fprintf(&b, "// %s\n", m.Doc)
+	}
+	fmt.Fprintf(&b, "func %s(r lua.Session) engine.Table {\n", regFn)
+	fmt.Fprintln(&b, "\tm := r.NewTable()")
+	for _, f := range m.Fields {
+		emitFieldResolution(&b, f)
+	}
+	for _, meth := range m.Methods {
+		fmt.Fprintf(&b, "\tm.RawSetString(%q, r.NewFunction(%s))\n",
+			meth.Name, trampolineName(m.Name, meth.Name))
+	}
+	fmt.Fprintln(&b, "\treturn m")
+	fmt.Fprintln(&b, "}")
+	fmt.Fprintln(&b)
+
+	for _, meth := range m.Methods {
+		emitLuaTrampoline(&b, m, meth)
+	}
+
+	out, err := format.Source(b.Bytes())
+	if err != nil {
+		return b.Bytes(), fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+	}
+	return out, nil
+}
+
+// emitLuaRequiredDecode writes the Go statements that decode a required
+// positional arg `a` at stack index `idx`.
+func emitLuaRequiredDecode(w *bytes.Buffer, a std.Arg, idx int) {
+	switch a.Type {
+	case std.TypeStringSlice:
+		fmt.Fprintf(w, "\t%sTbl := r.CheckTable(%d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t%s := make([]string, 0, %sTbl.Len())\n", a.Name, a.Name)
+		fmt.Fprintf(w, "\tfor i := 1; i <= %sTbl.Len(); i++ {\n", a.Name)
+		fmt.Fprintf(w, "\t\t%s = append(%s, %sTbl.RawGetInt(i).String())\n", a.Name, a.Name, a.Name)
+		fmt.Fprintln(w, "\t}")
+	case std.TypeStringMap:
+		fmt.Fprintf(w, "\t%sTbl := r.CheckTable(%d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t%s := map[string]string{}\n", a.Name)
+		fmt.Fprintf(w, "\t%sTbl.ForEach(func(k, v engine.Value) {\n", a.Name)
+		fmt.Fprintf(w, "\t\t%s[k.String()] = v.String()\n", a.Name)
+		fmt.Fprintln(w, "\t})")
+	case std.TypeAnyMap:
+		fmt.Fprintf(w, "\t%sTbl := r.CheckTable(%d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t%s := map[string]any{}\n", a.Name)
+		fmt.Fprintf(w, "\t%sTbl.ForEach(func(k, v engine.Value) {\n", a.Name)
+		fmt.Fprintf(w, "\t\t%s[k.String()] = valueToAny(v)\n", a.Name)
+		fmt.Fprintln(w, "\t})")
+	case std.TypeFunc:
+		fmt.Fprintf(w, "\t%sFn := r.CheckFunction(%d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t%s := newLuaCallback(r, %sFn)\n", a.Name, a.Name)
+	case std.TypeIndex:
+		// Lua is 1-based; the Go Impl expects 0-based.
+		fmt.Fprintf(w, "\t%s := r.CheckInt(%d) - 1\n", a.Name, idx)
+	default:
+		fmt.Fprintf(w, "\t%s := r.%s(%d)\n", a.Name, luaCheckCall(a.Type), idx)
+	}
+}
+
+// emitLuaOptionalDecode writes the Go statements that decode an optional
+// positional arg `a` at stack index `idx`. Treats explicit Lua nil the same
+// as omitted so callers can pass nil to skip an optional positional arg.
+func emitLuaOptionalDecode(w *bytes.Buffer, a std.Arg, idx int) {
+	switch a.Type {
+	case std.TypeStringSlice:
+		fmt.Fprintf(w, "\tvar %s []string\n", a.Name)
+		fmt.Fprintf(w, "\tif r.GetTop() >= %d && !r.Get(%d).IsNil() {\n", idx, idx)
+		fmt.Fprintf(w, "\t\tif tbl, ok := r.Get(%d).AsTable(); ok {\n", idx)
+		fmt.Fprintf(w, "\t\t\t%s = make([]string, 0, tbl.Len())\n", a.Name)
+		fmt.Fprintln(w, "\t\t\tfor i := 1; i <= tbl.Len(); i++ {")
+		fmt.Fprintf(w, "\t\t\t\t%s = append(%s, tbl.RawGetInt(i).String())\n", a.Name, a.Name)
+		fmt.Fprintln(w, "\t\t\t}")
+		fmt.Fprintln(w, "\t\t}")
+		fmt.Fprintln(w, "\t}")
+	case std.TypeStringMap:
+		fmt.Fprintf(w, "\t%s := map[string]string{}\n", a.Name)
+		fmt.Fprintf(w, "\tif r.GetTop() >= %d && !r.Get(%d).IsNil() {\n", idx, idx)
+		fmt.Fprintf(w, "\t\tif tbl, ok := r.Get(%d).AsTable(); ok {\n", idx)
+		fmt.Fprintf(w, "\t\t\ttbl.ForEach(func(k, v engine.Value) {\n")
+		fmt.Fprintf(w, "\t\t\t\t%s[k.String()] = v.String()\n", a.Name)
+		fmt.Fprintln(w, "\t\t\t})")
+		fmt.Fprintln(w, "\t\t}")
+		fmt.Fprintln(w, "\t}")
+	case std.TypeAnyMap:
+		fmt.Fprintf(w, "\tvar %s map[string]any\n", a.Name)
+		fmt.Fprintf(w, "\tif r.GetTop() >= %d && !r.Get(%d).IsNil() {\n", idx, idx)
+		fmt.Fprintf(w, "\t\tif %sTbl, ok := r.Get(%d).AsTable(); ok {\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t\t%s = map[string]any{}\n", a.Name)
+		fmt.Fprintf(w, "\t\t\t%sTbl.ForEach(func(k, v engine.Value) {\n", a.Name)
+		fmt.Fprintf(w, "\t\t\t\t%s[k.String()] = valueToAny(v)\n", a.Name)
+		fmt.Fprintln(w, "\t\t\t})")
+		fmt.Fprintln(w, "\t\t}")
+		fmt.Fprintln(w, "\t}")
+	case std.TypeFunc:
+		fmt.Fprintf(w, "\tvar %s std.Callback\n", a.Name)
+		fmt.Fprintf(w, "\tif r.GetTop() >= %d && !r.Get(%d).IsNil() {\n", idx, idx)
+		fmt.Fprintf(w, "\t\t%s = newLuaCallback(r, r.CheckFunction(%d))\n", a.Name, idx)
+		fmt.Fprintln(w, "\t}")
+	default:
+		def := zeroLiteral(a.Type)
+		if a.Default != nil {
+			def = goLiteral(a.Default)
+		}
+		fmt.Fprintf(w, "\t%s := %s\n", a.Name, def)
+		fmt.Fprintf(w, "\tif r.GetTop() >= %d && !r.Get(%d).IsNil() {\n", idx, idx)
+		fmt.Fprintf(w, "\t\t%s = r.%s(%d)\n", a.Name, luaCheckCall(a.Type), idx)
+		fmt.Fprintln(w, "\t}")
+	}
+}
+
+// emitLuaVariadicDecode writes the Go statements that decode a trailing
+// variadic arg `a` whose first element sits at 1-based stack position stackIdx
+// (i.e. just past any preceding fixed args). Today only TypeString is supported
+// as the element type.
+func emitLuaVariadicDecode(w *bytes.Buffer, a std.Arg, stackIdx int) {
+	fmt.Fprintln(w, "\tn := r.GetTop()")
+	fmt.Fprintf(w, "\tvar %s []%s\n", a.Name, a.Type.GoType())
+	fmt.Fprintf(w, "\tfor i := %d; i <= n; i++ {\n", stackIdx)
+	fmt.Fprintf(w, "\t\t%s = append(%s, r.%s(i))\n", a.Name, a.Name, luaCheckCall(a.Type))
+	fmt.Fprintln(w, "\t}")
+}
+
+func emitFieldResolution(w *bytes.Buffer, f std.Field) {
+	callArgs := ""
+	if f.ResolverTakesCtx() {
+		// Field resolvers don't have a Session context; pass background.
+		callArgs = "context.Background()"
+	}
+	fmt.Fprintln(w, "\t{")
+	fmt.Fprintf(w, "\t\tv, err := std.%s(%s)\n", f.FuncName(), callArgs)
+	fmt.Fprintln(w, "\t\t_ = err")
+	push := toLuaPushStmts(f.Type, "v", "\t\t")
+	switch f.Type {
+	case std.TypeString:
+		fmt.Fprintf(w, "\t\tm.RawSetString(%q, engine.StringValue(v))\n", f.Name)
+	case std.TypeBool:
+		fmt.Fprintf(w, "\t\tm.RawSetString(%q, engine.BoolValue(v))\n", f.Name)
+	case std.TypeInt:
+		fmt.Fprintf(w, "\t\tm.RawSetString(%q, engine.NumberValue(float64(v)))\n", f.Name)
+	case std.TypeFloat:
+		fmt.Fprintf(w, "\t\tm.RawSetString(%q, engine.NumberValue(v))\n", f.Name)
+	default:
+		fmt.Fprintln(w, push)
+		fmt.Fprintln(w, "\t\tval := r.Get(-1)")
+		fmt.Fprintln(w, "\t\tr.Pop(1)")
+		fmt.Fprintf(w, "\t\tm.RawSetString(%q, val)\n", f.Name)
+	}
+	fmt.Fprintln(w, "\t}")
+}
+
+func emitLuaTrampoline(w *bytes.Buffer, m std.Module, meth std.Method) {
+	name := trampolineName(m.Name, meth.Name)
+	if meth.Doc != "" {
+		fmt.Fprintf(w, "// %s wraps std.%s.\n// %s\n", name, meth.FuncName(), meth.Doc)
+	}
+	fmt.Fprintf(w, "func %s(ctx context.Context, r lua.Session) int {\n", name)
+
+	variadicName := ""
+	for i, a := range meth.Args {
+		stackIdx := i + 1
+		switch {
+		case a.Variadic:
+			variadicName = a.Name
+			emitLuaVariadicDecode(w, a, stackIdx)
+		case a.Optional:
+			emitLuaOptionalDecode(w, a, stackIdx)
+		default:
+			emitLuaRequiredDecode(w, a, stackIdx)
+		}
+	}
+
+	var lhs string
+	if len(meth.Returns) == 0 {
+		lhs = "err :="
+	} else {
+		parts := make([]string, 0, len(meth.Returns)+1)
+		for i := range meth.Returns {
+			parts = append(parts, fmt.Sprintf("ret%d", i))
+		}
+		parts = append(parts, "err")
+		lhs = strings.Join(parts, ", ") + " :="
+	}
+
+	callArgs := []string{"ctx"}
+	for _, a := range meth.Args {
+		if a.Variadic {
+			callArgs = append(callArgs, variadicName+"...")
+		} else {
+			callArgs = append(callArgs, a.Name)
+		}
+	}
+	fmt.Fprintf(w, "\t%s std.%s(%s)\n", lhs, meth.FuncName(), strings.Join(callArgs, ", "))
+
+	fmt.Fprintln(w, "\tif err != nil {")
+	w.WriteString("\t\tr.RaiseError(\"%s\", err.Error())\n")
+	fmt.Fprintln(w, "\t\treturn 0")
+	fmt.Fprintln(w, "\t}")
+
+	for i, ret := range meth.Returns {
+		fmt.Fprintln(w, toLuaPushStmts(ret.Type, fmt.Sprintf("ret%d", i), "\t"))
+	}
+	fmt.Fprintf(w, "\treturn %d\n", len(meth.Returns))
+	fmt.Fprintln(w, "}")
+	fmt.Fprintln(w)
+}
+
+// emitBuzz emits the Buzz trampolines for module m into package buzzgen. It
+// emits one Register<Module>(ctx, sess) that builds a buzz map of DirectValue
+// closures; Buzz closures return (Value, error) natively, so host errors
+// propagate as a Buzz runtime error instead of a panic. Method names stay
+// snake_case to match the magusfile DSL; multi-return Impls yield a list.
+//
+// Unlike emitLua (which targets the engine.Value / lua.Session abstraction so
+// gopherlua and luajit can share one binding implementation), this emits
+// directly against the concrete magus/gopherbuzz value system. Buzz has a single
+// backend, so there is no second VM for an interface to abstract over; see the
+// registerAllBuzz doc in interp/bindings/buzz.go for the full rationale.
+func emitBuzz(m std.Module) ([]byte, error) {
+	var b bytes.Buffer
+
+	// std is referenced by emitted field resolvers and method trampolines. extra
+	// is self-complete: every method is emitted onto the Buzz surface (even ones
+	// Buzz's stdlib also covers), so std is used whenever the module has content.
+	usesStd := len(m.Fields) > 0 || len(m.Methods) > 0
+
+	fmt.Fprintln(&b, "// Code generated by magus-bindings-gen. DO NOT EDIT.")
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "package buzzgen")
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, `import (`)
+	fmt.Fprintln(&b, `	"context"`)
+	fmt.Fprintln(&b)
+	if usesStd {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/std"`)
+	}
+	fmt.Fprintln(&b, `	buzz "github.com/egladman/gopherbuzz"`)
+	fmt.Fprintln(&b, `)`)
+	fmt.Fprintln(&b)
+
+	regFn := registerName(m.Name)
+	fmt.Fprintf(&b, "// %s builds the %q module map and returns it.\n", regFn, m.Name)
+	if m.Doc != "" {
+		fmt.Fprintf(&b, "// %s\n", m.Doc)
+	}
+	fmt.Fprintf(&b, "func %s(ctx context.Context, sess *buzz.Session) buzz.Value {\n", regFn)
+	fmt.Fprintln(&b, "\t_ = ctx")
+	fmt.Fprintln(&b, "\t_ = sess")
+	fmt.Fprintln(&b, "\tm := buzz.NewMap()")
+
+	for _, f := range m.Fields {
+		emitBuzzField(&b, f)
+	}
+	// extra is self-complete: every method is emitted onto the Buzz surface, even
+	// ones Buzz's own stdlib also covers. Authors reach one namespace (extra.fs.*)
+	// for a whole domain instead of straddling native fs + extra, and the extra
+	// forms are sandbox-aware where the stdlib is not (e.g. extra.env honors the
+	// env policy; Buzz's os.env does not). See std.NativeBuzzEquiv for the
+	// informational native cross-reference.
+	for _, meth := range m.Methods {
+		emitBuzzMethod(&b, m, meth)
+	}
+
+	fmt.Fprintln(&b, "\treturn m")
+	fmt.Fprintln(&b, "}")
+
+	out, err := format.Source(b.Bytes())
+	if err != nil {
+		return b.Bytes(), fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+	}
+	return out, nil
+}
+
+// emitBuzzField resolves a static field once and stores it on the module map.
+// The key is camelCased: Buzz's convention is camelCase, while the std descriptor
+// (and the Lua/Teal binding) is snake_case.
+func emitBuzzField(w *bytes.Buffer, f std.Field) {
+	callArgs := ""
+	if f.ResolverTakesCtx() {
+		callArgs = "ctx"
+	}
+	fmt.Fprintf(w, "\tif v, err := std.%s(%s); err == nil {\n", f.FuncName(), callArgs)
+	fmt.Fprintf(w, "\t\tm.MapSet(%q, %s)\n", std.CamelCase(f.Name), buzzValConv(f.Type, "v"))
+	fmt.Fprintln(w, "\t}")
+}
+
+// emitBuzzMethod emits one DirectValue trampoline for meth. The closure's arg
+// slice is named bzArgs to avoid colliding with host args named "args". The map
+// key is camelCased to match Buzz's convention (the snake_case descriptor name
+// stays the runtime label so errors still read e.g. "fs.readFile").
+func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method) {
+	name := std.CamelCase(meth.Name)
+	fmt.Fprintf(w, "\tm.MapSet(%q, buzz.DirectValue(%q, func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {\n",
+		name, m.Name+"."+name)
+
+	for i, a := range meth.Args {
+		emitBuzzArgDecode(w, a, i)
+	}
+
+	callArgs := make([]string, 0, 1+len(meth.Args))
+	callArgs = append(callArgs, "ctx")
+	for _, a := range meth.Args {
+		if a.Variadic {
+			callArgs = append(callArgs, a.Name+"...")
+		} else {
+			callArgs = append(callArgs, a.Name)
+		}
+	}
+	callStr := strings.Join(callArgs, ", ")
+
+	switch len(meth.Returns) {
+	case 0:
+		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", meth.FuncName(), callStr)
+		fmt.Fprintln(w, "\t\t\treturn buzz.Null, err")
+		fmt.Fprintln(w, "\t\t}")
+		fmt.Fprintln(w, "\t\treturn buzz.Null, nil")
+	case 1:
+		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", meth.FuncName(), callStr)
+		fmt.Fprintln(w, "\t\tif err != nil {")
+		fmt.Fprintln(w, "\t\t\treturn buzz.Null, err")
+		fmt.Fprintln(w, "\t\t}")
+		fmt.Fprintf(w, "\t\treturn %s, nil\n", buzzValConv(meth.Returns[0].Type, "ret0"))
+	default:
+		lhsParts := make([]string, 0, len(meth.Returns)+1)
+		for i := range meth.Returns {
+			lhsParts = append(lhsParts, fmt.Sprintf("ret%d", i))
+		}
+		lhsParts = append(lhsParts, "err")
+		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), meth.FuncName(), callStr)
+		fmt.Fprintln(w, "\t\tif err != nil {")
+		fmt.Fprintln(w, "\t\t\treturn buzz.Null, err")
+		fmt.Fprintln(w, "\t\t}")
+		items := make([]string, len(meth.Returns))
+		for i, ret := range meth.Returns {
+			items[i] = buzzValConv(ret.Type, fmt.Sprintf("ret%d", i))
+		}
+		fmt.Fprintf(w, "\t\treturn buzz.ListValue([]buzz.Value{%s}), nil\n", strings.Join(items, ", "))
+	}
+	fmt.Fprintln(w, "\t}))")
+}
+
+// emitBuzzArgDecode emits the decode statement for arg a at positional index idx.
+func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
+	if a.Variadic {
+		// Only TypeString variadic is used in practice.
+		fmt.Fprintf(w, "\t\t%s := bzVariadicStr(bzArgs, %d)\n", a.Name, idx)
+		return
+	}
+	switch a.Type {
+	case std.TypeString:
+		fmt.Fprintf(w, "\t\t%s := bzStr(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeInt:
+		def := "0"
+		if a.Optional && a.Default != nil {
+			def = goLiteral(a.Default)
+		}
+		fmt.Fprintf(w, "\t\t%s := bzInt(bzArgs, %d, %s)\n", a.Name, idx, def)
+	case std.TypeFloat:
+		def := "0"
+		if a.Optional && a.Default != nil {
+			def = goLiteral(a.Default)
+		}
+		fmt.Fprintf(w, "\t\t%s := bzFloat(bzArgs, %d, %s)\n", a.Name, idx, def)
+	case std.TypeIndex:
+		// Buzz lists are 0-based, matching the Go Impl — no offset.
+		fmt.Fprintf(w, "\t\t%s := bzInt(bzArgs, %d, 0)\n", a.Name, idx)
+	case std.TypeBool:
+		def := "false"
+		if a.Optional && a.Default != nil {
+			def = goLiteral(a.Default)
+		}
+		fmt.Fprintf(w, "\t\t%s := bzBool(bzArgs, %d, %s)\n", a.Name, idx, def)
+	case std.TypeStringSlice:
+		fmt.Fprintf(w, "\t\t%s := bzStrSlice(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeStringMap:
+		fmt.Fprintf(w, "\t\t%s := bzStrMap(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeAnyMap:
+		fmt.Fprintf(w, "\t\t%s := bzAnyMap(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeFunc:
+		fmt.Fprintf(w, "\t\t%s := bzCallback(sess, bzArgs, %d)\n", a.Name, idx)
+	case std.TypeAny:
+		fmt.Fprintf(w, "\t\t%s := bzAny(bzArgs, %d)\n", a.Name, idx)
+	default:
+		fmt.Fprintf(w, "\t\t%s := bzAny(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
+	}
+}
+
+// buzzValConv returns the Go expression that converts src (of the given
+// TypeTag) to a buzz.Value.
+func buzzValConv(t std.TypeTag, src string) string {
+	switch t {
+	case std.TypeString:
+		return fmt.Sprintf("bzStrVal(%s)", src)
+	case std.TypeInt, std.TypeIndex:
+		return fmt.Sprintf("bzIntVal(%s)", src)
+	case std.TypeBool:
+		return fmt.Sprintf("bzBoolVal(%s)", src)
+	case std.TypeFloat:
+		return fmt.Sprintf("bzFloatVal(%s)", src)
+	case std.TypeStringSlice:
+		return fmt.Sprintf("bzStrSliceVal(%s)", src)
+	case std.TypeStringMap:
+		return fmt.Sprintf("bzStrMapVal(%s)", src)
+	case std.TypeAnyMap:
+		return fmt.Sprintf("bzAnyMapVal(%s)", src)
+	case std.TypeAny:
+		return fmt.Sprintf("bzAnyVal(%s)", src)
+	default:
+		return fmt.Sprintf("bzStrVal(%s)", src)
+	}
+}

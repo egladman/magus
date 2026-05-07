@@ -1,0 +1,6 @@
+// @expect: 55
+var sum = 0;
+foreach (n in 1..10) {
+    sum = sum + n;
+}
+const __r = sum;

@@ -1,0 +1,77 @@
+.TH MAGUS-TAIL 1 "" "magus dev" "magus Manual"
+.SH NAME
+magus\-tail \- Stream the most recent cached log (interactive only)
+.SH SYNOPSIS
+.B magus
+.RI "tail [\-f] [\-n N] [target]"
+.SH DESCRIPTION
+Stream the captured build log of the most recent cache entry for a
+project. The log was written during a cache miss (when the build actually
+ran). Subsequent cache hits replay the same log without re\-running the build.
+.PP
+Requires an interactive terminal (like magus x). Set assume_interactive: true
+in magus.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override.
+.PP
+target follows the canonical path:target form used by magus run:
+  (none)     cwd project, latest run of any target
+  :build     cwd project, latest build run
+  api        api project, latest run of any target
+  api:test   api project, latest test run
+.PP
+Exits non\-zero when the project is not found, or when no cache entries
+exist yet (run a build first).
+.SH EXAMPLES
+\fIStream last log for cwd project\fR
+.PP
+.EX
+magus tail
+.EE
+.PP
+\fIFollow (stream new output as it arrives)\fR
+.PP
+.EX
+magus tail -f
+.EE
+.PP
+\fIShow last 50 lines\fR
+.PP
+.EX
+magus tail -n 50
+.EE
+.PP
+\fIShow entire log\fR
+.PP
+.EX
+magus tail -n 0
+.EE
+.PP
+\fILast test run for the api project\fR
+.PP
+.EX
+magus tail api:test
+.EE
+.PP
+\fILast build run for cwd project\fR
+.PP
+.EX
+magus tail :build
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

@@ -1,0 +1,74 @@
+.TH MAGUS-SERVER 1 "" "magus dev" "magus Manual"
+.SH NAME
+magus\-server \- Manage the persistent magus daemon
+.SH SYNOPSIS
+.B magus
+.RI "server <start|stop> [flags]"
+.SH DESCRIPTION
+Start, stop, or check the liveness of a persistent magus daemon.
+.PP
+By default every magus invocation starts a short\-lived proc server that dies
+when the command exits. The persistent daemon keeps the server alive across
+invocations so workspace discovery, config loading, and the content\-addressed
+cache are paid for once. Nested magus calls (from build scripts, editor
+integrations, etc.) forward work to the daemon automatically.
+.PP
+The socket address is resolved in priority order:
+  \-\-socket flag  >  MAGUS_DAEMON_ADDRESS env  >  daemon.address in magus.yaml  >
+  stable default ($XDG_RUNTIME_DIR/magus/magus\-daemon.sock)
+.PP
+The socket file acts as the lock: present means a daemon is running, absent
+means none. Shell init hooks (e.g. Nix\-injected .profile lines) typically
+check for the file with [ \-S "$socket" ] before starting one.
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBstart\fR
+Start a persistent daemon (foreground; use & or a supervisor to background)
+.TP
+\fBstop\fR
+Send a graceful shutdown request to a running daemon
+.RE
+.SH EXAMPLES
+\fIStart daemon in the background\fR
+.PP
+.EX
+magus server start &
+.EE
+.PP
+\fIStop the running daemon\fR
+.PP
+.EX
+magus server stop
+.EE
+.PP
+\fIInspect daemon pool state\fR
+.PP
+.EX
+magus status
+.EE
+.PP
+\fIUse a custom socket path\fR
+.PP
+.EX
+magus --daemon-address unix:///tmp/m.sock server start
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-tail\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

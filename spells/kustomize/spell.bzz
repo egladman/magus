@@ -1,0 +1,18 @@
+// kustomize — render Kustomize overlays.
+//
+// Authored source for the built-in "kustomize" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "kustomize"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["kustomization.yaml", "kustomization.yml", "Kustomization", "**/*.yaml", "**/*.yml"];
+}
+
+fun kustomizeBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "kustomize", "args": ["build", "."]}); return true; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"kustomize-build": kustomizeBuild};
+}

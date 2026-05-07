@@ -1,0 +1,6 @@
+// @expect: 42
+fun work() {
+    return 42;
+}
+const f = &work();
+const __r = resolve f;

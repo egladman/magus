@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magus-server</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="magus-server">magus-server</h1>
+<p>Manage the persistent magus daemon</p>
+<h2 id="synopsis">Synopsis</h2>
+<p><strong>magus</strong> server &lt;start|stop&gt; [flags]</p>
+<h2 id="description">Description</h2>
+<p>Start, stop, or check the liveness of a persistent magus daemon.</p>
+<p>By default every magus invocation starts a short-lived proc server that dies
+when the command exits. The persistent daemon keeps the server alive across
+invocations so workspace discovery, config loading, and the content-addressed
+cache are paid for once. Nested magus calls (from build scripts, editor
+integrations, etc.) forward work to the daemon automatically.</p>
+<p>The socket address is resolved in priority order:
+--socket flag  &gt;  MAGUS_DAEMON_ADDRESS env  &gt;  daemon.address in magus.yaml  &gt;
+stable default ($XDG_RUNTIME_DIR/magus/magus-daemon.sock)</p>
+<p>The socket file acts as the lock: present means a daemon is running, absent
+means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
+check for the file with [ -S &quot;$socket&quot; ] before starting one.</p>
+<h2 id="subcommands">Subcommands</h2>
+<dl>
+<dt><strong>start</strong></dt>
+<dd>Start a persistent daemon (foreground; use &amp; or a supervisor to background)</dd>
+<dt><strong>stop</strong></dt>
+<dd>Send a graceful shutdown request to a running daemon</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<p><em>Start daemon in the background</em></p>
+<pre><code>magus server start &amp;
+</code></pre>
+<p><em>Stop the running daemon</em></p>
+<pre><code>magus server stop
+</code></pre>
+<p><em>Inspect daemon pool state</em></p>
+<pre><code>magus status
+</code></pre>
+<p><em>Use a custom socket path</em></p>
+<pre><code>magus --daemon-address unix:///tmp/m.sock server start
+</code></pre>
+<h2 id="see-also">See Also</h2>
+<p><a href="magus.html"><strong>magus</strong>(1)</a>, <a href="magus-ls.html"><strong>magus-ls</strong>(1)</a>, <a href="magus-describe.html"><strong>magus-describe</strong>(1)</a>, <a href="magus-run.html"><strong>magus-run</strong>(1)</a>, <a href="magus-x.html"><strong>magus-x</strong>(1)</a>, <a href="magus-where.html"><strong>magus-where</strong>(1)</a>, <a href="magus-tail.html"><strong>magus-tail</strong>(1)</a>, <a href="magus-affected.html"><strong>magus-affected</strong>(1)</a>, <a href="magus-watch.html"><strong>magus-watch</strong>(1)</a>, <a href="magus-status.html"><strong>magus-status</strong>(1)</a>, <a href="magus-doctor.html"><strong>magus-doctor</strong>(1)</a>, <a href="magus-config.html"><strong>magus-config</strong>(1)</a>, <a href="magus-completion.html"><strong>magus-completion</strong>(1)</a>, <a href="magus-init.html"><strong>magus-init</strong>(1)</a>, <a href="magus-self.html"><strong>magus-self</strong>(1)</a>, <a href="magus-version.html"><strong>magus-version</strong>(1)</a></p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/manpage/gen/magus-server.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:15:29 UTC from commit <a href="https://github.com/egladman/tack/commit/ce03d86009fb586d971c8d56e1d4558560e71e13"><code>ce03d86</code></a></small>
+  </footer>
+</body>
+</html>

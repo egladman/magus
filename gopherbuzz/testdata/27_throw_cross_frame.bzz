@@ -1,0 +1,10 @@
+// @expect: caught inner error
+fun risky() {
+    throw "inner error";
+}
+var __r = "no catch";
+try {
+    risky();
+} catch (e) {
+    __r = "caught " + e;
+}

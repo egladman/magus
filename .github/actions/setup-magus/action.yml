@@ -1,0 +1,71 @@
+name: Setup magus
+description: >
+  Install the magus binary (prebuilt release with go-build fallback) and restore
+  Go module and Go build caches.
+
+inputs:
+  version:
+    description: >
+      Release tag to install (e.g. v0.5.0). Empty string always builds from
+      source using the checked-out code.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      with:
+        go-version-file: go.mod
+        cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
+
+    - name: Restore magus binary cache
+      id: magus-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/magus/bin
+        key: ${{ runner.os }}-magus-${{ inputs.version }}-${{ hashFiles('magus/cmd/magus/**', '**/*.go', 'go.sum') }}
+
+    - name: Install magus from release
+      id: prebuilt
+      if: steps.magus-cache.outputs.cache-hit != 'true' && inputs.version != ''
+      shell: bash
+      continue-on-error: true
+      run: |
+        set -euo pipefail
+        VERSION="${{ inputs.version }}"
+        OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+        BASE="https://github.com/egladman/magus/releases/download/${VERSION}"
+        ASSET="magus_${VERSION}_${OS}_${ARCH}.tar.gz"
+        TMP="$(mktemp -d)"
+        trap 'rm -rf "${TMP}"' EXIT
+
+        curl -fsSL "${BASE}/${ASSET}"   -o "${TMP}/${ASSET}"
+        curl -fsSL "${BASE}/SHA256SUMS" -o "${TMP}/SHA256SUMS"
+
+        cd "${TMP}"
+        grep "${ASSET}" SHA256SUMS | sha256sum --check --status
+
+        mkdir -p ~/.cache/magus/bin
+        tar -xzf "${ASSET}" -C ~/.cache/magus/bin magus
+        echo "magus: installed prebuilt ${VERSION} for ${OS}/${ARCH}" >&2
+
+    - name: Build magus from source
+      if: >
+        steps.magus-cache.outputs.cache-hit != 'true' &&
+        (inputs.version == '' || steps.prebuilt.outcome == 'failure')
+      shell: bash
+      run: |
+        mkdir -p ~/.cache/magus/bin
+        go build -o ~/.cache/magus/bin/magus ./cmd/magus
+        echo "magus: built from source" >&2
+
+    - name: Add magus to PATH
+      shell: bash
+      run: echo "$HOME/.cache/magus/bin" >> "$GITHUB_PATH"
+
+    - name: Verify magus
+      shell: bash
+      run: magus version

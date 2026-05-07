@@ -1,0 +1,25 @@
+// tf — Terraform formatting checks via terraform fmt.
+//
+// Authored source for the built-in "terraform" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "tf"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.tf", "**/*.tfvars", "**/*.tf.json", ".terraform.lock.hcl"];
+}
+
+export fun mgs_getVersionCommand() > [str] { return ["terraform", "version"]; }
+
+fun terraformFmt(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "terraform", "args": ["fmt", "-check", "-recursive", "."], "charms": {
+        "rw": {"ops": [{"op": "remove", "path": "/1"}]},
+    }});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"terraform-fmt": terraformFmt};
+}

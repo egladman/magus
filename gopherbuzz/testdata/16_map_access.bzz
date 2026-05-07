@@ -1,0 +1,3 @@
+// @expect: world
+const m = {"hello": "world", "foo": "bar"};
+const __r = m["hello"];

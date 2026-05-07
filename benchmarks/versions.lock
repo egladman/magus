@@ -1,0 +1,11 @@
+# Pinned versions for reproducible benchmarks.
+# bench.sh warns (but does not fail) if installed versions differ.
+# Set BENCH_SKIP_VERSION_CHECK=1 to suppress.
+hyperfine=1.18.0
+node=22.22.2
+pnpm=10.33.0
+turbo=2.9.14
+nx=22.7.3
+lage=2.15.12
+moon=2.2.5
+bazel=7.6.1

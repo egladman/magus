@@ -1,0 +1,22 @@
+// docker — image build, build-time checks, and Dockerfile linting.
+//
+// Authored source for the built-in "docker" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "docker"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["Dockerfile", ".dockerignore", "**/*"];
+}
+
+export fun mgs_getVersionCommand() > [str] { return ["docker", "--version"]; }
+
+fun dockerBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "docker", "args": ["build"]}); return true; }
+fun dockerBuildCheck(target: Target, cb: fun(any)) > bool { cb({"cmd": "docker", "args": ["build", "--check"]}); return true; }
+fun hadolint(target: Target, cb: fun(any)) > bool { cb({"cmd": "hadolint", "args": ["Dockerfile"]}); return true; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"docker-build": dockerBuild, "docker-build-check": dockerBuildCheck, "hadolint": hadolint};
+}

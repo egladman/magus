@@ -1,0 +1,8 @@
+// @error: cannot assign str to int
+fun work() > str *> int {
+    yield 1;
+    return "done";
+}
+// resolve returns the fiber's return type (str). Before inline fibers were
+// typed, this flowed as `any` and the mismatch went uncaught.
+const x: int = resolve &work();

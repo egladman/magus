@@ -1,0 +1,3 @@
+// @expect: HELLO
+const s = "hello";
+const __r = s.upper();

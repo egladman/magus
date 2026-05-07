@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1
+#
+# Pure-Go static magus image (CGO_ENABLED=0, distroless/static).
+#
+# Build locally:
+#   docker buildx build -f Dockerfile.static -t magus:static .
+#
+# Run against the host's working directory:
+#   docker run --rm -v "$PWD":/workspace magus:static ls
+#
+# Unlike the default Dockerfile (which uses CGO + LuaJIT), this variant
+# builds with CGO_ENABLED=0 — no shared libraries, no libc dependency.
+# The binary is the only layer added on top of gcr.io/distroless/static.
+# Mirrors the recipe used by the release-binaries target in magusfile.tl.
+
+FROM golang:1.25 AS builder
+WORKDIR /src
+
+# Cache module fetches independent of the source tree.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+ENV CGO_ENABLED=0
+ENV GOEXPERIMENT=jsonv2
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go build \
+      -trimpath \
+      -ldflags="-s -w -buildid= \
+        -X main.version=${VERSION} \
+        -X main.commit=${COMMIT} \
+        -X main.date=${DATE}" \
+      -o /out/magus \
+      ./cmd/magus
+
+FROM gcr.io/distroless/static:nonroot
+
+LABEL org.opencontainers.image.source="https://github.com/egladman/magus"
+LABEL org.opencontainers.image.description="magus — content-addressed monorepo build cache (static)"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+COPY --from=builder /out/magus /magus
+
+USER nonroot:nonroot
+WORKDIR /workspace
+
+ENTRYPOINT ["/magus"]
+CMD ["ls"]

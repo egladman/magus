@@ -1,0 +1,76 @@
+.TH MAGUS-CONFIG 1 "" "magus dev" "magus Manual"
+.SH NAME
+magus\-config \- View or update magus configuration
+.SH SYNOPSIS
+.B magus
+.RI "config <view|set|init> [flags]"
+.SH DESCRIPTION
+Inspect or modify the magus configuration. Configuration is loaded in
+priority order: built\-in defaults → user\-global file → workspace file →
+project\-local file → MAGUS_* environment variables → CLI flags.
+.PP
+The view sub\-command prints the effective merged configuration. The set
+sub\-command writes a key\-value pair to the local (or global) config file.
+The init sub\-command materialises the built\-in defaults to a magus.yaml so
+they can be edited by hand.
+.PP
+Configuration is stored in magus.yaml (or .magus.yaml). The canonical
+locations are the workspace root and $XDG_CONFIG_HOME/magus/.
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBview\fR
+Print the effective configuration (defaults + file + env)
+.TP
+\fBset\fR
+Write a key to the local (or global) config file
+.TP
+\fBinit\fR
+Materialise built\-in defaults to magus.yaml
+.TP
+\fBcache\fR
+Manage the build cache (prune \-\-older\-than)
+.RE
+.SH EXAMPLES
+\fIShow effective config\fR
+.PP
+.EX
+magus config view
+.EE
+.PP
+\fIShow config as JSON\fR
+.PP
+.EX
+magus config view -o json
+.EE
+.PP
+\fISet cache to read\-only\fR
+.PP
+.EX
+magus config set cache.immutable true
+.EE
+.PP
+\fIInitialise magus.yaml from defaults\fR
+.PP
+.EX
+magus config init
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-tail\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

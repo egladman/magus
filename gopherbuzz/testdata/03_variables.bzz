@@ -1,0 +1,4 @@
+// @expect: 15
+var x = 10;
+x = x + 5;
+const __r = x;

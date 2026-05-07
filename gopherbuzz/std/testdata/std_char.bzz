@@ -1,0 +1,3 @@
+// @expect: A
+import "std";
+const __r = std.char(65);

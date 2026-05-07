@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Race condition diagnostics</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="race-condition-diagnostics">Race condition diagnostics</h1>
+<p>Codes in the <code>MGS4xxx</code> range are emitted by the magus race condition detector.
+Enable with <code>magus run &lt;target&gt; --race</code>.</p>
+<p>The <code>--race</code> flag follows the <code>--output</code> pattern: an enumerated mode value.
+Modes are <strong>orthogonal</strong> and can be combined with a comma:</p>
+<pre><code>magus run build                          # no race diagnostics
+magus run build --race=watch             # cheap: fsnotify + static checks
+magus run build --race=replay            # determinism only
+magus run build --race=watch,replay      # everything
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Codes emitted</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(omitted)</td>
+<td><code>MGS4002</code> only</td>
+<td>free (static check, always on)</td>
+</tr>
+<tr>
+<td><code>watch</code></td>
+<td><code>MGS4001</code>, <code>MGS4002</code>, <code>MGS4004</code></td>
+<td>near-zero (fsnotify)</td>
+</tr>
+<tr>
+<td><code>replay</code></td>
+<td><code>MGS4002</code>, <code>MGS4003</code></td>
+<td>roughly doubles wall-clock</td>
+</tr>
+<tr>
+<td><code>watch,replay</code></td>
+<td>all four</td>
+<td>watch overhead + 2× wall-clock</td>
+</tr>
+</tbody>
+</table>
+<p><code>MGS4002</code> (declared-output overlap) is always emitted — it's a static check
+at graph construction time, with zero runtime cost, no flag required.</p>
+<p><code>watch</code> is safe to leave on for every CI run. <code>replay</code> re-executes the
+affected set sequentially with the cache bypassed — intended for nightly CI
+or a manual audit, not every push.</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/codes/race/README.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:31:42 UTC from commit <a href="https://github.com/egladman/tack/commit/d57fdd68d37625f0b1f5ea75649a23f1f709e713"><code>d57fdd6</code></a></small>
+  </footer>
+</body>
+</html>

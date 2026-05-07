@@ -1,0 +1,56 @@
+// buf — Protobuf toolchain spell: generate (codegen), build, lint, format.
+//
+// Authored source for the built-in "buf" spell. Compiled to bytecode and embedded
+// at build time (see cmd/magus-spells-gen); edit here, not the generated table.
+// Every op is a fork of `buf` on PATH — no shell. buf drives protoc-style code
+// generation from a buf.gen.yaml, so `generate` is the headline op.
+//
+// This spell is the reference example for a *codegen producer*: the interesting
+// part is the cache/affected metadata, not the commands. mgs_listRequiredGlobs
+// declares the .proto sources and buf config as inputs, and mgs_listProvidedGlobs
+// declares the generated code as outputs — so editing a .proto reruns codegen and,
+// because the generated files are a *dependent* project's inputs, invalidates
+// everything downstream of them. Keep `provides` in sync with the `out:` paths in
+// your buf.gen.yaml: under-declare and the cache won't replay codegen; over-declare
+// and every replay snapshots more than necessary.
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "buf"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"];
+}
+
+// Generated code buf writes. Adjust to match the `out:` directories in your
+// buf.gen.yaml; "gen/**" is the buf convention.
+export fun mgs_listProvidedGlobs() > [str] { return ["gen/**"]; }
+
+export fun mgs_getVersionCommand() > [str] { return ["buf", "--version"]; }
+
+fun bufBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "buf", "args": ["build"]}); return true; }
+fun bufGenerate(target: Target, cb: fun(any)) > bool { cb({"cmd": "buf", "args": ["generate"]}); return true; }
+fun bufLint(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "buf", "args": ["lint"], "charms": {
+        "gha": {"ops": [{"op": "add", "path": "/-", "value": "--error-format=github-actions"}]},
+    }});
+    return true;
+}
+
+// format checks by default (--exit-code fails CI when files would change); the
+// write charm applies the formatting in place.
+fun bufFormat(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "buf", "args": ["format", "--exit-code"], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/1", "value": "-w"}]},
+    }});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {
+        "buf-build": bufBuild,
+        "buf-generate": bufGenerate,
+        "buf-lint": bufLint,
+        "buf-format": bufFormat,
+    };
+}

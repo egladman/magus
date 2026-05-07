@@ -1,0 +1,3 @@
+// @expect: 42
+import "std";
+const __r = std.parseInt("42");

@@ -1,0 +1,7 @@
+// @expect: 15
+const items = [1, 2, 3, 4, 5];
+var sum = 0;
+foreach (x in items) {
+    sum = sum + x;
+}
+const __r = sum;

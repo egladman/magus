@@ -1,0 +1,22 @@
+// spells/hello/spell.bzz — a workspace-local spell.
+//
+// A spell is a module that exposes its contract as exported mgs_-prefixed
+// functions: a required mgs_getName, plus optional mgs_listRequiredGlobs / mgs_listProvidedGlobs /
+// mgs_listTargets and friends. Imported from the magusfile with
+// `import "spells/hello"` and bound to a project with
+// magus.project.register(".", { "spells": [hello] }).
+//
+// Each op in mgs_listTargets names a command and its argv, which magus forks directly
+// — no shell, no variable expansion, so invocations are deterministic and
+// injection-safe. For an op that needs a shell or a Buzz body, write an exported
+// function in the magusfile instead.
+
+export fun mgs_getName() > str { return "hello"; }
+
+// Ops are named after the CLI command they run (see docs/spells.md), so this op
+// is "echo", not a lifecycle verb like "build".
+export fun mgs_listTargets() > any {
+    return {
+        "echo": {"cmd": "echo", "args": ["Hello from magus"]},
+    };
+}

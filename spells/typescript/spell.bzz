@@ -1,0 +1,50 @@
+// ts — TypeScript / JS toolchain spell via pnpm (tsc, eslint, prettier, vitest).
+//
+// Authored source for the built-in "typescript" spell. Compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen); edit here, not the
+// generated table.
+//
+// Opaque (mgs_isForeignProcess) because pnpm manages its own dependency graph:
+// magus treats the project as a black box rather than tracking per-file inputs.
+// It claims a broad set of web-asset globs so sibling single-file spells (json,
+// css, markdown, ...) don't also claim files inside a TS project.
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "ts"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json",
+            ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json"];
+}
+
+export fun mgs_listClaimedGlobs() > [str] {
+    return ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs",
+            "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx",
+            "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"];
+}
+
+export fun mgs_isForeignProcess() > bool { return true; }
+
+export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
+
+fun eslint(target: Target, cb: fun(any)) > bool { cb({"cmd": "pnpm", "args": ["exec", "eslint", "."]}); return true; }
+// preflight is a no-op marker op (no command).
+fun preflight(target: Target, cb: fun(any)) > bool { cb({}); return true; }
+fun prettier(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "pnpm", "args": ["exec", "prettier", "--check", "."], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/2", "value": "--write"}]},
+    }});
+    return true;
+}
+fun tsc(target: Target, cb: fun(any)) > bool { cb({"cmd": "pnpm", "args": ["exec", "tsc"]}); return true; }
+fun vitest(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "pnpm", "args": ["exec", "vitest", "run"], "charms": {
+        "gha": {"ops": [{"op": "add", "path": "/-", "value": "--reporter=github-actions"}]},
+    }});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc, "vitest": vitest};
+}

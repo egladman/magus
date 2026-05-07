@@ -1,0 +1,11 @@
+// @expect: 10
+var sum = 0;
+var i = 0;
+while (i < 100) {
+    if (i >= 5) {
+        break;
+    }
+    sum = sum + i;
+    i = i + 1;
+}
+const __r = sum;

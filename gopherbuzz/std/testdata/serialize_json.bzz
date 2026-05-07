@@ -1,0 +1,5 @@
+// @expect: 3
+import "serialize";
+const boxed = serialize.jsonDecode("[1,2,3]");
+const items = boxed.listValue();
+const __r = items[2].integerValue();

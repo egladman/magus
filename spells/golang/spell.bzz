@@ -1,0 +1,83 @@
+// go — Go toolchain spell: build, test, vet, lint, fmt, and module hygiene.
+//
+// Authored source for the built-in "golang" spell. Compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen); edit here, not the
+// generated table. Every op is a fork of a tool on PATH — no shell.
+//
+// Op naming follows the convention in docs/spells.md: the op key is the literal
+// CLI command (kebab-case) and the handler is that command in lowerCamelCase, so
+// the source says exactly which tool runs. `lint` is `golangci-lint`, not `go lint`;
+// `fmt` is the `gofmt` binary.
+//
+// mgs_listTargets returns the op handlers by value, typed
+// {str: fun(Target, fun(any)) bool}: the checker verifies each handler exists with
+// the right signature, so a typo'd op is a compile error. A handler declares its
+// command by handing the {cmd, args, charms} record to the magus-injected cb
+// callback — the same command data as before, now reached through a typed contract.
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "go"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"];
+}
+
+export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
+
+fun goBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["build"]}); return true; }
+fun goClean(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["clean", "./..."]}); return true; }
+fun goGenerate(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["generate", "./..."]}); return true; }
+
+fun goFmt(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "gofmt", "args": ["-l", "."], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "-w"}]},
+    }});
+    return true;
+}
+fun golangCILint(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "go", "args": ["tool", "golangci-lint", "run", "./..."], "charms": {
+        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
+        "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},
+    }});
+    return true;
+}
+// The cd charm instruments the run with an atomic-mode coverage profile written
+// to coverage.out — the deliverable a CD pipeline ships to a coverage service
+// (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
+fun goTest(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "go", "args": ["test", "./..."], "charms": {
+        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
+        "cd": {"ops": [
+            {"op": "add", "path": "/-", "value": "-covermode=atomic"},
+            {"op": "add", "path": "/-", "value": "-coverprofile=coverage.out"},
+        ]},
+    }});
+    return true;
+}
+// tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes —
+// safe for CI gating); the write charm applies the changes.
+fun goModTidy(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "go", "args": ["mod", "tidy", "--diff"], "charms": {
+        "rw": {"ops": [{"op": "remove", "path": "/2"}]},
+    }});
+    return true;
+}
+fun goVet(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["vet", "./..."]}); return true; }
+// Scans for known vulnerabilities in the module's call graph. Run as a `go tool`
+// (like golangci-lint) so it resolves from go.mod's tool block, not PATH.
+fun goVulncheck(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["tool", "govulncheck", "./..."]}); return true; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {
+        "go-build": goBuild,
+        "go-clean": goClean,
+        "go-generate": goGenerate,
+        "go-fmt": goFmt,
+        "golangci-lint": golangCILint,
+        "go-test": goTest,
+        "go-mod-tidy": goModTidy,
+        "go-vet": goVet,
+        "govulncheck": goVulncheck,
+    };
+}

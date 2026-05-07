@@ -1,0 +1,340 @@
+// S3 remote cache backend for magus, written as an ordinary magus spell. Works
+// with Amazon S3 and any S3-compatible store (MinIO, Cloudflare R2, Backblaze
+// B2). Wire it in a magusfile:
+//
+//   import "spells/aws/s3-cache" as s3
+//   magus.cache.remote(s3)
+//
+// magus knows nothing about S3: it speaks only the generic spell contract. This
+// spell exposes function-ops typed {str: fun(Target, fun(any)) bool}; the
+// remote-cache subsystem invokes them with the work-unit Target and an input
+// callback cb, reading the boolean result of:
+//
+//   enabled(target, cb)   -> bool   active here? (gates fetch/push; ignores cb)
+//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit
+//   put_artifact(target, cb) -> bool   upload artifact at src;     true=stored
+//   prune(target, cb)     -> bool   evict artifacts by retention policy; true=swept
+//
+// An op reads its inputs by calling cb(io): the host writes {project, hash,
+// dest/src} (or, for prune, {older_than_secs, keep_last, dry_run}) into io, which
+// the op then reads.
+//
+// prune is the maintenance op behind `magus config cache prune --remote`: it walks
+// the bucket through the `listing` fiber — a coroutine that yields one object per
+// resume and transparently fetches the next S3 page when the current one drains,
+// hiding marker pagination behind the generator — then deletes whatever trips the
+// age and/or newest-N bounds (or just reports them on a dry run).
+//
+// Requests are signed with AWS Signature Version 4, composed from primitives that
+// already exist: extra/crypto for the HMAC signing-key chain (its byte-list
+// outputs feed straight back as the next key) and the final hex signature, Buzz's
+// crypto.hash / extra.crypto.sha256File for the SHA-256 hashes, extra.time for the
+// x-amz-date timestamp and parsing object LastModified during prune (Go's time
+// package, so no calendar math here), and extra/http for the byte-level GET/PUT —
+// so everything S3-specific stays out of the Go tree. Path-style addressing is used
+// (https://endpoint/bucket/key), which every S3-compatible store accepts.
+//
+// Configuration comes from the environment (standard AWS variables plus a bucket):
+//   AWS_ACCESS_KEY_ID       — access key (gates the backend)
+//   AWS_SECRET_ACCESS_KEY   — secret key
+//   AWS_SESSION_TOKEN       — optional; for temporary credentials
+//   AWS_REGION              — region (falls back to AWS_DEFAULT_REGION, then us-east-1)
+//   MAGUS_S3_BUCKET         — bucket name (gates the backend)
+//   MAGUS_S3_ENDPOINT       — optional; base URL incl. scheme, no trailing slash
+//                             (default https://s3.<region>.amazonaws.com; set this
+//                             for MinIO/R2/B2)
+
+import "magus/extra"
+import "magus/extra/http" as xhttp
+import "magus/extra/crypto" as xc
+import "magus/target"
+import "crypto"
+import "std"
+import "os"
+
+// --- spell contract -------------------------------------------------------
+
+export fun mgs_getName() > str { return "s3-cache"; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {
+        "enabled": enabled,
+        "get_artifact": get_artifact,
+        "put_artifact": put_artifact,
+        "prune": prune,
+    };
+}
+
+// SHA-256 of the empty string — the x-amz-content-sha256 for a bodyless GET.
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+// Version salt mixed into every key; bump to invalidate all artifacts at once.
+const CACHE_VERSION = "magus-remote-v1";
+// Go reference layout for an S3 LastModified ("2026-06-07T12:00:00.000Z"). The
+// RFC-3339 form parses the millisecond fraction without an explicit field.
+const S3_TIME_LAYOUT = "2006-01-02T15:04:05Z07:00";
+
+// --- configuration --------------------------------------------------------
+
+// getenv reads one environment variable, returning "" when unset.
+fun getenv(name: str) > str {
+    const v = os.env(name);
+    if (v == null) { return ""; }
+    return "" + v;
+}
+
+fun access() > str { return getenv("AWS_ACCESS_KEY_ID"); }
+fun secret() > str { return getenv("AWS_SECRET_ACCESS_KEY"); }
+fun token() > str { return getenv("AWS_SESSION_TOKEN"); }
+fun bucket() > str { return getenv("MAGUS_S3_BUCKET"); }
+
+fun region() > str {
+    const r = getenv("AWS_REGION");
+    if (r != "") { return r; }
+    const d = getenv("AWS_DEFAULT_REGION");
+    if (d != "") { return d; }
+    return "us-east-1";
+}
+
+fun endpoint() > str {
+    const e = getenv("MAGUS_S3_ENDPOINT");
+    if (e != "") { return e; }
+    return "https://s3." + region() + ".amazonaws.com";
+}
+
+// hostOf extracts the Host header value (authority) from a base URL. SigV4 signs
+// the host header, and the server recomputes the signature against the Host it
+// receives — which Go derives from the URL — so this must equal the URL authority.
+fun hostOf(url: str) > str {
+    const afterScheme = url.split("://");
+    var rest = url;
+    if (afterScheme.len() > 1) { rest = afterScheme[1]; }
+    return rest.split("/")[0];
+}
+
+// cache_key derives the object key from the spec hash (already unique per project;
+// hex, so URL-safe — no extra encoding needed in the canonical URI).
+fun cache_key(hash: str) > str { return "magus-" + hash + "-" + CACHE_VERSION; }
+
+// amzTimestamp formats the current UTC time as a SigV4 x-amz-date (YYYYMMDDTHHMMSSZ),
+// handing the calendar math to the host time module (Go's time.Format under the
+// hood). os.time() returns epoch millis as a float — exactly what extra.time
+// speaks — so it flows straight through with no conversion.
+fun amzTimestamp() > str {
+    return extra.time.format("20060102T150405Z", os.time());
+}
+
+// --- AWS Signature Version 4 ---------------------------------------------
+
+// sign builds the signed request headers for an S3 path-style request. path is
+// the canonical URI ("/bucket/key"); query is the canonical query string (keys
+// sorted, "" for none); payloadHash is the hex SHA-256 of the body (EMPTY_SHA256
+// for a bodyless GET/DELETE). Returns the header map to hand extra/http.
+fun sign(method: str, path: str, query: str, payloadHash: str) > any {
+    const reg = region();
+    const amzdate = amzTimestamp();
+    const datestamp = amzdate.sub(0, 8);
+    const host = hostOf(endpoint());
+    const scope = datestamp + "/" + reg + "/s3/aws4_request";
+    const tok = token();
+
+    // Canonical + signed headers, sorted by lowercased name. A session token, when
+    // present, sorts after x-amz-date, so it appends cleanly.
+    var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+    var canonicalHeaders = "host:" + host + "\n"
+        + "x-amz-content-sha256:" + payloadHash + "\n"
+        + "x-amz-date:" + amzdate + "\n";
+    if (tok != "") {
+        signedHeaders = signedHeaders + ";x-amz-security-token";
+        canonicalHeaders = canonicalHeaders + "x-amz-security-token:" + tok + "\n";
+    }
+
+    // CanonicalRequest: method, URI, query, headers, signed headers, payload hash.
+    const canonicalRequest = method + "\n"
+        + path + "\n"
+        + query + "\n"
+        + canonicalHeaders + "\n"
+        + signedHeaders + "\n"
+        + payloadHash;
+
+    const stringToSign = "AWS4-HMAC-SHA256\n"
+        + amzdate + "\n"
+        + scope + "\n"
+        + crypto.hash(crypto.HashAlgorithm.Sha256, canonicalRequest);
+
+    // Signing-key chain: each HMAC's byte-list output keys the next (extra/crypto
+    // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.
+    const kDate = xc.hmacSha256("AWS4" + secret(), datestamp);
+    const kRegion = xc.hmacSha256(kDate, reg);
+    const kService = xc.hmacSha256(kRegion, "s3");
+    const kSigning = xc.hmacSha256(kService, "aws4_request");
+    const signature = xc.hmacSha256Hex(kSigning, stringToSign);
+
+    const authorization = "AWS4-HMAC-SHA256 Credential=" + access() + "/" + scope
+        + ", SignedHeaders=" + signedHeaders
+        + ", Signature=" + signature;
+
+    var headers = {
+        "x-amz-date": amzdate,
+        "x-amz-content-sha256": payloadHash,
+        "Authorization": authorization,
+    };
+    if (tok != "") { headers["x-amz-security-token"] = tok; }
+    return headers;
+}
+
+// --- cache backend --------------------------------------------------------
+
+// enabled gates the backend on having credentials and a bucket. The cache probes
+// this once and skips fetch/push entirely when false — no remote calls.
+export fun enabled(target: Target, cb: fun(any)) > bool {
+    return access() != "" and secret() != "" and bucket() != "";
+}
+
+// get_artifact downloads the object for io.hash into io.dest. true on a hit (200),
+// false on a miss (404) or when not configured.
+export fun get_artifact(target: Target, cb: fun(any)) > bool {
+    if (access() == "" or bucket() == "") { return false; }
+    var io = {};
+    cb(io);
+    const path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
+    const headers = sign("GET", path, "", EMPTY_SHA256);
+    return xhttp.download(endpoint() + path, "" + io["dest"], headers) == 200;
+}
+
+// put_artifact uploads the file at io.src as the object for io.hash. true on a 200
+// store, false otherwise. The payload hash is the file's SHA-256 (S3 verifies it
+// against x-amz-content-sha256).
+export fun put_artifact(target: Target, cb: fun(any)) > bool {
+    if (access() == "" or bucket() == "") { return false; }
+    var io = {};
+    cb(io);
+    const src = "" + io["src"];
+    const path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
+    const headers = sign("PUT", path, "", extra.crypto.sha256File(src));
+    const res = xhttp.upload_chunked("PUT", endpoint() + path, src, 0, headers);
+    return res[0] == 200;
+}
+
+// --- prune ----------------------------------------------------------------
+
+// listPage fetches one page of the bucket listing (S3 ListObjects v1, path-style)
+// for objects under the magus- prefix, starting after marker (""=from the start).
+// Cache keys are hex + literal — all RFC-3986-unreserved — so neither prefix nor
+// marker needs percent-encoding, and the canonical query string (keys sorted:
+// marker before prefix) is byte-identical to the one on the URL. Returns the raw
+// XML body, or "" on a non-200.
+fun listPage(marker: str) > str {
+    var query = "prefix=magus-";
+    if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
+    const path = "/" + bucket();
+    const headers = sign("GET", path, query, EMPTY_SHA256);
+    const res = extra.http.get(endpoint() + path + "?" + query, headers);
+    if (res[0] != 200) { return ""; }
+    return "" + res[1];
+}
+
+// listing is a fiber generator over every magus- object in the bucket. Each resume
+// yields the next {key, lastModified} object, transparently fetching the next S3
+// page when the current one drains — marker pagination stays hidden behind the
+// coroutine. It returns null when the listing is exhausted; since a real artifact is
+// never null, the consumer drains it with a resume-until-null loop. The bucket's
+// LastModified is the S3-side mtime, so no per-object HEAD is needed.
+fun listing() > any {
+    var marker = "";
+    while (true) {
+        const body = listPage(marker);
+        if (body == "") { return null; }
+        // Each <Contents> block carries one object's <Key> and <LastModified>;
+        // blocks[0] is the preamble before the first object, so skip it.
+        const blocks = body.split("<Contents>");
+        var last = "";
+        for (var i = 1; i < blocks.len(); i = i + 1) {
+            const b = blocks[i];
+            const key = b.split("<Key>")[1].split("</Key>")[0];
+            const lm = b.split("<LastModified>")[1].split("</LastModified>")[0];
+            last = key;
+            yield {"key": key, "lastModified": lm};
+        }
+        // Continue only while S3 reports the listing truncated.
+        const trunc = body.split("<IsTruncated>");
+        if (trunc.len() < 2 or trunc[1].split("</IsTruncated>")[0] != "true") { return null; }
+        if (last == "") { return null; } // defensive: truncated but nothing parsed
+        marker = last;
+    }
+    return null;
+}
+
+// deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject
+// is idempotent, returning 204 No Content whether or not the key existed.
+fun deleteObject(key: str) > bool {
+    const path = "/" + bucket() + "/" + key;
+    const headers = sign("DELETE", path, "", EMPTY_SHA256);
+    const res = extra.http.request("DELETE", endpoint() + path, "", headers);
+    return res[0] == 204 or res[0] == 200;
+}
+
+// prune evicts cache objects per a retention policy, enumerating them through the
+// listing fiber. Inputs arrive via cb:
+//   older_than_secs : int  — evict objects older than this many seconds (0 = off)
+//   keep_last       : int  — keep only the newest N objects (0 = off)
+//   dry_run         : bool — report intended deletions without performing them
+// The two bounds are additive — an object is doomed if it trips either — and the
+// doomed set is keyed by object key so the overlap never double-deletes. Returns
+// true once the sweep completes; counts are reported to stdout (the host bridge
+// only learns completion).
+export fun prune(target: Target, cb: fun(any)) > bool {
+    if (access() == "" or bucket() == "") { return false; }
+    var io = {};
+    cb(io);
+    const olderSecs = std.toInt(io["older_than_secs"]);
+    const keepLast = std.toInt(io["keep_last"]);
+    const dry = io["dry_run"] == true;
+
+    // Drain the pagination fiber, parsing each object's S3 timestamp to epoch
+    // millis once (host time module) so the bounds below are integer comparisons.
+    var artifacts = [];
+    const gen = &listing();
+    var e = resume(gen);
+    while (e != null) {
+        e["ms"] = extra.time.parse(S3_TIME_LAYOUT, "" + e["lastModified"]);
+        artifacts.append(e);
+        e = resume(gen);
+    }
+
+    // Select objects to evict, de-duplicated by key across the two bounds.
+    var doomed = {};
+    if (olderSecs > 0) {
+        const cutoffMs = os.time() - olderSecs * 1000;
+        foreach (it in artifacts) {
+            if (it["ms"] < cutoffMs) { doomed["" + it["key"]] = it; }
+        }
+    }
+    if (keepLast > 0 and artifacts.len() > keepLast) {
+        // Newest first, then evict everything past the Nth.
+        const sorted = artifacts.sort(fun (a: any, b: any) > bool {
+            return a["ms"] > b["ms"];
+        });
+        for (var i = keepLast; i < sorted.len(); i = i + 1) {
+            const it = sorted[i];
+            doomed["" + it["key"]] = it;
+        }
+    }
+
+    // Evict, or just report on a dry run.
+    var removed = 0;
+    foreach (key in doomed.keys()) {
+        const it = doomed[key];
+        if (dry) {
+            std.print("s3 prune: would delete " + key + " (" + ("" + it["lastModified"]) + ")");
+            removed = removed + 1;
+        } else {
+            if (deleteObject(key)) { removed = removed + 1; }
+        }
+    }
+    if (dry) {
+        std.print("s3 prune: " + removed + " object(s) would be deleted, " + artifacts.len() + " scanned");
+    } else {
+        std.print("s3 prune: deleted " + removed + " object(s), " + artifacts.len() + " scanned");
+    }
+    return true;
+}

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS4004 — potential undeclared dependency</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mgs4004--potential-undeclared-dependency">MGS4004 — potential undeclared dependency</h1>
+<p>A project that did not run in this dispatch consumes a file that was written
+by a project that did run. The dependency graph is likely missing an edge —
+the build &quot;works today&quot; because of accidental ordering, but a future
+parallelism increase or scheduling reorder could expose a real race.</p>
+<pre><code>[MGS4004] potential undeclared dependency (see …/MGS4004.md)
+  consumer=worker producer=api path=api/dist/schema.json target=build
+</code></pre>
+<h2 id="why">Why</h2>
+<p>Magus's dependency graph is the contract: project <code>worker</code> depends on <code>api</code>
+<em>only</em> if <code>worker.dependsOn</code> contains <code>api</code> or <code>api</code> appears in <code>worker</code>'s
+inferred sources (a glob that matches a path inside <code>api/</code>).</p>
+<p>When the graph is correct, <code>magus run build</code> schedules <code>api</code> strictly before
+<code>worker</code> because of the edge. When the graph is missing an edge but <code>worker</code>
+still happens to consume <code>api</code>'s output, three things are simultaneously true:</p>
+<ol>
+<li><code>worker.Sources</code> matches a path inside <code>api/dist/</code>.</li>
+<li><code>api</code> wrote that path during this run (recorded by the Phase-3 attribution
+diff).</li>
+<li><code>worker</code> itself was NOT in this dispatch's project set (the missing edge
+means <code>magus affected</code> didn't pull it in).</li>
+</ol>
+<p>This is the same hazard that <strong>Ninja's <code>missingdeps</code></strong> subcommand catches —
+&quot;targets had depfile dependencies on generated inputs without a non-depfile
+dep path to the generator.&quot; The build is currently correct by accident; the
+graph cannot defend it against a scheduling change.</p>
+<p>Detection happens <strong>post-build, behind <code>--race</code></strong>, because it consumes the
+Phase-3 per-project write attribution. It is <strong>observational</strong> — magus does
+not block or fail the build.</p>
+<h2 id="resolution">Resolution</h2>
+<h3 id="1-add-the-missing-graph-edge">1. Add the missing graph edge</h3>
+<p>The fix is almost always to declare the dependency the build is silently
+relying on. In <code>magusfile.go</code>:</p>
+<pre><code class="language-go">boosterpack.Bind(pack.Go, specWorker.Build).DependsOn(specAPI.Build)
+</code></pre>
+<p>Or via the consumer project's sources, if the consumer's sources should pull
+the producer in automatically:</p>
+<pre><code class="language-yaml"># worker/magus.yaml
+sources:
+  - ../api/dist/schema.json # explicit dep
+</code></pre>
+<p>Either way, after the edit, <code>magus affected</code> will correctly include both
+producer and consumer when either changes.</p>
+<h3 id="2-if-the-consumer-should-not-consume-the-producers-output">2. If the consumer should not consume the producer's output</h3>
+<p>Sometimes MGS4004 fires because the consumer's source glob is too broad and
+sweeps in a path it shouldn't. Tighten the glob:</p>
+<pre><code class="language-yaml"># Before: matches every file under api/, including dist/
+sources:
+  - &quot;../api/**&quot;
+
+# After: matches only api source files
+sources:
+  - &quot;../api/**/*.go&quot;
+  - &quot;!../api/dist/**&quot;
+</code></pre>
+<h3 id="3-if-the-producers-output-isnt-really-an-output">3. If the producer's &quot;output&quot; isn't really an output</h3>
+<p>If <code>api</code> happens to write <code>api/dist/schema.json</code> only as a side-effect (e.g. a
+formatter touched it), and the file isn't meant to be a build artifact, remove
+it from <code>api</code>'s declared <code>outputs</code> and from any consumer's <code>sources</code>. Or
+suppress the spell's side-effect in <code>api</code> so it stops writing the path.</p>
+<h2 id="false-positives">False positives</h2>
+<p>MGS4004 is the lowest-confidence finding in the MGS4xxx family. Known sources
+of false positives:</p>
+<ul>
+<li><strong>The consumer was correctly excluded from the dispatch</strong> (e.g. <code>--scope</code>
+was set; the consumer isn't broken, it just wasn't asked to run). Magus
+cannot tell the difference between &quot;consumer was excluded on purpose&quot; and
+&quot;consumer wasn't included because the edge is missing.&quot;</li>
+<li><strong>The path is a transitive workspace-level file</strong> (e.g. <code>go.work.sum</code>) that
+technically lives under one project but is logically shared.</li>
+<li><strong>Glob matches that don't represent real consumption</strong> — e.g. <code>worker</code>
+declares <code>**/*.md</code> as sources but doesn't actually read any markdown.</li>
+</ul>
+<p>When in doubt, run with <code>--race</code> and consult
+<code>MGS4001</code> findings as well — a real race usually fires both.</p>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><code>MGS4001.md</code> — runtime race detector that this check builds on.</li>
+<li><a href="https://ninja-build.org/manual.html">Ninja's <code>missingdeps</code></a> — the
+inspiration for this audit. Same problem, same shape of fix.</li>
+<li><code>magus describe project &lt;path&gt;</code> — shows the project's declared
+<code>sources</code>/<code>outputs</code> and inferred <code>dependsOn</code> edges.</li>
+</ul>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/codes/race/MGS4004.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:31:42 UTC from commit <a href="https://github.com/egladman/tack/commit/d57fdd68d37625f0b1f5ea75649a23f1f709e713"><code>d57fdd6</code></a></small>
+  </footer>
+</body>
+</html>

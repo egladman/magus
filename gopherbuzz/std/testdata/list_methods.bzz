@@ -1,0 +1,3 @@
+// @expect: 3
+const xs = [10, 20, 30];
+const __r = xs.len();

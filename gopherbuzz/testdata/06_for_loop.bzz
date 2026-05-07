@@ -1,0 +1,6 @@
+// @expect: 45
+var total = 0;
+for (var i = 0; i < 10; i = i + 1) {
+    total = total + i;
+}
+const __r = total;

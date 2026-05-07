@@ -1,0 +1,12 @@
+# magus workspace config. Most settings use built-in defaults; only what this
+# repo overrides is listed here.
+cache:
+  remote:
+    # Trust set for the shared remote cache (wired via magus.cache.remote in the
+    # magusfile). A remote artifact is replayed only if signed by one of these
+    # Ed25519 public keys. The matching secret seed lives in CI as the
+    # MAGUS_CACHE_SIGNING_KEY secret (only trusted pushes hold it), so a developer
+    # laptop or a fork PR cannot publish artifacts that replay here. Keep prior
+    # keys listed during a rotation (overlap, then drop the old one).
+    trusted_keys:
+      - "Jo5PqJClVoakH2DTP6v9j76mqXcJHyCjC7OHKkckMjE="

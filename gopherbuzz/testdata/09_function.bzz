@@ -1,0 +1,8 @@
+// @expect: 120
+fun factorial(n) int {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+const __r = factorial(5);

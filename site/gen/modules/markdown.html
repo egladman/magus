@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`markdown`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><strong>magus docs</strong></li></ul>
+      <ul><li><a href="https://github.com/egladman/tack">Source code</a></li></ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="markdown"><code>markdown</code></h1>
+<p>GitHub-Flavored Markdown to semantic HTML.</p>
+<blockquote>
+<p><strong>Naming convention:</strong> Teal/Lua binds each module per-import in <code>snake_case</code> (<code>local markdown = require(&quot;magus.extra.markdown&quot;)</code>, then <code>markdown.some_method</code>). Buzz reaches them off the <code>import &quot;magus/extra&quot;</code> aggregate in <code>camelCase</code> (<code>extra.markdown.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="to-html"><code>to_html</code></h3>
+<p>Render GitHub-Flavored Markdown to semantic HTML. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md → index.html) to their generated .html equivalents.</p>
+<p><strong>Signature (Teal):</strong> <code>markdown.to_html(source) → string</code></p>
+<p><strong>Signature (Buzz):</strong> <code>extra.markdown.toHtml(source) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-docs-restructure-uc3d3l/magus/docs/modules/markdown.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 17:53:54 UTC from commit <a href="https://github.com/egladman/tack/commit/d739e274e98eab054cbeb0bbe6ddd55aa89135bc"><code>d739e27</code></a></small>
+  </footer>
+</body>
+</html>

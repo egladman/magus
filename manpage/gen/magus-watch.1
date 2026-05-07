@@ -1,0 +1,69 @@
+.TH MAGUS-WATCH 1 "" "magus dev" "magus Manual"
+.SH NAME
+magus\-watch \- Emit changed file paths to stdout
+.SH SYNOPSIS
+.B magus
+.RI "watch [flags]"
+.SH DESCRIPTION
+Watch the workspace for file\-system changes and emit batches of changed
+repo\-relative paths to stdout. Each path is on its own line; a blank line
+separates batches. This output format is compatible with git diff \-\-name\-only
+so the two are interchangeable on either side of a pipe.
+.PP
+Use \-\-null for binary\-safe output: paths are NUL\-separated and batches end
+with a double\-NUL, matching the \-\-null flag of magus affected \-\-stdin.
+.PP
+On startup an \-\-all sentinel batch is emitted (unless \-\-initial=false) to
+trigger a full initial build in the downstream magus affected \-\-stdin.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-backend\fR \fIstring\fR (default: fsnotify)
+Notification backend: fsnotify or poll
+.TP
+\fB\-\-debounce\fR \fIduration\fR (default: 200ms)
+Quiet window before emitting a batch
+.TP
+\fB\-\-initial\fR (default: true)
+Emit an \-\-all batch on startup before watching
+.TP
+\fB\-\-null\fR
+NUL\-separate paths; double\-NUL between batches
+.RE
+.SH EXAMPLES
+\fIContinuous build pipeline\fR
+.PP
+.EX
+magus watch | magus affected --stdin build
+.EE
+.PP
+\fIIncrease debounce for slow editors\fR
+.PP
+.EX
+magus watch --debounce 500ms | magus affected --stdin test
+.EE
+.PP
+\fIPolling backend (when inotify is unavailable)\fR
+.PP
+.EX
+magus watch --backend poll | magus affected --stdin build
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-tail\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

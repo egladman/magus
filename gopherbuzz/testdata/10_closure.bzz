@@ -1,0 +1,6 @@
+// @expect: 15
+fun makeAdder(n) fun(int) int {
+    return fun(x: int) int { return x + n; };
+}
+const add5 = makeAdder(5);
+const __r = add5(10);

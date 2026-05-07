@@ -1,0 +1,4 @@
+# Generated docs; the generator owns their formatting. Hand-formatting (or
+# prettier rewriting them) would drift against `magus run generate`.
+docs/modules/
+docs/manpage/gen/

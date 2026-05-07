@@ -1,0 +1,12 @@
+// @expect: 6
+fun gen() {
+    yield 1;
+    yield 2;
+    yield 3;
+}
+const f = &gen();
+var sum = 0;
+sum = sum + resume f;
+sum = sum + resume f;
+sum = sum + resume f;
+const __r = sum;

@@ -1,0 +1,31 @@
+// html — HTML linting/formatting via htmlhint and prettier.
+//
+// Authored source for the built-in "html" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "html"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.html", "**/*.htm", ".htmlhintrc"];
+}
+
+export fun mgs_listClaimedGlobs() > [str] {
+    return ["**/*.html", "**/*.htm"];
+}
+
+fun htmlhint(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "htmlhint", "args": ["**/*.html", "**/*.htm"]});
+    return true;
+}
+fun prettier(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "prettier", "args": ["--check", "**/*.html", "**/*.htm"], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "--write"}]},
+    }});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"htmlhint": htmlhint, "prettier": prettier};
+}

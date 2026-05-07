@@ -1,0 +1,30 @@
+// zig — Zig toolchain spell (build, fmt, test).
+//
+// Authored source for the built-in "zig" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen).
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "zig"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.zig", "**/*.zon", "build.zig", "build.zig.zon"];
+}
+
+export fun mgs_getVersionCommand() > [str] { return ["zig", "version"]; }
+
+fun zigBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "zig", "args": ["build"]}); return true; }
+// clean is a filesystem cleanup (rm -rf), not a zig subcommand, so it keeps the
+// descriptive lifecycle name rather than being renamed after `rm`.
+fun clean(target: Target, cb: fun(any)) > bool { cb({"cmd": "rm", "args": ["-rf", "zig-out", ".zig-cache"]}); return true; }
+fun zigFmt(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "zig", "args": ["fmt", "--check", "."], "charms": {
+        "rw": {"ops": [{"op": "remove", "path": "/1"}]},
+    }});
+    return true;
+}
+fun zigBuildTest(target: Target, cb: fun(any)) > bool { cb({"cmd": "zig", "args": ["build", "test"]}); return true; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"zig-build": zigBuild, "clean": clean, "zig-fmt": zigFmt, "zig-build-test": zigBuildTest};
+}

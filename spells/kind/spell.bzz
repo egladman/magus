@@ -1,0 +1,28 @@
+// kind — local Kubernetes cluster lifecycle via kind.
+//
+// Authored source for the built-in "kind" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen). The cluster name is the
+// working directory's basename, so each project gets its own cluster.
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "kind"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["kind-cluster.yaml"];
+}
+
+fun kindCreateCluster(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "sh", "args": ["-c",
+        "kind create cluster --name \"$(basename \"$PWD\")\" --config kind-cluster.yaml"]});
+    return true;
+}
+fun kindDeleteCluster(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "sh", "args": ["-c",
+        "kind delete cluster --name \"$(basename \"$PWD\")\""]});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"kind-create-cluster": kindCreateCluster, "kind-delete-cluster": kindDeleteCluster};
+}

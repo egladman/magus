@@ -1,0 +1,4 @@
+# Go coverage profile — throwaway intermediate from `magus run coverage`. The
+# rendered coverage.svg badge is committed; the profile is not.
+coverage.out
+
