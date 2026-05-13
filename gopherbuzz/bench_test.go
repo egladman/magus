@@ -103,6 +103,38 @@ while (i < 1000000) {
 	}
 }
 
+// BenchmarkLoopSumPromoted is BenchmarkLoopSumShared compiled with PromoteTopLevel:
+// sum/i are chunk-private (never captured, never exported), so they slot-promote
+// even though the chunk runs against the session Env. This is the win the
+// magusfile entrypoint path unlocks — it should approach the slot-based
+// BenchmarkLoopSum rather than the Env-bound BenchmarkLoopSumShared.
+func BenchmarkLoopSumPromoted(b *testing.B) {
+	sess := newSession(_benchCtx)
+	prog, err := Parse(`
+var sum = 0;
+var i = 0;
+while (i < 1000000) {
+    sum = sum + i;
+    i = i + 1;
+}
+`)
+	if err != nil {
+		b.Fatalf("bench parse: %v", err)
+	}
+	chunk, err := CompileWith(prog, CompileOptions{SharedGlobals: true, PromoteTopLevel: true})
+	if err != nil {
+		b.Fatalf("bench compile: %v", err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, sess.env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // BenchmarkLoopEq measures a tight while-loop whose body is dominated by
 // integer equality tests (OpEqual), counting how many i in [0,1e6) are even via
 // i % 2 == 0. Gates the OpEqual/OpNotEqual int fast paths.
@@ -175,6 +207,36 @@ while (i < 100) {
 	for i := 0; i < b.N; i++ {
 		vm := vmpackage.NewVM(_benchCtx)
 		if _, err := vm.Run(chunk, env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkStringInterpPromoted is BenchmarkStringInterp compiled with
+// PromoteTopLevel: s/i slot-promote, isolating how much of the interpolation-loop
+// cost was the top-level Env access path versus the string building itself.
+func BenchmarkStringInterpPromoted(b *testing.B) {
+	sess := newSession(_benchCtx)
+	prog, err := Parse(`
+var s = "";
+var i = 0;
+while (i < 100) {
+    s = "item {i} of 100";
+    i = i + 1;
+}
+`)
+	if err != nil {
+		b.Fatalf("bench parse: %v", err)
+	}
+	chunk, err := CompileWith(prog, CompileOptions{SharedGlobals: true, PromoteTopLevel: true})
+	if err != nil {
+		b.Fatalf("bench compile: %v", err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, sess.env); err != nil {
 			b.Fatal(err)
 		}
 	}

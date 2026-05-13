@@ -44,32 +44,32 @@ const (
 	Enum
 
 	// punctuation & operators
-	LParen    // (
-	RParen    // )
-	LBrace    // {
-	RBrace    // }
-	LBracket  // [
-	RBracket  // ]
-	Comma     // ,
-	Semicolon // ;
-	Colon     // :
-	Dot       // .
-	Assign    // =
-	Question  // ?
-	Coalesce  // ??
-	Bang      // !
-	Plus      // +
-	Minus     // -
-	Star      // *
-	Slash     // /
-	Percent   // %
-	Eq        // ==
-	Neq       // !=
-	Lt        // <
-	Gt        // >
-	Le        // <=
-	Ge        // >=
-	DotDot    // ..
+	LParen     // (
+	RParen     // )
+	LBrace     // {
+	RBrace     // }
+	LBracket   // [
+	RBracket   // ]
+	Comma      // ,
+	Semicolon  // ;
+	Colon      // :
+	Dot        // .
+	Assign     // =
+	Question   // ?
+	Coalesce   // ??
+	Bang       // !
+	Plus       // +
+	Minus      // -
+	Star       // *
+	Slash      // /
+	Percent    // %
+	Eq         // ==
+	Neq        // !=
+	Lt         // <
+	Gt         // >
+	Le         // <=
+	Ge         // >=
+	DotDot     // ..
 	ErrArrow   // !>
 	YieldArrow // *>
 	Backslash  // \
@@ -231,6 +231,14 @@ var keywords = map[string]Kind{
 	"resume":    Resume,
 	"resolve":   Resolve,
 	"namespace": Namespace,
+}
+
+// IsKeyword reports whether word is a reserved Buzz keyword (as opposed to an
+// identifier). It lets callers outside the parser — e.g. a syntax highlighter —
+// classify a word against the canonical keyword set without re-deriving it.
+func IsKeyword(word string) bool {
+	_, ok := keywords[word]
+	return ok
 }
 
 // StringPart is one segment of an interpolated string: either a literal run of

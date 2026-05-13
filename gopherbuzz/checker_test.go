@@ -12,7 +12,7 @@ func checkSrc(src string) []typeError {
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
 	}
-	return checkWithGlobals(prog, nil, nil)
+	return checkWithGlobals(prog, nil, nil, nil)
 }
 
 // checkOK asserts that Check reports no errors for src.

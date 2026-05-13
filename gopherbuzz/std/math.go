@@ -24,16 +24,28 @@ func mathModule() buzz.Value {
 	m.MapSet("floor", fn("math.floor", mathFloor))
 	m.MapSet("log", fn("math.log", mathLog))
 	m.MapSet("maxDouble", fn("math.maxDouble", mathBinaryFloat("math.maxDouble", func(a, b float64) float64 {
-		if a > b { return a }; return b
+		if a > b {
+			return a
+		}
+		return b
 	})))
 	m.MapSet("minDouble", fn("math.minDouble", mathBinaryFloat("math.minDouble", func(a, b float64) float64 {
-		if a < b { return a }; return b
+		if a < b {
+			return a
+		}
+		return b
 	})))
 	m.MapSet("maxInt", fn("math.maxInt", mathBinaryInt("math.maxInt", func(a, b int64) int64 {
-		if a > b { return a }; return b
+		if a > b {
+			return a
+		}
+		return b
 	})))
 	m.MapSet("minInt", fn("math.minInt", mathBinaryInt("math.minInt", func(a, b int64) int64 {
-		if a < b { return a }; return b
+		if a < b {
+			return a
+		}
+		return b
 	})))
 	m.MapSet("rad", fn("math.rad", mathUnary("math.rad", func(d float64) float64 { return d * math.Pi / 180 })))
 	m.MapSet("sin", fn("math.sin", mathUnary("math.sin", math.Sin)))

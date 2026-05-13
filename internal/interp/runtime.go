@@ -576,6 +576,12 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	// Override the env-var-derived include dirs with a workspace-sandboxed set
 	// so scripts cannot escape the project root via BUZZ_INCLUDE_PATH.
 	buzzSess.SetIncludeDirs(sandboxIncludeDirs(src.Dir))
+	// Magusfiles run as whole files, not incrementally, so a non-exported,
+	// non-captured top-level var is chunk-private and can use a fast stack slot
+	// instead of an Env binding. The cross-file/cross-target surface is `export`ed
+	// functions, which stay Env-bound. The REPL (NewBuzzReplSession) deliberately
+	// does not enable this — there a later line must resolve earlier names.
+	buzzSess.SetPromoteTopLevel(true)
 
 	targetMap := buzzSess.Targets()
 	if buzzHostBindingsFn != nil {

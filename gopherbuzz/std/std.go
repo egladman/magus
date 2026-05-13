@@ -23,12 +23,21 @@ package std
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 
 	buzz "github.com/egladman/gopherbuzz"
 )
 
-func Register(sess *buzz.Session) {
-	sess.SetSyntheticModule("std", coreModule())
+// Register installs every std module on sess. std.print writes to os.Stdout;
+// use RegisterWithOutput to redirect it.
+func Register(sess *buzz.Session) { RegisterWithOutput(sess, os.Stdout) }
+
+// RegisterWithOutput is Register with std.print directed to out. An embedding
+// that captures a program's textual output (e.g. the WebAssembly playground)
+// passes its own writer so print lands in a buffer instead of the host stdout.
+func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
+	sess.SetSyntheticModule("std", coreModule(out))
 	sess.SetSyntheticModule("math", mathModule())
 	sess.SetSyntheticModule("fs", fsModule())
 	sess.SetSyntheticModule("os", osModule())

@@ -3,6 +3,7 @@ package std
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"strconv"
 	"unicode/utf8"
@@ -12,10 +13,14 @@ import (
 
 // coreModule builds the "std" module matching Buzz's std reference:
 // https://buzz-lang.dev/0.5.0/reference/std/std.html
-func coreModule() buzz.Value {
+//
+// out receives std.print output; Register passes os.Stdout. Embeddings that
+// capture a program's output (e.g. a browser playground) supply their own
+// writer via RegisterWithOutput.
+func coreModule(out io.Writer) buzz.Value {
 	m := mod()
 	m.MapSet("assert", fn("std.assert", stdAssert))
-	m.MapSet("print", fn("std.print", stdPrint))
+	m.MapSet("print", fn("std.print", makeStdPrint(out)))
 	m.MapSet("parseInt", fn("std.parseInt", stdParseInt))
 	m.MapSet("parseDouble", fn("std.parseDouble", stdParseDouble))
 	m.MapSet("toInt", fn("std.toInt", stdToInt))
@@ -51,13 +56,15 @@ func stdAssert(_ context.Context, args []buzz.Value) (buzz.Value, error) {
 	return buzz.Null, nil
 }
 
-func stdPrint(_ context.Context, args []buzz.Value) (buzz.Value, error) {
-	if len(args) < 1 {
-		fmt.Println()
+func makeStdPrint(out io.Writer) func(context.Context, []buzz.Value) (buzz.Value, error) {
+	return func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+		if len(args) < 1 {
+			fmt.Fprintln(out)
+			return buzz.Null, nil
+		}
+		fmt.Fprintln(out, args[0].String())
 		return buzz.Null, nil
 	}
-	fmt.Println(args[0].String())
-	return buzz.Null, nil
 }
 
 func stdParseInt(_ context.Context, args []buzz.Value) (buzz.Value, error) {

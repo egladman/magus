@@ -73,7 +73,7 @@ var workloads = []workload{
 		name: "ForeachList", // iterate a 1000-element list
 		src: map[dialect]src{
 			lua:  {setup: "items={} for i=1,1000 do items[i]=i-1 end", hot: "local sum=0 for _,x in ipairs(items) do sum=sum+x end return sum"},
-			buzz: {setup: "const items = range(1000);", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
+			buzz: {setup: "var items = []; var i = 0; while (i < 1000) { items.append(i); i = i + 1; }", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
 		},
 	},
 	{

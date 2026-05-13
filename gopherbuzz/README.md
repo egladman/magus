@@ -42,6 +42,60 @@ cd ../internal/spell && go generate
 
 ---
 
+## Compiling to WebAssembly
+
+The interpreter is pure Go with no cgo on the core path, so it cross-compiles to
+WebAssembly unmodified — the `unsafe` NaN-box, fibers, FFI parser, and `std`
+module all build for `wasm`. The purego FFI provider is excluded on `wasm` (it
+has no `wasm` build tag), so `zdef()` returns the standard "unsupported" error
+rather than failing to link.
+
+`wasm/main.go` is a minimal entry point (guarded by `//go:build wasm`, so the
+host `go build ./...` skips it and the module stays a pure library natively). It
+reads a Buzz program from stdin, evaluates it, and prints the result of a
+trailing `return`:
+
+```sh
+# TinyGo (recommended — ~1.6 MB). The default scheduler is required: fibers
+# spawn goroutines, so -scheduler=none will not link.
+tinygo build -target=wasi -o buzz.wasm ./wasm
+
+# Standard toolchain (~4 MB, no extra toolchain needed)
+GOOS=wasip1 GOARCH=wasm go build -o buzz.wasm ./wasm
+
+# Run under any WASI runtime
+echo 'return (1 + 2) * 10;' | wasmtime buzz.wasm   # prints 30
+```
+
+Both `wasip1/wasm` and `js/wasm` are supported targets. TinyGo produces a
+binary roughly 2.5× smaller than the standard toolchain and is the better choice
+for embedding in a browser or a size-constrained host; the standard toolchain
+needs no separate install. Network and process builtins in `std` (`os.execute`,
+`Socket`, `TcpServer`) compile but are subject to the WASI runtime's sandbox at
+execution time.
+
+### Why this matters
+
+To our knowledge gopherbuzz is the **first Go implementation of Buzz** — the
+upstream language is written in Zig, which cross-compiles to nearly every native
+target. Pure Go opens a complementary door: the interpreter compiles to
+WebAssembly with `syscall/js` and runs **in the browser**, with no server and no
+install. That's exactly what the magus docs site's **Buzz playground**
+(`magus/site/editor.html`, backed by `magus/cmd/buzz-playground`) does — it
+evaluates Buzz live, and even loads a `magusfile.bzz` to show its project graph
+and dry-run a target. A browser can't fork processes, so host operations there
+are recorded, not executed.
+
+The playground's brains are a pure, DOM-free Go package,
+`magus/internal/playground` (`EvalBuzz`, `LoadMagusfile`, `DryRun`, a `Shell`
+REPL, and a `Highlight` scanner reusing `token.IsKeyword`). It embeds this
+package directly, so the whole thing is unit-tested on the host against the real
+interpreter, and `magus/cmd/buzz-playground` is a thin `syscall/js` shell over
+it. Magus host calls (`magus.project.register`, spell ops, …) are stubbed there
+as recorders; nothing runs.
+
+---
+
 ## Build tags
 
 Three mutually exclusive representations of `Value` are available. Only one is

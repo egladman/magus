@@ -29,14 +29,21 @@ type checker struct {
 	retTyp   types.Type
 	yieldTyp types.Type            // non-nil when inside a function with a *> yield annotation
 	types    map[string]types.Type // named type definitions (objects, enums)
+	// private names are visible in a flat-imported module's runtime Env but hidden
+	// from this file by exports-only import visibility; referencing one yields an
+	// "export it" hint rather than a bare "undefined". See session.importPrivate.
+	private map[string]bool
 }
 
 // Check type-checks prog after pre-registering extraGlobals as types.Any.
 // This allows callers to inject dynamically-defined names (e.g. from SetVal) so the
-// checker doesn't flag them as undefined.
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node) []typeError {
+// checker doesn't flag them as undefined. private names are hidden by exports-only
+// import visibility: referencing one is undefined here, but the checker points at
+// the missing `export` instead of a bare "undefined".
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, private map[string]bool) []typeError {
 	c := &checker{
-		types: map[string]types.Type{},
+		types:   map[string]types.Type{},
+		private: private,
 	}
 	c.pushScope()
 	c.registerBuiltins()
@@ -527,7 +534,11 @@ func (c *checker) inferIdent(v *ast.IdentExpr) types.Type {
 	if e, ok := c.lookup(v.Name); ok {
 		return e.typ
 	}
-	c.errorf(v.Pos, "undefined: %s", v.Name)
+	if c.private[v.Name] {
+		c.errorf(v.Pos, "undefined: %s (an imported module declares %q but does not export it — add `export` to it)", v.Name, v.Name)
+	} else {
+		c.errorf(v.Pos, "undefined: %s", v.Name)
+	}
 	return types.Any
 }
 

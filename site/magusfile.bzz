@@ -32,6 +32,10 @@ magus.project.register("site", {
         // a peer target mutating the tree mid-check.
         "generate": {"cachable": false, "isolated": true},
         "serve": {"cachable": false},
+        // build-playground shells out to TinyGo to rebuild a non-deterministic
+        // binary; a cache hit would replay a stale one. Run by hand when the
+        // interpreter or playground host changes (TinyGo is not a CI tool).
+        "build-playground": {"cachable": false},
     },
 });
 
@@ -146,9 +150,24 @@ fun commitFooter(path: str) > str {
         + "<a href=\"" + GH + "/commit/" + cFull + "\"><code>" + cShort + "</code></a>";
 }
 
+// rootPrefix returns the relative path from a generated page back up to gen/'s
+// root ("" for spells.html, "../" for modules/fs.html, "../../" for
+// codes/sandbox/X.html), so the shared nav links and theme.js resolve at any
+// page depth and the site still works when served under a project subpath.
+fun rootPrefix(srcRel: str) > str {
+    var rel = srcRel;
+    if (rel.startsWith(DOCS + "/")) { rel = rel.sub((DOCS + "/").len()); }
+    const depth = rel.split("/").len() - 1;
+    var out = "";
+    var i = 0;
+    while (i < depth) { out = out + "../"; i = i + 1; }
+    return out;
+}
+
 // srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
 // it drives both the per-page commit footer and the "Suggest an edit" link.
 fun page(title: str, content: str, srcRel: str) > str {
+    const root = rootPrefix(srcRel);
     return "<!DOCTYPE html>\n"
         + "<html lang=\"en\">\n"
         + "<head>\n"
@@ -156,12 +175,18 @@ fun page(title: str, content: str, srcRel: str) > str {
         + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
         + "  <title>" + title + "</title>\n"
         + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "  <script src=\"" + root + "theme.js\"></script>\n"
         + "</head>\n"
         + "<body>\n"
         + "  <header class=\"container\">\n"
         + "    <nav>\n"
-        + "      <ul><li><strong>magus docs</strong></li></ul>\n"
-        + "      <ul><li><a href=\"" + GH + "\">Source code</a></li></ul>\n"
+        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><strong>magus</strong></a></li></ul>\n"
+        + "      <ul>\n"
+        + "        <li><a href=\"" + root + "index.html\">Docs</a></li>\n"
+        + "        <li><a href=\"" + root + "editor.html\">Playground</a></li>\n"
+        + "        <li><a href=\"" + GH + "\">Source</a></li>\n"
+        + "        <li><button id=\"theme-toggle\" class=\"outline\" style=\"padding:0.2rem 0.7rem\">◐</button></li>\n"
+        + "      </ul>\n"
         + "    </nav>\n"
         + "  </header>\n"
         + "  <main class=\"container\">\n"
@@ -254,6 +279,14 @@ fun site_render() > void {
     os.execute(["sh", "-c", "[ -d " + ROOT + "/assets ] && cp -r " + ROOT + "/assets " + OUT + "/ || true"]);
     os.execute(["sh", "-c", "[ -f " + ROOT + "/coverage.svg ] && cp " + ROOT + "/coverage.svg " + OUT + "/ || true"]);
 
+    // Copy the WebAssembly playground — the editor page plus the committed
+    // buzz.wasm and its TinyGo glue. These are source artifacts of this project
+    // (rebuilt by the build-playground target), not rendered from docs, so the
+    // render only copies them; that keeps the drift gate stable.
+    os.execute(["sh", "-c", "[ -f editor.html ] && cp editor.html " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -f theme.js ] && cp theme.js " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -d playground ] && cp -r playground " + OUT + "/ || true"]);
+
     renderRoot();
     walk("");
     std.print("done");
@@ -285,6 +318,31 @@ export fun test(_args: [str]) > void { magus.depends_on(["format"]); }
 // lint/build/test, each of which waits for the render via generate.
 export fun ci(_args: [str]) > void {
     magus.depends_on(["lint", "build", "test"]);
+}
+
+// build-playground rebuilds the WebAssembly interpreter the playground page
+// loads: TinyGo compiles ../cmd/buzz-playground to site/playground/buzz.wasm and
+// the matching wasm_exec.js glue is copied beside it. Both are committed (like
+// default.pgo), so CI — which has no TinyGo — never rebuilds them; the render
+// just copies the checked-in result into gen/. Run this after changing the
+// interpreter (../gopherbuzz) or the playground host (../internal/playground),
+// then commit the refreshed artifacts. TinyGo ≥ 0.40 is required; the glue must
+// come from the same TinyGo that built the wasm.
+export fun build_playground(_args: [str]) > void {
+    magus.depends_on(["preflight"]);
+    // Run from the magus module root (..) so TinyGo resolves the go.mod there.
+    // -stack-size lifts TinyGo's small default goroutine stack so the embedded
+    // interpreter has room to recurse (e.g. fib in the showcase magusfile).
+    // -scheduler=asyncify is the wasm default, pinned so the status banner's
+    // reported scheduler is guaranteed to match the build.
+    extra.os.exec("tinygo",
+        ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
+         "-o", "site/playground/buzz.wasm", "./cmd/buzz-playground"],
+        "..", {});
+    extra.os.exec("sh",
+        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" site/playground/wasm_exec.js"],
+        "..", {});
+    magus.info("rebuilt site/playground/buzz.wasm + wasm_exec.js — commit the result");
 }
 
 // serve watches ../docs and re-renders gen/ on change — handy for local docs
