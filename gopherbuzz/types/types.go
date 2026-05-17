@@ -9,22 +9,23 @@ import (
 // Type represents a Buzz static type.
 type Type interface{ TypeName() string }
 
-// PrimitiveType is a named primitive type (int, float, str, bool, null, void, any, rng, fib).
+// PrimitiveType is a named primitive type (int, double, str, bool, null, void, any, rng, fib).
 type PrimitiveType struct{ Name string }
 
 func (p *PrimitiveType) TypeName() string { return p.Name }
 
 // Pre-defined primitive type singletons.
 var (
-	Int   Type = &PrimitiveType{"int"}
-	Float Type = &PrimitiveType{"float"}
-	Str   Type = &PrimitiveType{"str"}
-	Bool  Type = &PrimitiveType{"bool"}
-	Null  Type = &PrimitiveType{"null"}
-	Void  Type = &PrimitiveType{"void"}
-	Any   Type = &PrimitiveType{"any"} // unknown / unresolved
-	Rng   Type = &PrimitiveType{"rng"} // range type (lo..hi)
-	Fib   Type = &PrimitiveType{"fib"} // unparameterized fiber type
+	Int    Type = &PrimitiveType{"int"}
+	Double Type = &PrimitiveType{"double"}
+	Str    Type = &PrimitiveType{"str"}
+	Bool   Type = &PrimitiveType{"bool"}
+	Null   Type = &PrimitiveType{"null"}
+	Void   Type = &PrimitiveType{"void"}
+	Any    Type = &PrimitiveType{"any"} // unknown / unresolved
+	Rng    Type = &PrimitiveType{"rng"} // range type (lo..hi)
+	Fib    Type = &PrimitiveType{"fib"} // unparameterized fiber type
+	Pat    Type = &PrimitiveType{"pat"} // pattern type ($"...")
 )
 
 // FibType is the parameterized fiber type fib<Yield, Return>.
@@ -248,8 +249,8 @@ func (p *annotParser) parse() Type {
 		switch name {
 		case "int":
 			return Int
-		case "float":
-			return Float
+		case "double":
+			return Double
 		case "str":
 			return Str
 		case "bool":
@@ -260,6 +261,8 @@ func (p *annotParser) parse() Type {
 			return Void
 		case "any":
 			return Any
+		case "pat":
+			return Pat
 		case "fib":
 			if p.peek() == '<' {
 				p.advance() // consume '<'

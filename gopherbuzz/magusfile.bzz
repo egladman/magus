@@ -75,9 +75,9 @@ export fun ci(_args: [str]) > void {
 export fun regen_pgo(_args: [str]) > void {
     // The interpreter-hot benches; benchtime=1s gives enough samples that VM.Exec
     // dominates cumulative time. Keep this set in sync with the gating benches.
-    const bench = "Fib|LoopSum|LoopEq|MethodCall|FieldAccess|Call|ForeachMap|StringInterp";
-    const skip = "DirectCall|ForeachList";
-    const tmp = "default.pgo.tmp";
+    final bench = "Fib|LoopSum|LoopEq|MethodCall|FieldAccess|Call|ForeachMap|StringInterp";
+    final skip = "DirectCall|ForeachList";
+    final tmp = "default.pgo.tmp";
 
     extra.os.exec("go", ["test", "-run=^$",
         "-bench=" + bench,
@@ -88,7 +88,7 @@ export fun regen_pgo(_args: [str]) > void {
     if (!extra.fs.exists(tmp)) {
         throw "regen-pgo: no profile produced";
     }
-    const profile = extra.fs.readFile(tmp);
+    final profile = extra.fs.readFile(tmp);
     extra.fs.removeAll(tmp);
     if (profile.len() == 0) {
         throw "regen-pgo: empty profile produced";

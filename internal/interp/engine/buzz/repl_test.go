@@ -52,7 +52,7 @@ func TestDriverEvalExpression(t *testing.T) {
 // that a following expression sees its effect (shared globals).
 func TestDriverEvalStatement(t *testing.T) {
 	d := driver(t, newReplSession(t))
-	vals, err := d.EvalLine("const n = 5")
+	vals, err := d.EvalLine("final n = 5")
 	if err != nil {
 		t.Fatalf("EvalLine decl: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestDriverUserGlobalsFiltersHost(t *testing.T) {
 	s := newReplSession(t)
 	s.core.SetGlobal("magus", s.core.GetGlobal("magus")) // ensure a host-named global exists
 	d := driver(t, s)
-	if _, err := d.EvalLine("const mine = 99"); err != nil {
+	if _, err := d.EvalLine("final mine = 99"); err != nil {
 		t.Fatalf("EvalLine: %v", err)
 	}
 	g := d.UserGlobals()
@@ -119,7 +119,7 @@ func TestLineDelta(t *testing.T) {
 	if got := d.LineDelta("}"); got != -1 {
 		t.Fatalf("close brace delta = %d, want -1", got)
 	}
-	if got := d.LineDelta(`const s = "a {b} c"`); got != 0 {
+	if got := d.LineDelta(`final s = "a {b} c"`); got != 0 {
 		t.Fatalf("string-literal braces delta = %d, want 0", got)
 	}
 }
@@ -149,7 +149,7 @@ func TestStepperFramesThroughEngine(t *testing.T) {
 	src := "fun inner(n: int) int {\n" +
 		"  return n + 1\n" +
 		"}\n" +
-		"const out = inner(7)\n"
+		"final out = inner(7)\n"
 
 	var depthAtInner int
 	var nameAtInner string

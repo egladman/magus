@@ -22,18 +22,6 @@ type CompileOptions struct {
 	// line-level step hooks. Off by default — the one-shot fast path pays nothing;
 	// the session path (Session.Compile) turns it on so magus.pry() works.
 	DebugLines bool
-
-	// PromoteTopLevel, only meaningful together with SharedGlobals, slot-promotes
-	// a top-level var/const that is provably chunk-private: not exported and never
-	// referenced from inside any function/fiber body (where it would either need to
-	// outlive the top-level frame or change from a live-Env read to a by-value
-	// upvalue snapshot). Promoted vars become stack slots — the same fast path
-	// block-locals and function bodies already use — while exported and
-	// closure-captured top-level names stay Env bindings, so cross-chunk visibility
-	// is unchanged for them. Leave it false for the REPL/incremental path, where a
-	// later chunk may reference any earlier top-level name by name. See
-	// TOPLEVEL-SLOTS-PLAN.md.
-	PromoteTopLevel bool
 }
 
 // CompileWith compiles prog under opts. See CompileOptions. Pass the zero
@@ -45,10 +33,6 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*Chunk, error) {
 	c := newCompiler(nil, "<main>", nil)
 	c.useSlots = !opts.SharedGlobals
 	c.debugLines = opts.DebugLines
-	if opts.SharedGlobals && opts.PromoteTopLevel {
-		c.promoteTopLevel = true
-		c.keepEnv = topLevelKeepEnv(prog)
-	}
 	if opts.DebugLines {
 		c.chunk.Lines = []int32{} // non-nil: emit now records a line per instruction
 	}
@@ -70,149 +54,6 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*Chunk, error) {
 	FoldConsts(c.chunk)
 	FusePeephole(c.chunk)
 	return c.chunk, nil
-}
-
-// promotable reports whether a top-level declaration may be slot-promoted instead
-// of bound into the shared Env. Only applies in PromoteTopLevel mode at the chunk
-// top level; the name must be neither exported nor in keepEnv (the set of names
-// referenced from inside a function/fiber body, computed by topLevelKeepEnv). When
-// it returns false the caller falls through to the OpDefName path, so the var stays
-// an Env binding visible to later chunks exactly as before.
-func (c *compiler) promotable(v *ast.DeclStmt) bool {
-	return c.promoteTopLevel && c.depth == 0 && !v.IsExported && !c.keepEnv[v.Name]
-}
-
-// topLevelKeepEnv returns the set of top-level names that must remain Env bindings
-// even under PromoteTopLevel: every identifier referenced from inside any function
-// or fiber body. A top-level var captured by a closure cannot become a slot — the
-// closure outlives the top-level frame, and slot capture is a by-value upvalue
-// snapshot rather than the live-Env read the Env path gives. The scan is a sound
-// over-approximation: it collects every name used inside a function body, including
-// that function's own params/locals, so a top-level var is only promoted when its
-// name appears nowhere inside any nested function. Exported names are handled at the
-// declaration site (promotable checks IsExported) and need not be listed here.
-func topLevelKeepEnv(prog *ast.Program) map[string]bool {
-	keep := map[string]bool{}
-	for _, s := range prog.Stmts {
-		collectFuncRefs(s, false, keep)
-	}
-	return keep
-}
-
-// collectFuncRefs walks n and records, into keep, the Name of every IdentExpr that
-// appears while inFunc is true — i.e. lexically inside a function/fiber body.
-// Descending into a FunDecl/FunExpr (or object method) body sets inFunc; all other
-// recursion preserves it, so top-level code outside any function contributes no
-// names. The switch is exhaustive over ast node types; unrecognized or nil nodes
-// contribute nothing.
-func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
-	switch v := n.(type) {
-	case nil:
-		return
-	case *ast.IdentExpr:
-		if inFunc {
-			keep[v.Name] = true
-		}
-	case *ast.DeclStmt:
-		collectFuncRefs(v.Value, inFunc, keep)
-	case *ast.AssignStmt:
-		collectFuncRefs(v.Target, inFunc, keep)
-		collectFuncRefs(v.Value, inFunc, keep)
-	case *ast.ReturnStmt:
-		collectFuncRefs(v.Value, inFunc, keep)
-	case *ast.ExprStmt:
-		collectFuncRefs(v.Expr, inFunc, keep)
-	case *ast.BlockStmt:
-		for _, s := range v.Stmts {
-			collectFuncRefs(s, inFunc, keep)
-		}
-	case *ast.IfStmt:
-		collectFuncRefs(v.Cond, inFunc, keep)
-		collectFuncRefs(v.Then, inFunc, keep)
-		collectFuncRefs(v.Else, inFunc, keep)
-	case *ast.WhileStmt:
-		collectFuncRefs(v.Cond, inFunc, keep)
-		collectFuncRefs(v.Body, inFunc, keep)
-	case *ast.ForStmt:
-		collectFuncRefs(v.Init, inFunc, keep)
-		collectFuncRefs(v.Cond, inFunc, keep)
-		collectFuncRefs(v.Post, inFunc, keep)
-		collectFuncRefs(v.Body, inFunc, keep)
-	case *ast.ForEachStmt:
-		collectFuncRefs(v.Iter, inFunc, keep)
-		collectFuncRefs(v.Body, inFunc, keep)
-	case *ast.DoStmt:
-		collectFuncRefs(v.Body, inFunc, keep)
-		collectFuncRefs(v.Cond, inFunc, keep)
-	case *ast.TryStmt:
-		collectFuncRefs(v.Body, inFunc, keep)
-		collectFuncRefs(v.Catch, inFunc, keep)
-	case *ast.ThrowStmt:
-		collectFuncRefs(v.Value, inFunc, keep)
-	case *ast.FunDecl:
-		// Entering a function body: everything inside it captures by reference today.
-		collectFuncRefs(v.Body, true, keep)
-	case *ast.FunExpr:
-		collectFuncRefs(v.Body, true, keep)
-	case *ast.ObjectDecl:
-		for i := range v.Fields {
-			collectFuncRefs(v.Fields[i].Default, inFunc, keep)
-		}
-		for _, m := range v.Methods {
-			collectFuncRefs(m, inFunc, keep)
-		}
-	case *ast.BinaryExpr:
-		collectFuncRefs(v.Left, inFunc, keep)
-		collectFuncRefs(v.Right, inFunc, keep)
-	case *ast.UnaryExpr:
-		collectFuncRefs(v.Operand, inFunc, keep)
-	case *ast.CallExpr:
-		collectFuncRefs(v.Callee, inFunc, keep)
-		for _, a := range v.Args {
-			collectFuncRefs(a, inFunc, keep)
-		}
-	case *ast.MemberExpr:
-		collectFuncRefs(v.Object, inFunc, keep)
-	case *ast.IndexExpr:
-		collectFuncRefs(v.Object, inFunc, keep)
-		collectFuncRefs(v.Index, inFunc, keep)
-	case *ast.MapExpr:
-		for _, k := range v.Keys {
-			collectFuncRefs(k, inFunc, keep)
-		}
-		for _, val := range v.Values {
-			collectFuncRefs(val, inFunc, keep)
-		}
-	case *ast.ListExpr:
-		for _, it := range v.Items {
-			collectFuncRefs(it, inFunc, keep)
-		}
-	case *ast.ObjectLit:
-		for _, val := range v.Values {
-			collectFuncRefs(val, inFunc, keep)
-		}
-	case *ast.InterpExpr:
-		for i := range v.Parts {
-			collectFuncRefs(v.Parts[i].Expr, inFunc, keep)
-		}
-	case *ast.RangeExpr:
-		collectFuncRefs(v.Lo, inFunc, keep)
-		collectFuncRefs(v.Hi, inFunc, keep)
-	case *ast.IsExpr:
-		collectFuncRefs(v.Expr, inFunc, keep)
-	case *ast.AsExpr:
-		collectFuncRefs(v.Expr, inFunc, keep)
-	case *ast.YieldExpr:
-		collectFuncRefs(v.Value, inFunc, keep)
-	case *ast.FiberExpr:
-		collectFuncRefs(v.Call, inFunc, keep)
-	case *ast.ResumeExpr:
-		collectFuncRefs(v.Fiber, inFunc, keep)
-	case *ast.ResolveExpr:
-		collectFuncRefs(v.Fiber, inFunc, keep)
-	}
-	// Leaf nodes (literals, Import/Namespace/Break/Continue/Enum) and any node not
-	// listed have no identifier children that matter here.
 }
 
 type loopInfo struct {
@@ -253,7 +94,7 @@ func annotStyp(annot string) styp {
 	switch annot {
 	case "int":
 		return sInt
-	case "float":
+	case "double":
 		return sFloat
 	case "str":
 		return sStr
@@ -387,11 +228,6 @@ type compiler struct {
 	// function bodies; true for the top-level chunk only when compiled as a
 	// self-contained unit (see CompileOptions.SharedGlobals).
 	useSlots bool
-	// promoteTopLevel enables slot promotion of chunk-private top-level vars in
-	// SharedGlobals mode (see CompileOptions.PromoteTopLevel). Only set on the
-	// top-level compiler; keepEnv lists the names that must stay Env bindings.
-	promoteTopLevel bool
-	keepEnv         map[string]bool
 	// debugLines propagates CompileOptions.DebugLines into nested function
 	// compilers so every chunk in the program carries a parallel line table.
 	debugLines bool
@@ -568,7 +404,7 @@ func (c *compiler) compileStmt(n ast.Node) error {
 				slotType = sUnknown // compound/object annotation: not slot-tracked
 			}
 		}
-		if c.useSlots || c.depth > 0 || c.promotable(v) {
+		if c.useSlots || c.depth > 0 {
 			slot := c.defineLocal(v.Name)
 			c.setSlotType(slot, slotType)
 			if lit, ok := v.Value.(*ast.ObjectLit); ok {
@@ -585,11 +421,6 @@ func (c *compiler) compileStmt(n ast.Node) error {
 			c.chunk.Emit(OpDefName, c.nameConst(v.Name), 0)
 			if v.IsExported {
 				c.chunk.Exports = append(c.chunk.Exports, v.Name)
-			} else {
-				// Non-exported Env binding (a captured var or a non-exported
-				// function): stays live for this module's own code, but a flat
-				// importer hides it (exports-only visibility). See Chunk.Private.
-				c.chunk.Private = append(c.chunk.Private, v.Name)
 			}
 		}
 		return nil
@@ -678,11 +509,6 @@ func (c *compiler) compileStmt(n ast.Node) error {
 			c.chunk.Emit(OpDefName, c.nameConst(v.Name), 0)
 			if v.IsExported {
 				c.chunk.Exports = append(c.chunk.Exports, v.Name)
-			} else {
-				// Non-exported Env binding (a captured var or a non-exported
-				// function): stays live for this module's own code, but a flat
-				// importer hides it (exports-only visibility). See Chunk.Private.
-				c.chunk.Private = append(c.chunk.Private, v.Name)
 			}
 		}
 		return nil
@@ -716,6 +542,13 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 	case *ast.IdentExpr:
 		if err := c.compileExpr(v.Value); err != nil {
 			return err
+		}
+		// `_` is the discard target: evaluate the value (for its side effects, e.g.
+		// `_ = yield x`) and drop it. It binds no name, so this is valid anywhere,
+		// not only where `_` happens to be a loop variable.
+		if t.Name == "_" {
+			c.chunk.Emit(OpPop, 0, 0)
+			return nil
 		}
 		if slot := c.resolveLocal(t.Name); slot >= 0 {
 			// Preserve the slot's tracked type across reassignment: if the slot is a
@@ -1078,6 +911,15 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(FloatValue(v.Val)), 0)
 	case *ast.StringLit:
 		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(StrValue(v.Val)), 0)
+	case *ast.PatLit:
+		// Compile the regex once, at compile time, so a malformed pattern is a
+		// compile error and the value lives in the const pool (no per-eval recompile,
+		// no new Exec opcode).
+		pv, err := PatValue(v.Pattern)
+		if err != nil {
+			return fmt.Errorf("buzz: line %d:%d: %w", v.Line, v.Col, err)
+		}
+		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(pv), 0)
 	case *ast.InterpExpr:
 		return c.compileInterp(v)
 	case *ast.IdentExpr:
@@ -1136,7 +978,18 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if err := c.compileExpr(v.Index); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpGetIndex, 0, 0)
+		// A=1 selects the checked subscript (out-of-bounds → null); A=0 errors.
+		var opt int32
+		if v.Optional {
+			opt = 1
+		}
+		c.chunk.Emit(OpGetIndex, opt, 0)
+	case *ast.ForceExpr:
+		if err := c.compileExpr(v.Operand); err != nil {
+			return err
+		}
+		// Force-unwrap asserts non-null at runtime, leaving the value in place.
+		c.chunk.Emit(OpCheckType, CheckNonNull, 0)
 	case *ast.FunExpr:
 		idx, err := c.compileFunChunk("<fun>", "", v.Params, v.Body.Stmts)
 		if err != nil {
@@ -1149,7 +1002,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewList, int32(len(v.Items)), 0)
+		c.chunk.Emit(OpNewList, int32(len(v.Items)), mutFlag(v.Mut))
 	case *ast.MapExpr:
 		for i, k := range v.Keys {
 			if err := c.compileExpr(k); err != nil {
@@ -1159,7 +1012,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewMap, int32(len(v.Keys)), 0)
+		c.chunk.Emit(OpNewMap, int32(len(v.Keys)), mutFlag(v.Mut))
 	case *ast.ObjectLit:
 		return c.compileObjectLit(v)
 	case *ast.RangeExpr:
@@ -1360,7 +1213,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys)))
+		c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys))|mutFlag(v.Mut))
 		return nil
 	}
 
@@ -1382,6 +1235,15 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 			c.chunk.Emit(OpLoadNull, 0, 0)
 		}
 	}
-	c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields)))
+	c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut))
 	return nil
+}
+
+// mutFlag returns InstrMutBit when mut is set, for packing into a constructor's
+// B operand (OpNewList/OpNewMap/OpNewObject).
+func mutFlag(mut bool) int32 {
+	if mut {
+		return InstrMutBit
+	}
+	return 0
 }

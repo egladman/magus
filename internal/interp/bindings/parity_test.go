@@ -47,7 +47,7 @@ return {
 		name := "spells/parity." + ext
 		writeFile(t, dir, name, src)
 		writeFile(t, dir, "magusfile.bzz", `import "magus";
-const sp = magus.spell.load("`+name+`");
+final sp = magus.spell.load("`+name+`");
 magus.project.register(".", {"spells": [sp]});`)
 		if err := parseMagusfile(t, dir); err != nil {
 			t.Fatalf("parse (%s): %v", ext, err)

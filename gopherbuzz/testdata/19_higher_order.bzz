@@ -5,4 +5,4 @@ fun apply(f: fun(int)int, x: int) int {
 fun square(n: int) int {
     return n * n;
 }
-const __r = apply(square, 3);
+final __r = apply(square, 3);

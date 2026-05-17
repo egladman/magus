@@ -1,3 +1,3 @@
 // @expect: 5
-const xs = [10, 20, 30, 40, 50];
-const __r = xs.len();
+final xs = [10, 20, 30, 40, 50];
+final __r = xs.len();

@@ -5,4 +5,4 @@ fun fib(n: int) int {
     }
     return fib(n - 1) + fib(n - 2);
 }
-const __r = fib(10);
+final __r = fib(10);

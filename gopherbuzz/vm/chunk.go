@@ -66,13 +66,6 @@ type Chunk struct {
 	// Exports holds the names of top-level declarations marked export. Populated
 	// only in SharedGlobals mode (session-compiled chunks); nil otherwise.
 	Exports []string
-	// Private holds the names of non-exported top-level declarations that were
-	// bound into the Env (not slot-promoted) — i.e. non-exported captured vars and
-	// non-exported functions. A flat-importing session reads it to enforce
-	// exports-only import visibility: these names stay live in the runtime Env (the
-	// module's own functions read them) but are hidden from the importer's checker.
-	// In-memory only, like Doc/Exports' compile-time role; not serialized.
-	Private []string
 }
 
 func (c *Chunk) Emit(op OpCode, a, b int32) int {
@@ -206,8 +199,7 @@ func fusableCondOp(op OpCode) bool {
 // Pass 1L — 4-instruction: GetLocal;GetLocal;<binop>;SetLocal  → OpLocalLocalOp (C=dst+1).
 // Pass 1C — 4-instruction: GetLocal;LoadConst;<binop>;SetLocal → OpLocalConstOp (C=dst+1).
 // Pass 2  — 3-instruction: GetLocal;GetLocal;<binop>  → OpLocalLocalOp (C=0, push);
-//
-//	GetLocal;LoadConst;<binop> → OpLocalConstOp (C=0, push).
+//                           GetLocal;LoadConst;<binop> → OpLocalConstOp (C=0, push).
 //
 // Pass 1L/1C emit the destination register in Instr.C (with a +1 bias so C=0
 // keeps the "push to operand stack" meaning of the zero value). These run before

@@ -18,12 +18,14 @@ const (
 	InterpStr      // string with {expr} interpolation; segments in Token.Parts
 	Int
 	Float
+	Pat // pattern literal $"..."; raw regex source in Token.Val
 
 	// keywords
 	Import
 	Export
-	Const
+	Final
 	Var
+	Mut
 	Fun
 	Return
 	True
@@ -110,12 +112,16 @@ func (k Kind) String() string {
 		return "integer literal"
 	case Float:
 		return "float literal"
+	case Pat:
+		return "pattern literal"
 	case Import:
 		return "'import'"
 	case Export:
 		return "'export'"
-	case Const:
-		return "'const'"
+	case Final:
+		return "'final'"
+	case Mut:
+		return "'mut'"
 	case Var:
 		return "'var'"
 	case Fun:
@@ -200,8 +206,9 @@ func (k Kind) String() string {
 var keywords = map[string]Kind{
 	"import":    Import,
 	"export":    Export,
-	"const":     Const,
+	"final":     Final,
 	"var":       Var,
+	"mut":       Mut,
 	"fun":       Fun,
 	"return":    Return,
 	"true":      True,
@@ -464,6 +471,11 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		return simple(Minus, size), nil
 	case '"':
 		return l.lexString(startLine, startCol)
+	case '$':
+		if l.peekByte() == '"' {
+			return l.lexPattern(startLine, startCol)
+		}
+		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
 	case '\\':
 		return simple(Backslash, size), nil
 	}
@@ -574,6 +586,49 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 		}
 	}
 	return Token{}, fmt.Errorf("buzz: unterminated string at line %d:%d", line, col)
+}
+
+// lexPattern scans a $"..." pattern literal. Unlike a string, backslash escapes
+// are NOT interpreted — the regex source is preserved verbatim (so \d, \w, etc.
+// reach the regex engine intact) — except that a backslash defers the next byte,
+// which both lets a literal \" appear inside the pattern and reaches the engine
+// as \" (which it treats as a literal quote). The opening $ and " are consumed
+// here; scanning stops at the first unescaped ".
+func (l *lexer) lexPattern(line, col int) (Token, error) {
+	l.pos++ // $
+	l.col++
+	l.pos++ // opening "
+	l.col++
+	var sb strings.Builder
+	for l.pos < len(l.src) {
+		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
+		switch r {
+		case '\\':
+			sb.WriteRune(r)
+			l.pos += size
+			l.col += size
+			if l.pos < len(l.src) {
+				r2, s2 := utf8.DecodeRuneInString(l.src[l.pos:])
+				sb.WriteRune(r2)
+				l.pos += s2
+				l.col += s2
+			}
+		case '"':
+			l.pos++
+			l.col++
+			return Token{Kind: Pat, Val: sb.String(), Line: line, Col: col}, nil
+		case '\n':
+			l.line++
+			l.col = 1
+			sb.WriteRune(r)
+			l.pos += size
+		default:
+			sb.WriteRune(r)
+			l.pos += size
+			l.col += size
+		}
+	}
+	return Token{}, fmt.Errorf("buzz: unterminated pattern at line %d:%d", line, col)
 }
 
 // captureInterpExpr reads source up to the matching closing brace, honoring

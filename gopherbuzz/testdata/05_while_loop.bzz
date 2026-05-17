@@ -5,4 +5,4 @@ while (i <= 10) {
     sum = sum + i;
     i = i + 1;
 }
-const __r = sum;
+final __r = sum;

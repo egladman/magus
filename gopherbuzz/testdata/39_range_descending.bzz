@@ -1,0 +1,7 @@
+// @expect: 15
+// Ranges are half-open and descend when low > high: 5..0 yields 5,4,3,2,1.
+var sum = 0;
+foreach (n in 5..0) {
+    sum = sum + n;
+}
+final __r = sum;

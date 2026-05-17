@@ -1,0 +1,12 @@
+// @expect: 2
+// A fiber that yields null must not end iteration early: foreach runs until the
+// fiber is over, binding each yielded value (including null).
+fun g() > void *> int? {
+    _ = yield null;
+    _ = yield 5;
+}
+var count = 0;
+foreach (v in &g()) {
+    count = count + 1;
+}
+final __r = count;

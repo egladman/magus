@@ -22,6 +22,7 @@ var (
 	FloatValue  = vmpackage.FloatValue
 	StrValue    = vmpackage.StrValue
 	ListValue   = vmpackage.ListValue
+	PatValue    = vmpackage.PatValue
 	DirectValue = vmpackage.DirectValue
 	NewMap      = vmpackage.NewMap
 	Null        = vmpackage.Null
@@ -106,10 +107,12 @@ const (
 
 // Re-export OpCheckType type codes for the compiler.
 const (
-	CheckInt   = vmpackage.CheckInt
-	CheckFloat = vmpackage.CheckFloat
-	CheckStr   = vmpackage.CheckStr
-	CheckBool  = vmpackage.CheckBool
+	CheckInt     = vmpackage.CheckInt
+	CheckFloat   = vmpackage.CheckFloat
+	CheckStr     = vmpackage.CheckStr
+	CheckBool    = vmpackage.CheckBool
+	CheckNonNull = vmpackage.CheckNonNull
+	InstrMutBit  = vmpackage.InstrMutBit
 )
 
 // Re-export chunk helpers used by compiler.

@@ -262,7 +262,7 @@ export fun mgs_listTargets() > any {
 }
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-const widget = magus.spell.load("spells/widget.bzz");
+final widget = magus.spell.load("spells/widget.bzz");
 magus.project.register(".", {"spells": [widget]});`)
 
 	if err := parseMagusfile(t, dir); err != nil {
@@ -360,7 +360,7 @@ func TestSpellLoadBuzzNoOps(t *testing.T) {
 	writeFile(t, dir, "spells/noops.bzz", `export fun mgs_getName() > str { return "noopsbuzzspell"; }
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-const noops = magus.spell.load("spells/noops.bzz");
+final noops = magus.spell.load("spells/noops.bzz");
 magus.project.register(".", {"spells": [noops]});`)
 
 	if err := parseMagusfile(t, dir); err != nil {
@@ -391,9 +391,9 @@ export fun mgs_listTargets() > any {
 		t.Fatal(err)
 	}
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-const widget = magus.spell.load("spells/widget.bzz");
+final widget = magus.spell.load("spells/widget.bzz");
 export fun build(args: [str]) > void {
-    const names = widget.listTargets();
+    final names = widget.listTargets();
     if (names[0] != "capture") { error("listTargets mismatch"); }
     widget.capture({"cwd": "sub", "args": ["alpha", "beta"]});
 }`)
@@ -431,7 +431,7 @@ export fun mgs_listTargets() > any {
 }
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-const widget = magus.spell.load("spells/widget.bzz");
+final widget = magus.spell.load("spells/widget.bzz");
 export fun build(args: [str]) > void {
     widget.capture({"env": {"MYVAR": "overridden"}});
 }`)
@@ -502,9 +502,9 @@ export fun mgs_listTargets() > any {
 }
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-const widget = magus.spell.load("spells/widget.bzz");
+final widget = magus.spell.load("spells/widget.bzz");
 export fun build(args: [str]) > void {
-    const r = widget.hash();
+    final r = widget.hash();
     if (r.stdout != "abc123") { error("stdout mismatch: " + r.stdout); }
     if (r.code != 0) { error("code mismatch"); }
     if (r.ok != true) { error("ok mismatch"); }
@@ -534,10 +534,10 @@ export fun mgs_listTargets() > any {
 }
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-const widget = magus.spell.load("spells/widget.bzz");
+final widget = magus.spell.load("spells/widget.bzz");
 export fun build(args: [str]) > void {
-    const a = widget.emit();
-    const b = widget.shout({"stdin": a.stdout});
+    final a = widget.emit();
+    final b = widget.shout({"stdin": a.stdout});
     if (b.stdout != "ALPHA") { error("pipe mismatch: " + b.stdout); }
 }`)
 
@@ -576,7 +576,7 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
 import "magus/extra";
 export fun check(args: [str]) > void {
-    const c = extra.vcs.commit();
+    final c = extra.vcs.commit();
     if (c.subject != "hello") { error("subject: " + c.subject); }
     if (c.author.name != "A") { error("author: " + c.author.name); }
     if (c.date == "") { error("date empty"); }

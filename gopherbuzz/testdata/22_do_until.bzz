@@ -3,4 +3,4 @@ var i = 0;
 do {
     i = i + 1;
 } until (i >= 5);
-const __r = i;
+final __r = i;

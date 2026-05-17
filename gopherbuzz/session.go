@@ -58,22 +58,6 @@ type Session struct {
 	// SetSourceModule; used for shipped Buzz library modules (e.g. canonical
 	// magus types) that have no .bzz file on the include path.
 	sourceModules map[string]string
-	// promoteTopLevel opts this session's compiles into top-level slot promotion
-	// (CompileOptions.PromoteTopLevel). The magusfile execution path enables it for
-	// faster top-level hot code; the REPL leaves it off, since a later prompt line
-	// must still resolve earlier top-level names by name. Under it a non-exported,
-	// non-captured top-level var becomes chunk-private, so cross-file/import code
-	// referencing it must go through `export`. See SetPromoteTopLevel.
-	promoteTopLevel bool
-	// importPrivate is the set of non-exported top-level names introduced by flat
-	// `import`ed modules (each module chunk's Chunk.Private). They remain live in
-	// the runtime Env — the module's own functions read them — but compileShared
-	// hides them from a later compile's checker, so a flat importer sees only a
-	// module's `export`ed names (exports-only visibility). collectImportPrivate is
-	// set while executing an import so Exec knows to accumulate them; same-project
-	// files (executed directly, not via import) are unaffected.
-	importPrivate        map[string]bool
-	collectImportPrivate bool
 }
 
 // SetSyntheticModule registers v as the module imported by `import "<importPath>"`.
@@ -240,12 +224,6 @@ func NewSession(ctx context.Context) *Session {
 // sandboxing before running any user code.
 func (s *Session) SetIncludeDirs(dirs []string) { s.includeDirs = dirs }
 
-// SetPromoteTopLevel enables top-level slot promotion for every chunk this
-// session compiles (see Session.promoteTopLevel and CompileOptions.PromoteTopLevel).
-// The magusfile execution path turns it on for faster top-level code; the REPL
-// must leave it off so a later prompt line can resolve earlier top-level names.
-func (s *Session) SetPromoteTopLevel(on bool) { s.promoteTopLevel = on }
-
 // IncludeDirs returns the current include directory list.
 func (s *Session) IncludeDirs() []string { return s.includeDirs }
 
@@ -266,27 +244,8 @@ func (s *Session) Exec(ctx context.Context, code string) error {
 		for _, name := range chunk.Exports {
 			s.exportedNames[name] = true
 		}
-		if s.collectImportPrivate {
-			if s.importPrivate == nil {
-				s.importPrivate = map[string]bool{}
-			}
-			for _, name := range chunk.Private {
-				s.importPrivate[name] = true
-			}
-		}
 	}
 	return err
-}
-
-// execImport runs an imported module's source with import-private collection on,
-// so the module's non-exported top-level names are recorded in importPrivate and
-// hidden from the importer's checker (exports-only visibility). The flag is
-// save-and-restored so a nested import (a module importing another) still collects.
-func (s *Session) execImport(ctx context.Context, code string) error {
-	prev := s.collectImportPrivate
-	s.collectImportPrivate = true
-	defer func() { s.collectImportPrivate = prev }()
-	return s.Exec(ctx, code)
 }
 
 // enter makes vm the session's current VM (for debugger introspection) and
@@ -376,40 +335,14 @@ func (s *Session) compileShared(code string) (*Chunk, error) {
 	names := s.env.Names()
 	globals := make([]string, 0, len(names))
 	for name := range names {
-		// Exports-only import visibility: a name made private by some flat import
-		// is hidden from this compile's checker unless another module exported it.
-		// It stays in the runtime Env (the owning module's functions still read it).
-		if s.importPrivate[name] && !s.exportedNames[name] {
-			continue
-		}
 		globals = append(globals, name)
 	}
-	if errs := checkWithGlobals(prog, globals, s.importedTypes, s.importPrivateHint()); len(errs) != 0 {
+	if errs := checkWithGlobals(prog, globals, s.importedTypes); len(errs) != 0 {
 		return nil, errs[0]
 	}
 	// DebugLines so magus.pry() / the REPL can report a paused frame's line and
 	// drive line-level stepping; the cost is one parallel int32 slice per chunk.
-	return CompileWith(prog, CompileOptions{
-		SharedGlobals:   true,
-		DebugLines:      true,
-		PromoteTopLevel: s.promoteTopLevel,
-	})
-}
-
-// importPrivateHint returns the names hidden by exports-only import visibility
-// (importPrivate minus anything since exported), so the checker can suggest
-// `export`ing one instead of reporting a bare "undefined". nil when none apply.
-func (s *Session) importPrivateHint() map[string]bool {
-	if len(s.importPrivate) == 0 {
-		return nil
-	}
-	hint := make(map[string]bool, len(s.importPrivate))
-	for name := range s.importPrivate {
-		if !s.exportedNames[name] {
-			hint[name] = true
-		}
-	}
-	return hint
+	return CompileWith(prog, CompileOptions{SharedGlobals: true, DebugLines: true})
 }
 
 // loadFileImports scans prog for import statements and, for any module name not
@@ -461,7 +394,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			}
 			s.loadedPaths[key] = true
 			s.collectImportedTypes(src)
-			if err := s.execImport(s.ctx, src); err != nil {
+			if err := s.Exec(s.ctx, src); err != nil {
 				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
 			}
 			continue
@@ -506,7 +439,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			// collect its exported object/enum types so the importer can name
 			// them (Exec only merges runtime values, not type declarations).
 			s.collectImportedTypes(string(data))
-			if err := s.execImport(s.ctx, string(data)); err != nil {
+			if err := s.Exec(s.ctx, string(data)); err != nil {
 				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
 			}
 		}

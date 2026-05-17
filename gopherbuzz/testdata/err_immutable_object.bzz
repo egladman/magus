@@ -1,0 +1,4 @@
+// @error: cannot mutate immutable object
+object P { x: int = 0 }
+final p = P{};
+p.x = 5;
