@@ -1,4 +1,4 @@
 // @expect: true
 import "gc";
-final b = gc.allocated();
-final __r = b > 0;
+const b = gc.allocated();
+const __r = b > 0;

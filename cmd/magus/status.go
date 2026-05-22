@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 	"golang.org/x/term"
@@ -114,10 +113,8 @@ type statusReport struct {
 
 // buildStatus reports optional features compiled into this binary via build tags.
 type buildStatus struct {
-	SelfManage  bool     `json:"selfmanage" yaml:"selfmanage"`
-	MCP         bool     `json:"mcp" yaml:"mcp"`
-	LuaEngine   string   `json:"lua_engine" yaml:"lua_engine"`
-	LuaCompiled []string `json:"lua_compiled" yaml:"lua_compiled"`
+	SelfManage bool `json:"selfmanage" yaml:"selfmanage"`
+	MCP        bool `json:"mcp" yaml:"mcp"`
 }
 
 type telemetryStatus struct {
@@ -163,10 +160,8 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Build: buildStatus{
-			SelfManage:  selfManageCompiled,
-			MCP:         mcpIsCompiled,
-			LuaEngine:   interp.ActiveBackend().ID(),
-			LuaCompiled: interp.CompiledEngines(),
+			SelfManage: selfManageCompiled,
+			MCP:        mcpIsCompiled,
 		},
 	}
 	addr, err := resolveStatusSocket(ctx, socket)
@@ -269,11 +264,7 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 		fmt.Fprintln(tw, "build")
 		fmt.Fprintf(tw, "  selfmanage\t%t\n", r.Build.SelfManage)
 		fmt.Fprintf(tw, "  mcp\t%t\n", r.Build.MCP)
-		lua := r.Build.LuaEngine
-		if len(r.Build.LuaCompiled) > 0 {
-			lua += " (compiled: " + strings.Join(r.Build.LuaCompiled, ", ") + ")"
-		}
-		fmt.Fprintf(tw, "  lua\t%s\n", lua)
+		fmt.Fprintf(tw, "  engine\tbuzz\n")
 	}
 	_ = tw.Flush()
 

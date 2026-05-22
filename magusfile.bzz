@@ -56,7 +56,6 @@ magus.cache.remote(github);
 magus.project.register(".", {
     "spells": [magus.spell.get("magusfile"), go, buzz, md],
     "outputs": [
-        "internal/std/gen/lua/*.go",
         "internal/std/gen/buzz/*.go",
         "docs/modules/*.md",
         "docs/manpage/gen/*.md",
@@ -84,13 +83,13 @@ magus.project.register(".", {
 // ── build metadata ───────────────────────────────────────────────────────────
 
 fun version() > str {
-    final v = extra.os.exec("git", ["describe", "--tags", "--always", "--dirty"]).stdout;
+    const v = extra.os.exec("git", ["describe", "--tags", "--always", "--dirty"]).stdout;
     if (v == "") { return "unknown"; }
     return v;
 }
 
 fun commit() > str {
-    final c = extra.vcs.shortHash();
+    const c = extra.vcs.shortHash();
     if (c == "") { return "unknown"; }
     return c;
 }
@@ -98,7 +97,7 @@ fun commit() > str {
 // The commit's record date (RFC3339), not wall-clock, so the same source tree
 // builds reproducibly. nil when built outside a repo (e.g. from a tarball).
 fun build_date() > str {
-    final c = extra.vcs.commit();
+    const c = extra.vcs.commit();
     if (c == null) { return "unknown"; }
     return c.date;
 }
@@ -187,7 +186,7 @@ export fun man_generate(args: [str]) > void {
 // magus project boundaries, and isolates failures: a stale directive in one area
 // fails only its own target instead of masking every generator after it.
 
-// Regenerates the Go host bindings (internal/std -> gen/{lua,buzz}) from the
+// Regenerates the Go host bindings (internal/std -> gen/buzz) from the
 // std.Module declarations.
 export fun bindings_generate(args: [str]) > void {
     extra.os.exec("go", ["generate", "./internal/std/..."]);
@@ -219,7 +218,7 @@ export fun docs_generate(args: [str]) > void {
 // can't go stale.
 export fun md_generate(args: [str]) > void {
     // magus.cmd captures the subcommand's stdout (trimmed); re-add the trailing newline.
-    final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
+    const doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
     extra.fs.writeFile("MAGUS.md", doc + "\n");
 }
 
@@ -238,7 +237,7 @@ export fun generate(args: [str]) > void {
     magus.depends_on(magus.target.expand_globs("*-generate"));
     if (magus.has_charm("rw")) { return; }
 
-    final drift = extra.os.exec("git", ["status", "--porcelain", "--", "."]).stdout;
+    const drift = extra.os.exec("git", ["status", "--porcelain", "--", "."]).stdout;
     if (drift != "") {
         throw "generate: working tree is dirty after regeneration; if generated "
             + "files drifted, re-run `magus run generate:rw` and commit:\n" + drift;
@@ -248,7 +247,7 @@ export fun generate(args: [str]) > void {
 // ── release ──────────────────────────────────────────────────────────────────
 // Cross-compiles a static binary per platform into dist/ and archives each one.
 export fun release(args: [str]) > void {
-    final release_platforms = [
+    const release_platforms = [
         ["linux",   "amd64"],
         ["linux",   "arm64"],
         ["darwin",  "amd64"],
@@ -257,30 +256,30 @@ export fun release(args: [str]) > void {
     ];
 
     fs.makeDirectory("dist");
-    final v = version();
-    final flags = ld_flags();
+    const v = version();
+    const flags = ld_flags();
     foreach (p in release_platforms) {
-        final goos = p[0];
-        final goarch = p[1];
+        const goos = p[0];
+        const goarch = p[1];
         var binary = "magus";
         if (goos == "windows") { binary = "magus.exe"; }
 
         // Stage each binary in its own dir: extra.archive.compress archives a
         // directory's contents, so this puts just the binary at the archive root.
-        final stage = extra.fs.join("dist", goos + "-" + goarch);
+        const stage = extra.fs.join("dist", goos + "-" + goarch);
         fs.makeDirectory(stage);
         go["go-build"]({
             "env": {"GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "0"},
             "args": ["-trimpath", "-ldflags", flags, "-o", extra.fs.join(stage, binary), "./cmd/magus"],
         });
 
-        final asset = extra.fs.join("dist", "magus_" + v + "_" + goos + "_" + goarch + ".tar.gz");
+        const asset = extra.fs.join("dist", "magus_" + v + "_" + goos + "_" + goarch + ".tar.gz");
         extra.archive.compress(stage, asset, {});
         fs.delete(stage);
     }
     var sums = "";
     foreach (asset in extra.fs.glob(extra.fs.join("dist", "magus_*.tar.gz"))) {
-        final digest = crypto.hash(crypto.HashAlgorithm.Sha256, extra.fs.readFile(asset));
+        const digest = crypto.hash(crypto.HashAlgorithm.Sha256, extra.fs.readFile(asset));
         sums = sums + digest + "  " + extra.fs.basename(asset) + "\n";
     }
     extra.fs.writeFile(extra.fs.join("dist", "SHA256SUMS"), sums);
@@ -313,9 +312,9 @@ export fun watch(args: [str]) > void {
 // line is `total:\t(statements)\t43.5%`; stdout is already trimmed, so split on
 // whitespace and take the final field, dropping the trailing "%".
 fun total_coverage(func_out: str) > str {
-    final lines = func_out.split("\n");
-    final fields = lines[lines.len() - 1].split("");
-    final cell = fields[fields.len() - 1];
+    const lines = func_out.split("\n");
+    const fields = lines[lines.len() - 1].split("");
+    const cell = fields[fields.len() - 1];
     if (cell.endsWith("%")) { return cell.sub(0, cell.len() - 1); }
     return cell;
 }
@@ -323,7 +322,7 @@ fun total_coverage(func_out: str) > str {
 // badge_color maps a coverage percentage to a go-badge color name, keyed off the
 // whole-number part (parseInt stops at the decimal point).
 fun badge_color(pct: str) > str {
-    final whole = std.parseInt(pct.split(".")[0]);
+    const whole = std.parseInt(pct.split(".")[0]);
     if (whole >= 90) { return "brightgreen"; }
     if (whole >= 80) { return "green"; }
     if (whole >= 70) { return "yellowgreen"; }
@@ -336,8 +335,8 @@ fun badge_color(pct: str) > str {
 // and writes the coverage.svg badge (color picked by threshold) via the shim.
 export fun coverage(args: [str]) > void {
     extra.os.exec("go", ["test", "-covermode=atomic", "-coverprofile=coverage.out", "./..."]);
-    final pct = total_coverage(extra.os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
-    final svg = extra.os.exec("go", ["run", "./cmd/coverage-badge",
+    const pct = total_coverage(extra.os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
+    const svg = extra.os.exec("go", ["run", "./cmd/coverage-badge",
         "-label", "coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
     extra.fs.writeFile("coverage.svg", svg);
 }
@@ -437,12 +436,12 @@ export fun ci_shard(args: [str]) > void {
     if (input == "") {
         throw "ci-shard: no shard plan on stdin — pipe one in: magus affected ci --plan | magus run ci-shard:gha";
     }
-    final plan = serialize.jsonDecode(input);
-    var include = mut [];
+    const plan = serialize.jsonDecode(input);
+    var include = [];
     foreach (row in plan.q("matrix").listValue()) {
         include.append({"shard": row.q("shard").stringValue(), "projects": row.q("projects").stringValue()});
     }
-    final block = "matrix=" + serialize.jsonEncode({"include": include}) + "\n"
+    const block = "matrix=" + serialize.jsonEncode({"include": include}) + "\n"
         + "count=" + plan.q("count").integerValue() + "\n"
         + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
@@ -455,7 +454,7 @@ export fun ci_shard(args: [str]) > void {
         magus.info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
         return;
     }
-    final path = os.env("GITHUB_OUTPUT");
+    const path = os.env("GITHUB_OUTPUT");
     var p = "";
     if (path != null) { p = "" + path; }
     if (p == "") {

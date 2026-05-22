@@ -185,15 +185,4 @@ const (
 	CheckFloat = 2
 	CheckStr   = 3
 	CheckBool  = 4
-	// CheckNonNull asserts the peeked value is not null; emitted for force-unwrap
-	// (operand!). It reuses OpCheckType so no new dispatch case enters Exec's
-	// switch (which would displace hot handlers from L1 — see README).
-	CheckNonNull = 5
 )
-
-// InstrMutBit is set in the B operand of OpNewList/OpNewMap/OpNewObject to mark
-// the constructed list/map/object as mutable (the `mut [...]` / `mut {…}` /
-// `mut Foo{…}` forms). Collections are immutable by default, so the bit is clear
-// for a plain literal. It rides high in B so OpNewObject keeps its field count
-// in the low bits.
-const InstrMutBit int32 = 1 << 30

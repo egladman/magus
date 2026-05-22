@@ -9,18 +9,6 @@ go build ./cmd/magus
 go test -race ./...
 ```
 
-LuaJIT is required for the full test suite on Linux and macOS:
-
-```sh
-# Linux
-sudo apt-get install libluajit-5.1-dev pkg-config
-
-# macOS
-brew install luajit pkg-config
-```
-
-Windows uses the pure-Go gopherlua backend (`CGO_ENABLED=0`).
-
 ## Test conventions
 
 This repo distinguishes unit tests from integration tests with four layered signals.

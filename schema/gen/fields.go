@@ -236,14 +236,6 @@ func init() {
 			Usage:    "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).",
 		},
 		{
-			GoPath:   "Interpreter.Lua.Engine",
-			YamlPath: "interpreter.lua.engine",
-			EnvVar:   "MAGUS_INTERPRETER_LUA_ENGINE",
-			Flag:     FlagNames{Long: "interpreter-lua-engine"},
-			Kind:     KindString,
-			Usage:    "MAGUS_INTERPRETER_LUA_ENGINE: Engine is 'luajit' (cgo) or 'gopherlua' (pure-Go); empty picks the best compiled-in engine.",
-		},
-		{
 			GoPath:   "MCP.Enabled",
 			YamlPath: "mcp.enabled",
 			EnvVar:   "MAGUS_MCP_ENABLED",

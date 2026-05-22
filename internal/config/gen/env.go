@@ -142,9 +142,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_VCS_BASE_REF"); v != "" {
 		cfg.VCS.BaseRef = v
 	}
-	if v := getenv("MAGUS_INTERPRETER_LUA_ENGINE"); v != "" {
-		cfg.Interpreter.Lua.Engine = v
-	}
 	if v := getenv("MAGUS_MCP_ENABLED"); v != "" {
 		b := parseBoolEnv(v, cfg.MCP.Enabled != nil && *cfg.MCP.Enabled)
 		cfg.MCP.Enabled = &b

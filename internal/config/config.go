@@ -13,20 +13,19 @@ import (
 
 // Config is the top-level magus configuration.
 type Config struct {
-	Cache       Cache       `yaml:"cache"`
-	CI          CI          `yaml:"ci"`
-	Flake       Flake       `yaml:"flake"`
-	Graph       Graph       `yaml:"graph"`
-	Watch       Watch       `yaml:"watch"`
-	Health      Health      `yaml:"health"`
-	Telemetry   Telemetry   `yaml:"telemetry"`
-	Daemon      Daemon      `yaml:"daemon"`
-	VCS         VCS         `yaml:"vcs"`
-	Interpreter Interpreter `yaml:"interpreter"`
-	MCP         MCP         `yaml:"mcp"`
-	Report      Report      `yaml:"report"`
-	Log         Log         `yaml:"log"`
-	Hints       Hints       `yaml:"hints"`
+	Cache     Cache     `yaml:"cache"`
+	CI        CI        `yaml:"ci"`
+	Flake     Flake     `yaml:"flake"`
+	Graph     Graph     `yaml:"graph"`
+	Watch     Watch     `yaml:"watch"`
+	Health    Health    `yaml:"health"`
+	Telemetry Telemetry `yaml:"telemetry"`
+	Daemon    Daemon    `yaml:"daemon"`
+	VCS       VCS       `yaml:"vcs"`
+	MCP       MCP       `yaml:"mcp"`
+	Report    Report    `yaml:"report"`
+	Log       Log       `yaml:"log"`
+	Hints     Hints     `yaml:"hints"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -177,17 +176,6 @@ type Graph struct {
 // Health controls dependency-health checks run by magus doctor.
 type Health struct {
 	Exempt []string `yaml:"exempt"` // project paths exempt from blast-radius warnings (exact match)
-}
-
-// Interpreter holds settings for the script-interpreter layer.
-type Interpreter struct {
-	Lua Lua `yaml:"lua"`
-}
-
-// Lua selects the Lua scripting backend.
-type Lua struct {
-	// Engine is "luajit" (cgo) or "gopherlua" (pure-Go); empty picks the best compiled-in engine.
-	Engine string `yaml:"engine" validate:"omitempty,oneof=luajit gopherlua"`
 }
 
 // Telemetry holds OpenTelemetry exporter settings. OFF by default; no magus-operated backend exists.

@@ -1,4 +1,0 @@
-// @expect: 7
-// Force-unwrap (!) asserts an optional is non-null and yields the value.
-var x: int? = 7;
-final __r = x!;

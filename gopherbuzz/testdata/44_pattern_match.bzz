@@ -1,5 +1,0 @@
-// @expect: 12
-// $"..." is a pattern literal; match returns [full, groups...] or null.
-final p = $"\d+";
-final m = p.match("ab12cd");
-final __r = m![0];

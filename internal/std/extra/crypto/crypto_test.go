@@ -30,9 +30,9 @@ export fun hmacHex() > str {
 // kSigning = HMAC(kService, "aws4_request"). The byte-list outputs feed straight
 // back as the next key, so this also proves the chain never corrupts a byte.
 export fun awsSigningKeyHex() > str {
-    final kDate    = xc.hmacSha256("AWS4wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "20150830");
-    final kRegion  = xc.hmacSha256(kDate, "us-east-1");
-    final kService = xc.hmacSha256(kRegion, "iam");
+    const kDate    = xc.hmacSha256("AWS4wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "20150830");
+    const kRegion  = xc.hmacSha256(kDate, "us-east-1");
+    const kService = xc.hmacSha256(kRegion, "iam");
     return xc.hmacSha256Hex(kService, "aws4_request");
 }
 

@@ -8,26 +8,27 @@ import (
 )
 
 var largeMagefile = `
-global function go_build(args: {string}) end
-global function go_test(args: {string}) end
-global function go_lint(args: {string}) end
-global function go_vet(args: {string}) end
-global function docker_build(args: {string}) end
-global function docker_push(args: {string}) end
-global function release_tag(args: {string}) end
-global function release_sign(args: {string}) end
-global function ci_lint(args: {string}) end
-global function ci_test(args: {string}) end
-global function db_migrate(args: {string}) end
-global function db_seed(args: {string}) end
-global function build(args: {string}) end
-global function test(args: {string}) end
-global function clean(args: {string}) end
+import "magus";
+export fun go_build(_args: [str]) > void {}
+export fun go_test(_args: [str]) > void {}
+export fun go_lint(_args: [str]) > void {}
+export fun go_vet(_args: [str]) > void {}
+export fun docker_build(_args: [str]) > void {}
+export fun docker_push(_args: [str]) > void {}
+export fun release_tag(_args: [str]) > void {}
+export fun release_sign(_args: [str]) > void {}
+export fun ci_lint(_args: [str]) > void {}
+export fun ci_test(_args: [str]) > void {}
+export fun db_migrate(_args: [str]) > void {}
+export fun db_seed(_args: [str]) > void {}
+export fun build(_args: [str]) > void {}
+export fun test(_args: [str]) > void {}
+export fun clean(_args: [str]) > void {}
 `
 
 func BenchmarkParse(b *testing.B) {
 	dir := b.TempDir()
-	path := filepath.Join(dir, "magusfile.tl")
+	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(largeMagefile), 0o644); err != nil {
 		b.Fatal(err)
 	}
@@ -44,8 +45,8 @@ func BenchmarkParse(b *testing.B) {
 
 func BenchmarkFind(b *testing.B) {
 	dir := b.TempDir()
-	path := filepath.Join(dir, "magusfile.tl")
-	if err := os.WriteFile(path, []byte("global function noop(_args: {string}) end\n"), 0o644); err != nil {
+	path := filepath.Join(dir, "magusfile.bzz")
+	if err := os.WriteFile(path, []byte("import \"magus\";\nexport fun noop(_args: [str]) > void {}\n"), 0o644); err != nil {
 		b.Fatal(err)
 	}
 

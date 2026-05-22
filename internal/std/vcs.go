@@ -12,7 +12,6 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../../cmd/magus-bindings-gen -module vcs -lang lua -out gen/lua/vcs.go
 //go:generate go run ../../cmd/magus-bindings-gen -module vcs -lang buzz -out gen/buzz/vcs.go
 
 func init() { Register(Vcs) }

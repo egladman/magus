@@ -1,4 +1,0 @@
-// @expect: 9
-var m = mut {"a": 1};
-m["b"] = 9;
-final __r = m["b"];

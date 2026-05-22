@@ -1,4 +1,4 @@
 // @expect: true
-final a = true;
-final b = false;
-final __r = (a or b) and !(b and a);
+const a = true;
+const b = false;
+const __r = (a or b) and !(b and a);

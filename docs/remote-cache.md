@@ -30,8 +30,8 @@ magus itself knows nothing about S3 or GitHub — a backend is an ordinary
 | `get_artifact(target, cb)` | on a local cache miss         | download the artifact into `dest`; `true` = hit   |
 | `put_artifact(target, cb)` | after building a missed artifact | upload the artifact at `src`; `true` = stored     |
 
-Everything backend-specific (auth, transport) stays in the spell, in pure Buzz or
-Teal — see [spells.md](spells.md) and [engines.md](engines.md).
+Everything backend-specific (auth, transport) stays in the spell, in pure Buzz —
+see [spells.md](spells.md) and [engines.md](engines.md).
 
 ## Wiring a backend
 

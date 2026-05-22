@@ -19,9 +19,9 @@ type Semaphore interface {
 	Yield(ctx context.Context, fn func() error) error
 }
 
-// WorkerFactory creates a pre-warmed Buzz session and target map for the pool.
+// WorkerFunc creates a pre-warmed Buzz session and target map for the pool.
 // The session is owned by the pool worker and must not be used concurrently.
-type WorkerFactory func(ctx context.Context) (*Session, map[string]Callable, error)
+type WorkerFunc func(ctx context.Context) (*Session, map[string]Callable, error)
 
 // TargetMemo is a per-invocation run-once tracker. It ensures a target executes
 // at most once within one top-level dispatch, even when concurrent `depends_on`
@@ -94,9 +94,9 @@ func TargetMemoFromContext(ctx context.Context) *TargetMemo {
 // semaphore, which Dispatch yields (via getSem.Yield) so a child can acquire
 // the slot its parent holds, even at MAGUS_CONCURRENCY=1.
 type Pool struct {
-	factory  WorkerFactory
-	getSem   func(ctx context.Context) Semaphore // derives semaphore from ctx; nil ok
-	capacity int
+	newSession WorkerFunc
+	getSem     func(ctx context.Context) Semaphore // derives semaphore from ctx; nil ok
+	capacity   int
 
 	mu     sync.Mutex
 	idle   []*poolWorker
@@ -128,15 +128,15 @@ func NewPoolRegistry(getSem func(ctx context.Context) Semaphore, capacity int) *
 	}
 }
 
-// Get returns the Pool for key, creating it with factory on first call.
-// factory is ignored on cache hits.
-func (r *PoolRegistry) Get(key string, factory WorkerFactory) *Pool {
+// Get returns the Pool for key, creating it with newSession on first call.
+// newSession is ignored on cache hits.
+func (r *PoolRegistry) Get(key string, newSession WorkerFunc) *Pool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if p, ok := r.pools[key]; ok {
 		return p
 	}
-	p := newPool(factory, r.getSem, r.capacity)
+	p := newPool(newSession, r.getSem, r.capacity)
 	r.pools[key] = p
 	return p
 }
@@ -168,11 +168,11 @@ func PoolRegistryFromContext(ctx context.Context) *PoolRegistry {
 	return v
 }
 
-func newPool(factory WorkerFactory, getSem func(ctx context.Context) Semaphore, capacity int) *Pool {
+func newPool(newSession WorkerFunc, getSem func(ctx context.Context) Semaphore, capacity int) *Pool {
 	if capacity <= 0 {
 		capacity = runtime.NumCPU()
 	}
-	return &Pool{factory: factory, getSem: getSem, capacity: capacity}
+	return &Pool{newSession: newSession, getSem: getSem, capacity: capacity}
 }
 
 // Submit dispatches name and returns a channel delivering one error.
@@ -345,7 +345,7 @@ func (p *Pool) releaseWorker(w *poolWorker) {
 }
 
 func (p *Pool) newWorker(ctx context.Context) (*poolWorker, error) {
-	sess, targets, err := p.factory(ctx)
+	sess, targets, err := p.newSession(ctx)
 	if err != nil {
 		return nil, err
 	}

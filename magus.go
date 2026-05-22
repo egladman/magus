@@ -2,7 +2,7 @@
 // Use [Open] for build/test cycles and [Inspect] for read-only commands.
 //
 // Boundary: the library links the engine-agnostic interp surface and the Buzz VM,
-// but deliberately not the host bindings (interp/bindings) or a concrete Lua
+// but deliberately not the host bindings (interp/bindings) or the Buzz engine
 // backend — cmd/magus blank-imports those. So a script-driven backend (e.g. the
 // spell-backed remote backend) reaches the library only through registered
 // hooks such as [cache.RegisterRemoteBackendOpener], never a direct import.
@@ -29,7 +29,6 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/depgraph"
 	"github.com/egladman/magus/internal/interp"
-	interpPool "github.com/egladman/magus/internal/interp/pool"
 	"github.com/egladman/magus/internal/observability"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/wire"
@@ -44,10 +43,8 @@ type Magus struct {
 	cfg   config.Config
 	cache *cache.Cache
 
-	limOnce  sync.Once
-	lim      *cache.Limiter
-	poolOnce sync.Once
-	poolReg  *interpPool.Registry
+	limOnce sync.Once
+	lim     *cache.Limiter
 
 	buzzPoolOnce sync.Once
 	buzzPoolReg  *buzzeng.PoolRegistry
@@ -60,7 +57,6 @@ type Magus struct {
 // rootMarkers lists workspace-root markers in priority order; magus markers precede go.mod.
 var rootMarkers = []string{
 	"magusfiles",
-	"magusfile.tl",
 	"magusfile.bzz",
 	"magus.yaml",
 	"go.mod",
@@ -100,7 +96,7 @@ func FindRoot(dir string) (string, error) {
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
-			return "", errors.New("magus: could not locate workspace root (no magusfiles/, magusfile.tl, magusfile.bzz, magus.yaml, or go.mod found)")
+			return "", errors.New("magus: could not locate workspace root (no magusfiles/, magusfile.bzz, magus.yaml, or go.mod found)")
 		}
 		cur = parent
 	}
@@ -119,9 +115,9 @@ func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceR
 }
 
 // finishConstruction completes workspace setup shared by Inspect and Open:
-// Teal magusfile preloading, workspace-registry application, and magusfile spell autobind.
+// magusfile preloading, workspace-registry application, and magusfile spell autobind.
 func (m *Magus) finishConstruction(ctx context.Context) error {
-	if err := preloadTealMagusfiles(ctx, m); err != nil {
+	if err := preloadMagusfiles(ctx, m); err != nil {
 		return err
 	}
 	if err := m.wsReg.Apply(m); err != nil {
@@ -180,8 +176,8 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	return cfg, nil
 }
 
-// preloadTealMagusfiles parses magusfiles in each project so magus.project.register() calls populate m.wsReg.
-func preloadTealMagusfiles(ctx context.Context, m *Magus) error {
+// preloadMagusfiles parses magusfiles in each project so magus.project.register() calls populate m.wsReg.
+func preloadMagusfiles(ctx context.Context, m *Magus) error {
 	if !interp.Available() {
 		return nil
 	}
@@ -432,14 +428,6 @@ func (m *Magus) limiter() *cache.Limiter {
 	return m.lim
 }
 
-// poolRegistry returns the shared Lua VM pool registry, lazily constructed with capacity matching the limiter.
-func (m *Magus) poolRegistry() *interpPool.Registry {
-	m.poolOnce.Do(func() {
-		m.poolReg = interpPool.NewRegistry(m.limiter().Capacity())
-	})
-	return m.poolReg
-}
-
 // buzzPoolRegistry returns the shared Buzz session pool registry.
 // The semaphore is derived from context at execution time (the workspace
 // limiter is stored in ctx by the RunAll scheduler), so individual pools
@@ -462,9 +450,6 @@ func (m *Magus) buzzPoolRegistry() *buzzeng.PoolRegistry {
 // Close releases workspace resources (VM pools); cache and limiter are caller-owned.
 func (m *Magus) Close() error {
 	var errs []error
-	if m.poolReg != nil {
-		errs = append(errs, m.poolReg.Close())
-	}
 	if m.buzzPoolReg != nil {
 		errs = append(errs, m.buzzPoolReg.Close())
 	}

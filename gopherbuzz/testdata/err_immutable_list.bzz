@@ -1,3 +1,0 @@
-// @error: cannot mutate immutable list
-final xs = [1, 2, 3];
-xs.append(4);

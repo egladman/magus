@@ -14,8 +14,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../../cmd/magus-bindings-gen -module magus -lang lua -out gen/lua/magus.go
-
 func init() { Register(Magus) }
 
 // Magus declares the host-declarable subset of the magus module. The remaining

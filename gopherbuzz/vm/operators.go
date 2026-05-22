@@ -187,9 +187,7 @@ func asInt(v Value) (int64, bool) {
 
 // indexGet evaluates obj[idx] for lists (int) and maps (string key).
 // Note: map keys are always stringified, so m[1] and m["1"] collide.
-// indexGet evaluates obj[idx]. When optional is set (the checked subscript form
-// obj[?idx]), an out-of-bounds list/str index yields null instead of an error.
-func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
+func indexGet(vm *VM, obj, idx Value) (Value, error) {
 	switch obj.tag() {
 	case tagList:
 		list := vm.asList(obj)
@@ -198,9 +196,6 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 			return Null, fmt.Errorf("buzz: list index must be an int, got %s", idx.buzzKind())
 		}
 		if i < 0 || int(i) >= len(list.Items) {
-			if optional {
-				return Null, nil
-			}
 			return Null, fmt.Errorf("buzz: list index %d out of range (len %d)", i, len(list.Items))
 		}
 		return list.Items[i], nil
@@ -215,20 +210,11 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 	}
 }
 
-// errImmutable reports an in-place mutation of an immutable value. Buzz
-// collections and objects are immutable unless built with `mut`.
-func errImmutable(kind string) error {
-	return fmt.Errorf("buzz: cannot mutate immutable %s (declare it with `mut`)", kind)
-}
-
 // setIndex evaluates obj[idx] = val for lists and maps.
 func setIndex(vm *VM, obj, idx, val Value) error {
 	switch obj.tag() {
 	case tagList:
 		list := vm.asList(obj)
-		if !list.Mut {
-			return errImmutable("list")
-		}
 		i, ok := asInt(idx)
 		if !ok {
 			return fmt.Errorf("buzz: list index must be an int, got %s", idx.buzzKind())
@@ -239,11 +225,7 @@ func setIndex(vm *VM, obj, idx, val Value) error {
 		list.Items[i] = val
 		return nil
 	case tagMap:
-		m := vm.asMap(obj)
-		if !m.Mut {
-			return errImmutable("map")
-		}
-		m.set(idx.String(), val)
+		vm.asMap(obj).set(idx.String(), val)
 		return nil
 	default:
 		return fmt.Errorf("buzz: cannot index-assign %s", obj.buzzKind())
@@ -254,17 +236,10 @@ func setIndex(vm *VM, obj, idx, val Value) error {
 func setMember(vm *VM, obj Value, name string, val Value) error {
 	switch obj.tag() {
 	case tagMap:
-		m := vm.asMap(obj)
-		if !m.Mut {
-			return errImmutable("map")
-		}
-		m.set(name, val)
+		vm.asMap(obj).set(name, val)
 		return nil
 	case tagObject:
 		inst := vm.asObject(obj)
-		if !inst.Mut {
-			return errImmutable("object")
-		}
 		if i := inst.Def.fieldIndex(name); i >= 0 {
 			inst.Fields[i] = val
 			return nil
@@ -303,11 +278,6 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 			return m, nil
 		}
 		return Null, nil
-	case tagPat:
-		if m := patMethod(vm, obj, name); m != Null {
-			return m, nil
-		}
-		return Null, nil
 	case tagObject:
 		instance := vm.asObject(obj)
 		if i := instance.Def.fieldIndex(name); i >= 0 {
@@ -343,15 +313,6 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 // or Null if name is not a known list method.
 func listMethod(vm *VM, list Value, name string) Value {
 	lo := vm.asList(list)
-	// In-place mutators require a mutable list (immutable by default).
-	switch name {
-	case "append", "insert", "remove", "pop", "fill":
-		if !lo.Mut {
-			return DirectValue("list."+name, func(context.Context, []Value) (Value, error) {
-				return Null, errImmutable("list")
-			})
-		}
-	}
 	switch name {
 	case "len":
 		return DirectValue("list.len", func(_ context.Context, _ []Value) (Value, error) {
@@ -559,12 +520,10 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return list, nil
 		})
 	case "clone", "cloneMutable", "cloneImmutable":
-		// cloneMutable yields a mutable copy; clone/cloneImmutable an immutable one.
-		mut := name == "cloneMutable"
-		return DirectValue("list."+name, func(_ context.Context, _ []Value) (Value, error) {
+		return DirectValue("list.clone", func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			copy(cp, lo.Items)
-			return heapValue(tagList, &listObj{Items: cp, Mut: mut}), nil
+			return ListValue(cp), nil
 		})
 	}
 	return Null
@@ -574,12 +533,6 @@ func listMethod(vm *VM, list Value, name string) Value {
 // or Null if name is not a known map method.
 func mapMethod(vm *VM, m Value, name string) Value {
 	mp := vm.asMap(m)
-	// In-place mutators require a mutable map (immutable by default).
-	if name == "remove" && !mp.Mut {
-		return DirectValue("map.remove", func(context.Context, []Value) (Value, error) {
-			return Null, errImmutable("map")
-		})
-	}
 	switch name {
 	case "size":
 		return DirectValue("map.size", func(_ context.Context, _ []Value) (Value, error) {
@@ -663,15 +616,12 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return acc, nil
 		})
 	case "clone", "cloneMutable", "cloneImmutable":
-		// cloneMutable yields a mutable copy; clone/cloneImmutable an immutable one.
-		mut := name == "cloneMutable"
-		return DirectValue("map."+name, func(_ context.Context, _ []Value) (Value, error) {
-			nm := newMapObj()
-			nm.Mut = mut
+		return DirectValue("map.clone", func(_ context.Context, _ []Value) (Value, error) {
+			out := NewMap()
 			for i, k := range mp.Keys {
-				nm.set(k, mp.Vals[i])
+				out.MapSet(k, mp.Vals[i])
 			}
-			return vm.allocMap(nm), nil
+			return out, nil
 		})
 	case "diff":
 		return DirectValue("map.diff", func(_ context.Context, args []Value) (Value, error) {

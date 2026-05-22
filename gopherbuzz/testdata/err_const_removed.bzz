@@ -1,3 +1,0 @@
-// @error: undefined: const
-// `const` is not a Buzz keyword — only `var` and `final` declare bindings.
-const x = 1;

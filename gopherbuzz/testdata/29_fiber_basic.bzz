@@ -3,5 +3,5 @@ fun counter() {
     yield 10;
     yield 20;
 }
-final f = &counter();
-final __r = resume f;
+const f = &counter();
+const __r = resume f;

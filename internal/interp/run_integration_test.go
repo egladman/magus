@@ -14,7 +14,7 @@ import (
 
 func writeMagusfile(t *testing.T, dir, body string) {
 	t.Helper()
-	path := filepath.Join(dir, "magusfile.tl")
+	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -38,10 +38,11 @@ func sentinel(dir string) string { return filepath.Join(dir, "ran") }
 func TestRunTopLevelTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-global function build(args: {string})
-    local f = io.open("ran", "w")
-    if f then f:write("build") f:close() end
-end
+import "magus";
+import "magus/extra";
+export fun build(_args: [str]) > void {
+    extra.fs.writeFile("ran", "build");
+}
 `)
 	if err := runTarget(t, dir, "build"); err != nil {
 		t.Fatalf("run build: %v", err)
@@ -58,10 +59,11 @@ end
 func TestRunPathTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-global function db_migrate(args: {string})
-    local f = io.open("ran", "w")
-    if f then f:write("db:migrate") f:close() end
-end
+import "magus";
+import "magus/extra";
+export fun db_migrate(_args: [str]) > void {
+    extra.fs.writeFile("ran", "db:migrate");
+}
 `)
 	if err := runTarget(t, dir, "db:migrate"); err != nil {
 		t.Fatalf("run db:migrate: %v", err)
@@ -165,30 +167,6 @@ export fun verify(_opts: [str]) > void {
 	}
 }
 
-// TestRunTealFmtSprintf is the Teal/lua counterpart to TestRunBuzzFmtSprintf:
-// fmt.sprintf must type-check (via the fmt.d.tl record) and format identically
-// through the lua engine.
-func TestRunTealFmtSprintf(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-global function verify(args: {string})
-    local fmt = require("magus.extra.fmt")
-    local fs = require("magus.extra.fs")
-    fs.write_file("ran", fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64"))
-end
-`)
-	if err := runTarget(t, dir, "verify"); err != nil {
-		t.Fatalf("run verify: %v", err)
-	}
-	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if string(got) != "magus_1.0_linux_amd64.tar.gz" {
-		t.Errorf("sentinel = %q, want %q", got, "magus_1.0_linux_amd64.tar.gz")
-	}
-}
-
 // TestRunBuzzAggregateUtil proves the magus host utilities resolve through the
 // single `import "magus/extra"` aggregate (extra.fs.join / extra.os.execSh, in
 // camelCase) and coexist with Buzz's own stdlib in the same file: hashing uses
@@ -226,11 +204,14 @@ export fun verify(_opts: [str]) > void {
 
 func TestRunTargetWithArgs(t *testing.T) {
 	dir := t.TempDir()
+	// Forwarded args are spread as positional parameters to a Buzz target, so the
+	// target declares one parameter per forwarded arg.
 	writeMagusfile(t, dir, `
-global function db_migrate(args: {string})
-    local f = io.open("ran", "w")
-    if f then f:write(table.concat(args, " ")) f:close() end
-end
+import "magus";
+import "magus/extra";
+export fun db_migrate(a: str, b: str, c: str) > void {
+    extra.fs.writeFile("ran", a + " " + b + " " + c);
+}
 `)
 	if err := runTarget(t, dir, "db:migrate", "a", "b", "c"); err != nil {
 		t.Fatalf("run db:migrate: %v", err)
@@ -247,9 +228,10 @@ end
 func TestRunTargetReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-global function db_migrate(args: {string})
-    error("boom")
-end
+import "magus";
+export fun db_migrate(_args: [str]) > void {
+    throw "boom";
+}
 `)
 	err := runTarget(t, dir, "db:migrate")
 	if err == nil {
@@ -263,7 +245,8 @@ end
 func TestRunUnknownTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-global function db_migrate(args: {string}) end
+import "magus";
+export fun db_migrate(_args: [str]) > void {}
 `)
 	err := runTarget(t, dir, "no-such-target")
 	if err == nil {
@@ -276,69 +259,47 @@ global function db_migrate(args: {string}) end
 // cwd — the workspace-preload case that used to fail with "module not found"
 // (Teal) / "undefined variable" (Buzz) because local-spell lookup was cwd-relative.
 func TestParseLocalSpellFromOtherDir(t *testing.T) {
-	cases := []struct {
-		name, ext, spell, magusfile string
-	}{
-		{
-			name: "teal", ext: "tl",
-			spell: `return {
-   mgs_getName = function(): string return "hello" end,
-   mgs_listTargets = function(): any return { build = { cmd = "echo", args = {"hi"} } } end,
-}`,
-			magusfile: `local hello = require("spells.hello")
-global function go(_a: {string})
-    hello.build()
-end`,
-		},
-		{
-			name: "buzz", ext: "bzz",
-			spell: `export fun mgs_getName() > str { return "hello"; }
-export fun mgs_listTargets() > any { return {"build": {"cmd": "echo", "args": ["hi"]}}; }`,
-			magusfile: `import "magus";
+	spell := `export fun mgs_getName() > str { return "hello"; }
+export fun mgs_listTargets() > any { return {"build": {"cmd": "echo", "args": ["hi"]}}; }`
+	magusfile := `import "magus";
 import "spells/hello";
-export fun go(_a: [str]) > void { hello.build(); }`,
-		},
+export fun go(_a: [str]) > void { hello.build(); }`
+
+	proj := filepath.Join(t.TempDir(), "proj")
+	if err := os.MkdirAll(filepath.Join(proj, "spells"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			proj := filepath.Join(t.TempDir(), "proj")
-			if err := os.MkdirAll(filepath.Join(proj, "spells"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(proj, "spells", "hello."+tc.ext), []byte(tc.spell), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(proj, "magusfile."+tc.ext), []byte(tc.magusfile), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			// Parse from the test's cwd, NOT from proj — exactly what workspace
-			// preload does when it visits a sub-project's magusfile.
-			srcs, err := interp.FindAll(proj)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(srcs) == 0 {
-				t.Fatal("FindAll: no sources")
-			}
-			for _, src := range srcs {
-				if _, err := interp.Parse(context.Background(), src); err != nil {
-					t.Fatalf("Parse local-spell magusfile from other dir: %v", err)
-				}
-			}
-		})
+	if err := os.WriteFile(filepath.Join(proj, "spells", "hello.bzz"), []byte(spell), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "magusfile.bzz"), []byte(magusfile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Parse from the test's cwd, NOT from proj — exactly what workspace
+	// preload does when it visits a sub-project's magusfile.
+	srcs, err := interp.FindAll(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(srcs) == 0 {
+		t.Fatal("FindAll: no sources")
+	}
+	for _, src := range srcs {
+		if _, err := interp.Parse(context.Background(), src); err != nil {
+			t.Fatalf("Parse local-spell magusfile from other dir: %v", err)
+		}
 	}
 }
 
 // TestDependsOnUnknownTargetFails verifies a typo'd or removed dependency fails
-// fast rather than silently no-op'ing. The Buzz and pool dispatch paths already
-// errored; this pins the same for the Teal non-pool path (the branch that used
-// to `continue` past an unknown name).
+// fast rather than silently no-op'ing.
 func TestDependsOnUnknownTargetFails(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-global function top(args: {string})
-    magus.depends_on({"does_not_exist"})
-end
+import "magus";
+export fun top(_args: [str]) > void {
+    magus.depends_on(["does_not_exist"]);
+}
 `)
 	err := runTarget(t, dir, "top")
 	if err == nil {
@@ -346,24 +307,6 @@ end
 	}
 	if !strings.Contains(err.Error(), "unknown target") {
 		t.Errorf("error = %v, want it to mention %q", err, "unknown target")
-	}
-}
-
-// TestRunTealTargetNameCollision verifies that two Teal target functions whose
-// names normalize to the same canonical target are a hard error, not a silent
-// last-write-wins clobber.
-func TestRunTealTargetNameCollision(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-global function foo_bar(args: {string}) end
-global function fooBar(args: {string}) end
-`)
-	err := runTarget(t, dir, "foo-bar")
-	if err == nil {
-		t.Fatal("expected collision error, got nil")
-	}
-	if !strings.Contains(err.Error(), "foo-bar") || !strings.Contains(err.Error(), "normalize") {
-		t.Errorf("error should name the colliding canonical target and the cause; got: %v", err)
 	}
 }
 
@@ -524,52 +467,6 @@ export fun viash(_a: [str]) > void {
 	}
 }
 
-// TestOsExitTealCarriesCode is the regression test for the Lua-engine bug where
-// os.exit(code) dropped the code (the typed ExitError was stringified by the VM).
-// The recorder must carry it so a Teal os.exit(7) yields ExitError{Code:7}.
-func TestOsExitTealCarriesCode(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-global function bail(args: {string})
-    local os = require("magus.extra.os")
-    os.exit(7)
-end
-`)
-	err := runTarget(t, dir, "bail")
-	if err == nil {
-		t.Fatal("expected error from os.exit, got nil")
-	}
-	var ex types.ExitError
-	if !errors.As(err, &ex) {
-		t.Fatalf("expected types.ExitError on the Lua engine, got %T: %v", err, err)
-	}
-	if ex.Code != 7 {
-		t.Errorf("exit code = %d, want 7", ex.Code)
-	}
-}
-
-// TestMagusFatalTealCarriesCode verifies magus.fatal also carries its exit code
-// (1) as a typed ExitError on the Lua engine.
-func TestMagusFatalTealCarriesCode(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-global function boom(args: {string})
-    magus.fatal("boom")
-end
-`)
-	err := runTarget(t, dir, "boom")
-	if err == nil {
-		t.Fatal("expected error from magus.fatal, got nil")
-	}
-	var ex types.ExitError
-	if !errors.As(err, &ex) {
-		t.Fatalf("expected types.ExitError, got %T: %v", err, err)
-	}
-	if ex.Code != 1 {
-		t.Errorf("exit code = %d, want 1", ex.Code)
-	}
-}
-
 // TestDependsOnDedup verifies magus.depends_on runs a duplicated target once —
 // the footgun where a manually-listed target also matches an expand_globs glob.
 func TestDependsOnDedup(t *testing.T) {
@@ -618,28 +515,12 @@ export fun logit(_a: [str]) > void {
 	}
 }
 
-// TestMagusLoggingTeal exercises the same methods from a Teal magusfile (the
-// Lua-engine harvest path).
-func TestMagusLoggingTeal(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-global function logit(args: {string})
-    magus.info("hello", {})
-    magus.debug("dbg", {k = "v"})
-    magus.warn("warn", {})
-    magus.error("err", {})
-end
-`)
-	if err := runTarget(t, dir, "logit"); err != nil {
-		t.Fatalf("magus logging (teal): %v", err)
-	}
-}
-
 func TestParseIncludesPathTargets(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-global function db_migrate(args: {string}) end
-global function build(args: {string}) end
+import "magus";
+export fun db_migrate(_args: [str]) > void {}
+export fun build(_args: [str]) > void {}
 `)
 	src, err := interp.Find(dir)
 	if err != nil {
@@ -673,17 +554,18 @@ global function build(args: {string}) end
 func TestTargetDependsOnExpandGlobs(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-local function note(s: string)
-   local f = io.open("ran", "a")
-   if f then f:write(s .. "\n") f:close() end
-end
-global function go_build(_a: {string}) note("go-build") end
-global function image_build(_a: {string}) note("image-build") end
-global function go_test(_a: {string}) note("go-test") end
-global function build(_a: {string})
-   magus.depends_on(magus.target.expand_globs("*-build"))
-   note("build-body")
-end
+import "magus";
+import "magus/extra";
+fun note(s: str) > void {
+   extra.os.execSh("printf '%s\n' " + s + " >> ran", "");
+}
+export fun go_build(_a: [str]) > void { note("go-build"); }
+export fun image_build(_a: [str]) > void { note("image-build"); }
+export fun go_test(_a: [str]) > void { note("go-test"); }
+export fun build(_a: [str]) > void {
+   magus.depends_on(magus.target.expand_globs("*-build"));
+   note("build-body");
+}
 `)
 	if err := runTarget(t, dir, "build"); err != nil {
 		t.Fatalf("run build: %v", err)
@@ -708,18 +590,26 @@ end
 func TestExpandGlobsReturnsSortedNames(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
-global function image_build(_a: {string}) end
-global function go_build(_a: {string}) end
-global function go_test(_a: {string}) end
-global function probe(_a: {string})
-   local glob   = magus.target.expand_globs("*-build")
-   local suffix = magus.target.expand_globs("build")
-   local f = io.open("ran", "w")
-   if f then
-      f:write(table.concat(glob, ",") .. "|" .. table.concat(suffix, ","))
-      f:close()
-   end
-end
+import "magus";
+import "magus/extra";
+export fun image_build(_a: [str]) > void {}
+export fun go_build(_a: [str]) > void {}
+export fun go_test(_a: [str]) > void {}
+export fun probe(_a: [str]) > void {
+   var glob   = magus.target.expand_globs("*-build");
+   var suffix = magus.target.expand_globs("build");
+   extra.fs.writeFile("ran", join(glob, ",") + "|" + join(suffix, ","));
+}
+fun join(xs: [str], sep: str) > str {
+   var out = "";
+   var first = true;
+   foreach (x in xs) {
+      if (!first) { out = out + sep; }
+      out = out + x;
+      first = false;
+   }
+   return out;
+}
 `)
 	if err := runTarget(t, dir, "probe"); err != nil {
 		t.Fatalf("run probe: %v", err)

@@ -212,7 +212,6 @@ func (v Value) asEnumVal() *enumValObj     { return nanboxObj(v).(*enumValObj) }
 func (v Value) asIterState() *iterStateObj { return nanboxObj(v).(*iterStateObj) }
 func (v Value) asRange() *rangeObj         { return nanboxObj(v).(*rangeObj) }
 func (v Value) asFib() *fibObj             { return nanboxObj(v).(*fibObj) }
-func (v Value) asPat() *patObj             { return nanboxObj(v).(*patObj) }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
 func (v Value) asObjDecl() *ast.ObjectDecl { return nanboxObj(v).(*objDeclPayload).ObjectDecl }
@@ -230,7 +229,6 @@ func (vm *VM) asEnumVal(v Value) *enumValObj     { return v.asEnumVal() }
 func (vm *VM) asIterState(v Value) *iterStateObj { return v.asIterState() }
 func (vm *VM) asRange(v Value) *rangeObj         { return v.asRange() }
 func (vm *VM) asFib(v Value) *fibObj             { return v.asFib() }
-func (vm *VM) asPat(v Value) *patObj             { return v.asPat() }
 func (vm *VM) asObjDecl(v Value) *ast.ObjectDecl { return v.asObjDecl() }
 
 // VM-context allocators: intern into the global heap.

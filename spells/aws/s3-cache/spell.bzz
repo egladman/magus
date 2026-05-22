@@ -66,18 +66,18 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 }
 
 // SHA-256 of the empty string — the x-amz-content-sha256 for a bodyless GET.
-final EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 // Version salt mixed into every key; bump to invalidate all artifacts at once.
-final CACHE_VERSION = "magus-remote-v1";
+const CACHE_VERSION = "magus-remote-v1";
 // Go reference layout for an S3 LastModified ("2026-06-07T12:00:00.000Z"). The
 // RFC-3339 form parses the millisecond fraction without an explicit field.
-final S3_TIME_LAYOUT = "2006-01-02T15:04:05Z07:00";
+const S3_TIME_LAYOUT = "2006-01-02T15:04:05Z07:00";
 
 // --- configuration --------------------------------------------------------
 
 // getenv reads one environment variable, returning "" when unset.
 fun getenv(name: str) > str {
-    final v = os.env(name);
+    const v = os.env(name);
     if (v == null) { return ""; }
     return "" + v;
 }
@@ -88,15 +88,15 @@ fun token() > str { return getenv("AWS_SESSION_TOKEN"); }
 fun bucket() > str { return getenv("MAGUS_S3_BUCKET"); }
 
 fun region() > str {
-    final r = getenv("AWS_REGION");
+    const r = getenv("AWS_REGION");
     if (r != "") { return r; }
-    final d = getenv("AWS_DEFAULT_REGION");
+    const d = getenv("AWS_DEFAULT_REGION");
     if (d != "") { return d; }
     return "us-east-1";
 }
 
 fun endpoint() > str {
-    final e = getenv("MAGUS_S3_ENDPOINT");
+    const e = getenv("MAGUS_S3_ENDPOINT");
     if (e != "") { return e; }
     return "https://s3." + region() + ".amazonaws.com";
 }
@@ -105,7 +105,7 @@ fun endpoint() > str {
 // the host header, and the server recomputes the signature against the Host it
 // receives — which Go derives from the URL — so this must equal the URL authority.
 fun hostOf(url: str) > str {
-    final afterScheme = url.split("://");
+    const afterScheme = url.split("://");
     var rest = url;
     if (afterScheme.len() > 1) { rest = afterScheme[1]; }
     return rest.split("/")[0];
@@ -117,7 +117,7 @@ fun cache_key(hash: str) > str { return "magus-" + hash + "-" + CACHE_VERSION; }
 
 // amzTimestamp formats the current UTC time as a SigV4 x-amz-date (YYYYMMDDTHHMMSSZ),
 // handing the calendar math to the host time module (Go's time.Format under the
-// hood). os.time() returns epoch millis as a double — exactly what extra.time
+// hood). os.time() returns epoch millis as a float — exactly what extra.time
 // speaks — so it flows straight through with no conversion.
 fun amzTimestamp() > str {
     return extra.time.format("20060102T150405Z", os.time());
@@ -130,12 +130,12 @@ fun amzTimestamp() > str {
 // sorted, "" for none); payloadHash is the hex SHA-256 of the body (EMPTY_SHA256
 // for a bodyless GET/DELETE). Returns the header map to hand extra/http.
 fun sign(method: str, path: str, query: str, payloadHash: str) > any {
-    final reg = region();
-    final amzdate = amzTimestamp();
-    final datestamp = amzdate.sub(0, 8);
-    final host = hostOf(endpoint());
-    final scope = datestamp + "/" + reg + "/s3/aws4_request";
-    final tok = token();
+    const reg = region();
+    const amzdate = amzTimestamp();
+    const datestamp = amzdate.sub(0, 8);
+    const host = hostOf(endpoint());
+    const scope = datestamp + "/" + reg + "/s3/aws4_request";
+    const tok = token();
 
     // Canonical + signed headers, sorted by lowercased name. A session token, when
     // present, sorts after x-amz-date, so it appends cleanly.
@@ -149,27 +149,27 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     }
 
     // CanonicalRequest: method, URI, query, headers, signed headers, payload hash.
-    final canonicalRequest = method + "\n"
+    const canonicalRequest = method + "\n"
         + path + "\n"
         + query + "\n"
         + canonicalHeaders + "\n"
         + signedHeaders + "\n"
         + payloadHash;
 
-    final stringToSign = "AWS4-HMAC-SHA256\n"
+    const stringToSign = "AWS4-HMAC-SHA256\n"
         + amzdate + "\n"
         + scope + "\n"
         + crypto.hash(crypto.HashAlgorithm.Sha256, canonicalRequest);
 
     // Signing-key chain: each HMAC's byte-list output keys the next (extra/crypto
     // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.
-    final kDate = xc.hmacSha256("AWS4" + secret(), datestamp);
-    final kRegion = xc.hmacSha256(kDate, reg);
-    final kService = xc.hmacSha256(kRegion, "s3");
-    final kSigning = xc.hmacSha256(kService, "aws4_request");
-    final signature = xc.hmacSha256Hex(kSigning, stringToSign);
+    const kDate = xc.hmacSha256("AWS4" + secret(), datestamp);
+    const kRegion = xc.hmacSha256(kDate, reg);
+    const kService = xc.hmacSha256(kRegion, "s3");
+    const kSigning = xc.hmacSha256(kService, "aws4_request");
+    const signature = xc.hmacSha256Hex(kSigning, stringToSign);
 
-    final authorization = "AWS4-HMAC-SHA256 Credential=" + access() + "/" + scope
+    const authorization = "AWS4-HMAC-SHA256 Credential=" + access() + "/" + scope
         + ", SignedHeaders=" + signedHeaders
         + ", Signature=" + signature;
 
@@ -196,8 +196,8 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
     if (access() == "" or bucket() == "") { return false; }
     var io = {};
     cb(io);
-    final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
-    final headers = sign("GET", path, "", EMPTY_SHA256);
+    const path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
+    const headers = sign("GET", path, "", EMPTY_SHA256);
     return xhttp.download(endpoint() + path, "" + io["dest"], headers) == 200;
 }
 
@@ -208,10 +208,10 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     if (access() == "" or bucket() == "") { return false; }
     var io = {};
     cb(io);
-    final src = "" + io["src"];
-    final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
-    final headers = sign("PUT", path, "", extra.crypto.sha256File(src));
-    final res = xhttp.upload_chunked("PUT", endpoint() + path, src, 0, headers);
+    const src = "" + io["src"];
+    const path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
+    const headers = sign("PUT", path, "", extra.crypto.sha256File(src));
+    const res = xhttp.upload_chunked("PUT", endpoint() + path, src, 0, headers);
     return res[0] == 200;
 }
 
@@ -226,9 +226,9 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
 fun listPage(marker: str) > str {
     var query = "prefix=magus-";
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
-    final path = "/" + bucket();
-    final headers = sign("GET", path, query, EMPTY_SHA256);
-    final res = extra.http.get(endpoint() + path + "?" + query, headers);
+    const path = "/" + bucket();
+    const headers = sign("GET", path, query, EMPTY_SHA256);
+    const res = extra.http.get(endpoint() + path + "?" + query, headers);
     if (res[0] != 200) { return ""; }
     return "" + res[1];
 }
@@ -242,21 +242,21 @@ fun listPage(marker: str) > str {
 fun listing() > any {
     var marker = "";
     while (true) {
-        final body = listPage(marker);
+        const body = listPage(marker);
         if (body == "") { return null; }
         // Each <Contents> block carries one object's <Key> and <LastModified>;
         // blocks[0] is the preamble before the first object, so skip it.
-        final blocks = body.split("<Contents>");
+        const blocks = body.split("<Contents>");
         var last = "";
         for (var i = 1; i < blocks.len(); i = i + 1) {
-            final b = blocks[i];
-            final key = b.split("<Key>")[1].split("</Key>")[0];
-            final lm = b.split("<LastModified>")[1].split("</LastModified>")[0];
+            const b = blocks[i];
+            const key = b.split("<Key>")[1].split("</Key>")[0];
+            const lm = b.split("<LastModified>")[1].split("</LastModified>")[0];
             last = key;
-            yield mut {"key": key, "lastModified": lm};
+            yield {"key": key, "lastModified": lm};
         }
         // Continue only while S3 reports the listing truncated.
-        final trunc = body.split("<IsTruncated>");
+        const trunc = body.split("<IsTruncated>");
         if (trunc.len() < 2 or trunc[1].split("</IsTruncated>")[0] != "true") { return null; }
         if (last == "") { return null; } // defensive: truncated but nothing parsed
         marker = last;
@@ -267,9 +267,9 @@ fun listing() > any {
 // deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject
 // is idempotent, returning 204 No Content whether or not the key existed.
 fun deleteObject(key: str) > bool {
-    final path = "/" + bucket() + "/" + key;
-    final headers = sign("DELETE", path, "", EMPTY_SHA256);
-    final res = extra.http.request("DELETE", endpoint() + path, "", headers);
+    const path = "/" + bucket() + "/" + key;
+    const headers = sign("DELETE", path, "", EMPTY_SHA256);
+    const res = extra.http.request("DELETE", endpoint() + path, "", headers);
     return res[0] == 204 or res[0] == 200;
 }
 
@@ -286,14 +286,14 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     if (access() == "" or bucket() == "") { return false; }
     var io = {};
     cb(io);
-    final olderSecs = std.toInt(io["older_than_secs"]);
-    final keepLast = std.toInt(io["keep_last"]);
-    final dry = io["dry_run"] == true;
+    const olderSecs = std.toInt(io["older_than_secs"]);
+    const keepLast = std.toInt(io["keep_last"]);
+    const dry = io["dry_run"] == true;
 
     // Drain the pagination fiber, parsing each object's S3 timestamp to epoch
     // millis once (host time module) so the bounds below are integer comparisons.
-    var artifacts = mut [];
-    final gen = &listing();
+    var artifacts = [];
+    const gen = &listing();
     var e = resume(gen);
     while (e != null) {
         e["ms"] = extra.time.parse(S3_TIME_LAYOUT, "" + e["lastModified"]);
@@ -302,20 +302,20 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     }
 
     // Select objects to evict, de-duplicated by key across the two bounds.
-    var doomed = mut {};
+    var doomed = {};
     if (olderSecs > 0) {
-        final cutoffMs = os.time() - olderSecs * 1000;
+        const cutoffMs = os.time() - olderSecs * 1000;
         foreach (it in artifacts) {
             if (it["ms"] < cutoffMs) { doomed["" + it["key"]] = it; }
         }
     }
     if (keepLast > 0 and artifacts.len() > keepLast) {
         // Newest first, then evict everything past the Nth.
-        final sorted = artifacts.sort(fun (a: any, b: any) > bool {
+        const sorted = artifacts.sort(fun (a: any, b: any) > bool {
             return a["ms"] > b["ms"];
         });
         for (var i = keepLast; i < sorted.len(); i = i + 1) {
-            final it = sorted[i];
+            const it = sorted[i];
             doomed["" + it["key"]] = it;
         }
     }
@@ -323,7 +323,7 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     // Evict, or just report on a dry run.
     var removed = 0;
     foreach (key in doomed.keys()) {
-        final it = doomed[key];
+        const it = doomed[key];
         if (dry) {
             std.print("s3 prune: would delete " + key + " (" + ("" + it["lastModified"]) + ")");
             removed = removed + 1;

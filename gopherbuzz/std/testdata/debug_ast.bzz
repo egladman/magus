@@ -1,5 +1,5 @@
 // @expect: true
 import "debug";
-final src = "final x = 1;";
-final j = debug.ast(src);
-final __r = j.len() > 0;
+const src = "const x = 1;";
+const j = debug.ast(src);
+const __r = j.len() > 0;

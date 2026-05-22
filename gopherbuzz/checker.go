@@ -29,14 +29,21 @@ type checker struct {
 	retTyp   types.Type
 	yieldTyp types.Type            // non-nil when inside a function with a *> yield annotation
 	types    map[string]types.Type // named type definitions (objects, enums)
+	// private names are visible in a flat-imported module's runtime Env but hidden
+	// from this file by exports-only import visibility; referencing one yields an
+	// "export it" hint rather than a bare "undefined". See session.importPrivate.
+	private map[string]bool
 }
 
 // Check type-checks prog after pre-registering extraGlobals as types.Any.
 // This allows callers to inject dynamically-defined names (e.g. from SetVal) so the
-// checker doesn't flag them as undefined.
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node) []typeError {
+// checker doesn't flag them as undefined. private names are hidden by exports-only
+// import visibility: referencing one is undefined here, but the checker points at
+// the missing `export` instead of a bare "undefined".
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, private map[string]bool) []typeError {
 	c := &checker{
-		types: map[string]types.Type{},
+		types:   map[string]types.Type{},
+		private: private,
 	}
 	c.pushScope()
 	c.registerBuiltins()
@@ -64,7 +71,7 @@ func (c *checker) registerBuiltins() {
 	c.define("print", anyRet, true)
 	c.define("str", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Str}, true)
 	c.define("int", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Int}, true)
-	c.define("double", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Double}, true)
+	c.define("float", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Float}, true)
 	c.define("bool", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Bool}, true)
 	c.define("len", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Int}, true)
 	c.define("keys", &types.FuncType{Params: []types.Type{types.Any}, Ret: &types.ListType{Elem: types.Str}}, true)
@@ -293,13 +300,8 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 
 func (c *checker) checkAssign(v *ast.AssignStmt) {
 	if id, ok := v.Target.(*ast.IdentExpr); ok {
-		// `_` is the discard target: accept any value and bind nothing.
-		if id.Name == "_" {
-			c.infer(v.Value)
-			return
-		}
 		if e, found := c.lookup(id.Name); found && e.isConst {
-			c.errorf(id.Pos, "cannot assign to final %q", id.Name)
+			c.errorf(id.Pos, "cannot assign to const %q", id.Name)
 		} else if found {
 			rhs := c.infer(v.Value)
 			if !types.Compat(rhs, e.typ) {
@@ -365,10 +367,6 @@ func (c *checker) checkForEach(v *ast.ForEachStmt) {
 			valTyp = types.Int
 			keyTyp = types.Int
 		}
-	case *types.FibType:
-		// foreach over a fiber binds each yielded value.
-		valTyp = it.Yield
-		keyTyp = types.Int
 	}
 	c.pushScope()
 	c.define(v.ValName, valTyp, false)
@@ -446,7 +444,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 	case *ast.IntLit:
 		return types.Int
 	case *ast.FloatLit:
-		return types.Double
+		return types.Float
 	case *ast.StringLit:
 		return types.Str
 	case *ast.BoolLit:
@@ -472,12 +470,6 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return c.inferMember(v)
 	case *ast.IndexExpr:
 		return c.inferIndex(v)
-	case *ast.ForceExpr:
-		// Optionals are erased to their base type in this checker, so force-unwrap
-		// reports the operand's type unchanged.
-		return c.infer(v.Operand)
-	case *ast.PatLit:
-		return types.Pat
 	case *ast.FunExpr:
 		return c.inferFunExpr(v)
 	case *ast.MapExpr:
@@ -542,7 +534,11 @@ func (c *checker) inferIdent(v *ast.IdentExpr) types.Type {
 	if e, ok := c.lookup(v.Name); ok {
 		return e.typ
 	}
-	c.errorf(v.Pos, "undefined: %s", v.Name)
+	if c.private[v.Name] {
+		c.errorf(v.Pos, "undefined: %s (an imported module declares %q but does not export it — add `export` to it)", v.Name, v.Name)
+	} else {
+		c.errorf(v.Pos, "undefined: %s", v.Name)
+	}
 	return types.Any
 }
 
@@ -564,8 +560,8 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 	case "-", "*", "%":
 		return c.numericResult(v.Pos, left, right)
 	case "/":
-		if left == types.Double || right == types.Double {
-			return types.Double
+		if left == types.Float || right == types.Float {
+			return types.Float
 		}
 		return types.Int
 	case "<", ">", "<=", ">=", "==", "!=":
@@ -585,13 +581,13 @@ func (c *checker) numericResult(p ast.Pos, left, right types.Type) types.Type {
 	if left == types.Any || right == types.Any {
 		return types.Any
 	}
-	if left == types.Double || right == types.Double {
-		return types.Double
+	if left == types.Float || right == types.Float {
+		return types.Float
 	}
 	if left == types.Int && right == types.Int {
 		return types.Int
 	}
-	if left != types.Int && left != types.Double {
+	if left != types.Int && left != types.Float {
 		c.errorf(p, "invalid type %s in arithmetic expression", left.TypeName())
 	}
 	return types.Any
@@ -601,7 +597,7 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 	t := c.infer(v.Operand)
 	switch v.Op {
 	case "-":
-		if t == types.Any || t == types.Int || t == types.Double {
+		if t == types.Any || t == types.Int || t == types.Float {
 			return t
 		}
 		c.errorf(v.Pos, "unary - requires numeric operand, got %s", t.TypeName())

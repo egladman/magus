@@ -8,7 +8,6 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 )
 
-//go:generate go run ../../cmd/magus-bindings-gen -module env -lang lua -out gen/lua/env.go
 //go:generate go run ../../cmd/magus-bindings-gen -module env -lang buzz -out gen/buzz/env.go
 
 func init() { Register(Env) }

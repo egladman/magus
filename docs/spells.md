@@ -13,7 +13,7 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 | **What it is**          | a library of tool-native operations (+ cache metadata)                               | an addressable unit of work you run                                                     |
 | **Answers**             | _how_ a tool performs an operation                                                   | _what_ operation runs on _which_ project                                                |
 | **Vocabulary**          | the tool's own CLI command (`go-vet`, `cargo-clippy`, `tsc`, `eslint`, `ruff-check`) | magus's lifecycle (`build`, `test`, `lint`, `format`, `clean`, `generate`, `preflight`) |
-| **Who declares it**     | a built-in, a spell file (`spells/*.bzz`/`*.tl`), or `magus.spell.define`            | an exported function in your magusfile                                                  |
+| **Who declares it**     | a built-in, a spell file (`spells/*.bzz`), or `magus.spell.define`                   | an exported function in your magusfile                                                  |
 | **How it enters a run** | **bound** to a project via `magus.project.register`                                  | **invoked** via `magus run <name>`                                                      |
 | **Runs on its own?**    | **No**: it only contributes ops + cache inputs                                       | **Yes**: it is the entry point                                                          |
 | **Cardinality**         | many ops per spell; many spells per project                                          | one function per target name per project                                                |
@@ -22,15 +22,15 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 
 The relationship is **compositional**: a target's body calls spell ops.
 
-```lua
-local go = require("magus.spell.go")
-magus.project.register(".", { spells = {go} })   -- bind the spell (runs nothing)
+```buzz
+import "magus/spell/go";
+magus.project.register(".", { "spells": [go] });   // bind the spell (runs nothing)
 
--- targets are the runnable verbs; their bodies call the spell's ops. Op keys are
--- the CLI command, so kebab names are reached by subscript (see Naming operations).
-global function build(_args: {string}) go["go-build"]({cwd = "."})      end
-global function lint(_args: {string})  go["golangci-lint"]({cwd = "."}) end
-global function test(_args: {string})  go["go-test"]({cwd = "."})       end
+// targets are the runnable verbs; their bodies call the spell's ops. Op keys are
+// the CLI command, so kebab names are reached by subscript (see Naming operations).
+export fun build(_args: [str]) > void { go["go-build"]({ "cwd": "." }); }
+export fun lint(_args: [str])  > void { go["golangci-lint"]({ "cwd": "." }); }
+export fun test(_args: [str])  > void { go["go-test"]({ "cwd": "." }); }
 ```
 
 ```sh
@@ -41,7 +41,7 @@ magus run lint .         # runs your `lint` target, which calls go's golangci-li
 
 - **Reach for a target** when you want a _runnable verb_: the thing a teammate or CI types (`magus run test api`). Targets are your **public surface**; declare one per lifecycle step you want runnable. Until you export a target for an operation, `magus run <op>` is a graceful no-op.
 - **Reach for a spell** when you want to _package a toolchain's operations_ and _tell the cache which files matter_. Bind a built-in, load a spell file, or `magus.spell.define` an inline one. Call its ops from inside target bodies.
-- **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with `magus.extra.*` (e.g. `os.exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
+- **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with `extra.*` (e.g. `extra.os.exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
 - **Use the `::` escape hatch** (`magus run go::go-vet api`) only for ad-hoc runs or introspection. The everyday surface is your composed targets.
 
 magus deliberately does **not** decide what "lint" or "format" means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).
@@ -67,7 +67,7 @@ Binding a spell contributes its `needs`/`claims`/`provides` to that project's ca
 
 Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.
 
-**Function-ops in either engine.** A Buzz spell writes function-ops as handlers (the form above). A Teal spell writes a **record** for a fork op and a **function value** for a function-op — `mgs_listTargets` returns `{ ["get-entry"] = function(target, cb) ... end }`; the handler reads its inputs from the table it passes to `cb` and may call host modules (`require("magus.extra.http")`). This is what lets a remote cache backend be authored in Teal, not only Buzz. The one difference: Buzz captures handler doc comments for `magus doctor`; Teal function-ops carry none and are exempt from the doc check. That exemption is a deliberate scope decision, not a hard limit (Teal drops comments during codegen, but capturing them reliably would mean extending the vendored Teal compiler) — see [engines.md](engines.md#the-engine-agnostic-spell-contract) for the rationale.
+A function-op handler does host work in-VM (HTTP, signing, a cache backend's `get-entry`) instead of forking a single command, calling host modules (`extra.http`, `extra.crypto`) as needed. This is what lets a remote cache backend be authored as a spell. `magus doctor` enforces a doc comment on each function-op handler, captured by the Buzz parser at compile time.
 
 The handler's second parameter is named **`cb`** (a plain callback): the handler calls `cb({cmd, args, charms})` once to declare the command it forks. The name stays `cb` rather than `op` on purpose — `op` already means two other things here (a charm patch's `op` field, and a spell's _ops_), so reusing it would be ambiguous.
 
@@ -79,61 +79,61 @@ A spell only takes effect when its **handle** is passed to `magus.project.regist
 
 Built-in spells are compiled into the magus binary.
 
-```lua
-local go = require("magus.spell.go")
-magus.project.register(".", { spells = {go} })
+```buzz
+import "magus/spell/go";
+magus.project.register(".", { "spells": [go] });
 ```
 
 Available built-ins: `go`, `typescript`, `javascript`, `python`, `rust`, `zig`, `bash`, `docker`, `compose`, `kind`, `terraform`, `kustomize`, `json`, `yaml`, `toml`, `html`, `markdown`, `css`, `sql`.
 
 ### File spell
 
-A workspace-local `spells/<name>.bzz` (or `.tl`) loaded by path:
+A workspace-local `spells/<name>.bzz` loaded by path:
 
-```lua
-local rb = magus.spell.load("spells/ruby.bzz")
-magus.project.register("gems/", { spells = {rb} })
+```buzz
+const rb = magus.spell.load("spells/ruby.bzz");
+magus.project.register("gems/", { "spells": [rb] });
 ```
 
 ### Inline spell
 
 For a spell used in only one magusfile, define it inline:
 
-```lua
-local rb = magus.spell.define {
-   name = "ruby",
-   needs = function(_dir: string): {string} return {"**/*.rb", "Gemfile.lock"} end,
-   provides = function(): {string} return {"vendor/bundle/**/*"} end,
-   ops = {
-      rspec   = { cmd = "bundle", args = {"exec", "rspec"} },
-      rubocop = { cmd = "bundle", args = {"exec", "rubocop", "--check"},
-                  charms = { rw = { ops = {{op = "replace", path = "/2", value = "-A"}} } } },
-   },
-}
-magus.project.register("gems/", { spells = {rb} })
+```buzz
+const rb = magus.spell.define({
+    "name": "ruby",
+    "needs": fun(_dir: str) > [str] { return ["**/*.rb", "Gemfile.lock"]; },
+    "provides": fun() > [str] { return ["vendor/bundle/**/*"]; },
+    "ops": {
+        "rspec":   { "cmd": "bundle", "args": ["exec", "rspec"] },
+        "rubocop": { "cmd": "bundle", "args": ["exec", "rubocop", "--check"],
+                     "charms": { "rw": {"ops": [{"op": "replace", "path": "/2", "value": "-A"}]} } },
+    },
+});
+magus.project.register("gems/", { "spells": [rb] });
 ```
 
 The handle exposes `handle.listTargets()` (sorted op names) for introspection.
 
 ## Composing spells
 
-Spells do **not** import one another. There is no spell-to-spell `require`/`import`, and a [built-in spell](engines.md#built-in-spell-vs-language-builtins) may import only the pure-types `magus/target` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
+Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/target` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
 
-```lua
-local go      = require("magus.spell.go")
-local docker  = require("magus.spell.docker")
-local compose = require("magus.spell.compose")
-magus.project.register(".", { spells = {go, docker, compose} })   -- co-bound
+```buzz
+import "magus/spell/go";
+import "magus/spell/docker";
+import "magus/spell/compose";
+magus.project.register(".", { "spells": [go, docker, compose] });   // co-bound
 
-global function build(_args: {string})
-   go["go-build"]({cwd = "."})
-   docker.build({cwd = "."})        -- one target, ops from two spells
-end
+export fun build(_args: [str]) > void {
+    go["go-build"]({ "cwd": "." });
+    docker.build({ "cwd": "." });        // one target, ops from two spells
+}
 ```
 
 The docker/compose relationship is exactly this **co-binding**, not an import: both are bound to a project and their ops are composed in target bodies. The cache sees the union of every bound spell's `needs`/`provides`/`claims`.
 
-One magus API does take a spell handle as an argument: `magus.cache.remote(github)` wires a [function-op](#operations-come-in-two-shapes) spell (e.g. `actions`, `s3-cache`) as the remote cache backend. That is a magus call consuming a spell, not a spell importing a spell. The engine-level details of how both languages resolve modules live in [engines.md](engines.md); for the shipped backends and how to set one up, see [Remote caching](remote-cache.md).
+One magus API does take a spell handle as an argument: `magus.cache.remote(github)` wires a [function-op](#operations-come-in-two-shapes) spell (e.g. `actions`, `s3-cache`) as the remote cache backend. That is a magus call consuming a spell, not a spell importing a spell. For the shipped backends and how to set one up, see [Remote caching](remote-cache.md).
 
 ## Naming operations
 
@@ -188,14 +188,14 @@ export fun mgs_listTargets() > any {
 }
 ```
 
-Teal spell files (`.tl`) use the same function names as table keys in a returned module (see any `spells/*.tl` for the format). Then bind it and compose targets that call its ops:
+Then bind it and compose targets that call its ops:
 
-```lua
-local rb = magus.spell.load("spells/ruby.bzz")
-magus.project.register("gems/", { spells = {rb} })
+```buzz
+const rb = magus.spell.load("spells/ruby.bzz");
+magus.project.register("gems/", { "spells": [rb] });
 
-global function test(_args: {string}) rb.rspec({cwd = "gems/"})  end
-global function lint(_args: {string}) rb.rubocop({cwd = "gems/"}) end
+export fun test(_args: [str]) > void { rb.rspec({ "cwd": "gems/" }); }
+export fun lint(_args: [str]) > void { rb.rubocop({ "cwd": "gems/" }); }
 ```
 
 For cache-correctness rules (declare every input in `needs`, declare `provides` so outputs replay, toolchain-version footguns), see [Spells in the README](../README.md#custom-spells).
@@ -203,22 +203,22 @@ For cache-correctness rules (declare every input in `needs`, declare `provides` 
 ## Lifecycle: bind → contribute → compose → run
 
 ```
-magus.spell.load / require / define   → a Spell handle (registers nothing)
+import / magus.spell.load / define     → a Spell handle (registers nothing)
       │
       ▼
 magus.project.register(path, {spells}) → the spell is bound to the project;
       │                                   its needs/provides/claims now feed the
       │                                   project's cache key and affected set
       ▼
-global function <name>(...) end         → a target whose body calls spell ops
-      │                                   (spell.op({cwd=...})); this is the
+export fun <name>(...) > void {}        → a target whose body calls spell ops
+      │                                   (spell.op({"cwd": ...})); this is the
       │                                   runnable verb
       ▼
 magus run <name> <project>             → executes the target; spell ops fork
                                           their commands (cached by needs/provides)
 ```
 
-Key invariant: **binding is not running.** A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; use `magus.extra.*`).
+Key invariant: **binding is not running.** A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; use `extra.*`).
 
 ## Glossary
 
@@ -226,12 +226,12 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Spell**          | A library of tool-native operations for one toolchain, plus its cache/affected metadata. Bound to a project; runs nothing on its own.                                                                                              |
 | **Op (operation)** | One tool-native action a spell exposes, named after its CLI command (`go-vet`, `golangci-lint`). Reached by subscript on the handle (`go["go-vet"]()`) or via `spell::op` on the CLI. See [Naming operations](#naming-operations). |
-| **Handle**         | The value returned by `require`/`magus.spell.load`/`magus.spell.define`. Inert until passed to `magus.project.register`.                                                                                                           |
+| **Handle**         | The value returned by an `import`/`magus.spell.load`/`magus.spell.define`. Inert until passed to `magus.project.register`.                                                                                                         |
 | **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                      |
 | **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                             |
 | **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`), for affected-set attribution.                                                                                                                                                         |
 | **Fork op**        | An op that declares a `{cmd, args, charms}` command magus forks directly (no shell).                                                                                                                                               |
-| **Function-op**    | An op whose handler does host work in-VM (e.g. a cache backend) rather than forking a single command. Authored in either engine: a Buzz handler, or a Teal function-valued op.                                                     |
+| **Function-op**    | An op whose handler does host work in-VM (e.g. a cache backend) rather than forking a single command.                                                                                                                             |
 | **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                   |
 
 ## Worked examples in this repo
@@ -248,6 +248,6 @@ Read these spells under [`magus/spells/`](../spells) when you outgrow a plain fo
 
 - [Anatomy of a magus Target](targets.md): the unit you _run_, and the CLI grammar for addressing it.
 - [Charms](charms.md): execution modifiers that spell ops and targets both honor.
-- [Engines](engines.md): the Lua/Buzz seam, the engine-agnostic `mgs_` contract, and the `require` vs `import` idioms.
+- [Engines](engines.md): how a magusfile runs on the embedded Buzz VM and the `mgs_` spell contract.
 - [Spells (README)](../README.md#spells): built-ins list, extending a built-in, and custom-spell best practices.
 - [`magus` module API](modules/magus.md): `magus.project.register`, `magus.spell.load`, `magus.spell.define`.

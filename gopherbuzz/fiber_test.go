@@ -17,11 +17,11 @@ fun gen() int {
     yield 2;
     return 3;
 }
-final f = &gen();
-final a = resume f;
-final b = resume f;
-final c = resume f;
-final r = resolve f;
+const f = &gen();
+const a = resume f;
+const b = resume f;
+const c = resume f;
+const r = resolve f;
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -52,12 +52,12 @@ fun counter(start) int {
     }
     return -1;
 }
-final f = &counter(10);
-final a = resume f;
-final b = resume f;
-final c = resume f;
-final d = resume f;
-final r = resolve f;
+const f = &counter(10);
+const a = resume f;
+const b = resume f;
+const c = resume f;
+const d = resume f;
+const r = resolve f;
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -83,10 +83,10 @@ func TestFiberCancellation(t *testing.T) {
 	sess := newSession(ctx)
 	if err := sess.Exec(context.Background(),
 		`fun spin() int { var i = 0; while (i >= 0) { i = i + 1; } return i; }
-final f = &spin();`); err != nil {
+const f = &spin();`); err != nil {
 		t.Fatal(err)
 	}
-	if err := sess.Exec(ctx, `final r = resume f;`); err == nil {
+	if err := sess.Exec(ctx, `const r = resume f;`); err == nil {
 		t.Fatal("resume of infinite-loop fiber under cancelled ctx did not error")
 	}
 }
@@ -98,7 +98,7 @@ func TestFiberRecursiveResumeGuard(t *testing.T) {
 	src := `
 var f = null;
 f = &(fun() int { return resume f; })();
-final r = resume f;
+const r = resume f;
 `
 	if err := sess.Exec(context.Background(), src); err == nil {
 		t.Fatal("recursive resume of a running fiber should error")
@@ -111,9 +111,9 @@ func TestFiberResumeDoneReturnsNull(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
 fun gen() int { return 1; }
-final f = &gen();
-final a = resume f;
-final b = resume f;
+const f = &gen();
+const a = resume f;
+const b = resume f;
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -134,25 +134,25 @@ func TestFiberErrorResurfaced(t *testing.T) {
 	ctx := context.Background()
 	t.Run("resolve then resolve", func(t *testing.T) {
 		sess := newSession(ctx)
-		if err := sess.Exec(ctx, `fun boom() { throw "boom"; } final f = &boom();`); err != nil {
+		if err := sess.Exec(ctx, `fun boom() { throw "boom"; } const f = &boom();`); err != nil {
 			t.Fatal(err)
 		}
-		if err := sess.Exec(ctx, `final a = resolve f;`); err == nil {
+		if err := sess.Exec(ctx, `const a = resolve f;`); err == nil {
 			t.Fatal("first resolve of a throwing fiber should error")
 		}
-		if err := sess.Exec(ctx, `final b = resolve f;`); err == nil {
+		if err := sess.Exec(ctx, `const b = resolve f;`); err == nil {
 			t.Fatal("re-resolve of an errored fiber should re-surface the error, not return null")
 		}
 	})
 	t.Run("resume then resolve", func(t *testing.T) {
 		sess := newSession(ctx)
-		if err := sess.Exec(ctx, `fun boom() { throw "boom"; } final f = &boom();`); err != nil {
+		if err := sess.Exec(ctx, `fun boom() { throw "boom"; } const f = &boom();`); err != nil {
 			t.Fatal(err)
 		}
-		if err := sess.Exec(ctx, `final a = resume f;`); err == nil {
+		if err := sess.Exec(ctx, `const a = resume f;`); err == nil {
 			t.Fatal("resume of a throwing fiber should error")
 		}
-		if err := sess.Exec(ctx, `final b = resolve f;`); err == nil {
+		if err := sess.Exec(ctx, `const b = resolve f;`); err == nil {
 			t.Fatal("resolve after a resume that errored should re-surface the error, not return null")
 		}
 	})
@@ -174,7 +174,7 @@ func TestFiberDirectRejected(t *testing.T) {
 	sess.SetGlobal("nat", DirectValue("nat", func(_ context.Context, _ []Value) (Value, error) {
 		return IntValue(42), nil
 	}))
-	if err := sess.Exec(context.Background(), `final f = &nat();`); err == nil {
+	if err := sess.Exec(context.Background(), `const f = &nat();`); err == nil {
 		t.Fatal("& on a direct callable should error")
 	}
 }
@@ -207,8 +207,8 @@ fun gen() int {
     yield inner();
     return 0;
 }
-final f = &gen();
-final v = resume f;
+const f = &gen();
+const v = resume f;
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ func TestFiberConcurrentSessions(t *testing.T) {
 			sess := newSession(context.Background())
 			src := `
 fun gen() int { yield 1; yield 2; return 7; }
-final f = &gen();
+const f = &gen();
 var sum = 0;
 sum = sum + resume f;
 sum = sum + resume f;

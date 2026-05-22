@@ -15,17 +15,17 @@ func openTempWorkspace(t *testing.T, projPath string, outputs []string) (*Magus,
 	t.Helper()
 	root := t.TempDir()
 
-	// An empty magusfile.tl at the root marks it as the workspace root.
-	if err := os.WriteFile(filepath.Join(root, "magusfile.tl"), []byte(""), 0o644); err != nil {
+	// An empty magusfile.bzz at the root marks it as the workspace root.
+	if err := os.WriteFile(filepath.Join(root, "magusfile.bzz"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// An empty magusfile.tl in the project directory makes magus discover it.
+	// An empty magusfile.bzz in the project directory makes magus discover it.
 	projDir := filepath.Join(root, filepath.FromSlash(projPath))
 	if err := os.MkdirAll(projDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.tl"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projDir, "magusfile.bzz"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

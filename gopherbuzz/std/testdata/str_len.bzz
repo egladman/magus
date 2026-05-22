@@ -1,2 +1,2 @@
 // @expect: 5
-final __r = "hello".len();
+const __r = "hello".len();

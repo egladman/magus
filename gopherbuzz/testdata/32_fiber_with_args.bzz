@@ -3,5 +3,5 @@ fun adder(n: int) {
     yield n + 5;
     yield n + 10;
 }
-final f = &adder(10);
-final __r = resume f;
+const f = &adder(10);
+const __r = resume f;

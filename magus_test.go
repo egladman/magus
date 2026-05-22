@@ -279,7 +279,7 @@ func TestRunTarget_InjectsEffectiveClaims(t *testing.T) {
 // than panicking on a nil cache.
 func TestCacheOps_InspectReturnErrNoCache(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.tl")
+	root := makeWorkspaceRoot(t, "magusfile.bzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -313,12 +313,12 @@ func TestLimiter_IdempotentNonNil(t *testing.T) {
 func TestPoolRegistry_IdempotentNonNil(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
-	r1 := m.poolRegistry()
+	r1 := m.buzzPoolRegistry()
 	if r1 == nil {
-		t.Fatal("poolRegistry() = nil, want non-nil")
+		t.Fatal("buzzPoolRegistry() = nil, want non-nil")
 	}
-	if r2 := m.poolRegistry(); r1 != r2 {
-		t.Error("poolRegistry() not idempotent: second call returned different pointer")
+	if r2 := m.buzzPoolRegistry(); r1 != r2 {
+		t.Error("buzzPoolRegistry() not idempotent: second call returned different pointer")
 	}
 }
 
@@ -329,7 +329,7 @@ func TestClose_Idempotent(t *testing.T) {
 		t.Errorf("Close on fresh Magus: %v", err)
 	}
 	// Trigger lazy init of poolReg, then Close again.
-	_ = m.poolRegistry()
+	_ = m.buzzPoolRegistry()
 	if err := m.Close(); err != nil {
 		t.Errorf("Close after PoolRegistry: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestClose_Idempotent(t *testing.T) {
 
 func TestSetGraphObserver_Invoked(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.tl")
+	root := makeWorkspaceRoot(t, "magusfile.bzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -368,7 +368,7 @@ func TestSetGraphObserver_Invoked(t *testing.T) {
 
 func TestSpecFor_RootProject(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.tl")
+	root := makeWorkspaceRoot(t, "magusfile.bzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -400,7 +400,7 @@ func TestSpecFor_RootProject(t *testing.T) {
 
 func TestSpecFor_NestedProject(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.tl", "api/magusfile.tl")
+	root := makeWorkspaceRoot(t, "magusfile.bzz", "api/magusfile.bzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -511,13 +511,13 @@ func ExampleInspect() {
 	}
 	defer os.RemoveAll(root)
 
-	// A directory is a project if it contains a magusfile.tl.
+	// A directory is a project if it contains a magusfile.bzz.
 	projDir := filepath.Join(root, "myapp")
 	if err := os.MkdirAll(projDir, 0o755); err != nil {
 		fmt.Println("setup error:", err)
 		return
 	}
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.tl"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projDir, "magusfile.bzz"), []byte(""), 0o644); err != nil {
 		fmt.Println("setup error:", err)
 		return
 	}
@@ -581,11 +581,11 @@ func newWorkspace(t *testing.T) types.WorkspaceRepository {
 	t.Helper()
 	root := t.TempDir()
 	for _, rel := range []string{
-		"magusfile.tl",                    // root project "."
-		"api/magusfile.tl",                // "api"
-		"web/studio/magusfile.tl",         // "web/studio"
-		"extensions/drape/magusfile.tl",   // "extensions/drape"
-		"extensions/lattice/magusfile.tl", // "extensions/lattice"
+		"magusfile.bzz",                    // root project "."
+		"api/magusfile.bzz",                // "api"
+		"web/studio/magusfile.bzz",         // "web/studio"
+		"extensions/drape/magusfile.bzz",   // "extensions/drape"
+		"extensions/lattice/magusfile.bzz", // "extensions/lattice"
 	} {
 		abs := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {

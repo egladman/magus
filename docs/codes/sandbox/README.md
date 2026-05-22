@@ -77,7 +77,7 @@ Two layers run together:
    on itself before any spell code runs. The restriction is inherited
    across `fork+exec`, so every child process gets the same filesystem
    confinement automatically. No root required.
-2. **Interpreter level.** The Lua/Teal/JS `fs.*`, `sh.*`, `env.*`
+2. **Interpreter level.** The Buzz `fs.*`, `sh.*`, `env.*`
    bindings consult the policy before performing any path or process
    operation. This gives spells a friendly `MGS2001/MGS2002` error
    message and is the only enforcement on macOS, Windows, or older Linux

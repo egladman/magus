@@ -130,22 +130,19 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 		sess.SetSyntheticModule("magus/spell/"+spec.Name, buzzSpellObject(spec.Name))
 	}
 	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
-	// ./spells/hello.{bzz,tl} on demand and binds its handle under the basename
-	// (hello). This is the import sugar for magus.spell.load on that path — the
-	// resolver reuses the same cross-engine loader (so a Buzz magusfile can import
-	// a Teal spell), and the handle registers by value when bound via
-	// magus.project.register. Mirrors require("spells.hello") in Teal.
+	// ./spells/hello.bzz on demand and binds its handle under the basename
+	// (hello). This is the import sugar for magus.spell.load on that path, and the
+	// handle registers by value when bound via magus.project.register.
 	sess.SetModuleResolver(func(importPath string) (buzzeng.Value, bool) {
 		return resolveLocalSpellImport(ctx, importPath)
 	})
 }
 
 // resolveLocalSpellImport resolves a path-style import (e.g. "spells/hello") to a
-// workspace-local spell at <importPath>.bzz or <importPath>.tl, relative to the
-// process cwd (the magusfile's directory at run time, matching magus.spell.load).
-// .bzz wins when both exist. It returns the spell handle and ok=true when a file
-// exists and parses as a spell; otherwise ok=false, leaving the import to the
-// normal file search.
+// workspace-local spell at <importPath>.bzz, relative to the process cwd (the
+// magusfile's directory at run time, matching magus.spell.load). It returns the
+// spell handle and ok=true when a file exists and parses as a spell; otherwise
+// ok=false, leaving the import to the normal file search.
 func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Value, bool) {
 	// Resolve relative to the magusfile's own directory first, so a magusfile
 	// imported from outside its dir (e.g. workspace preload visiting a sub-project)
@@ -156,25 +153,23 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Va
 	}
 	dirs = append(dirs, "")
 	for _, dir := range dirs {
-		for _, ext := range []string{".bzz", ".tl"} {
-			// Two layouts are accepted: a flat spells/<name>.bzz, and the directory
-			// convention spells/<name>/spell.bzz (preferred — keeps a spell's source
-			// and any future companion files together, easy to discover).
-			for _, rel := range []string{importPath + ext, filepath.Join(importPath, "spell"+ext)} {
-				path := rel
-				if dir != "" {
-					path = filepath.Join(dir, rel)
-				}
-				if fi, err := os.Stat(path); err != nil || fi.IsDir() {
-					continue
-				}
-				// loadLocalSpell dispatches by extension and absolutizes a relative path.
-				// For a Buzz spell it also registers it with function-op support, so the
-				// returned handle's name resolves to a function-op-capable spell whether
-				// it is bound to a project or wired as the remote cache backend.
-				if m, ok := loadLocalSpell(ctx, path); ok {
-					return spellHandleFromMeta(m), true
-				}
+		// Two layouts are accepted: a flat spells/<name>.bzz, and the directory
+		// convention spells/<name>/spell.bzz (preferred — keeps a spell's source
+		// and any future companion files together, easy to discover).
+		for _, rel := range []string{importPath + ".bzz", filepath.Join(importPath, "spell.bzz")} {
+			path := rel
+			if dir != "" {
+				path = filepath.Join(dir, rel)
+			}
+			if fi, err := os.Stat(path); err != nil || fi.IsDir() {
+				continue
+			}
+			// loadLocalSpell absolutizes a relative path and registers the Buzz spell
+			// with function-op support, so the returned handle's name resolves to a
+			// function-op-capable spell whether it is bound to a project or wired as
+			// the remote cache backend.
+			if m, ok := loadLocalSpell(ctx, path); ok {
+				return spellHandleFromMeta(m), true
 			}
 		}
 	}
@@ -667,7 +662,7 @@ func buildBuzzDependsOn(targets map[string]buzzeng.Callable) func(context.Contex
 		if src := interp.SourceFromContext(callCtx); src != nil {
 			if reg := buzzeng.PoolRegistryFromContext(callCtx); reg != nil {
 				key := src.Dir + "\x00buzz"
-				p := reg.Get(key, interp.NewBuzzWorkerFactory(src))
+				p := reg.Get(key, interp.NewBuzzWorkerFunc(src))
 				if err := buzzDispatchViaPool(callCtx, p, names); err != nil {
 					return buzzeng.Null, fmt.Errorf("magus.depends_on: %w", err)
 				}
@@ -721,7 +716,7 @@ func buildBuzzDispatch(targets map[string]buzzeng.Callable) func(context.Context
 		if src := interp.SourceFromContext(callCtx); src != nil {
 			if reg := buzzeng.PoolRegistryFromContext(callCtx); reg != nil {
 				key := src.Dir + "\x00buzz"
-				p := reg.Get(key, interp.NewBuzzWorkerFactory(src))
+				p := reg.Get(key, interp.NewBuzzWorkerFunc(src))
 				if err := buzzDispatchViaPool(callCtx, p, matched); err != nil {
 					return buzzeng.Null, fmt.Errorf("magus.dispatch: %w", err)
 				}

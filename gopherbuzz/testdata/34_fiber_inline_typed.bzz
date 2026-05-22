@@ -5,4 +5,4 @@ fun work() > str *> int {
 }
 // resolve returns the fiber's return type (str). Before inline fibers were
 // typed, this flowed as `any` and the mismatch went uncaught.
-final x: int = resolve &work();
+const x: int = resolve &work();

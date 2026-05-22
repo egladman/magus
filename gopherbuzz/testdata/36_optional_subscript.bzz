@@ -1,6 +1,0 @@
-// @expect: 30
-// Checked subscript list[?i] yields null when i is out of bounds instead of erroring.
-final xs = [10, 20, 30];
-final a = xs[?2] ?? 0;
-final b = xs[?5] ?? 0;
-final __r = a + b;

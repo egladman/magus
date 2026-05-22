@@ -33,7 +33,7 @@ import (
 //
 // v7 adds Instr.C (4 bytes, compile-time destination register). An older VM would
 // read C's bytes as the next instruction's Op/A fields, silently mis-executing.
-const BytecodeVersion uint16 = 8
+const BytecodeVersion uint16 = 7
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -245,7 +245,6 @@ const (
 	constTagStr     = 4
 	constTagEnumDef = 5
 	constTagObjDecl = 6
-	constTagPat     = 7
 )
 
 func (e *enc) constVal(v Value) error {
@@ -272,9 +271,6 @@ func (e *enc) constVal(v Value) error {
 	case tagObjDecl:
 		e.u8(constTagObjDecl)
 		return e.node(v.asObjDecl())
-	case tagPat:
-		e.u8(constTagPat)
-		e.str(v.asPat().src)
 	default:
 		return fmt.Errorf("buzz: marshal: cannot serialize constant of kind %s", v.buzzKind())
 	}
@@ -922,12 +918,6 @@ func (d *dec) constVal() (Value, error) {
 			return Null, fmt.Errorf("constVal: expected *ast.ObjectDecl, got %T", n)
 		}
 		return heapValue(tagObjDecl, &objDeclPayload{decl}), nil
-	case constTagPat:
-		s, err := d.str()
-		if err != nil {
-			return Null, err
-		}
-		return PatValue(s)
 	default:
 		return Null, fmt.Errorf("unknown const tag %d", tag)
 	}

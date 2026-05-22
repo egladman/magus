@@ -12,7 +12,6 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 )
 
-//go:generate go run ../../cmd/magus-bindings-gen -module http -lang lua -out gen/lua/http.go
 //go:generate go run ../../cmd/magus-bindings-gen -module http -lang buzz -out gen/buzz/http.go
 
 func init() { Register(HTTP) }

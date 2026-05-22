@@ -1,4 +1,4 @@
 // @expect: 42
 import "serialize";
-final boxed = serialize.jsonDecode("[42]");
-final __r = boxed.listValue()[0].integerValue();
+const boxed = serialize.jsonDecode("[42]");
+const __r = boxed.listValue()[0].integerValue();

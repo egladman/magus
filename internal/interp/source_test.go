@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-func TestFindMagusTl(t *testing.T) {
+func TestFindMagusBzz(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.tl"), []byte("global function build(_args: {string}) end\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,11 +45,12 @@ func TestParseTargetsPath(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	source := `
-global function build(args: {string}) end
-global function test(args: {string}) end
-global function go_vet(args: {string}) end
+import "magus";
+export fun build(_args: [str]) > void {}
+export fun test(_args: [str]) > void {}
+export fun go_vet(_args: [str]) > void {}
 `
-	path := filepath.Join(dir, "magusfile.tl")
+	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}

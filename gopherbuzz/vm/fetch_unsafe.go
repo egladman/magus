@@ -77,8 +77,10 @@ func fetch(code []Instr, ip int) Instr {
 // invariant panics there under -tags buzz_safe instead of reading a stray slot.
 //
 // measured: BenchmarkLoopSum -4.13% (p=0.005), BenchmarkLoopEq -2.16% (p=0.002)
-//   (benchstat n=10, amd64, Go 1.25); call-bound benches (Fib/Call/MethodCall)
-//   unchanged, as their local-load density is low relative to call overhead.
+//
+//	(benchstat n=10, amd64, Go 1.25); call-bound benches (Fib/Call/MethodCall)
+//	unchanged, as their local-load density is low relative to call overhead.
+//
 // assumes: 0 <= i < len(s), guaranteed by the per-opcode invariants above.
 func vget(s []Value, i int) Value {
 	//nolint:gosec // G103: audited unchecked load — i in [0,len(s)) by the per-opcode

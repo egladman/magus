@@ -176,7 +176,7 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 // is a spell name looked up in the registry. The magusfile wires the backend by
 // calling magus.cache.remote(<spell handle>), which records the spell's name.
 func resolveBackendSpell(ctx context.Context, selector string) (types.SpellDriver, error) {
-	if strings.HasSuffix(selector, ".bzz") || strings.HasSuffix(selector, ".tl") {
+	if strings.HasSuffix(selector, ".bzz") {
 		return loadSpellFile(ctx, selector)
 	}
 	drv, ok := project.DefaultSpellRegistry().Lookup(selector)

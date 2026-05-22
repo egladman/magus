@@ -9,10 +9,11 @@ import (
 
 func TestRunAndParse(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.tl")
+	path := filepath.Join(dir, "magusfile.bzz")
 	content := `
-global function build(args: {string}) end
-global function test(args: {string}) end
+import "magus";
+export fun build(_args: [str]) > void {}
+export fun test(_args: [str]) > void {}
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)

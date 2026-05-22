@@ -1,2 +1,2 @@
 // @error: undefined
-final __r = doesNotExist;
+const __r = doesNotExist;

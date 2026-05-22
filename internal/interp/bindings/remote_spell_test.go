@@ -96,19 +96,19 @@ export fun mgs_listTargets() > any {
     return {"get_artifact": {"fn": "get_artifact"}, "put_artifact": {"fn": "put_artifact"}};
 }
 
-final BASE = %q;
+const BASE = %q;
 
 export fun get_artifact(target: any, cb: fun(any)) > bool {
     var io = {};
     cb(io);
-    final url = BASE + "/blob/" + io["hash"];
+    const url = BASE + "/blob/" + io["hash"];
     return xhttp.download(url, "" + io["dest"], {}) == 200;
 }
 export fun put_artifact(target: any, cb: fun(any)) > bool {
     var io = {};
     cb(io);
-    final url = BASE + "/blob/" + io["hash"];
-    final res = xhttp.upload_chunked("PUT", url, "" + io["src"], 0, {});
+    const url = BASE + "/blob/" + io["hash"];
+    const res = xhttp.upload_chunked("PUT", url, "" + io["src"], 0, {});
     return res[0] == 200;
 }
 `, name, srvURL)

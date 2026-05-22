@@ -7,20 +7,20 @@ import (
 	"testing"
 )
 
-// FuzzParse verifies that Parse never panics on arbitrary Teal source content.
-// The invariant: any bytes written as a .tl file must produce either
+// FuzzParse verifies that Parse never panics on arbitrary Buzz source content.
+// The invariant: any bytes written as a .bzz file must produce either
 // (targets, nil) or (nil, error) — never a panic.
 func FuzzParse(f *testing.F) {
-	f.Add([]byte("global function build(_args: {string}) end\n"))
-	f.Add([]byte("global function build(_args: {string}) end\nglobal function test(_args: {string}) end\n"))
-	f.Add([]byte("local x: string = {"))
+	f.Add([]byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\n"))
+	f.Add([]byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\nexport fun test(_args: [str]) > void {}\n"))
+	f.Add([]byte("var x: str = {"))
 	f.Add([]byte(""))
 	f.Add([]byte("\x00\x01\x02\x03"))
-	f.Add([]byte("global function noop(_args: {string}) end\n"))
+	f.Add([]byte("import \"magus\";\nexport fun noop(_args: [str]) > void {}\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, "magusfile.tl")
+		path := filepath.Join(dir, "magusfile.bzz")
 		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}

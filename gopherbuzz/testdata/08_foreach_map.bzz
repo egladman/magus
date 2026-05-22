@@ -1,7 +1,7 @@
 // @expect: 3
-final m = {"a": 1, "b": 2, "c": 3};
+const m = {"a": 1, "b": 2, "c": 3};
 var last = 0;
 foreach (k, v in m) {
     last = v;
 }
-final __r = last;
+const __r = last;

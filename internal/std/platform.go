@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-//go:generate go run ../../cmd/magus-bindings-gen -module platform -lang lua -out gen/lua/platform.go
 //go:generate go run ../../cmd/magus-bindings-gen -module platform -lang buzz -out gen/buzz/platform.go
 
 // HostPlatform returns the Docker/OCI platform triple (GOOS, OCI arch, ARM variant).

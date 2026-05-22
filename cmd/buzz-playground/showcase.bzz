@@ -20,7 +20,7 @@ import "std";              // Buzz's standard library: print, assert, …
 
 // ── values & types ──────────────────────────────────────────────────────────
 // Buzz is gradually typed: annotate where it clarifies, infer where it doesn't.
-final VERSION: str = "1.0.0";   // final is immutable
+const VERSION: str = "1.0.0";   // const is immutable
 var builds = 0;                  // var is mutable; its type (int) is inferred
 
 // ── objects ─────────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ magus.project.register("web", {
 
 export fun preflight(_args: [str]) > void {
     // A map literal, iterated as (key, value) pairs.
-    final stack = {"api": "go", "web": "typescript"};
+    const stack = {"api": "go", "web": "typescript"};
     foreach (name, lang in stack) {
         magus.info("{name} is a {lang} project");
     }
@@ -124,7 +124,7 @@ export fun test(_args: [str]) > void {
 
     // try / catch around a function that declares it may throw.
     try {
-        final s = stageName(Stage.Test);
+        const s = stageName(Stage.Test);
         magus.info("stage resolved to {s}");
     } catch (err) {
         magus.warn("stage error: {err}");
@@ -145,14 +145,14 @@ export fun ci(_args: [str]) > void {
 export fun release(_args: [str]) > void {
     magus.depends_on(["ci"]);
 
-    final p = Project{ name = "magus", stars = 7 };
-    final nickname = null;
-    final label = nickname ?? p.badge();         // ?? is null-coalescing
+    const p = Project{ name = "magus", stars = 7 };
+    const nickname = null;
+    const label = nickname ?? p.badge();         // ?? is null-coalescing
     magus.info("release {VERSION}: {label} ({builds} build(s), fib(10)={fib(10)})");
 
-    final ratio = 0.9;
-    if (ratio is double) {                         // `is` tests a type
-        final pct = ratio as int;                 // `as` converts
+    const ratio = 0.9;
+    if (ratio is float) {                         // `is` tests a type
+        const pct = ratio as int;                 // `as` converts
         magus.info("ratio floors to {pct}");
     }
 

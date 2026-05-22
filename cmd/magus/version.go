@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/egladman/magus/internal/interp"
 )
 
 // version, commit, and buildDate are injected by the linker at build time:
@@ -18,7 +16,7 @@ var (
 func runVersion(args []string) {
 	fmt.Printf("magus %s (%s) built %s\n", version, commit, buildDate)
 	if hasVerboseFlag(args) {
-		fmt.Printf("lua engine: %s\n", interp.ActiveBackend().ID())
+		fmt.Printf("engine: buzz\n")
 	}
 }
 

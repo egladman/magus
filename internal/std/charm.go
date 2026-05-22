@@ -9,7 +9,6 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 )
 
-//go:generate go run ../../cmd/magus-bindings-gen -module charm -lang lua -out gen/lua/charm.go
 //go:generate go run ../../cmd/magus-bindings-gen -module charm -lang buzz -out gen/buzz/charm.go
 
 func init() { Register(Charm) }

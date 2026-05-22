@@ -1,6 +1,5 @@
 package vm
 
-
 // RegisterStdlib binds the VM-level intrinsic functions into env.
 //
 // These are the small set of globals that exist at the VM level regardless of

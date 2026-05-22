@@ -1,3 +1,0 @@
-// @error: force-unwrap of null
-var x: int? = null;
-final __r = x!;

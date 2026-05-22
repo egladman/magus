@@ -67,12 +67,10 @@ cannot run this benchmark.
 ## Prerequisites
 
 - Node + npm (see `versions.lock`), `hyperfine` (`sudo apt install hyperfine`).
-- A magus binary with the `magus.spell.*` bindings. Build the dual-engine cgo
-  binary for the `magus-luajit` / `magus-gopherlua` split:
+- A magus binary with the `magus.spell.*` bindings:
 
   ```sh
-  sudo apt install -y libluajit-5.1-dev
-  CGO_ENABLED=1 go build -tags mcp,selfmanage -o ~/.local/bin/magus ./magus/cmd/magus
+  go build -tags mcp,selfmanage -o ~/.local/bin/magus ./magus/cmd/magus
   ```
 
   turbo/nx/lage are installed locally by `setup.sh` (`npm install`); no global

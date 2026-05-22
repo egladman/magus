@@ -6,5 +6,5 @@ object Point {
         return this.x + this.y;
     }
 }
-final p = Point{ x = 3, y = 4 };
-final __r = p.sum();
+const p = Point{ x = 3, y = 4 };
+const __r = p.sum();

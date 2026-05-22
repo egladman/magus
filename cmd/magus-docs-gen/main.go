@@ -136,6 +136,5 @@ func renderIndex(modules []std.Module) string {
 	}
 	b.WriteByte('\n')
 	fmt.Fprintf(&b, "## See also\n\n")
-	fmt.Fprintln(&b, "- [Debugging Lua magusfiles](../debug/lua.md)")
 	return b.String()
 }

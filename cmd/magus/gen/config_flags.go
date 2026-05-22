@@ -47,7 +47,6 @@ var ConfigFlagSpecs = []ConfigFlagSpec{
 	{"", "MAGUS_VCS_ENABLED", "boolptr"},
 	{"vcs-name", "MAGUS_VCS_NAME", "string"},
 	{"vcs-base-ref", "MAGUS_VCS_BASE_REF", "string"},
-	{"interpreter-lua-engine", "MAGUS_INTERPRETER_LUA_ENGINE", "string"},
 	{"", "MAGUS_MCP_ENABLED", "boolptr"},
 	{"mcp-address", "MAGUS_MCP_ADDRESS", "string"},
 	{"", "MAGUS_REPORT_FILTER", "stringslice"},
@@ -97,7 +96,6 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.Daemon.Socket, "daemon-socket", cfg.Daemon.Socket, "MAGUS_DAEMON_SOCKET: Socket is the runtime socket path set by the daemon for forwarded children; unix:// URL or bare path.")
 	fs.StringVar(&cfg.VCS.Name, "vcs-name", cfg.VCS.Name, "MAGUS_VCS_NAME: MAGUS_VCS_NAME")
 	fs.StringVar(&cfg.VCS.BaseRef, "vcs-base-ref", cfg.VCS.BaseRef, "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).")
-	fs.StringVar(&cfg.Interpreter.Lua.Engine, "interpreter-lua-engine", cfg.Interpreter.Lua.Engine, "MAGUS_INTERPRETER_LUA_ENGINE: Engine is 'luajit' (cgo) or 'gopherlua' (pure-Go); empty picks the best compiled-in engine.")
 	fs.StringVar(&cfg.MCP.Address, "mcp-address", cfg.MCP.Address, "MAGUS_MCP_ADDRESS: MAGUS_MCP_ADDRESS")
 	fs.StringVar(&cfg.Log.Format, "log-format", cfg.Log.Format, "MAGUS_LOG_FORMAT: MAGUS_LOG_FORMAT")
 	fs.StringVar(&cfg.Log.Level, "log-level", cfg.Log.Level, "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.")

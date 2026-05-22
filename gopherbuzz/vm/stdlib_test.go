@@ -57,7 +57,7 @@ func TestRegisterStdlibLegacyGlobalsRemoved(t *testing.T) {
 	e := vm.NewEnv()
 	vm.RegisterStdlib(e)
 
-	removed := []string{"print", "len", "str", "int", "double", "bool", "append", "type", "keys", "values", "range", "error", "assert"}
+	removed := []string{"print", "len", "str", "int", "float", "bool", "append", "type", "keys", "values", "range", "error", "assert"}
 	for _, name := range removed {
 		if _, ok := e.Get(name); ok {
 			t.Errorf("legacy global %q still present after RegisterStdlib; it should have been removed (use `import \"std\"` instead)", name)

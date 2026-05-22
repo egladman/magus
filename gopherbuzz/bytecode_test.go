@@ -72,7 +72,7 @@ func TestBytecodeRoundTrip(t *testing.T) {
 // exercising the AST-node codec path that backs tagObjDecl constants.
 func TestBytecodeObjectDefault(t *testing.T) {
 	src := `
-final WHO = "world";
+const WHO = "world";
 object Config {
     label: str = "hi {WHO}",
     tags: [str] = ["a", "b"],
@@ -80,8 +80,8 @@ object Config {
         return this.label;
     }
 }
-final c = Config{};
-final __r = c.describe() + " " + c.tags[0];
+const c = Config{};
+const __r = c.describe() + " " + c.tags[0];
 `
 	ctx := context.Background()
 
@@ -147,7 +147,7 @@ func TestBytecodeExportsRoundTrip(t *testing.T) {
 func TestBytecodeDebugRoundTrip(t *testing.T) {
 	src := `
 fun add(a, b) { return a + b; }
-final __r = add(2, 3);
+const __r = add(2, 3);
 `
 	ctx := context.Background()
 	sess := newSession(ctx)
@@ -204,7 +204,7 @@ final __r = add(2, 3);
 
 func TestBytecodeVersionGuard(t *testing.T) {
 	sess := newSession(context.Background())
-	chunk, err := sess.Compile("final __r = 1 + 2;")
+	chunk, err := sess.Compile("const __r = 1 + 2;")
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}

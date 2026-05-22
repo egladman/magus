@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/interp/engine"
+	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 )
 
 func TestBuzzEngine_Registered(t *testing.T) {

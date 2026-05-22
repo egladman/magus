@@ -1,9 +1,8 @@
 // Package host is the single source of truth for host-binding APIs that
 // magusfiles call into. Each module (os, fs, vcs, …) declares its
 // Methods here as a Module value with typed args, return types, and a Go
-// Impl. The magus-bindings-gen tool consumes these declarations and emits per-VM
-// trampolines into gen/lua and gen/js, so feature parity between VMs is
-// structural: both VMs run the same Impl.
+// Impl. The magus-bindings-gen tool consumes these declarations and emits the
+// Buzz trampolines into gen/buzz from the same Impl.
 package std
 
 import (
@@ -15,8 +14,7 @@ import (
 )
 
 // Callback is the host-side handle for a VM-side function value passed as
-// an argument. Each backend supplies its own concrete implementation:
-// gen/lua wraps a lua.Session+engine.Value pair, gen/buzz wraps a buzz.Session+function value.
+// an argument. gen/buzz wraps a buzz.Session + function value.
 // Impls invoke the callback via Call; args are marshalled per VM convention.
 type Callback interface {
 	Call(ctx context.Context, args ...any) ([]any, error)

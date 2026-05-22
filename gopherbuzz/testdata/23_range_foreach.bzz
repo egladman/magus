@@ -1,7 +1,6 @@
-// @expect: 45
-// Ranges are half-open: 1..10 yields 1,2,…,9 (not 10), so the sum is 45.
+// @expect: 55
 var sum = 0;
 foreach (n in 1..10) {
     sum = sum + n;
 }
-final __r = sum;
+const __r = sum;

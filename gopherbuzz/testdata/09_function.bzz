@@ -5,4 +5,4 @@ fun factorial(n) int {
     }
     return n * factorial(n - 1);
 }
-final __r = factorial(5);
+const __r = factorial(5);

@@ -3,4 +3,4 @@ var total = 0;
 for (var i = 0; i < 10; i = i + 1) {
     total = total + i;
 }
-final __r = total;
+const __r = total;

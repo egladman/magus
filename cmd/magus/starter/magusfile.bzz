@@ -15,15 +15,14 @@ import "magus";
 // for Buzz's own stdlib (`import "std"`, `import "os"`).
 import "magus/extra";
 
-// Import the workspace-local "hello" spell (spells/hello/spell.tl or .bzz); it binds
-// under the basename `hello`. Reach a built-in spell the same way:
+// Bind the spell(s) that build this project. Reach a built-in spell by importing
+// it; it binds under its basename:
 //
 //   import "magus/spell/go";
 //   magus.project.register(".", { "spells": [go] });
 //
-import "spells/hello";
 magus.project.register(".", {
-    "spells": [hello],
+    // "spells": [go],
     // "outputs": ["bin/*", "dist/**"],
     // "depends_on": ["../api"],
 });

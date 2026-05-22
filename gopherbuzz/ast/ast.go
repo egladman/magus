@@ -178,27 +178,11 @@ type MemberExpr struct {
 	Name   string
 }
 
-// IndexExpr: object[index]. Optional is set for the checked subscript form
-// object[?index], which yields null on an out-of-bounds index instead of an
-// error (Buzz null-safety).
+// IndexExpr: object[index]
 type IndexExpr struct {
 	Pos
-	Object   Node
-	Index    Node
-	Optional bool
-}
-
-// ForceExpr: operand! — force-unwraps an optional, erroring at runtime if the
-// value is null.
-type ForceExpr struct {
-	Pos
-	Operand Node
-}
-
-// PatLit: $"regex" — a pattern (pat) literal.
-type PatLit struct {
-	Pos
-	Pattern string
+	Object Node
+	Index  Node
 }
 
 // FunExpr: fun(params) type { body }
@@ -211,31 +195,25 @@ type FunExpr struct {
 	Body        *BlockStmt
 }
 
-// MapExpr: {"key": val, ...}. Mut is set for the `mut {…}` form (a mutable map);
-// a plain map literal is immutable.
+// MapExpr: {"key": val, ...}
 type MapExpr struct {
 	Pos
 	Keys   []Node // key expressions (string literals or arbitrary exprs)
 	Values []Node
-	Mut    bool
 }
 
-// ListExpr: [val, ...]. Mut is set for the `mut [...]` form (a mutable list); a
-// plain list literal is immutable.
+// ListExpr: [val, ...]
 type ListExpr struct {
 	Pos
 	Items []Node
-	Mut   bool
 }
 
-// ObjectLit: TypeName{ field = val, ... }. Mut is set for `mut TypeName{…}` (a
-// mutable instance); a plain object literal is immutable.
+// ObjectLit: TypeName{ field = val, ... }
 type ObjectLit struct {
 	Pos
 	TypeName string
 	Keys     []string
 	Values   []Node
-	Mut      bool
 }
 
 // InterpExpr: "text {expr} ..." — alternating literal and expression parts.

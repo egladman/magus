@@ -23,7 +23,6 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
-	interpPool "github.com/egladman/magus/internal/interp/pool"
 	"github.com/egladman/magus/internal/mcp/origin"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/race"
@@ -156,10 +155,10 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	return m.runResolved(ctx, targets, o)
 }
 
-// ciDeclRe matches a top-level ci target declaration in either magusfile dialect:
-// `export fun ci` (Buzz) or `global function ci` (Teal). Case-insensitive (CI/Ci
-// normalize to the same target) and \b-anchored so `cipher` doesn't match.
-var ciDeclRe = regexp.MustCompile(`(?im)^\s*(?:export\s+fun|global\s+function)\s+ci\b`)
+// ciDeclRe matches a top-level ci target declaration in a Buzz magusfile:
+// `export fun ci`. Case-insensitive (CI/Ci normalize to the same target) and
+// \b-anchored so `cipher` doesn't match.
+var ciDeclRe = regexp.MustCompile(`(?im)^\s*export\s+fun\s+ci\b`)
 
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
 // ci lives in the magusfile (composed via magus.depends_on), never in a spell, so
@@ -454,7 +453,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
 
-	ctx = interpPool.WithRegistry(ctx, m.poolRegistry())
 	ctx = buzzeng.WithPoolRegistry(ctx, m.buzzPoolRegistry())
 	lim := m.limiter()
 	if opts.Step {

@@ -5,20 +5,17 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"sort"
 	"strings"
 
 	"github.com/egladman/magus/internal/interp/engine"
-	lua "github.com/egladman/magus/internal/interp/engine/lua"
-	teal "github.com/egladman/magus/internal/interp/engine/lua/teal"
 	"github.com/fatih/color"
 )
 
 // ReplOptions configures a REPL session.
 type ReplOptions struct {
-	WorkDir string // sets Lua package.path; defaults to process cwd
+	WorkDir string // working directory for the session; defaults to process cwd
 	Stdin   io.Reader
 	Stdout  io.Writer
 	Stderr  io.Writer
@@ -26,39 +23,20 @@ type ReplOptions struct {
 	Locals  map[string]engine.Value // injected as globals before the loop
 }
 
-// replDrivers returns the available REPL drivers for sess, with Teal appended
-// for Lua sessions. The caller may use Language() to switch between them.
+// replDrivers returns the available REPL drivers for sess. The caller may use
+// Language() to switch between them.
 func replDrivers(sess engine.Session) []engine.ReplDriver {
 	var drivers []engine.ReplDriver
 	if dp, ok := sess.(engine.DriversProvider); ok {
 		drivers = append(drivers, dp.Drivers()...)
 	}
-	if lr, ok := sess.(lua.Session); ok {
-		drivers = append(drivers, teal.NewDriver(lr))
-	}
 	return drivers
 }
 
-// defaultDriver picks the REPL-start driver: Teal for Lua sessions, first
-// available otherwise.
+// defaultDriver picks the REPL-start driver: the first available.
 func defaultDriver(drivers []engine.ReplDriver) engine.ReplDriver {
-	for _, d := range drivers {
-		if d.Language() == "teal" {
-			return d
-		}
-	}
 	if len(drivers) > 0 {
 		return drivers[0]
-	}
-	return nil
-}
-
-// driverByLang finds a driver by its Language() name.
-func driverByLang(drivers []engine.ReplDriver, lang string) engine.ReplDriver {
-	for _, d := range drivers {
-		if d.Language() == lang {
-			return d
-		}
 	}
 	return nil
 }
@@ -76,17 +54,6 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 	}
 	if opts.WorkDir == "" {
 		opts.WorkDir, _ = os.Getwd()
-	}
-
-	if lr, ok := sess.(lua.Session); ok && opts.WorkDir != "" {
-		pkgPath := fmt.Sprintf(
-			`package.path = %q .. ";" .. %q .. ";" .. package.path`,
-			opts.WorkDir+"/?.lua",
-			opts.WorkDir+"/?/init.lua",
-		)
-		if err := lr.DoString(pkgPath); err != nil {
-			slog.Warn("interp: repl package.path failed", slog.String("error", err.Error()))
-		}
 	}
 
 	for name, val := range opts.Locals {
@@ -182,22 +149,6 @@ func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, 
 	switch {
 	case line == ".exit" || line == ".quit":
 		return true, true
-	case line == ".tl" || line == ".teal":
-		if d := driverByLang(drivers, "teal"); d != nil {
-			*current = d
-			fmt.Fprintln(stdout, "-- teal mode")
-		} else {
-			fmt.Fprintln(stdout, "(teal not available on this engine)")
-		}
-		return true, false
-	case line == ".lua":
-		if d := driverByLang(drivers, "lua"); d != nil {
-			*current = d
-			fmt.Fprintln(stdout, "-- lua mode")
-		} else {
-			fmt.Fprintln(stdout, "(lua not available on this engine)")
-		}
-		return true, false
 	case line == ".help":
 		replHelp(stdout, drivers)
 		return true, false
@@ -209,19 +160,8 @@ func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, 
 	return false, false
 }
 
-// loadFile reads and executes path in sess (Lua compiled, others via DoString).
+// loadFile reads and executes path in sess via DoString.
 func loadFile(ctx context.Context, sess engine.Session, path string, stderr io.Writer) {
-	if lr, ok := sess.(lua.Session); ok {
-		code, err := CompileFile(ctx, lr, path)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return
-		}
-		if err := lr.DoString(string(code)); err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-		}
-		return
-	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -281,17 +221,6 @@ func Pry(ctx context.Context, sess engine.Session, pctx PryContext, opts ReplOpt
 
 	stdoutFile, _ := opts.Stdout.(*os.File)
 	useColor := ColorEnabledForFile(stdoutFile)
-
-	if lr, ok := sess.(lua.Session); ok && opts.WorkDir != "" {
-		pkgPath := fmt.Sprintf(
-			`package.path = %q .. ";" .. %q .. ";" .. package.path`,
-			opts.WorkDir+"/?.lua",
-			opts.WorkDir+"/?/init.lua",
-		)
-		if err := lr.DoString(pkgPath); err != nil {
-			slog.Warn("interp: repl package.path failed", slog.String("error", err.Error()))
-		}
-	}
 
 	for name, val := range opts.Locals {
 		sess.SetGlobal(name, val)
@@ -434,22 +363,6 @@ func handlePryMeta(ctx context.Context, stdout, stderr io.Writer, line string, s
 		return ResumeFinish, true
 	case ".help":
 		pryHelp(stdout)
-		return pryMetaConsumed, true
-	case ".tl", ".teal":
-		if d := driverByLang(st.drivers, "teal"); d != nil {
-			st.driver = d
-			fmt.Fprintln(stdout, "-- teal mode")
-		} else {
-			fmt.Fprintln(stdout, "(teal not available on this engine)")
-		}
-		return pryMetaConsumed, true
-	case ".lua":
-		if d := driverByLang(st.drivers, "lua"); d != nil {
-			st.driver = d
-			fmt.Fprintln(stdout, "-- lua mode")
-		} else {
-			fmt.Fprintln(stdout, "(lua not available on this engine)")
-		}
 		return pryMetaConsumed, true
 	case ".where", ".backtrace":
 		printBacktrace(stdout, st.debug, st.pctx, st.currentFrame, st.useColor)
@@ -674,7 +587,6 @@ func pryHelp(w io.Writer) {
 	fmt.Fprintln(w, "  .continue        resume execution (alias: .exit)")
 	fmt.Fprintln(w, "  .history [N]     show last N (default 50) commands")
 	fmt.Fprintln(w, "  .history!N       print the Nth-most-recent command")
-	fmt.Fprintln(w, "  .tl / .lua       switch input language")
 	fmt.Fprintln(w, "  .load <path>     execute a file")
 }
 

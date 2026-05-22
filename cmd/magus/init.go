@@ -13,29 +13,19 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 )
 
-// Starter magusfiles written by `magus init` when a directory has none.
-// They double as the canonical example magusfiles referenced in the docs, so
-// edits here are user-facing in both places.
+// starterMagusfileBuzz is the starter magusfile written by `magus init` when a
+// directory has none. It doubles as the canonical example magusfile referenced in
+// the docs, so edits here are user-facing in both places.
 //
-//go:embed starter/magusfile.tl
-var starterMagusfileTeal string
-
 //go:embed starter/magusfile.bzz
 var starterMagusfileBuzz string
-
-// The starter magusfiles load a workspace-local "hello" spell. It is authored
-// in Teal regardless of the magusfile language and scaffolded under the spell
-// directory convention at spells/hello/spell.tl.
-//
-//go:embed starter/spells/hello/spell.tl
-var starterSpellHello string
 
 // initCmd implements `magus init`: bootstrap a magus workspace in the
 // current directory. It writes a magus.yaml to $XDG_CONFIG_HOME/magus/
 // by default (use --local to write into the repo instead), stubs a
-// magusfile (teal by default, or buzz via --lang) when the directory has
-// none, and wires the VCS merge driver so conflicts in declared outputs
-// regenerate instead of producing conflict markers.
+// magusfile.bzz when the directory has none, and wires the VCS merge driver
+// so conflicts in declared outputs regenerate instead of producing conflict
+// markers.
 //
 // With --global only the global XDG config is written; the workspace
 // bootstrap (magusfile stub + merge driver) is per-clone and skipped.
@@ -46,13 +36,12 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	useLocal := fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 	force := fs.Bool("force", false, "Overwrite an existing config file")
 	vcsName := fs.String("vcs", "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
-	lang := fs.String("lang", "teal", "magusfile language to scaffold (teal|buzz)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus init [flags]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Bootstrap a magus workspace in the current directory:")
 		fmt.Fprintln(os.Stderr, "  - write magus.yaml to $XDG_CONFIG_HOME/magus/ (default) or CWD (--local)")
-		fmt.Fprintln(os.Stderr, "  - stub a magusfile (teal or buzz via --lang) when none exists")
+		fmt.Fprintln(os.Stderr, "  - stub a magusfile.bzz when none exists")
 		fmt.Fprintln(os.Stderr, "  - wire the VCS merge driver so conflicts in declared outputs regenerate")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "The VCS is taken from --vcs, or picked interactively when stdin is a")
@@ -69,12 +58,6 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("init: --global and --local are mutually exclusive")
 	}
 
-	switch *lang {
-	case "teal", "buzz":
-	default:
-		return fmt.Errorf("init: unknown --lang %q (choose teal or buzz)", *lang)
-	}
-
 	// --global: write XDG config only, skip workspace bootstrap.
 	if *useGlobal {
 		cfgPath, err := xdgConfigPath()
@@ -85,7 +68,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		slog.InfoContext(ctx, "init: wrote global config", slog.String("path", cfgPath))
-		printInitNextSteps(ctx, cfgPath, "", false)
+		printInitNextSteps(ctx, cfgPath, false, false)
 		return nil
 	}
 
@@ -108,7 +91,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	}
 	slog.InfoContext(ctx, "init: wrote config", slog.String("path", cfgPath))
 
-	if err := writeMagusfileStub(".", *lang); err != nil {
+	if err := writeMagusfileStub("."); err != nil {
 		return err
 	}
 
@@ -116,7 +99,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	printInitNextSteps(ctx, cfgPath, *lang, isLocal)
+	printInitNextSteps(ctx, cfgPath, true, isLocal)
 	return nil
 }
 
@@ -136,21 +119,17 @@ func xdgConfigPath() (string, error) {
 
 // printInitNextSteps prints actionable hints after a successful init.
 // Gated on interactive.Enabled() so MAGUS_HINTS_ENABLED=false silences it.
-// cfgPath is where magus.yaml was written; lang is the scaffolded language
-// (empty when --global was used); isLocal is true when --local was used.
-func printInitNextSteps(ctx context.Context, cfgPath, lang string, isLocal bool) {
+// cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.bzz
+// was stubbed (false when --global was used); isLocal is true when --local was used.
+func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal bool) {
 	if !interactive.Enabled() {
 		return
 	}
 
 	interactive.Emit(os.Stderr, fmt.Sprintf("config written to %s", cfgPath))
 
-	if lang != "" {
-		magusfile := "magusfile.tl"
-		if lang == "buzz" {
-			magusfile = "magusfile.bzz"
-		}
-		interactive.Emit(os.Stderr, fmt.Sprintf("magusfile scaffolded: %s", magusfile))
+	if scaffolded {
+		interactive.Emit(os.Stderr, "magusfile scaffolded: magusfile.bzz")
 		interactive.Emit(os.Stderr, "run your first target:  magus run build")
 	}
 
@@ -172,48 +151,26 @@ func printInitNextSteps(ctx context.Context, cfgPath, lang string, isLocal bool)
 	interactive.Emit(os.Stderr, "stop with:  magus server stop")
 }
 
-// writeMagusfileStub writes a starter magusfile in dir when the directory has
-// no magus declaration file yet. lang selects the scaffold language: "teal"
-// writes magusfile.tl, "buzz" writes magusfile.bzz. A pre-existing
-// magusfile.{tl,bzz} or magusfiles/ directory is left untouched.
-func writeMagusfileStub(dir, lang string) error {
+// writeMagusfileStub writes a starter magusfile.bzz in dir when the directory has
+// no magus declaration file yet. A pre-existing magusfile.bzz or magusfiles/
+// directory is left untouched.
+func writeMagusfileStub(dir string) error {
 	if magusfilePresent(dir) {
 		return nil
 	}
-	filename, content := "magusfile.tl", starterMagusfileTeal
-	if lang == "buzz" {
-		filename, content = "magusfile.bzz", starterMagusfileBuzz
-	}
-	path := filepath.Join(dir, filename)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	path := filepath.Join(dir, "magusfile.bzz")
+	if err := os.WriteFile(path, []byte(starterMagusfileBuzz), 0o644); err != nil {
 		return fmt.Errorf("init: write %s: %w", path, err)
 	}
 	slog.Info("init: wrote magusfile", slog.String("path", path))
-
-	// The magusfile loads the "hello" spell; scaffold it under the directory
-	// convention (spells/<name>/spell.tl). Leave an existing one untouched so
-	// re-running init never clobbers edits.
-	spellPath := filepath.Join(dir, "spells", "hello", "spell.tl")
-	if _, err := os.Stat(spellPath); err == nil {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(spellPath), 0o755); err != nil {
-		return fmt.Errorf("init: create %s: %w", filepath.Dir(spellPath), err)
-	}
-	if err := os.WriteFile(spellPath, []byte(starterSpellHello), 0o644); err != nil {
-		return fmt.Errorf("init: write %s: %w", spellPath, err)
-	}
-	slog.Info("init: wrote spell", slog.String("path", spellPath))
 	return nil
 }
 
 // magusfilePresent reports whether dir already holds a magus project
-// declaration: a magusfile.{tl,bzz} file or a magusfiles/ directory.
+// declaration: a magusfile.bzz file or a magusfiles/ directory.
 func magusfilePresent(dir string) bool {
-	for _, name := range []string{"magusfile.tl", "magusfile.bzz"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return true
-		}
+	if _, err := os.Stat(filepath.Join(dir, "magusfile.bzz")); err == nil {
+		return true
 	}
 	if fi, err := os.Stat(filepath.Join(dir, "magusfiles")); err == nil && fi.IsDir() {
 		return true

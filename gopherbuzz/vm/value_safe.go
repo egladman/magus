@@ -98,7 +98,6 @@ func (v Value) asEnumVal() *enumValObj     { return objAs[*enumValObj](v, "enumv
 func (v Value) asIterState() *iterStateObj { return objAs[*iterStateObj](v, "iter") }
 func (v Value) asRange() *rangeObj         { return objAs[*rangeObj](v, "range") }
 func (v Value) asFib() *fibObj             { return objAs[*fibObj](v, "fib") }
-func (v Value) asPat() *patObj             { return objAs[*patObj](v, "pat") }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
 func (v Value) asObjDecl() *ast.ObjectDecl { return objAs[*objDeclPayload](v, "objectdecl").ObjectDecl }
@@ -118,7 +117,6 @@ func (vm *VM) asEnumVal(v Value) *enumValObj     { return v.asEnumVal() }
 func (vm *VM) asIterState(v Value) *iterStateObj { return v.asIterState() }
 func (vm *VM) asRange(v Value) *rangeObj         { return v.asRange() }
 func (vm *VM) asFib(v Value) *fibObj             { return v.asFib() }
-func (vm *VM) asPat(v Value) *patObj             { return v.asPat() }
 func (vm *VM) asObjDecl(v Value) *ast.ObjectDecl { return v.asObjDecl() }
 
 // VM-context allocators — zero-cost wrappers in M2 (delegate to package-level

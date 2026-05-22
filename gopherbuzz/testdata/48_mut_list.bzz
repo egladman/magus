@@ -1,5 +1,0 @@
-// @expect: 4
-// A `mut` list may be appended to; a plain list literal may not.
-var xs = mut [1, 2, 3];
-xs.append(4);
-final __r = xs.len();

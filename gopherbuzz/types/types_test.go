@@ -12,7 +12,7 @@ func TestParseAnnot_Primitives(t *testing.T) {
 		wantName string
 	}{
 		{"int", "int"},
-		{"double", "double"},
+		{"float", "float"},
 		{"str", "str"},
 		{"bool", "bool"},
 		{"null", "null"},
@@ -92,7 +92,7 @@ func TestCompat_DifferentTypes(t *testing.T) {
 	if types.Compat(types.Int, types.Str) {
 		t.Error("Compat(Int, Str) = true, want false")
 	}
-	if types.Compat(types.Bool, types.Double) {
+	if types.Compat(types.Bool, types.Float) {
 		t.Error("Compat(Bool, Float) = true, want false")
 	}
 }

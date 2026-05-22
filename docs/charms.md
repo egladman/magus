@@ -116,34 +116,33 @@ fun lint(target: Target, cb: fun(any)) > bool {
 
 ### 2. Workspace spells & magusfiles (the `charm` constructors)
 
-Import `magus.extra.charm` and build the patch through constructors that resolve a value anchor to an index for you:
+Import `magus/extra` and build the patch through `extra.charm` constructors that resolve a value anchor to an index for you:
 
-```lua
-local charm = require("magus.extra.charm")
-local base  = {"tool", "golangci-lint", "run", "./..."}
+```buzz
+import "magus/extra";
+const base = ["tool", "golangci-lint", "run", "./..."];
 ops = {
-    lint = {
-        cmd  = "go",
-        args = base,
-        charms = {
-            rw    = charm.after(base, "run", {"--fix"}),  -- insert after "run"
-            debug = charm.append({"-v"}),                 -- append
+    "lint": {
+        "cmd":  "go",
+        "args": base,
+        "charms": {
+            "rw":    extra.charm.after(base, "run", ["--fix"]),  // insert after "run"
+            "debug": extra.charm.append(["-v"]),                 // append
         },
     },
-}
+};
 ```
 
 ### 3. Function targets & ops (branch in code)
 
 When the argv needs to be computed, branch in code. A magusfile function target receives the forwarded CLI args:
 
-```lua
-global function lint(args: {string})
-    local os  = require("magus.extra.os")
-    local fix = false
-    for _, a in ipairs(args) do if a == "--write" then fix = true end end
-    os.exec("golangci-lint", fix and {"run", "--fix"} or {"run"})
-end
+```buzz
+export fun lint(args: [str]) > void {
+    var fix = false;
+    for (a in args) { if (a == "--write") { fix = true; } }
+    extra.os.exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
+}
 ```
 
 A function target reads the active charm set directly with **`magus.has_charm(name)`** — including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_ — the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
@@ -171,18 +170,18 @@ Spell op methods receive the active charm set as `opts.charms` (a lookup table: 
 | `before(argv, anchor, vals)`            | insert `vals` just before `anchor`                                                           |
 | `set(argv, anchor, val)`                | replace the element equal to `anchor` with `val`                                             |
 | `remove(argv, anchor)`                  | remove the element equal to `anchor`                                                         |
-| `after_func(argv, fn, vals)`            | `after`, but match by predicate                                                              |
-| `before_func(argv, fn, vals)`           | `before`, by predicate                                                                       |
-| `set_func(argv, fn, val)`               | `set`, by predicate                                                                          |
-| `remove_func(argv, fn)`                 | `remove`, by predicate                                                                       |
+| `afterFunc(argv, fn, vals)`             | `after`, but match by predicate                                                              |
+| `beforeFunc(argv, fn, vals)`            | `before`, by predicate                                                                       |
+| `setFunc(argv, fn, val)`                | `set`, by predicate                                                                          |
+| `removeFunc(argv, fn)`                  | `remove`, by predicate                                                                       |
 | `move(argv, anchor, to)`                | move the `anchor` element to pointer `to` (`"/-"` end, `"/0"` front, or `path(...)`)         |
 | `copy(argv, anchor, to)`                | copy the `anchor` element to pointer `to`                                                    |
 | `test(argv, anchor)`                    | guard: assert `anchor` is still at its position when the patch applies (else the run errors) |
-| `move_func` / `copy_func` / `test_func` | the above, matching by predicate                                                             |
+| `moveFunc` / `copyFunc` / `testFunc`    | the above, matching by predicate                                                             |
 | `path(argv, anchor)`                    | the JSON Pointer (`"/N"`) of `anchor`, for use as a `to` destination or in a hand-written op |
-| `path_func(argv, fn)`                   | `path`, by predicate                                                                         |
+| `pathFunc(argv, fn)`                    | `path`, by predicate                                                                         |
 
-**Naming across engines.** Teal/Lua uses snake_case (`charm.after_func`); Buzz uses camelCase off the `magus/extra` import (`extra.charm.afterFunc`).
+Methods are camelCase off the `magus/extra` import (`extra.charm.afterFunc`), following Buzz's convention.
 
 A missing anchor is a **load-time error**, not a silently wrong index.
 
@@ -190,46 +189,46 @@ A missing anchor is a **load-time error**, not a silently wrong index.
 
 **Append a flag** (e.g. a `debug` charm adding `-v`):
 
-```lua
-debug = charm.append({"-v"})
--- {"ops":[{"op":"add","path":"/-","value":"-v"}]}
+```buzz
+debug = extra.charm.append(["-v"]);
+// {"ops":[{"op":"add","path":"/-","value":"-v"}]}
 ```
 
 **Insert after a subcommand** (anchor by value, index-proof):
 
-```lua
--- base {"test", "./..."}: add -race right after "test"
-race = charm.after({"test", "./..."}, "test", {"-race"})
--- {"ops":[{"op":"add","path":"/1","value":"-race"}]}
+```buzz
+// base ["test", "./..."]: add -race right after "test"
+race = extra.charm.after(["test", "./..."], "test", ["-race"]);
+// {"ops":[{"op":"add","path":"/1","value":"-race"}]}
 ```
 
 **Swap a flag** (e.g. `gofmt -l .` → `-w .`):
 
-```lua
-rw = charm.set({"-l", "."}, "-l", "-w")
--- {"ops":[{"op":"replace","path":"/0","value":"-w"}]}
+```buzz
+rw = extra.charm.set(["-l", "."], "-l", "-w");
+// {"ops":[{"op":"replace","path":"/0","value":"-w"}]}
 ```
 
 **Drop a flag** (e.g. `ruff format --check .` → `ruff format .`):
 
-```lua
-rw = charm.remove(base, "--check")
+```buzz
+rw = extra.charm.remove(base, "--check");
 ```
 
 **Several edits in one charm** (remove higher indices first to avoid reshuffling):
 
-```lua
--- cargo fmt -- --check  →  cargo fmt
-rw = { ops = {
-    {op = "remove", path = "/2"},   -- "--check"
-    {op = "remove", path = "/1"},   -- "--"
-}}
+```buzz
+// cargo fmt -- --check  →  cargo fmt
+rw = { "ops": [
+    {"op": "remove", "path": "/2"},   // "--check"
+    {"op": "remove", "path": "/1"},   // "--"
+]};
 ```
 
 **Match by predicate:**
 
-```lua
-cap = charm.set_func(base, function(s) return s:match("^%-j%d+$") ~= nil end, "-j16")
+```buzz
+cap = extra.charm.setFunc(base, fun(s: str) > bool { return s.startsWith("-j"); }, "-j16");
 ```
 
 Conditional or per-invocation logic belongs in a **function target**, not a charm. Charms are static data resolved at author time.
@@ -260,16 +259,15 @@ This is a deliberate, enforced boundary, not a missing feature.
 
 ### When you've left the charm layer
 
-**Function target** (most common): write an exported `global function` and call the tool via `os.exec`:
+**Function target** (most common): write an exported function and call the tool via `extra.os.exec`:
 
-```lua
--- magusfile.tl
-global function lint(args: {string})
-    local os = require("magus.extra.os")
-    local fix = false
-    for _, a in ipairs(args) do if a == "--write" then fix = true end end
-    os.exec("golangci-lint", fix and {"run", "--fix", "./..."} or {"run", "./..."})
-end
+```buzz
+// magusfile.bzz
+export fun lint(args: [str]) > void {
+    var fix = false;
+    for (a in args) { if (a == "--write") { fix = true; } }
+    extra.os.exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);
+}
 ```
 
 **Workspace spell**: define a spell (`magus.spell.define` / `magus.spell.load`) with an `ops` entry and wire per-project charms there. The spell owns the _command_; charms tune its _args_.
@@ -282,10 +280,9 @@ Charm args are **literal** — there is no `${VAR}` interpolation, by design. Th
 
 - **Known at load time:** build the string in code and pass it to a constructor:
 
-  ```lua
-  local env   = require("magus.extra.env")
-  local charm = require("magus.extra.charm")
-  charms = { rw = charm.after(base, "run", {"--config=" .. env.get("LINT_CONFIG")}) }
+  ```buzz
+  import "magus/extra";
+  charms = { "rw": extra.charm.after(base, "run", ["--config={extra.env.get("LINT_CONFIG")}"]) };
   ```
 
 - **Per-invocation:** use a function target. Charms are static data; they cannot read the env at run time.

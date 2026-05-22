@@ -21,4 +21,3 @@ These are the runtime utility modules. In Teal, require each one you use — `lo
 
 ## See also
 
-- [Debugging Lua magusfiles](../debug/lua.md)

@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-// Engine is the factory that creates Sessions for script execution.
+// Engine creates Sessions for script execution.
 // Implementations register themselves at init() time via Register.
 type Engine interface {
 	// ID returns a stable identifier included in compile-cache keys so

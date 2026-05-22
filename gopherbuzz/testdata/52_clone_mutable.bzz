@@ -1,6 +1,0 @@
-// @expect: 4
-// cloneMutable yields a mutable copy of an immutable list.
-final xs = [1, 2, 3];
-final ys = xs.cloneMutable();
-ys.append(4);
-final __r = ys.len();

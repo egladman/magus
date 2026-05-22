@@ -1,3 +1,0 @@
-// @error: cannot mutate immutable map
-final m = {"a": 1};
-m["b"] = 2;

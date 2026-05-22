@@ -1,4 +1,4 @@
 // @expect: 3
 import "math";
 import "std";
-final __r = std.toInt(math.sqrt(9.0));
+const __r = std.toInt(math.sqrt(9.0));

@@ -1,4 +1,4 @@
 // @expect: 4
-var xs = mut [1, 2, 3];
+var xs = [1, 2, 3];
 xs.append(4);
-final __r = xs.len();
+const __r = xs.len();

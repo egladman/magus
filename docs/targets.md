@@ -181,4 +181,4 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 
 - [spells.md](spells.md): the operations a target composes, and [Spells vs Targets](spells.md#spells-vs-targets).
 - [charms.md](charms.md): the execution modifiers attached after `:`.
-- [engines.md](engines.md): the Lua/Buzz engines a magusfile runs on.
+- [engines.md](engines.md): the Buzz engine a magusfile runs on.

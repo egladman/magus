@@ -38,7 +38,7 @@ func BenchmarkFib(b *testing.B) {
     if (n <= 1) { return n; }
     return fib(n - 1) + fib(n - 2);
 }`,
-		`final __r = fib(30);`,
+		`const __r = fib(30);`,
 	)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -103,6 +103,38 @@ while (i < 1000000) {
 	}
 }
 
+// BenchmarkLoopSumPromoted is BenchmarkLoopSumShared compiled with PromoteTopLevel:
+// sum/i are chunk-private (never captured, never exported), so they slot-promote
+// even though the chunk runs against the session Env. This is the win the
+// magusfile entrypoint path unlocks — it should approach the slot-based
+// BenchmarkLoopSum rather than the Env-bound BenchmarkLoopSumShared.
+func BenchmarkLoopSumPromoted(b *testing.B) {
+	sess := newSession(_benchCtx)
+	prog, err := Parse(`
+var sum = 0;
+var i = 0;
+while (i < 1000000) {
+    sum = sum + i;
+    i = i + 1;
+}
+`)
+	if err != nil {
+		b.Fatalf("bench parse: %v", err)
+	}
+	chunk, err := CompileWith(prog, CompileOptions{SharedGlobals: true, PromoteTopLevel: true})
+	if err != nil {
+		b.Fatalf("bench compile: %v", err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, sess.env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // BenchmarkLoopEq measures a tight while-loop whose body is dominated by
 // integer equality tests (OpEqual), counting how many i in [0,1e6) are even via
 // i % 2 == 0. Gates the OpEqual/OpNotEqual int fast paths.
@@ -128,7 +160,7 @@ while (i < 1000000) {
 // BenchmarkForeachList measures list iteration and element access.
 func BenchmarkForeachList(b *testing.B) {
 	chunk, env := benchSetup(b,
-		`var items = mut []; var k = 0; while (k < 1000) { items.append(k); k = k + 1; }`,
+		`var items = []; var k = 0; while (k < 1000) { items.append(k); k = k + 1; }`,
 		`var sum = 0;
 foreach (x in items) { sum = sum + x; }`,
 	)
@@ -145,7 +177,7 @@ foreach (x in items) { sum = sum + x; }`,
 // BenchmarkForeachMap measures map iteration (insertion-ordered keys).
 func BenchmarkForeachMap(b *testing.B) {
 	chunk, env := benchSetup(b,
-		`final m = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
+		`const m = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
                     "f": 6, "g": 7, "h": 8, "i": 9, "j": 10};`,
 		`var sum = 0;
 foreach (k, v in m) { sum = sum + v; }`,
@@ -175,6 +207,36 @@ while (i < 100) {
 	for i := 0; i < b.N; i++ {
 		vm := vmpackage.NewVM(_benchCtx)
 		if _, err := vm.Run(chunk, env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkStringInterpPromoted is BenchmarkStringInterp compiled with
+// PromoteTopLevel: s/i slot-promote, isolating how much of the interpolation-loop
+// cost was the top-level Env access path versus the string building itself.
+func BenchmarkStringInterpPromoted(b *testing.B) {
+	sess := newSession(_benchCtx)
+	prog, err := Parse(`
+var s = "";
+var i = 0;
+while (i < 100) {
+    s = "item {i} of 100";
+    i = i + 1;
+}
+`)
+	if err != nil {
+		b.Fatalf("bench parse: %v", err)
+	}
+	chunk, err := CompileWith(prog, CompileOptions{SharedGlobals: true, PromoteTopLevel: true})
+	if err != nil {
+		b.Fatalf("bench compile: %v", err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, sess.env); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -239,7 +301,7 @@ export fun build(_args: [str]) > void {}
 func BenchmarkCall(b *testing.B) {
 	chunk, env := benchSetup(b,
 		`fun add(a, b) int { return a + b; }`,
-		`final __r = add(1, 2);`,
+		`const __r = add(1, 2);`,
 	)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -265,7 +327,7 @@ func BenchmarkMethodCall(b *testing.B) {
         return this.x * this.x + this.y * this.y;
     }
 }
-final p = Point{ x = 3, y = 4 };`,
+const p = Point{ x = 3, y = 4 };`,
 		`var sum = 0;
 var i = 0;
 while (i < 100000) {
@@ -292,7 +354,7 @@ func BenchmarkFieldAccess(b *testing.B) {
 		`object Counter {
     n: int = 0,
 }
-final c = mut Counter{};`,
+const c = Counter{};`,
 		`var i = 0;
 while (i < 1000000) {
     c.n = c.n + 1;
@@ -323,7 +385,7 @@ func BenchmarkFieldAccessLocal(b *testing.B) {
     n: int = 0,
 }
 fun run() {
-    var c = mut Counter{};
+    var c = Counter{};
     var i = 0;
     while (i < 1000000) {
         c.n = c.n + 1;

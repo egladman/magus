@@ -20,7 +20,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../../cmd/magus-bindings-gen -module os -lang lua -out gen/lua/os.go
 //go:generate go run ../../cmd/magus-bindings-gen -module os -lang buzz -out gen/buzz/os.go
 
 func init() { Register(Os) }

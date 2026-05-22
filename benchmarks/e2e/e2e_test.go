@@ -1,8 +1,8 @@
 // Package e2e holds end-to-end orchestration tests for the public magus
 // API. It lives in its own package because exercising Run/RunCI requires
-// blank-importing the Lua engine and host bindings, whose init() registers the
-// built-in spells process-wide — a side effect that would collide with the spell
-// fixtures in the magus package's own tests.
+// blank-importing the host bindings, whose init() registers the built-in spells
+// process-wide — a side effect that would collide with the spell fixtures in the
+// magus package's own tests.
 package e2e
 
 import (
@@ -17,12 +17,11 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 
-	// Link the Lua engine and host bindings so magusfile.tl targets execute.
+	// Link the host bindings so magusfile.bzz targets execute.
 	_ "github.com/egladman/magus/internal/interp/bindings"
-	_ "github.com/egladman/magus/internal/interp/engine/lua/gopherlua"
 )
 
-// writeProject creates root/name/magusfile.tl with body. No magus.project.register
+// writeProject creates root/name/magusfile.bzz with body. No magus.project.register
 // call is written: a bare magusfile that defines targets is expected to run via
 // the auto-bound magusfile spell.
 func writeProject(t *testing.T, root, name, body string) string {
@@ -31,7 +30,7 @@ func writeProject(t *testing.T, root, name, body string) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.tl"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -44,14 +43,14 @@ func writeProject(t *testing.T, root, name, body string) string {
 func TestRunMultipleTargetsRunsAllProjectTargetPairs(t *testing.T) {
 	root := t.TempDir()
 	body := `
-global function alpha(args: {string})
-    local f = io.open("ran-alpha", "w")
-    if f then f:write("1") f:close() end
-end
-global function beta(args: {string})
-    local f = io.open("ran-beta", "w")
-    if f then f:write("1") f:close() end
-end
+import "magus";
+import "magus/extra";
+export fun alpha(_args: [str]) > void {
+    extra.fs.writeFile("ran-alpha", "1");
+}
+export fun beta(_args: [str]) > void {
+    extra.fs.writeFile("ran-beta", "1");
+}
 `
 	for _, name := range []string{"svc-a", "svc-b"} {
 		writeProject(t, root, name, body)
@@ -122,8 +121,9 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell("faketool") })
 
 	// Register the project explicitly via a magusfile instead of marker-based auto-detection.
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.tl"), []byte(
-		`magus.project.register("svc", {spells = {magus.spell.get("faketool")}})`+"\n",
+	if err := os.WriteFile(filepath.Join(projDir, "magusfile.bzz"), []byte(
+		`import "magus";`+"\n"+
+			`magus.project.register("svc", {"spells": [magus.spell.get("faketool")]});`+"\n",
 	), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -171,21 +171,22 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 }
 
 // TestExplicitRegisterDoesNotDoubleBind guards the idempotence of auto-bind: a
-// magusfile that explicitly binds the teal spell must not also get an auto-bound
-// copy, or its target would run twice.
+// magusfile that explicitly binds the magusfile spell must not also get an
+// auto-bound copy, or its target would run twice.
 func TestExplicitRegisterDoesNotDoubleBind(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "svc")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	src := `magus.project.register("svc", { spells = {magus.spell.get("magusfile")} })
-global function hit(args: {string})
-    local f = io.open("count", "a")
-    if f then f:write("x") f:close() end
-end
+	src := `import "magus";
+import "magus/extra";
+magus.project.register("svc", {"spells": [magus.spell.get("magusfile")]});
+export fun hit(_args: [str]) > void {
+    extra.os.execSh("printf x >> count", "");
+}
 `
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.tl"), []byte(src), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +233,7 @@ func TestBuiltinSpellVersionProbeIsDataDriven(t *testing.T) {
 // owns by the time Run returns.
 func TestRunWithReportWriter(t *testing.T) {
 	root := t.TempDir()
-	writeProject(t, root, "svc", "global function build(_args: {string}) end\n")
+	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(_args: [str]) > void {}\n")
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
@@ -275,18 +276,19 @@ func readFile(t *testing.T, path string) string {
 func TestRunCIComposesMagusfileTarget(t *testing.T) {
 	root := t.TempDir()
 	body := `
-local function record(name: string)
-    local f = io.open("ci-order", "a")
-    if f then f:write(name .. "\n") f:close() end
-end
-global function build(args: {string}) record("build") end
-global function test(args: {string})
-    magus.depends_on({"build"})
-    record("test")
-end
-global function ci(args: {string})
-    magus.depends_on({"test"})
-end
+import "magus";
+import "magus/extra";
+fun record(name: str) > void {
+    extra.os.execSh("printf '%s\n' " + name + " >> ci-order", "");
+}
+export fun build(_args: [str]) > void { record("build"); }
+export fun test(_args: [str]) > void {
+    magus.depends_on(["build"]);
+    record("test");
+}
+export fun ci(_args: [str]) > void {
+    magus.depends_on(["test"]);
+}
 `
 	writeProject(t, root, "svc", body)
 

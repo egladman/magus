@@ -1,5 +1,5 @@
 // @expect: 3
 import "std";
-final lib = zdef("libm", "double sqrt(double x);");
-final r = lib.sqrt(9.0);
-final __r = std.toInt(r);
+const lib = zdef("libm", "double sqrt(double x);");
+const r = lib.sqrt(9.0);
+const __r = std.toInt(r);

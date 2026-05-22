@@ -123,7 +123,7 @@ func BoolValue(b bool) Value {
 type heapVal interface {
 	*strObj | *listObj | *mapObj | *funObj | *directObj | *objectInst |
 		*objectDefObj | *enumDefObj | *enumValObj | *iterStateObj | *rangeObj |
-		*fibObj | *patObj | *objDeclPayload
+		*fibObj | *objDeclPayload
 }
 
 // heapValue builds a heap Value: it pairs tag with ptr, converting the typed
@@ -165,7 +165,6 @@ func (v Value) asEnumVal() *enumValObj     { return ptrAs[enumValObj](v) }
 func (v Value) asIterState() *iterStateObj { return ptrAs[iterStateObj](v) }
 func (v Value) asRange() *rangeObj         { return ptrAs[rangeObj](v) }
 func (v Value) asFib() *fibObj             { return ptrAs[fibObj](v) }
-func (v Value) asPat() *patObj             { return ptrAs[patObj](v) }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
 func (v Value) asObjDecl() *ast.ObjectDecl { return ptrAs[objDeclPayload](v).ObjectDecl }
@@ -185,7 +184,6 @@ func (vm *VM) asEnumVal(v Value) *enumValObj     { return v.asEnumVal() }
 func (vm *VM) asIterState(v Value) *iterStateObj { return v.asIterState() }
 func (vm *VM) asRange(v Value) *rangeObj         { return v.asRange() }
 func (vm *VM) asFib(v Value) *fibObj             { return v.asFib() }
-func (vm *VM) asPat(v Value) *patObj             { return v.asPat() }
 func (vm *VM) asObjDecl(v Value) *ast.ObjectDecl { return v.asObjDecl() }
 
 // VM-context allocators — zero-cost wrappers in M2 (delegate to package-level

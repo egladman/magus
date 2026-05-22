@@ -2,5 +2,5 @@
 fun work() {
     return 42;
 }
-final f = &work();
-final __r = resolve f;
+const f = &work();
+const __r = resolve f;

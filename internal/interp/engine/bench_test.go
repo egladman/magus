@@ -1,13 +1,11 @@
 // Cross-engine microbenchmarks. Each workload is expressed once per source
-// dialect (Lua, Buzz) and run through every registered engine via the common
+// dialect (Buzz) and run through every registered engine via the common
 // engine.Session interface — exactly how magus drives an engine in production.
 //
 // Because it goes through engine.Session, the Buzz numbers reflect the
 // shared-globals (Env) execution path magus uses for magusfiles, NOT the
 // standalone slot-mode fast path; that one is measured in the buzz package's
-// own bench suite (magus/gopherbuzz). LuaJIT is measured with
-// its JIT disabled (magus opens it that way for concurrency safety), i.e. as an
-// interpreter.
+// own bench suite (magus/gopherbuzz).
 //
 // External test package so it can blank-import the engine backends (which
 // themselves import engine) without an import cycle.
@@ -19,27 +17,22 @@ import (
 
 	"github.com/egladman/magus/internal/interp/engine"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
-	_ "github.com/egladman/magus/internal/interp/engine/lua/gopherlua"
-	_ "github.com/egladman/magus/internal/interp/engine/lua/luajit"
 )
 
 // dialect identifies a source language; engines that share one reuse its source.
 type dialect int
 
 const (
-	lua dialect = iota
-	buzz
+	buzz dialect = iota
 )
 
 // enginesUnderTest lists the registered engine IDs to benchmark, paired with
-// the dialect each one executes. An engine absent from the build (e.g. luajit
-// without cgo) is skipped at run time.
+// the dialect each one executes. An engine absent from the build is skipped at
+// run time.
 var enginesUnderTest = []struct {
 	id      string
 	dialect dialect
 }{
-	{"gopherlua", lua},
-	{"luajit", lua},
 	{"buzz", buzz},
 }
 
@@ -52,48 +45,42 @@ type workload struct {
 	src  map[dialect]src
 }
 
-// workloads mirror the per-engine benchmarks in the buzz and gopher-lua suites
-// so results line up across all three engines.
+// workloads mirror the per-engine benchmarks in the buzz suite so results line
+// up across engines.
 var workloads = []workload{
 	{
 		name: "Fib", // recursive fib(30): call/return, int arithmetic, branching
 		src: map[dialect]src{
-			lua:  {setup: "function fib(n) if n <= 1 then return n end return fib(n-1)+fib(n-2) end", hot: "return fib(30)"},
 			buzz: {setup: "fun fib(n) int { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); }", hot: "fib(30);"},
 		},
 	},
 	{
 		name: "LoopSum", // tight while-loop summing 1e6 ints
 		src: map[dialect]src{
-			lua:  {hot: "local sum=0 local i=0 while i<1000000 do sum=sum+i i=i+1 end return sum"},
 			buzz: {hot: "var sum = 0; var i = 0; while (i < 1000000) { sum = sum + i; i = i + 1; }"},
 		},
 	},
 	{
 		name: "ForeachList", // iterate a 1000-element list
 		src: map[dialect]src{
-			lua:  {setup: "items={} for i=1,1000 do items[i]=i-1 end", hot: "local sum=0 for _,x in ipairs(items) do sum=sum+x end return sum"},
-			buzz: {setup: "final items = range(1000);", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
+			buzz: {setup: "var items = []; var i = 0; while (i < 1000) { items.append(i); i = i + 1; }", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
 		},
 	},
 	{
 		name: "ForeachMap", // iterate a 10-entry map
 		src: map[dialect]src{
-			lua:  {setup: "m={a=1,b=2,c=3,d=4,e=5,f=6,g=7,h=8,i=9,j=10}", hot: "local sum=0 for k,v in pairs(m) do sum=sum+v end return sum"},
-			buzz: {setup: `final m = {"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10};`, hot: "var sum = 0; foreach (k, v in m) { sum = sum + v; }"},
+			buzz: {setup: `const m = {"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10};`, hot: "var sum = 0; foreach (k, v in m) { sum = sum + v; }"},
 		},
 	},
 	{
 		name: "StringInterp", // build an interpolated string 100x
 		src: map[dialect]src{
-			lua:  {hot: `local s="" local i=0 while i<100 do s="item "..i.." of 100" i=i+1 end return s`},
 			buzz: {hot: `var s = ""; var i = 0; while (i < 100) { s = "item {i} of 100"; i = i + 1; }`},
 		},
 	},
 	{
 		name: "Call", // overhead of one trivial function call
 		src: map[dialect]src{
-			lua:  {setup: "function add(a,b) return a+b end", hot: "return add(1,2)"},
 			buzz: {setup: "fun add(a, b) int { return a + b; }", hot: "add(1, 2);"},
 		},
 	},

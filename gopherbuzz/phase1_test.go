@@ -8,7 +8,7 @@ import (
 func evalResult(t *testing.T, src string) Value {
 	t.Helper()
 	sess := newSession(context.Background())
-	if err := sess.Exec(context.Background(), "final __r = "+src+";"); err != nil {
+	if err := sess.Exec(context.Background(), "const __r = "+src+";"); err != nil {
 		t.Fatalf("exec %q: %v", src, err)
 	}
 	return sess.GetGlobal("__r")
@@ -74,9 +74,9 @@ func TestNullCoalesce(t *testing.T) {
 func TestStringInterpolation(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
-final name = "world";
-final n = 42;
-final greeting = "hello {name}, n+1 = {n + 1}!";
+const name = "world";
+const n = 42;
+const greeting = "hello {name}, n+1 = {n + 1}!";
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestIfElse(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
 var result = "";
-final x = 5;
+const x = 5;
 if (x > 10) {
     result = "big";
 } else if (x > 3) {
@@ -153,7 +153,7 @@ for (var i = 0; i < 100; i = i + 1) {
 func TestForEachList(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
-final items = [10, 20, 30];
+const items = [10, 20, 30];
 var sum = 0;
 foreach (x in items) {
     sum = sum + x;
@@ -168,7 +168,7 @@ foreach (x in items) {
 func TestForEachMap(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
-final m = {"a": 1, "b": 2, "c": 3};
+const m = {"a": 1, "b": 2, "c": 3};
 var keys = "";
 var sum = 0;
 foreach (k, v in m) {
@@ -186,10 +186,10 @@ foreach (k, v in m) {
 func TestIndexing(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
-final list = [100, 200, 300];
-final m = {"key": "val"};
-final a = list[1];
-final b = m["key"];
+const list = [100, 200, 300];
+const m = {"key": "val"};
+const a = list[1];
+const b = m["key"];
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -201,12 +201,12 @@ final b = m["key"];
 func TestIndexAssign(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
-final list = mut [1, 2, 3];
+const list = [1, 2, 3];
 list[0] = 99;
-final m = mut {"x": 1};
+const m = {"x": 1};
 m["y"] = 2;
-final first = list[0];
-final my = m["y"];
+const first = list[0];
+const my = m["y"];
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -221,7 +221,7 @@ func TestNamedFunction(t *testing.T) {
 fun add(a, b) int {
     return a + b;
 }
-final result = add(3, 4);
+const result = add(3, 4);
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -236,7 +236,7 @@ fun fact(n) int {
     if (n <= 1) { return 1; }
     return n * fact(n - 1);
 }
-final result = fact(5);
+const result = fact(5);
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -250,8 +250,8 @@ func TestClosureCapture(t *testing.T) {
 fun makeAdder(n) fun(int) int {
     return fun(x) int { return x + n; };
 }
-final add5 = makeAdder(5);
-final result = add5(10);
+const add5 = makeAdder(5);
+const result = add5(10);
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -270,9 +270,9 @@ object Point {
         return this.x + this.y;
     }
 }
-final p = Point{ x = 3, y = 4 };
-final px = p.x;
-final total = p.sum();
+const p = Point{ x = 3, y = 4 };
+const px = p.x;
+const total = p.sum();
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -288,9 +288,9 @@ object Config {
     name: str = "default",
     count: int = 1,
 }
-final c = Config{ name = "custom" };
-final cn = c.name;
-final cc = c.count;
+const c = Config{ name = "custom" };
+const cn = c.name;
+const cc = c.count;
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -307,9 +307,9 @@ enum Color {
     Green,
     Blue,
 }
-final c = Color.Green;
-final isGreen = c == Color.Green;
-final isRed = c == Color.Red;
+const c = Color.Green;
+const isGreen = c == Color.Green;
+const isRed = c == Color.Red;
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -340,12 +340,12 @@ fun describe(n) str {
     return "has {n} items";
 }
 
-final labels = ["a", "b", "c"];
+const labels = ["a", "b", "c"];
 var joined = "";
 foreach (i, label in labels) {
     joined = joined + label;
 }
-final msg = describe(3);
+const msg = describe(3);
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)

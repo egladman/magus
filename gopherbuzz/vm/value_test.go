@@ -33,7 +33,7 @@ func TestValueConstructorsAndPredicates(t *testing.T) {
 			name:    "FloatValue",
 			v:       vm.FloatValue(3.14),
 			isFloat: true,
-			kind:    "double",
+			kind:    "float",
 		},
 		{
 			name:   "BoolValue true",

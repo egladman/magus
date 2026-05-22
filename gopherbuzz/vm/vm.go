@@ -664,9 +664,6 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			obj := vm.pop()
 			if obj.tag() == tagObject {
 				inst := vm.asObject(obj)
-				if !inst.Mut {
-					return Null, errImmutable("object")
-				}
 				ip := f.ip - 1
 				if ip < len(vm.mcache) {
 					if e := vm.mcache[ip]; e.def == inst.Def {
@@ -709,9 +706,6 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			obj := vm.pop()
 			if obj.tag() == tagObject {
 				inst := vm.asObject(obj)
-				if !inst.Mut {
-					return Null, errImmutable("object")
-				}
 				if h := int(ins.A); h < len(inst.Fields) {
 					inst.Fields[h] = val
 					continue
@@ -725,7 +719,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpGetIndex:
 			idx := vm.pop()
 			obj := vm.pop()
-			v, err := indexGet(vm, obj, idx, ins.A != 0)
+			v, err := indexGet(vm, obj, idx)
 			if err != nil {
 				return Null, err
 			}
@@ -745,13 +739,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			for i := n - 1; i >= 0; i-- {
 				items[i] = vm.pop()
 			}
-			vm.push(heapValue(tagList, &listObj{Items: items, Mut: ins.B&InstrMutBit != 0}))
+			vm.push(ListValue(items))
 
 		case OpNewMap:
 			// ultra-opt: read k/v pairs directly from stack — no intermediate slice.
 			n := int(ins.A)
 			m := newMapObj()
-			m.Mut = ins.B&InstrMutBit != 0
 			base := len(vm.stack) - n*2
 			for i := 0; i < n; i++ {
 				k := vm.stack[base+i*2]
@@ -982,7 +975,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				}
 			} else {
 				typeName := vm.asStr(cv).V
-				if err := vm.buildObjectVal(typeName, int(ins.B&^InstrMutBit), f.env, ins.B&InstrMutBit != 0); err != nil {
+				if err := vm.buildObjectVal(typeName, int(ins.B), f.env); err != nil {
 					return Null, err
 				}
 			}
@@ -997,8 +990,6 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagRange:
 				r := vm.asRange(iter)
 				vm.push(vm.allocIterState(&iterStateObj{rng: r, rangeIdx: r.Lo}))
-			case tagFib:
-				vm.push(vm.allocIterState(&iterStateObj{fib: iter.asFib()}))
 			default:
 				return Null, errCannotIterate(iter)
 			}
@@ -1029,44 +1020,14 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					done = true
 				}
 			} else if state.rng != nil {
-				// Ranges are half-open: a..b yields the integers from a up to (but not
-				// including) b, and descends when a > b. The iteration key is the
-				// zero-based step count.
-				r := state.rng
-				if r.Lo <= r.Hi {
-					if state.rangeIdx < r.Hi {
-						if wantKey {
-							vm.push(IntValue(state.rangeIdx - r.Lo))
-						}
-						vm.push(IntValue(state.rangeIdx))
-						state.rangeIdx++
-					} else {
-						done = true
-					}
-				} else {
-					if state.rangeIdx > r.Hi {
-						if wantKey {
-							vm.push(IntValue(r.Lo - state.rangeIdx))
-						}
-						vm.push(IntValue(state.rangeIdx))
-						state.rangeIdx--
-					} else {
-						done = true
-					}
-				}
-			} else if state.fib != nil {
-				val, fdone, err := vm.fiberIterNext(state.fib)
-				if err != nil {
-					return Null, err
-				}
-				if fdone {
-					done = true
-				} else {
+				if state.rangeIdx <= state.rng.Hi {
 					if wantKey {
-						vm.push(IntValue(int64(state.idx)))
+						vm.push(IntValue(state.rangeIdx - state.rng.Lo))
 					}
-					vm.push(val)
-					state.idx++
+					vm.push(IntValue(state.rangeIdx))
+					state.rangeIdx++
+				} else {
+					done = true
 				}
 			} else {
 				done = true
@@ -1479,8 +1440,6 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				ok = v.tag() == tagStr
 			case CheckBool:
 				ok = v.tag() == tagBool
-			case CheckNonNull:
-				ok = v.tag() != tagNull
 			}
 			if !ok {
 				return Null, errCheckType(ins.A, v)
@@ -1536,34 +1495,6 @@ func errNotCallable(v Value) error { return fmt.Errorf("buzz: %s is not callable
 //go:noinline
 func errCannotIterate(v Value) error { return fmt.Errorf("buzz: cannot iterate over %s", v.buzzKind()) }
 
-// fiberIterNext drives one step of `foreach (x in &fib())`: it resumes the fiber
-// and reports the next yielded value, or done=true once the fiber completes
-// without yielding. It mirrors session.builtinResume but stays in-package so
-// OpIterNext needs only a small branch plus this out-of-line call (keeping the
-// resume machinery out of Exec's hot switch — see README on the I-cache budget).
-//
-//go:noinline
-func (vm *VM) fiberIterNext(f *fibObj) (Value, bool, error) {
-	if f.status == fibDone {
-		return Null, true, f.err
-	}
-	f.vm.SetCtx(vm.ctx)
-	f.status = fibRunning
-	res, err := f.vm.Exec()
-	if err != nil {
-		if ys, ok := err.(*yieldSignal); ok {
-			f.status = fibSuspended
-			return ys.value, false, nil
-		}
-		f.status = fibDone
-		f.err = err
-		return Null, true, err
-	}
-	f.status = fibDone
-	f.returnVal = res
-	return Null, true, nil
-}
-
 //go:noinline
 func errRangeOperands(lo, hi Value) error {
 	return fmt.Errorf("buzz: range operands must be int, got %s..%s", lo.buzzKind(), hi.buzzKind())
@@ -1577,16 +1508,12 @@ func errUnknownOpcode(op OpCode) error { return fmt.Errorf("buzz: unknown opcode
 
 //go:noinline
 func errCheckType(code int32, v Value) error {
-	switch code {
-	case CheckNonNull:
-		return fmt.Errorf("buzz: force-unwrap of null value")
-	}
 	want := "value"
 	switch code {
 	case CheckInt:
 		want = "int"
 	case CheckFloat:
-		want = "double"
+		want = "float"
 	case CheckStr:
 		want = "str"
 	case CheckBool:
@@ -1742,7 +1669,7 @@ func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount int, env *Env) er
 }
 
 // buildObjectVal pops (name, value) pairs and creates an objectInst with flat field storage.
-func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env, mut bool) error {
+func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env) error {
 	type fieldPair struct {
 		name string
 		val  Value
@@ -1773,7 +1700,7 @@ func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env, mut bool
 			flatFields[j] = p.val
 		}
 	}
-	vm.push(vm.allocObject(&objectInst{Def: def, Fields: flatFields, Mut: mut}))
+	vm.push(vm.allocObject(&objectInst{Def: def, Fields: flatFields}))
 	return nil
 }
 
@@ -1794,7 +1721,7 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 		return v.tag() == tagBool
 	case "int":
 		return v.tag() == tagInt
-	case "double":
+	case "float":
 		return v.tag() == tagFloat
 	case "str":
 		return v.tag() == tagStr
@@ -1806,8 +1733,6 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 		return v.tag() == tagFun || v.tag() == tagDirect
 	case "rng":
 		return v.tag() == tagRange
-	case "pat":
-		return v.tag() == tagPat
 	}
 	if v.tag() == tagObject {
 		return vm.asObject(v).Def.Name == typeName
@@ -1839,7 +1764,7 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 			}
 			return IntValue(n), nil
 		}
-	case "double":
+	case "float":
 		switch v.tag() {
 		case tagFloat:
 			return v, nil

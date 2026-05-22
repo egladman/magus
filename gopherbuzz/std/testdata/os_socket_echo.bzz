@@ -1,5 +1,5 @@
 // @expect: closed
 import "os";
-final server = os.TcpServer.init(0, os.SocketProtocol.tcp);
+const server = os.TcpServer.init(0, os.SocketProtocol.tcp);
 server.close();
-final __r = "closed";
+const __r = "closed";

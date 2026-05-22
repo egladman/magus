@@ -18,25 +18,25 @@ func TestThisFieldAccess(t *testing.T) {
 		// read this.x/this.y (the BenchmarkMethodCall shape)
 		"read fields": {`object P { x: int = 0, y: int = 0,
 fun dist() int { return this.x * this.x + this.y * this.y; } }
-final p = P{ x = 3, y = 4 };
-final __r = p.dist();`, 25},
+const p = P{ x = 3, y = 4 };
+const __r = p.dist();`, 25},
 		// write this.field, then read it back
 		"write then read": {`object C { n: int = 0,
-mut fun bump() int { this.n = this.n + 1; this.n = this.n + 10; return this.n; } }
-final c = mut C{};
-final __r = c.bump();`, 11},
+fun bump() int { this.n = this.n + 1; this.n = this.n + 10; return this.n; } }
+const c = C{};
+const __r = c.bump();`, 11},
 		// access fields in an order different from declaration order
 		"out-of-order access": {`object T { a: int = 1, b: int = 2, c: int = 3,
 fun mix() int { return this.c * 100 + this.a * 10 + this.b; } }
-final t = T{ a = 4, b = 5, c = 6 };
-final __r = t.mix();`, 645},
+const t = T{ a = 4, b = 5, c = 6 };
+const __r = t.mix();`, 645},
 		// field whose value is mutated via an external setter still reads back
 		// correctly inside a method (in-place update preserves slot order)
 		"external set then method read": {`object Box { v: int = 0,
 fun get() int { return this.v; } }
-final b = mut Box{};
+const b = Box{};
 b.v = 99;
-final __r = b.get();`, 99},
+const __r = b.get();`, 99},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

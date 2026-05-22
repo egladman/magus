@@ -23,7 +23,7 @@
 //	magus config <subcommand>           view or update magus configuration
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
-//	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)
+//	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.bzz + merge driver)
 //	magus self update [flags]           update magus to the latest release
 //	magus self install [flags]          install magus to ~/.local/bin
 //	magus version                       print version info
@@ -55,7 +55,6 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -209,7 +208,6 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	configgen.ApplyEnv(&cfg, os.Getenv)
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
-	interp.SetLuaEngine(cfg.Interpreter.Lua.Engine)
 	// Wire hints enabled from config (default true when Hints.Enabled is nil).
 	hintsOn := cfg.Hints.Enabled == nil || *cfg.Hints.Enabled
 	interactive.SetEnabled(hintsOn)
@@ -461,7 +459,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  repl           open an interactive Teal/Lua interpreter")
 	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (stdlib only; no host bindings)")
 	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
-	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)")
+	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.bzz + merge driver)")
 	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")
 	fmt.Fprintln(os.Stderr, "  version        print version, commit, and build date")
 	fmt.Fprintln(os.Stderr, "  help           show this message")

@@ -22,7 +22,7 @@ import (
 
 // openBenchJSWorkspace creates nProjects JS project directories (package.json
 // marker only, no magusfile.tl) so project.Discover auto-detects them as JS
-// projects. Used to measure Open on a pure JS workspace where preloadTealMagusfiles
+// projects. Used to measure Open on a pure JS workspace where preloadMagusfiles
 // is a no-op and all cost is borne by Inspect + cache replay.
 func openBenchJSWorkspace(tb testing.TB, nProjects int) string {
 	tb.Helper()
@@ -84,7 +84,7 @@ func BenchmarkMagusOpenCold(b *testing.B) {
 // BenchmarkMagusOpenWarmGraphCache measures magus.Open on a 50-project pure JS
 // workspace where the workspace.cache.json is already warm (disk cache valid).
 // On a warm cache, project.Discover replays the graph from disk (no FS walk),
-// preloadTealMagusfiles is a no-op (no .tl files), and registry.Apply resolves
+// preloadMagusfiles is a no-op (no .tl files), and registry.Apply resolves
 // spell names. This is the cold-process / warm-disk hot path for JS monorepos.
 //
 // optimization: workspace.cache.json fast path (project.Discover restoreFromCache)
@@ -92,7 +92,7 @@ func BenchmarkMagusOpenCold(b *testing.B) {
 //	skips the full directory walk + autoDetect goroutine pool on warm disk.
 //	For a 50-project JS workspace, the cache hit collapses Inspect from
 //	O(D) WalkDir syscalls to a single ReadFile + N Lstat calls (one per dir
-//	in DirMtimes). Combined with preloadTealMagusfiles being a no-op for
+//	in DirMtimes). Combined with preloadMagusfiles being a no-op for
 //	pure JS workspaces, total Open cost drops by ~80% vs cold.
 //	measured: BenchmarkMagusOpenWarmGraphCache vs BenchmarkMagusOpenCold.
 //	trade-off: cache is invalidated on any directory mtime change; over-

@@ -11,28 +11,24 @@ hardware, and exact tool versions.
 
 ### Prerequisites
 
-System packages (Debian/Ubuntu) — for building `magus` (cgo + LuaJIT) and
+System packages (Debian/Ubuntu) — for building `magus` and
 for fixture filesystem watches that the bench scenarios may exercise:
 
 ```sh
-sudo apt install -y build-essential pkg-config libluajit-5.1-dev hyperfine inotify-tools
+sudo apt install -y build-essential pkg-config hyperfine inotify-tools
 ```
 
-| Tool        | Install                                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------------------------- |
-| `hyperfine` | `sudo apt install hyperfine` (included above)                                                                    |
-| `magus`     | `cd tack && CGO_ENABLED=1 go build -o ~/.local/bin/magus ./magus/cmd/magus` (cgo build carries both Lua engines) |
-| `make`      | usually pre-installed                                                                                            |
+| Tool        | Install                                                                  |
+| ----------- | ------------------------------------------------------------------------ |
+| `hyperfine` | `sudo apt install hyperfine` (included above)                            |
+| `magus`     | `cd tack && go build -o ~/.local/bin/magus ./magus/cmd/magus`            |
+| `make`      | usually pre-installed                                                    |
 | `turbo`     | `pnpm install -g turbo@latest`                                                                                   |
 | `nx`        | `pnpm install -g nx@latest`                                                                                      |
 | `lage`      | `pnpm install -g @microsoft/lage@latest`                                                                         |
 | `moon`      | `curl -fsSL https://moonrepo.dev/install/moon.sh \| bash`                                                        |
 | `bazel`     | see [bazel.build/install](https://bazel.build/install)                                                           |
 
-> `libluajit-5.1-dev` provides `luajit.pc` so cgo can link the LuaJIT
-> engine. To build without LuaJIT (slower fallback Lua VM), use
-> `CGO_ENABLED=0 go build ...` and skip the libluajit package.
->
 > `inotify-tools` is optional but useful if you hit
 > `fs.inotify.max_user_watches` errors on large fixtures — bump it with
 > `sudo sysctl fs.inotify.max_user_watches=524288`.
