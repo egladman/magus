@@ -2,13 +2,6 @@ package std
 
 import "strings"
 
-// TealSignature renders a method's Teal/Lua call form: the module bound by
-// require, snake_case method, e.g. `env.lookup(name) → string, bool`. mod and m
-// are the parent module and one of its methods.
-func TealSignature(mod Module, m Method) string {
-	return mod.Name + "." + m.Name + "(" + strings.Join(argNames(m), ", ") + ")" + returnSuffix(m)
-}
-
 // BuzzSignature renders a method's Buzz call form: reached off the `extra`
 // aggregate with the name camelCased, e.g. `extra.env.lookup(name) → string, bool`.
 // mod and m are the parent module and one of its methods.

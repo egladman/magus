@@ -1,30 +1,58 @@
 # buzz benchmarks
 
-Microbenchmarks for the Buzz interpreter. The benchmark code lives in
-`buzz/bench_test.go` (and `buzz/vm/*_test.go`); this directory holds only the
-optimization analysis. Result dumps are not committed — regenerate them.
+Microbenchmarks for the Buzz VM. The benchmark code lives in `bench_test.go`
+(and `vm/*_test.go`); this directory holds the optimization analysis and the
+cross-language comparison. Result dumps are not committed — regenerate them.
 
 ## Run
 
 ```sh
-# all buzz benchmarks
-go test -bench=. -benchmem ./buzz/...
+# all buzz benchmarks (from the gopherbuzz module root)
+go test -run='^$' -bench=. -benchmem ./...
 
 # one benchmark
-go test -bench=BenchmarkLoopSum -benchmem ./buzz
+go test -run='^$' -bench=BenchmarkLoopSum -benchmem .
 ```
 
-Benchmarks: `Fib`, `LoopSum`, `LoopEq`, `ForeachList`, `ForeachMap`,
-`StringInterp`, `Parse`, `Compile`, `Call`, `MethodCall`, `FieldAccess`,
-`DirectCall`.
+Benchmarks: `Fib`, `LoopSum`, `LoopSumFloat`, `LoopEq`, `ForeachList`,
+`ForeachMap`, `StringInterp`, `Parse`, `Compile`, `Call`, `MethodCall`,
+`FieldAccess`, `DirectCall`.
+
+## JIT axis
+
+The baseline JIT (amd64) is on by default. Compare it against the interpreter
+with the `BUZZ_JIT` environment variable:
+
+```sh
+BUZZ_JIT=0 go test -run='^$' -bench=LoopSum -count=8 . > interp.txt
+BUZZ_JIT=1 go test -run='^$' -bench=LoopSum -count=8 . > jit.txt
+benchstat interp.txt jit.txt
+```
+
+The JIT only engages on eligible top-level numeric loops (`LoopSum`,
+`LoopSumFloat`, `LoopEq`, …); call-heavy or object-heavy benchmarks fall back to
+the interpreter, so `BUZZ_JIT` leaves them unchanged.
 
 ## Value representation axis
 
-The VM's `Value` has two build-tag-selected layouts. Benchmark both:
+The VM's `Value` has three build-tag-selected layouts. Benchmark them:
 
 ```sh
-go test -bench=. ./buzz/...                 # default: unsafe.Pointer payload
-go test -bench=. -tags buzz_safe ./buzz/... # safe: typed interface payload
+go test -run='^$' -bench=. .                  # default: 8-byte NaN-box
+go test -run='^$' -bench=. -tags buzz_safe .  # safe: typed interface payload
+go test -run='^$' -bench=. -tags buzz_unsafe . # unsafe: pointer struct
+```
+
+(The JIT is compiled only with the default rep; the safe/unsafe builds run on the
+interpreter.)
+
+## Cross-language comparison
+
+`comparison/` is a separate module benchmarking Buzz against gopher-lua, tengo,
+and goja. See `comparison/README.md`.
+
+```sh
+cd comparison && GOWORK=off go test -run='^$' -bench=. -benchmem .
 ```
 
 ## Read
@@ -32,9 +60,9 @@ go test -bench=. -tags buzz_safe ./buzz/... # safe: typed interface payload
 Compare two runs with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat):
 
 ```sh
-go test -bench=. -benchmem -count=10 ./buzz > old.txt
+go test -run='^$' -bench=. -benchmem -count=10 . > old.txt
 # ...make a change...
-go test -bench=. -benchmem -count=10 ./buzz > new.txt
+go test -run='^$' -bench=. -benchmem -count=10 . > new.txt
 benchstat old.txt new.txt
 ```
 

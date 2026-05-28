@@ -1,0 +1,6 @@
+// @expect: 11
+// A `mut fun` may mutate the receiver, which must itself be a mutable instance.
+object C { n: int = 0,
+    mut fun bump() int { this.n = this.n + 1; this.n = this.n + 10; return this.n; } }
+final c = mut C{};
+final __r = c.bump();

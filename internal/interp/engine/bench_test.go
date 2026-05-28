@@ -63,13 +63,13 @@ var workloads = []workload{
 	{
 		name: "ForeachList", // iterate a 1000-element list
 		src: map[dialect]src{
-			buzz: {setup: "var items = []; var i = 0; while (i < 1000) { items.append(i); i = i + 1; }", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
+			buzz: {setup: "var items = mut []; var i = 0; while (i < 1000) { items.append(i); i = i + 1; }", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
 		},
 	},
 	{
 		name: "ForeachMap", // iterate a 10-entry map
 		src: map[dialect]src{
-			buzz: {setup: `const m = {"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10};`, hot: "var sum = 0; foreach (k, v in m) { sum = sum + v; }"},
+			buzz: {setup: `final m = {"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10};`, hot: "var sum = 0; foreach (k, v in m) { sum = sum + v; }"},
 		},
 	},
 	{

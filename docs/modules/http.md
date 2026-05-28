@@ -2,7 +2,7 @@
 
 HTTP client with automatic retry on transient errors.
 
-> **Naming convention:** Teal/Lua binds each module per-import in `snake_case` (`local http = require("magus.extra.http")`, then `http.some_method`). Buzz reaches them off the `import "magus/extra"` aggregate in `camelCase` (`extra.http.someMethod`).
+> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.http.someMethod`).
 
 ## Methods
 
@@ -10,9 +10,7 @@ HTTP client with automatic retry on transient errors.
 
 Send a GET request; returns (status_code, body).
 
-**Signature (Teal):** `http.get(url, [headers]) → status, body`
-
-**Signature (Buzz):** `extra.http.get(url, [headers]) → status, body`
+**Signature:** `extra.http.get(url, [headers]) → status, body`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -25,9 +23,7 @@ Send a GET request; returns (status_code, body).
 
 Send a POST request with body; returns (status_code, body).
 
-**Signature (Teal):** `http.post(url, body, [headers]) → status, body`
-
-**Signature (Buzz):** `extra.http.post(url, body, [headers]) → status, body`
+**Signature:** `extra.http.post(url, body, [headers]) → status, body`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -41,9 +37,7 @@ Send a POST request with body; returns (status_code, body).
 
 Send an HTTP request; returns (status_code, body).
 
-**Signature (Teal):** `http.request(method, url, [body], [headers]) → status, body`
-
-**Signature (Buzz):** `extra.http.request(method, url, [body], [headers]) → status, body`
+**Signature:** `extra.http.request(method, url, [body], [headers]) → status, body`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

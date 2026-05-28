@@ -62,13 +62,11 @@ func renderModule(m std.Module) string {
 		fmt.Fprintf(&b, "%s\n\n", m.Doc)
 	}
 
-	// Naming convention note. Each magusfile language gets the method names in
-	// its own idiom: snake_case for Teal/Lua, camelCase for Buzz. extra is
-	// self-complete, so every module is on both surfaces.
-	fmt.Fprintf(&b, "> **Naming convention:** Teal/Lua binds each module per-import in `snake_case` "+
-		"(`local %s = require(\"magus.extra.%s\")`, then `%s.some_method`). Buzz reaches them off the "+
+	// Naming convention note: Buzz reaches each module off the `import
+	// "magus/extra"` aggregate in camelCase.
+	fmt.Fprintf(&b, "> **Naming convention:** Buzz reaches modules off the "+
 		"`import \"magus/extra\"` aggregate in `camelCase` (`extra.%s.someMethod`).\n\n",
-		m.Name, m.Name, m.Name, m.Name)
+		m.Name)
 
 	if len(m.Fields) > 0 {
 		fmt.Fprintf(&b, "## Fields\n\n")
@@ -87,8 +85,7 @@ func renderModule(m std.Module) string {
 			if meth.Doc != "" {
 				fmt.Fprintf(&b, "%s\n\n", meth.Doc)
 			}
-			fmt.Fprintf(&b, "**Signature (Teal):** `%s`\n\n", std.TealSignature(m, meth))
-			fmt.Fprintf(&b, "**Signature (Buzz):** `%s`\n\n", std.BuzzSignature(m, meth))
+			fmt.Fprintf(&b, "**Signature:** `%s`\n\n", std.BuzzSignature(m, meth))
 			if equiv, dup := std.NativeBuzzEquiv(m.Name, meth.Name); dup {
 				fmt.Fprintf(&b, "**Also in Buzz's stdlib:** `%s` — the `extra` form is sandbox-aware.\n\n", equiv)
 			}
@@ -128,7 +125,7 @@ func writeIndex(dir string, modules []std.Module) error {
 func renderIndex(modules []std.Module) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Magusfile Module Reference\n\n")
-	fmt.Fprintf(&b, "These are the runtime utility modules. In Teal, require each one you use — `local fs = require(\"magus.extra.fs\")` — with `snake_case` methods. In Buzz, take the single `import \"magus/extra\"` aggregate and reach modules off it — `extra.fs.glob(...)` — with `camelCase` methods. Each module is **self-complete**: `extra` carries a whole domain in one place (so you never straddle native `fs` and `extra.fs`), and the `extra` forms are sandbox-aware where Buzz's bare stdlib is not. Some methods also exist in Buzz's own stdlib (noted per-method); either works.\n\n")
+	fmt.Fprintf(&b, "These are the runtime utility modules. Take the single `import \"magus/extra\"` aggregate and reach modules off it — `extra.fs.glob(...)` — with `camelCase` methods. Each module is **self-complete**: `extra` carries a whole domain in one place (so you never straddle native `fs` and `extra.fs`), and the `extra` forms are sandbox-aware where Buzz's bare stdlib is not. Some methods also exist in Buzz's own stdlib (noted per-method); either works.\n\n")
 	fmt.Fprintln(&b, "| Module | Description |")
 	fmt.Fprintln(&b, "|--------|-------------|")
 	for _, m := range modules {

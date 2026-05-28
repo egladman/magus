@@ -2,7 +2,7 @@
 
 Process environment variable access.
 
-> **Naming convention:** Teal/Lua binds each module per-import in `snake_case` (`local env = require("magus.extra.env")`, then `env.some_method`). Buzz reaches them off the `import "magus/extra"` aggregate in `camelCase` (`extra.env.someMethod`).
+> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.env.someMethod`).
 
 ## Methods
 
@@ -10,9 +10,7 @@ Process environment variable access.
 
 Return the value of name, or "" if unset. Use lookup to tell unset from set-but-empty.
 
-**Signature (Teal):** `env.get(name) → string`
-
-**Signature (Buzz):** `extra.env.get(name) → string`
+**Signature:** `extra.env.get(name) → string`
 
 **Also in Buzz's stdlib:** `os.env` — the `extra` form is sandbox-aware.
 
@@ -26,9 +24,7 @@ Return the value of name, or "" if unset. Use lookup to tell unset from set-but-
 
 Return (value, found); found is false when name is unset or stripped by the sandbox.
 
-**Signature (Teal):** `env.lookup(name) → string, bool`
-
-**Signature (Buzz):** `extra.env.lookup(name) → string, bool`
+**Signature:** `extra.env.lookup(name) → string, bool`
 
 **Also in Buzz's stdlib:** `os.env (returns null when unset)` — the `extra` form is sandbox-aware.
 
@@ -42,9 +38,7 @@ Return (value, found); found is false when name is unset or stripped by the sand
 
 Set name to value in the current process environment.
 
-**Signature (Teal):** `env.set(name, value)`
-
-**Signature (Buzz):** `extra.env.set(name, value)`
+**Signature:** `extra.env.set(name, value)`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -55,9 +49,7 @@ Set name to value in the current process environment.
 
 Return all environment variables as a name→value map.
 
-**Signature (Teal):** `env.list() → map[string]string`
-
-**Signature (Buzz):** `extra.env.list() → map[string]string`
+**Signature:** `extra.env.list() → map[string]string`
 
 **Returns:** map[string]string
 

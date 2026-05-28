@@ -126,7 +126,7 @@ func (p *parser) parseStmt() (ast.Node, error) {
 			n.IsExported = true
 		}
 		return node, nil
-	case token.Const, token.Var:
+	case token.Final, token.Var:
 		return p.parseDecl()
 	case token.Return:
 		return p.parseReturn()
@@ -222,8 +222,8 @@ func (p *parser) parseNamespace() (*ast.NamespaceStmt, error) {
 }
 
 func (p *parser) parseDecl() (*ast.DeclStmt, error) {
-	t := p.advance() // const/var
-	isConst := t.Kind == token.Const
+	t := p.advance() // const/final/var
+	isConst := t.Kind == token.Final
 	nameTok, err := p.eatIdent()
 	if err != nil {
 		return nil, err
@@ -248,6 +248,12 @@ func (p *parser) parseDecl() (*ast.DeclStmt, error) {
 
 // skipType skips a type expression; types are unused at runtime in Phase 1/3.
 func (p *parser) skipType() error {
+	// `mut` is a leading modifier on a collection/object type (mut [int], mut Foo).
+	// Mutability is enforced on the value at runtime, so the annotation is consumed
+	// and otherwise ignored here.
+	if p.check(token.Mut) {
+		p.advance()
+	}
 	t := p.peek()
 	switch t.Kind {
 	case token.Ident, token.Void:
@@ -577,7 +583,7 @@ func (p *parser) parseForLoop() (*ast.ForStmt, error) {
 
 // parseForInit parses the for-loop init clause: a declaration or assignment/expr.
 func (p *parser) parseForInit() (ast.Node, error) {
-	if p.check(token.Const) || p.check(token.Var) {
+	if p.check(token.Final) || p.check(token.Var) {
 		return p.parseDeclNoSemi()
 	}
 	return p.parseAssignTail()
@@ -586,7 +592,7 @@ func (p *parser) parseForInit() (ast.Node, error) {
 // parseDeclNoSemi parses a const/var declaration without consuming a semicolon.
 func (p *parser) parseDeclNoSemi() (*ast.DeclStmt, error) {
 	t := p.advance()
-	isConst := t.Kind == token.Const
+	isConst := t.Kind == token.Final
 	nameTok, err := p.eatIdent()
 	if err != nil {
 		return nil, err
@@ -718,6 +724,12 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	}
 	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		// `mut fun` declares a method that mutates the receiver. Mutation is enforced
+		// on the receiver value at runtime (an immutable instance rejects field
+		// writes), so the modifier is consumed here and the method parsed normally.
+		if p.check(token.Mut) && p.peekAt(1).Kind == token.Fun {
+			p.advance()
+		}
 		if p.check(token.Fun) {
 			method, err := p.parseFunDecl()
 			if err != nil {
@@ -1010,6 +1022,26 @@ func (p *parser) parseMultiplicative() (ast.Node, error) {
 }
 
 func (p *parser) parseUnary() (ast.Node, error) {
+	// `mut` marks a list, map, or object literal as mutable. Collections are
+	// immutable by default in Buzz; only a mut value may be mutated in place.
+	if p.check(token.Mut) {
+		t := p.advance()
+		expr, err := p.parsePostfix()
+		if err != nil {
+			return nil, err
+		}
+		switch e := expr.(type) {
+		case *ast.ListExpr:
+			e.Mut = true
+		case *ast.MapExpr:
+			e.Mut = true
+		case *ast.ObjectLit:
+			e.Mut = true
+		default:
+			return nil, fmt.Errorf("buzz: line %d:%d: 'mut' must precede a list, map, or object literal", t.Line, t.Col)
+		}
+		return expr, nil
+	}
 	if p.check(token.Bang) || p.check(token.Minus) {
 		t := p.advance()
 		op := "!"
@@ -1079,6 +1111,20 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 				return nil, err
 			}
 			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val}
+		case token.Backslash:
+			// Namespace access: std\print. Resolves a member of an imported module,
+			// which is the same machinery as `.` member access on the module value.
+			t := p.advance()
+			nameTok, err := p.eatIdent()
+			if err != nil {
+				return nil, err
+			}
+			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val}
+		case token.Bang:
+			// Postfix force-unwrap: operand!. A lone '!' here (not '!=') unwraps an
+			// optional, erroring at runtime if the value is null.
+			t := p.advance()
+			node = &ast.ForceExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Operand: node}
 		case token.LParen:
 			t := p.advance()
 			args, err := p.parseArgList()
@@ -1091,6 +1137,12 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			node = &ast.CallExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Callee: node, Args: args}
 		case token.LBracket:
 			t := p.advance()
+			// Checked subscript: object[?index] yields null on an out-of-bounds index.
+			optional := false
+			if p.check(token.Question) {
+				p.advance()
+				optional = true
+			}
 			idx, err := p.parseExpr()
 			if err != nil {
 				return nil, err
@@ -1098,7 +1150,7 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			if _, err := p.eat(token.RBracket); err != nil {
 				return nil, err
 			}
-			node = &ast.IndexExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Index: idx}
+			node = &ast.IndexExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Index: idx, Optional: optional}
 		case token.LBrace:
 			id, ok := node.(*ast.IdentExpr)
 			if !ok {
@@ -1146,6 +1198,9 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 	case token.InterpStr:
 		p.advance()
 		return p.buildInterp(t)
+	case token.Pat:
+		p.advance()
+		return &ast.PatLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Pattern: t.Val}, nil
 	case token.Int:
 		p.advance()
 		n, err := strconv.ParseInt(t.Val, 10, 64)

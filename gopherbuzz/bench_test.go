@@ -38,7 +38,7 @@ func BenchmarkFib(b *testing.B) {
     if (n <= 1) { return n; }
     return fib(n - 1) + fib(n - 2);
 }`,
-		`const __r = fib(30);`,
+		`final __r = fib(30);`,
 	)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -59,6 +59,28 @@ var i = 0;
 while (i < 1000000) {
     sum = sum + i;
     i = i + 1;
+}
+`)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkLoopSumFloat is BenchmarkLoopSum with double operands — it exercises
+// the JIT's SSE float fast path (and the interpreter's float arithmetic when the
+// JIT is disabled).
+func BenchmarkLoopSumFloat(b *testing.B) {
+	chunk, env := benchSetup(b, "", `
+var sum = 0.0;
+var i = 0.0;
+while (i < 1000000.0) {
+    sum = sum + i;
+    i = i + 1.0;
 }
 `)
 	b.ReportAllocs()
@@ -160,7 +182,7 @@ while (i < 1000000) {
 // BenchmarkForeachList measures list iteration and element access.
 func BenchmarkForeachList(b *testing.B) {
 	chunk, env := benchSetup(b,
-		`var items = []; var k = 0; while (k < 1000) { items.append(k); k = k + 1; }`,
+		`var items = mut []; var k = 0; while (k < 1000) { items.append(k); k = k + 1; }`,
 		`var sum = 0;
 foreach (x in items) { sum = sum + x; }`,
 	)
@@ -177,7 +199,7 @@ foreach (x in items) { sum = sum + x; }`,
 // BenchmarkForeachMap measures map iteration (insertion-ordered keys).
 func BenchmarkForeachMap(b *testing.B) {
 	chunk, env := benchSetup(b,
-		`const m = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
+		`final m = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
                     "f": 6, "g": 7, "h": 8, "i": 9, "j": 10};`,
 		`var sum = 0;
 foreach (k, v in m) { sum = sum + v; }`,
@@ -301,7 +323,7 @@ export fun build(_args: [str]) > void {}
 func BenchmarkCall(b *testing.B) {
 	chunk, env := benchSetup(b,
 		`fun add(a, b) int { return a + b; }`,
-		`const __r = add(1, 2);`,
+		`final __r = add(1, 2);`,
 	)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -327,7 +349,7 @@ func BenchmarkMethodCall(b *testing.B) {
         return this.x * this.x + this.y * this.y;
     }
 }
-const p = Point{ x = 3, y = 4 };`,
+final p = Point{ x = 3, y = 4 };`,
 		`var sum = 0;
 var i = 0;
 while (i < 100000) {
@@ -354,7 +376,7 @@ func BenchmarkFieldAccess(b *testing.B) {
 		`object Counter {
     n: int = 0,
 }
-const c = Counter{};`,
+final c = mut Counter{};`,
 		`var i = 0;
 while (i < 1000000) {
     c.n = c.n + 1;
@@ -385,7 +407,7 @@ func BenchmarkFieldAccessLocal(b *testing.B) {
     n: int = 0,
 }
 fun run() {
-    var c = Counter{};
+    var c = mut Counter{};
     var i = 0;
     while (i < 1000000) {
         c.n = c.n + 1;

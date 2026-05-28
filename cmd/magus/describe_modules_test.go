@@ -34,16 +34,13 @@ func TestBuildModulesOutput_Detail(t *testing.T) {
 	if out.Count != 1 || out.Modules[0].Name != "env" {
 		t.Fatalf("want single env module, got %+v", out.Modules)
 	}
-	byName := map[string]struct{ teal, buzz, native string }{}
+	byName := map[string]struct{ buzz, native string }{}
 	for _, m := range out.Modules[0].Methods {
-		byName[m.Name] = struct{ teal, buzz, native string }{m.Teal, m.Buzz, m.NativeBuzz}
+		byName[m.Name] = struct{ buzz, native string }{m.Buzz, m.NativeBuzz}
 	}
 	lk, ok := byName["lookup"]
 	if !ok {
 		t.Fatal("env.lookup missing from detail view")
-	}
-	if !strings.HasPrefix(lk.teal, "env.lookup(") {
-		t.Errorf("Teal sig = %q, want env.lookup(...)", lk.teal)
 	}
 	if !strings.HasPrefix(lk.buzz, "extra.env.lookup(") {
 		t.Errorf("Buzz sig = %q, want extra.env.lookup(...)", lk.buzz)

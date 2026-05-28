@@ -1,0 +1,3 @@
+// @expect: true
+// A pattern literal has type `pat`.
+final __r = $"[a-z]+" is pat;

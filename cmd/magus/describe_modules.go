@@ -23,7 +23,7 @@ func describeModules(args []string) error {
 			fmt.Fprintln(os.Stderr, types.ModuleDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no name, lists every module; with a name, prints its methods")
-			fmt.Fprintln(os.Stderr, "with per-engine (Teal and Buzz) signatures.")
+			fmt.Fprintln(os.Stderr, "with Buzz signatures.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -106,8 +106,7 @@ func describeModules(args []string) error {
 		if meth.Doc != "" {
 			fmt.Printf("    %s\n", meth.Doc)
 		}
-		fmt.Printf("    Teal: %s\n", meth.Teal)
-		fmt.Printf("    Buzz: %s\n", meth.Buzz)
+		fmt.Printf("    Signature: %s\n", meth.Buzz)
 		if meth.NativeBuzz != "" {
 			fmt.Printf("    (also in Buzz's stdlib: %s — the extra form is sandbox-aware)\n", meth.NativeBuzz)
 		}
@@ -138,7 +137,6 @@ func buildModulesOutput(name string) types.ModulesOutput {
 				me := types.ModuleMethodEntry{
 					Name: meth.Name,
 					Doc:  meth.Doc,
-					Teal: std.TealSignature(m, meth),
 					Buzz: std.BuzzSignature(m, meth),
 				}
 				if equiv, dup := std.NativeBuzzEquiv(m.Name, meth.Name); dup {

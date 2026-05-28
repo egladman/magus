@@ -1,0 +1,5 @@
+// @expect: 2024-06
+// Capture groups land at indices 1.. of the match list.
+final p = $"(\d+)-(\d+)";
+final m = p.match("date: 2024-06!");
+final __r = m![1] + "-" + m![2];

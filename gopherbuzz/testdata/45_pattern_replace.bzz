@@ -1,0 +1,3 @@
+// @expect: a_b_c
+// replaceAll replaces every match; \s+ collapses whitespace runs.
+final __r = $"\s+".replaceAll("a  b   c", "_");

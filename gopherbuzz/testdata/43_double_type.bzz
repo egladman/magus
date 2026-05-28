@@ -1,0 +1,4 @@
+// @expect: true
+// The 64-bit float type is `double` (not `float`).
+final x = 3.5;
+final __r = x is double;

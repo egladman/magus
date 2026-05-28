@@ -1,2 +1,2 @@
 // @expect: hello world
-const __r = "hello" + " " + "world";
+final __r = "hello" + " " + "world";

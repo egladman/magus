@@ -60,8 +60,8 @@ func TestCheckCITarget(t *testing.T) {
 	}{
 		{"no projects skipped", nil, StatusOK},
 		{
-			"ci declared (teal)",
-			[]*types.Project{projectWith(map[string]string{"magusfile.tl": "global function ci(a: {string}) end\n"})},
+			"ci declared",
+			[]*types.Project{projectWith(map[string]string{"magusfile.bzz": "export fun ci(_a: [str]) > void {}\n"})},
 			StatusOK,
 		},
 		{
@@ -72,14 +72,14 @@ func TestCheckCITarget(t *testing.T) {
 		{
 			"ci declared in one of several projects",
 			[]*types.Project{
-				projectWith(map[string]string{"magusfile.tl": "global function build(a: {string}) end\n"}),
-				projectWith(map[string]string{"magusfile.tl": "global function ci(a: {string}) end\n"}),
+				projectWith(map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void {}\n"}),
+				projectWith(map[string]string{"magusfile.bzz": "export fun ci(_a: [str]) > void {}\n"}),
 			},
 			StatusOK,
 		},
 		{
 			"no ci anywhere fails",
-			[]*types.Project{projectWith(map[string]string{"magusfile.tl": "global function build(a: {string}) end\n"})},
+			[]*types.Project{projectWith(map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void {}\n"})},
 			StatusFail,
 		},
 		{
@@ -102,7 +102,7 @@ func TestCheckCITarget(t *testing.T) {
 // define ci and references the MGS1001 doc.
 func TestCheckCITarget_FailDetails(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "magusfile.tl"), "global function build(a: {string}) end\n")
+	writeFile(t, filepath.Join(dir, "magusfile.bzz"), "export fun build(_a: [str]) > void {}\n")
 	got := (&runner{}).checkCITarget([]*types.Project{{Dir: dir}})
 	if got.Status != StatusFail {
 		t.Fatalf("status = %q, want fail", got.Status)
@@ -191,24 +191,24 @@ func TestCheckTargetNameConventions(t *testing.T) {
 	}{
 		{
 			"consistent snake_case",
-			map[string]string{"magusfile.tl": "global function go_build(a: {string}) end\nglobal function go_test(a: {string}) end\n"},
+			map[string]string{"magusfile.bzz": "export fun go_build(_a: [str]) > void {}\nexport fun go_test(_a: [str]) > void {}\n"},
 			StatusOK,
 		},
 		{
 			"neutral names only",
-			map[string]string{"magusfile.tl": "global function build(a: {string}) end\nglobal function test(a: {string}) end\n"},
+			map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void {}\nexport fun test(_a: [str]) > void {}\n"},
 			StatusOK,
 		},
 		{
 			"snake and camel mixed",
-			map[string]string{"magusfile.tl": "global function go_build(a: {string}) end\nglobal function goTest(a: {string}) end\n"},
+			map[string]string{"magusfile.bzz": "export fun go_build(_a: [str]) > void {}\nexport fun goTest(_a: [str]) > void {}\n"},
 			StatusWarn,
 		},
 		{
-			"mixed across teal and buzz",
+			"mixed across magusfiles dir",
 			map[string]string{
-				"magusfile.tl":  "global function go_build(a: {string}) end\n",
-				"magusfile.bzz": "export fun GoTest(_a: [str]) > void {}\n",
+				"magusfiles/a.bzz": "export fun go_build(_a: [str]) > void {}\n",
+				"magusfiles/b.bzz": "export fun GoTest(_a: [str]) > void {}\n",
 			},
 			StatusWarn,
 		},
@@ -217,7 +217,11 @@ func TestCheckTargetNameConventions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			for name, body := range tt.files {
-				if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {
+				path := filepath.Join(root, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -666,80 +670,6 @@ func TestCheckDependencyTangle(t *testing.T) {
 		got := r.checkDependencyTangle(g)
 		if got.Status != StatusOK {
 			t.Errorf("status = %q, want ok for star topology (low NCCD)", got.Status)
-		}
-	})
-}
-
-// ── checkTealRegistryPressure ─────────────────────────────────────────
-
-func TestCheckTealRegistryPressure(t *testing.T) {
-	genTargets := func(n int) string {
-		var sb strings.Builder
-		for i := 0; i < n; i++ {
-			fmt.Fprintf(&sb, "global function t_%d(args: {string}) end\n", i)
-		}
-		return sb.String()
-	}
-
-	t.Run("ok when below threshold", func(t *testing.T) {
-		dir := t.TempDir()
-		writeFile(t, filepath.Join(dir, "magusfile.tl"), genTargets(10))
-		r := &runner{root: dir}
-		got := r.checkTealRegistryPressure([]*types.Project{{Dir: dir}})
-		if got.Status != StatusOK {
-			t.Errorf("status = %q, want ok; message: %s", got.Status, got.Message)
-		}
-	})
-
-	t.Run("warn when above threshold", func(t *testing.T) {
-		dir := t.TempDir()
-		writeFile(t, filepath.Join(dir, "magusfile.tl"), genTargets(tealRegistryWarnThreshold+1))
-		r := &runner{root: dir}
-		got := r.checkTealRegistryPressure([]*types.Project{{Dir: dir}})
-		if got.Status != StatusWarn {
-			t.Errorf("status = %q, want warn; message: %s", got.Status, got.Message)
-		}
-		if len(got.Details) == 0 {
-			t.Error("expected at least one detail line")
-		}
-	})
-
-	t.Run("ok when split across magusfiles/", func(t *testing.T) {
-		dir := t.TempDir()
-		mfDir := filepath.Join(dir, "magusfiles")
-		if err := os.MkdirAll(mfDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		// 300 targets per file — each safely under the threshold
-		writeFile(t, filepath.Join(mfDir, "a.tl"), genTargets(300))
-		writeFile(t, filepath.Join(mfDir, "b.tl"), genTargets(300))
-		r := &runner{root: dir}
-		got := r.checkTealRegistryPressure([]*types.Project{{Dir: dir}})
-		if got.Status != StatusOK {
-			t.Errorf("status = %q, want ok; message: %s", got.Status, got.Message)
-		}
-	})
-
-	t.Run("warn when a split file still exceeds threshold", func(t *testing.T) {
-		dir := t.TempDir()
-		mfDir := filepath.Join(dir, "magusfiles")
-		if err := os.MkdirAll(mfDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		writeFile(t, filepath.Join(mfDir, "big.tl"), genTargets(tealRegistryWarnThreshold+1))
-		r := &runner{root: dir}
-		got := r.checkTealRegistryPressure([]*types.Project{{Dir: dir}})
-		if got.Status != StatusWarn {
-			t.Errorf("status = %q, want warn; message: %s", got.Status, got.Message)
-		}
-	})
-
-	t.Run("ok when no magusfile present", func(t *testing.T) {
-		dir := t.TempDir()
-		r := &runner{root: dir}
-		got := r.checkTealRegistryPressure([]*types.Project{{Dir: dir}})
-		if got.Status != StatusOK {
-			t.Errorf("status = %q, want ok; message: %s", got.Status, got.Message)
 		}
 	})
 }

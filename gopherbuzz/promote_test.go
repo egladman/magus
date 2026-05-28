@@ -3,7 +3,7 @@ package buzz
 import "testing"
 
 // promoteOpts is SharedGlobals with top-level slot promotion enabled — the mode
-// the magusfile entrypoint path uses (see TOPLEVEL-SLOTS-PLAN.md). sharedOpts is
+// the magusfile entrypoint path uses. sharedOpts is
 // the same without promotion (the REPL/incremental path).
 var (
 	promoteOpts = CompileOptions{SharedGlobals: true, PromoteTopLevel: true}

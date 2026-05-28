@@ -1,2 +1,2 @@
 // @expect: 42
-const __r = 6 * 7;
+final __r = 6 * 7;

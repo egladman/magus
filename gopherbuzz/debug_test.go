@@ -26,7 +26,7 @@ func TestEvalSharesGlobals(t *testing.T) {
 	s := NewSession(context.Background())
 	defer s.Close()
 
-	if err := s.Exec(context.Background(), "const x = 10"); err != nil {
+	if err := s.Exec(context.Background(), "final x = 10"); err != nil {
 		t.Fatalf("exec: %v", err)
 	}
 	v, err := s.Eval(context.Background(), "return x * 2")
@@ -43,7 +43,7 @@ func TestGlobals(t *testing.T) {
 	s := NewSession(context.Background())
 	defer s.Close()
 
-	if err := s.Exec(context.Background(), "const foo = 1\nconst bar = 2"); err != nil {
+	if err := s.Exec(context.Background(), "final foo = 1\nfinal bar = 2"); err != nil {
 		t.Fatalf("exec: %v", err)
 	}
 	g := s.Globals()
@@ -65,9 +65,9 @@ func TestStepHookLines(t *testing.T) {
 		}
 	})
 
-	src := "const a = 1\n" + // line 1
-		"const b = 2\n" + // line 2
-		"const c = a + b\n" // line 3
+	src := "final a = 1\n" + // line 1
+		"final b = 2\n" + // line 2
+		"final c = a + b\n" // line 3
 	if err := s.Exec(context.Background(), src); err != nil {
 		t.Fatalf("exec: %v", err)
 	}
@@ -91,10 +91,10 @@ func TestFramesAndLocals(t *testing.T) {
 	defer s.Close()
 
 	src := "fun inner(n: int) int {\n" + // 1
-		"  const doubled = n * 2\n" + // 2
+		"  final doubled = n * 2\n" + // 2
 		"  return doubled\n" + // 3
 		"}\n" + // 4
-		"const out = inner(21)\n" // 5
+		"final out = inner(21)\n" // 5
 
 	var frames []DebugFrame
 	var innerLocal Value
@@ -130,7 +130,7 @@ func TestFramesAndLocals(t *testing.T) {
 // TestDebugLinesOffByDefault verifies the one-shot compile path carries no line
 // table, keeping the hot path allocation-free.
 func TestDebugLinesOffByDefault(t *testing.T) {
-	prog, err := Parse("const x = 1")
+	prog, err := Parse("final x = 1")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

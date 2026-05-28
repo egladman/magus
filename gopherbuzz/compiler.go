@@ -31,8 +31,7 @@ type CompileOptions struct {
 	// block-locals and function bodies already use — while exported and
 	// closure-captured top-level names stay Env bindings, so cross-chunk visibility
 	// is unchanged for them. Leave it false for the REPL/incremental path, where a
-	// later chunk may reference any earlier top-level name by name. See
-	// TOPLEVEL-SLOTS-PLAN.md.
+	// later chunk may reference any earlier top-level name by name.
 	PromoteTopLevel bool
 }
 
@@ -253,7 +252,7 @@ func annotStyp(annot string) styp {
 	switch annot {
 	case "int":
 		return sInt
-	case "float":
+	case "double":
 		return sFloat
 	case "str":
 		return sStr
@@ -717,6 +716,13 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 		if err := c.compileExpr(v.Value); err != nil {
 			return err
 		}
+		// `_` is the discard target: evaluate the value (for its side effects, e.g.
+		// `_ = yield x`) and drop it. It binds no name, so this is valid anywhere,
+		// not only where `_` happens to be a loop variable.
+		if t.Name == "_" {
+			c.chunk.Emit(OpPop, 0, 0)
+			return nil
+		}
 		if slot := c.resolveLocal(t.Name); slot >= 0 {
 			// Preserve the slot's tracked type across reassignment: if the slot is a
 			// tracked primitive and the new value is not statically that type, assert
@@ -1078,6 +1084,15 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(FloatValue(v.Val)), 0)
 	case *ast.StringLit:
 		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(StrValue(v.Val)), 0)
+	case *ast.PatLit:
+		// Compile the regex once, at compile time, so a malformed pattern is a
+		// compile error and the value lives in the const pool (no per-eval recompile,
+		// no new Exec opcode).
+		pv, err := PatValue(v.Pattern)
+		if err != nil {
+			return fmt.Errorf("buzz: line %d:%d: %w", v.Line, v.Col, err)
+		}
+		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(pv), 0)
 	case *ast.InterpExpr:
 		return c.compileInterp(v)
 	case *ast.IdentExpr:
@@ -1136,7 +1151,18 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if err := c.compileExpr(v.Index); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpGetIndex, 0, 0)
+		// A=1 selects the checked subscript (out-of-bounds → null); A=0 errors.
+		var opt int32
+		if v.Optional {
+			opt = 1
+		}
+		c.chunk.Emit(OpGetIndex, opt, 0)
+	case *ast.ForceExpr:
+		if err := c.compileExpr(v.Operand); err != nil {
+			return err
+		}
+		// Force-unwrap asserts non-null at runtime, leaving the value in place.
+		c.chunk.Emit(OpCheckType, CheckNonNull, 0)
 	case *ast.FunExpr:
 		idx, err := c.compileFunChunk("<fun>", "", v.Params, v.Body.Stmts)
 		if err != nil {
@@ -1149,7 +1175,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewList, int32(len(v.Items)), 0)
+		c.chunk.Emit(OpNewList, int32(len(v.Items)), mutFlag(v.Mut))
 	case *ast.MapExpr:
 		for i, k := range v.Keys {
 			if err := c.compileExpr(k); err != nil {
@@ -1159,7 +1185,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewMap, int32(len(v.Keys)), 0)
+		c.chunk.Emit(OpNewMap, int32(len(v.Keys)), mutFlag(v.Mut))
 	case *ast.ObjectLit:
 		return c.compileObjectLit(v)
 	case *ast.RangeExpr:
@@ -1360,7 +1386,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys)))
+		c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys))|mutFlag(v.Mut))
 		return nil
 	}
 
@@ -1382,6 +1408,15 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 			c.chunk.Emit(OpLoadNull, 0, 0)
 		}
 	}
-	c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields)))
+	c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut))
 	return nil
+}
+
+// mutFlag returns InstrMutBit when mut is set, for packing into a constructor's
+// B operand (OpNewList/OpNewMap/OpNewObject).
+func mutFlag(mut bool) int32 {
+	if mut {
+		return InstrMutBit
+	}
+	return 0
 }

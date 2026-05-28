@@ -29,7 +29,7 @@ func TestParseCDecls(t *testing.T) {
 }
 
 func TestParseCDeclsCharPtr(t *testing.T) {
-	sigs, err := ParseCDecls("char* getenv(const char* name);")
+	sigs, err := ParseCDecls("char* getenv(final char* name);")
 	if err != nil {
 		t.Fatalf("ParseCDecls: %v", err)
 	}
@@ -70,8 +70,8 @@ func TestFFIProviderInjection(t *testing.T) {
 
 	sess := newSession(context.Background())
 	src := `
-const lib = zdef("mylib", "int dbl(int x);");
-const r = lib.dbl(21);
+final lib = zdef("mylib", "int dbl(int x);");
+final r = lib.dbl(21);
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatalf("exec: %v", err)
@@ -92,7 +92,7 @@ func TestFFINoProvider(t *testing.T) {
 	SetFFIProvider(nil)
 
 	sess := newSession(context.Background())
-	err := sess.Exec(context.Background(), `const lib = zdef("libm", "double sqrt(double x);");`)
+	err := sess.Exec(context.Background(), `final lib = zdef("libm", "double sqrt(double x);");`)
 	if err == nil {
 		t.Fatal("expected an error when no FFI provider is registered")
 	}

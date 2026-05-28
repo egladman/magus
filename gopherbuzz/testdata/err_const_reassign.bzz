@@ -1,3 +1,0 @@
-// @error: cannot assign to const
-const x = 1;
-x = 2;

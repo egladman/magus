@@ -25,8 +25,8 @@ fun build() > Target {
         files = ["a.go"],
     };
 }
-export const tname = build().name;
-export const cname = build().charms[0].name;
+export final tname = build().name;
+export final cname = build().charms[0].name;
 `
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatalf("import \"magus/target\": %v", err)

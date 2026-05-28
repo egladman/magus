@@ -1,3 +1,3 @@
 // @expect: world
-const m = {"hello": "world", "foo": "bar"};
-const __r = m["hello"];
+final m = {"hello": "world", "foo": "bar"};
+final __r = m["hello"];

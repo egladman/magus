@@ -230,7 +230,7 @@ func NormalizeTarget(ctx context.Context, name string) string {
 }
 
 // targetCollisionErr reports two source target names that normalize to the same
-// canonical key. Shared by the Teal and Buzz registration paths so the message
+// canonical key. Used by the Buzz registration path so the message
 // stays identical across engines.
 func targetCollisionErr(prev, cur, key string) error {
 	return fmt.Errorf("magusfile: targets %q and %q both normalize to %q; "+

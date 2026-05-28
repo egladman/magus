@@ -13,8 +13,8 @@ func TestHighlight_lossless(t *testing.T) {
 		"",
 		"return 1 + 2;",
 		`import "magus"; // a comment` + "\nfun f(n: int) > int { return n; }\n",
-		"const x = 3.14; // pi\nforeach (i in 0..5) { x = x; }",
-		"/* block\n comment */ const s = \"he\\\"llo {name}\";",
+		"final x = 3.14; // pi\nforeach (i in 0..5) { x = x; }",
+		"/* block\n comment */ final s = \"he\\\"llo {name}\";",
 	}
 	for _, src := range srcs {
 		var b strings.Builder
@@ -28,14 +28,14 @@ func TestHighlight_lossless(t *testing.T) {
 }
 
 func TestHighlight_classes(t *testing.T) {
-	spans := Highlight(`const n = 42; // note` + "\n" + `var s = "hi";`)
+	spans := Highlight(`final n = 42; // note` + "\n" + `var s = "hi";`)
 	got := map[string]string{} // class -> first text seen
 	for _, sp := range spans {
 		if _, ok := got[sp.Class]; !ok {
 			got[sp.Class] = sp.Text
 		}
 	}
-	if got["kw"] != "const" {
+	if got["kw"] != "final" {
 		t.Errorf("keyword: got %q", got["kw"])
 	}
 	if got["num"] != "42" {

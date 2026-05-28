@@ -3,6 +3,6 @@ fun work() > str *> int {
     yield 1;
     return "done";
 }
-const f = &work();
+final f = &work();
 resume f;
-const __r = resolve f;
+final __r = resolve f;

@@ -1,2 +1,2 @@
 // @error: cannot assign str to int
-const x: int = "hello";
+final x: int = "hello";

@@ -28,7 +28,7 @@ func TestParser_Import(t *testing.T) {
 }
 
 func TestParser_ConstDecl(t *testing.T) {
-	prog, err := Parse(`const x = 42;`)
+	prog, err := Parse(`final x = 42;`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestParser_ConstDecl(t *testing.T) {
 }
 
 func TestParser_FunExpr(t *testing.T) {
-	src := `const f = fun(_args: [str]) void {};`
+	src := `final f = fun(_args: [str]) void {};`
 	prog, err := Parse(src)
 	if err != nil {
 		t.Fatalf("parse %q: %v", src, err)
@@ -63,7 +63,7 @@ func TestParser_FunExpr(t *testing.T) {
 }
 
 func TestParser_MapLit(t *testing.T) {
-	src := `const m = {"key": "val"};`
+	src := `final m = {"key": "val"};`
 	prog, err := Parse(src)
 	if err != nil {
 		t.Fatalf("parse %q: %v", src, err)
@@ -100,7 +100,7 @@ func TestParser_CallChain(t *testing.T) {
 
 func TestEval_ConstBinding(t *testing.T) {
 	sess := newSession(context.Background())
-	if err := sess.Exec(context.Background(), `const x = "hello";`); err != nil {
+	if err := sess.Exec(context.Background(), `final x = "hello";`); err != nil {
 		t.Fatal(err)
 	}
 	v := sess.GetGlobal("x")
@@ -162,9 +162,9 @@ fun run(a, b) int {
     var y = b.get();
     return x * 10 + y;
 }
-const a = Box{ n = 1 };
-const b = Box{ n = 2 };
-const result = run(a, b);
+final a = Box{ n = 1 };
+final b = Box{ n = 2 };
+final result = run(a, b);
 `
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatal(err)
@@ -298,13 +298,13 @@ fun helper() > void {}
 	}
 }
 
-// TestExport_DeclIsExported verifies that an exported const appears in Exports().
+// TestExport_DeclIsExported verifies that an exported final appears in Exports().
 func TestExport_DeclIsExported(t *testing.T) {
 	ctx := context.Background()
 	sess := NewSession(ctx)
 	defer sess.Close()
 
-	if err := sess.Exec(ctx, `export const version = "1.0";`); err != nil {
+	if err := sess.Exec(ctx, `export final version = "1.0";`); err != nil {
 		t.Fatalf("exec: %v", err)
 	}
 	exports := sess.Exports()
@@ -323,7 +323,7 @@ func TestNamespaceStmt(t *testing.T) {
 
 	src := `
 namespace my\module;
-export const x = 42;
+export final x = 42;
 `
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatalf("namespace decl should not error, got: %v", err)
@@ -337,7 +337,7 @@ export const x = 42;
 // TestImport_AsAlias verifies that `import "file" as alias` binds under the alias.
 func TestImport_AsAlias(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "util.bzz"), []byte(`const helper = 99;`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "util.bzz"), []byte(`final helper = 99;`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -347,7 +347,7 @@ func TestImport_AsAlias(t *testing.T) {
 	sess.SetIncludeDirs([]string{dir})
 
 	// import as alias: "util" loaded, bound under "u"
-	if err := sess.Exec(ctx, `import "util" as u; const got = u.helper;`); err != nil {
+	if err := sess.Exec(ctx, `import "util" as u; final got = u.helper;`); err != nil {
 		t.Fatalf("exec: %v", err)
 	}
 }
@@ -356,10 +356,10 @@ func TestImport_AsAlias(t *testing.T) {
 // not cause infinite recursion. loadedPaths in the Session guards the cycle.
 func TestCyclicImportTerminates(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a.bzz"), []byte(`import "b"; const from_a = 1;`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.bzz"), []byte(`import "b"; final from_a = 1;`), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "b.bzz"), []byte(`import "a"; const from_b = 2;`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "b.bzz"), []byte(`import "a"; final from_b = 2;`), 0644); err != nil {
 		t.Fatal(err)
 	}
 

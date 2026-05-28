@@ -211,7 +211,6 @@ func (r *runner) run(wsErr error) Report {
 		r.checkTargetNameConventions(projects),
 		r.checkCharmTargetCollision(projects),
 		r.checkShellCompletion(),
-		r.checkTealRegistryPressure(projects),
 		r.checkVCSBaseRef(),
 		r.checkMergeDriver(),
 		r.checkConcurrencyBudget(),

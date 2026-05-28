@@ -123,15 +123,14 @@ type ProjectsOutput struct {
 
 // ModuleDefinition is the human-readable description shown by "magus describe modules".
 const ModuleDefinition = "A module is a magus standard-library namespace a magusfile imports for " +
-	"host capabilities — filesystem, exec, vcs, crypto, http, and more. In Teal: " +
-	"require(\"magus.extra.<name>\"); in Buzz: import \"magus/extra\" then extra.<name>. The extra " +
+	"host capabilities — filesystem, exec, vcs, crypto, http, and more. Import " +
+	"\"magus/extra\" then reach extra.<name>. The extra " +
 	"surface is self-complete and sandbox-aware; some methods also exist in Buzz's own stdlib."
 
-// ModuleMethodEntry is one method of a module, with its per-engine call form.
+// ModuleMethodEntry is one method of a module, with its Buzz call form.
 type ModuleMethodEntry struct {
 	Name       string `json:"name"                  yaml:"name"`
 	Doc        string `json:"doc,omitempty"         yaml:"doc,omitempty"`
-	Teal       string `json:"teal"                  yaml:"teal"`
 	Buzz       string `json:"buzz"                  yaml:"buzz"`
 	NativeBuzz string `json:"native_buzz,omitempty" yaml:"native_buzz,omitempty"`
 }

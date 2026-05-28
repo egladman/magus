@@ -31,7 +31,7 @@ func TestImport_ExportedObjectType(t *testing.T) {
 	src := `
 import "lib";
 fun make() > Foo { return Foo{ n = 7 }; }
-export const result = make().n;
+export final result = make().n;
 `
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatalf("exec with imported object type: %v", err)
@@ -59,7 +59,7 @@ func TestImport_ExportedEnumType(t *testing.T) {
 	src := `
 import "palette";
 fun pick() > Color { return Color.Green; }
-const c = pick();
+final c = pick();
 `
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatalf("exec with imported enum type: %v", err)
@@ -83,7 +83,7 @@ export object Outer { inner: Inner = Inner{} }
 	src := `
 import "shapes";
 fun build() > Outer { return Outer{ inner = Inner{ v = 3 } }; }
-export const got = build().inner.v;
+export final got = build().inner.v;
 `
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatalf("exec with cross-referencing imported types: %v", err)
@@ -116,7 +116,7 @@ import "magus/lib";
 fun pick() > Target {
     return Target{ name = "build", charms = [Charm{ name = "fast" }] };
 }
-export const tname = pick().name;
+export final tname = pick().name;
 `
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatalf("exec with source-module types: %v", err)
@@ -139,7 +139,7 @@ func TestImport_NonExportedObjectType_Errors(t *testing.T) {
 	defer sess.Close()
 	sess.SetIncludeDirs([]string{dir})
 
-	err := sess.Exec(ctx, `import "internal"; const s = Secret{ n = 1 };`)
+	err := sess.Exec(ctx, `import "internal"; final s = Secret{ n = 1 };`)
 	if err == nil {
 		t.Fatal("expected error using a non-exported imported type, got nil")
 	}

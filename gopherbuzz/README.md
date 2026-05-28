@@ -1,15 +1,39 @@
 # buzz
 
-A stack-based bytecode interpreter for the [Buzz](https://buzz-lang.dev/0.5.0/)
-scripting language, written in pure Go. Source is lexed, parsed, type-checked,
-compiled to a flat instruction stream, and executed by a register-window VM. The
-primary embedding entry point is `NewSession`.
+A pure-Go bytecode VM for the [Buzz](https://buzz-lang.dev/0.5.0/) scripting
+language: lexed, parsed, type-checked, compiled to a flat instruction stream, and
+run on a register-window VM with an 8-byte NaN-boxed value. Hot top-level numeric
+loops are compiled to native code by an opt-out **baseline JIT** (amd64). Embed
+via `NewSession`.
 
-- Language reference: <https://buzz-lang.dev/0.5.0/reference/>
-- API: see `doc.go` and the package godoc
-- Performance roadmap: `PERFORMANCE.md`
+- Reference: <https://buzz-lang.dev/0.5.0/reference/> · API: `doc.go`
+- Hot-path notes: [Performance design](#performance-design) · JIT: [Baseline JIT](#baseline-jit)
 
----
+## Performance
+
+Two workloads vs other Go-embedded languages, each compiled once and run per
+iteration (benchstat median, n=6, amd64 Xeon @ 2.80 GHz, Go 1.25). `LoopSum` sums
+`0..1e6`; `Fib` is recursive `fib(30)` (call-heavy, so Buzz runs it on the
+interpreter — JIT'd calls aren't done yet). Harness: `benchmarks/comparison/`.
+
+| Engine | LoopSum | Fib(30) | LoopSum mem |
+|---|--:|--:|--:|
+| **Buzz (JIT)** | **5.9 ms** | 188 ms | 5.7 KB |
+| **Buzz (interp)** | 36.7 ms | **182 ms** | 2.0 KB |
+| gopher-lua | 47.6 ms | 266 ms | 15 MB |
+| tengo | 78.3 ms | 217 ms | 15 MB |
+| goja (JS) | 395 ms | 403 ms | 107 MB |
+
+Buzz leads both — ~8× over gopher-lua and ~13× over tengo on the loop, and the
+interpreter even wins `fib` — at KB, not MB/GB, of allocation. Cross-language
+microbenchmarks differ in semantics; read as order-of-magnitude.
+
+Reproduce:
+
+```sh
+go test -run='^$' -bench=. -benchmem ./...                # in-tree (BUZZ_JIT=0 for interp)
+cd benchmarks/comparison && GOWORK=off go test -bench=. . # cross-language
+```
 
 ## Building
 
@@ -18,303 +42,130 @@ go build ./...
 go test ./...
 ```
 
-No cgo, no external toolchain. The only optional dependency is
-[`purego`](https://github.com/ebitengine/purego) for `zdef()` FFI, which is
-compiled only on platforms where purego supports it; on all others the
-interpreter builds and runs fully and `zdef()` returns a clear error.
+No cgo, no external toolchain. Pure-Go deps:
+[`purego`](https://github.com/ebitengine/purego) (`zdef()` FFI) and
+[`golang-asm`](https://github.com/twitchyliquid64/golang-asm) (JIT codegen, amd64).
 
-### PGO
-
-A CPU profile lives at `default.pgo`. Go 1.21+ applies it automatically when
-building from this directory. Regenerate it after material changes to the VM hot
-path:
-
-```sh
-magus run regen-pgo gopherbuzz
-```
-
-A stale profile drifts toward neutral (it won't hurt, but it won't help). Rebuild
-the embedded spell bytecode after changing `BytecodeVersion`:
-
-```sh
-cd ../internal/spell && go generate
-```
-
----
-
-## Compiling to WebAssembly
-
-The interpreter is pure Go with no cgo on the core path, so it cross-compiles to
-WebAssembly unmodified — the `unsafe` NaN-box, fibers, FFI parser, and `std`
-module all build for `wasm`. The purego FFI provider is excluded on `wasm` (it
-has no `wasm` build tag), so `zdef()` returns the standard "unsupported" error
-rather than failing to link.
-
-`wasm/main.go` is a minimal entry point (guarded by `//go:build wasm`, so the
-host `go build ./...` skips it and the module stays a pure library natively). It
-reads a Buzz program from stdin, evaluates it, and prints the result of a
-trailing `return`:
-
-```sh
-# TinyGo (recommended — ~1.6 MB). The default scheduler is required: fibers
-# spawn goroutines, so -scheduler=none will not link.
-tinygo build -target=wasi -o buzz.wasm ./wasm
-
-# Standard toolchain (~4 MB, no extra toolchain needed)
-GOOS=wasip1 GOARCH=wasm go build -o buzz.wasm ./wasm
-
-# Run under any WASI runtime
-echo 'return (1 + 2) * 10;' | wasmtime buzz.wasm   # prints 30
-```
-
-Both `wasip1/wasm` and `js/wasm` are supported targets. TinyGo produces a
-binary roughly 2.5× smaller than the standard toolchain and is the better choice
-for embedding in a browser or a size-constrained host; the standard toolchain
-needs no separate install. Network and process builtins in `std` (`os.execute`,
-`Socket`, `TcpServer`) compile but are subject to the WASI runtime's sandbox at
-execution time.
-
-### Why this matters
-
-To our knowledge gopherbuzz is the **first Go implementation of Buzz** — the
-upstream language is written in Zig, which cross-compiles to nearly every native
-target. Pure Go opens a complementary door: the interpreter compiles to
-WebAssembly with `syscall/js` and runs **in the browser**, with no server and no
-install. That's exactly what the magus docs site's **Buzz playground**
-(`magus/site/editor.html`, backed by `magus/cmd/buzz-playground`) does — it
-evaluates Buzz live, and even loads a `magusfile.bzz` to show its project graph
-and dry-run a target. A browser can't fork processes, so host operations there
-are recorded, not executed.
-
-The playground's brains are a pure, DOM-free Go package,
-`magus/internal/playground` (`EvalBuzz`, `LoadMagusfile`, `DryRun`, a `Shell`
-REPL, and a `Highlight` scanner reusing `token.IsKeyword`). It embeds this
-package directly, so the whole thing is unit-tested on the host against the real
-interpreter, and `magus/cmd/buzz-playground` is a thin `syscall/js` shell over
-it. Magus host calls (`magus.project.register`, spell ops, …) are stubbed there
-as recorders; nothing runs.
-
----
+`default.pgo` is applied automatically by Go 1.21+ when building from this dir;
+regenerate with `magus run regen-pgo gopherbuzz` after hot-path changes (a stale
+profile is neutral). After bumping `BytecodeVersion`, run `go generate` in
+`../internal/spell` to rebuild the embedded spell bytecode.
 
 ## Build tags
 
-Three mutually exclusive representations of `Value` are available. Only one is
-compiled at a time.
+Three mutually exclusive `Value` representations; one is compiled at a time.
 
-| Tag _(default: none)_ | `Value` | Instruction fetch | Use |
-|---|---|---|---|
-| _(none)_ | 8-byte NaN-box + handle table (`value_nanbox.go`) | unchecked (`fetch_nanbox.go`) | **Default production build** |
-| `buzz_safe` | 24-byte interface + type assertion | bounds-checked | CI verification, differential testing |
-| `buzz_unsafe` | 24-byte pointer struct | unchecked | Legacy / comparison baseline |
+| Tag | `Value` | Use |
+|---|---|---|
+| _(none)_ | 8-byte NaN-box + handle table | **default production build** |
+| `buzz_safe` | 24-byte interface + assertion, bounds-checked | CI / differential testing |
+| `buzz_unsafe` | 24-byte pointer struct | legacy baseline |
 
-The default NaN-box build carries **zero GC write barriers** on the push/arith/pop
-path (the operand stack is `[]uint64`, pointer-free). `buzz_safe` is behaviorally
-identical and slower; it exists so CI can validate the fast build's invariants.
+The default build has **zero GC write barriers** on the push/arith/pop path (the
+operand stack is `[]uint64`). `buzz_safe` is behaviorally identical and slower —
+it lets CI validate the fast build. The [JIT](#baseline-jit) is built with the
+default rep on amd64 and arm64; every other config (safe/unsafe, other arches,
+wasm) uses a no-op stub.
 
 ```sh
-go test -tags buzz_safe ./...   # safe twin
-go test -tags buzz_unsafe ./... # old unsafe rep
+go test -tags buzz_safe ./...
+go test -tags buzz_unsafe ./...
 ```
 
----
+## WebAssembly
 
-## VM architecture overview
+The core is pure Go with no cgo, so it cross-compiles to wasm unmodified
+(`zdef()` returns "unsupported"; the JIT uses its stub). `wasm/main.go` (guarded
+by `//go:build wasm`) reads a program from stdin and prints a trailing `return`:
 
-```
-source text
-    │ Parse
-    ▼
-ast.Program
-    │ Checker  (type annotations, gradual typing)
-    │ Compiler (emits Chunk: []Instr + const pool + nested Funs)
-    │ FoldConsts → FusePeephole
-    ▼
-Chunk (bytecode)
-    │ VM.Exec  (register-window stack; frame.base as register file)
-    ▼
-Value
+```sh
+tinygo build -target=wasi -o buzz.wasm ./wasm        # ~1.6 MB; default scheduler (fibers use goroutines)
+GOOS=wasip1 GOARCH=wasm go build -o buzz.wasm ./wasm # ~4 MB, no extra toolchain
+echo 'return (1 + 2) * 10;' | wasmtime buzz.wasm     # 30
 ```
 
-**`Instr`** is `{Op uint8, A int32, B int32}` — a word-coded, pointer-free struct
-in a contiguous slice, fetched without bounds checks on the hot path.
+Both `wasip1/wasm` and `js/wasm` build. This makes gopherbuzz (to our knowledge
+the first Go implementation of Buzz) run **in the browser** — the magus docs
+site's Buzz playground (`magus/cmd/buzz-playground` over `magus/internal/playground`)
+evaluates Buzz live and dry-runs a `magusfile.bzz`, with host calls recorded.
 
-**`Value`** is an 8-byte NaN-boxed word (default). Integers, floats, booleans,
-and null are encoded directly in the payload bits; heap objects (strings, lists,
-maps, closures, …) are stored as indices into a per-VM handle table, so the
-operand stack is `[]uint64` with no GC-visible pointers and no write barriers.
+## Architecture
 
----
+```
+source → Parse → ast.Program → Checker → Compiler (FoldConsts → FusePeephole)
+       → Chunk (bytecode) → VM.Exec (register-window stack) → Value
+```
+
+- **`Instr`** `{Op uint8, A, B int32}` — word-coded, pointer-free, in a
+  contiguous slice, fetched without bounds checks on the hot path.
+- **`Value`** — 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in
+  the payload; heap objects are indices into a per-VM handle table, so the
+  operand stack is `[]uint64` with no GC-visible pointers.
+
+## Baseline JIT
+
+On **amd64**, a hot top-level chunk whose body is the numeric loop/arithmetic
+opcode subset is compiled to native code, deleting interpreter dispatch. On by
+default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
+
+- The pointerless `[]uint64` stack lets native code run with no GC cooperation;
+  every value sits at a static slot offset at each opcode boundary, so
+  interpreter state is always materialized.
+- Each op has an int and a double (SSE) fast path. Anything else — mixed
+  int/float, a non-number via `any`, NaN, float ÷0/`%` — **deopts** to the
+  interpreter at the recorded ip; unsupported ops (calls, members, strings) make
+  the chunk ineligible. The interpreter is the oracle, so the JIT is never wrong.
+- Loop back-edges poll cancellation every 256 iterations (one predicted branch).
+
+Codegen uses [`golang-asm`](https://github.com/twitchyliquid64/golang-asm): same
+machine code (so same runtime speed) as a hand emitter, but toolchain-verified.
+Only the trampolines (`vm/jit_<arch>.s`) are hand asm. Not yet JIT'd: calls,
+non-top-level frames, strings.
+
+**amd64** is the runtime-verified, default-on backend (int + float). **arm64**
+(`vm/jit_arm64.go`) is int-only and **compile-verified but not yet run on arm64
+hardware**, so it's **off by default there** — opt in with `BUZZ_JIT=1` to run the
+differential tests on real hardware. Float/div/mod deopt to the interpreter on
+arm64. Other arches and the safe/unsafe/wasm builds use a no-op stub.
 
 ## Performance design
 
-The interpreter achieves its throughput through a layered set of optimizations.
-Understanding them is essential before modifying the hot path.
+The interpreter's throughput rests on a few load-bearing tricks. Before touching
+the hot path, baseline with `benchstat` over `-bench=. -count=10` and re-check
+under `buzz_safe`.
 
-### 1 — The Exec I-cache constraint
-
-`VM.Exec` is a single ~50 KB function (one `switch` over 60+ opcodes). The L1
-instruction cache on typical x86-64 / ARM64 hardware is 32–64 KB. The entire
-hot-path dispatch loop must stay I-cache resident.
-
-**Critical rule: adding a new, full-sized `case` handler to `Exec` regresses ALL
-benchmarks by 25–55%, even benchmarks that never execute that opcode.** The
-displacement of the hot handlers from L1 is the cause. Verified experimentally;
-see the `OpLocalConstStore`/`OpLocalLocalStore` and `OpReturnLocal` attempts in
-the session history.
-
-Safe patterns that do not trigger this regression:
-- Add a small branch (≤ ~80 bytes) **inside an existing handler** — e.g. the
-  SetLocal absorption in `OpLocalConstOp`/`OpLocalLocalOp`.
-- Move cold code to a `//go:noinline` helper — the hot/cold split in
-  `errUndefinedVar` et al. saves ~2 KB from Exec's text.
-
-Unsafe: adding any new case body to the switch. Measure with `benchstat` over the
-full suite before and after.
-
-### 2 — Superinstructions (`FusePeephole`)
-
-`FoldConsts` + `FusePeephole` run immediately after compilation. Three fused ops
-cover the dominant instruction patterns:
-
-| Superinstruction | Fuses | Saves |
-|---|---|---|
-| `OpLocalConstOp` | `GetLocal; LoadConst; <binop>` | 2 dispatches, 2 push/pop |
-| `OpLocalLocalOp` | `GetLocal; GetLocal; <binop>` | 2 dispatches, 2 push/pop |
-| `OpForCondLC` | `GetLocal; LoadConst; <cmp>; JumpFalse` | 3 dispatches |
-
-Jump operands are absolute indices, so fusion rewrites in-place (super + `OpNop`
-fill) rather than collapsing the stream. A window is suppressed if any branch
-targets a slot inside it.
-
-### 3 — SetLocal absorption
-
-`OpLocalConstOp` and `OpLocalLocalOp` peek at the immediately following
-instruction. If it is `OpSetLocal` back to the same slot (the `x = x + y`
-pattern), the result is written directly to the stack slot, absorbing the
-`OpSetLocal` dispatch and the push/pop round-trip. This is a runtime lookahead
-inside existing handlers — not a new opcode.
-
-### 4 — Static int-type proof (bit 31 of fused op `B`)
-
-`OpGetLocal` carries the slot's static type (from the compiler's `styp` lattice)
-in its `B` field. `FusePeephole` sets **bit 31** of the fused instruction's `B`
-field when it can prove both operands are `int` at compile time:
-
-- `OpLocalConstOp`: left slot is `sInt` and the constant is `tagInt`
-- `OpLocalLocalOp`: both slots are `sInt`
-
-The VM handler checks `ins.B < 0` (sign bit) and, when set, skips the two
-runtime `tag == tagInt` comparisons entirely. Sound because `OpCheckType` is
-emitted at every `any → int` narrowing, so a proven-int slot always holds an
-int at runtime.
-
-**Encoding note:** bit 31 bleeds into the sub-opcode byte. Both handlers mask it
-off: `uint32(ins.B) >> 24 & 0x7F` (LocalConstOp) and `uint32(ins.B) >> 16 &
-0x7FFF` (LocalLocalOp). If you ever widen the sub-opcode range beyond 7 bits /
-15 bits, re-examine this masking.
-
-### 5 — Runtime member-access inline cache (`mcache`)
-
-`OpGetMember` / `OpSetMember` maintain a per-VM `[]mcacheEntry` indexed by
-instruction position. Each entry stores a `*objectDefObj` pointer and a field
-index. A hit is a pointer-equality check (`e.def == inst.Def`) — no string
-comparison. The cache grows monotonically and is never reset; correctness rests
-entirely on the read-side verify.
-
-The cache is **per-VM** (not per-Chunk), so concurrent VMs sharing a `*Chunk`
-don't race. Verified under `go test -race`.
-
-### 6 — Compile-time field slots (`OpGetField` / `OpSetField`)
-
-Inside method bodies, `this.field` accesses are compiled to `OpGetField`/`OpSetField`
-with a compile-time field-index hint (A) and a fallback name (B). The handler
-checks `Keys[hint] == name` (one comparison) and, on a hit, does a direct
-`Fields[hint]` load — no map scan. On a miss it falls back to the name path
-and is sound for any receiver.
-
-### 7 — PGO
-
-`default.pgo` provides profile-guided inlining and interface-call devirtualization
-(`Callable` in `OpCall`). Re-run `magus run regen-pgo gopherbuzz` after material changes to the VM
-dispatch order or opcode set. A stale profile is neutral; it won't introduce
-regressions, but it won't help either.
-
-### 8 — NaN-box and the handle table
-
-The default `Value` is a single `uint64`. Doubles are stored directly; ints,
-bools, null, and heap references are encoded in the quiet-NaN payload. Heap refs
-are indices into a per-VM `heap []heapVal` table — not raw pointers — so the
-operand stack is a `[]uint64` with no pointers, triggering **zero GC write
-barriers** on push/pop. The GC scans only the table itself.
-
-Trade-off: the table pins objects for the VM's lifetime (Go's GC cannot
-collect a heap entry). Acceptable for magus's short-lived per-target sessions.
-
----
+- **`Exec` is I-cache-bound** (~50 KB single `switch`). Adding a new full `case`
+  regresses *all* benchmarks 25–55%. Add small branches inside existing handlers,
+  or move cold code to `//go:noinline` helpers — never a new case body.
+- **Superinstructions** (`FusePeephole`): `OpLocalConstOp`, `OpLocalLocalOp`,
+  `OpForCondLC` fuse the dominant `GetLocal/LoadConst/<op>/JumpFalse` patterns.
+- **SetLocal absorption**: fused ops peek ahead and write `x = x op y` straight
+  to the slot.
+- **Static int proof**: bit 31 of a fused op's `B` means "both operands proven
+  int" (drops the tag checks); sub-opcode is masked `& 0x7F` / `& 0x7FFF`. Sound
+  because `OpCheckType` guards every `any → int` narrowing.
+- **Inline caches**: per-VM `mcache` (member access) and field-slot hints
+  (`OpGetField`/`OpSetField`) — pointer/index compares, no string scan. Per-VM,
+  not per-Chunk (chunks are shared; verified `-race`).
+- **NaN-box + handle table**: zero write barriers on push/pop; the table pins
+  objects for the VM's life (fine for short per-target sessions).
+- **PGO** (`default.pgo`): profile-guided inlining + `OpCall` devirtualization.
 
 ## Bytecode version
 
-`vm.BytecodeVersion` (in `vm/marshal.go`) must be incremented whenever:
-- opcode numbering changes (`opcode.go`),
-- the `Instr` / `Chunk` / `UpvalInfo` layout changes,
-- the fused-instruction encoding changes (e.g., the bit-31 int-type flag added
-  in v6), or
-- the serializable `Value` subset or AST node types change.
+Bump `vm.BytecodeVersion` (in `vm/marshal.go`) when opcode numbering, the
+`Instr`/`Chunk`/`UpvalInfo` layout, the fused-op encoding, or the serializable
+`Value`/AST set changes — then `go generate` in `../internal/spell`.
 
-After bumping the version, regenerate the embedded spell bytecode:
+## Contributing gotchas
 
-```sh
-cd ../internal/spell && go generate
-```
-
----
-
-## Contributing — things to watch out for
-
-**Before touching the hot path**, run a full benchmark baseline:
-
-```sh
-go test -run='^$' -bench=. -benchmem -benchtime=300ms -count=10 \
-    -pgo=./default.pgo ./... > /tmp/before.txt
-# make your change
-go test -run='^$' -bench=. -benchmem -benchtime=300ms -count=10 \
-    -pgo=./default.pgo ./... > /tmp/after.txt
-benchstat /tmp/before.txt /tmp/after.txt
-```
-
-Key things that will surprise you:
-
-1. **I-cache budget is exhausted.** Any new `case` body in `Exec`'s switch will
-   regress every benchmark. Add logic inside existing handlers instead, or plan a
-   structural split first.
-
-2. **Three `Value` reps.** Every change to `value.go`, `operators.go`, or any
-   VM helper that touches values must compile and pass tests under all three
-   tags. The CI runs `buzz_safe` and the default; spot-check `buzz_unsafe` when
-   touching representation code.
-
-3. **Sub-opcode masking in fused handlers.** `OpLocalConstOp` and `OpLocalLocalOp`
-   use bit 31 of `B` as a type flag. The sub-opcode is extracted with `& 0x7F`
-   / `& 0x7FFF` masks. If you add more flag bits, update both FusePeephole
-   (chunk.go) and the VM handlers.
-
-4. **`slotTypeInt = 1` is a cross-package constant.** `chunk.go` (vm package)
-   uses the literal `1` to represent `buzz.sInt`. If `buzz.sInt` ever changes
-   value, update both.
-
-5. **Bytecode is versioned.** Adding or renumbering opcodes, or changing a fused
-   instruction's bit encoding, requires bumping `BytecodeVersion` and running
-   `go generate` in `../internal/spell`.
-
-6. **PGO profile goes stale.** After adding or reordering opcodes, re-run
-   `magus run regen-pgo gopherbuzz`. A stale profile is neutral but a freshly regenerated one
-   often recovers 5–20% on `Call`/`FieldAccess`/`MethodCall`.
-
-7. **`mcache` and `ncache` are per-VM, not per-Chunk.** Chunks are immutable and
-   shared across goroutines. Any instruction-position-indexed side data must live
-   on the `VM`, not the `Chunk`.
-
-8. **Escape analysis.** Run `go build -gcflags='-m=2' ./vm/` after hot-path
-   changes and check that `Value` stays a value type (not heap-allocated), that
-   `frame` doesn't escape, and that the error-path helpers (`errUndefinedVar`,
-   etc.) remain `noinline`. A single stray escape on the hot path is measurable.
+1. No new `Exec` case bodies (I-cache — see above).
+2. Value changes must pass under all three build tags (CI runs default +
+   `buzz_safe`; spot-check `buzz_unsafe`).
+3. Fused-op sub-opcode masking (`& 0x7F` / `& 0x7FFF`) must track any new flag
+   bits, in both `chunk.go` and the VM handlers.
+4. `slotTypeInt = 1` (vm `chunk.go`) mirrors `buzz.sInt` — keep in sync.
+5. Renumbering opcodes / changing a fused encoding → bump `BytecodeVersion` +
+   regenerate spells.
+6. `mcache`/`ncache` are per-VM, never per-Chunk (chunks are shared).
+7. Re-check escapes with `go build -gcflags='-m=2' ./vm/` after hot-path changes.

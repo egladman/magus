@@ -1,4 +1,4 @@
 // @expect: true
 enum Direction { North, South, East, West }
-const d = Direction.East;
-const __r = d == Direction.East;
+final d = Direction.East;
+final __r = d == Direction.East;

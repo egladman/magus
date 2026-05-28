@@ -55,6 +55,7 @@ const (
 	tagObjDecl            // obj: *objDeclPayload (wraps *ast.ObjectDecl)
 	tagRange              // obj: *rangeObj
 	tagFib                // obj: *fibObj
+	tagPat                // obj: *patObj
 )
 
 // Value is defined in value_unsafe.go / value_safe.go (build-tag-selected),
@@ -65,7 +66,14 @@ const (
 // --- heap payload types ---
 
 type strObj struct{ V string }
-type listObj struct{ Items []Value }
+
+// listObj backs Buzz list literals. Mut reports whether the list may be mutated
+// in place (append, subscript-set, …); plain `[…]` literals are immutable, only
+// `mut [...]` sets Mut.
+type listObj struct {
+	Items []Value
+	Mut   bool
+}
 
 // mapObj backs Buzz map literals. Keys/Vals/keyVals are parallel slices in
 // insertion order; M is a lazily-built key→index hash that exists only once
@@ -90,6 +98,7 @@ type mapObj struct {
 	Vals    []Value          // parallel to Keys; indexed value access (no map lookup for iteration)
 	keyVals []Value          // pre-built StrValue per key; zero-alloc map key iteration
 	M       map[string]int32 // key → index in Keys/Vals/keyVals; nil until size > smallMapThreshold
+	Mut     bool             // mutable only for `mut {…}` literals (immutable by default)
 }
 
 // smallMapThreshold is the key count at or below which a mapObj skips its Go map
@@ -111,6 +120,7 @@ type directObj struct {
 type objectInst struct {
 	Def    *objectDefObj
 	Fields []Value // declaration-order flat field values; indexed by def.Fields[i]
+	Mut    bool    // mutable only for `mut Foo{…}` instances (immutable by default)
 }
 
 // methodEntry is one slot in an object type's method table (vtable). Methods are
@@ -204,6 +214,7 @@ type iterStateObj struct {
 	list     *listObj
 	mapObj   *mapObj
 	rng      *rangeObj
+	fib      *fibObj
 	rangeIdx int64
 	idx      int
 }
@@ -333,7 +344,7 @@ func (v Value) buzzKind() string {
 	case tagInt:
 		return "int"
 	case tagFloat:
-		return "float"
+		return "double"
 	case tagStr:
 		return "str"
 	case tagList:
@@ -358,6 +369,8 @@ func (v Value) buzzKind() string {
 		return "rng"
 	case tagFib:
 		return "fib"
+	case tagPat:
+		return "pat"
 	default:
 		return "unknown"
 	}
@@ -444,6 +457,8 @@ func (v Value) String() string {
 		default:
 			return "<fib:done>"
 		}
+	case tagPat:
+		return v.asPat().src
 	default:
 		return "<unknown>"
 	}

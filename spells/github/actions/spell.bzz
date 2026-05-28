@@ -58,7 +58,7 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 // getenv reads one environment variable, returning "" when unset (os.env returns
 // null for an unset var; the callers below test against "").
 fun getenv(name: str) > str {
-    const v = os.env(name);
+    final v = os.env(name);
     if (v == null) { return ""; }
     return "" + v;
 }
@@ -66,11 +66,11 @@ fun getenv(name: str) > str {
 // --- implementation -------------------------------------------------------
 
 // Version salt mixed into every key; bump to invalidate all artifacts at once.
-const CACHE_VERSION = "magus-remote-v1";
+final CACHE_VERSION = "magus-remote-v1";
 // Accept header carrying the API version the v1 cache service expects.
-const API_ACCEPT = "application/json;api-version=6.0-preview.1";
+final API_ACCEPT = "application/json;api-version=6.0-preview.1";
 // 32 MiB: the GitHub Actions Cache per-PATCH ceiling.
-const CHUNK = 33554432;
+final CHUNK = 33554432;
 
 fun base() > str { return getenv("ACTIONS_CACHE_URL"); }
 fun token() > str { return getenv("ACTIONS_RUNTIME_TOKEN"); }
@@ -81,7 +81,7 @@ fun token() > str { return getenv("ACTIONS_RUNTIME_TOKEN"); }
 fun cache_key(hash: str) > str { return "magus-" + hash; }
 
 fun auth_headers() > any {
-    return {"Authorization": "Bearer " + token(), "Accept": API_ACCEPT};
+    return mut {"Authorization": "Bearer " + token(), "Accept": API_ACCEPT};
 }
 
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
@@ -90,15 +90,15 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
     if (base() == "" or token() == "") { return false; }
     var io = {};
     cb(io);
-    const hash = "" + io["hash"];
-    const dest = "" + io["dest"];
-    const key = cache_key(hash);
-    const url = base() + "_apis/artifactcache/cache?keys=" + key + "&version=" + CACHE_VERSION;
-    const res = extra.http.get(url, auth_headers());
+    final hash = "" + io["hash"];
+    final dest = "" + io["dest"];
+    final key = cache_key(hash);
+    final url = base() + "_apis/artifactcache/cache?keys=" + key + "&version=" + CACHE_VERSION;
+    final res = extra.http.get(url, auth_headers());
     if (res[0] != 200) { return false; }  // 204 = miss
     // jsonDecode returns a Boxed tree: navigate with .q(key) and read the leaf
     // with a typed accessor (.string() → the str, or null if absent/wrong type).
-    const loc = serialize.jsonDecode(res[1]).q("archiveLocation").string();
+    final loc = serialize.jsonDecode(res[1]).q("archiveLocation").string();
     if (loc == null or loc == "") { return false; }
     // The archive location is a pre-signed blob URL; it needs no auth header.
     return xhttp.download("" + loc, dest, {}) == 200;
@@ -110,29 +110,29 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     if (base() == "" or token() == "") { return false; }
     var io = {};
     cb(io);
-    const hash = "" + io["hash"];
-    const src = "" + io["src"];
-    const key = cache_key(hash);
+    final hash = "" + io["hash"];
+    final src = "" + io["src"];
+    final key = cache_key(hash);
 
     // 1. Reserve the artifact.
     var json_headers = auth_headers();
     json_headers["Content-Type"] = "application/json";
-    const reserve = serialize.jsonEncode({"key": key, "version": CACHE_VERSION});
-    const rres = extra.http.post(base() + "_apis/artifactcache/caches", reserve, json_headers);
+    final reserve = serialize.jsonEncode({"key": key, "version": CACHE_VERSION});
+    final rres = extra.http.post(base() + "_apis/artifactcache/caches", reserve, json_headers);
     if (rres[0] == 409) { return true; }   // another runner won the race
     if (rres[0] != 201) { return false; }
-    const cache_id = serialize.jsonDecode(rres[1]).q("cacheId").integer();
-    const url = base() + "_apis/artifactcache/caches/" + cache_id;
+    final cache_id = serialize.jsonDecode(rres[1]).q("cacheId").integer();
+    final url = base() + "_apis/artifactcache/caches/" + cache_id;
 
     // 2. Upload the file in Content-Range chunks.
     var bin_headers = auth_headers();
     bin_headers["Content-Type"] = "application/octet-stream";
-    const ures = xhttp.upload_chunked("PATCH", url, src, CHUNK, bin_headers);
+    final ures = xhttp.upload_chunked("PATCH", url, src, CHUNK, bin_headers);
     if (ures[0] != 204) { return false; }
 
     // 3. Commit with the exact byte size.
-    const commit = serialize.jsonEncode({"size": xhttp.byteSize(src)});
-    const cres = extra.http.post(url, commit, json_headers);
-    const code = cres[0];
+    final commit = serialize.jsonEncode({"size": xhttp.byteSize(src)});
+    final cres = extra.http.post(url, commit, json_headers);
+    final code = cres[0];
     return code == 200 or code == 201 or code == 204;
 }

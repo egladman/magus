@@ -86,7 +86,7 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 
 // checkSpellDocs requires a doc comment on every function-handler target of each
 // workspace-local Buzz spell. Only those targets opt in (DocRequiredTargets) —
-// built-ins, Teal spells, and record-style {cmd,args} ops, whose handler comments
+// built-ins and record-style {cmd,args} ops, whose handler comments
 // aren't captured, are skipped — so the check enforces the convention exactly
 // where the Buzz interpreter can verify it.
 func (*runner) checkSpellDocs(spells []*types.Spell) Check {
@@ -305,19 +305,19 @@ func toSlashRel(root, p string) string {
 }
 
 func (*runner) checkMagefileCoexistence(_ []*types.Project) Check {
-	return Check{Name: "magefile coexistence", Status: StatusOK, Message: "single magusfile.tl layout enforced"}
+	return Check{Name: "magefile coexistence", Status: StatusOK, Message: "single magusfile.bzz layout enforced"}
 }
 
 func (*runner) checkLegacyMageForms(_ []*types.Project) Check {
-	return Check{Name: "legacy mage forms", Status: StatusOK, Message: "workspace uses Teal magusfiles"}
+	return Check{Name: "legacy mage forms", Status: StatusOK, Message: "workspace uses Buzz magusfiles"}
 }
 
 func (*runner) checkMixedMageforms(_ []*types.Project) Check {
-	return Check{Name: "consistent mage forms", Status: StatusOK, Message: "workspace uses Teal magusfiles"}
+	return Check{Name: "consistent mage forms", Status: StatusOK, Message: "workspace uses Buzz magusfiles"}
 }
 
 func (*runner) checkVariadicMageTargets(_ []*types.Project) Check {
-	return Check{Name: "variadic mage targets", Status: StatusOK, Message: "Teal targets receive args as a table — no variadic conflicts"}
+	return Check{Name: "variadic mage targets", Status: StatusOK, Message: "Buzz targets receive args as a list — no variadic conflicts"}
 }
 
 // ── Binary & runtime checks ───────────────────────────────────────────────────
@@ -725,7 +725,7 @@ func (r *runner) checkDependencyTangle(g *types.Graph) Check {
 	return Check{Name: "dependency tangle (NCCD)", Status: StatusOK, Message: msg}
 }
 
-// ── Environment & Teal checks ─────────────────────────────────────────────────
+// ── Environment checks ────────────────────────────────────────────────────────
 
 func (*runner) checkEnvVars() Check {
 	var unknown []string
@@ -767,101 +767,11 @@ func (*runner) checkEnvVars() Check {
 	}
 }
 
-// tealRegistryWarnThreshold is the number of magus.target.new() calls in a
-// single .tl file at which we start warning. The Teal compiler's internal
-// registry overflows at roughly 1000 targets in one file; 500 gives users
-// early notice.
-const tealRegistryWarnThreshold = 500
-
-// checkTealRegistryPressure warns when any single .tl file contains enough
-// global function declarations to approach the Teal compiler's registry overflow limit.
-// Users should split large magusfiles into magusfiles/*.tl to stay well clear.
-func (r *runner) checkTealRegistryPressure(projects []*types.Project) Check {
-	type offender struct {
-		file  string
-		count int
-	}
-	var offenders []offender
-	for _, p := range projects {
-		for _, f := range tealFilesInDir(p.Dir) {
-			n, err := countMagusTargets(f)
-			if err != nil || n <= tealRegistryWarnThreshold {
-				continue
-			}
-			rel, _ := filepath.Rel(r.root, f)
-			offenders = append(offenders, offender{filepath.ToSlash(rel), n})
-		}
-	}
-	if len(offenders) == 0 {
-		return Check{
-			Name:    "teal registry pressure",
-			Status:  StatusOK,
-			Message: fmt.Sprintf("no .tl file exceeds %d targets", tealRegistryWarnThreshold),
-		}
-	}
-	slices.SortFunc(offenders, func(a, b offender) int {
-		if a.count != b.count {
-			return cmp.Compare(b.count, a.count)
-		}
-		return cmp.Compare(a.file, b.file)
-	})
-	details := make([]string, 0, min(5, len(offenders)))
-	for i, o := range offenders {
-		if i >= 5 {
-			break
-		}
-		details = append(details, fmt.Sprintf(
-			"%s: %d targets (limit ~1000; split into magusfiles/*.tl to avoid compiler overflow)",
-			o.file, o.count,
-		))
-	}
-	if len(offenders) > 5 {
-		details = append(details, fmt.Sprintf("(+%d more)", len(offenders)-5))
-	}
-	return Check{
-		Name:    "teal registry pressure",
-		Status:  StatusWarn,
-		Message: fmt.Sprintf("%d .tl file(s) exceed %d targets and risk Teal compiler registry overflow", len(offenders), tealRegistryWarnThreshold),
-		Details: details,
-	}
-}
-
-// tealFilesInDir returns the .tl source files for a project directory:
-// all *.tl files under magusfiles/ (sorted), or magusfile.tl if present.
-func tealFilesInDir(dir string) []string {
-	mfDir := filepath.Join(dir, "magusfiles")
-	if info, err := os.Stat(mfDir); err == nil && info.IsDir() {
-		entries, _ := filepath.Glob(filepath.Join(mfDir, "*.tl"))
-		if len(entries) > 0 {
-			slices.Sort(entries)
-			return entries
-		}
-	}
-	p := filepath.Join(dir, "magusfile.tl")
-	if _, err := os.Stat(p); err == nil {
-		return []string{p}
-	}
-	return nil
-}
-
-// countMagusTargets counts the number of global function declarations in a .tl
-// file (each registers one target against the Teal compiler's registry).
-func countMagusTargets(path string) (int, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-	return strings.Count(string(data), "global function "), nil
-}
-
 // ── Target-name convention check ──────────────────────────────────────────────
 
 var (
-	tealTargetDeclRe = regexp.MustCompile(`(?m)\bglobal\s+function\s+([A-Za-z_][A-Za-z0-9_]*)`)
 	buzzTargetDeclRe = regexp.MustCompile(`(?m)\bexport\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)`)
-	// has_charm("NAME") is spelled identically in Teal and Buzz, so one pattern
-	// covers both dialects.
-	hasCharmDeclRe = regexp.MustCompile(`has_charm\(\s*"([^"]+)"`)
+	hasCharmDeclRe   = regexp.MustCompile(`has_charm\(\s*"([^"]+)"`)
 )
 
 // checkTargetNameConventions warns when a workspace declares target functions
@@ -923,38 +833,28 @@ func nameConvention(name string) string {
 	return "camelCase"
 }
 
-// magusfileSourcesInDir returns every magusfile source (Teal and Buzz) for a
-// project directory: the top-level magusfile.{tl,bzz} plus magusfiles/*.{tl,bzz}.
+// magusfileSourcesInDir returns every Buzz magusfile source for a project
+// directory: the top-level magusfile.bzz plus magusfiles/*.bzz.
 func magusfileSourcesInDir(dir string) []string {
 	var out []string
-	for _, name := range []string{"magusfile.tl", "magusfile.bzz"} {
-		p := filepath.Join(dir, name)
-		if _, err := os.Stat(p); err == nil {
-			out = append(out, p)
-		}
+	if _, err := os.Stat(filepath.Join(dir, "magusfile.bzz")); err == nil {
+		out = append(out, filepath.Join(dir, "magusfile.bzz"))
 	}
-	mfDir := filepath.Join(dir, "magusfiles")
-	for _, pat := range []string{"*.tl", "*.bzz"} {
-		entries, _ := filepath.Glob(filepath.Join(mfDir, pat))
-		out = append(out, entries...)
-	}
+	entries, _ := filepath.Glob(filepath.Join(dir, "magusfiles", "*.bzz"))
+	out = append(out, entries...)
 	slices.Sort(out)
 	return out
 }
 
 // declaredTargetNames extracts the raw identifiers of target functions declared
-// in a magusfile source: `global function NAME` (Teal) or `export fun NAME` (Buzz).
+// in a Buzz magusfile source: `export fun NAME`.
 func declaredTargetNames(path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	re := tealTargetDeclRe
-	if strings.HasSuffix(path, ".bzz") {
-		re = buzzTargetDeclRe
-	}
 	var names []string
-	for _, m := range re.FindAllStringSubmatch(string(data), -1) {
+	for _, m := range buzzTargetDeclRe.FindAllStringSubmatch(string(data), -1) {
 		names = append(names, m[1])
 	}
 	return names

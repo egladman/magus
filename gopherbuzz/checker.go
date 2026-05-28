@@ -71,7 +71,7 @@ func (c *checker) registerBuiltins() {
 	c.define("print", anyRet, true)
 	c.define("str", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Str}, true)
 	c.define("int", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Int}, true)
-	c.define("float", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Float}, true)
+	c.define("double", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Double}, true)
 	c.define("bool", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Bool}, true)
 	c.define("len", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Int}, true)
 	c.define("keys", &types.FuncType{Params: []types.Type{types.Any}, Ret: &types.ListType{Elem: types.Str}}, true)
@@ -300,8 +300,13 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 
 func (c *checker) checkAssign(v *ast.AssignStmt) {
 	if id, ok := v.Target.(*ast.IdentExpr); ok {
+		// `_` is the discard target: accept any value and bind nothing.
+		if id.Name == "_" {
+			c.infer(v.Value)
+			return
+		}
 		if e, found := c.lookup(id.Name); found && e.isConst {
-			c.errorf(id.Pos, "cannot assign to const %q", id.Name)
+			c.errorf(id.Pos, "cannot assign to final %q", id.Name)
 		} else if found {
 			rhs := c.infer(v.Value)
 			if !types.Compat(rhs, e.typ) {
@@ -367,6 +372,10 @@ func (c *checker) checkForEach(v *ast.ForEachStmt) {
 			valTyp = types.Int
 			keyTyp = types.Int
 		}
+	case *types.FibType:
+		// foreach over a fiber binds each yielded value.
+		valTyp = it.Yield
+		keyTyp = types.Int
 	}
 	c.pushScope()
 	c.define(v.ValName, valTyp, false)
@@ -444,7 +453,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 	case *ast.IntLit:
 		return types.Int
 	case *ast.FloatLit:
-		return types.Float
+		return types.Double
 	case *ast.StringLit:
 		return types.Str
 	case *ast.BoolLit:
@@ -470,6 +479,12 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return c.inferMember(v)
 	case *ast.IndexExpr:
 		return c.inferIndex(v)
+	case *ast.ForceExpr:
+		// Optionals are erased to their base type in this checker, so force-unwrap
+		// reports the operand's type unchanged.
+		return c.infer(v.Operand)
+	case *ast.PatLit:
+		return types.Pat
 	case *ast.FunExpr:
 		return c.inferFunExpr(v)
 	case *ast.MapExpr:
@@ -560,8 +575,8 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 	case "-", "*", "%":
 		return c.numericResult(v.Pos, left, right)
 	case "/":
-		if left == types.Float || right == types.Float {
-			return types.Float
+		if left == types.Double || right == types.Double {
+			return types.Double
 		}
 		return types.Int
 	case "<", ">", "<=", ">=", "==", "!=":
@@ -581,13 +596,13 @@ func (c *checker) numericResult(p ast.Pos, left, right types.Type) types.Type {
 	if left == types.Any || right == types.Any {
 		return types.Any
 	}
-	if left == types.Float || right == types.Float {
-		return types.Float
+	if left == types.Double || right == types.Double {
+		return types.Double
 	}
 	if left == types.Int && right == types.Int {
 		return types.Int
 	}
-	if left != types.Int && left != types.Float {
+	if left != types.Int && left != types.Double {
 		c.errorf(p, "invalid type %s in arithmetic expression", left.TypeName())
 	}
 	return types.Any
@@ -597,7 +612,7 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 	t := c.infer(v.Operand)
 	switch v.Op {
 	case "-":
-		if t == types.Any || t == types.Int || t == types.Float {
+		if t == types.Any || t == types.Int || t == types.Double {
 			return t
 		}
 		c.errorf(v.Pos, "unary - requires numeric operand, got %s", t.TypeName())

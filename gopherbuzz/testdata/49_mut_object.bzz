@@ -1,0 +1,6 @@
+// @expect: 5
+// `mut Foo{…}` produces a mutable instance whose fields can be written.
+object P { x: int = 0 }
+final p = mut P{};
+p.x = 5;
+final __r = p.x;

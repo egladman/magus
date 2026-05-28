@@ -220,7 +220,7 @@ func writeGlossary(b *bytes.Buffer) {
 		{"Spell", "a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands."},
 		{"Charm", "an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it."},
 		{"Module", "a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more."},
-		{"Buzz", "one of the magusfile languages magus supports (the `.bzz` engine); Teal (`.tl`) is the other."},
+		{"Buzz", "the language magusfiles are written in (the `.bzz` engine)."},
 	} {
 		fmt.Fprintf(b, "- **%s**: %s\n", g.term, g.def)
 	}

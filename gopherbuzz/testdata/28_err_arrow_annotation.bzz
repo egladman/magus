@@ -2,4 +2,4 @@
 fun safe(x: int) > int !> str {
     return x;
 }
-const __r = safe(42);
+final __r = safe(42);

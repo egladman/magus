@@ -4,9 +4,9 @@ fun gen() {
     yield 2;
     yield 3;
 }
-const f = &gen();
+final f = &gen();
 var sum = 0;
 sum = sum + resume f;
 sum = sum + resume f;
 sum = sum + resume f;
-const __r = sum;
+final __r = sum;

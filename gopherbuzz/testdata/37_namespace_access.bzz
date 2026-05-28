@@ -1,0 +1,4 @@
+// @expect: 42
+// Namespace access uses backslash: std\parseInt resolves parseInt in the std module.
+import "std";
+final __r = std\parseInt("42")!;
