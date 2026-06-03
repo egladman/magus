@@ -105,3 +105,19 @@ Report whether standard input is a terminal (TTY) rather than a pipe, file, or /
 
 **Returns:** bool
 
+### `num_cpu`
+
+Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).
+
+**Signature:** `extra.os.numCpu() → int`
+
+**Returns:** int
+
+### `hostname`
+
+Return the host machine's name.
+
+**Signature:** `extra.os.hostname() → string`
+
+**Returns:** string
+

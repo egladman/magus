@@ -22,7 +22,7 @@ func (d *buzzReplDriver) EvalLine(snippet string) ([]engine.Value, error) {
 	// Compile (not run) the expression form first so bare expressions print a
 	// result; only on a compile error fall back to the statement form. Compiling
 	// before running — rather than try-running both — means a snippet with side
-	// effects can never execute twice (mirrors the Lua/Teal drivers).
+	// effects can never execute twice.
 	chunk, err := d.core.Compile("return " + snippet)
 	if err != nil {
 		chunk, err = d.core.Compile(snippet)

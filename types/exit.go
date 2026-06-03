@@ -33,8 +33,8 @@ type exitRecorderKey struct{}
 // WithExitRecorder returns a context that captures an exit code requested via
 // RecordExit during execution, plus a reader for it. The interpreter wraps each
 // target run with this so an os.exit / magus.fatal code survives even when a VM
-// stringifies the ExitError on the way out — the Lua engines raise host errors
-// as Lua strings, dropping the Go type, so reading the code out-of-band here is
+// stringifies the ExitError on the way out — an engine that raises host errors
+// as plain strings drops the Go type, so reading the code out-of-band here is
 // what makes os.exit's code engine-independent.
 func WithExitRecorder(ctx context.Context) (context.Context, func() (int, bool)) {
 	r := &exitRecorder{}

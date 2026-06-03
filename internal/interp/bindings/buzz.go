@@ -36,22 +36,19 @@ func init() {
 //
 // These bindings (and the magus-bindings-gen-emitted ones in gen/buzz) are written
 // directly against the concrete magus/gopherbuzz value system — NewMap, DirectValue,
-// StrValue, and friends — rather than the engine.Value / lua.Session
-// abstraction the Lua bindings target. That asymmetry is deliberate, not a
-// layering gap:
+// StrValue, and friends — rather than behind the generic engine.Value /
+// engine.Session abstraction. That is deliberate, not a layering gap:
 //
-//   - The Lua abstraction earns its keep because two backends, gopherlua and
-//     luajit, share one binding implementation; the interface is what lets a
-//     single set of bindings drive both VMs. Buzz has exactly one backend, so
-//     there is no second implementation to share with and nothing for an
-//     interface to abstract over. A buzz-local interface here would be a
-//     single-implementation wrapper over hundreds of value-shaped call sites.
+//   - Buzz is the only engine, so there is no second implementation to share
+//     with and nothing for an interface to abstract over. A buzz-local interface
+//     here would be a single-implementation wrapper over hundreds of
+//     value-shaped call sites.
 //   - magus/gopherbuzz is an intentionally public, standalone interpreter package;
 //     binding against its real API exercises that public surface directly
 //     instead of hiding it behind an internal seam.
 //
 // The generic engine.Session adapter (engine/buzz) still exists for the
-// cross-language REPL/pry path; it is not used here.
+// REPL/pry path; it is not used here.
 func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[string]buzzeng.Callable, parseMode bool) {
 	magus := buzzeng.NewMap()
 	magus.MapSet("project", buildProjectNS(ctx))
@@ -80,7 +77,7 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	magus.MapSet("error", buzzeng.DirectValue("magus.error", buzzLogFn(slog.LevelError)))
 
 	// magus.cmd runs the magus binary with args; it raises when the invocation
-	// exits non-zero (parity with the Lua handle and os.exec).
+	// exits non-zero (parity with os.exec).
 	magus.MapSet("cmd", buzzeng.DirectValue("magus.cmd", func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		var argv []string
 		if len(args) > 0 {
@@ -195,13 +192,19 @@ func buildBuzzStd(ctx context.Context, sess *buzzeng.Session) buzzeng.Value {
 	stdNS.MapSet("archive", buzzgen.RegisterArchive(ctx, sess))
 	stdNS.MapSet("crypto", buzzgen.RegisterCrypto(ctx, sess))
 	stdNS.MapSet("env", buzzgen.RegisterEnv(ctx, sess))
-	// json is intentionally absent: parse/stringify both duplicate Buzz's
-	// serialize.jsonDecode/jsonEncode, so the module would be empty here.
+	// json's parse/stringify duplicate Buzz's serialize.jsonDecode/jsonEncode,
+	// but stringify_pretty (indented output) has no serialize equivalent, so the
+	// module is wired in for that — and, per the self-complete principle, so an
+	// author reaches the whole json surface through extra.json.
+	stdNS.MapSet("json", buzzgen.RegisterJson(ctx, sess))
 	stdNS.MapSet("http", buzzgen.RegisterHttp(ctx, sess))
 	stdNS.MapSet("time", buzzgen.RegisterTime(ctx, sess))
 	stdNS.MapSet("fmt", buzzgen.RegisterFmt(ctx, sess))
 	stdNS.MapSet("markdown", buzzgen.RegisterMarkdown(ctx, sess))
 	stdNS.MapSet("charm", buzzgen.RegisterCharm(ctx, sess))
+	stdNS.MapSet("encoding", buzzgen.RegisterEncoding(ctx, sess))
+	stdNS.MapSet("path", buzzgen.RegisterPath(ctx, sess))
+	stdNS.MapSet("strings", buzzgen.RegisterStrings(ctx, sess))
 	return stdNS
 }
 
@@ -230,8 +233,8 @@ func registerHostModules(ctx context.Context, sess *buzzeng.Session) {
 	sess.SetSourceModule(ispell.TargetModulePath, ispell.TargetModuleSource)
 }
 
-// buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It shares
-// emitMagusLog with the Lua side so both engines log identically.
+// buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes
+// through the shared emitMagusLog so every host log path formats identically.
 func buzzLogFn(level slog.Level) func(context.Context, []buzzeng.Value) (buzzeng.Value, error) {
 	return func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		msg := ""
@@ -378,8 +381,7 @@ func spellHandleFromMeta(m ispell.Spec) buzzeng.Value {
 	return h
 }
 
-// bindBuzzTargetDispatch wires a Buzz spell handle's runnable surface, mirroring
-// the Lua binding:
+// bindBuzzTargetDispatch wires a Buzz spell handle's runnable surface:
 //
 //   - spell.<target>(opts?) — a callable per fork target. This is the way to
 //     invoke an op: docker.build({cwd: "..", args: ["-t", tag, "."]}), go.generate().
@@ -401,8 +403,7 @@ func bindBuzzTargetDispatch(h buzzeng.Value, targets map[string]ispell.Target) {
 }
 
 // bindBuzzForkTargetMethod attaches tgt as a callable method named target on h,
-// so spell.<target>(opts?) forks the target. Mirrors the Lua binding's
-// bindForkTargetMethod.
+// so spell.<target>(opts?) forks the target.
 func bindBuzzForkTargetMethod(h buzzeng.Value, target string, tgt ispell.Target) {
 	h.MapSet(target, buzzeng.DirectValue("spell."+target, func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		opts := spellOptsFromBuzz(args, 0)
@@ -830,7 +831,7 @@ func buzzPryContext(esess engine.Session) interp.PryContext {
 
 // buzzInstallStepHook arms a one-shot line hook that re-enters the Pry REPL when
 // execution reaches the next line selected by mode (step into / over / finish),
-// then resumes. Mirrors the Lua step-resume loop. The hook keys purely off
+// then resumes. The hook keys purely off
 // line events and call depth: step stops at any depth, next at the start depth
 // or shallower, finish strictly shallower (the current frame has returned).
 func buzzInstallStepHook(ctx context.Context, esess engine.Session, resume interp.PryResume, opts interp.ReplOptions) {

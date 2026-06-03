@@ -159,7 +159,35 @@ var Os = Module{
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    OsStdinIsTerminal,
 		},
+		{
+			Name:    "num_cpu",
+			Doc:     "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeInt}},
+			Impl:    OsNumCPU,
+		},
+		{
+			Name:    "hostname",
+			Doc:     "Return the host machine's name.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    OsHostname,
+		},
 	},
+}
+
+// OsNumCPU returns the number of logical CPUs usable by the process.
+func OsNumCPU(_ context.Context) (int, error) {
+	return goruntime.NumCPU(), nil
+}
+
+// OsHostname returns the host machine's name.
+func OsHostname(_ context.Context) (string, error) {
+	name, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("os.hostname: %w", err)
+	}
+	return name, nil
 }
 
 // OsStdinIsTerminal reports whether stdin is a TTY, reusing the shared terminal
@@ -206,7 +234,7 @@ func OsSleep(ctx context.Context, ms float64) error {
 // daemon serving other workspaces, where os.Exit would kill unrelated work. The
 // error propagates to the CLI (and daemon), which translate it into the process
 // exit status. It also records the code on ctx (types.RecordExit) so the code
-// survives even on the Lua engines, which stringify the error type away; the
+// survives even when the engine stringifies the error type away; the
 // interpreter reads it back. See types.ExitError.
 func OsExit(ctx context.Context, code int) error {
 	types.RecordExit(ctx, code)

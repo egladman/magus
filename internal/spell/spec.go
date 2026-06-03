@@ -1,7 +1,7 @@
 // Package spell holds the engine-agnostic spell types and the built-in spell
-// registry: the Spec / Target / Charm value types both the Lua/Teal and Buzz
-// spell engines speak, so neither engine has to import the other. Importers
-// conventionally alias it `ispell` (it is one of three `spell` packages).
+// registry: the Spec / Target / Charm value types the Buzz spell engine speaks,
+// kept free of engine imports so the type package stays a neutral boundary.
+// Importers conventionally alias it `ispell` (it is one of three `spell` packages).
 package spell
 
 import (

@@ -41,5 +41,12 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzFloatVal(ret0), nil
 	}))
+	m.MapSet("nowIso", buzz.DirectValue("time.nowIso", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		ret0, err := std.TimeNowISO(ctx)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
 	return m
 }

@@ -130,6 +130,76 @@ Return directory entries; empty if path does not exist.
 
 **Returns:** []string
 
+### `ext`
+
+File-name extension of path, including the leading dot ("" if none).
+
+**Signature:** `extra.fs.ext(path) → string`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+
+**Returns:** string
+
+### `is_dir`
+
+True iff path exists and is a directory (a sandbox-denied path reads as false).
+
+**Signature:** `extra.fs.isDir(path) → bool`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+
+**Returns:** bool
+
+### `is_file`
+
+True iff path exists and is a regular file (a sandbox-denied path reads as false).
+
+**Signature:** `extra.fs.isFile(path) → bool`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+
+**Returns:** bool
+
+### `stat`
+
+Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.
+
+**Signature:** `extra.fs.stat(path) → map[string]any`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+
+**Returns:** map[string]any
+
+### `copy_file`
+
+Copy the file at src to dst (overwriting), preserving its permission bits.
+
+**Signature:** `extra.fs.copyFile(src, dst)`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `src` | `string` |  | |
+| `dst` | `string` |  | |
+
+### `copy_dir`
+
+Recursively copy the directory tree at src to dst, preserving permission bits.
+
+**Signature:** `extra.fs.copyDir(src, dst)`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `src` | `string` |  | |
+| `dst` | `string` |  | |
+
 ### `watch`
 
 Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.

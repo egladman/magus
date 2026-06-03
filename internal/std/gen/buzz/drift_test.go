@@ -42,6 +42,9 @@ var registries = map[string]func(context.Context, *buzz.Session) buzz.Value{
 	"fmt":      RegisterFmt,
 	"markdown": RegisterMarkdown,
 	"charm":    RegisterCharm,
+	"encoding": RegisterEncoding,
+	"path":     RegisterPath,
+	"strings":  RegisterStrings,
 }
 
 // TestBuzzBindingsMatchHostModules guards against the gen/buzz trampolines

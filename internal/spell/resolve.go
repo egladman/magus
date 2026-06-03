@@ -58,7 +58,7 @@ func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Spec, e
 	def.MapSet("name", nv)
 
 	// Optional mgs_ functions → resolved values under the decoder's keys.
-	// OptionalContract is the canonical list so this loop and resolveLua can't drift.
+	// OptionalContract is the canonical list this loop stays in sync with.
 	for _, f := range OptionalContract {
 		fn, ok := ex[f.Name]
 		if !ok {
@@ -72,8 +72,8 @@ func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Spec, e
 		if err != nil {
 			return Spec{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 		}
-		// ops is post-processed here only; the Lua resolver decodes record ops
-		// directly (function-valued handlers are a Buzz-only form). See contract.go.
+		// ops is post-processed here because its handlers can be function-valued
+		// (a Buzz-only form) and need resolving to data. See contract.go.
 		if f.Field == "ops" {
 			rv, err = resolveOps(ctx, sess, rv, mode)
 			if err != nil {

@@ -17,8 +17,7 @@ import (
 // registered driver. This is the single place a Buzz spell becomes a registered
 // spell — whether reached by `import "spells/<name>"`, magus.spell.load, or the
 // remote-cache resolver — so every imported Buzz spell carries function-ops
-// uniformly, not only those wired through the cache. (A Teal spell with
-// function-ops registers eagerly the same way via registerLocalLuaFnSpell.)
+// uniformly, not only those wired through the cache.
 //
 // Registering at load time (rather than deferring to project bind) is what lets
 // the function-op invoker capture the spell source; the spec-only handle

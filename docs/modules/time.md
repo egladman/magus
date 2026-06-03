@@ -44,3 +44,11 @@ Parse a Go duration string (e.g. "168h", "1h30m") into milliseconds; errors on m
 
 **Returns:** float64
 
+### `now_iso`
+
+Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().
+
+**Signature:** `extra.time.nowIso() → string`
+
+**Returns:** string
+

@@ -1,32 +1,33 @@
 package main
 
-// Spell registration: spells are authored in Teal, compiled to Lua under
-// magus/internal/interp/engine/lua/teal/spell/<name>/gen/<name>.lua, and loaded
-// into the Lua VM at runtime via package.preload (key: "magus.spell.<name>").
-// No blank-import or project.RegisterSpell call is required; the bindings
-// layer discovers all spells from the embedded filesystem at startup.
+// Spell registration: built-in spells are authored in Buzz under
+// magus/spells/<name>/spell.bzz, compiled to bytecode and embedded at build
+// time (see cmd/magus-spells-gen), and exposed to magusfiles as the import
+// "magus/spell/<name>". No blank-import or project.RegisterSpell call is
+// required; the bindings layer discovers all spells from the embedded
+// filesystem at startup.
 //
-// To attach a spell to a project from a magusfile.tl:
+// To attach a spell to a project from a magusfile.bzz:
 //
-//	local go = require("magus.spell.go")
-//	magus.project.register(".", { spells = { go } })
+//	import "magus";
+//	import "magus/spell/go";
+//	magus.project.register(".", { "spells": [go] });
 //
 // Or from a Go magusfile using the magus package:
 //
 //	magus.RegisterProject(".", magus.WithSpell("go"))
 //
-// To call a spell's targets directly from a Teal target:
+// To call a spell's targets directly from a Buzz target:
 //
-//	local go = require("magus.spell.go")
-//	go.build({cwd = "."})
+//	import "magus/spell/go";
+//	go.build({ "cwd": "." });
 //
-// Available spells live under magus/internal/interp/engine/lua/teal/spell/<name>/.
-// Each spell is a <name>.tl source file; regenerate compiled Lua with:
+// Built-in spells live under magus/spells/<name>/; each is a spell.bzz source
+// file. Regenerate the embedded bytecode with:
 //
 //	magus run spells-generate
 //
-// Runtime utility modules are imported per file with require:
+// Host utility modules are imported per file off the magus/extra aggregate:
 //
-//	local os = require("magus.extra.os")   -- os.exec (direct) / os.exec_sh (shell)
-//	local fs = require("magus.extra.fs")   -- filesystem helpers
-//	local vcs = require("magus.extra.vcs") -- VCS introspection
+//	import "magus/extra";  // extra.os.exec (direct) / extra.os.exec_sh (shell),
+//	                       // extra.fs (filesystem), extra.vcs (VCS introspection)

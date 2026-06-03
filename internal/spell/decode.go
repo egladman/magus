@@ -7,9 +7,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Obj is a read view over a host-language record — a Lua table or a Buzz map.
-// Each engine wraps its native value in a small adapter (~15 lines), so Decode
-// reads a spell definition once, identically, regardless of authoring language.
+// Obj is a read view over a host-language record — e.g. a Buzz map. An engine
+// wraps its native value in a small adapter (~15 lines), so Decode reads a spell
+// definition once, identically, regardless of authoring language.
 // It is the marshalling boundary: the single place that knows a spell's shape.
 type Obj interface {
 	// Str returns the string at key and whether it was present as a string.
@@ -31,14 +31,14 @@ type Obj interface {
 	// bound handle, where define/load marshalled the result back as data so
 	// project.register can decode the spell by value at bind time). Absent yields
 	// (nil, nil). Calling a function is the one genuinely engine-specific act:
-	// Lua calls through its runtime, Buzz through its session.
+	// Buzz calls through its session.
 	CallStrs(key string, args ...string) ([]string, error)
 }
 
 // Decode marshals a spell definition record into the canonical Spec,
 // resolving needs()/provides() and validating op names and charm strategies. It
-// is the single reader both the Lua/Teal and Buzz engines route through, so the
-// two languages cannot drift. Decode is pure: it neither registers the spell nor
+// is the single reader the Buzz engine routes through, so a spell's shape is
+// known in exactly one place. Decode is pure: it neither registers the spell nor
 // touches any global state.
 func Decode(src Obj) (Spec, error) {
 	name, _ := src.Str("name")

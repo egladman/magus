@@ -43,12 +43,27 @@ var Time = Module{
 			Returns: []Ret{{Type: TypeFloat}},
 			Impl:    TimeParseDuration,
 		},
+		{
+			Name:    "now_iso",
+			Doc:     "Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    TimeNowISO,
+		},
 	},
 }
 
 // TimeFormat renders unixMillis (interpreted as UTC) with a Go reference layout.
 func TimeFormat(_ context.Context, layout string, unixMillis float64) (string, error) {
 	return time.UnixMilli(int64(unixMillis)).UTC().Format(layout), nil
+}
+
+// TimeNowISO returns the current UTC time formatted as RFC 3339. The raw
+// epoch-millis clock value is already available as Buzz's os.time(); this is the
+// formatted-string convenience the time module would otherwise force a caller to
+// build by hand via os.time() + time.format.
+func TimeNowISO(_ context.Context) (string, error) {
+	return time.Now().UTC().Format(time.RFC3339), nil
 }
 
 // TimeParse parses value with layout into Unix epoch milliseconds. A zoneless

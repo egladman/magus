@@ -94,6 +94,54 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzStrSliceVal(ret0), nil
 	}))
+	m.MapSet("ext", buzz.DirectValue("fs.ext", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		path := bzStr(bzArgs, 0)
+		ret0, err := std.FsExt(ctx, path)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
+	m.MapSet("isDir", buzz.DirectValue("fs.isDir", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		path := bzStr(bzArgs, 0)
+		ret0, err := std.FsIsDir(ctx, path)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzBoolVal(ret0), nil
+	}))
+	m.MapSet("isFile", buzz.DirectValue("fs.isFile", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		path := bzStr(bzArgs, 0)
+		ret0, err := std.FsIsFile(ctx, path)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzBoolVal(ret0), nil
+	}))
+	m.MapSet("stat", buzz.DirectValue("fs.stat", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		path := bzStr(bzArgs, 0)
+		ret0, err := std.FsStat(ctx, path)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzAnyMapVal(ret0), nil
+	}))
+	m.MapSet("copyFile", buzz.DirectValue("fs.copyFile", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		src := bzStr(bzArgs, 0)
+		dst := bzStr(bzArgs, 1)
+		if err := std.FsCopyFile(ctx, src, dst); err != nil {
+			return buzz.Null, err
+		}
+		return buzz.Null, nil
+	}))
+	m.MapSet("copyDir", buzz.DirectValue("fs.copyDir", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		src := bzStr(bzArgs, 0)
+		dst := bzStr(bzArgs, 1)
+		if err := std.FsCopyDir(ctx, src, dst); err != nil {
+			return buzz.Null, err
+		}
+		return buzz.Null, nil
+	}))
 	m.MapSet("watch", buzz.DirectValue("fs.watch", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
 		paths := bzStrSlice(bzArgs, 0)
 		callback := bzCallback(sess, bzArgs, 1)

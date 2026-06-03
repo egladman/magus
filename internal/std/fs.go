@@ -3,6 +3,7 @@ package std
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -95,6 +96,48 @@ var Fs = Module{
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringSlice}},
 			Impl:    FsListDir,
+		},
+		{
+			Name:    "ext",
+			Doc:     "File-name extension of path, including the leading dot (\"\" if none).",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    FsExt,
+		},
+		{
+			Name:    "is_dir",
+			Doc:     "True iff path exists and is a directory (a sandbox-denied path reads as false).",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    FsIsDir,
+		},
+		{
+			Name:    "is_file",
+			Doc:     "True iff path exists and is a regular file (a sandbox-denied path reads as false).",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    FsIsFile,
+		},
+		{
+			Name:    "stat",
+			Doc:     "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    FsStat,
+		},
+		{
+			Name:    "copy_file",
+			Doc:     "Copy the file at src to dst (overwriting), preserving its permission bits.",
+			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
+			Returns: nil,
+			Impl:    FsCopyFile,
+		},
+		{
+			Name:    "copy_dir",
+			Doc:     "Recursively copy the directory tree at src to dst, preserving permission bits.",
+			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
+			Returns: nil,
+			Impl:    FsCopyDir,
 		},
 		{
 			Name: "watch",
@@ -221,6 +264,127 @@ func FsListDir(ctx context.Context, path string) ([]string, error) {
 		names[i] = e.Name()
 	}
 	return names, nil
+}
+
+// FsExt returns the file-name extension of path (including the leading dot).
+func FsExt(_ context.Context, path string) (string, error) {
+	return filepath.Ext(path), nil
+}
+
+// FsIsDir reports whether path exists and is a directory. Like FsExists, a
+// sandbox-denied path is reported as false rather than raising, so the predicate
+// is safe to use as a probe.
+func FsIsDir(ctx context.Context, path string) (bool, error) {
+	if err := checkRead(ctx, path); err != nil {
+		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir(), nil
+}
+
+// FsIsFile reports whether path exists and is a regular file. A sandbox-denied
+// path is reported as false (see FsIsDir).
+func FsIsFile(ctx context.Context, path string) (bool, error) {
+	if err := checkRead(ctx, path); err != nil {
+		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular(), nil
+}
+
+// FsStat returns metadata for path as {size, mtime, mode, is_dir}, subject to the
+// sandbox read policy. Unlike the probe predicates a missing path is an error,
+// since a caller asking for metadata expects the entry to exist.
+func FsStat(ctx context.Context, path string) (map[string]any, error) {
+	if err := checkRead(ctx, path); err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("fs.stat %q: %w", path, err)
+	}
+	return map[string]any{
+		"size":   info.Size(),
+		"mtime":  float64(info.ModTime().UnixMilli()),
+		"mode":   int64(info.Mode().Perm()),
+		"is_dir": info.IsDir(),
+	}, nil
+}
+
+// FsCopyFile copies src to dst (overwriting), preserving src's permission bits.
+// Both ends are subject to the sandbox policy: src must be readable, dst writable.
+func FsCopyFile(ctx context.Context, src, dst string) error {
+	if err := checkRead(ctx, src); err != nil {
+		return err
+	}
+	if err := checkWrite(ctx, dst); err != nil {
+		return err
+	}
+	if err := copyFile(src, dst); err != nil {
+		return fmt.Errorf("fs.copy_file %q -> %q: %w", src, dst, err)
+	}
+	return nil
+}
+
+// FsCopyDir recursively copies the directory tree at src to dst, preserving
+// permission bits. Each source entry is checked for read and each destination
+// for write, so a sandbox-denied path stops the copy with a diag error.
+func FsCopyDir(ctx context.Context, src, dst string) error {
+	walkErr := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			if err := checkWrite(ctx, target); err != nil {
+				return err
+			}
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		if err := checkRead(ctx, path); err != nil {
+			return err
+		}
+		if err := checkWrite(ctx, target); err != nil {
+			return err
+		}
+		return copyFile(path, target)
+	})
+	if walkErr != nil {
+		return fmt.Errorf("fs.copy_dir %q -> %q: %w", src, dst, walkErr)
+	}
+	return nil
+}
+
+// copyFile streams src to dst, creating or truncating dst with src's permission
+// bits. It is the unguarded primitive behind FsCopyFile/FsCopyDir; callers apply
+// the sandbox checks.
+func copyFile(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // checkRead returns a MGS2001 diag error when ctx carries a sandbox policy

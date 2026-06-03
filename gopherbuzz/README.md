@@ -1,32 +1,52 @@
-# buzz
+# gopherbuzz
 
 A pure-Go bytecode VM for the [Buzz](https://buzz-lang.dev/0.5.0/) scripting
-language: lexed, parsed, type-checked, compiled to a flat instruction stream, and
-run on a register-window VM with an 8-byte NaN-boxed value. Hot top-level numeric
-loops are compiled to native code by an opt-out **baseline JIT** (amd64). Embed
-via `NewSession`.
+language with JIT support.
 
-- Reference: <https://buzz-lang.dev/0.5.0/reference/> · API: `doc.go`
+- Reference: <https://buzz-lang.dev/0.5.0/reference/>
 - Hot-path notes: [Performance design](#performance-design) · JIT: [Baseline JIT](#baseline-jit)
 
 ## Performance
 
-Two workloads vs other Go-embedded languages, each compiled once and run per
-iteration (benchstat median, n=6, amd64 Xeon @ 2.80 GHz, Go 1.25). `LoopSum` sums
-`0..1e6`; `Fib` is recursive `fib(30)` (call-heavy, so Buzz runs it on the
-interpreter — JIT'd calls aren't done yet). Harness: `benchmarks/comparison/`.
+A pure-Go VM with a baseline JIT — no cgo, no toolchain. Its standout case is a
+tight top-level numeric loop (`LoopSum`, sum `0..1e6`) — the one shape the JIT
+compiles. Both gopherbuzz bars below are the **same VM**, JIT on vs. off, so the
+chart shows what the JIT adds *and* what the interpreter does without it:
 
-| Engine | LoopSum | Fib(30) | LoopSum mem |
-|---|--:|--:|--:|
-| **Buzz (JIT)** | **5.9 ms** | 188 ms | 5.7 KB |
-| **Buzz (interp)** | 36.7 ms | **182 ms** | 2.0 KB |
-| gopher-lua | 47.6 ms | 266 ms | 15 MB |
-| tengo | 78.3 ms | 217 ms | 15 MB |
-| goja (JS) | 395 ms | 403 ms | 107 MB |
+```mermaid
+xychart-beta
+    title "LoopSum 0..1e6 — warm, ms/op (lower is better)"
+    x-axis ["gopherbuzz JIT", "gopherbuzz interp", "gopher-lua", "tengo", "goja"]
+    y-axis "ms/op" 0 --> 430
+    bar [5.8, 35.9, 50.5, 84.0, 424]
+```
 
-Buzz leads both — ~8× over gopher-lua and ~13× over tengo on the loop, and the
-interpreter even wins `fib` — at KB, not MB/GB, of allocation. Cross-language
-microbenchmarks differ in semantics; read as order-of-magnitude.
+```mermaid
+xychart-beta
+    title "LoopSum 0..1e6 — warm, MB allocated (lower is better)"
+    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
+    y-axis "MB/op" 0 --> 110
+    bar [0, 15, 15, 107]
+```
+
+On this loop gopherbuzz leads on both axes: ~6× its own interpreter and ~9×
+gopher-lua via the JIT, and — because the NaN-boxed `[]uint64` stack has no
+GC-visible pointers — steady-state allocation is effectively zero.
+
+**`LoopSum` is the flattering workload, and the JIT's only wheelhouse —
+everywhere else gopherbuzz runs the interpreter.** There it wins the lighter
+scripting microbenchmarks (loops, calls, `fib`, collection iteration) but
+**loses every heavy compute kernel on raw time**: Mandelbrot and MatMul to
+gopher-lua, BinaryTrees and NBody to tengo, and string building to gopher-lua.
+Its allocation stays well under the dynamically typed peers across the board, but
+it's "kilobytes" only on the lean workloads — collection- and string-heavy ones
+reach single-digit MB. The full win-and-lose matrix — 10 workloads, warm + fresh,
+plus an opt-in LuaJIT / Umka / wazero tier that is faster still — lives in
+[`benchmarks/`](benchmarks/), kept deliberately honest.
+
+benchstat median, amd64 Xeon @ 2.80 GHz, Go 1.25; cross-language microbenchmarks
+differ in semantics (types, safety, GC) — read as order-of-magnitude, not a
+verdict.
 
 Reproduce:
 
@@ -34,6 +54,39 @@ Reproduce:
 go test -run='^$' -bench=. -benchmem ./...                # in-tree (BUZZ_JIT=0 for interp)
 cd benchmarks/comparison && GOWORK=off go test -bench=. . # cross-language
 ```
+
+## Why this matters
+
+gopherbuzz is the interpreter behind **magus**, and magus has exactly one job:
+fan out across a workspace, run the tasks, and get out of the way. Two
+constraints fall out of that, and they're why this VM exists at all:
+
+- **No second toolchain.** magus is a single static Go binary that cross-compiles
+  cleanly and runs anywhere `go` does — no cgo, no C library, nothing to install
+  first. The moment the magusfile language reached for a faster engine that
+  needed a C toolchain (the [extended tier](benchmarks/comparison/) — LuaJIT,
+  Umka — makes the speed on offer explicit), magus would forfeit that promise. So
+  the engine has to be **pure Go**. That rules out the fastest options in the
+  comparison and makes a fast *pure-Go* VM the only door, not a preference.
+- **It's on every task's critical path.** The VM evaluates the `magusfile.bzz`
+  and the host-call glue for every target, on every run, before any real work
+  starts — and again as the fan-out widens. If it's slow or allocation-heavy,
+  that cost is paid over and over and lands as latency and GC pressure sitting
+  between you and your build. "Get out of the way" only holds if the layer doing
+  the dispatching is itself too cheap to notice.
+
+That's the whole bar: **be invisible.** The benchmarks above are deliberately
+heavy stress loops (a million iterations, recursion to `fib(30)`); a real
+`magusfile.bzz` is orders of magnitude smaller, so the VM's slice of any run sits
+far below them — well under the cost of the work it's dispatching. Fast and lean
+on the stress tests is the headroom that makes it negligible in practice.
+
+And yes — we're well into diminishing returns now. Shaving another few percent off
+the hot path won't change anyone's day, and the [perf design notes](#performance-design)
+exist mostly to stop a future change from *regressing* what's here. The point was
+never to win microbenchmarks; it was to make the interpreter cheap enough that
+magus can treat it as free — without reaching for a second toolchain to get there.
+It was a fun exercise besides.
 
 ## Building
 
@@ -96,11 +149,8 @@ source → Parse → ast.Program → Checker → Compiler (FoldConsts → FusePe
        → Chunk (bytecode) → VM.Exec (register-window stack) → Value
 ```
 
-- **`Instr`** `{Op uint8, A, B int32}` — word-coded, pointer-free, in a
-  contiguous slice, fetched without bounds checks on the hot path.
-- **`Value`** — 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in
-  the payload; heap objects are indices into a per-VM handle table, so the
-  operand stack is `[]uint64` with no GC-visible pointers.
+- **`Instr`** `{Op uint8, A, B int32}` — word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.
+- **`Value`** — 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in the payload; heap objects are indices into a per-VM handle table, so the operand stack is `[]uint64` with no GC-visible pointers.
 
 ## Baseline JIT
 
@@ -108,25 +158,14 @@ On **amd64**, a hot top-level chunk whose body is the numeric loop/arithmetic
 opcode subset is compiled to native code, deleting interpreter dispatch. On by
 default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
 
-- The pointerless `[]uint64` stack lets native code run with no GC cooperation;
-  every value sits at a static slot offset at each opcode boundary, so
-  interpreter state is always materialized.
+- The pointerless `[]uint64` stack lets native code run with no GC cooperation; every value sits at a static slot offset at each opcode boundary, so interpreter state is always materialized.
 - Each op has an int and a double (SSE) fast path. Anything else — mixed
-  int/float, a non-number via `any`, NaN, float ÷0/`%` — **deopts** to the
-  interpreter at the recorded ip; unsupported ops (calls, members, strings) make
-  the chunk ineligible. The interpreter is the oracle, so the JIT is never wrong.
+  int/float, a non-number via `any`, NaN, float ÷0/`%` — **deopts** to the interpreter at the recorded ip; unsupported ops (calls, members, strings) make the chunk ineligible. The interpreter is the oracle, so the JIT is never wrong.
 - Loop back-edges poll cancellation every 256 iterations (one predicted branch).
 
-Codegen uses [`golang-asm`](https://github.com/twitchyliquid64/golang-asm): same
-machine code (so same runtime speed) as a hand emitter, but toolchain-verified.
+Codegen uses [`golang-asm`](https://github.com/twitchyliquid64/golang-asm): same machine code (so same runtime speed) as a hand emitter, but toolchain-verified.
 Only the trampolines (`vm/jit_<arch>.s`) are hand asm. Not yet JIT'd: calls,
 non-top-level frames, strings.
-
-**amd64** is the runtime-verified, default-on backend (int + float). **arm64**
-(`vm/jit_arm64.go`) is int-only and **compile-verified but not yet run on arm64
-hardware**, so it's **off by default there** — opt in with `BUZZ_JIT=1` to run the
-differential tests on real hardware. Float/div/mod deopt to the interpreter on
-arm64. Other arches and the safe/unsafe/wasm builds use a no-op stub.
 
 ## Performance design
 
@@ -149,23 +188,18 @@ under `buzz_safe`.
   not per-Chunk (chunks are shared; verified `-race`).
 - **NaN-box + handle table**: zero write barriers on push/pop; the table pins
   objects for the VM's life (fine for short per-target sessions).
-- **PGO** (`default.pgo`): profile-guided inlining + `OpCall` devirtualization.
 
 ## Bytecode version
 
 Bump `vm.BytecodeVersion` (in `vm/marshal.go`) when opcode numbering, the
 `Instr`/`Chunk`/`UpvalInfo` layout, the fused-op encoding, or the serializable
-`Value`/AST set changes — then `go generate` in `../internal/spell`.
+`Value`/AST set changes.
 
 ## Contributing gotchas
 
 1. No new `Exec` case bodies (I-cache — see above).
-2. Value changes must pass under all three build tags (CI runs default +
-   `buzz_safe`; spot-check `buzz_unsafe`).
-3. Fused-op sub-opcode masking (`& 0x7F` / `& 0x7FFF`) must track any new flag
-   bits, in both `chunk.go` and the VM handlers.
-4. `slotTypeInt = 1` (vm `chunk.go`) mirrors `buzz.sInt` — keep in sync.
-5. Renumbering opcodes / changing a fused encoding → bump `BytecodeVersion` +
-   regenerate spells.
-6. `mcache`/`ncache` are per-VM, never per-Chunk (chunks are shared).
-7. Re-check escapes with `go build -gcflags='-m=2' ./vm/` after hot-path changes.
+2. Value changes must pass under all three build tags (CI runs default + `buzz_safe`; spot-check `buzz_unsafe`).
+3. Fused-op sub-opcode masking (`& 0x7F` / `& 0x7FFF`) must track any new flag bits, in both `chunk.go` and the VM handlers.
+4. `slotTypeInt = 1` (vm `chunk.go`) mirrors `buzz.sInt` so they must be kept in sync.
+5. `mcache`/`ncache` are per-VM, never per-Chunk (chunks are shared).
+6. Re-check escapes with `go build -gcflags='-m=2' ./vm/` after hot-path changes.

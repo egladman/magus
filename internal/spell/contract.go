@@ -1,10 +1,9 @@
 package spell
 
 // ContractEntry describes one optional entry in the engine-agnostic mgs_ spell
-// contract. Both the Buzz resolver (resolve.go) and the Lua resolver
-// (resolveLua in internal/interp/bindings/spell.go) iterate OptionalContract, so
-// the set of optional functions and the decoder keys they map to can never drift
-// between engines.
+// contract. The Buzz resolver (resolve.go) iterates OptionalContract, so the
+// optional functions and the decoder keys they map to live in one canonical
+// list rather than being spelled out at each call site.
 type ContractEntry struct {
 	Name     string // exported mgs_ function name
 	Field    string // decoder field key the resolved value is stored under

@@ -88,5 +88,19 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzBoolVal(ret0), nil
 	}))
+	m.MapSet("numCpu", buzz.DirectValue("os.numCpu", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		ret0, err := std.OsNumCPU(ctx)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzIntVal(ret0), nil
+	}))
+	m.MapSet("hostname", buzz.DirectValue("os.hostname", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		ret0, err := std.OsHostname(ctx)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
 	return m
 }

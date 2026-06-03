@@ -39,10 +39,10 @@ const (
 	TypeFunc
 	TypeAny
 	TypeBytes
-	// TypeIndex is an int that names a position in a list. Codegen translates it
-	// to each VM's convention — 1-based in Lua, 0-based in JS — so the Go Impl
-	// always sees a 0-based index (and returns one; -1 for "not found" becomes 0
-	// in Lua, stays -1 in JS).
+	// TypeIndex is an int that names a position in a list. Buzz lists are
+	// 0-based, matching the Go Impl, so the index needs no offset on the way in
+	// or out (-1 means "not found"). The distinct tag is kept so a VM with a
+	// different convention can be translated in one place if one is ever added.
 	TypeIndex
 )
 
@@ -93,8 +93,8 @@ type Ret struct {
 
 // Method declares one host function bound into the VM.
 type Method struct {
-	// Name is the canonical snake_case identifier exposed in the Lua surface
-	// (e.g. "read_file"). The JS surface uses camelCase derived from this.
+	// Name is the canonical snake_case identifier (e.g. "read_file"); the Buzz
+	// surface exposes it as camelCase derived from this (readFile).
 	Name string
 	// Doc is a one-line description used in generated .d.ts comments.
 	Doc string
@@ -102,7 +102,7 @@ type Method struct {
 	// present, must be the last arg.
 	Args []Arg
 	// Returns lists return values. An error is always implicit on Impls
-	// and surfaces as a Lua error / JS thrown Error; do not list it here.
+	// and surfaces as a Buzz runtime error; do not list it here.
 	Returns []Ret
 	// Impl is the typed Go function bound by this Method. Codegen reflects
 	// over it to discover its package-qualified name and validates that its
@@ -112,8 +112,8 @@ type Method struct {
 
 // Field is a static, table-level value on a Module. Unlike a Method, a Field
 // is resolved once at registration time and stored as a plain value on the
-// module's table (Lua) or object (JS) — callers read it without function
-// invocation (e.g. `vcs.name`, not `vcs.name()`).
+// module's Buzz map — callers read it without function invocation (e.g.
+// `vcs.name`, not `vcs.name()`).
 type Field struct {
 	Name string
 	Doc  string

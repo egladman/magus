@@ -145,8 +145,8 @@ func vcsRoot(dir string) string {
 
 // DescribeGraph returns the target dependency graph of each project, extracted
 // statically from its magusfile (no target body is evaluated). Buzz magusfiles
-// are supported today; a Teal/Lua project yields an engine-tagged entry with no
-// nodes until that extractor lands.
+// are supported; a project on any other engine yields an engine-tagged entry
+// with no nodes until that extractor lands.
 func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 	out := types.TargetGraphOutput{Definition: types.TargetGraphDefinition}
 	repoRoot := vcsRoot(m.ws.Root) // "" outside a repo; drives the repo-relative MAGUS.md heading

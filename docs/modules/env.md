@@ -53,3 +53,33 @@ Return all environment variables as a name→value map.
 
 **Returns:** map[string]string
 
+### `unset`
+
+Remove name from the current process environment.
+
+**Signature:** `extra.env.unset(name)`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` |  | |
+
+### `expand`
+
+Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to "").
+
+**Signature:** `extra.env.expand(s) → string`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `s` | `string` |  | |
+
+**Returns:** string
+
+### `home`
+
+Return the current user's home directory.
+
+**Signature:** `extra.env.home() → string`
+
+**Returns:** string
+

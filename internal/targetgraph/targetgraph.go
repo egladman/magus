@@ -13,9 +13,9 @@
 // same kebab-case normalizer the run path registers targets under, so a node and
 // an edge that name the same target always reconcile.
 //
-// The extractor currently understands the Buzz syntax (`export fun`, `//`
-// comments, `[...]` lists). The Teal/Lua dialect is a planned follow-up; callers
-// gate on the engine until then.
+// The extractor understands the Buzz syntax (`export fun`, `//` comments,
+// `[...]` lists); callers gate on the engine, so a project on any other engine
+// is skipped until an extractor for it lands.
 package targetgraph
 
 import (

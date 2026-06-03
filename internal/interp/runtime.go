@@ -315,7 +315,7 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 // NewBuzzReplSession creates a Buzz session with host bindings installed, ready
 // for the shared REPL. When autoloadDir is non-empty and a magusfile.bzz is
 // found in or above it, its files are executed first so their top-level
-// definitions are available at the prompt (mirroring the Lua repl autoload).
+// definitions are available at the prompt.
 // The returned engine.Session also satisfies the optional REPL/debug interfaces.
 func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session, error) {
 	buzzSess := buzz.NewSession(ctx)

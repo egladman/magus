@@ -46,5 +46,27 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzStrMapVal(ret0), nil
 	}))
+	m.MapSet("unset", buzz.DirectValue("env.unset", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		name := bzStr(bzArgs, 0)
+		if err := std.EnvUnset(ctx, name); err != nil {
+			return buzz.Null, err
+		}
+		return buzz.Null, nil
+	}))
+	m.MapSet("expand", buzz.DirectValue("env.expand", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		s := bzStr(bzArgs, 0)
+		ret0, err := std.EnvExpand(ctx, s)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
+	m.MapSet("home", buzz.DirectValue("env.home", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		ret0, err := std.EnvHome(ctx)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
 	return m
 }

@@ -25,7 +25,8 @@ func RegisterJson(ctx context.Context, sess *buzz.Session) buzz.Value {
 	}))
 	m.MapSet("stringify", buzz.DirectValue("json.stringify", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
 		value := bzAny(bzArgs, 0)
-		ret0, err := std.JSONStringify(ctx, value)
+		indent := bzStr(bzArgs, 1)
+		ret0, err := std.JSONStringify(ctx, value, indent)
 		if err != nil {
 			return buzz.Null, err
 		}
