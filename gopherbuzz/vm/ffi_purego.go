@@ -32,8 +32,95 @@ import (
 )
 
 // init registers the purego backend as the default FFI provider on supported
-// platforms. An embedder can still override it via RegisterFFIProvider.
-func init() { RegisterFFIProvider(puregoFFI{}) }
+// platforms. An embedder can still override it via RegisterFFIProvider. It also
+// wires the callback maker used by MakeCallback (ffi.go), since building a C
+// function pointer needs purego.NewCallback.
+func init() {
+	RegisterFFIProvider(puregoFFI{})
+	callbackMaker = puregoMakeCallback
+}
+
+// puregoMakeCallback builds a C function pointer (purego.NewCallback) whose body
+// re-enters Buzz to run fn. The C ABI restricts callbacks to integer/pointer/bool
+// arguments and a single such result (or void) — MakeCallback already rejected
+// floating types — so the reflect signature here uses only those kinds.
+func puregoMakeCallback(ctx context.Context, fn Value, ret CType, params []CType) (uintptr, error) {
+	paramTypes := make([]reflect.Type, len(params))
+	for i, p := range params {
+		paramTypes[i] = cTypeToReflect(p)
+	}
+	var retTypes []reflect.Type
+	if ret != CVoid {
+		retTypes = []reflect.Type{cTypeToReflect(ret)}
+	}
+	fnType := reflect.FuncOf(paramTypes, retTypes, false)
+
+	trampoline := reflect.MakeFunc(fnType, func(in []reflect.Value) []reflect.Value {
+		bargs := make([]Value, len(params))
+		for i, p := range params {
+			bargs[i] = reflectArgToBuzz(in[i], p)
+		}
+		// Run the Buzz callback on a fresh VM (the global heap makes fn portable
+		// across VMs). A C callback cannot receive a Buzz error, so on failure we
+		// fall through to the zero return value.
+		result := Null
+		nv := NewVM(ctx)
+		if err := nv.Call(fn, bargs); err == nil {
+			if r, e := nv.Exec(); e == nil {
+				result = r
+			}
+		}
+		if ret == CVoid {
+			return nil
+		}
+		return []reflect.Value{buzzRetToReflect(result, ret, fnType.Out(0))}
+	})
+
+	return purego.NewCallback(trampoline.Interface()), nil
+}
+
+// reflectArgToBuzz converts one C argument delivered to a callback into the Buzz
+// value the script's function receives. It is the inverse of buzzToReflectArg for
+// the callback-legal kinds.
+func reflectArgToBuzz(v reflect.Value, kind CType) Value {
+	switch kind {
+	case CBool:
+		return BoolValue(v.Bool())
+	case CInt:
+		return IntValue(v.Int())
+	case CUint:
+		return IntValue(int64(v.Uint()))
+	case CCharPtr:
+		return StrValue(v.String())
+	case CVoidPtr:
+		return IntValue(int64(v.Uint())) // uintptr address as int
+	default:
+		return Null
+	}
+}
+
+// buzzRetToReflect converts the Buzz callback's result back into the C return
+// type, as a reflect.Value of exactly outType (what RegisterFunc/NewCallback
+// expects). Out-of-type or null results collapse to the zero value.
+func buzzRetToReflect(v Value, kind CType, outType reflect.Type) reflect.Value {
+	switch kind {
+	case CBool:
+		return reflect.ValueOf(v.Bool())
+	case CInt:
+		if v.IsInt() {
+			return reflect.ValueOf(v.AsInt())
+		}
+	case CUint:
+		if v.IsInt() {
+			return reflect.ValueOf(uint64(v.AsInt()))
+		}
+	case CVoidPtr:
+		if v.IsInt() {
+			return reflect.ValueOf(uintptr(v.AsInt()))
+		}
+	}
+	return reflect.Zero(outType)
+}
 
 // puregoFFI implements FFIProvider using purego's dlopen/dlsym + RegisterFunc.
 type puregoFFI struct{}

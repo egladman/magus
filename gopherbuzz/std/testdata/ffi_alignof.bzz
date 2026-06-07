@@ -1,0 +1,3 @@
+// @expect: 4
+import "ffi";
+final __r = ffi.alignOf("int");

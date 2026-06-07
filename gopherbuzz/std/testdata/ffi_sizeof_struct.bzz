@@ -1,0 +1,4 @@
+// @expect: 16
+// struct { int; char* } on LP64: 4 + 4 pad + 8 = 16.
+import "ffi";
+final __r = ffi.sizeOfStruct(["int", "char*"]);

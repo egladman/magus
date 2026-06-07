@@ -1,0 +1,38 @@
+import "std";
+import "ffi";
+
+// __LIBPATH__ is substituted by the runner with the compiled library's path.
+final lib = zdef("__LIBPATH__", "int add(int a, int b); void divmod(int a, int b, int *q, int *r); int apply_each(int *xs, int n, void *f);");
+
+// square is handed to C as a function pointer via ffi.callback below.
+fun square(x: int) > int {
+    return x * x;
+}
+
+fun main() > void {
+    // 1. Scalar call.
+    std.print("add(40, 2) = {lib.add(40, 2)}");
+
+    // 2. Out-parameters: allocate two ints, let C fill them, read them back.
+    final isize = ffi.sizeOf("int");
+    final q = ffi.alloc(isize);
+    final r = ffi.alloc(isize);
+    lib.divmod(17, 5, q, r);
+    final quot = ffi.read(q, 0, "int");
+    final rem = ffi.read(r, 0, "int");
+    std.print("divmod(17, 5) = {quot} rem {rem}");
+    ffi.free(q);
+    ffi.free(r);
+
+    // 3. Callback over a C-side array: build int[]{1,2,3,4}, sum the squares.
+    final n = 4;
+    final xs = ffi.alloc(isize * n);
+    foreach (i in 0..n) {
+        ffi.write(xs, i * isize, "int", i + 1);
+    }
+    final cb = ffi.callback(square, "int", ["int"]);
+    std.print("sum of squares 1..4 = {lib.apply_each(xs, n, cb)}");
+    ffi.free(xs);
+}
+
+main();

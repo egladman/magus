@@ -79,11 +79,7 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	// magus.cmd runs the magus binary with args; it raises when the invocation
 	// exits non-zero (parity with os.exec).
 	magus.MapSet("cmd", buzzeng.DirectValue("magus.cmd", func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		var argv []string
-		if len(args) > 0 {
-			argv = buzzValToStringSlice(args[0])
-		}
-		rec, err := std.MagusCmd(ctx, argv)
+		rec, err := std.MagusCmd(ctx, argStrSlice(args, 0))
 		if err != nil {
 			return buzzeng.Null, err
 		}
@@ -101,11 +97,7 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	// magus.fatal(msg): log at error level, then abort with exit 1 via a typed
 	// ExitError (the CLI/daemon map it to the exit status).
 	magus.MapSet("fatal", buzzeng.DirectValue("magus.fatal", func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		msg := ""
-		if len(args) > 0 && args[0].IsStr() {
-			msg = args[0].AsString()
-		}
-		emitMagusLog(ctx, slog.LevelError, msg, nil)
+		emitMagusLog(ctx, slog.LevelError, argStr(args, 0), nil)
 		types.RecordExit(ctx, 1)
 		return buzzeng.Null, types.ExitError{Code: 1}
 	}))
@@ -237,19 +229,7 @@ func registerHostModules(ctx context.Context, sess *buzzeng.Session) {
 // through the shared emitMagusLog so every host log path formats identically.
 func buzzLogFn(level slog.Level) func(context.Context, []buzzeng.Value) (buzzeng.Value, error) {
 	return func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		msg := ""
-		if len(args) > 0 && args[0].IsStr() {
-			msg = args[0].AsString()
-		}
-		fields := map[string]string{}
-		if len(args) > 1 && args[1].IsMap() {
-			for _, k := range args[1].MapKeys() {
-				if v, ok := args[1].MapGet(k); ok {
-					fields[k] = v.AsString()
-				}
-			}
-		}
-		emitMagusLog(ctx, level, msg, fields)
+		emitMagusLog(ctx, level, argStr(args, 0), argStrMap(args, 1))
 		return buzzeng.Null, nil
 	}
 }
@@ -260,10 +240,7 @@ func buildProjectNS(ctx context.Context) buzzeng.Value {
 		if len(args) == 0 {
 			return buzzeng.Null, nil
 		}
-		path := ""
-		if args[0].IsStr() {
-			path = args[0].AsString()
-		}
+		path := argStr(args, 0)
 		var opts []wire.ProjectOption
 		if len(args) >= 2 {
 			var err error
@@ -550,11 +527,7 @@ func buildSpellNS(ctx context.Context) buzzeng.Value {
 	}))
 
 	ns.MapSet("load", buzzeng.DirectValue("magus.spell.load", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		path := ""
-		if len(args) > 0 && args[0].IsStr() {
-			path = args[0].AsString()
-		}
-		m, ok := loadLocalSpell(ctx, path)
+		m, ok := loadLocalSpell(ctx, argStr(args, 0))
 		if !ok {
 			return buzzeng.Null, nil
 		}

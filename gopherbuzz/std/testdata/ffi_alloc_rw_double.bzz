@@ -1,0 +1,6 @@
+// @expect: 3.5
+import "ffi";
+final p = ffi.alloc(8);
+ffi.write(p, 0, "double", 3.5);
+final __r = ffi.read(p, 0, "double");
+ffi.free(p);

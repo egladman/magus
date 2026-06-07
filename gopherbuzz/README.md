@@ -8,45 +8,22 @@ language with JIT support.
 
 ## Performance
 
-A pure-Go VM with a baseline JIT — no cgo, no toolchain. Its standout case is a
-tight top-level numeric loop (`LoopSum`, sum `0..1e6`) — the one shape the JIT
-compiles. Both gopherbuzz bars below are the **same VM**, JIT on vs. off, so the
-chart shows what the JIT adds *and* what the interpreter does without it:
+Two workloads vs other Go-embedded languages, each compiled once and run per
+iteration (benchstat median, n=6, amd64 Xeon @ 2.80 GHz, Go 1.25). `LoopSum` sums
+`0..1e6`; `Fib` is recursive `fib(30)` (call-heavy, so Buzz runs it on the
+interpreter — JIT'd calls aren't done yet). Harness: `benchmarks/comparison/`.
 
-```mermaid
-xychart-beta
-    title "LoopSum 0..1e6 — warm, ms/op (lower is better)"
-    x-axis ["gopherbuzz JIT", "gopherbuzz interp", "gopher-lua", "tengo", "goja"]
-    y-axis "ms/op" 0 --> 430
-    bar [5.8, 35.9, 50.5, 84.0, 424]
-```
+| Engine | LoopSum | Fib(30) | LoopSum mem |
+|---|--:|--:|--:|
+| **Buzz (JIT)** | **5.9 ms** | 188 ms | 5.7 KB |
+| **Buzz (interp)** | 36.7 ms | **182 ms** | 2.0 KB |
+| gopher-lua | 47.6 ms | 266 ms | 15 MB |
+| tengo | 78.3 ms | 217 ms | 15 MB |
+| goja (JS) | 395 ms | 403 ms | 107 MB |
 
-```mermaid
-xychart-beta
-    title "LoopSum 0..1e6 — warm, MB allocated (lower is better)"
-    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
-    y-axis "MB/op" 0 --> 110
-    bar [0, 15, 15, 107]
-```
-
-On this loop gopherbuzz leads on both axes: ~6× its own interpreter and ~9×
-gopher-lua via the JIT, and — because the NaN-boxed `[]uint64` stack has no
-GC-visible pointers — steady-state allocation is effectively zero.
-
-**`LoopSum` is the flattering workload, and the JIT's only wheelhouse —
-everywhere else gopherbuzz runs the interpreter.** There it wins the lighter
-scripting microbenchmarks (loops, calls, `fib`, collection iteration) but
-**loses every heavy compute kernel on raw time**: Mandelbrot and MatMul to
-gopher-lua, BinaryTrees and NBody to tengo, and string building to gopher-lua.
-Its allocation stays well under the dynamically typed peers across the board, but
-it's "kilobytes" only on the lean workloads — collection- and string-heavy ones
-reach single-digit MB. The full win-and-lose matrix — 10 workloads, warm + fresh,
-plus an opt-in LuaJIT / Umka / wazero tier that is faster still — lives in
-[`benchmarks/`](benchmarks/), kept deliberately honest.
-
-benchstat median, amd64 Xeon @ 2.80 GHz, Go 1.25; cross-language microbenchmarks
-differ in semantics (types, safety, GC) — read as order-of-magnitude, not a
-verdict.
+Buzz leads both — ~8× over gopher-lua and ~13× over tengo on the loop, and the
+interpreter even wins `fib` — at KB, not MB/GB, of allocation. Cross-language
+microbenchmarks differ in semantics; read as order-of-magnitude.
 
 Reproduce:
 
@@ -54,39 +31,6 @@ Reproduce:
 go test -run='^$' -bench=. -benchmem ./...                # in-tree (BUZZ_JIT=0 for interp)
 cd benchmarks/comparison && GOWORK=off go test -bench=. . # cross-language
 ```
-
-## Why this matters
-
-gopherbuzz is the interpreter behind **magus**, and magus has exactly one job:
-fan out across a workspace, run the tasks, and get out of the way. Two
-constraints fall out of that, and they're why this VM exists at all:
-
-- **No second toolchain.** magus is a single static Go binary that cross-compiles
-  cleanly and runs anywhere `go` does — no cgo, no C library, nothing to install
-  first. The moment the magusfile language reached for a faster engine that
-  needed a C toolchain (the [extended tier](benchmarks/comparison/) — LuaJIT,
-  Umka — makes the speed on offer explicit), magus would forfeit that promise. So
-  the engine has to be **pure Go**. That rules out the fastest options in the
-  comparison and makes a fast *pure-Go* VM the only door, not a preference.
-- **It's on every task's critical path.** The VM evaluates the `magusfile.bzz`
-  and the host-call glue for every target, on every run, before any real work
-  starts — and again as the fan-out widens. If it's slow or allocation-heavy,
-  that cost is paid over and over and lands as latency and GC pressure sitting
-  between you and your build. "Get out of the way" only holds if the layer doing
-  the dispatching is itself too cheap to notice.
-
-That's the whole bar: **be invisible.** The benchmarks above are deliberately
-heavy stress loops (a million iterations, recursion to `fib(30)`); a real
-`magusfile.bzz` is orders of magnitude smaller, so the VM's slice of any run sits
-far below them — well under the cost of the work it's dispatching. Fast and lean
-on the stress tests is the headroom that makes it negligible in practice.
-
-And yes — we're well into diminishing returns now. Shaving another few percent off
-the hot path won't change anyone's day, and the [perf design notes](#performance-design)
-exist mostly to stop a future change from *regressing* what's here. The point was
-never to win microbenchmarks; it was to make the interpreter cheap enough that
-magus can treat it as free — without reaching for a second toolchain to get there.
-It was a fun exercise besides.
 
 ## Building
 
@@ -103,6 +47,24 @@ No cgo, no external toolchain. Pure-Go deps:
 regenerate with `magus run regen-pgo gopherbuzz` after hot-path changes (a stale
 profile is neutral). After bumping `BytecodeVersion`, run `go generate` in
 `../internal/spell` to rebuild the embedded spell bytecode.
+
+## CLI
+
+`cmd/buzz` is a standalone runner mirroring the upstream `buzz` CLI, built on the
+Go standard library alone (no third-party CLI framework):
+
+```sh
+go run ./cmd/buzz script.bzz          # run a file
+echo 'return 1 + 2;' | go run ./cmd/buzz -   # run stdin
+go run ./cmd/buzz -e 'import "std"; std.print("hi");'
+go run ./cmd/buzz -c script.bzz       # type-check only
+go run ./cmd/buzz --ast script.bzz    # dump the AST as JSON
+go run ./cmd/buzz -L ./lib m.bzz      # add an import search path
+```
+
+The Buzz standard library is available; magus host bindings are not (use
+`magus buzz` / `magus repl --engine buzz` for those). Test blocks are not
+supported by this implementation.
 
 ## Build tags
 
@@ -124,6 +86,28 @@ wasm) uses a no-op stub.
 go test -tags buzz_safe ./...
 go test -tags buzz_unsafe ./...
 ```
+
+## FFI (calling C)
+
+`zdef()` binds functions from a C shared library at runtime via
+[`purego`](https://github.com/ebitengine/purego) — no cgo, no build-time
+toolchain. The `ffi` module adds C-ABI type metadata and a pinned-memory API so
+scripts can drive the common patterns: scalar calls, pointer out-parameters,
+by-reference structs, and callbacks.
+
+```buzz
+import "ffi";
+final lib = zdef("libm", "double sqrt(double x);");
+final r = lib.sqrt(9.0);                 // 3.0
+```
+
+Unlike upstream Buzz (whose FFI is Zig-ABI native and needs an embedded Zig
+compiler), gopherbuzz is C-ABI native: `zdef` takes C prototypes and `ffi.sizeOf`
+& friends take C type-name strings. Parsing works on every target; binding works
+where purego does, and returns a clear "unsupported" error elsewhere (e.g. wasm).
+
+Full reference: [`docs/ffi.md`](docs/ffi.md) · runnable demo:
+[`examples/ffi-c/`](examples/ffi-c/) (`go run .`).
 
 ## WebAssembly
 

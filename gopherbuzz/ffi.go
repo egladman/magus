@@ -46,3 +46,22 @@ var SetFFIProvider = vmpackage.SetFFIProvider
 
 // ParseCDecls parses one or more C function prototypes separated by semicolons.
 var ParseCDecls = vmpackage.ParseCDecls
+
+// FFI memory and C-ABI type metadata, backing the `ffi` std module. These are
+// portable (no cgo, no purego) — see vm/ffi_mem.go.
+var (
+	// CTypeLayout returns the size and alignment in bytes of a C type name.
+	CTypeLayout = vmpackage.CTypeLayout
+	// StructLayout computes size, alignment, and field offsets of a C struct.
+	StructLayout = vmpackage.StructLayout
+	// AllocFFI pins n zeroed bytes at a fixed address and returns it.
+	AllocFFI = vmpackage.AllocFFI
+	// FreeFFI releases a block previously returned by AllocFFI.
+	FreeFFI = vmpackage.FreeFFI
+	// ReadScalar reads a C scalar from an alloc block at addr+offset.
+	ReadScalar = vmpackage.ReadScalar
+	// WriteScalar writes a C scalar into an alloc block at addr+offset.
+	WriteScalar = vmpackage.WriteScalar
+	// MakeCallback wraps a Buzz function as a C function pointer (its address).
+	MakeCallback = vmpackage.MakeCallback
+)

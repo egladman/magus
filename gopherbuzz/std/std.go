@@ -15,14 +15,14 @@
 //	import "serialize" // Boxed, serialize, jsonEncode, jsonDecode
 //	import "buffer"    // Buffer
 //
-// ffi is registered with stub implementations that return a descriptive error:
-// sizeOf, alignOf, sizeOfStruct, and alignOfStruct require the Zig ABI and
-// cannot be implemented in a Go embedding.
+// ffi is C-ABI native (see ffi.go): zdef() binds C functions, and the ffi module
+// offers cstr, sizeOf/alignOf, sizeOfStruct/alignOfStruct, structLayout, and a
+// pinned alloc/free/read/write memory API for out-parameters and by-reference
+// structs. Type arguments are C type-name strings, not Zig types.
 package std
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 
@@ -47,7 +47,7 @@ func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
 	sess.SetSyntheticModule("io", ioModule(sess))
 	sess.SetSyntheticModule("serialize", serializeModule())
 	sess.SetSyntheticModule("buffer", bufferModule())
-	sess.SetSyntheticModule("ffi", ffiStubModule())
+	sess.SetSyntheticModule("ffi", ffiModule())
 }
 
 func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) buzz.Value {
@@ -55,18 +55,3 @@ func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) 
 }
 
 func mod() buzz.Value { return buzz.NewMap() }
-
-// ffiStubModule returns the "ffi" module with each known member wired to a stub
-// that returns a clear error. sizeOf/alignOf/sizeOfStruct/alignOfStruct all
-// require the Zig ABI and cannot be implemented in a Go embedding.
-func ffiStubModule() buzz.Value {
-	const reason = "FFI requires the Zig ABI, not supported in the magus/buzz embedding"
-	stub := fn("ffi.stub", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
-		return buzz.Null, fmt.Errorf("ffi: %s", reason)
-	})
-	m := mod()
-	for _, name := range []string{"sizeOf", "alignOf", "sizeOfStruct", "alignOfStruct"} {
-		m.MapSet(name, stub)
-	}
-	return m
-}

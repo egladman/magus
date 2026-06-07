@@ -1,0 +1,3 @@
+// @error: unknown C type
+import "ffi";
+ffi.sizeOf("notatype");

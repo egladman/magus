@@ -1,0 +1,5 @@
+// @expect: 8
+// offsets of struct { int; char* }: [0, 8]; read the second field's offset.
+import "ffi";
+final lay = ffi.structLayout(["int", "char*"]);
+final __r = lay["offsets"][1];

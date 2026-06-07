@@ -111,6 +111,66 @@ func GetFFIProvider() FFIProvider { return ffiProvider }
 // it accepts nil). Intended for tests that need to temporarily replace or clear it.
 func SetFFIProvider(p FFIProvider) { ffiProvider = p }
 
+// callbackMaker builds a C-callable function pointer that re-enters Buzz, or is
+// nil on platforms with no purego backend. Set by ffi_purego.go's init(); see
+// MakeCallback. Kept as a function value (not a method on FFIProvider) because it
+// is a leaf capability of the default backend, not something an embedder must
+// reimplement to get zdef() working.
+var callbackMaker func(ctx context.Context, fn Value, ret CType, params []CType) (uintptr, error)
+
+// MakeCallback wraps a Buzz function as a C function pointer (returned as its
+// machine address) so it can be passed where C expects a callback — e.g. the
+// comparator of qsort(). retName/paramNames are C type names from the zdef
+// subset. Floating types are rejected: purego's callback ABI carries only
+// integer/pointer/bool arguments and a single integer/pointer/bool (or void)
+// result, which covers comparators, predicates, and visitors.
+//
+// The returned pointer is passed to C as a void* zdef parameter. When C invokes
+// it, the wrapper marshals the C arguments to Buzz values, runs the Buzz function
+// on a nested VM, and marshals its result back. A C callback has nowhere to
+// propagate a Buzz error, so a raised error yields the zero return value.
+func MakeCallback(ctx context.Context, fn Value, retName string, paramNames []string) (uintptr, error) {
+	if !fn.IsFun() {
+		return 0, fmt.Errorf("buzz: ffi: callback target must be a function, got %s", fn.buzzKind())
+	}
+	ret, err := callbackCType(retName, true)
+	if err != nil {
+		return 0, err
+	}
+	params := make([]CType, len(paramNames))
+	for i, p := range paramNames {
+		ct, err := callbackCType(p, false)
+		if err != nil {
+			return 0, err
+		}
+		params[i] = ct
+	}
+	if callbackMaker == nil {
+		return 0, fmt.Errorf("buzz: ffi: callbacks are not supported on this platform (no FFI provider registered)")
+	}
+	return callbackMaker(ctx, fn, ret, params)
+}
+
+// callbackCType resolves a C type name for a callback signature, rejecting
+// floating types (unsupported by the callback ABI) and, for a parameter, void.
+func callbackCType(name string, isRet bool) (CType, error) {
+	if isRet && strings.TrimSpace(name) == "void" {
+		return CVoid, nil
+	}
+	ct := parseCType(name)
+	if ct == CUnsupported {
+		// A trailing '*' (any pointer) is a valid integer-width address.
+		if strings.HasSuffix(strings.TrimSpace(name), "*") {
+			return CVoidPtr, nil
+		}
+		return CUnsupported, fmt.Errorf("buzz: ffi: unsupported callback type %q", name)
+	}
+	if ct == CFloat || ct == CDouble {
+		return CUnsupported, fmt.Errorf("buzz: ffi: callbacks cannot use floating type %q (the callback ABI carries integer/pointer values only)", name)
+	}
+	return ct, nil
+}
+
 // ---- C-declaration subset parser (portable) ----
 //
 // Supported C types: void, bool, int, uint, short, ushort, long, ulong,
@@ -195,7 +255,10 @@ func parseSingleCDecl(src string) (CFuncSig, error) {
 	fullRet := strings.TrimSpace(src[:lp])
 	if strings.Contains(fullRet, "char *") || strings.Contains(fullRet, "char*") {
 		retType = CCharPtr
-	} else if strings.Contains(fullRet, "void *") || strings.Contains(fullRet, "void*") {
+	} else if strings.Contains(fullRet, "*") {
+		// Any other pointer return (void*, int*, struct Foo*, …) is an opaque
+		// machine address. We surface it to Buzz as an int the script can hand to
+		// ffi.read*/ffi.write* or pass back into another C call.
 		retType = CVoidPtr
 	} else {
 		retType = parseCType(retStr)
@@ -229,7 +292,13 @@ func parseCParam(s string) (CParam, error) {
 		name := extractParamName(s)
 		return CParam{Name: name, Type: CCharPtr}, nil
 	}
-	if strings.Contains(s, "void *") || strings.Contains(s, "void*") {
+	// Every other pointer parameter (void*, int*, double*, struct Foo*, …) is an
+	// opaque address. The script passes an int address — typically one returned
+	// by ffi.alloc — and reads results back with ffi.read*. Mapping all of these
+	// to CVoidPtr (rather than stripping the '*' and binding the pointee scalar
+	// directly, which silently passed a value where C expected an address) is
+	// what makes out-parameters and by-reference structs work.
+	if strings.Contains(s, "*") {
 		name := extractParamName(s)
 		return CParam{Name: name, Type: CVoidPtr}, nil
 	}
