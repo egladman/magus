@@ -142,15 +142,28 @@ func ffiModule() buzz.Value {
 	// read(addr, offset, ctype): load a scalar, returning float for float/double
 	// and int otherwise.
 	m.MapSet("read", fn("ffi.read", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
-		if len(args) < 3 || !args[0].IsInt() || !args[1].IsInt() || !args[2].IsStr() {
-			return buzz.Null, fmt.Errorf("ffi.read: requires (int addr, int offset, str ctype)")
+		if len(args) < 3 || !args[1].IsInt() || !args[2].IsStr() {
+			return buzz.Null, fmt.Errorf("ffi.read: requires (addr, int offset, str ctype)")
 		}
-		i, f, isFloat, err := buzz.ReadScalar(uintptr(args[0].AsInt()), int(args[1].AsInt()), args[2].AsString())
+		var addr uintptr
+		switch {
+		case args[0].IsUD():
+			addr = args[0].AsUD()
+		case args[0].IsInt():
+			addr = uintptr(args[0].AsInt())
+		default:
+			return buzz.Null, fmt.Errorf("ffi.read: addr must be an int or ud")
+		}
+		ctype := args[2].AsString()
+		i, f, isFloat, err := buzz.ReadScalar(addr, int(args[1].AsInt()), ctype)
 		if err != nil {
 			return buzz.Null, err
 		}
 		if isFloat {
 			return buzz.FloatValue(f), nil
+		}
+		if buzz.IsPointerCType(ctype) {
+			return buzz.UDValue(uintptr(uint64(i))), nil
 		}
 		return buzz.IntValue(i), nil
 	}))

@@ -1,6 +1,6 @@
 # Magusfile Module Reference
 
-These are the runtime utility modules. Take the single `import "magus/extra"` aggregate and reach modules off it — `extra.fs.glob(...)` — with `camelCase` methods. Each module is **self-complete**: `extra` carries a whole domain in one place (so you never straddle native `fs` and `extra.fs`), and the `extra` forms are sandbox-aware where Buzz's bare stdlib is not. Some methods also exist in Buzz's own stdlib (noted per-method); either works.
+These are the runtime utility modules. Import each under its bare name — `import "fs"`, then `fs.glob(...)` — with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Some methods also exist in Buzz's own stdlib (noted per-method); either works.
 
 | Module | Description |
 |--------|-------------|
@@ -18,9 +18,11 @@ These are the runtime utility modules. Take the single `import "magus/extra"` ag
 | [`os`](os.md) | Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a line through the shell. Both stream output live and return a result {stdout, stderr, code, ok}. |
 | [`path`](path.md) | Pure path-string math: abs, rel, clean, is_abs, expand_user. |
 | [`platform`](platform.md) | Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin). |
+| [`semver`](semver.md) | Semantic version parsing and comparison (SemVer 2.0.0). |
 | [`strings`](strings.md) | Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis). |
 | [`time`](time.md) | Timestamp formatting/parsing and duration parsing (Go time, UTC). |
 | [`vcs`](vcs.md) | Version-control queries for the current working tree. |
+| [`yaml`](yaml.md) | YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3). |
 
 ## See also
 

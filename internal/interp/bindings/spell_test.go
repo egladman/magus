@@ -57,7 +57,7 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
 final widget = magus.spell.load("spells/widget.bzz");
-magus.project.register(".", {"spells": [widget]});`)
+magus.project.register(".", fun(p, cb) > bool { cb({"spells": [widget]}); return true; });`)
 
 	if err := parseMagusfile(t, dir); err != nil {
 		t.Fatalf("parse: %v", err)
@@ -96,7 +96,7 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
 import "spells/widget";
-magus.project.register(".", {"spells": [widget]});`)
+magus.project.register(".", fun(p, cb) > bool { cb({"spells": [widget]}); return true; });`)
 
 	if err := parseMagusfile(t, dir); err != nil {
 		t.Fatalf("parse: %v", err)
@@ -155,7 +155,7 @@ func TestSpellLoadBuzzNoOps(t *testing.T) {
 `)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
 final noops = magus.spell.load("spells/noops.bzz");
-magus.project.register(".", {"spells": [noops]});`)
+magus.project.register(".", fun(p, cb) > bool { cb({"spells": [noops]}); return true; });`)
 
 	if err := parseMagusfile(t, dir); err != nil {
 		t.Fatalf("parse should not fail: %v", err)
@@ -332,9 +332,9 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 	}
 
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-import "magus/extra";
+import "vcs";
 export fun check(args: [str]) > void {
-    final c = extra.vcs.commit();
+    final c = vcs.commit();
     if (c.subject != "hello") { error("subject: " + c.subject); }
     if (c.author.name != "A") { error("author: " + c.author.name); }
     if (c.date == "") { error("date empty"); }
@@ -356,9 +356,9 @@ func TestVcsCommitNullOutsideRepo(t *testing.T) {
 	dir := t.TempDir() // a bare temp dir, not under version control
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.bzz", `import "magus";
-import "magus/extra";
+import "vcs";
 export fun check(args: [str]) > void {
-    if (extra.vcs.commit() != null) { error("expected null outside a repo"); }
+    if (vcs.commit() != null) { error("expected null outside a repo"); }
 }`)
 	srcs, err := interp.FindAll(dir)
 	if err != nil {
@@ -366,5 +366,61 @@ export fun check(args: [str]) > void {
 	}
 	if err := interp.Run(context.Background(), srcs[0], "check", nil, dir); err != nil {
 		t.Fatalf("vcs.commit null case: %v", err)
+	}
+}
+
+// TestEngineSpecParity locks the engine-agnostic mgs_ contract: a Buzz spell
+// declaring every optional mgs_ function with record-shaped ops resolves to the
+// expected Spec. It guards the resolver (internal/spell/resolve.go) against
+// dropping fields — claims is asserted explicitly because that is the field that
+// previously regressed.
+func TestEngineSpecParity(t *testing.T) {
+	buzzSrc := `export fun mgs_getName() > str { return "parity_buzz"; }
+export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.rb", "Gemfile.lock"]; }
+export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**"]; }
+export fun mgs_listClaimedGlobs() > [str] { return [".rubocop.yml", "Gemfile"]; }
+export fun mgs_getVersionCommand() > [str] { return ["ruby", "--version"]; }
+export fun mgs_isForeignProcess() > bool { return false; }
+export fun mgs_listTargets() > any {
+    return {"rspec": {"cmd": "bundle", "args": ["exec", "rspec"]}};
+}
+`
+
+	loadAndBind := func(t *testing.T, ext, src string) {
+		t.Helper()
+		dir := t.TempDir()
+		t.Chdir(dir)
+		name := "spells/parity." + ext
+		writeFile(t, dir, name, src)
+		writeFile(t, dir, "magusfile.bzz", `import "magus";
+final sp = magus.spell.load("`+name+`");
+magus.project.register(".", fun(p, cb) > bool { cb({"spells": [sp]}); return true; });`)
+		if err := parseMagusfile(t, dir); err != nil {
+			t.Fatalf("parse (%s): %v", ext, err)
+		}
+	}
+
+	loadAndBind(t, "bzz", buzzSrc)
+
+	buzzSp, ok := project.DefaultSpellRegistry().Lookup("parity_buzz")
+	if !ok {
+		t.Fatal("parity_buzz not registered")
+	}
+
+	if want := []string{"**/*.rb", "Gemfile.lock"}; !slices.Equal(buzzSp.Sources(), want) {
+		t.Errorf("sources = %v, want %v", buzzSp.Sources(), want)
+	}
+	if want := []string{"vendor/bundle/**"}; !slices.Equal(buzzSp.Outputs(), want) {
+		t.Errorf("outputs = %v, want %v", buzzSp.Outputs(), want)
+	}
+	if want := []string{"rspec"}; !slices.Equal(buzzSp.Targets(), want) {
+		t.Errorf("targets = %v, want %v", buzzSp.Targets(), want)
+	}
+	// claims is the field the resolver previously dropped — assert it directly.
+	if want := []string{".rubocop.yml", "Gemfile"}; !slices.Equal(buzzSp.Claims(), want) {
+		t.Errorf("claims = %v, want %v (mgs_listClaimedGlobs must be carried)", buzzSp.Claims(), want)
+	}
+	if buzzSp.ForeignProcess() {
+		t.Errorf("foreignProcess = true, want false")
 	}
 }

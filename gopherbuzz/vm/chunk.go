@@ -8,7 +8,7 @@ package vm
 //
 // The +1 bias lets the zero value keep the old push-to-stack semantics so every
 // Instr literal that omits C defaults to stack form with no migration work.
-// Only OpLocalLocalOp and OpLocalConstOp currently use C; all other opcodes leave
+// Only OpBinLL and OpBinLC currently use C; all other opcodes leave
 // it zero.
 type Instr struct {
 	Op OpCode
@@ -185,7 +185,7 @@ func fusableBinop(op OpCode) bool {
 }
 
 // fusableCondOp reports whether op is a comparison opcode suitable for
-// GetLocal;LoadConst;<op>;JumpFalse → OpForCondLC fusion.
+// GetLocal;LoadConst;<op>;JumpFalse → OpCmpLC fusion.
 func fusableCondOp(op OpCode) bool {
 	switch op {
 	case OpLess, OpLessEqual, OpGreater, OpGreaterEqual, OpEqual, OpNotEqual:
@@ -202,12 +202,12 @@ func fusableCondOp(op OpCode) bool {
 // window (e.g. a loop back-edge), but a target inside the window would skip
 // operand evaluation — fusion is suppressed when any jump targets a slot inside.
 //
-// Pass 1  — 4-instruction: GetLocal;LoadConst;<cmp>;JumpFalse → OpForCondLC.
-// Pass 1L — 4-instruction: GetLocal;GetLocal;<binop>;SetLocal  → OpLocalLocalOp (C=dst+1).
-// Pass 1C — 4-instruction: GetLocal;LoadConst;<binop>;SetLocal → OpLocalConstOp (C=dst+1).
-// Pass 2  — 3-instruction: GetLocal;GetLocal;<binop>  → OpLocalLocalOp (C=0, push);
+// Pass 1  — 4-instruction: GetLocal;LoadConst;<cmp>;JumpFalse → OpCmpLC.
+// Pass 1L — 4-instruction: GetLocal;GetLocal;<binop>;SetLocal  → OpBinLL (C=dst+1).
+// Pass 1C — 4-instruction: GetLocal;LoadConst;<binop>;SetLocal → OpBinLC (C=dst+1).
+// Pass 2  — 3-instruction: GetLocal;GetLocal;<binop>  → OpBinLL (C=0, push);
 //
-//	GetLocal;LoadConst;<binop> → OpLocalConstOp (C=0, push).
+//	GetLocal;LoadConst;<binop> → OpBinLC (C=0, push).
 //
 // Pass 1L/1C emit the destination register in Instr.C (with a +1 bias so C=0
 // keeps the "push to operand stack" meaning of the zero value). These run before
@@ -230,7 +230,7 @@ func FusePeephole(c *Chunk) {
 		}
 	}
 
-	// Pass 1: GetLocal;LoadConst;<cmp>;JumpFalse → OpForCondLC.
+	// Pass 1: GetLocal;LoadConst;<cmp>;JumpFalse → OpCmpLC.
 	// Covers the canonical while/for loop condition (i < N, i >= lo, etc.).
 	// The jump target is stored in the first absorbed OpNop's A field so the
 	// handler can branch without an extra instruction; three NOPs follow.
@@ -247,7 +247,7 @@ func FusePeephole(c *Chunk) {
 			continue
 		}
 		target := code[i+3].A
-		code[i] = Instr{Op: OpForCondLC, A: code[i].A, B: cidx | int32(code[i+2].Op)<<24}
+		code[i] = Instr{Op: OpCmpLC, A: code[i].A, B: cidx | int32(code[i+2].Op)<<24}
 		code[i+1] = Instr{Op: OpNop, A: target} // target preserved for handler
 		code[i+2] = Instr{Op: OpNop}
 		code[i+3] = Instr{Op: OpNop}
@@ -279,7 +279,7 @@ func FusePeephole(c *Chunk) {
 			if code[i].B == slotTypeInt && code[i+1].B == slotTypeInt {
 				flag = provenIntFlag
 			}
-			code[i] = Instr{Op: OpLocalLocalOp, A: slotL, B: slotR | int32(op)<<16 | flag, C: dstSlot + 1}
+			code[i] = Instr{Op: OpBinLL, A: slotL, B: slotR | int32(op)<<16 | flag, C: dstSlot + 1}
 			code[i+1] = Instr{Op: OpNop}
 			code[i+2] = Instr{Op: OpNop}
 			code[i+3] = Instr{Op: OpNop}
@@ -294,7 +294,7 @@ func FusePeephole(c *Chunk) {
 			if code[i].B == slotTypeInt && len(c.Consts) > int(cidx) && c.Consts[cidx].tag() == tagInt {
 				flag = provenIntFlag
 			}
-			code[i] = Instr{Op: OpLocalConstOp, A: code[i].A, B: cidx | int32(op)<<24 | flag, C: dstSlot + 1}
+			code[i] = Instr{Op: OpBinLC, A: code[i].A, B: cidx | int32(op)<<24 | flag, C: dstSlot + 1}
 			code[i+1] = Instr{Op: OpNop}
 			code[i+2] = Instr{Op: OpNop}
 			code[i+3] = Instr{Op: OpNop}
@@ -311,8 +311,8 @@ func FusePeephole(c *Chunk) {
 	// with a single sign-bit test per dispatch. Sound because OpCheckType is
 	// emitted wherever any→int flows, so a proven-int slot is always int at
 	// runtime. The flag shares the B field without stealing encoding bits:
-	//   OpLocalLocalOp B = slotR | op<<16 | flag<<31  (sub-op is at most 8-bit value << 16, flag in bit 31)
-	//   OpLocalConstOp B = cidx | op<<24 | flag<<31   (sub-op is at most 8-bit value << 24, flag in bit 31)
+	//   OpBinLL B = slotR | op<<16 | flag<<31  (sub-op is at most 8-bit value << 16, flag in bit 31)
+	//   OpBinLC B = cidx | op<<24 | flag<<31   (sub-op is at most 8-bit value << 24, flag in bit 31)
 	// Limitation: params, upvalues, globals, and call/member/index results always
 	// emit B=0 on OpGetLocal (slotType=sUnknown), so only stack-slot locals with a
 	// tracked primitive type trigger the fast path.
@@ -331,7 +331,7 @@ func FusePeephole(c *Chunk) {
 			if code[i].B == slotTypeInt && code[i+1].B == slotTypeInt {
 				flag = provenIntFlag
 			}
-			code[i] = Instr{Op: OpLocalLocalOp, A: code[i].A, B: slotR | int32(op)<<16 | flag}
+			code[i] = Instr{Op: OpBinLL, A: code[i].A, B: slotR | int32(op)<<16 | flag}
 			code[i+1] = Instr{Op: OpNop}
 			code[i+2] = Instr{Op: OpNop}
 			i += 2
@@ -345,7 +345,7 @@ func FusePeephole(c *Chunk) {
 			if code[i].B == slotTypeInt && len(c.Consts) > int(cidx) && c.Consts[cidx].tag() == tagInt {
 				flag = provenIntFlag
 			}
-			code[i] = Instr{Op: OpLocalConstOp, A: code[i].A, B: cidx | int32(op)<<24 | flag}
+			code[i] = Instr{Op: OpBinLC, A: code[i].A, B: cidx | int32(op)<<24 | flag}
 			code[i+1] = Instr{Op: OpNop}
 			code[i+2] = Instr{Op: OpNop}
 			i += 2

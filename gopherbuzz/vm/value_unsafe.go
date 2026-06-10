@@ -154,6 +154,7 @@ func sameObj(a, b Value) bool { return a.obj == b.obj }
 func ptrAs[T any](v Value) *T { return (*T)(v.obj) }
 
 func (v Value) asStr() *strObj             { return ptrAs[strObj](v) }
+func (v Value) asUD() *udObj               { return ptrAs[udObj](v) }
 func (v Value) asList() *listObj           { return ptrAs[listObj](v) }
 func (v Value) asMap() *mapObj             { return ptrAs[mapObj](v) }
 func (v Value) asFun() *funObj             { return ptrAs[funObj](v) }

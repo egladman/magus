@@ -62,11 +62,11 @@ func renderModule(m std.Module) string {
 		fmt.Fprintf(&b, "%s\n\n", m.Doc)
 	}
 
-	// Naming convention note: Buzz reaches each module off the `import
-	// "magus/extra"` aggregate in camelCase.
-	fmt.Fprintf(&b, "> **Naming convention:** Buzz reaches modules off the "+
-		"`import \"magus/extra\"` aggregate in `camelCase` (`extra.%s.someMethod`).\n\n",
-		m.Name)
+	// Naming convention note: each module is imported under its bare name, with
+	// methods in camelCase.
+	fmt.Fprintf(&b, "> **Naming convention:** import the module under its bare name "+
+		"(`import \"%s\"`) and call methods in `camelCase` (`%s.someMethod`).\n\n",
+		m.Name, m.Name)
 
 	if len(m.Fields) > 0 {
 		fmt.Fprintf(&b, "## Fields\n\n")
@@ -87,7 +87,7 @@ func renderModule(m std.Module) string {
 			}
 			fmt.Fprintf(&b, "**Signature:** `%s`\n\n", std.BuzzSignature(m, meth))
 			if equiv, dup := std.NativeBuzzEquiv(m.Name, meth.Name); dup {
-				fmt.Fprintf(&b, "**Also in Buzz's stdlib:** `%s` — the `extra` form is sandbox-aware.\n\n", equiv)
+				fmt.Fprintf(&b, "**Also in Buzz's stdlib:** `%s` — the magus form is sandbox-aware.\n\n", equiv)
 			}
 			if len(meth.Args) > 0 {
 				fmt.Fprintln(&b, "| Parameter | Type | Optional | Description |")
@@ -125,7 +125,7 @@ func writeIndex(dir string, modules []std.Module) error {
 func renderIndex(modules []std.Module) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Magusfile Module Reference\n\n")
-	fmt.Fprintf(&b, "These are the runtime utility modules. Take the single `import \"magus/extra\"` aggregate and reach modules off it — `extra.fs.glob(...)` — with `camelCase` methods. Each module is **self-complete**: `extra` carries a whole domain in one place (so you never straddle native `fs` and `extra.fs`), and the `extra` forms are sandbox-aware where Buzz's bare stdlib is not. Some methods also exist in Buzz's own stdlib (noted per-method); either works.\n\n")
+	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name — `import \"fs\"`, then `fs.glob(...)` — with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Some methods also exist in Buzz's own stdlib (noted per-method); either works.\n\n")
 	fmt.Fprintln(&b, "| Module | Description |")
 	fmt.Fprintln(&b, "|--------|-------------|")
 	for _, m := range modules {

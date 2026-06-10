@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
+	// Blank import wires the active backend and host bindings for all interp
+	// tests. It registers the backend and host modules before any test runs.
+	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/interp/engine"
 )
 

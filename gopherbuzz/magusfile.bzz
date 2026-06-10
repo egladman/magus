@@ -5,10 +5,10 @@
 // of the magus tree; this magusfile makes it a first-class magus project with the
 // built-in go spell, scoped to its own go.mod.
 //
-//   magus run build gopherbuzz      -- compile the package
-//   magus run test gopherbuzz       -- run the Go test suite
-//   magus run ci gopherbuzz         -- lint, build, and test (the affected anchor)
-//   magus run regen-pgo gopherbuzz  -- regenerate the VM's PGO profile
+//   magus run build gopherbuzz         -- compile the package
+//   magus run test gopherbuzz          -- run the Go test suite
+//   magus run ci gopherbuzz            -- lint, build, and test (the affected anchor)
+//   magus run pgo-generate gopherbuzz  -- regenerate the VM's PGO profile
 
 import "magus";
 
@@ -16,19 +16,23 @@ import "magus";
 // marks this project affected for `magus affected ci`.
 import "magus/spell/go";
 
-// The magus host aggregate, for the regen-pgo target: extra.os.exec forks the
-// benchmark run; extra.fs reads the captured profile and commits it. Buzz's own
-// stdlib lacks live-streaming exec and raw file read/write, so these come from extra.
-import "magus/extra";
+// magus host modules for the pgo-generate target: os.exec forks the benchmark
+// run; fs reads the captured profile and commits it. Buzz's own stdlib lacks
+// live-streaming exec and raw file read/write, so these magus methods supply them.
+import "os";
+import "fs";
 
-magus.project.register(".", {
-    "spells": [go],
-    // regen-pgo writes a fresh, non-deterministic profile from the live VM; a
-    // cache hit would replay a stale one instead of re-sampling, so it must run
-    // every time it's invoked.
-    "targets": {
-        "regen-pgo": {"cachable": false},
-    },
+magus.project.register(fun(p, cb) > bool {
+    cb({
+        "spells": [go],
+        // pgo-generate writes a fresh, non-deterministic profile from the live VM; a
+        // cache hit would replay a stale one instead of re-sampling, so it must run
+        // every time it's invoked.
+        "targets": {
+            "pgo-generate": {"cachable": false},
+        },
+    });
+    return true;
 });
 
 // ── targets ──────────────────────────────────────────────────────────────────
@@ -72,28 +76,28 @@ export fun ci(_args: [str]) > void {
 // failing at setup) can't clobber a good profile. allow_failure mirrors the shell
 // `|| true`: the excluded benches still exit the run non-zero, but the profile is
 // what matters, not the exit code.
-export fun regen_pgo(_args: [str]) > void {
+export fun pgo_generate(_args: [str]) > void {
     // The interpreter-hot benches; benchtime=1s gives enough samples that VM.Exec
     // dominates cumulative time. Keep this set in sync with the gating benches.
     final bench = "Fib|LoopSum|LoopEq|MethodCall|FieldAccess|Call|ForeachMap|StringInterp";
     final skip = "DirectCall|ForeachList";
     final tmp = "default.pgo.tmp";
 
-    extra.os.exec("go", ["test", "-run=^$",
+    os.exec("go", ["test", "-run=^$",
         "-bench=" + bench,
         "-skip=" + skip,
         "-benchtime=1s", "-cpuprofile=" + tmp, "-o", "/dev/null", "."],
         "", {"allow_failure": true});
 
-    if (!extra.fs.exists(tmp)) {
-        throw "regen-pgo: no profile produced";
+    if (!fs.exists(tmp)) {
+        throw "pgo-generate: no profile produced";
     }
-    final profile = extra.fs.readFile(tmp);
-    extra.fs.removeAll(tmp);
+    final profile = fs.readFile(tmp);
+    fs.removeAll(tmp);
     if (profile.len() == 0) {
-        throw "regen-pgo: empty profile produced";
+        throw "pgo-generate: empty profile produced";
     }
-    extra.fs.writeFile("default.pgo", profile);
+    fs.writeFile("default.pgo", profile);
     magus.info("wrote default.pgo ({profile.len()} bytes)");
 
     // Verify the win:

@@ -1,0 +1,10 @@
+// @expect: true
+// Backtick raw strings — upstream Buzz's multiline form, used above all for
+// zdef declaration blocks: no escapes, no interpolation, newlines literal.
+final decl = `
+    fn add(a: c_int) c_int;
+    {braces stay literal}
+`;
+final __r = decl.indexOf("fn add") != null
+    and decl.indexOf("\{braces stay literal\}") != null
+    and decl.indexOf("\n") != null;

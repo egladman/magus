@@ -68,5 +68,14 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzStrVal(ret0), nil
 	}))
+	m.MapSet("getOr", buzz.DirectValue("env.getOr", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		name := bzStr(bzArgs, 0)
+		def := bzStr(bzArgs, 1)
+		ret0, err := std.EnvGetOr(ctx, name, def)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
 	return m
 }

@@ -39,9 +39,9 @@ func TestRunTopLevelTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-import "magus/extra";
+import "fs";
 export fun build(_args: [str]) > void {
-    extra.fs.writeFile("ran", "build");
+    fs.writeFile("ran", "build");
 }
 `)
 	if err := runTarget(t, dir, "build"); err != nil {
@@ -60,9 +60,9 @@ func TestRunPathTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-import "magus/extra";
+import "fs";
 export fun db_migrate(_args: [str]) > void {
-    extra.fs.writeFile("ran", "db:migrate");
+    fs.writeFile("ran", "db:migrate");
 }
 `)
 	if err := runTarget(t, dir, "db:migrate"); err != nil {
@@ -77,22 +77,56 @@ export fun db_migrate(_args: [str]) > void {
 	}
 }
 
+// TestRunImportsMagusfilesSibling verifies a magusfile resolves a plain
+// `import "<name>"` against the project's magusfiles/ directory (magus's
+// override of gopherbuzz's default search paths). The helper lives in a
+// magusfiles/ subdirectory so it is not auto-loaded as a magusfile source.
+func TestRunImportsMagusfilesSibling(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "magusfiles", "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "magusfiles", "lib", "calc.bzz"),
+		[]byte(`export final tag = "calc-ok";`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+import "lib/calc";
+export fun build(_args: [str]) > void {
+    fs.writeFile("ran", tag);
+}
+`)
+	if err := runTarget(t, dir, "build"); err != nil {
+		t.Fatalf("run build: %v", err)
+	}
+	got, err := os.ReadFile(sentinel(dir))
+	if err != nil {
+		t.Fatalf("sentinel not created: %v", err)
+	}
+	if string(got) != "calc-ok" {
+		t.Errorf("sentinel = %q, want %q", got, "calc-ok")
+	}
+}
+
 // TestRunBuzzStdModule exercises the std host surface from a magusfile.bzz
 // end-to-end: the magus-bindings-gen-emitted buzzgen trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
-// (fs.writeFile). Modules are reached off the `import "magus/extra"` aggregate,
-// with camelCase methods (Buzz's convention).
+// (fs.writeFile). Modules are reached under bare module imports (fs.join,
+// charm.append), with camelCase methods (Buzz's convention).
 func TestRunBuzzStdModule(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "fs";
+import "charm";
 
 export fun verify(_opts: [str]) > void {
-    var joined = extra.fs.join("a", "b", "c");
-    var patch = extra.charm.append(["y", "z"]);
-    extra.fs.writeFile("ran", joined + "|" + patch.ops[1].value);
+    var joined = fs.join("a", "b", "c");
+    var patch = charm.append(["y", "z"]);
+    fs.writeFile("ran", joined + "|" + patch.ops[1].value);
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -109,18 +143,19 @@ export fun verify(_opts: [str]) > void {
 	}
 }
 
-// TestRunBuzzMarkdownModule proves the markdown host module is reachable through
-// the magus/extra aggregate (extra.markdown.toHtml), so a docs-site project can
+// TestRunBuzzMarkdownModule proves the markdown host module is reachable under
+// the bare module import (markdown.toHtml), so a docs-site project can
 // render Markdown to HTML in its own magusfile target.
 func TestRunBuzzMarkdownModule(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "fs";
+import "markdown";
 
 export fun verify(_opts: [str]) > void {
-    extra.fs.writeFile("ran", extra.markdown.toHtml("# Hi"));
+    fs.writeFile("ran", markdown.toHtml("# Hi"));
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -145,12 +180,13 @@ func TestRunBuzzFmtSprintf(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "fmt";
+import "fs";
 
 export fun verify(_opts: [str]) > void {
-    var asset = extra.fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
-    var none = extra.fmt.sprintf("literal");
-    extra.fs.writeFile("ran", asset + "|" + none);
+    var asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
+    var none = fmt.sprintf("literal");
+    fs.writeFile("ran", asset + "|" + none);
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -167,24 +203,24 @@ export fun verify(_opts: [str]) > void {
 	}
 }
 
-// TestRunBuzzAggregateUtil proves the magus host utilities resolve through the
-// single `import "magus/extra"` aggregate (extra.fs.join / extra.os.execSh, in
-// camelCase) and coexist with Buzz's own stdlib in the same file: hashing uses
-// the stdlib `crypto.hash`, which the aggregate deliberately leaves room for by
-// keeping the bare name `crypto` free.
+// TestRunBuzzAggregateUtil proves the magus host utilities resolve under bare
+// module imports (fs.join / os.execSh, in camelCase) and coexist with Buzz's own
+// stdlib in the same file: the magus fs/os methods are layered onto the bare
+// fs/os modules, while hashing uses the stdlib `crypto.hash`.
 func TestRunBuzzAggregateUtil(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "fs";
+import "os";
 import "crypto";
 
 export fun verify(_opts: [str]) > void {
-    var joined = extra.fs.join("a", "b", "c");
-    var out = extra.os.execSh("printf hello").stdout;
+    var joined = fs.join("a", "b", "c");
+    var out = os.execSh("printf hello").stdout;
     var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "");
-    extra.fs.writeFile("ran", joined + "|" + out + "|" + digest);
+    fs.writeFile("ran", joined + "|" + out + "|" + digest);
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -208,9 +244,9 @@ func TestRunTargetWithArgs(t *testing.T) {
 	// target declares one parameter per forwarded arg.
 	writeMagusfile(t, dir, `
 import "magus";
-import "magus/extra";
+import "fs";
 export fun db_migrate(a: str, b: str, c: str) > void {
-    extra.fs.writeFile("ran", a + " " + b + " " + c);
+    fs.writeFile("ran", a + " " + b + " " + c);
 }
 `)
 	if err := runTarget(t, dir, "db:migrate", "a", "b", "c"); err != nil {
@@ -340,9 +376,9 @@ func TestOsExitRaisesExitError(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "os";
 
-export fun bail(_a: [str]) > void { extra.os.exit(3); }
+export fun bail(_a: [str]) > void { os.exit(3); }
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -367,11 +403,11 @@ func TestOsSleep(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "os";
 
 export fun nap(_a: [str]) > void {
-    extra.os.sleep(1.5);
-    extra.os.sleep(0);
+    os.sleep(1.5);
+    os.sleep(0);
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -388,11 +424,11 @@ func TestOsWhich(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "os";
 
 export fun checkwhich(_a: [str]) > void {
-    if (extra.os.which("sh") == "") { extra.os.exit(2); }
-    if (extra.os.which("definitely-no-such-cmd-zzz") != "") { extra.os.exit(3); }
+    if (os.which("sh") == "") { os.exit(2); }
+    if (os.which("definitely-no-such-cmd-zzz") != "") { os.exit(3); }
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -454,10 +490,10 @@ func TestOsExecShShellOption(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "os";
 
 export fun viash(_a: [str]) > void {
-    extra.os.execSh("true", "", {"shell": "sh"});
+    os.execSh("true", "", {"shell": "sh"});
 }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -474,9 +510,9 @@ func TestDependsOnDedup(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.bzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
-import "magus/extra";
+import "os";
 
-export fun dep(_a: [str]) > void { extra.os.execSh("printf x >> mark", ""); }
+export fun dep(_a: [str]) > void { os.execSh("printf x >> mark", ""); }
 export fun top(_a: [str]) > void { magus.depends_on(["dep", "dep"]); }
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -555,9 +591,9 @@ func TestTargetDependsOnExpandGlobs(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-import "magus/extra";
+import "os";
 fun note(s: str) > void {
-   extra.os.execSh("printf '%s\n' " + s + " >> ran", "");
+   os.execSh("printf '%s\n' " + s + " >> ran", "");
 }
 export fun go_build(_a: [str]) > void { note("go-build"); }
 export fun image_build(_a: [str]) > void { note("image-build"); }
@@ -591,14 +627,14 @@ func TestExpandGlobsReturnsSortedNames(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-import "magus/extra";
+import "fs";
 export fun image_build(_a: [str]) > void {}
 export fun go_build(_a: [str]) > void {}
 export fun go_test(_a: [str]) > void {}
 export fun probe(_a: [str]) > void {
    var glob   = magus.target.expand_globs("*-build");
    var suffix = magus.target.expand_globs("build");
-   extra.fs.writeFile("ran", join(glob, ",") + "|" + join(suffix, ","));
+   fs.writeFile("ran", join(glob, ",") + "|" + join(suffix, ","));
 }
 fun join(xs: [str], sep: str) > str {
    var out = "";

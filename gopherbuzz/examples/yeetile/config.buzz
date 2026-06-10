@@ -1,0 +1,623 @@
+// config.buzz — one file, i3 flavor.
+//
+// yeetile reads its whole configuration from a single plain-text file, the
+// way i3 and sway do: `set $name value` variables, a handful of directives,
+// and `bind <chord> <command>` lines. Unknown lines warn and are skipped so a
+// half-written config still starts.
+//
+// This module is pure Buzz (no FFI); config_test.buzz exercises it on any
+// platform.
+
+namespace config;
+
+import "std";
+import "io";
+import "regex";
+
+export object Bind {
+    flags: int = 0,    // CGEventFlags modifier bits, summed
+    keycode: int = 0,  // macOS virtual keycode
+    command: str = "",
+    mode: str = "",    // binding mode ("" = default); see `bind_mode`
+}
+
+export object Config {
+    gapInner: double = 8.0,    // gaps inner — between panes; also absorbs apps that clamp a few px over their slot
+    gapOuter: double = 0.0,    // gaps outer — screen edges (0: maximize)
+    topPadding: double = 36.0, // reserved for the menu bar
+    pollMs: int = 3000,        // safety-reconcile interval (AX observers drive the fast path)
+    barOn: bool = true,        // status bar at the bottom edge
+    trayOn: bool = true,       // menu-bar item (top right): presence + workspace
+    statusFile: str = "",      // file whose first line shows on the bar's right
+    ffmOn: bool = false,       // focus follows mouse (hover to focus)
+    tileDisplay: int = 1,      // single tiled display (legacy; see tileDisplays)
+    tileDisplays: [any] = [],  // [int] 1-based display picks; empty = [tileDisplay]
+    tileAll: bool = false,     // tile every display
+    borderOn: bool = false,    // high-contrast ring around the focused window
+    borderWidth: double = 3.0,
+    cheatFlags: int = 1310720, // cheat-sheet chord: cmd+ctrl…
+    cheatKey: int = 44,        // …+slash — hold to show, release to hide
+    goldenOn: bool = false,    // golden-ratio mode: focus takes the phi share
+    minWidth: double = 460.0,  // smallest usable tile width — narrower regions stack instead of overlap (also golden clamp)
+    minHeight: double = 380.0, // smallest usable tile height — shorter regions stack instead of overlap (also golden clamp)
+    hideMethod: str = "app",   // how inactive-workspace windows hide: "app" (cmd+H, instant), "corner" (off-screen), "minimize"
+    binds: mut [any],          // [Bind] — set at construction (see parseConfig)
+    execs: mut [any],          // [str] — `exec` lines, run once at startup
+    rules: mut [any],          // [Rule] — applied when a window is adopted
+}
+
+// Rule is a `rule` line: when a newly adopted window matches the criteria,
+// the command runs against that window — i3's for_window. A criterion is a
+// case-insensitive substring, or a regex when written /like-this/ (compiled
+// at parse time by regex.buzz — a matcher written in pure Buzz, so rules
+// need no gopherbuzz std extension; anchors, classes, repetition, |, (?i)).
+export object Rule {
+    app: str = "",
+    title: str = "",
+    appPat: any = null,    // compiled Re when app was /regex/
+    titlePat: any = null,  // compiled Re when title was /regex/
+    command: str = "",
+}
+
+// macOS ANSI-US virtual keycodes (HIToolbox Events.h, kVK_ANSI_*). The layout
+// scrambles them — `a` is 0 but `b` is 11 — hence a table, not arithmetic.
+final keycodes = {
+    "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8,
+    "v": 9, "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17,
+    "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "9": 25, "7": 26,
+    "8": 28, "0": 29, "o": 31, "u": 32, "i": 34, "p": 35, "l": 37, "j": 38,
+    "k": 40, "n": 45, "m": 46,
+    "return": 36, "tab": 48, "space": 49, "escape": 53,
+    "minus": 27, "equal": 24, "comma": 43, "period": 47, "slash": 44,
+    "semicolon": 41, "quote": 39, "backslash": 42, "grave": 50,
+    "bracketleft": 33, "bracketright": 30,
+    "left": 123, "right": 124, "down": 125, "up": 126,
+};
+
+// CGEventFlags modifier masks (decimal: Buzz has no hex literals).
+final modFlags = {
+    "shift": 131072,    // 1 << 17
+    "ctrl": 262144,     // 1 << 18
+    "control": 262144,
+    "alt": 524288,      // 1 << 19
+    "option": 524288,
+    "cmd": 1048576,     // 1 << 20
+    "super": 1048576,
+};
+
+// parseChord turns "cmd+shift+h" into [flags, keycode], or null when a
+// modifier or key name is unknown.
+export fun parseChord(spec: str) > [int]? {
+    final parts = spec.lower().split("+");
+    var flags = 0;
+    // Sum the modifier parts (everything before the final key). Guarded: a bare
+    // key like "h" has no modifiers, and buzz iterates the degenerate range
+    // `0..0` once — which would wrongly test the key itself as a modifier.
+    if (parts.len() > 1) {
+        foreach (i in 0..parts.len() - 1) {
+            final f = modFlags[parts[i]];
+            if (f == null) {
+                return null;
+            }
+            flags = flags + f!;
+        }
+    }
+    final key = keycodes[parts[parts.len() - 1]];
+    if (key == null) {
+        return null;
+    }
+    return [flags, key!];
+}
+
+export fun parseConfig(text: str) > Config {
+    final c = mut Config{ binds = mut [], execs = mut [], rules = mut [] };
+    c.binds = mut [];
+    c.execs = mut [];
+    c.rules = mut [];
+    final vars = mut {<str: any>};
+    var lineNo = 0;
+    foreach (raw in text.split("\n")) {
+        lineNo = lineNo + 1;
+        final words = tokenize(raw, vars: vars);
+        if (words.len() == 0) {
+            continue;
+        }
+        final head: str = words[0];
+        if (head == "set" and words.len() >= 3) {
+            vars[strAt(words, i: 1)] = words.sub(2).join(" ");
+            continue;
+        }
+        if (head == "gaps" and words.len() >= 3) {
+            final v = std\parseDouble(strAt(words, i: 2));
+            if (v != null and strAt(words, i: 1) == "inner") {
+                c.gapInner = v!;
+                continue;
+            }
+            if (v != null and strAt(words, i: 1) == "outer") {
+                c.gapOuter = v!;
+                continue;
+            }
+        }
+        if (head == "top_padding" and words.len() >= 2) {
+            final v = std\parseDouble(strAt(words, i: 1));
+            if (v != null) {
+                c.topPadding = v!;
+                continue;
+            }
+        }
+        if (head == "poll_interval_ms" and words.len() >= 2) {
+            final v = std\parseInt(strAt(words, i: 1));
+            if (v != null) {
+                c.pollMs = v!;
+                continue;
+            }
+        }
+        if (head == "bar" and words.len() >= 2) {
+            c.barOn = strAt(words, i: 1) != "off";
+            continue;
+        }
+        if (head == "tile_displays" and words.len() >= 2) {
+            if (strAt(words, i: 1) == "all") {
+                c.tileAll = true;
+                continue;
+            }
+            final picks = mut [];
+            var bad = false;
+            foreach (i in 1..words.len()) {
+                final v = std\parseInt(strAt(words, i: i));
+                if (v == null or v! < 1) {
+                    bad = true;
+                } else {
+                    picks.append(v!);
+                }
+            }
+            if (!bad and picks.len() > 0) {
+                c.tileDisplays = picks;
+                continue;
+            }
+        }
+        if (head == "tray" and words.len() >= 2) {
+            c.trayOn = strAt(words, i: 1) != "off";
+            continue;
+        }
+        if (head == "border" and words.len() >= 2) {
+            c.borderOn = strAt(words, i: 1) != "off";
+            continue;
+        }
+        if (head == "border_width" and words.len() >= 2) {
+            final v = std\parseDouble(strAt(words, i: 1));
+            if (v != null and v! > 0.0) {
+                c.borderWidth = v!;
+                continue;
+            }
+        }
+        if (head == "cheatsheet" and words.len() >= 2) {
+            final chord = parseChord(strAt(words, i: 1));
+            if (chord != null) {
+                c.cheatFlags = chord![0];
+                c.cheatKey = chord![1];
+                continue;
+            }
+        }
+        if (head == "tile_display" and words.len() >= 2) {
+            if (strAt(words, i: 1) == "main") {
+                c.tileDisplay = 1;
+                continue;
+            }
+            final v = std\parseInt(strAt(words, i: 1));
+            if (v != null and v! >= 1) {
+                c.tileDisplay = v!;
+                continue;
+            }
+        }
+        if (head == "focus_follows_mouse" and words.len() >= 2) {
+            c.ffmOn = strAt(words, i: 1) != "off";
+            continue;
+        }
+        if (head == "golden" and words.len() >= 2) {
+            c.goldenOn = strAt(words, i: 1) != "off";
+            continue;
+        }
+        if (head == "hide_method" and words.len() >= 2) {
+            final mth = strAt(words, i: 1);
+            if (mth == "app" or mth == "corner" or mth == "minimize") {
+                c.hideMethod = mth;
+                continue;
+            }
+        }
+        if (head == "min_width" and words.len() >= 2) {
+            final v = std\parseDouble(strAt(words, i: 1));
+            if (v != null) {
+                c.minWidth = v!;
+                continue;
+            }
+        }
+        if (head == "min_height" and words.len() >= 2) {
+            final v = std\parseDouble(strAt(words, i: 1));
+            if (v != null) {
+                c.minHeight = v!;
+                continue;
+            }
+        }
+        if (head == "rule" and words.len() >= 3) {
+            final r = parseRule(words.sub(1).join(" "));
+            if (r == null) {
+                std\print("yeetile: config line {lineNo}: bad rule (need app=/title= and a command)");
+                continue;
+            }
+            c.rules.append(r!);
+            continue;
+        }
+        if (head == "exec" and words.len() >= 2) {
+            // A bare exec line is an autostart command (i3 semantics: run on
+            // startup, not on reload — yeetile's main consumes these once).
+            c.execs.append(words.sub(1).join(" "));
+            continue;
+        }
+        if (head == "status_file" and words.len() >= 2) {
+            c.statusFile = strAt(words, i: 1);
+            continue;
+        }
+        if (head == "bind_mode" and words.len() >= 4) {
+            // i3's binding modes, flat syntax: bind_mode <mode> <chord> <cmd>.
+            // Mode binds match only while `mode <name>` is active; unbound
+            // keys pass through to apps, exactly like i3.
+            final chord = parseChord(strAt(words, i: 2));
+            if (chord == null) {
+                std\print("yeetile: config line {lineNo}: unknown chord \"{strAt(words, i: 2)}\"");
+                continue;
+            }
+            c.binds.append(mut Bind{
+                flags = chord![0],
+                keycode = chord![1],
+                command = words.sub(3).join(" "),
+                mode = strAt(words, i: 1),
+            });
+            continue;
+        }
+        if (head == "bind" and words.len() >= 3) {
+            final chord = parseChord(strAt(words, i: 1));
+            if (chord == null) {
+                std\print("yeetile: config line {lineNo}: unknown chord \"{strAt(words, i: 1)}\"");
+                continue;
+            }
+            c.binds.append(mut Bind{
+                flags = chord![0],
+                keycode = chord![1],
+                command = words.sub(2).join(" "),
+            });
+            continue;
+        }
+        std\print("yeetile: config line {lineNo}: ignored \"{raw.trim()}\"");
+    }
+    return c;
+}
+
+// bindAt re-types an entry of Config.binds ([any]) at the read side.
+export fun bindAt(binds: [any], i: int) > Bind {
+    return (binds[i] as? Bind)!;
+}
+
+export fun ruleAt(rules: [any], i: int) > Rule {
+    return (rules[i] as? Rule)!;
+}
+
+// parseRule parses `app=X title="Some Name" <command>`: any mix of the two
+// criteria (bare or double-quoted values), then the command. Null when a
+// criterion or the command is missing.
+export fun parseRule(text: str) > Rule? {
+    final r = mut Rule{};
+    var rest = text.trim();
+    var progress = true;
+    while (progress) {
+        progress = false;
+        if (rest.startsWith("app=")) {
+            final v = takeValue(rest.sub(4));
+            r.app = strAt(v, i: 0);
+            rest = strAt(v, i: 1);
+            progress = true;
+        } else if (rest.startsWith("title=")) {
+            final v = takeValue(rest.sub(6));
+            r.title = strAt(v, i: 0);
+            rest = strAt(v, i: 1);
+            progress = true;
+        }
+    }
+    r.command = rest.trim();
+    if (r.command.len() == 0 or (r.app.len() == 0 and r.title.len() == 0)) {
+        return null;
+    }
+    // A /slash-wrapped/ criterion compiles to a regex (regex.buzz, written
+    // in pure Buzz); a bad one rejects the whole rule.
+    if (isRegex(r.app)) {
+        r.appPat = regex\reCompile(r.app.sub(1, len: r.app.len() - 2));
+        if (r.appPat == null) {
+            std\print("yeetile: bad rule regex {r.app}");
+            return null;
+        }
+    }
+    if (isRegex(r.title)) {
+        r.titlePat = regex\reCompile(r.title.sub(1, len: r.title.len() - 2));
+        if (r.titlePat == null) {
+            std\print("yeetile: bad rule regex {r.title}");
+            return null;
+        }
+    }
+    return r;
+}
+
+fun isRegex(s: str) > bool {
+    return s.len() > 2 and s.startsWith("/") and s.endsWith("/");
+}
+
+// takeValue reads a bare, double-quoted, or /slash-delimited/ value (the
+// regex form may contain spaces); returns [value, remainder].
+fun takeValue(s: str) > [str] {
+    if (s.startsWith("/")) {
+        final close = s.sub(1).indexOf("/");
+        if (close == null) {
+            return [s, ""];
+        }
+        final v: str = s.sub(0, len: close! + 2); // keep both slashes for isRegex
+        final rest: str = s.sub(close! + 2).trim();
+        return [v, rest];
+    }
+    if (s.startsWith("\"")) {
+        final close = s.sub(1).indexOf("\"");
+        if (close == null) {
+            final v: str = s.sub(1);
+            return [v, ""];
+        }
+        final v: str = s.sub(1, len: close!);
+        final rest: str = s.sub(close! + 2).trim();
+        return [v, rest];
+    }
+    final sp = s.indexOf(" ");
+    if (sp == null) {
+        return [s, ""];
+    }
+    final v: str = s.sub(0, len: sp!);
+    final rest: str = s.sub(sp! + 1).trim();
+    return [v, rest];
+}
+
+// ruleMatches: empty criteria match anything; /regex/ criteria match their
+// compiled pattern; everything else is a case-insensitive substring test.
+export fun ruleMatches(r: Rule, app: str, title: str) > bool {
+    if (r.appPat != null) {
+        if (!regex\reMatch((r.appPat as? regex\Re)!, textRaw: app)) {
+            return false;
+        }
+    } else if (r.app.len() > 0 and app.lower().indexOf(r.app.lower()) == null) {
+        return false;
+    }
+    if (r.titlePat != null) {
+        if (!regex\reMatch((r.titlePat as? regex\Re)!, textRaw: title)) {
+            return false;
+        }
+    } else if (r.title.len() > 0 and title.lower().indexOf(r.title.lower()) == null) {
+        return false;
+    }
+    return true;
+}
+
+// tokenize splits a config line into words, dropping whole-line comments and
+// substituting `$name` variables. Substitution is longest-prefix per token so
+// "$mod+h" resolves even though the token isn't exactly "$mod".
+fun tokenize(raw: str, vars: {str: any}) > [str] {
+    final line = raw.trim();
+    final res = mut [];
+    if (line.len() == 0 or line.startsWith("#")) {
+        return [<str>];
+    }
+    foreach (word in line.split(" ")) {
+        if (word.len() == 0) {
+            continue;
+        }
+        res.append(substitute(word, vars: vars));
+    }
+    // Re-type the [any] accumulator as [str] for callers.
+    var typed = [<str>];
+    foreach (w in res) {
+        final s = (w as? str)!;
+        typed = typed + [s];
+    }
+    return typed;
+}
+
+fun substitute(word: str, vars: {str: any}) > str {
+    if (!word.startsWith("$")) {
+        return word;
+    }
+    var bestKey = "";
+    foreach (k, _ in vars) {
+        if (word.startsWith(k) and k.len() > bestKey.len()) {
+            bestKey = k;
+        }
+    }
+    if (bestKey.len() == 0) {
+        return word;
+    }
+    final val = "{vars[bestKey]}";
+    return val + word.sub(bestKey.len());
+}
+
+fun strAt(words: [str], i: int) > str {
+    return words[i];
+}
+
+// escapeBuzz escapes s for inclusion in a Buzz double-quoted string literal:
+// backslashes, quotes, and `{` (which starts interpolation). `}` is literal in
+// a string on both gopherbuzz and upstream buzz — and upstream rejects `\}` as
+// an escape — so it is deliberately left alone.
+export fun escapeBuzz(s: str) > str {
+    return s.split("\\").join("\\\\").split("\"").join("\\\"")
+        .split("\{").join("\\\{");
+}
+
+// rulesSource renders app→command pairs as a window-rules hook — real Buzz
+// source, the same thing a user would write by hand. `layout export` feeds
+// it the live arrangement, closing the loop: arrange windows, export, and
+// the placement comes back as editable rules instead of bespoke values.
+export fun rulesSource(apps: [str], commands: [str]) > str {
+    var body = "";
+    foreach (i in 0..apps.len()) {
+        body = body
+            + "    if (app == \"" + escapeBuzz(apps[i]) + "\") \{\n"
+            + "        return \"" + escapeBuzz(commands[i]) + "\";\n"
+            + "    }\n";
+    }
+    return "// generated by `layout export` — the current arrangement, as window rules.\n"
+        + "// Loaded before rules.buzz (hand-written hooks run after these). Edit\n"
+        + "// freely, or regenerate with `layout export`.\n\n"
+        + "onWindowRule(fun (app: str, title: str, id: int) > str \{\n"
+        + body
+        + "    return \"\";\n"
+        + "});\n";
+}
+
+// keyName reverses the keycode table for display ("h", "return", …).
+export fun keyName(code: int) > str {
+    foreach (name, kc in keycodes) {
+        if (kc == code) {
+            return name;
+        }
+    }
+    return "#{code}";
+}
+
+// chordName renders a bind's chord back into config spelling ("cmd+shift+h").
+export fun chordName(flags: int, keycode: int) > str {
+    final modBits = [1048576, 262144, 524288, 131072];
+    final modLabels = ["cmd", "ctrl", "alt", "shift"];
+    var res = "";
+    foreach (i in 0..modBits.len()) {
+        if ((flags / modBits[i]) % 2 == 1) {
+            if (res.len() > 0) {
+                res = res + "+";
+            }
+            res = res + modLabels[i];
+        }
+    }
+    if (res.len() > 0) {
+        res = res + "+";
+    }
+    return res + keyName(keycode);
+}
+
+// splitCommands splits a "cmd; cmd; cmd" sequence (what a rules hook may
+// return) into individual trimmed commands, dropping empties.
+export fun splitCommands(s: str) > [str] {
+    var res = [<str>];
+    foreach (part in s.split(";")) {
+        final p = part.trim();
+        if (p.len() > 0) {
+            res = res + [p];
+        }
+    }
+    return res;
+}
+
+// readConfigText returns the config file's content, or null when it is
+// missing or unreadable. Host errors like File.open unwind to catch the same
+// way thrown Buzz errors do.
+export fun readConfigText(path: str) > str? {
+    var text: str? = null;
+    try {
+        final f = io\File.open(path, mode: io\FileMode.read);
+        text = f.readAll();
+        f.close();
+    } catch {
+        return null;
+    }
+    return text;
+}
+
+// loadConfig reads the file at path; a missing or unreadable file falls back
+// to the built-in defaults (i3 ships a default config too).
+export fun loadConfig(path: str) > Config {
+    final text = readConfigText(path);
+    if (text == null) {
+        std\print("yeetile: no readable config at {path} — using built-in defaults");
+        return parseConfig(defaultConfigText());
+    }
+    return parseConfig(text!);
+}
+
+// The built-in defaults are expressed in the config language itself, so they
+// double as living documentation of the syntax. The chords track i3's stock
+// config where macOS lets them: vim-key focus/move, $mod+N workspaces,
+// $mod+shift+q kill, $mod+shift+e exit.
+export fun defaultConfigText() > str {
+    var ws = "";
+    foreach (n in 1..10) {
+        ws = ws + "bind $mod+{n} workspace {n}\n"
+            + "bind $mod+shift+{n} move workspace {n}\n";
+    }
+    return "set $mod cmd+ctrl\n"
+        + "top_padding 36\n"
+        + "bind $mod+h focus left\n"
+        + "bind $mod+j focus down\n"
+        + "bind $mod+k focus up\n"
+        + "bind $mod+l focus right\n"
+        + "bind $mod+tab focus next\n"
+        + "bind $mod+shift+tab focus prev\n"
+        + "bind $mod+shift+h move left\n"
+        + "bind $mod+shift+j move down\n"
+        + "bind $mod+shift+k move up\n"
+        + "bind $mod+shift+l move right\n"
+        + "bind $mod+v split vertical\n"
+        + "bind $mod+s split horizontal\n"
+        + "bind $mod+f fullscreen\n"
+        + "bind $mod+shift+f fullscreen native\n"
+        + "bind $mod+minus resize shrink\n"
+        + "bind $mod+equal resize grow\n"
+        + "bind $mod+right resize grow width\n"
+        + "bind $mod+left resize shrink width\n"
+        + "bind $mod+down resize grow height\n"
+        + "bind $mod+up resize shrink height\n"
+        + "bind $mod+b balance\n"
+        + "bind $mod+g golden toggle\n"
+        + "bind $mod+w stacking toggle\n"
+        + "bind $mod+e launcher eval\n"
+        + "bind $mod+i inspector\n"
+        + "bind $mod+shift+i console\n"
+        + "bind $mod+o launcher windows\n"
+        + "bind $mod+z undo\n"
+        + "bind $mod+m mode resize\n"
+        + "bind_mode resize h resize shrink width\n"
+        + "bind_mode resize l resize grow width\n"
+        + "bind_mode resize k resize shrink height\n"
+        + "bind_mode resize j resize grow height\n"
+        + "bind_mode resize escape mode default\n"
+        + "bind_mode resize return mode default\n"
+        + "bind $mod+shift+space floating toggle\n"
+        + "bind $mod+shift+grave move scratchpad\n"
+        + "bind $mod+grave scratchpad show\n"
+        + "bind $mod+r reload\n"
+        + "bind $mod+p reconcile toggle\n"
+        + "bind $mod+shift+s sweep\n"
+        + "bind $mod+d launcher\n"
+        + "bind $mod+shift+d launcher run\n"
+        + "bind $mod+return exec open -a Terminal\n"
+        + "bind $mod+shift+q kill\n"
+        + "bind $mod+shift+e quit\n"
+        // Rectangle.app's own default chords, so it can be uninstalled
+        // without retraining: snap the (floated) focused window.
+        + "bind ctrl+alt+left snap left\n"
+        + "bind ctrl+alt+right snap right\n"
+        + "bind ctrl+alt+up snap top\n"
+        + "bind ctrl+alt+down snap bottom\n"
+        + "bind ctrl+alt+u snap topleft\n"
+        + "bind ctrl+alt+i snap topright\n"
+        + "bind ctrl+alt+j snap bottomleft\n"
+        + "bind ctrl+alt+k snap bottomright\n"
+        + "bind ctrl+alt+d snap first-third\n"
+        + "bind ctrl+alt+f snap center-third\n"
+        + "bind ctrl+alt+g snap last-third\n"
+        + "bind ctrl+alt+e snap first-two-thirds\n"
+        + "bind ctrl+alt+t snap last-two-thirds\n"
+        + "bind ctrl+alt+return snap max\n"
+        + "bind ctrl+alt+c snap center\n"
+        + ws;
+}

@@ -1,0 +1,23 @@
+// @expect: ok
+// std.pattern is the runtime twin of the $"..." literal: PCRE-style regex
+// compiled from a string (config files, user input). Bad patterns raise a
+// catchable error. Note the argument is an ordinary Buzz string, so regex
+// braces must be escaped (\{2\}) or they read as interpolation — unlike
+// $"..." literals, which never interpolate.
+import "std";
+
+final p = std.pattern("^Untitled [0-9]+$");
+std.assert(p.match("Untitled 42") != null, "regex matches");
+std.assert(p.match("Settings") == null, "regex rejects");
+
+final pcre = std.pattern("(?i)co\{2\}l(?= beans)");
+std.assert(pcre.match("COOL beans") != null, "PCRE flags and lookahead work");
+
+var caught = false;
+try {
+    std.pattern("(unclosed");
+} catch (e) {
+    caught = true;
+}
+std.assert(caught, "malformed pattern raises catchably");
+final __r = "ok";

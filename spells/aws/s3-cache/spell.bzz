@@ -26,13 +26,14 @@
 // age and/or newest-N bounds (or just reports them on a dry run).
 //
 // Requests are signed with AWS Signature Version 4, composed from primitives that
-// already exist: extra/crypto for the HMAC signing-key chain (its byte-list
-// outputs feed straight back as the next key) and the final hex signature, Buzz's
-// crypto.hash / extra.crypto.sha256File for the SHA-256 hashes, extra.time for the
-// x-amz-date timestamp and parsing object LastModified during prune (Go's time
-// package, so no calendar math here), and extra/http for the byte-level GET/PUT —
-// so everything S3-specific stays out of the Go tree. Path-style addressing is used
-// (https://endpoint/bucket/key), which every S3-compatible store accepts.
+// already exist on the bare host modules: crypto.hmacSha256/hmacSha256Hex for the
+// HMAC signing-key chain (its byte-list outputs feed straight back as the next key)
+// and the final hex signature, crypto.hash / crypto.sha256File for the SHA-256
+// hashes, time for the x-amz-date timestamp and parsing object LastModified during
+// prune (Go's time package, so no calendar math here), and http for the byte-level
+// GET/PUT — so everything S3-specific stays out of the Go tree. Path-style
+// addressing is used (https://endpoint/bucket/key), which every S3-compatible
+// store accepts.
 //
 // Configuration comes from the environment (standard AWS variables plus a bucket):
 //   AWS_ACCESS_KEY_ID       — access key (gates the backend)
@@ -44,9 +45,8 @@
 //                             (default https://s3.<region>.amazonaws.com; set this
 //                             for MinIO/R2/B2)
 
-import "magus/extra"
-import "magus/extra/http" as xhttp
-import "magus/extra/crypto" as xc
+import "http"
+import "time"
 import "magus/target"
 import "crypto"
 import "std"
@@ -117,10 +117,10 @@ fun cache_key(hash: str) > str { return "magus-" + hash + "-" + CACHE_VERSION; }
 
 // amzTimestamp formats the current UTC time as a SigV4 x-amz-date (YYYYMMDDTHHMMSSZ),
 // handing the calendar math to the host time module (Go's time.Format under the
-// hood). os.time() returns epoch millis as a double — exactly what extra.time
-// speaks — so it flows straight through with no conversion.
+// hood). os.time() returns epoch millis as a double — exactly what the time
+// module speaks — so it flows straight through with no conversion.
 fun amzTimestamp() > str {
-    return extra.time.format("20060102T150405Z", os.time());
+    return time.format("20060102T150405Z", os.time());
 }
 
 // --- AWS Signature Version 4 ---------------------------------------------
@@ -161,13 +161,13 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
         + scope + "\n"
         + crypto.hash(crypto.HashAlgorithm.Sha256, canonicalRequest);
 
-    // Signing-key chain: each HMAC's byte-list output keys the next (extra/crypto
+    // Signing-key chain: each HMAC's byte-list output keys the next (crypto.hmacSha256
     // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.
-    final kDate = xc.hmacSha256("AWS4" + secret(), datestamp);
-    final kRegion = xc.hmacSha256(kDate, reg);
-    final kService = xc.hmacSha256(kRegion, "s3");
-    final kSigning = xc.hmacSha256(kService, "aws4_request");
-    final signature = xc.hmacSha256Hex(kSigning, stringToSign);
+    final kDate = crypto.hmacSha256("AWS4" + secret(), datestamp);
+    final kRegion = crypto.hmacSha256(kDate, reg);
+    final kService = crypto.hmacSha256(kRegion, "s3");
+    final kSigning = crypto.hmacSha256(kService, "aws4_request");
+    final signature = crypto.hmacSha256Hex(kSigning, stringToSign);
 
     final authorization = "AWS4-HMAC-SHA256 Credential=" + access() + "/" + scope
         + ", SignedHeaders=" + signedHeaders
@@ -198,7 +198,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
     cb(io);
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
     final headers = sign("GET", path, "", EMPTY_SHA256);
-    return xhttp.download(endpoint() + path, "" + io["dest"], headers) == 200;
+    return http.download(endpoint() + path, "" + io["dest"], headers) == 200;
 }
 
 // put_artifact uploads the file at io.src as the object for io.hash. true on a 200
@@ -210,8 +210,8 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     cb(io);
     final src = "" + io["src"];
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
-    final headers = sign("PUT", path, "", extra.crypto.sha256File(src));
-    final res = xhttp.upload_chunked("PUT", endpoint() + path, src, 0, headers);
+    final headers = sign("PUT", path, "", crypto.sha256File(src));
+    final res = http.upload_chunked("PUT", endpoint() + path, src, 0, headers);
     return res[0] == 200;
 }
 
@@ -228,9 +228,9 @@ fun listPage(marker: str) > str {
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
     final path = "/" + bucket();
     final headers = sign("GET", path, query, EMPTY_SHA256);
-    final res = extra.http.get(endpoint() + path + "?" + query, headers);
-    if (res[0] != 200) { return ""; }
-    return "" + res[1];
+    final res = http.get(endpoint() + path + "?" + query, headers);
+    if (res["status"] != 200) { return ""; }
+    return "" + res["body"];
 }
 
 // listing is a fiber generator over every magus- object in the bucket. Each resume
@@ -269,8 +269,8 @@ fun listing() > any {
 fun deleteObject(key: str) > bool {
     final path = "/" + bucket() + "/" + key;
     final headers = sign("DELETE", path, "", EMPTY_SHA256);
-    final res = extra.http.request("DELETE", endpoint() + path, "", headers);
-    return res[0] == 204 or res[0] == 200;
+    final res = http.request("DELETE", endpoint() + path, "", headers);
+    return res["status"] == 204 or res["status"] == 200;
 }
 
 // prune evicts cache objects per a retention policy, enumerating them through the
@@ -296,7 +296,7 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     final gen = &listing();
     var e = resume(gen);
     while (e != null) {
-        e["ms"] = extra.time.parse(S3_TIME_LAYOUT, "" + e["lastModified"]);
+        e["ms"] = time.parse(S3_TIME_LAYOUT, "" + e["lastModified"]);
         artifacts.append(e);
         e = resume(gen);
     }

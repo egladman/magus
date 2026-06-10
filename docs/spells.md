@@ -24,7 +24,7 @@ The relationship is **compositional**: a target's body calls spell ops.
 
 ```buzz
 import "magus/spell/go";
-magus.project.register(".", { "spells": [go] });   // bind the spell (runs nothing)
+magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });   // bind the spell (runs nothing)
 
 // targets are the runnable verbs; their bodies call the spell's ops. Op keys are
 // the CLI command, so kebab names are reached by subscript (see Naming operations).
@@ -81,7 +81,7 @@ Built-in spells are compiled into the magus binary.
 
 ```buzz
 import "magus/spell/go";
-magus.project.register(".", { "spells": [go] });
+magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
 ```
 
 Available built-ins: `go`, `typescript`, `javascript`, `python`, `rust`, `zig`, `bash`, `docker`, `compose`, `kind`, `terraform`, `kustomize`, `json`, `yaml`, `toml`, `html`, `markdown`, `css`, `sql`.
@@ -92,7 +92,7 @@ A workspace-local `spells/<name>.bzz` loaded by path:
 
 ```buzz
 const rb = magus.spell.load("spells/ruby.bzz");
-magus.project.register("gems/", { "spells": [rb] });
+magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 ```
 
 ### Inline spell
@@ -110,7 +110,7 @@ const rb = magus.spell.define({
                      "charms": { "rw": {"ops": [{"op": "replace", "path": "/2", "value": "-A"}]} } },
     },
 });
-magus.project.register("gems/", { "spells": [rb] });
+magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 ```
 
 The handle exposes `handle.listTargets()` (sorted op names) for introspection.
@@ -123,7 +123,7 @@ Spells do **not** import one another. There is no spell-to-spell `import`, and a
 import "magus/spell/go";
 import "magus/spell/docker";
 import "magus/spell/compose";
-magus.project.register(".", { "spells": [go, docker, compose] });   // co-bound
+magus.project.register(fun(p, cb) > bool { cb({ "spells": [go, docker, compose] }); return true; });   // co-bound
 
 export fun build(_args: [str]) > void {
     go["go-build"]({ "cwd": "." });
@@ -192,7 +192,7 @@ Then bind it and compose targets that call its ops:
 
 ```buzz
 const rb = magus.spell.load("spells/ruby.bzz");
-magus.project.register("gems/", { "spells": [rb] });
+magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 
 export fun test(_args: [str]) > void { rb.rspec({ "cwd": "gems/" }); }
 export fun lint(_args: [str]) > void { rb.rubocop({ "cwd": "gems/" }); }
@@ -206,7 +206,7 @@ For cache-correctness rules (declare every input in `needs`, declare `provides` 
 import / magus.spell.load / define     → a Spell handle (registers nothing)
       │
       ▼
-magus.project.register(path, {spells}) → the spell is bound to the project;
+register(fun(p, cb){ cb({spells}) })   → the spell is bound to the project;
       │                                   its needs/provides/claims now feed the
       │                                   project's cache key and affected set
       ▼

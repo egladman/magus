@@ -18,32 +18,35 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) buzz.Value {
 	m.MapSet("get", buzz.DirectValue("http.get", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
 		url := bzStr(bzArgs, 0)
 		headers := bzStrMap(bzArgs, 1)
-		ret0, ret1, err := std.HTTPGet(ctx, url, headers)
+		opts := bzAnyMap(bzArgs, 2)
+		ret0, err := std.HTTPGet(ctx, url, headers, opts)
 		if err != nil {
 			return buzz.Null, err
 		}
-		return buzz.ListValue([]buzz.Value{bzIntVal(ret0), bzStrVal(ret1)}), nil
+		return bzAnyMapVal(ret0), nil
 	}))
 	m.MapSet("post", buzz.DirectValue("http.post", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
 		url := bzStr(bzArgs, 0)
 		body := bzStr(bzArgs, 1)
 		headers := bzStrMap(bzArgs, 2)
-		ret0, ret1, err := std.HTTPPost(ctx, url, body, headers)
+		opts := bzAnyMap(bzArgs, 3)
+		ret0, err := std.HTTPPost(ctx, url, body, headers, opts)
 		if err != nil {
 			return buzz.Null, err
 		}
-		return buzz.ListValue([]buzz.Value{bzIntVal(ret0), bzStrVal(ret1)}), nil
+		return bzAnyMapVal(ret0), nil
 	}))
 	m.MapSet("request", buzz.DirectValue("http.request", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
 		method := bzStr(bzArgs, 0)
 		url := bzStr(bzArgs, 1)
 		body := bzStr(bzArgs, 2)
 		headers := bzStrMap(bzArgs, 3)
-		ret0, ret1, err := std.HTTPRequest(ctx, method, url, body, headers)
+		opts := bzAnyMap(bzArgs, 4)
+		ret0, err := std.HTTPRequest(ctx, method, url, body, headers, opts)
 		if err != nil {
 			return buzz.Null, err
 		}
-		return buzz.ListValue([]buzz.Value{bzIntVal(ret0), bzStrVal(ret1)}), nil
+		return bzAnyMapVal(ret0), nil
 	}))
 	return m
 }

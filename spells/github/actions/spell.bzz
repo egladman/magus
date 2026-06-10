@@ -21,8 +21,9 @@
 // `any`.
 //
 // The GitHub Actions Cache v1 protocol is implemented here in Buzz using the
-// magus host utilities (extra.http/extra.env), Buzz's serialize for JSON, plus
-// the byte-level primitives in magus/extra/http — so everything GitHub-specific
+// magus host http module (http.get/post for the JSON API plus the byte-level
+// http.download/upload_chunked/byteSize primitives), os.env for the runner
+// environment, and Buzz's serialize for JSON — so everything GitHub-specific
 // stays out of the Go tree.
 //
 // Auth and endpoint come from the runner environment:
@@ -30,8 +31,7 @@
 //   ACTIONS_CACHE_URL      — base API URL (always ends in "/")
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
-import "magus/extra"
-import "magus/extra/http" as xhttp
+import "http"
 import "magus/target"
 import "serialize"
 import "os"
@@ -94,14 +94,14 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
     final dest = "" + io["dest"];
     final key = cache_key(hash);
     final url = base() + "_apis/artifactcache/cache?keys=" + key + "&version=" + CACHE_VERSION;
-    final res = extra.http.get(url, auth_headers());
-    if (res[0] != 200) { return false; }  // 204 = miss
+    final res = http.get(url, auth_headers());
+    if (res["status"] != 200) { return false; }  // 204 = miss
     // jsonDecode returns a Boxed tree: navigate with .q(key) and read the leaf
     // with a typed accessor (.string() → the str, or null if absent/wrong type).
-    final loc = serialize.jsonDecode(res[1]).q("archiveLocation").string();
+    final loc = serialize.jsonDecode(res["body"]).q("archiveLocation").string();
     if (loc == null or loc == "") { return false; }
     // The archive location is a pre-signed blob URL; it needs no auth header.
-    return xhttp.download("" + loc, dest, {}) == 200;
+    return http.download("" + loc, dest, {}) == 200;
 }
 
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
@@ -118,21 +118,21 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     var json_headers = auth_headers();
     json_headers["Content-Type"] = "application/json";
     final reserve = serialize.jsonEncode({"key": key, "version": CACHE_VERSION});
-    final rres = extra.http.post(base() + "_apis/artifactcache/caches", reserve, json_headers);
-    if (rres[0] == 409) { return true; }   // another runner won the race
-    if (rres[0] != 201) { return false; }
-    final cache_id = serialize.jsonDecode(rres[1]).q("cacheId").integer();
+    final rres = http.post(base() + "_apis/artifactcache/caches", reserve, json_headers);
+    if (rres["status"] == 409) { return true; }   // another runner won the race
+    if (rres["status"] != 201) { return false; }
+    final cache_id = serialize.jsonDecode(rres["body"]).q("cacheId").integer();
     final url = base() + "_apis/artifactcache/caches/" + cache_id;
 
     // 2. Upload the file in Content-Range chunks.
     var bin_headers = auth_headers();
     bin_headers["Content-Type"] = "application/octet-stream";
-    final ures = xhttp.upload_chunked("PATCH", url, src, CHUNK, bin_headers);
+    final ures = http.upload_chunked("PATCH", url, src, CHUNK, bin_headers);
     if (ures[0] != 204) { return false; }
 
     // 3. Commit with the exact byte size.
-    final commit = serialize.jsonEncode({"size": xhttp.byteSize(src)});
-    final cres = extra.http.post(url, commit, json_headers);
-    final code = cres[0];
+    final commit = serialize.jsonEncode({"size": http.byteSize(src)});
+    final cres = http.post(url, commit, json_headers);
+    final code = cres["status"];
     return code == 200 or code == 201 or code == 204;
 }

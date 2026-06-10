@@ -27,6 +27,7 @@ func coreModule(out io.Writer) buzz.Value {
 	m.MapSet("toDouble", fn("std.toDouble", stdToDouble))
 	m.MapSet("char", fn("std.char", stdChar))
 	m.MapSet("random", fn("std.random", stdRandom))
+	m.MapSet("pattern", fn("std.pattern", stdPattern))
 	m.MapSet("currentFiber", fn("std.currentFiber", stdCurrentFiber))
 	m.MapSet("panic", fn("std.panic", stdPanic))
 	// toUd / parseUd require Zig userdata — not supported in the Go embedding.
@@ -173,4 +174,17 @@ func stdPanic(_ context.Context, args []buzz.Value) (buzz.Value, error) {
 		msg = args[0].AsString()
 	}
 	return buzz.Null, fmt.Errorf("std.panic: %s", msg)
+}
+
+// stdPattern compiles a runtime string into a pat value — the dynamic twin of
+// the $"..." literal, for patterns that arrive from config files or user
+// input. A malformed pattern raises (catchable) rather than returning null,
+// so the caller hears *why* it is bad. (Callers writing the pattern as a Buzz
+// string literal must escape braces — \{2\} — since ordinary strings
+// interpolate; $"..." literals don't have this problem.)
+func stdPattern(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	if len(args) < 1 || !args[0].IsStr() {
+		return buzz.Null, fmt.Errorf("std.pattern: requires a str argument")
+	}
+	return buzz.PatValue(args[0].AsString())
 }

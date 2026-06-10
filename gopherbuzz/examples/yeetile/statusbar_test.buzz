@@ -1,0 +1,24 @@
+// statusbar_test.buzz — tests for the bar's pure text rendering. Runs anywhere:
+//
+//     go run ./cmd/buzz -t -L . statusbar_test.buzz
+
+import "std";
+import "statusbar";
+
+test "barText shows current and occupied workspaces" {
+    final t = barText(0, counts: [2, 0, 1], title: "main.go — editor");
+    std\assert(t.startsWith("[1]"), message: "current workspace bracketed");
+    std\assert(t.indexOf(" 3 ") != null, message: "occupied workspace listed");
+    std\assert(t.indexOf("2") == null or t.indexOf(" 2 ") == null, message: "empty workspace omitted");
+    std\assert(t.indexOf("main.go") != null, message: "focused title shown");
+}
+
+test "barText truncates long titles" {
+    var long = "";
+    foreach (i in 0..30) {
+        long = long + "abcd";
+    }
+    final t = barText(0, counts: [1], title: long);
+    std\assert(t.indexOf("…") != null, message: "title ellipsized");
+    std\assert(t.len() < 100, message: "kept short");
+}

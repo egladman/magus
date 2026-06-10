@@ -1,0 +1,77 @@
+// cheatsheet.buzz — hold-to-peek keybinding reference.
+//
+// Hold the cheat chord (default cmd+ctrl+slash, `cheatsheet <chord>` to
+// change) and a centered panel lists every bind as "chord  command"; release
+// any part of the chord and it vanishes. The key tap listens to key-ups and
+// modifier changes precisely for this — the WM core calls sheetShow on the
+// chord's key-down and sheetHide on its release.
+
+namespace cheatsheet;
+
+import "std";
+import "config";
+import "platform/macos/cocoa";
+
+final maxRows = 22;
+final rowH = 22.0;
+final padding = 18.0;
+final colW = 360.0;
+
+var panel: ud? = null;
+var labels = mut [<ud>];  // up to maxRows * 2 (two columns)
+var visible = false;
+
+fun labelAt(i: int) > ud? {
+    return labels[i];
+}
+
+fun sheetInit(cx: double, cy: double) > void {
+    if (panel != null) {
+        return;
+    }
+    cocoa\uiInit();
+    final w = colW * 2.0 + padding * 3.0;
+    final h = padding * 2.0 + std\toDouble(maxRows) * rowH;
+    panel = cocoa\uiPanel(cx - w / 2.0, y: cy - h / 2.0, w: w, h: h, gray: 0.1, alpha: 0.96);
+    cocoa\uiIgnoreMouse(panel);
+    foreach (col in 0..2) {
+        foreach (row in 0..maxRows) {
+            final x = padding + std\toDouble(col) * (colW + padding);
+            final y = h - padding - rowH * std\toDouble(row + 1);
+            final lb = cocoa\uiLabel(panel, x: x, y: y, w: colW, h: rowH - 4.0, size: 13.0, gray: 0.92);
+            labels.append(lb!);
+        }
+    }
+}
+
+// sheetShow renders the current keymap centered at (cx, cy) — AppKit
+// coordinates of the active display's center.
+export fun sheetShow(binds: [any], cx: double, cy: double) > void {
+    sheetInit(cx, cy);
+    final total = maxRows * 2;
+    foreach (i in 0..total) {
+        var text = "";
+        if (i < binds.len() and i < total) {
+            final b = config\bindAt(binds, i: i);
+            text = "{config\chordName(b.flags, keycode: b.keycode)}  ·  {b.command}";
+        }
+        if (i == total - 1 and binds.len() > total) {
+            text = "… and {binds.len() - total + 1} more";
+        }
+        cocoa\uiSetText(labelAt(i), text: text);
+    }
+    cocoa\uiShow(panel);
+    visible = true;
+}
+
+export fun sheetHide() > void {
+    if (!visible) {
+        return;
+    }
+    visible = false;
+    cocoa\uiHide(panel);
+}
+
+export fun sheetVisible() > bool {
+    return visible;
+}

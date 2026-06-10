@@ -51,7 +51,7 @@ func init() {
 // REPL/pry path; it is not used here.
 func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[string]buzzeng.Callable, parseMode bool) {
 	magus := buzzeng.NewMap()
-	magus.MapSet("project", buildProjectNS(ctx))
+	magus.MapSet("project", buildProjectNS(ctx, sess))
 	magus.MapSet("target", buildTargetNS(targets))
 	magus.MapSet("spell", buildSpellNS(ctx))
 	magus.MapSet("cache", buildCacheNS(ctx))
@@ -103,14 +103,12 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	}))
 	sess.SetGlobal("magus", magus)
 
-	// The host utilities are reached through a single aggregate import: `import
-	// "magus/extra"` binds `extra`, and a magusfile selects modules off it —
-	// extra.os.exec, extra.fs.glob, extra.vcs.shortHash. The aggregate (rather than
-	// per-module `magus/extra/os`) keeps the bare names os/fs/crypto free for
-	// Buzz's own stdlib (`import "os"`, `import "crypto"`), which a magusfile may
-	// use alongside these. registerHostModules also installs the byte-level
-	// `import "magus/extra/http"` and is shared with spell-loading, so a magusfile
-	// and a function-op spell see the same module surface.
+	// The host utilities are reached under the same bare names as Buzz's own
+	// stdlib: `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, … A
+	// magusfile selects methods off each module directly (os.exec, fs.glob,
+	// vcs.shortHash). registerHostModules layers the magus host methods onto
+	// Buzz's stdlib modules — a superset surface — and is shared with
+	// spell-loading, so a magusfile and a function-op spell see the same modules.
 	registerHostModules(ctx, sess)
 	// Built-in spells follow the same import idiom as std modules: each spell is
 	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
@@ -165,59 +163,78 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Va
 	return buzzeng.Null, false
 }
 
-// buildBuzzStd assembles magus.extra for a magusfile.bzz: the host utility
-// modules (os/platform/fs/vcs/env/crypto/http/archive/arg/charm) via the
-// magus-bindings-gen-emitted buzzgen trampolines. The closures capture sess so
-// host callbacks (e.g. arg.index_func, os.with_env) can call back into the VM.
+// magusModules builds every magus host module (os/platform/fs/vcs/env/crypto/
+// http/archive/charm/semver/yaml/…) via the magus-bindings-gen-emitted buzzgen
+// trampolines, keyed by the bare import name each is exposed under. The closures
+// capture sess so host callbacks (e.g. arg.index_func, os.with_env) can call back
+// into the VM.
 //
-// extra is self-complete: every host method is exposed here, even ones Buzz's
-// own stdlib also covers (fs.exists, env.get, json, crypto hashes, …). Authors
-// reach a whole domain through one namespace (extra.fs.*) instead of straddling
-// native fs + extra, and the extra forms are sandbox-aware where the stdlib is
-// not. std.NativeBuzzEquiv records the native equivalents for cross-reference.
-func buildBuzzStd(ctx context.Context, sess *buzzeng.Session) buzzeng.Value {
-	stdNS := buzzeng.NewMap()
-	stdNS.MapSet("os", buzzgen.RegisterOs(ctx, sess))
-	stdNS.MapSet("platform", buzzgen.RegisterPlatform(ctx, sess))
-	stdNS.MapSet("fs", buzzgen.RegisterFs(ctx, sess))
-	stdNS.MapSet("vcs", buzzgen.RegisterVcs(ctx, sess))
-	stdNS.MapSet("archive", buzzgen.RegisterArchive(ctx, sess))
-	stdNS.MapSet("crypto", buzzgen.RegisterCrypto(ctx, sess))
-	stdNS.MapSet("env", buzzgen.RegisterEnv(ctx, sess))
-	// json's parse/stringify duplicate Buzz's serialize.jsonDecode/jsonEncode,
-	// but stringify_pretty (indented output) has no serialize equivalent, so the
-	// module is wired in for that — and, per the self-complete principle, so an
-	// author reaches the whole json surface through extra.json.
-	stdNS.MapSet("json", buzzgen.RegisterJson(ctx, sess))
-	stdNS.MapSet("http", buzzgen.RegisterHttp(ctx, sess))
-	stdNS.MapSet("time", buzzgen.RegisterTime(ctx, sess))
-	stdNS.MapSet("fmt", buzzgen.RegisterFmt(ctx, sess))
-	stdNS.MapSet("markdown", buzzgen.RegisterMarkdown(ctx, sess))
-	stdNS.MapSet("charm", buzzgen.RegisterCharm(ctx, sess))
-	stdNS.MapSet("encoding", buzzgen.RegisterEncoding(ctx, sess))
-	stdNS.MapSet("path", buzzgen.RegisterPath(ctx, sess))
-	stdNS.MapSet("strings", buzzgen.RegisterStrings(ctx, sess))
-	return stdNS
+// The byte-level crypto (hmac, keyed base64) and http (download, upload_chunked,
+// byteSize) companions are merged into their respective module maps so a script
+// reaches a whole domain through one import — crypto.hmacSha256 and http.download
+// sit alongside crypto.sha256Hex and http.get.
+func magusModules(ctx context.Context, sess *buzzeng.Session) map[string]buzzeng.Value {
+	cryptoNS := buzzgen.RegisterCrypto(ctx, sess)
+	mergeModuleMap(cryptoNS, extracrypto.Register(ctx, sess))
+
+	httpNS := buzzgen.RegisterHttp(ctx, sess)
+	mergeModuleMap(httpNS, extrahttp.Register(ctx, sess))
+
+	return map[string]buzzeng.Value{
+		"os":       buzzgen.RegisterOs(ctx, sess),
+		"platform": buzzgen.RegisterPlatform(ctx, sess),
+		"fs":       buzzgen.RegisterFs(ctx, sess),
+		"vcs":      buzzgen.RegisterVcs(ctx, sess),
+		"archive":  buzzgen.RegisterArchive(ctx, sess),
+		"crypto":   cryptoNS,
+		"env":      buzzgen.RegisterEnv(ctx, sess),
+		// json's parse/stringify duplicate Buzz's serialize.jsonDecode/jsonEncode,
+		// but stringify_pretty (indented output) has no serialize equivalent.
+		"json":     buzzgen.RegisterJson(ctx, sess),
+		"http":     httpNS,
+		"time":     buzzgen.RegisterTime(ctx, sess),
+		"fmt":      buzzgen.RegisterFmt(ctx, sess),
+		"markdown": buzzgen.RegisterMarkdown(ctx, sess),
+		"charm":    buzzgen.RegisterCharm(ctx, sess),
+		"encoding": buzzgen.RegisterEncoding(ctx, sess),
+		"path":     buzzgen.RegisterPath(ctx, sess),
+		"strings":  buzzgen.RegisterStrings(ctx, sess),
+		"semver":   buzzgen.RegisterSemver(ctx, sess),
+		"yaml":     buzzgen.RegisterYaml(ctx, sess),
+	}
 }
 
-// registerHostModules exposes the magus host utilities to a Buzz session: the
-// aggregate `import "magus/extra"` (extra.os.exec, extra.fs.glob, …) plus the
-// byte-level `import "magus/extra/http"` and `import "magus/extra/crypto"`,
-// alongside Buzz's own stdlib (so a magusfile or spell may `import "std"` /
-// `import "serialize"` / `import "buffer"`). Shared by the
-// magusfile binding path (registerAllBuzz) and the spell function-op path
-// (callBuzzSpellFunc), so both surfaces stay in lock-step.
+// mergeModuleMap copies all keys from src into dst. On a key both define, src
+// wins — the order callers rely on when layering one module over another.
+func mergeModuleMap(dst, src buzzeng.Value) {
+	for _, k := range src.MapKeys() {
+		if v, ok := src.MapGet(k); ok {
+			dst.MapSet(k, v)
+		}
+	}
+}
+
+// registerHostModules installs the host module surface a Buzz session sees: Buzz's
+// own stdlib under bare names (so a magusfile or spell may `import "std"` /
+// `import "serialize"` / `import "io"`), with the magus host modules layered on top
+// of those same bare names — `import "os"` carries Buzz's os plus os.exec/which/…,
+// and modules Buzz's stdlib lacks (http, vcs, archive, env, time, …) become new
+// bare imports. The result is one superset surface, no separate `magus/extra`
+// aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
+// function-op path (callBuzzSpellFunc), so both surfaces stay in lock-step.
 func registerHostModules(ctx context.Context, sess *buzzeng.Session) {
 	buzzstd.Register(sess)
-	sess.SetSyntheticModule("magus/extra", buildBuzzStd(ctx, sess))
-	// extra/http is the byte-level HTTP companion the aggregate's extra.http omits
-	// (streaming a body to/from a file, Content-Range chunked upload), which is what
-	// lets a remote cache backend be written entirely in Buzz.
-	sess.SetSyntheticModule("magus/extra/http", extrahttp.Register(ctx, sess))
-	// extra/crypto is the byte-level keyed-hash/base64 companion to the digest-only
-	// aggregate extra.crypto — the primitives a spell needs to sign requests (AWS
-	// SigV4), so an S3-compatible remote cache backend can be written in pure Buzz.
-	sess.SetSyntheticModule("magus/extra/crypto", extracrypto.Register(ctx, sess))
+	for name, mod := range magusModules(ctx, sess) {
+		if base, ok := sess.SyntheticModule(name); ok {
+			// Buzz's stdlib already owns this bare name (os, fs, crypto): overlay
+			// the magus methods onto it so callers see the union. magus wins on the
+			// few shared keys (os.exit/os.sleep, fs.exists) — its forms are sandbox-
+			// and context-aware where the bare stdlib is not.
+			mergeModuleMap(base, mod)
+		} else {
+			sess.SetSyntheticModule(name, mod)
+		}
+	}
 	// Canonical value types (Target/Charm/Strategy) as a flat-importable source
 	// module, so a spell's mgs_listTargets can be typed {str: fun(Target, fun(any)) bool}
 	// instead of `any`. Single source of truth lives in the spell package; the
@@ -234,20 +251,45 @@ func buzzLogFn(level slog.Level) func(context.Context, []buzzeng.Value) (buzzeng
 	}
 }
 
-func buildProjectNS(ctx context.Context) buzzeng.Value {
+func buildProjectNS(ctx context.Context, sess *buzzeng.Session) buzzeng.Value {
 	ns := buzzeng.NewMap()
-	ns.MapSet("register", buzzeng.DirectValue("magus.project.register", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
+	// magus.project.register takes a configurator function, mirroring the spell-op
+	// shape `fun(p, cb) > bool`: the host hands it the project `p` and a sink `cb`,
+	// and the function emits its options map via cb({...}) exactly once. Two forms:
+	//
+	//   register(fn)        — configures THIS project; its path comes from context
+	//                         (the magusfile's own project), so it can't be wrong.
+	//   register(path, fn)  — configures the project at an explicit workspace path
+	//                         (the rare central/monorepo form, e.g. one magusfile
+	//                         declaring several projects).
+	ns.MapSet("register", buzzeng.DirectValue("magus.project.register", func(callCtx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		if len(args) == 0 {
 			return buzzeng.Null, nil
 		}
-		path := argStr(args, 0)
-		var opts []wire.ProjectOption
-		if len(args) >= 2 {
-			var err error
-			opts, err = parseBuzzProjectOpts(ctx, args[1])
-			if err != nil {
-				return buzzeng.Null, err
+		var path string
+		var fn buzzeng.Value
+		if args[0].IsStr() {
+			path = args[0].AsString()
+			if len(args) >= 2 {
+				fn = args[1]
 			}
+		} else {
+			fn = args[0]
+			path, _ = interp.ProjectPathFromContext(ctx)
+		}
+		if !fn.IsFun() {
+			return buzzeng.Null, fmt.Errorf(
+				"magus.project.register expects a configurator function `fun(p, cb) { cb({...}); }`%s",
+				registerMapHint(args[0]))
+		}
+
+		optsVal, err := recordProjectOpts(callCtx, sess, fn, path)
+		if err != nil {
+			return buzzeng.Null, err
+		}
+		opts, err := parseBuzzProjectOpts(ctx, optsVal)
+		if err != nil {
+			return buzzeng.Null, err
 		}
 		if reg := wire.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.RegisterProject(path, opts...)
@@ -255,6 +297,54 @@ func buildProjectNS(ctx context.Context) buzzeng.Value {
 		return buzzeng.Null, nil
 	}))
 	return ns
+}
+
+// recordProjectOpts calls a register configurator once with the project handle p
+// and a recording sink cb, returning the single options map it emits via cb({...}).
+// Mirrors recordForkSpec: the function must call cb exactly once with a map. p
+// carries the project's workspace path and name so a configurator may branch on
+// them; the common case ignores it.
+func recordProjectOpts(ctx context.Context, sess *buzzeng.Session, fn buzzeng.Value, path string) (buzzeng.Value, error) {
+	captured := buzzeng.Null
+	calls := 0
+	cb := buzzeng.DirectValue("magus.cb", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
+		calls++
+		if calls > 1 {
+			return buzzeng.Null, fmt.Errorf("magus.project.register: the configurator must call cb({...}) exactly once")
+		}
+		if len(args) > 0 {
+			captured = args[0]
+		}
+		return buzzeng.Null, nil
+	})
+	p := buzzeng.NewMap()
+	p.MapSet("path", buzzeng.StrValue(path))
+	p.MapSet("name", buzzeng.StrValue(projectBaseName(path)))
+	if _, err := sess.CallValue(ctx, fn, []buzzeng.Value{p, cb}); err != nil {
+		return buzzeng.Null, err
+	}
+	if !captured.IsMap() {
+		return buzzeng.Null, fmt.Errorf("magus.project.register: the configurator must call cb({...}) with an options map")
+	}
+	return captured, nil
+}
+
+// projectBaseName returns the last path segment of a workspace-relative project
+// path ("magus/site" -> "site"), or the path itself when it has no separator.
+func projectBaseName(path string) string {
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		return path[i+1:]
+	}
+	return path
+}
+
+// registerMapHint nudges a caller still passing the old declarative map toward the
+// configurator form; empty for any other bad argument.
+func registerMapHint(arg buzzeng.Value) string {
+	if arg.IsMap() {
+		return "; pass it inside the configurator instead: register(fun(p, cb) { cb({...}); })"
+	}
+	return ""
 }
 
 func parseBuzzProjectOpts(ctx context.Context, v buzzeng.Value) ([]wire.ProjectOption, error) {

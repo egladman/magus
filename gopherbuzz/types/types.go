@@ -26,6 +26,7 @@ var (
 	Rng    Type = &PrimitiveType{"rng"} // range type (lo..hi)
 	Fib    Type = &PrimitiveType{"fib"} // unparameterized fiber type
 	Pat    Type = &PrimitiveType{"pat"} // pattern type ($"...")
+	Ud     Type = &PrimitiveType{"ud"}  // foreign userdata (FFI opaque pointer), matching upstream's `ud`
 )
 
 // FibType is the parameterized fiber type fib<Yield, Return>.
@@ -51,6 +52,10 @@ type FuncType struct {
 	Ret      Type
 	Variadic bool // if true, caller may pass any number of args beyond len(Params)
 	Yield    Type // the *> yield type, when the function is wrapped in a fiber; nil if unannotated. Not part of TypeName/Compat — two functions differing only in Yield stay assignable.
+	// ParamNames carries the declared parameter names so the checker can
+	// resolve named arguments at call sites. Like Yield, it is not part of
+	// TypeName/Compat — names never affect assignability.
+	ParamNames []string
 }
 
 func (f *FuncType) TypeName() string {
@@ -219,6 +224,14 @@ func (p *annotParser) parse() Type {
 			if p.peek() == '(' {
 				p.advance()
 				for p.peek() != ')' && p.peek() != 0 {
+					// A parameter may carry the upstream `name: type` spelling;
+					// skip the `name:` prefix so the type alone is parsed.
+					save := p.pos
+					if id := p.readIdent(); id != "" && p.peek() == ':' {
+						p.advance()
+					} else {
+						p.pos = save
+					}
 					pt := p.parse()
 					if pt != nil {
 						params = append(params, pt)
@@ -231,9 +244,17 @@ func (p *annotParser) parse() Type {
 					p.advance()
 				}
 			}
+			// The return type follows a `>` arrow.
+			if p.peek() == '>' {
+				p.advance()
+			}
 			var ret Type
-			if p.peek() != 0 {
+			if p.peek() != 0 && p.peek() != '?' {
 				ret = p.parse()
+			}
+			// A trailing `?` makes the function value itself optional.
+			if p.peek() == '?' {
+				p.advance()
 			}
 			return &FuncType{Params: params, Ret: ret}
 		}
@@ -241,6 +262,18 @@ func (p *annotParser) parse() Type {
 		name := p.readIdent()
 		if name == "" {
 			return nil
+		}
+		// A namespace-qualified type `ns\Type` (or `a\b\Type`) resolves by its
+		// last segment — gopherbuzz binds an import's exported types unqualified
+		// (the splat), so `config\Config` is the same type as `Config`. This
+		// matches how a `config\Config{...}` object literal is parsed.
+		for p.peek() == '\\' {
+			p.advance()
+			seg := p.readIdent()
+			if seg == "" {
+				break
+			}
+			name = seg
 		}
 		if p.peek() == '?' {
 			p.advance()
@@ -261,6 +294,13 @@ func (p *annotParser) parse() Type {
 			return Void
 		case "any":
 			return Any
+		case "ud":
+			// Foreign userdata (an FFI opaque pointer) — a distinct type, as in
+			// upstream buzz, so a handle can't be silently used as an int/double/
+			// str (those mismatches are caught here too). It bridges through
+			// `any` (gopherbuzz's FFI calls are `any`-typed), which is what lets
+			// the same `ud?`-threaded source check on both runtimes.
+			return Ud
 		case "pat":
 			return Pat
 		case "fib":

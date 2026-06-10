@@ -15,6 +15,8 @@ func TestParseArgs(t *testing.T) {
 		{"file then script args", []string{"x.bzz", "a", "b"}, opts{args: []string{"x.bzz", "a", "b"}}},
 		{"check long", []string{"--check", "x.bzz"}, opts{check: true, args: []string{"x.bzz"}}},
 		{"check short", []string{"-c", "x.bzz"}, opts{check: true, args: []string{"x.bzz"}}},
+		{"test short", []string{"-t", "x.bzz"}, opts{test: true, args: []string{"x.bzz"}}},
+		{"test long", []string{"--test", "x.bzz"}, opts{test: true, args: []string{"x.bzz"}}},
 		{"eval", []string{"-e", "code"}, opts{eval: "code"}},
 		{"eval equals", []string{"--eval=code"}, opts{eval: "code"}},
 		{"ast", []string{"--ast", "x.bzz"}, opts{dumpAST: true, args: []string{"x.bzz"}}},

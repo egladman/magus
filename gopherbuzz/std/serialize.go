@@ -38,19 +38,32 @@ func makeBoxed(v buzz.Value) buzz.Value {
 	m := mod()
 
 	m.MapSet("q", fn("Boxed.q", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+		// Path segments come either as upstream's single list (q([any], with str
+		// keys for maps and int indices for lists) or the legacy variadic-string
+		// form (q("a", "b")). Accept both so the same source runs on both runtimes.
+		path := args
+		if len(args) == 1 && args[0].IsList() {
+			path = args[0].ListItems()
+		}
 		cur := v
-		for _, seg := range args {
-			if !seg.IsStr() {
+		for _, seg := range path {
+			switch {
+			case cur.IsMap() && seg.IsStr():
+				got, ok := cur.MapGet(seg.AsString())
+				if !ok {
+					return makeBoxed(buzz.Null), nil
+				}
+				cur = got
+			case cur.IsList() && seg.IsInt():
+				items := cur.ListItems()
+				idx := int(seg.AsInt())
+				if idx < 0 || idx >= len(items) {
+					return makeBoxed(buzz.Null), nil
+				}
+				cur = items[idx]
+			default:
 				return makeBoxed(buzz.Null), nil
 			}
-			if !cur.IsMap() {
-				return makeBoxed(buzz.Null), nil
-			}
-			got, ok := cur.MapGet(seg.AsString())
-			if !ok {
-				return makeBoxed(buzz.Null), nil
-			}
-			cur = got
 		}
 		return makeBoxed(cur), nil
 	}))
@@ -72,12 +85,14 @@ func makeBoxed(v buzz.Value) buzz.Value {
 		}
 		return buzz.Null, nil
 	}))
-	m.MapSet("floating", fn("Boxed.floating", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+	floating := fn("Boxed.floating", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
 		if v.IsFloat() {
 			return v, nil
 		}
 		return buzz.Null, nil
-	}))
+	})
+	m.MapSet("floating", floating)
+	m.MapSet("float", floating) // upstream serialize names it float()
 	m.MapSet("map", fn("Boxed.map", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
 		if !v.IsMap() {
 			return buzz.Null, nil
@@ -119,12 +134,14 @@ func makeBoxed(v buzz.Value) buzz.Value {
 		}
 		return buzz.IntValue(0), nil
 	}))
-	m.MapSet("floatingValue", fn("Boxed.floatingValue", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+	floatingValue := fn("Boxed.floatingValue", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
 		if v.IsFloat() {
 			return v, nil
 		}
 		return buzz.FloatValue(0), nil
-	}))
+	})
+	m.MapSet("floatingValue", floatingValue)
+	m.MapSet("floatValue", floatingValue) // upstream serialize names it floatValue()
 	m.MapSet("mapValue", fn("Boxed.mapValue", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
 		if !v.IsMap() {
 			return buzz.NewMap(), nil

@@ -2,11 +2,11 @@ package std
 
 import "strings"
 
-// BuzzSignature renders a method's Buzz call form: reached off the `extra`
-// aggregate with the name camelCased, e.g. `extra.env.lookup(name) → string, bool`.
+// BuzzSignature renders a method's Buzz call form: the module imported under its
+// bare name with the method camelCased, e.g. `env.lookup(name) → string, bool`.
 // mod and m are the parent module and one of its methods.
 func BuzzSignature(mod Module, m Method) string {
-	return "extra." + mod.Name + "." + CamelCase(m.Name) + "(" + strings.Join(argNames(m), ", ") + ")" + returnSuffix(m)
+	return mod.Name + "." + CamelCase(m.Name) + "(" + strings.Join(argNames(m), ", ") + ")" + returnSuffix(m)
 }
 
 // argNames lists the parameter names, marking variadic ones with a trailing "..."

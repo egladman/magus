@@ -11,6 +11,7 @@
 //	buzz                         # run stdin
 //	buzz -e 'import "std"; std.print("hi");'
 //	buzz -c script.buzz          # type-check only
+//	buzz -t script.buzz          # run its test "..." {} blocks
 //	buzz --ast script.buzz       # dump the AST as JSON
 //	buzz -L ./lib script.buzz    # add an import search path
 package main
@@ -22,6 +23,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	buzz "github.com/egladman/gopherbuzz"
@@ -30,6 +32,14 @@ import (
 
 // version is the Buzz language version gopherbuzz targets.
 const version = "0.5.0"
+
+// init pins the interpreter to the process's main OS thread. Scripts that
+// zdef() into single-thread-affine C frameworks (macOS AppKit above all)
+// must issue those calls from the main thread; without the lock the main
+// goroutine may migrate. Free for everything else, so it is unconditional.
+func init() {
+	runtime.LockOSThread()
+}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -42,6 +52,7 @@ func main() {
 type opts struct {
 	eval     string   // -e <code>
 	check    bool     // -c / --check
+	test     bool     // -t / --test
 	dumpAST  bool     // --ast
 	showVer  bool     // -v / --version
 	showHelp bool     // -h / --help
@@ -101,6 +112,52 @@ func run(argv []string) error {
 	if err := sess.Exec(ctx, code); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
+
+	// --test runs each `test "..." {}` block registered while executing the file
+	// and reports pass/fail, matching upstream `buzz --test`.
+	if o.test {
+		return runTests(ctx, sess, name)
+	}
+
+	// Like upstream's Run flavor, the entry-point script's `main(args)` function
+	// is invoked automatically after its top-level runs. The CLI args after the
+	// script name are passed as a [str]; a script with no `main` is a no-op.
+	if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
+		var items []buzz.Value
+		if len(o.args) > 1 {
+			for _, a := range o.args[1:] {
+				items = append(items, buzz.StrValue(a))
+			}
+		}
+		if _, err := sess.CallValue(ctx, mainFn, []buzz.Value{buzz.ListValue(items)}); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// runTests executes every registered test block, printing one line per test, and
+// returns an error if any test failed (so the process exits non-zero). A test
+// "fails" when its body raises — typically a std.assert that did not hold.
+func runTests(ctx context.Context, sess *buzz.Session, name string) error {
+	tests := sess.Tests()
+	if len(tests) == 0 {
+		fmt.Printf("%s: no tests\n", name)
+		return nil
+	}
+	failed := 0
+	for _, tc := range tests {
+		if _, err := sess.CallValue(ctx, tc.Fn, nil); err != nil {
+			failed++
+			fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
+		} else {
+			fmt.Printf("ok    test %q\n", tc.Name)
+		}
+	}
+	fmt.Printf("---\n%d passed, %d failed\n", len(tests)-failed, failed)
+	if failed > 0 {
+		return fmt.Errorf("%d of %d tests failed", failed, len(tests))
+	}
 	return nil
 }
 
@@ -127,6 +184,8 @@ func parseArgs(argv []string) (opts, error) {
 			o.showVer = true
 		case "-c", "--check":
 			o.check = true
+		case "-t", "--test":
+			o.test = true
 		case "--ast":
 			o.dumpAST = true
 		case "-e", "--eval":
@@ -239,12 +298,12 @@ Usage:
 Options:
   -e, --eval <code>          run <code> instead of a file
   -c, --check                type-check the script without running it
+  -t, --test                 run the script's test "..." { } blocks
       --ast                  dump the parsed AST as JSON and exit
   -L, --library-path <dir>   add an import search path (repeatable)
   -v, --version              print the version and exit
   -h, --help                 print this help and exit
 
 The Buzz standard library is available (import "std", "math", "ffi", …).
-Test blocks are not supported by this implementation.
 `)
 }

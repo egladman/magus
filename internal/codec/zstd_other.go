@@ -8,16 +8,16 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-// NewZstdWriter returns a streaming zstd compressor that writes to w.
+// newZstdWriter returns a streaming zstd compressor that writes to w.
 // level is the user-specified compression level (-1 = default, 1-19).
 // threads controls encoder concurrency (0 = single-threaded).
-func NewZstdWriter(w io.Writer, level, threads int) (io.WriteCloser, error) {
+func newZstdWriter(w io.Writer, level, threads int) (io.WriteCloser, error) {
 	return zstd.NewWriter(w, zstdPureGoLevel(level), zstd.WithEncoderConcurrency(threads))
 }
 
-// NewZstdReader returns a streaming zstd decompressor reading from r.
+// newZstdReader returns a streaming zstd decompressor reading from r.
 // threads controls decoder concurrency (0 = single-threaded).
-func NewZstdReader(r io.Reader, threads int) (io.ReadCloser, error) {
+func newZstdReader(r io.Reader, threads int) (io.ReadCloser, error) {
 	dec, err := zstd.NewReader(r, zstd.WithDecoderConcurrency(threads))
 	if err != nil {
 		return nil, err

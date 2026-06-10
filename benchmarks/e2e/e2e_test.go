@@ -44,12 +44,12 @@ func TestRunMultipleTargetsRunsAllProjectTargetPairs(t *testing.T) {
 	root := t.TempDir()
 	body := `
 import "magus";
-import "magus/extra";
+import "fs";
 export fun alpha(_args: [str]) > void {
-    extra.fs.writeFile("ran-alpha", "1");
+    fs.writeFile("ran-alpha", "1");
 }
 export fun beta(_args: [str]) > void {
-    extra.fs.writeFile("ran-beta", "1");
+    fs.writeFile("ran-beta", "1");
 }
 `
 	for _, name := range []string{"svc-a", "svc-b"} {
@@ -123,7 +123,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	// Register the project explicitly via a magusfile instead of marker-based auto-detection.
 	if err := os.WriteFile(filepath.Join(projDir, "magusfile.bzz"), []byte(
 		`import "magus";`+"\n"+
-			`magus.project.register("svc", {"spells": [magus.spell.get("faketool")]});`+"\n",
+			`magus.project.register("svc", fun(p, cb) > bool { cb({"spells": [magus.spell.get("faketool")]}); return true; });`+"\n",
 	), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -180,10 +180,10 @@ func TestExplicitRegisterDoesNotDoubleBind(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := `import "magus";
-import "magus/extra";
-magus.project.register("svc", {"spells": [magus.spell.get("magusfile")]});
+import "os";
+magus.project.register("svc", fun(p, cb) > bool { cb({"spells": [magus.spell.get("magusfile")]}); return true; });
 export fun hit(_args: [str]) > void {
-    extra.os.execSh("printf x >> count", "");
+    os.execSh("printf x >> count", "");
 }
 `
 	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte(src), 0o644); err != nil {
@@ -277,9 +277,9 @@ func TestRunCIComposesMagusfileTarget(t *testing.T) {
 	root := t.TempDir()
 	body := `
 import "magus";
-import "magus/extra";
+import "os";
 fun record(name: str) > void {
-    extra.os.execSh("printf '%s\n' " + name + " >> ci-order", "");
+    os.execSh("printf '%s\n' " + name + " >> ci-order", "");
 }
 export fun build(_args: [str]) > void { record("build"); }
 export fun test(_args: [str]) > void {

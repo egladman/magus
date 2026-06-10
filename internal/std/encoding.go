@@ -79,6 +79,20 @@ var Encoding = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    EncodingURLDecode,
 		},
+		{
+			Name:    "parse_url",
+			Doc:     "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
+			Args:    []Arg{{Name: "raw_url", Type: TypeString}},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    EncodingParseURL,
+		},
+		{
+			Name:    "build_url",
+			Doc:     "Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.",
+			Args:    []Arg{{Name: "parts", Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    EncodingBuildURL,
+		},
 	},
 }
 
@@ -136,4 +150,43 @@ func EncodingURLDecode(_ context.Context, s string) (string, error) {
 		return "", fmt.Errorf("encoding.url_decode: %w", err)
 	}
 	return v, nil
+}
+
+// EncodingParseURL parses rawURL into its components.
+func EncodingParseURL(_ context.Context, rawURL string) (map[string]any, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("encoding.parse_url: %w", err)
+	}
+	return map[string]any{
+		"scheme":   u.Scheme,
+		"host":     u.Hostname(),
+		"port":     u.Port(),
+		"path":     u.Path,
+		"query":    u.RawQuery,
+		"fragment": u.Fragment,
+	}, nil
+}
+
+// EncodingBuildURL assembles a URL string from a parts map with keys
+// scheme, host, port, path, query, fragment. Missing keys are treated as empty.
+func EncodingBuildURL(_ context.Context, parts map[string]any) (string, error) {
+	strField := func(key string) string {
+		if v, ok := parts[key].(string); ok {
+			return v
+		}
+		return ""
+	}
+	u := &url.URL{
+		Scheme:   strField("scheme"),
+		Path:     strField("path"),
+		RawQuery: strField("query"),
+		Fragment: strField("fragment"),
+	}
+	host := strField("host")
+	if port := strField("port"); port != "" {
+		host = host + ":" + port
+	}
+	u.Host = host
+	return u.String(), nil
 }

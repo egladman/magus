@@ -1,0 +1,2577 @@
+// yeetile 🪟💨 (yeet + tile) — a tiling window manager for macOS that yeets
+// windows into place, cobbled together entirely in Buzz for shits and giggles.
+//
+// It manages every standard
+// on-screen window in a binary split tree (layout.buzz), drives the actual
+// windows through the public accessibility API (macos/windows/events/
+// permissions.buzz), and reads a single i3-style config file (config.buzz,
+// live-reloaded on edit). Hotkeys arrive through a CGEventTap; a run-loop
+// timer rescans for new and closed windows.
+//
+//     go run ./cmd/buzz -L examples/yeetile examples/yeetile/yeetile.buzz
+//
+// Needs macOS and the Accessibility permission — and nothing else: no SIP
+// changes, no root, no private frameworks.
+
+import "std";
+import "os";
+import "fs";
+import "layout";
+import "config";
+import "launcher";
+import "statusbar";
+import "cheatsheet";
+import "focusring";
+import "inspector";
+import "serialize";
+import "io";
+import "platform/macos/frameworks";
+import "platform/macos/windows";
+import "platform/macos/events";
+import "platform/macos/permissions";
+
+// Managed pairs our stable window id (what the layout tree stores) with the
+// retained AXUIElementRef handle, owning pid, and home workspace.
+object Managed {
+    id: int = 0,
+    ref: ud? = null,
+    pid: int = 0,
+    workspace: int = 0,
+    screen: int = 0,        // index into screens (which tiled display owns it)
+    floating: bool = false, // user-toggled or scratchpad: never tiled
+    missing: int = 0,       // consecutive scans absent while alive; see rescan
+}
+
+// Workspace holds a parked layout. macOS Spaces APIs are private, so
+// yeet's workspaces are its own: switching away minimizes a workspace's
+// windows and stashes its tree here; switching back restores both. The
+// *current* workspace always lives in the root/focusedId/fullscreenId
+// globals — these slots are only the saved state of inactive ones.
+object Workspace {
+    root: mut layout\Node? = null,
+    focusedId: int = 0,
+    fullscreenId: int = 0,
+    stacked: bool = false,
+}
+
+var cfg = mut config\Config{ binds = mut [], execs = mut [], rules = mut [] };
+var cfgTarget: mut config\Config? = null; // reload candidate; setters write here while validating
+var userWindowHooks = mut [];  // registered hooks, run in order (see onWindowRule)
+var root: mut layout\Node? = null;
+var managed = mut [];   // [Managed]
+var nextId = 1;
+var focusedId = 0;
+var fullscreenId = 0;   // monocle toggle; 0 = tiled
+var stacked = false;    // stacked layout: every window full-size, focused on top
+var lastKeyAt = 0.0;    // last key-down (os\time ms); hover-focus defers to typing
+var bindMode = "";      // active binding mode ("" = default); see `mode`
+final marks = mut {<str: int>};   // mark letter → window id (vim registers for windows)
+final undoStack = mut [];  // cloned active-screen trees; `undo` pops
+var evalNote = "";      // last eval result, echoed on the bar
+var evalNoteAt = 0.0;
+
+// Screen is one tiled display: its bounds, its parked per-workspace layouts,
+// and — when it is not the active screen — its saved live state. The ACTIVE
+// screen's live state sits in the root/focusedId/fullscreenId/stacked
+// globals (the same save/swap discipline workspaces use), so every command
+// keeps operating on plain globals.
+object Screen {
+    disp: int = 1,    // 1-based index into displays() (main first)
+    cg: [double] = [0.0, 0.0, 1280.0, 800.0],
+    workspaces: mut [any],
+    root: mut layout\Node? = null,
+    focusedId: int = 0,
+    fullscreenId: int = 0,
+    stacked: bool = false,
+}
+
+var screens = mut [];    // [Screen], one per tiled display (config-picked)
+var activeScreen = 0;    // index into screens mirrored by the globals
+var curWs = 0;
+
+// tiledCG mirrors the ACTIVE screen's bounds, so all the geometry helpers
+// (snap, center, golden, the launcher) keep reading one rectangle.
+var tiledCG = [0.0, 0.0, 1280.0, 800.0];
+var lastWs = 0;        // previous workspace, for back_and_forth
+var scratchShown = 0;  // id of the scratchpad window currently popped up, or 0
+final scratchWs = 0 - 1; // sentinel "workspace": parked, belongs to no tree
+var reconcilePaused = false; // when true the WM stops auto-adopting/retiling on events + the timer (commands still work)
+// Park position for windows on inactive workspaces: far past the bottom-right
+// corner. macOS clamps it to keep the title bar reachable, so a ~40x32px corner
+// peeks — but the active workspace's tiled windows and the status bar cover it.
+// This is AeroSpace's approach: instant (no minimize animation), keeps layout.
+final parkX = 60000.0;
+final parkY = 60000.0;
+var hiddenPids = mut []; // [int] pids the WM has app-hidden (AXHidden's read lags its async set, so we track it ourselves)
+var lastDownX = 0.0;   // last left-mouse-down location, to tell a drag from a click
+var lastDownY = 0.0;
+
+fun screenAt(i: int) > mut Screen {
+    return (screens[i] as? mut Screen)!;
+}
+
+fun wsAt(i: int) > mut Workspace {
+    return wsOn(activeScreen, i: i);
+}
+
+fun wsOn(si: int, i: int) > mut Workspace {
+    final s = screenAt(si);
+    return (s.workspaces[i] as? mut Workspace)!;
+}
+
+// saveActive/loadActive swap the live globals with a screen's stored state.
+fun saveActive() > void {
+    final s = screenAt(activeScreen);
+    s.root = root;
+    s.focusedId = focusedId;
+    s.fullscreenId = fullscreenId;
+    s.stacked = stacked;
+}
+
+fun loadActive(i: int) > void {
+    activeScreen = i;
+    final s = screenAt(i);
+    root = s.root;
+    focusedId = s.focusedId;
+    fullscreenId = s.fullscreenId;
+    stacked = s.stacked;
+    tiledCG = s.cg;
+}
+
+fun setActive(i: int) > void {
+    if (i == activeScreen or i < 0 or i >= screens.len()) {
+        return;
+    }
+    saveActive();
+    loadActive(i);
+}
+
+// pickedDisplays resolves the config into 1-based display indexes:
+// tile_displays wins, `all` means every active display, otherwise the
+// legacy single tile_display.
+fun pickedDisplays() > [any] {
+    final ds = windows\displays();
+    final picks = mut [];
+    if (cfg.tileAll) {
+        foreach (i in 0..ds.len()) {
+            picks.append(i + 1);
+        }
+        return picks;
+    }
+    if (cfg.tileDisplays.len() > 0) {
+        foreach (pv in cfg.tileDisplays) {
+            final n = (pv as? int)!;
+            if (n >= 1 and n <= ds.len() and picks.indexOf(n) == null) {
+                picks.append(n);
+            }
+        }
+        if (picks.len() > 0) {
+            return picks;
+        }
+    }
+    var n = cfg.tileDisplay;
+    if (n < 1 or n > ds.len()) {
+        n = 1;
+    }
+    picks.append(n);
+    return picks;
+}
+
+// initScreens (re)builds the screen set from the config. On a reload that
+// changes the picks, everything is released back to macOS and re-adopted
+// fresh — predictable beats clever here.
+fun initScreens() > void {
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        frameworks\releaseRef(mm.ref);
+    }
+    managed = mut [];
+    screens = mut [];
+    root = null;
+    focusedId = 0;
+    fullscreenId = 0;
+    stacked = false;
+    scratchShown = 0;
+    foreach (pv in pickedDisplays()) {
+        final n = (pv as? int)!;
+        final sc = mut Screen{ disp = n, workspaces = mut [] };
+        foreach (_ in 0..9) {
+            sc.workspaces.append(mut Workspace{});
+        }
+        screens.append(sc);
+    }
+    activeScreen = 0;
+    refreshTiledBounds();
+    loadActive(0);
+}
+
+// refreshTiledBounds re-reads each tiled display's bounds (displays move,
+// resolutions change); an unplugged pick falls back to the main display.
+fun refreshTiledBounds() > void {
+    final ds = windows\displays();
+    if (ds.len() == 0 or screens.len() == 0) {
+        return;
+    }
+    foreach (sv in screens) {
+        final sc = (sv as? mut Screen)!;
+        var idx = sc.disp - 1;
+        if (idx < 0 or idx >= ds.len()) {
+            idx = 0;
+        }
+        final d = (ds[idx] as? [double])!;
+        sc.cg = [d[1], d[2], d[3], d[4]];
+    }
+    tiledCG = screenAt(activeScreen).cg;
+}
+
+fun inScreen(sc: Screen, x: double, y: double) > bool {
+    return x >= sc.cg[0] and x < sc.cg[0] + sc.cg[2]
+        and y >= sc.cg[1] and y < sc.cg[1] + sc.cg[3];
+}
+
+fun inTiled(x: double, y: double) > bool {
+    foreach (sv in screens) {
+        final sc = (sv as? mut Screen)!;
+        if (inScreen(sc, x: x, y: y)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// screenForRef returns the tiled-screen index whose bounds hold the window's
+// center, or -1 (an untiled display: the window stays native).
+fun screenForRef(ref: ud?) > int {
+    final fr = windows\windowFrame(ref);
+    if (fr == null) {
+        return 0 - 1;
+    }
+    final f = fr!;
+    final cx = f[0] + f[2] / 2.0;
+    final cy = f[1] + f[3] / 2.0;
+    foreach (i in 0..screens.len()) {
+        if (inScreen(screenAt(i), x: cx, y: cy)) {
+            return i;
+        }
+    }
+    return 0 - 1;
+}
+
+// tiledAppKit converts the tiled bounds to AppKit coordinates (origin at the
+// main display's bottom-left, y up) for the bar and launcher panels.
+fun tiledAppKit() > [double] {
+    final mainH = std\toDouble(windows\screenHeight());
+    return [tiledCG[0], mainH - (tiledCG[1] + tiledCG[3]), tiledCG[2], tiledCG[3]];
+}
+
+final keyDownEvent = 10;                // kCGEventKeyDown
+final tapDisabledTimeout = 4294967294;  // kCGEventTapDisabledByTimeout
+final tapDisabledUserInput = 4294967295;
+final modMask = [131072, 262144, 524288, 1048576]; // shift, ctrl, alt, cmd
+
+fun configDir() > str {
+    final xdg = os\env("XDG_CONFIG_HOME");
+    if (xdg != null) {
+        return xdg! + "/yeetile";
+    }
+    final home = os\env("HOME") ?? ".";
+    return home + "/.config/yeetile";
+}
+
+fun configPath() > str {
+    return configDir() + "/config";
+}
+
+fun layoutPath() > str {
+    return configDir() + "/layout.json";
+}
+
+fun rulesPath() > str {
+    return configDir() + "/rules.buzz";
+}
+
+fun buzzConfigPath() > str {
+    return configDir() + "/config.buzz";
+}
+
+fun generatedRulesPath() > str {
+    return configDir() + "/rules.generated.buzz";
+}
+
+// --- managed-window registry ---
+
+fun refOf(id: int) > ud? {
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.id == id) {
+            return mm.ref;
+        }
+    }
+    return null;
+}
+
+fun pidOf(id: int) > int {
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.id == id) {
+            return mm.pid;
+        }
+    }
+    return 0;
+}
+
+// idForRef matches an AX handle against the registry. AX hands out a fresh
+// ref for the same window on every scan, so identity is CFEqual, not address.
+fun idForRef(ref: ud?) > int {
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (frameworks\sameRef(mm.ref, b: ref)) {
+            return mm.id;
+        }
+    }
+    return 0;
+}
+
+fun managedRemove(id: int) > void {
+    final keep = mut [];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.id != id) {
+            keep.append(mm);
+        }
+    }
+    managed = keep;
+}
+
+// treeOf reads a screen's live tree (the globals for the active screen).
+fun treeOf(si: int) > mut layout\Node? {
+    if (si == activeScreen) {
+        return root;
+    }
+    return screenAt(si).root;
+}
+
+fun managedById(id: int) > mut Managed? {
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.id == id) {
+            return mm;
+        }
+    }
+    return null;
+}
+
+// --- scan: adopt new windows, evict closed ones ---
+
+fun rescan() > void {
+    final seen = mut [];
+    foreach (p in windows\onScreenPids()) {
+        final pid = (p as? int)!;
+        _ = events\watchApp(pid); // event-driven: react to this app's window lifecycle (idempotent)
+        foreach (w in windows\appWindows(pid)) {
+            final ref = (w as? ud)!;
+            final known = idForRef(ref);
+            if (known != 0) {
+                frameworks\releaseRef(ref); // duplicate handle to a window already managed
+                final mo = managedById(known);
+                if (mo != null) {
+                    final mm = mo!;
+                    mm.missing = 0;
+                    if (mm.workspace != curWs) {
+                        // Parked on another workspace (off-screen or minimized).
+                        // Leave it entirely — don't evict, re-home, or pull it
+                        // onto the current workspace. Surfacing is explicit now
+                        // (workspace switch), not a passive rescan side effect.
+                        seen.append(known);
+                        continue;
+                    }
+                    final nowOn = screenForRef(mm.ref);
+                    if (!mm.floating and nowOn == 0 - 1) {
+                        // The window moved to an untiled display: hand it
+                        // back to macOS entirely (floating windows may roam).
+                        evict(mm);
+                        managedRemove(mm.id);
+                        continue;
+                    }
+                    if (!mm.floating and nowOn != mm.screen and mm.workspace == curWs) {
+                        // Dragged across tiled displays: re-home its tree.
+                        detachOn(mm.screen, id: mm.id);
+                        mm.screen = nowOn;
+                        adoptOn(nowOn, id: mm.id);
+                    }
+                    // Past the parked guard above, this window belongs to the
+                    // current workspace. Re-tile it if it fell out of the tree
+                    // (restored after a transient minimize) or the tree is empty.
+                    if (!mm.floating and treeOf(mm.screen) != null and layout\findLeaf(treeOf(mm.screen)!, target: mm.id) == null) {
+                        adoptOn(mm.screen, id: mm.id);
+                    } else if (!mm.floating and treeOf(mm.screen) == null) {
+                        adoptOn(mm.screen, id: mm.id);
+                    }
+                }
+                seen.append(known);
+                continue;
+            }
+            final home = screenForRef(ref);
+            if (home == 0 - 1) {
+                frameworks\releaseRef(ref); // lives on an untiled display: stays native
+                continue;
+            }
+            final id = nextId;
+            nextId = nextId + 1;
+            managed.append(mut Managed{ id = id, ref = ref, pid = pid, workspace = curWs, screen = home });
+            events\watchWindow(pid, element: ref, id: id); // destroyed/moved/minimize for this window
+            adoptOn(home, id: id);
+            seen.append(id);
+            applyRules(id);
+        }
+    }
+    final keep = mut [];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (seen.indexOf(mm.id) != null) {
+            keep.append(mm);
+            continue;
+        }
+        // Not on screen but the element is dead: the window closed. Evict.
+        if (!windows\windowAlive(mm.ref)) {
+            evict(mm);
+            continue;
+        }
+        // Alive but invisible. Parked workspaces are expected to be invisible;
+        // on the current workspace this is a minimized window — either the
+        // user's doing or a workspace-switch restore still animating. Give it
+        // a grace tick before untiling, so a slow unminimize isn't punished,
+        // then detach (the re-adopt above tiles it again on restore).
+        if (mm.workspace == curWs) {
+            mm.missing = mm.missing + 1;
+            if (mm.missing == 2) {
+                detachOn(mm.screen, id: mm.id);
+            }
+        }
+        keep.append(mm);
+    }
+    managed = keep;
+}
+
+// tilingRect derives a screen's usable tiling rectangle from its CG frame
+// `cg` ([x, y, w, h]) — insetting the outer gap, the top padding (menu bar) and
+// the status bar. Shared by retileOne and the build-time seedDims below.
+fun tilingRect(cg: [double]) > [double] {
+    final ox = cg[0] + cfg.gapOuter;
+    final oy = cg[1] + cfg.topPadding + cfg.gapOuter;
+    final ow = cg[2] - 2.0 * cfg.gapOuter;
+    var oh = cg[3] - cfg.topPadding - 2.0 * cfg.gapOuter;
+    if (cfg.barOn) {
+        // Reserve the bar height plus a 6px buffer so windows clear the bar
+        // instead of touching it (where shadows / slight app overflow get covered).
+        oh = oh - statusbar\barHeight - 6.0;
+    }
+    return [ox, oy, ow, oh];
+}
+
+// seedDims re-assigns the tiling rect to a tree mid-build so the NEXT split's
+// chooseOrient sees real leaf shapes instead of zeros. Without it, a tree built
+// in one pass before the first retile (cold start with many windows, undo,
+// restore) splits every window horizontally — full-height columns too narrow
+// for apps to honor, so they overlap. assign here only sets geometry; no window
+// moves until retile.
+fun seedDims(r: mut layout\Node, cg: [double]) > void {
+    final t = tilingRect(cg);
+    layout\assign(r, x: t[0], y: t[1], w: t[2], h: t[3], gap: cfg.gapInner, minW: cfg.minWidth, minH: cfg.minHeight);
+}
+
+fun adopt(id: int) > void {
+    if (root == null) {
+        root = layout\makeLeaf(id);
+        if (focusedId == 0) {
+            focusedId = id;
+        }
+        seedDims(root!, cg: screenAt(activeScreen).cg);
+        return;
+    }
+    final r = root!;
+    if (!layout\insertAt(r, target: focusedId, id: id)) {
+        layout\insertAt(r, target: layout\lastLeaf(r).id, id: id);
+    }
+    seedDims(r, cg: screenAt(activeScreen).cg);
+}
+
+// adoptOn inserts a window into a screen's live tree — through the globals
+// for the active screen, directly into stored state otherwise.
+fun adoptOn(si: int, id: int) > void {
+    if (si == activeScreen) {
+        adopt(id);
+        return;
+    }
+    final sc = screenAt(si);
+    if (sc.root == null) {
+        sc.root = layout\makeLeaf(id);
+        if (sc.focusedId == 0) {
+            sc.focusedId = id;
+        }
+        seedDims(sc.root!, cg: sc.cg);
+        return;
+    }
+    final r = sc.root!;
+    if (!layout\insertAt(r, target: sc.focusedId, id: id)) {
+        layout\insertAt(r, target: layout\lastLeaf(r).id, id: id);
+    }
+    seedDims(r, cg: sc.cg);
+}
+
+// detachOn removes a window from a screen's live tree (current workspace).
+fun detachOn(si: int, id: int) > void {
+    if (si == activeScreen) {
+        detachCurrent(id);
+        return;
+    }
+    final sc = screenAt(si);
+    if (sc.fullscreenId == id) {
+        sc.fullscreenId = 0;
+    }
+    if (sc.root == null) {
+        return;
+    }
+    final r = sc.root!;
+    if (r.isLeaf() and r.id == id) {
+        sc.root = null;
+        sc.focusedId = 0;
+        return;
+    }
+    layout\removeAt(r, target: id);
+    if (sc.focusedId == id) {
+        sc.focusedId = layout\lastLeaf(r).id;
+    }
+}
+
+fun evict(m: Managed) > void {
+    frameworks\releaseRef(m.ref);
+    if (scratchShown == m.id) {
+        scratchShown = 0;
+    }
+    if (m.workspace == curWs) {
+        detachOn(m.screen, id: m.id);
+    } else if (m.workspace != scratchWs) {
+        detachParked(m);
+    }
+}
+
+// detachCurrent removes a window from the active tree (the globals).
+fun detachCurrent(id: int) > void {
+    if (fullscreenId == id) {
+        fullscreenId = 0;
+    }
+    if (root == null) {
+        return;
+    }
+    final r = root!;
+    if (r.isLeaf() and r.id == id) {
+        root = null;
+        focusedId = 0;
+        return;
+    }
+    layout\removeAt(r, target: id);
+    if (focusedId == id) {
+        focusedId = layout\lastLeaf(r).id;
+    }
+}
+
+// detachParked is detachCurrent against an inactive workspace's saved state
+// on the window's own screen.
+fun detachParked(m: Managed) > void {
+    final w = wsOn(m.screen, i: m.workspace);
+    if (w.fullscreenId == m.id) {
+        w.fullscreenId = 0;
+    }
+    if (w.root == null) {
+        return;
+    }
+    final r = w.root!;
+    if (r.isLeaf() and r.id == m.id) {
+        w.root = null;
+        w.focusedId = 0;
+        return;
+    }
+    layout\removeAt(r, target: m.id);
+    if (w.focusedId == m.id) {
+        w.focusedId = layout\lastLeaf(r).id;
+    }
+}
+
+// --- tiling ---
+
+// retile lays out every tiled screen: the active one from the live globals,
+// the rest from their stored state. Golden mode follows the global focus, so
+// only the active screen reflows around it.
+fun retile() > void {
+    foreach (i in 0..screens.len()) {
+        final sc = screenAt(i);
+        if (i == activeScreen) {
+            retileOne(root, cg: sc.cg, focusId: focusedId, fullId: fullscreenId, stk: stacked, golden: true);
+        } else {
+            retileOne(sc.root, cg: sc.cg, focusId: sc.focusedId, fullId: sc.fullscreenId, stk: sc.stacked, golden: false);
+        }
+    }
+    updateRing();
+}
+
+fun retileOne(r0: mut layout\Node?, cg: [double], focusId: int, fullId: int, stk: bool, golden: bool) > void {
+    if (r0 == null) {
+        return;
+    }
+    final r = r0!;
+    final t = tilingRect(cg);
+    final ox = t[0];
+    final oy = t[1];
+    final ow = t[2];
+    final oh = t[3];
+    if (fullId != 0 and refOf(fullId) != null) {
+        applyFrame(refOf(fullId), x: ox, y: oy, w: ow, h: oh);
+        return;
+    }
+    if (stk) {
+        // Stacked layout: every window takes the whole tiling area, the
+        // focused one on top — cycle the pile with focus next/prev.
+        final ls = mut [];
+        layout\collectLeaves(r, res: ls);
+        foreach (l in ls) {
+            final leaf = (l as? mut layout\Node)!;
+            final ref = refOf(leaf.id);
+            if (ref != null) {
+                applyFrame(ref, x: ox, y: oy, w: ow, h: oh);
+            }
+        }
+        if (focusId != 0 and refOf(focusId) != null) {
+            windows\raiseWindow(refOf(focusId));
+        }
+        return;
+    }
+    layout\assign(r, x: ox, y: oy, w: ow, h: oh, gap: cfg.gapInner, minW: cfg.minWidth, minH: cfg.minHeight);
+    if (golden and cfg.goldenOn and focusId != 0) {
+        // Golden-ratio mode: re-proportion the focused window's ancestor
+        // chain to phi (clamped to min_width/min_height), then re-assign.
+        if (layout\applyGolden(r, target: focusId, minW: cfg.minWidth, minH: cfg.minHeight)) {
+            layout\assign(r, x: ox, y: oy, w: ow, h: oh, gap: cfg.gapInner, minW: cfg.minWidth, minH: cfg.minHeight);
+        }
+    }
+    final ls = mut [];
+    layout\collectLeaves(r, res: ls);
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        final ref = refOf(leaf.id);
+        if (ref != null) {
+            applyFrame(ref, x: leaf.x, y: leaf.y, w: leaf.w, h: leaf.h);
+        }
+    }
+    // Stacked groups put several windows at the same rect (no partial overlap);
+    // raise the focused one so it's the visible member of its stack.
+    if (focusId != 0 and refOf(focusId) != null) {
+        windows\raiseWindow(refOf(focusId));
+    }
+}
+
+// updateRing keeps the focus border (focusring.buzz) glued to the focused
+// window: the tree's assigned frame when tiled, the real frame when
+// floating. Hidden while a fullscreen monocle owns the screen.
+fun updateRing() > void {
+    if (!cfg.borderOn or focusedId == 0 or fullscreenId != 0) {
+        focusring\ringHide();
+        return;
+    }
+    final mainH = std\toDouble(windows\screenHeight());
+    if (root != null) {
+        final leaf = layout\findLeaf(root!, target: focusedId);
+        if (leaf != null and !stacked) {
+            final l = leaf!;
+            focusring\ringShow(l.x, y: l.y, w: l.w, h: l.h, bw: cfg.borderWidth, mainH: mainH);
+            return;
+        }
+    }
+    final mo = managedById(focusedId);
+    if (mo != null and mo!.floating) {
+        final fr = windows\windowFrame(mo!.ref);
+        if (fr != null) {
+            final f = fr!;
+            focusring\ringShow(f[0], y: f[1], w: f[2], h: f[3], bw: cfg.borderWidth, mainH: mainH);
+            return;
+        }
+    }
+    focusring\ringHide();
+}
+
+// applyFrame skips the AX round-trip when the window is already in place,
+// so the poll-driven retile is a cheap no-op for a settled layout.
+fun applyFrame(ref: ud?, x: double, y: double, w: double, h: double) > void {
+    final cur = windows\windowFrame(ref);
+    if (cur != null) {
+        final c = cur!;
+        if (near(c[0], b: x) and near(c[1], b: y) and near(c[2], b: w) and near(c[3], b: h)) {
+            return;
+        }
+    }
+    windows\setWindowFrame(ref, x: x, y: y, w: w, h: h);
+}
+
+fun near(a: double, b: double) > bool {
+    final d = a - b;
+    return d < 1.5 and d > 0.0 - 1.5;
+}
+
+// syncFocus follows clicks: whatever macOS says is focused becomes our
+// focused leaf, so directional commands start from where the user actually is.
+fun syncFocus() > void {
+    final ref = windows\focusedWindowRef();
+    if (ref == null) {
+        return;
+    }
+    final id = idForRef(ref);
+    frameworks\releaseRef(ref);
+    if (id == 0) {
+        return;
+    }
+    final mo = managedById(id);
+    if (mo != null and mo!.screen != activeScreen) {
+        setActive(mo!.screen);
+    }
+    focusedId = id;
+}
+
+// --- commands (the right-hand side of a bind line) ---
+
+fun dirVec(word: str) > [double]? {
+    if (word == "left") {
+        return [0.0 - 1.0, 0.0];
+    }
+    if (word == "right") {
+        return [1.0, 0.0];
+    }
+    if (word == "up") {
+        return [0.0, 0.0 - 1.0];
+    }
+    if (word == "down") {
+        return [0.0, 1.0];
+    }
+    return null;
+}
+
+fun cmdFocus(word: str) > void {
+    if (root == null) {
+        return;
+    }
+    if (word == "next") {
+        cmdFocusCycle(1);
+        return;
+    }
+    if (word == "prev") {
+        cmdFocusCycle(0 - 1);
+        return;
+    }
+    final v = dirVec(word);
+    if (v == null) {
+        return;
+    }
+    var target = 0;
+    if (root != null) {
+        target = layout\neighbor(root!, fromId: focusedId, dx: v![0], dy: v![1]);
+    }
+    if (target == 0) {
+        // Nothing in this screen's tree: look across the other tiled
+        // displays geometrically (frames are global coordinates).
+        final cross = crossScreenNeighbor(v![0], dy: v![1]);
+        if (cross == 0 - 1) {
+            return;
+        }
+        setActive(cross / 1000000);
+        target = cross % 1000000;
+    }
+    focusedId = target;
+    windows\focusWindow(refOf(target), pid: pidOf(target));
+    retile();
+}
+
+// crossScreenNeighbor scans other screens' leaves for the nearest window in
+// the cone from the focused window's center; returns screen*1e6+id or -1.
+fun crossScreenNeighbor(dx: double, dy: double) > int {
+    if (root == null or focusedId == 0) {
+        return 0 - 1;
+    }
+    final fromLeaf = layout\findLeaf(root!, target: focusedId);
+    if (fromLeaf == null) {
+        return 0 - 1;
+    }
+    final f = fromLeaf!;
+    final fcx = f.x + f.w / 2.0;
+    final fcy = f.y + f.h / 2.0;
+    var best = 0 - 1;
+    var bestDist = 0.0;
+    foreach (si in 0..screens.len()) {
+        if (si == activeScreen) {
+            continue;
+        }
+        final r0 = screenAt(si).root;
+        if (r0 == null) {
+            continue;
+        }
+        final ls = mut [];
+        layout\collectLeaves(r0!, res: ls);
+        foreach (l in ls) {
+            final leaf = (l as? mut layout\Node)!;
+            final vx = leaf.x + leaf.w / 2.0 - fcx;
+            final vy = leaf.y + leaf.h / 2.0 - fcy;
+            final along = vx * dx + vy * dy;
+            if (along <= 0.0) {
+                continue;
+            }
+            var across = vx * dy - vy * dx;
+            if (across < 0.0) {
+                across = 0.0 - across;
+            }
+            if (across > along) {
+                continue;
+            }
+            final dist = vx * vx + vy * vy;
+            if (best == 0 - 1 or dist < bestDist) {
+                best = si * 1000000 + leaf.id;
+                bestDist = dist;
+            }
+        }
+    }
+    return best;
+}
+
+// cmdFocusCycle steps through the tree's leaves in order — the alt-tab of a
+// keyboard-only workflow, and the fallback when directional focus has no
+// candidate (a lone column, say).
+fun cmdFocusCycle(step: int) > void {
+    final ls = mut [];
+    layout\collectLeaves(root!, res: ls);
+    final n = ls.len();
+    if (n <= 1) {
+        return;
+    }
+    var idx = 0;
+    foreach (i in 0..n) {
+        final cand = (ls[i] as? mut layout\Node)!;
+        if (cand.id == focusedId) {
+            idx = i;
+            break;
+        }
+    }
+    final next = (ls[(idx + step + n) % n] as? mut layout\Node)!;
+    focusedId = next.id;
+    windows\focusWindow(refOf(next.id), pid: pidOf(next.id));
+    if (cfg.goldenOn or stacked) {
+        retile();
+    }
+}
+
+fun cmdMove(word: str) > void {
+    if (root == null) {
+        return;
+    }
+    pushUndo();
+    final v = dirVec(word);
+    if (v == null) {
+        return;
+    }
+    final target = layout\neighbor(root!, fromId: focusedId, dx: v![0], dy: v![1]);
+    if (target == 0) {
+        return;
+    }
+    layout\swapIds(root!, a: focusedId, b: target);
+    retile();
+}
+
+fun cmdSplit(word: str) > void {
+    if (root == null) {
+        return;
+    }
+    final leaf = layout\findLeaf(root!, target: focusedId);
+    if (leaf == null) {
+        return;
+    }
+    final l = leaf!;
+    if (word == "horizontal") {
+        l.pick = layout\Pick.Horiz;
+    }
+    if (word == "vertical") {
+        l.pick = layout\Pick.Vert;
+    }
+}
+
+// cmdWorkspace switches to workspace n (0-based): save the active tree into
+// its slot, park its windows, restore the target's windows and tree.
+// Re-requesting the current workspace bounces to the previous one — i3's
+// workspace_auto_back_and_forth, always on.
+// parkLeaving hides the windows of the workspace being left (curWs at call time),
+// per cfg.hideMethod. The "app" method is reconciled in showArriving (after curWs
+// flips) since it keys on the destination, not the origin.
+fun parkLeaving() > void {
+    if (cfg.hideMethod == "app") {
+        return;
+    }
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace == curWs) {
+            if (mm.floating or cfg.hideMethod == "minimize") {
+                windows\setMinimized(mm.ref, minimized: true);
+            } else {
+                windows\moveWindow(mm.ref, x: parkX, y: parkY); // corner-park
+            }
+        }
+    }
+}
+
+// showArriving reveals the windows of the workspace just switched to (n == curWs).
+fun showArriving(n: int) > void {
+    if (cfg.hideMethod == "app") {
+        reconcileAppHide();
+        return;
+    }
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace == n) {
+            windows\setMinimized(mm.ref, minimized: false); // unminimize; tiled also get repositioned by retile
+        }
+    }
+}
+
+// reconcileAppHide (app method): every app with a managed window on the current
+// workspace is shown; every app without one is hidden (cmd+H). A window of a shown
+// app that lives on another workspace (the app spans workspaces) is corner-parked,
+// since app-hide is all-or-nothing. We track what we hid (hiddenPids) because
+// AXHidden's read lags its async set.
+fun reconcileAppHide() > void {
+    final seen = mut [];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (seen.indexOf(mm.pid) != null) {
+            continue;
+        }
+        seen.append(mm.pid);
+        var hasHere = false;
+        foreach (m2 in managed) {
+            final mm2 = (m2 as? mut Managed)!;
+            if (mm2.pid == mm.pid and mm2.workspace == curWs) {
+                hasHere = true;
+            }
+        }
+        if (hasHere) {
+            final idx = hiddenPids.indexOf(mm.pid);
+            if (idx != null) {
+                windows\setAppHidden(mm.pid, hidden: false);
+                _ = hiddenPids.remove(idx!);
+            }
+            foreach (m2 in managed) {
+                final mm2 = (m2 as? mut Managed)!;
+                if (mm2.pid == mm.pid and mm2.workspace != curWs and !mm2.floating) {
+                    windows\moveWindow(mm2.ref, x: parkX, y: parkY); // spanning window: corner-park
+                }
+            }
+        } else if (hiddenPids.indexOf(mm.pid) == null) {
+            windows\setAppHidden(mm.pid, hidden: true);
+            hiddenPids.append(mm.pid);
+        }
+    }
+}
+
+fun cmdWorkspace(nRequested: int) > void {
+    var n = nRequested;
+    if (n == curWs) {
+        n = lastWs;
+    }
+    if (n == curWs or n < 0 or n >= 9) {
+        return;
+    }
+    scratchShown = 0; // a popped scratchpad window stays with the ws it is on
+    saveActive();
+    foreach (si in 0..screens.len()) {
+        final sc = screenAt(si);
+        final cur = wsOn(si, i: curWs);
+        cur.root = sc.root;
+        cur.focusedId = sc.focusedId;
+        cur.fullscreenId = sc.fullscreenId;
+        cur.stacked = sc.stacked;
+    }
+    parkLeaving(); // hide the leaving workspace's windows (method-aware; app method reconciles below)
+    lastWs = curWs;
+    curWs = n;
+    foreach (si in 0..screens.len()) {
+        final sc = screenAt(si);
+        final nxt = wsOn(si, i: n);
+        sc.root = nxt.root;
+        sc.focusedId = nxt.focusedId;
+        sc.fullscreenId = nxt.fullscreenId;
+        sc.stacked = nxt.stacked;
+    }
+    loadActive(activeScreen);
+    showArriving(n); // reveal the arriving workspace's windows (method-aware)
+    retile(); // positions the arriving workspace's tiled windows into their slots
+    if (focusedId != 0) {
+        windows\focusWindow(refOf(focusedId), pid: pidOf(focusedId));
+    }
+    // Drop the move/minimize events this switch generated so the next pump's
+    // reconcile can't re-adopt a parked window onto the wrong workspace.
+    while (events\pollWindowEvent() != 0) {
+        _ = events\windowEventArg();
+    }
+}
+
+// cmdMoveToWs sends the focused window to workspace n (0-based) and parks it
+// there; the window leaves the active tree immediately.
+fun cmdMoveToWs(n: int) > void {
+    if (n == curWs or n < 0 or n >= 9 or focusedId == 0) {
+        return;
+    }
+    final mo = managedById(focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    final id = mm.id;
+    detachOn(mm.screen, id: id);
+    mm.workspace = n;
+    windows\setMinimized(mm.ref, minimized: true);
+    final target = wsOn(mm.screen, i: n);
+    if (target.root == null) {
+        target.root = layout\makeLeaf(id);
+        target.focusedId = id;
+    } else {
+        final tr = target.root!;
+        if (!layout\insertAt(tr, target: target.focusedId, id: id)) {
+            layout\insertAt(tr, target: layout\lastLeaf(tr).id, id: id);
+        }
+    }
+    retile();
+    if (focusedId != 0) {
+        windows\focusWindow(refOf(focusedId), pid: pidOf(focusedId));
+    }
+}
+
+// centerWindow gives a floating/scratchpad window a 55% centered frame so it
+// reads as floating rather than wherever tiling last left it.
+fun centerWindow(ref: ud?) > void {
+    final w = tiledCG[2] * 0.55;
+    final h = tiledCG[3] * 0.55;
+    windows\setWindowFrame(ref, x: tiledCG[0] + (tiledCG[2] - w) / 2.0, y: tiledCG[1] + (tiledCG[3] - h) / 2.0, w: w, h: h);
+}
+
+// cmdFloating toggles the focused window out of (or back into) the tree.
+// Floating windows keep whatever frame the user gives them; the scanner
+// tracks them but the tiler never touches them.
+fun cmdFloating() > void {
+    final mo = managedById(focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    if (mm.floating) {
+        mm.floating = false;
+        adopt(mm.id);
+        retile();
+        return;
+    }
+    mm.floating = true;
+    detachCurrent(mm.id);
+    centerWindow(mm.ref);
+    retile();
+}
+
+// cmdMoveScratchpad sends the focused window to the scratchpad: parked like
+// an inactive workspace, but belonging to none — it comes back floating.
+fun cmdMoveScratchpad() > void {
+    final mo = managedById(focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    detachCurrent(mm.id);
+    mm.workspace = scratchWs;
+    mm.floating = true;
+    windows\setMinimized(mm.ref, minimized: true);
+    if (scratchShown == mm.id) {
+        scratchShown = 0;
+    }
+    retile();
+}
+
+// cmdScratchpadShow toggles: pop the next scratchpad window centered over the
+// current workspace, or stash the one already showing back.
+fun cmdScratchpadShow() > void {
+    if (scratchShown != 0) {
+        final mo = managedById(scratchShown);
+        if (mo != null) {
+            final mm = mo!;
+            mm.workspace = scratchWs;
+            windows\setMinimized(mm.ref, minimized: true);
+        }
+        scratchShown = 0;
+        return;
+    }
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace == scratchWs) {
+            mm.workspace = curWs;
+            mm.screen = activeScreen;
+            mm.floating = true;
+            windows\setMinimized(mm.ref, minimized: false);
+            centerWindow(mm.ref);
+            windows\focusWindow(mm.ref, pid: mm.pid);
+            scratchShown = mm.id;
+            return;
+        }
+    }
+}
+
+// onWindowRule registers a window hook written in Buzz — the programmable
+// half of window rules. rules.buzz (loaded into this very session, so this
+// function is in its scope) calls it with a closure:
+//
+//     onWindowRule(fun (app: str, title: str, id: int) > str {
+//         if (app == "Music") { return "floating toggle"; }
+//         return "";
+//     });
+//
+// Each hook runs for every newly adopted window; its result is a command (or
+// several, ";"-separated; "" for none) executed against that window. Hooks
+// accumulate in registration order, so `layout export`'s generated rules and
+// hand-written ones coexist (hand-written run last — they get the final
+// word). And because hooks live inside the WM's session, they may ignore the
+// contract and drive the manager directly — runCommandFor(id, cmd: …), anything.
+fun onWindowRule(f: any) > void {
+    userWindowHooks.append(f);
+}
+
+// loadRules (re)loads rules.generated.buzz (written by `layout export`) and
+// rules.buzz, re-registering hooks from scratch: an absent file simply drops
+// out, a broken one reports and the WM keeps going. Runs at startup and on
+// the explicit `reload` command — nothing watches files behind your back.
+fun loadRules() > void {
+    userWindowHooks = mut [];
+    loadRuleFile(generatedRulesPath());
+    loadRuleFile(rulesPath());
+}
+
+fun loadRuleFile(path: str) > void {
+    if (config\readConfigText(path) == null) {
+        return;
+    }
+    try {
+        io\runFile(path);
+        std\print("yeetile: rules loaded from {path}");
+    } catch (e: any) {
+        std\print("yeetile: {path}: {e}");
+    }
+}
+
+// applyRules runs the declarative `rule` lines, then the rules.buzz hook,
+// against a freshly adopted window — i3's for_window, programmable.
+fun applyRules(id: int) > void {
+    if (cfg.rules.len() == 0 and userWindowHooks.len() == 0) {
+        return;
+    }
+    final app = windows\appName(pidOf(id));
+    final title = windows\windowTitle(refOf(id));
+    foreach (rr in cfg.rules) {
+        final rule = (rr as? config\Rule)!;
+        if (config\ruleMatches(rule, app: app, title: title)) {
+            runCommandFor(id, cmd: rule.command);
+        }
+    }
+    foreach (h in userWindowHooks) {
+        try {
+            final hook = h as? fun (app: str, title: str, id: int) > str?;
+            final res = hook!(app, title: title, id: id);
+            if (res != null) {
+                foreach (c in config\splitCommands("{res!}")) {
+                    final cmd = (c as? str)!;
+                    runCommandFor(id, cmd: cmd);
+                }
+            }
+        } catch (e: any) {
+            std\print("yeetile: rules hook: {e}");
+        }
+    }
+}
+
+// cmdLayoutExport closes the loop: the live arrangement comes back as window
+// *rules* — runnable, editable Buzz (rules.generated.buzz) — instead of
+// bespoke values in a data file. Arrange by hand, export, done: every app
+// you placed gets pinned to its workspace (floating windows export as
+// floating) the next time it opens. First window of each app wins.
+fun cmdLayoutExport() > void {
+    final apps = mut [];
+    final cmds = mut [];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace == scratchWs) {
+            continue;
+        }
+        final app = windows\appName(mm.pid);
+        if (app.len() == 0 or apps.indexOf(app) != null) {
+            continue;
+        }
+        var cmd = "move workspace {mm.workspace + 1}";
+        if (mm.floating) {
+            // Floating windows export with their exact coordinates.
+            cmd = "floating toggle";
+            final fr = windows\windowFrame(mm.ref);
+            if (fr != null) {
+                final f = fr!;
+                cmd = "frame {f[0]} {f[1]} {f[2]} {f[3]}";
+            }
+        }
+        apps.append(app);
+        cmds.append(cmd);
+    }
+    if (apps.len() == 0) {
+        std\print("yeetile: nothing to export — no managed windows");
+        return;
+    }
+    var a = [<str>];
+    foreach (x in apps) {
+        final v = (x as? str)!;
+        a = a + [v];
+    }
+    var c = [<str>];
+    foreach (x in cmds) {
+        final v = (x as? str)!;
+        c = c + [v];
+    }
+    try {
+        fs\makeDirectory(configDir());
+        final f = io\File.open(generatedRulesPath(), mode: io\FileMode.write);
+        f.write(config\rulesSource(a, commands: c));
+        f.close();
+    } catch (e: any) {
+        std\print("yeetile: layout export failed: {e}");
+        return;
+    }
+    loadRules();
+    std\print("yeetile: exported {a.len()} window rules to {generatedRulesPath()} — edit freely");
+}
+
+// runCommandFor runs a command with the given window as its target (commands
+// act on focusedId); the previous focus is restored unless the command moved
+// it on purpose.
+fun runCommandFor(id: int, cmd: str) > void {
+    final prev = focusedId;
+    focusedId = id;
+    runCommand(cmd);
+    if (focusedId == id) {
+        focusedId = prev;
+    }
+}
+
+// --- layout snapshots: `layout save` / `layout restore` ---
+
+// stampTags labels every leaf with its app name so the snapshot can be
+// matched against live windows after a restart.
+fun stampTags(t: layout\Node?) > void {
+    if (t == null) {
+        return;
+    }
+    final ls = mut [];
+    layout\collectLeaves(t!, res: ls);
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        leaf.tag = windows\appName(pidOf(leaf.id));
+    }
+}
+
+// cmdLayoutSave snapshots the ACTIVE screen's workspaces (multi-display
+// snapshots would need per-screen files; one screen keeps it predictable).
+fun cmdLayoutSave() > void {
+    final trees = mut [];
+    foreach (i in 0..9) {
+        var t: layout\Node? = null;
+        if (i == curWs) {
+            t = root;
+        } else {
+            t = wsAt(i).root;
+        }
+        stampTags(t);
+        trees.append(layout\encodeTree(t));
+    }
+    final data = mut {};
+    data["ws"] = trees;
+    try {
+        fs\makeDirectory(configDir());
+        final f = io\File.open(layoutPath(), mode: io\FileMode.write);
+        f.write(serialize\jsonEncode(serialize\Boxed.init(data)));
+        f.close();
+    } catch (e: any) {
+        std\print("yeetile: layout save failed: {e}");
+        return;
+    }
+    std\print("yeetile: layout saved to {layoutPath()}");
+}
+
+// cmdLayoutRestore reshapes the current workspace from the snapshot: saved
+// leaves claim live windows by app name, unmatched leaves are pruned, and
+// windows the snapshot doesn't know are appended.
+fun cmdLayoutRestore() > void {
+    final text = config\readConfigText(layoutPath());
+    if (text == null) {
+        std\print("yeetile: no saved layout at {layoutPath()} (use `layout save`)");
+        return;
+    }
+    var decoded: mut layout\Node? = null;
+    try {
+        final b = serialize\jsonDecode(text!);
+        final entries = b.q(["ws"]).listValue();
+        if (curWs < entries.len()) {
+            decoded = layout\decodeTree(entries[curWs]);
+        }
+    } catch (e: any) {
+        std\print("yeetile: bad layout file: {e}");
+        return;
+    }
+    if (decoded == null) {
+        std\print("yeetile: no saved layout for workspace {curWs + 1}");
+        return;
+    }
+    // Pool of claimable windows on this workspace, zeroed as they match.
+    final live = mut [<int>];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace == curWs and !mm.floating) {
+            live.append(mm.id);
+        }
+    }
+    final ls = mut [];
+    layout\collectLeaves(decoded!, res: ls);
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        leaf.id = takeMatch(live, tag: leaf.tag);
+    }
+    var rebuilt = layout\pruneZeroLeaves(decoded);
+    foreach (idv in live) {
+        final id = (idv as? int)!;
+        if (id == 0) {
+            continue;
+        }
+        if (rebuilt == null) {
+            rebuilt = layout\makeLeaf(id);
+        } else {
+            final r = rebuilt!;
+            layout\insertAt(r, target: layout\lastLeaf(r).id, id: id);
+        }
+        seedDims(rebuilt!, cg: screenAt(activeScreen).cg);
+    }
+    if (rebuilt == null) {
+        std\print("yeetile: nothing on this workspace matches the snapshot");
+        return;
+    }
+    root = rebuilt;
+    fullscreenId = 0;
+    focusedId = layout\lastLeaf(rebuilt!).id;
+    retile();
+    std\print("yeetile: layout restored for workspace {curWs + 1}");
+}
+
+// takeMatch claims the first unclaimed live window whose app name equals the
+// saved tag (case-insensitive); 0 when none is left.
+fun takeMatch(live: mut [int], tag: str) > int {
+    if (tag.len() == 0) {
+        return 0;
+    }
+    foreach (i in 0..live.len()) {
+        final id: int = live[i];
+        if (id == 0) {
+            continue;
+        }
+        if (windows\appName(pidOf(id)).lower() == tag.lower()) {
+            live[i] = 0;
+            return id;
+        }
+    }
+    return 0;
+}
+
+// cmdEval runs a line of Buzz inside this very session: the script shares
+// the WM's globals (the registry, the tree, every imported module), so it
+// can inspect or rewire the live window manager. The interpreter is the
+// feature — no other WM ships its own language in-process.
+fun cmdEval(code: str) > void {
+    final path = os\tmpDir() + "/yeetile-eval.buzz";
+    // Expression-wrap first so the result echoes (Retool console style: see
+    // what you got, not just side effects); statements fall back to raw.
+    var ran = false;
+    try {
+        final f = io\File.open(path, mode: io\FileMode.write);
+        f.write("evalEcho((" + code + "));\n");
+        f.close();
+        io\runFile(path);
+        ran = true;
+    } catch (_: any) {
+        ran = false;
+    }
+    if (!ran) {
+        try {
+            final f = io\File.open(path, mode: io\FileMode.write);
+            f.write(code + "\n");
+            f.close();
+            io\runFile(path);
+            noteEval("ok");
+        } catch (e: any) {
+            noteEval("error: {e}");
+            std\print("yeetile: eval: {e}");
+        }
+    }
+    retile();
+    updateBar();
+}
+
+// evalEcho receives the wrapped expression's value — eval scripts call it
+// implicitly; the result lands on the bar and in the log.
+fun evalEcho(v: any) > void {
+    noteEval("{v}");
+}
+
+fun noteEval(msg: str) > void {
+    evalNote = "eval → {msg}";
+    evalNoteAt = os\time();
+    std\print("yeetile: {evalNote}");
+}
+
+// cmdFrame floats the focused window at an exact position: `frame x y w h`.
+// This is how exported rules carry coordinates — a floating window's frame
+// round-trips through `layout export` as a frame command.
+fun cmdFrame(words: [str]) > void {
+    final mo = managedById(focusedId);
+    if (mo == null) {
+        return;
+    }
+    final x = std\parseDouble(words[1]);
+    final y = std\parseDouble(words[2]);
+    final w = std\parseDouble(words[3]);
+    final h = std\parseDouble(words[4]);
+    if (x == null or y == null or w == null or h == null) {
+        return;
+    }
+    final mm = mo!;
+    if (!mm.floating) {
+        mm.floating = true;
+        detachCurrent(mm.id);
+    }
+    windows\setWindowFrame(mm.ref, x: x!, y: y!, w: w!, h: h!);
+    retile();
+}
+
+// cmdSnap floats the focused window into a Rectangle-style position within
+// the tiled display: halves, quarters, thirds, two-thirds, max — plus
+// `snap center`, which keeps the window's size. The default binds mirror
+// Rectangle.app's (ctrl+alt+…), so it can be uninstalled without retraining.
+fun cmdSnap(pos: str) > void {
+    final mo = managedById(focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    if (!mm.floating) {
+        mm.floating = true;
+        detachCurrent(mm.id);
+    }
+    if (pos == "center") {
+        final fr = windows\windowFrame(mm.ref);
+        if (fr != null) {
+            final f = fr!;
+            windows\setWindowFrame(mm.ref,
+                x: tiledCG[0] + (tiledCG[2] - f[2]) / 2.0,
+                y: tiledCG[1] + (tiledCG[3] - f[3]) / 2.0, w: f[2], h: f[3]);
+        }
+        retile();
+        return;
+    }
+    final snapped = layout\snapFrame(pos, bx: tiledCG[0], by: tiledCG[1], bw: tiledCG[2], bh: tiledCG[3]);
+    if (snapped == null) {
+        std\print("yeetile: unknown snap position \"{pos}\"");
+        return;
+    }
+    final f = snapped!;
+    windows\setWindowFrame(mm.ref, x: f[0], y: f[1], w: f[2], h: f[3]);
+    retile();
+}
+
+// pushUndo snapshots the active screen's tree before a mutating command;
+// `undo` pops back, pruning windows that closed in between.
+fun pushUndo() > void {
+    undoStack.append(layout\cloneTree(root));
+    if (undoStack.len() > 20) {
+        undoStack.remove(0);
+    }
+}
+
+fun cmdUndo() > void {
+    if (undoStack.len() == 0) {
+        std\print("yeetile: nothing to undo");
+        return;
+    }
+    final snap = undoStack.pop();
+    final ids = mut [];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace == curWs and mm.screen == activeScreen and !mm.floating) {
+            ids.append(mm.id);
+        }
+    }
+    var restored = layout\pruneMissing((snap as? mut layout\Node), keep: ids);
+    // windows that appeared since the snapshot get appended
+    foreach (idv in ids) {
+        final id = (idv as? int)!;
+        if (restored == null) {
+            restored = layout\makeLeaf(id);
+        } else if (layout\findLeaf(restored!, target: id) == null) {
+            final r = restored!;
+            layout\insertAt(r, target: layout\lastLeaf(r).id, id: id);
+        }
+        seedDims(restored!, cg: screenAt(activeScreen).cg);
+    }
+    root = restored;
+    if (root != null and layout\findLeaf(root!, target: focusedId) == null) {
+        focusedId = layout\lastLeaf(root!).id;
+    }
+    retile();
+}
+
+// cmdMark / cmdGoto: vim registers for windows. `mark a` tags the focused
+// window; `goto a` jumps to it — switching workspace and screen if needed.
+fun cmdMark(key: str) > void {
+    if (focusedId != 0) {
+        marks[key] = focusedId;
+        std\print("yeetile: marked '{key}'");
+    }
+}
+
+fun jumpTo(id: int) > void {
+    final mo = managedById(id);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    if (mm.workspace != curWs and mm.workspace != scratchWs) {
+        cmdWorkspace(mm.workspace);
+    }
+    setActive(mm.screen);
+    focusedId = mm.id;
+    windows\focusWindow(mm.ref, pid: mm.pid);
+    retile();
+}
+
+fun cmdGoto(key: str) > void {
+    final hit = marks[key];
+    if (hit == null) {
+        std\print("yeetile: no mark '{key}'");
+        return;
+    }
+    final id: int = hit!;
+    if (managedById(id) == null) {
+        std\print("yeetile: mark '{key}' window is gone");
+        return;
+    }
+    jumpTo(id);
+}
+
+// cmdSummon opens launcher over every managed window ("#id app — title");
+// picking one jumps to it, rofi's window switcher.
+fun cmdSummon() > void {
+    var rows = [<str>];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        rows = rows + ["#{mm.id} {windows\appName(mm.pid)} — {windows\windowTitle(mm.ref)}"];
+    }
+    if (rows.len() == 0) {
+        return;
+    }
+    final ak = tiledAppKit();
+    launcher\launcherWindows(rows, ax: ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+}
+
+fun onWindowPick(row: str) > void {
+    // rows are "#id …": parse the id back out
+    final sp = row.indexOf(" ");
+    if (sp == null or !row.startsWith("#")) {
+        return;
+    }
+    final id = std\parseInt(row.sub(1, len: sp! - 1));
+    if (id != null) {
+        jumpTo(id!);
+    }
+}
+
+fun cmdKill() > void {
+    if (focusedId == 0) {
+        return;
+    }
+    final ref = refOf(focusedId);
+    if (ref != null) {
+        windows\closeWindow(ref); // async; the next rescan tick reaps it from the tree
+    }
+}
+
+// cmdResize: `resize grow|shrink` adjusts the innermost split; with an axis
+// (`resize grow width|height`, the arrow-key binds) it adjusts the nearest
+// split along that axis instead, like i3.
+fun cmdResize(word: str, axis: str) > void {
+    if (root == null) {
+        return;
+    }
+    pushUndo();
+    var delta = 0.05;
+    if (word == "shrink") {
+        delta = 0.0 - 0.05;
+    }
+    var changed = false;
+    if (axis == "width") {
+        changed = layout\growAxis(root!, target: focusedId, orient: layout\Orient.Horiz, delta: delta);
+    } else if (axis == "height") {
+        changed = layout\growAxis(root!, target: focusedId, orient: layout\Orient.Vert, delta: delta);
+    } else {
+        changed = layout\grow(root!, target: focusedId, delta: delta);
+    }
+    if (changed) {
+        retile();
+    }
+}
+
+// toggleReconcile pauses/resumes the WM's automatic window management. Paused,
+// it stops adopting new windows and retiling on events/timer (manual commands
+// still work); resuming reconciles immediately. Driven by the `reconcile`
+// command and the status-bar toggle.
+fun toggleReconcile() > void {
+    reconcilePaused = !reconcilePaused;
+    if (!reconcilePaused) {
+        tick(); // resuming: catch up the layout now (also refreshes the bar)
+    } else {
+        updateBar();
+    }
+    std\print("yeetile: auto-reconcile {!reconcilePaused}");
+}
+
+// cmdSweep pulls every off-display window back onto the active display so the
+// WM can adopt and tile it — recovers windows that drifted off-screen (e.g. a
+// crash left them parked off the right edge).
+fun cmdSweep() > void {
+    foreach (p in windows\onScreenPids()) {
+        final pid = (p as? int)!;
+        foreach (w in windows\appWindows(pid)) {
+            final ref = (w as? ud)!;
+            if (screenForRef(ref) == 0 - 1) {
+                // off the tiled display — park it near the top-left so the next
+                // rescan homes it here; retile gives it a real slot.
+                windows\setWindowFrame(ref, x: tiledCG[0] + 24.0, y: tiledCG[1] + 60.0, w: 800.0, h: 600.0);
+            }
+            frameworks\releaseRef(ref);
+        }
+    }
+    rescan();
+    retile();
+    updateBar();
+}
+
+fun runCommand(cmd: str) > void {
+    final words = cmd.split(" ");
+    final head: str = words[0];
+    if (head == "exec" and words.len() >= 2) {
+        // i3 semantics: hand the rest to a shell and don't block the WM on it.
+        _ = os\execute(["/bin/sh", "-c", cmd.sub(5) + " >/dev/null 2>&1 &"]) catch 0;
+        return;
+    }
+    if (head == "focus" and words.len() >= 2) {
+        cmdFocus(words[1]);
+        return;
+    }
+    if (head == "workspace" and words.len() >= 2) {
+        if (words[1] == "back_and_forth") {
+            cmdWorkspace(lastWs);
+            return;
+        }
+        final n = std\parseInt(words[1]);
+        if (n != null) {
+            cmdWorkspace(n! - 1); // user-facing workspaces are 1-based
+        }
+        return;
+    }
+    if (head == "floating") {
+        cmdFloating();
+        return;
+    }
+    if (head == "frame" and words.len() >= 5) {
+        cmdFrame(words);
+        return;
+    }
+    if (head == "snap" and words.len() >= 2) {
+        cmdSnap(words[1]);
+        return;
+    }
+    if (head == "golden") {
+        cfg.goldenOn = !cfg.goldenOn;
+        retile();
+        std\print("yeetile: golden ratio {cfg.goldenOn}");
+        return;
+    }
+    if (head == "stacking") {
+        stacked = !stacked;
+        retile();
+        updateBar();
+        return;
+    }
+    if (head == "sweep") {
+        cmdSweep();
+        return;
+    }
+    if (head == "reconcile") {
+        // reconcile [toggle|on|off] — pause/resume auto-adopt + auto-retile.
+        if (words.len() >= 2 and words[1] == "on") {
+            reconcilePaused = false;
+            tick();
+            updateBar();
+        } else if (words.len() >= 2 and words[1] == "off") {
+            reconcilePaused = true;
+            updateBar();
+        } else {
+            toggleReconcile();
+        }
+        return;
+    }
+    if (head == "eval" and words.len() >= 2) {
+        cmdEval(cmd.sub(5));
+        return;
+    }
+    if (head == "move" and words.len() >= 2 and words[1] == "scratchpad") {
+        cmdMoveScratchpad();
+        return;
+    }
+    if (head == "scratchpad" and words.len() >= 2 and words[1] == "show") {
+        cmdScratchpadShow();
+        return;
+    }
+    if (head == "move" and words.len() >= 3 and words[1] == "workspace") {
+        final n = std\parseInt(words[2]);
+        if (n != null) {
+            cmdMoveToWs(n! - 1);
+        }
+        return;
+    }
+    if (head == "move" and words.len() >= 2) {
+        cmdMove(words[1]);
+        return;
+    }
+    if (head == "kill" or head == "yeetus") { // `yeetus deletus` also accepted
+        cmdKill();
+        return;
+    }
+    if (head == "launcher") {
+        final ak = tiledAppKit();
+        if (words.len() >= 2 and words[1] == "run") {
+            launcher\launcherRun(ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+        } else if (words.len() >= 2 and words[1] == "eval") {
+            launcher\launcherEval(ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+        } else if (words.len() >= 2 and words[1] == "windows") {
+            cmdSummon();
+        } else {
+            launcher\launcherApps(ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+        }
+        return;
+    }
+    if (head == "split" and words.len() >= 2) {
+        cmdSplit(words[1]);
+        return;
+    }
+    if (head == "resize" and words.len() >= 2) {
+        var axis = "";
+        if (words.len() >= 3) {
+            axis = words[2];
+        }
+        cmdResize(words[1], axis: axis);
+        return;
+    }
+    if (head == "fullscreen" and words.len() >= 2 and words[1] == "native") {
+        // macOS's own green-button fullscreen via AXFullScreen: the window
+        // takes its own Space and leaves management until it comes back.
+        if (focusedId != 0 and refOf(focusedId) != null) {
+            final ref = refOf(focusedId);
+            windows\setNativeFullscreen(ref, on: !windows\isNativeFullscreen(ref));
+        }
+        return;
+    }
+    if (head == "fullscreen") {
+        if (fullscreenId != 0) {
+            fullscreenId = 0;
+        } else {
+            fullscreenId = focusedId;
+        }
+        retile();
+        return;
+    }
+    if (head == "balance") {
+        if (root != null) {
+            pushUndo();
+            layout\balance(root!);
+            retile();
+        }
+        return;
+    }
+    if (head == "layout" and words.len() >= 2) {
+        if (words[1] == "save") {
+            cmdLayoutSave();
+        } else if (words[1] == "restore") {
+            cmdLayoutRestore();
+        } else if (words[1] == "export") {
+            cmdLayoutExport();
+        }
+        return;
+    }
+    if (head == "rules" and words.len() >= 2 and words[1] == "apply") {
+        // Re-run all rules over every managed window (handy after editing
+        // rules.buzz; mind that toggle-style commands do toggle again).
+        foreach (m in managed) {
+            final mm = (m as? mut Managed)!;
+            applyRules(mm.id);
+        }
+        retile();
+        return;
+    }
+    if (head == "inspector") {
+        cmdInspector();
+        return;
+    }
+    if (head == "console") {
+        cmdConsole();
+        return;
+    }
+    if (head == "mode" and words.len() >= 2) {
+        bindMode = words[1];
+        if (bindMode == "default") {
+            bindMode = "";
+        }
+        pushChords(); // the active mode's bindings changed — refresh the swallow set
+        updateBar();
+        return;
+    }
+    if (head == "mark" and words.len() >= 2) {
+        cmdMark(words[1]);
+        return;
+    }
+    if (head == "goto" and words.len() >= 2) {
+        cmdGoto(words[1]);
+        return;
+    }
+    if (head == "undo") {
+        cmdUndo();
+        return;
+    }
+    if (head == "border") {
+        cfg.borderOn = !cfg.borderOn;
+        updateRing();
+        return;
+    }
+    if (head == "retile") {
+        rescan();
+        retile();
+        return;
+    }
+    if (head == "reload") {
+        cmdReload();
+        return;
+    }
+    if (head == "quit") {
+        std\print("yeetile: bye");
+        restoreAllWindows(); // AeroSpace-style: never leave a parked window off-screen
+        os\exit(0);
+        return;
+    }
+    std\print("yeetile: unknown command \"{cmd}\"");
+}
+
+// --- event handling (the poll loop in main drains events\pollKey/pollMouse;
+// the C event-tap helper makes the swallow decision synchronously) ---
+
+// handleKey processes one key event dequeued from the helper (etype is the
+// CGEventType: 10 key-down, 11 key-up, 12 flags-changed). Swallowing already
+// happened in the tap callback (against the chord table pushChords() publishes,
+// plus the launcher grab), so this only reacts.
+fun handleKey(etype: int, code: int, flags: int) > void {
+    if (etype == 11 or etype == 12) { // keyUp / flagsChanged
+        if (cheatsheet\sheetVisible()) {
+            // Hold-to-peek: releasing the cheat key, or letting go of any of
+            // its modifiers, dismisses the sheet instantly.
+            if (etype == 11 and code == cfg.cheatKey) {
+                cheatsheet\sheetHide();
+                return;
+            }
+            if (etype == 12 and !modsMatch(flags, want: cfg.cheatFlags)) {
+                cheatsheet\sheetHide();
+            }
+        }
+        return;
+    }
+    if (etype != keyDownEvent) {
+        return;
+    }
+    lastKeyAt = os\time();
+    if (launcher\launcherActive()) {
+        // The bar owns the keyboard while it is up, dmenu-style (the helper
+        // grabs every key while it is open); route the key to it.
+        launcher\launcherKey(code, shiftHeld: (flags / 131072) % 2 == 1);
+        return;
+    }
+    if (code == cfg.cheatKey and modsMatch(flags, want: cfg.cheatFlags)) {
+        // Hold to peek at the keymap; release hides it (handled above).
+        final ak = tiledAppKit();
+        inspector\inspHide(); // mutually exclusive overlays — don't peek over the inspector
+        cheatsheet\sheetShow(cfg.binds, cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+        return;
+    }
+    foreach (b in cfg.binds) {
+        final bind = (b as? config\Bind)!;
+        if (bind.mode == bindMode and bind.keycode == code and modsMatch(flags, want: bind.flags)) {
+            runCommand(bind.command);
+            return;
+        }
+    }
+}
+
+// pushChords publishes the swallow set to the event-tap helper: the active
+// mode's bound chords plus the cheat chord, so a matched hotkey is consumed in
+// the tap callback (the focused app never sees it). Called on startup, reload,
+// and mode change.
+fun pushChords() > void {
+    events\clearChords();
+    foreach (b in cfg.binds) {
+        final bind = (b as? config\Bind)!;
+        if (bind.mode == bindMode) {
+            events\addChord(bind.flags, keycode: bind.keycode);
+        }
+    }
+    events\addChord(cfg.cheatFlags, keycode: cfg.cheatKey);
+}
+
+// modsMatch compares exactly the four modifier bits: extra device-state bits
+// in CGEventFlags must not break matching, and a bind without shift must not
+// fire when shift is held.
+fun modsMatch(flags: int, want: int) > bool {
+    foreach (m in modMask) {
+        if ((flags / m) % 2 != (want / m) % 2) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// --- focus follows mouse ---
+
+var lastHover = 0.0;
+
+// handleMouse hands focus to the hovered window — X11's focus-follows-mouse,
+// which macOS still doesn't offer. The cursor position comes from the
+// (listen-only) mouse tap via the helper; hit-testing is pure geometry against
+// our own assigned frames, throttled so a fast move costs a couple of compares.
+fun handleMouse(x: double, y: double) > void {
+    if (!cfg.ffmOn or launcher\launcherActive() or screens.len() == 0) {
+        return;
+    }
+    final now: double = os\time();
+    if (now - lastHover < 80.0) {
+        return;
+    }
+    if (now - lastKeyAt < 700.0) {
+        return; // hands on keyboard: brushing the mouse must not steal focus
+    }
+    lastHover = now;
+    hoverFocus(x, y: y);
+}
+
+fun hoverFocus(x: double, y: double) > void {
+    foreach (si in 0..screens.len()) {
+        final r0 = treeOf(si);
+        if (r0 == null) {
+            continue;
+        }
+        final ls = mut [];
+        layout\collectLeaves(r0!, res: ls);
+        foreach (l in ls) {
+            final leaf = (l as? mut layout\Node)!;
+            if (x >= leaf.x and x < leaf.x + leaf.w and y >= leaf.y and y < leaf.y + leaf.h) {
+                if (leaf.id != focusedId or si != activeScreen) {
+                    setActive(si);
+                    focusedId = leaf.id;
+                    windows\focusWindowNoRaise(refOf(leaf.id), pid: pidOf(leaf.id));
+                    if (cfg.goldenOn) {
+                        retile(); // golden reflows around the hovered window
+                    }
+                    updateBar();
+                }
+                return;
+            }
+        }
+    }
+}
+
+// tick is the periodic scan: re-arm the taps, re-read display bounds, follow the
+// system focus, adopt/evict windows, retile, and refresh the chrome. Driven by
+// the poll loop in main every cfg.pollMs.
+fun tick() > void {
+    events\reenableTaps();
+    refreshTiledBounds();
+    syncFocus();
+    rescan();
+    retile();
+    updateBar();
+    if (inspector\inspVisible()) {
+        final ak = tiledAppKit();
+        inspector\inspShow(inspectLines(), cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+    }
+}
+
+// drainWindowEvents consumes the AX observer queue each pump and reacts at once,
+// so windows tile the instant they appear instead of waiting for the reconcile
+// timer. A burst (an app opening several windows) is coalesced into a single
+// reconcile. Moved is deliberately ignored: our own retile moves windows and
+// would feed back — user drags are handled by the reflow path (Stage 2).
+fun drainWindowEvents() > void {
+    var we = events\pollWindowEvent();
+    var structural = false;
+    var focusChanged = false;
+    while (we != 0) {
+        if (we == events\winFocus) {
+            focusChanged = true;
+        } else if (we != events\winMoved) {
+            structural = true; // created / destroyed / minimize / deminimize
+        }
+        we = events\pollWindowEvent();
+    }
+    if (reconcilePaused) {
+        return; // queue drained above so it can't overflow, but we don't act
+    }
+    if (structural) {
+        tick(); // full reconcile (also re-syncs focus + the bar)
+    } else if (focusChanged) {
+        syncFocus();
+        updateBar();
+    }
+}
+
+fun absD(x: double) > double {
+    if (x < 0.0) {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+// handleRelease implements drag-to-reflow: on a left-mouse-up that ended a drag,
+// find the managed window that was dragged out of its slot and swap it with the
+// window whose slot it was dropped on (i3-style move-by-mouse). The drop snaps
+// into the grid; nothing overlaps.
+fun handleRelease(ux: double, uy: double) > void {
+    if (root == null or reconcilePaused) {
+        return;
+    }
+    final r = root!;
+    // The dragged window is the managed one whose real frame drifted from its
+    // assigned slot (apps honor position, so only a drag moves it far).
+    var draggedId = 0;
+    var best = 40.0;
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace != curWs or mm.floating) {
+            continue;
+        }
+        final leaf = layout\findLeaf(r, target: mm.id);
+        final ref = refOf(mm.id);
+        if (leaf == null or ref == null) {
+            continue;
+        }
+        final f = windows\windowFrame(ref);
+        if (f == null) {
+            continue;
+        }
+        final fr = f!;
+        final delta = absD(fr[0] - leaf!.x) + absD(fr[1] - leaf!.y);
+        if (delta > best) {
+            best = delta;
+            draggedId = mm.id;
+        }
+    }
+    if (draggedId == 0) {
+        return;
+    }
+    final targetId = layout\leafAt(root, x: ux, y: uy);
+    if (targetId != 0 and targetId != draggedId) {
+        _ = layout\swapIds(r, a: draggedId, b: targetId);
+    }
+    retile(); // either swap-then-retile, or just snap the dragged window back
+}
+
+// handleBarClick routes a left-click (global CG coords) that lands on the status
+// bar: the reconcile toggle at the right edge, or a workspace cell on the left.
+fun handleBarClick(gx: double, gy: double) > void {
+    if (!cfg.barOn) {
+        return;
+    }
+    final barTop = tiledCG[1] + tiledCG[3] - statusbar\barHeight;
+    if (gy < barTop - 4.0 or gx < tiledCG[0] or gx >= tiledCG[0] + tiledCG[2]) {
+        return; // not on the bar
+    }
+    final localX = gx - tiledCG[0];
+    if (statusbar\barToggleHit(localX, barW: tiledCG[2])) {
+        toggleReconcile();
+        return;
+    }
+    final ws = statusbar\barWsAt(localX, shown: statusbar\wsShown(curWs, counts: wsCounts()));
+    if (ws >= 0 and ws != curWs) {
+        cmdWorkspace(ws);
+    }
+}
+
+// wsCounts tallies managed windows per workspace — shared by the bar render and
+// the bar-click workspace mapping.
+fun wsCounts() > [int] {
+    final counts = mut [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        if (mm.workspace >= 0 and mm.workspace < counts.len()) {
+            counts[mm.workspace] = counts[mm.workspace] + 1;
+        }
+    }
+    return counts;
+}
+
+fun updateBar() > void {
+    if (!cfg.barOn) {
+        return;
+    }
+    final counts = wsCounts();
+    var title = "";
+    if (focusedId != 0 and refOf(focusedId) != null) {
+        title = windows\windowTitle(refOf(focusedId));
+    }
+    // Workspace cells come first at a fixed x so clicks map to a workspace; the
+    // orientation/mode indicators and title are appended after them.
+    var left = statusbar\barText(curWs, counts: counts);
+    if (bindMode != "") {
+        left = left + " [{bindMode}]"; // i3 shows the active binding mode
+    }
+    if (title.len() > 0) {
+        var t = title;
+        if (t.len() > 70) {
+            t = t.sub(0, len: 70) + "…";
+        }
+        left = left + "  ·  " + t;
+    }
+    // Layout/orientation glyph on the right: ≡ global stacking, ◫ next split is
+    // side-by-side (two columns), ⊟ next split stacks below (two rows).
+    var layoutSym = "";
+    if (stacked) {
+        layoutSym = "≡";
+    } else {
+        final ori = layout\pendingOrient(root, target: focusedId);
+        if (ori != null) {
+            if (ori! == layout\Orient.Vert) {
+                layoutSym = "⊟";
+            } else {
+                layoutSym = "◫";
+            }
+        }
+    }
+    var recIcon = "⟳"; // auto-reconcile on
+    if (reconcilePaused) {
+        recIcon = "⏸"; // paused
+    }
+    final nwin = managed.len();
+    var wword = "windows";
+    if (nwin == 1) {
+        wword = "window";
+    }
+    var right = "{nwin} {wword}  {recIcon}"; // recIcon sits at the right edge — its click zone
+    if (layoutSym != "") {
+        right = "{layoutSym}  " + right;
+    }
+    if (cfg.statusFile.len() > 0) {
+        final status = config\readConfigText(cfg.statusFile);
+        if (status != null) {
+            final line = status!.trim();
+            if (line.len() > 0) {
+                right = line + "  ·  " + right;
+            }
+        }
+    }
+    if (evalNote.len() > 0 and os\time() - evalNoteAt < 6000.0) {
+        right = evalNote + "  ·  " + right;
+    }
+    statusbar\barUpdate(left, right: right);
+    if (cfg.trayOn) {
+        var tray = "▦ {curWs + 1}";
+        if (bindMode != "") {
+            tray = "▦ [{bindMode}]";
+        }
+        statusbar\trayUpdate(tray);
+    }
+}
+
+// cmdReload is the only way configuration changes apply (i3-style: edit,
+// then $mod+r — nothing watches files behind your back). It validates before
+// committing: the text config parses into a *candidate*, config.buzz runs
+// with its setters redirected at that candidate, and only if everything
+// succeeded does the candidate become live — a broken edit keeps the WM on
+// the previous configuration. On success the validated text config is
+// snapshotted to config.last-good, so reverting a bad edit is one copy.
+// restoreAllWindows un-minimizes every managed window and pulls any corner-parked
+// one back onto the active display — so quitting never strands a window where it
+// can't be reached. (A force-kill skips this; relaunch + `sweep` recovers them.)
+fun restoreAllWindows() > void {
+    foreach (pidv in hiddenPids) {
+        windows\setAppHidden((pidv as? int)!, hidden: false); // un-hide app-hidden workspaces
+    }
+    hiddenPids = mut [];
+    var off = 0.0;
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        windows\setMinimized(mm.ref, minimized: false);
+        if (mm.workspace != curWs and !mm.floating) {
+            // Corner-parked window (clamped to ~bottom-right) — cascade it back
+            // onto the active display so it's reachable.
+            windows\moveWindow(mm.ref, x: tiledCG[0] + 40.0 + off, y: tiledCG[1] + 40.0 + off);
+            off = off + 28.0;
+        }
+    }
+}
+
+fun cmdReload() > void {
+    final candidate = config\loadConfig(configPath());
+    cfgTarget = (candidate as? mut config\Config)!;
+    final ok = runBuzzConfig();
+    cfgTarget = null;
+    if (!ok) {
+        std\print("yeetile: reload aborted — kept the previous configuration");
+        return;
+    }
+    cfg = (candidate as? mut config\Config)!;
+    writeLastGood();
+    loadRules();
+    initScreens();
+    rescan();
+    final ak = tiledAppKit();
+    statusbar\barSetVisible(cfg.barOn, x: ak[0], y: ak[1], w: ak[2]);
+    retile();
+    updateBar();
+    std\print("yeetile: config reloaded ({cfg.binds.len()} binds)");
+}
+
+// writeLastGood snapshots the just-validated text config next to itself.
+fun writeLastGood() > void {
+    final text = config\readConfigText(configPath());
+    if (text == null) {
+        return;
+    }
+    try {
+        final f = io\File.open(configDir() + "/config.last-good", mode: io\FileMode.write);
+        f.write(text!);
+        f.close();
+    } catch (_: any) {
+        // last-good snapshot is a convenience; never fail a reload over it
+    }
+}
+
+// inspectLines is what the inspector overlay renders: the live objects —
+// screens, trees (tagged with app names), the registry, the effective
+// config. Everything here is also reachable from eval; the overlay is the
+// read-only window, the buzz> prompt is the write end.
+fun inspectLines() > [str] {
+    saveActive(); // so every screen's stored state is current
+    var res = [<str>];
+    res = res + ["yeetile — workspace {curWs + 1}, {managed.len()} managed, {screens.len()} tiled display(s)"];
+    foreach (si in 0..screens.len()) {
+        final sc = screenAt(si);
+        var marker = " ";
+        if (si == activeScreen) {
+            marker = "*";
+        }
+        res = res + [""];
+        res = res + ["{marker} screen {si + 1}  display {sc.disp}  {sc.cg[2]}x{sc.cg[3]} at {sc.cg[0]},{sc.cg[1]}  stacked={sc.stacked}"];
+        stampTags(sc.root);
+        res = res + layout\treeLines(sc.root, prefix: "    ");
+    }
+    res = res + [""];
+    res = res + ["registry:"];
+    foreach (m in managed) {
+        final mm = (m as? mut Managed)!;
+        var flags = "";
+        if (mm.floating) {
+            flags = " floating";
+        }
+        if (mm.workspace == scratchWs) {
+            flags = flags + " scratchpad";
+        }
+        res = res + ["    #{mm.id} {windows\appName(mm.pid)} — \"{windows\windowTitle(mm.ref)}\"  ws{mm.workspace + 1} scr{mm.screen + 1}{flags}"];
+    }
+    res = res + [""];
+    res = res + ["config: gaps {cfg.gapInner}/{cfg.gapOuter}  golden={cfg.goldenOn}  ffm={cfg.ffmOn}  border={cfg.borderOn}  binds={cfg.binds.len()}  rules={cfg.rules.len()}+{userWindowHooks.len()} hooks"];
+    return res;
+}
+
+// consoleLines is Retool's "explore what's available": every command the keymap,
+// rules, config.buzz, and the buzz> prompt can use — served by the live WM
+// itself, so it can't go stale the way external docs do.
+fun consoleLines() > [str] {
+    var res = [<str>];
+    res = res + ["yeetile console — every command (bindable, rule-able, eval-able) + what's in scope for buzz>"];
+    res = res + [""];
+    final cmds = [
+        "focus left|right|up|down|next|prev      move left|right|up|down",
+        "workspace N|back_and_forth              move workspace N",
+        "split horizontal|vertical               resize grow|shrink [width|height]",
+        "fullscreen [native]                     stacking toggle",
+        "golden toggle                           balance      undo",
+        "floating toggle                         frame X Y W H",
+        "snap left|right|top|bottom|topleft|topright|bottomleft|bottomright",
+        "snap first-third|center-third|last-third|first-two-thirds|last-two-thirds",
+        "snap max|center                         border",
+        "move scratchpad                         scratchpad show",
+        "mark <key>                              goto <key>",
+        "launcher [run|eval|windows]             inspector    console",
+        "rules apply                             layout save|restore|export",
+        "kill (also: yeetus)                     exec <shell> eval <buzz>",
+        "mode <name>                             retile       reload      quit",
+    ];
+    foreach (c in cmds) {
+        res = res + ["  " + c];
+    }
+    res = res + [""];
+    res = res + ["in scope for rules.buzz / config.buzz / eval (same session):"];
+    res = res + ["  runCommand(cmd)  runCommandFor(id, cmd: cmd)  onWindowRule(fn)"];
+    res = res + ["  managed  root  screens  cfg  curWs  countLeaves(n)  displays()"];
+    res = res + ["  reCompile/reMatch  fuzzyScore  treeLines  …and every module export"];
+    return res;
+}
+
+fun cmdConsole() > void {
+    if (inspector\inspVisible()) {
+        inspector\inspHide();
+        return;
+    }
+    final ak = tiledAppKit();
+    cheatsheet\sheetHide(); // mutually exclusive overlays — never stack the cheatsheet under this
+    inspector\inspShow(consoleLines(), cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+}
+
+fun cmdInspector() > void {
+    if (inspector\inspVisible()) {
+        inspector\inspHide();
+        return;
+    }
+    final ak = tiledAppKit();
+    cheatsheet\sheetHide(); // mutually exclusive overlays
+    inspector\inspShow(inspectLines(), cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+}
+
+fun onEvalLine(code: str) > void {
+    cmdEval(code);
+}
+
+// --- configuration as code: ~/.config/yeetile/config.buzz ---
+//
+// The config can be Buzz instead of (or on top of) the i3-style text file:
+// config.buzz runs inside the WM's session after the text config parses, with
+// the setter API below in scope — so settings can branch on real state
+// ("two displays? tile the second one"). Applied at startup and on `reload`.
+
+fun runBuzzConfig() > bool {
+    if (config\readConfigText(buzzConfigPath()) == null) {
+        return true; // no config.buzz is fine
+    }
+    var ok = false;
+    try {
+        io\runFile(buzzConfigPath());
+        std\print("yeetile: config.buzz applied");
+        ok = true;
+    } catch (e: any) {
+        std\print("yeetile: config.buzz: {e}");
+        ok = false;
+    }
+    return ok;
+}
+
+// cfgEdit is what the config.buzz setters mutate: the reload candidate while
+// one is being validated, the live config otherwise (startup).
+fun cfgEdit() > mut config\Config {
+    if (cfgTarget != null) {
+        return cfgTarget!;
+    }
+    return cfg;
+}
+
+// The config.buzz setter API. Each mirrors a text directive; bind() and
+// rule() append, clearBinds() starts the keymap from zero for purists.
+fun gapsInner(v: double) > void {
+    cfgEdit().gapInner = v;
+}
+
+fun gapsOuter(v: double) > void {
+    cfgEdit().gapOuter = v;
+}
+
+fun topPadding(v: double) > void {
+    cfgEdit().topPadding = v;
+}
+
+fun pollMs(v: int) > void {
+    cfgEdit().pollMs = v;
+}
+
+fun bar(on: bool) > void {
+    cfgEdit().barOn = on;
+}
+
+fun golden(on: bool) > void {
+    cfgEdit().goldenOn = on;
+}
+
+fun minSize(w: double, h: double) > void {
+    cfgEdit().minWidth = w;
+    cfgEdit().minHeight = h;
+}
+
+fun focusFollowsMouse(on: bool) > void {
+    cfgEdit().ffmOn = on;
+}
+
+fun tileDisplay(n: int) > void {
+    if (n >= 1) {
+        cfgEdit().tileDisplay = n;
+    }
+}
+
+fun bind(chord: str, command: str) > void {
+    final parsed = config\parseChord(chord);
+    if (parsed == null) {
+        std\print("yeetile: config.buzz: unknown chord \"{chord}\"");
+        return;
+    }
+    cfgEdit().binds.append(mut config\Bind{ flags = parsed![0], keycode = parsed![1], command = command });
+}
+
+fun clearBinds() > void {
+    cfgEdit().binds = mut [];
+}
+
+fun rule(line: str) > void {
+    final r = config\parseRule(line);
+    if (r == null) {
+        std\print("yeetile: config.buzz: bad rule \"{line}\"");
+        return;
+    }
+    cfgEdit().rules.append(r!);
+}
+
+// --- entry point ---
+
+// ensureAccessibility checks the one permission yeet needs and walks the
+// user through granting it: trigger macOS's native prompt (which registers
+// yeet in the Settings list), deep-link System Settings to the exact
+// pane, then poll the live trust state until the toggle flips. No SIP
+// changes, no root — one checkbox.
+fun ensureAccessibility() > bool {
+    if (permissions\axTrusted()) {
+        return true;
+    }
+    std\print("yeetile: macOS Accessibility permission needed (one checkbox; no SIP, no root).");
+    std\print("  Opening System Settings → Privacy & Security → Accessibility —");
+    std\print("  enable the terminal you run yeet from.");
+    permissions\promptAccessibility();
+    permissions\openAccessibilitySettings();
+    std\print("yeetile: waiting for the toggle (up to 2 minutes, Ctrl-C to give up)…");
+    var waited = 0;
+    while (waited < 120000) {
+        os\sleep(2000.0);
+        waited = waited + 2000;
+        if (permissions\axTrusted()) {
+            std\print("yeetile: permission granted — starting.");
+            return true;
+        }
+    }
+    std\print("yeetile: still not trusted. Flip the toggle, then run yeet again.");
+    return false;
+}
+
+fun main(args: [str]) > void {
+    std\print("yeet — an i3-flavored tiling window manager, in Buzz");
+    if (!frameworks\onMacOS()) {
+        std\print("yeetile: this program drives macOS frameworks and only runs there.");
+        os\exit(1);
+        return;
+    }
+    if (!ensureAccessibility()) {
+        os\exit(1);
+        return;
+    }
+    cfg = (config\loadConfig(configPath()) as? mut config\Config)!;
+    runBuzzConfig();
+    initScreens();
+    loadRules();
+    rescan();
+    syncFocus();
+    retile();
+    if (!events\installTaps()) {
+        std\print("yeetile: could not create the key event tap.");
+        std\print("  If the permission was granted just now, macOS may want a fresh");
+        std\print("  process before honoring it — run yeet once more.");
+        os\exit(1);
+        return;
+    }
+    pushChords(); // publish the swallow set to the tap helper
+    launcher\launcherOnEval(onEvalLine);
+    launcher\launcherOnPick(onWindowPick);
+    if (cfg.trayOn) {
+        statusbar\trayInit("▦"); // menu-bar presence; updateBar keeps it live
+    }
+    if (cfg.barOn) {
+        final ak = tiledAppKit();
+        statusbar\barInit(ak[0], y: ak[1], w: ak[2]);
+        updateBar();
+    }
+    foreach (e in cfg.execs) {
+        final cmd = (e as? str)!;
+        runCommand("exec " + cmd); // autostart lines, i3-style (startup only)
+    }
+    std\print("yeetile: managing {layout\countLeaves(root)} windows, {cfg.binds.len()} binds, event-driven, reconcile every {cfg.pollMs}ms");
+
+    // The WM loop: pump the run loop (the tap callbacks fire and the AppKit
+    // overlays redraw), drain the key/mouse queues, and rescan every pollMs.
+    var lastScanAt = os\time();
+    while (true) {
+        events\pump(0.04); // ~25 Hz; hotkey latency is one pump at most
+        events\setGrab(launcher\launcherActive()); // grab the keyboard while the launcher is up
+        var et = events\pollKey();
+        while (et != 0) {
+            handleKey(et, code: events\keycode(), flags: events\flags());
+            et = events\pollKey();
+        }
+        if (cfg.ffmOn and events\pollMouse()) {
+            handleMouse(events\mouseX(), y: events\mouseY());
+        }
+        if (events\pollClick()) {
+            lastDownX = events\clickX();
+            lastDownY = events\clickY();
+            handleBarClick(lastDownX, gy: lastDownY); // clickable status bar
+        }
+        if (events\pollRelease()) {
+            final rx = events\releaseX();
+            final ry = events\releaseY();
+            // Only a real drag (moved between down and up) triggers the reflow scan.
+            if (absD(rx - lastDownX) + absD(ry - lastDownY) > 24.0) {
+                handleRelease(rx, uy: ry);
+            }
+        }
+        drainWindowEvents(); // event-driven: react to window lifecycle immediately
+        final now: double = os\time();
+        if (now - lastScanAt >= std\toDouble(cfg.pollMs)) {
+            lastScanAt = now;
+            if (!reconcilePaused) {
+                tick(); // slow safety reconcile — catches anything the observers missed
+            }
+        }
+    }
+}
+

@@ -6,20 +6,19 @@
 
 import "magus";
 
-// One aggregate import binds `extra`; modules hang off it (extra.os, extra.fs,
-// extra.vcs, extra.archive). It carries only what Buzz's stdlib lacks — stdout
-// capture, path join/glob/basename, fs.watch, git introspection, tar.gz
-// compression. Methods are camelCase, Buzz's convention.
-import "magus/extra";
-
-// Buzz's own stdlib for the rest, so `extra` doesn't shadow it: `fs` for
-// makeDirectory/delete, `crypto` for hash (over the bytes extra.fs.readFile
-// returns). The aggregate deliberately leaves these bare names free.
-import "fs";
-import "crypto";
-// Buzz's stdlib os, for reading $GITHUB_OUTPUT in the ci-shard target. `extra.os`
-// (set/exec) doesn't expose a plain env read; `os.env` does. Both coexist.
+// Host utility modules are imported under bare names. magus layers its host
+// methods onto Buzz's stdlib, so one `import "fs"` carries both Buzz's
+// fs.makeDirectory/delete and magus's fs.join/glob/readFile/basename/watch, and
+// `import "os"` carries os.env (Buzz, reads $GITHUB_OUTPUT) alongside
+// os.exec/stdinIsTerminal (magus). vcs (git introspection) and archive (tar.gz)
+// are magus-only. Methods are camelCase, Buzz's convention.
 import "os";
+import "fs";
+import "vcs";
+import "archive";
+// crypto carries Buzz's hash() and HashAlgorithm enum (used over the bytes
+// fs.readFile returns) plus magus's digest/hmac helpers.
+import "crypto";
 // serialize for the ci-shard target's JSON shaping (decode the affected plan,
 // re-encode the GitHub matrix). The GitHub-specific output stays in Buzz here,
 // out of the Go tree — magus emits only the provider-neutral plan.
@@ -53,7 +52,7 @@ magus.cache.remote(github);
 // The go spell claims **/*.go, so editing Go sources marks this project affected
 // for `magus affected ci`. outputs are the regenerable artifacts the cache
 // snapshots after generate/release.
-magus.project.register(".", {
+magus.project.register(fun(p, cb) > bool { cb({
     "spells": [magus.spell.get("magusfile"), go, buzz, md],
     "outputs": [
         "internal/std/gen/buzz/*.go",
@@ -78,18 +77,18 @@ magus.project.register(".", {
         // time; a cache hit would skip the write and leave the matrix job blank.
         "ci-shard": {"cachable": false},
     },
-});
+}); return true; });
 
 // ── build metadata ───────────────────────────────────────────────────────────
 
 fun version() > str {
-    final v = extra.os.exec("git", ["describe", "--tags", "--always", "--dirty"]).stdout;
+    final v = os.exec("git", ["describe", "--tags", "--always", "--dirty"]).stdout;
     if (v == "") { return "unknown"; }
     return v;
 }
 
 fun commit() > str {
-    final c = extra.vcs.shortHash();
+    final c = vcs.shortHash();
     if (c == "") { return "unknown"; }
     return c;
 }
@@ -97,7 +96,7 @@ fun commit() > str {
 // The commit's record date (RFC3339), not wall-clock, so the same source tree
 // builds reproducibly. nil when built outside a repo (e.g. from a tarball).
 fun build_date() > str {
-    final c = extra.vcs.commit();
+    final c = vcs.commit();
     if (c == null) { return "unknown"; }
     return c.date;
 }
@@ -113,13 +112,18 @@ fun ld_flags() > str {
 
 // Compiles the version-stamped magus binary. The raw flags append to `go build`,
 // with the linker flags passed as ordinary args; mcp compiles in the server,
-// selfmanage enables `magus self update`.
+// selfmanage enables `magus self update`. GOEXPERIMENT=jsonv2 selects the
+// encoding/json/v2 codec (internal/codec) for faster JSON marshaling — matching
+// CI and the Dockerfiles, so a dogfooded build is not silently stuck on v1.
 export fun go_build(args: [str]) > void {
-    go["go-build"]({"args": ["-trimpath",
-        "-ldflags", ld_flags(),
-        "-tags", "mcp,selfmanage",
-        "-o", "magus",
-        "./cmd/magus"]});
+    go["go-build"]({
+        "env": {"GOEXPERIMENT": "jsonv2"},
+        "args": ["-trimpath",
+            "-ldflags", ld_flags(),
+            "-tags", "mcp,selfmanage",
+            "-o", "magus",
+            "./cmd/magus"],
+    });
 }
 
 // ── image targets ────────────────────────────────────────────────────────────
@@ -145,7 +149,7 @@ export fun image_build(args: [str]) > void {
         "-t", image_tag(),
         "."]});
     if (magus.has_charm("cd")) {
-        extra.os.exec("docker", ["push", image_tag()]);
+        os.exec("docker", ["push", image_tag()]);
     }
 }
 
@@ -157,14 +161,14 @@ export fun image_scan(args: [str]) > void {
     magus.depends_on(["image-build"]);
     if (magus.has_charm("rw")) {
         fs.makeDirectory("dist");
-        extra.os.exec("trivy", ["image",
+        os.exec("trivy", ["image",
             "--format", "sarif",
-            "--output", extra.fs.join("dist", "trivy.sarif"),
+            "--output", fs.join("dist", "trivy.sarif"),
             "--severity", "HIGH,CRITICAL",
             "--exit-code", "1",
             image_tag()]);
     } else {
-        extra.os.exec("trivy", ["image", image_tag()]);
+        os.exec("trivy", ["image", image_tag()]);
     }
 }
 
@@ -173,11 +177,11 @@ export fun image_scan(args: [str]) > void {
 // Renders the man pages and mirrors them into the embed dir so the shipped binary
 // carries the current set for `magus self install`.
 export fun man_generate(args: [str]) > void {
-    fs.makeDirectory(extra.fs.join("manpage", "gen"));
-    fs.makeDirectory(extra.fs.join("cmd", "magus", "manpages"));
-    extra.os.exec("go", ["run", "./cmd/manpage-gen", "-format", "roff", "-out", extra.fs.join("manpage", "gen")]);
-    foreach (page in extra.fs.glob(extra.fs.join("manpage", "gen", "*.1"))) {
-        extra.fs.writeFile(extra.fs.join("cmd", "magus", "manpages", extra.fs.basename(page)), extra.fs.readFile(page));
+    fs.makeDirectory(fs.join("manpage", "gen"));
+    fs.makeDirectory(fs.join("cmd", "magus", "manpages"));
+    os.exec("go", ["run", "./cmd/manpage-gen", "-format", "roff", "-out", fs.join("manpage", "gen")]);
+    foreach (page in fs.glob(fs.join("manpage", "gen", "*.1"))) {
+        fs.writeFile(fs.join("cmd", "magus", "manpages", fs.basename(page)), fs.readFile(page));
     }
 }
 
@@ -189,18 +193,18 @@ export fun man_generate(args: [str]) > void {
 // Regenerates the Go host bindings (internal/std -> gen/buzz) from the
 // std.Module declarations.
 export fun bindings_generate(args: [str]) > void {
-    extra.os.exec("go", ["generate", "./internal/std/..."]);
+    os.exec("go", ["generate", "./internal/std/..."]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spell/gen).
 export fun spells_generate(args: [str]) > void {
-    extra.os.exec("go", ["generate", "./internal/spell/..."]);
+    os.exec("go", ["generate", "./internal/spell/..."]);
 }
 
 // Regenerates the CLI config-flag plumbing (cmd/magus/gen, schema fields, env
 // bindings) from internal/config/config.go.
 export fun config_generate(args: [str]) > void {
-    extra.os.exec("go", ["generate", "./cmd/magus/..."]);
+    os.exec("go", ["generate", "./cmd/magus/..."]);
 }
 
 // Regenerates the committed Markdown that feeds the docs site — module reference
@@ -208,8 +212,8 @@ export fun config_generate(args: [str]) > void {
 // under docs/ as registered outputs, so a stale doc trips the drift gate. The
 // `site` project renders this Markdown into HTML (see site/magusfile.bzz).
 export fun docs_generate(args: [str]) > void {
-    extra.os.exec("go", ["run", "./cmd/magus-docs-gen", "-out", "./docs/modules"]);
-    extra.os.exec("go", ["run", "./cmd/manpage-gen", "-format", "md", "-out", "./docs/manpage/gen"]);
+    os.exec("go", ["run", "./cmd/magus-docs-gen", "-out", "./docs/modules"]);
+    os.exec("go", ["run", "./cmd/manpage-gen", "-format", "md", "-out", "./docs/manpage/gen"]);
 }
 
 // Renders MAGUS.md (this catalog + dependency graph) via `magus describe graph`.
@@ -219,7 +223,7 @@ export fun docs_generate(args: [str]) > void {
 export fun md_generate(args: [str]) > void {
     // magus.cmd captures the subcommand's stdout (trimmed); re-add the trailing newline.
     final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
-    extra.fs.writeFile("MAGUS.md", doc + "\n");
+    fs.writeFile("MAGUS.md", doc + "\n");
 }
 
 // Regenerates every committed tree (the `*-generate` siblings), then gates on
@@ -237,7 +241,7 @@ export fun generate(args: [str]) > void {
     magus.depends_on(magus.target.expand_globs("*-generate"));
     if (magus.has_charm("rw")) { return; }
 
-    final drift = extra.os.exec("git", ["status", "--porcelain", "--", "."]).stdout;
+    final drift = os.exec("git", ["status", "--porcelain", "--", "."]).stdout;
     if (drift != "") {
         throw "generate: working tree is dirty after regeneration; if generated "
             + "files drifted, re-run `magus run generate:rw` and commit:\n" + drift;
@@ -264,33 +268,35 @@ export fun release(args: [str]) > void {
         var binary = "magus";
         if (goos == "windows") { binary = "magus.exe"; }
 
-        // Stage each binary in its own dir: extra.archive.compress archives a
+        // Stage each binary in its own dir: archive.compress archives a
         // directory's contents, so this puts just the binary at the archive root.
-        final stage = extra.fs.join("dist", goos + "-" + goarch);
+        final stage = fs.join("dist", goos + "-" + goarch);
         fs.makeDirectory(stage);
         go["go-build"]({
-            "env": {"GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "0"},
-            "args": ["-trimpath", "-ldflags", flags, "-o", extra.fs.join(stage, binary), "./cmd/magus"],
+            // GOEXPERIMENT=jsonv2 selects the encoding/json/v2 codec so every
+            // released binary ships the v2 marshaler (matches go_build, CI, Docker).
+            "env": {"GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "0", "GOEXPERIMENT": "jsonv2"},
+            "args": ["-trimpath", "-ldflags", flags, "-o", fs.join(stage, binary), "./cmd/magus"],
         });
 
-        final asset = extra.fs.join("dist", "magus_" + v + "_" + goos + "_" + goarch + ".tar.gz");
-        extra.archive.compress(stage, asset, {});
+        final asset = fs.join("dist", "magus_" + v + "_" + goos + "_" + goarch + ".tar.gz");
+        archive.compress(stage, asset, {});
         fs.delete(stage);
     }
     var sums = "";
-    foreach (asset in extra.fs.glob(extra.fs.join("dist", "magus_*.tar.gz"))) {
-        final digest = crypto.hash(crypto.HashAlgorithm.Sha256, extra.fs.readFile(asset));
-        sums = sums + digest + "  " + extra.fs.basename(asset) + "\n";
+    foreach (asset in fs.glob(fs.join("dist", "magus_*.tar.gz"))) {
+        final digest = crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(asset));
+        sums = sums + digest + "  " + fs.basename(asset) + "\n";
     }
-    extra.fs.writeFile(extra.fs.join("dist", "SHA256SUMS"), sums);
+    fs.writeFile(fs.join("dist", "SHA256SUMS"), sums);
 }
 
 // ── dev watch ─────────────────────────────────────────────────────────────────
-// Rebuilds on every debounced change until interrupted (Ctrl-C). extra.fs.watch
+// Rebuilds on every debounced change until interrupted (Ctrl-C). fs.watch
 // BLOCKS; try/catch keeps a failing build from ending the watch.
 export fun watch(args: [str]) > void {
     magus.info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
-    extra.fs.watch(["cmd", "internal"], fun(changed: [str]) > bool {
+    fs.watch(["cmd", "internal"], fun(changed: [str]) > bool {
         magus.info("change detected — rebuilding");
         try {
             go_build([]);
@@ -334,11 +340,11 @@ fun badge_color(pct: str) > str {
 // Runs the suite with -coverprofile, reads the total off `go tool cover -func`,
 // and writes the coverage.svg badge (color picked by threshold) via the shim.
 export fun coverage(args: [str]) > void {
-    extra.os.exec("go", ["test", "-covermode=atomic", "-coverprofile=coverage.out", "./..."]);
-    final pct = total_coverage(extra.os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
-    final svg = extra.os.exec("go", ["run", "./cmd/coverage-badge",
+    os.exec("go", ["test", "-covermode=atomic", "-coverprofile=coverage.out", "./..."]);
+    final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
+    final svg = os.exec("go", ["run", "./cmd/coverage-badge",
         "-label", "coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
-    extra.fs.writeFile("coverage.svg", svg);
+    fs.writeFile("coverage.svg", svg);
 }
 
 // ── buzz dogfood ───────────────────────────────────────────────────────────────
@@ -430,7 +436,7 @@ export fun ci_shard(args: [str]) > void {
     // reads as "") — either way name the command instead of hanging or failing with
     // a cryptic JSON-decode error downstream.
     var input = "";
-    if (!extra.os.stdinIsTerminal()) {
+    if (!os.stdinIsTerminal()) {
         input = io.stdin.readAll();
     }
     if (input == "") {
@@ -461,6 +467,6 @@ export fun ci_shard(args: [str]) > void {
         throw "ci-shard: the gha charm is set but $GITHUB_OUTPUT is unset — run this inside a GitHub Actions step";
     }
     var existing = "";
-    if (extra.fs.exists(p)) { existing = extra.fs.readFile(p); }
-    extra.fs.writeFile(p, existing + block);
+    if (fs.exists(p)) { existing = fs.readFile(p); }
+    fs.writeFile(p, existing + block);
 }

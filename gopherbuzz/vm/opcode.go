@@ -132,7 +132,7 @@ const (
 
 	// Superinstruction (peephole fusion, see chunk.go FusePeephole).
 	//
-	// OpLocalConstOp fuses GetLocal;LoadConst;<binop> into one dispatch.
+	// OpBinLC fuses GetLocal;LoadConst;<binop> into one dispatch.
 	//   A = local slot (relative to frame.base)
 	//   B = const-pool index (low 24 bits) | sub-opcode (high 8 bits)
 	// The sub-opcode is the original binary op (OpAdd…OpGreaterEqual). The handler
@@ -140,21 +140,21 @@ const (
 	// dispatches — then runs the *same* polymorphic op, so it is sound even when the
 	// operands aren't the static type the checker inferred. The two absorbed slots
 	// stay as OpNop for jump-target index stability and are skipped at runtime.
-	OpLocalConstOp
+	OpBinLC
 
-	// OpLocalLocalOp fuses GetLocal;GetLocal;<binop> into one dispatch.
+	// OpBinLL fuses GetLocal;GetLocal;<binop> into one dispatch.
 	//   A = left slot (relative to frame.base)
 	//   B = right slot (low 16 bits) | sub-opcode (high 16 bits)
-	// Same discipline as OpLocalConstOp. Targets the two-local arithmetic pattern
-	// (e.g. sum + i) that OpLocalConstOp does not cover.
-	OpLocalLocalOp
+	// Same discipline as OpBinLC. Targets the two-local arithmetic pattern
+	// (e.g. sum + i) that OpBinLC does not cover.
+	OpBinLL
 
-	// OpForCondLC fuses GetLocal;LoadConst;<cmp>;JumpFalse into one dispatch.
+	// OpCmpLC fuses GetLocal;LoadConst;<cmp>;JumpFalse into one dispatch.
 	//   A = local slot; B = const-pool index (low 24 bits) | cmp-opcode (high 8 bits)
 	//   The jump target is stored in code[ip].A (the first absorbed OpNop);
 	//   three OpNop slots follow the super for jump-target stability.
 	// Covers the canonical while/for loop condition (i < N).
-	OpForCondLC
+	OpCmpLC
 
 	// OpCheckType asserts that the value on top of the stack has the runtime
 	// primitive type named by operand A (one of CheckInt/CheckFloat/CheckStr/

@@ -2,7 +2,7 @@
 
 Pure path-string math: abs, rel, clean, is_abs, expand_user.
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.path.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "path"`) and call methods in `camelCase` (`path.someMethod`).
 
 ## Methods
 
@@ -10,7 +10,7 @@ Pure path-string math: abs, rel, clean, is_abs, expand_user.
 
 Return the absolute form of path, resolved against the current directory and lexically cleaned.
 
-**Signature:** `extra.path.abs(path) → string`
+**Signature:** `path.abs(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -22,7 +22,7 @@ Return the absolute form of path, resolved against the current directory and lex
 
 Return a relative path from base to target; errors if no relative path exists.
 
-**Signature:** `extra.path.rel(base, target) → string`
+**Signature:** `path.rel(base, target) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -35,7 +35,7 @@ Return a relative path from base to target; errors if no relative path exists.
 
 Return the shortest lexically-equivalent path (resolves . and .., collapses separators).
 
-**Signature:** `extra.path.clean(path) → string`
+**Signature:** `path.clean(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -47,7 +47,7 @@ Return the shortest lexically-equivalent path (resolves . and .., collapses sepa
 
 Report whether path is absolute.
 
-**Signature:** `extra.path.isAbs(path) → bool`
+**Signature:** `path.isAbs(path) → bool`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -59,7 +59,7 @@ Report whether path is absolute.
 
 Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.
 
-**Signature:** `extra.path.expandUser(path) → string`
+**Signature:** `path.expandUser(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

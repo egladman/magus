@@ -1,0 +1,18 @@
+// @expect: caught: File.open
+// A host (Go-side) function failure is a catchable Buzz error, mirroring
+// upstream's `!>` semantics: try/catch receives the message as a str instead
+// of the VM aborting. (Without a try, it still aborts the run as before.)
+import "std";
+import "io";
+var __r = "not caught";
+try {
+    final f = io.File.open("/definitely/not/here/buzz-try-host-42", io.FileMode.read);
+    f.close();
+} catch (e) {
+    final msg: str = "{e}";
+    if (msg.startsWith("File.open")) {
+        __r = "caught: File.open";
+    } else {
+        __r = "caught unexpected: {msg}";
+    }
+}

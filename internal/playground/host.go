@@ -15,7 +15,7 @@ import (
 func installHost(sess *buzz.Session, rec *Recorder) {
 	buzzstd.RegisterWithOutput(sess, &rec.out)
 
-	sess.SetGlobal("magus", buildMagus(rec))
+	sess.SetGlobal("magus", buildMagus(sess, rec))
 	sess.SetSyntheticModule("magus/extra", buildExtra(rec))
 	for name, ops := range builtinSpellOps {
 		sess.SetSyntheticModule("magus/spell/"+name, buildSpell(name, ops, rec))
@@ -34,12 +34,16 @@ func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) 
 	return buzz.DirectValue(name, f)
 }
 
-func buildMagus(rec *Recorder) buzz.Value {
+func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 	m := buzz.NewMap()
 
 	project := buzz.NewMap()
-	project.MapSet("register", fn("magus.project.register", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
-		rec.recordProject(args)
+	project.MapSet("register", fn("magus.project.register", func(ctx context.Context, args []buzz.Value) (buzz.Value, error) {
+		path, opts, err := captureRegister(ctx, sess, args)
+		if err != nil {
+			return buzz.Null, err
+		}
+		rec.recordProject(path, opts)
 		return buzz.Null, nil
 	}))
 	m.MapSet("project", project)
@@ -82,15 +86,45 @@ func buildMagus(rec *Recorder) buzz.Value {
 	return m
 }
 
-// recordProject flattens a magus.project.register(path, opts) call into the
-// graph model. It mirrors parseBuzzProjectOpts in the real binding.
-func (r *Recorder) recordProject(args []buzz.Value) {
-	p := Project{}
+// captureRegister runs a magus.project.register configurator and returns the
+// project path plus the options map it emits. It mirrors recordProjectOpts in the
+// real binding: register(fn) configures this project (path defaults to "."),
+// register(path, fn) an explicit one; the configurator emits its options via
+// cb({...}). Returns a null opts value (no-op) for a malformed call.
+func captureRegister(ctx context.Context, sess *buzz.Session, args []buzz.Value) (string, buzz.Value, error) {
+	path := "."
+	var configurator buzz.Value
 	if len(args) >= 1 && args[0].IsStr() {
-		p.Path = args[0].AsString()
+		path = args[0].AsString()
+		if len(args) >= 2 {
+			configurator = args[1]
+		}
+	} else if len(args) >= 1 {
+		configurator = args[0]
 	}
-	if len(args) >= 2 && args[1].IsMap() {
-		opts := args[1]
+	if !configurator.IsFun() {
+		return path, buzz.Null, nil
+	}
+	captured := buzz.Null
+	cb := buzz.DirectValue("magus.cb", func(_ context.Context, a []buzz.Value) (buzz.Value, error) {
+		if len(a) > 0 {
+			captured = a[0]
+		}
+		return buzz.Null, nil
+	})
+	p := buzz.NewMap()
+	p.MapSet("path", buzz.StrValue(path))
+	if _, err := sess.CallValue(ctx, configurator, []buzz.Value{p, cb}); err != nil {
+		return path, buzz.Null, err
+	}
+	return path, captured, nil
+}
+
+// recordProject flattens the path and emitted options of a magus.project.register
+// call into the graph model. It mirrors parseBuzzProjectOpts in the real binding.
+func (r *Recorder) recordProject(path string, opts buzz.Value) {
+	p := Project{Path: path}
+	if opts.IsMap() {
 		if v, ok := opts.MapGet("depends_on"); ok {
 			p.DependsOn = valToStrings(v)
 		}

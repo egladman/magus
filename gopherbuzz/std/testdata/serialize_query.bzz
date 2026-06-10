@@ -1,0 +1,6 @@
+// @expect: 0.25
+// Boxed.q accepts upstream's list-path form — str keys for maps, int indices
+// for lists — navigated multi-segment, plus the floatValue() accessor alias.
+import "serialize";
+final b = serialize.jsonDecode("\{\"ws\": [\{\"ratio\": 0.5}, \{\"ratio\": 0.25}]}");
+final __r = b.q(["ws", 1, "ratio"]).floatValue();

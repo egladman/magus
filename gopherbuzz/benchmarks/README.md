@@ -1,13 +1,13 @@
-# buzz benchmarks
+# gopherbuzz benchmarks
 
-Microbenchmarks for the Buzz VM. The benchmark code lives in `bench_test.go`
+Microbenchmarks for the gopherbuzz VM. The benchmark code lives in `bench_test.go`
 (and `vm/*_test.go`); this directory holds the optimization analysis and the
-cross-language comparison. Result dumps are not committed — regenerate them.
+cross-language comparison. Result dumps are not committed - regenerate them.
 
 ## Run
 
 ```sh
-# all buzz benchmarks (from the gopherbuzz module root)
+# all gopherbuzz benchmarks (from the gopherbuzz module root)
 go test -run='^$' -bench=. -benchmem ./...
 
 # one benchmark
@@ -48,11 +48,14 @@ interpreter.)
 
 ## Cross-language comparison
 
-`comparison/` is a separate module benchmarking Buzz against gopher-lua, tengo,
-and goja. See `comparison/README.md`.
+`comparison/` is a separate module benchmarking gopherbuzz against gopher-lua,
+tengo, and goja. Every engine runs under the same two protocols - `Warm` (reused VM)
+and `Fresh` (new VM per iteration) - so the field is level; sub-benchmarks are
+named `Workload/Protocol/Engine`. See `comparison/README.md`.
 
 ```sh
 cd comparison && GOWORK=off go test -run='^$' -bench=. -benchmem .
+cd comparison && GOWORK=off go test -run='^$' -bench='LoopSum/Warm' -benchmem . # one cell
 ```
 
 ## Read

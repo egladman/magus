@@ -1,0 +1,68 @@
+// focusring.buzz — i3-style high-contrast border around the focused window.
+//
+// The AX API cannot draw, so the ring is four thin always-on-top panels from
+// the platform toolkit, click-through (uiIgnoreMouse) so they never steal
+// input. Honest caveats versus i3, where the border is part of the window
+// frame: the ring sits *above* window edges, and it follows user-initiated
+// drags only as fast as the poll tick re-reads frames. Off by default
+// (`border on` to enable).
+
+namespace focusring;
+
+import "platform/macos/cocoa";
+
+var strips = mut [<ud>];   // four panel handles, created once
+var visible = false;
+var lastKey = "";      // frame+width signature; skip redundant repositioning
+
+fun stripAt(i: int) > ud? {
+    return strips[i];
+}
+
+fun ringInit() > void {
+    if (strips.len() > 0) {
+        return;
+    }
+    cocoa\uiInit();
+    foreach (_ in 0..4) {
+        final p = cocoa\uiPanel(0.0, y: 0.0, w: 1.0, h: 1.0, gray: 1.0, alpha: 0.9); // near-white, high contrast
+        cocoa\uiIgnoreMouse(p);
+        if (p != null) {
+            strips.append(p!);
+        }
+    }
+}
+
+// ringShow frames (x, y, w, h) — CG global coordinates — with a border of
+// the given width drawn just outside the window. mainH converts to AppKit's
+// bottom-left origin.
+export fun ringShow(x: double, y: double, w: double, h: double, bw: double, mainH: double) > void {
+    ringInit();
+    final key = "{x},{y},{w},{h},{bw}";
+    if (visible and key == lastKey) {
+        return;
+    }
+    lastKey = key;
+    final akTop = mainH - y;          // AppKit y of the window's top edge
+    final akBottom = mainH - (y + h); // …and bottom edge
+    // top, bottom, left, right strips (drawn outside the frame)
+    cocoa\uiSetPanelFrame(stripAt(0), x: x - bw, y: akTop, w: w + bw * 2.0, h: bw);
+    cocoa\uiSetPanelFrame(stripAt(1), x: x - bw, y: akBottom - bw, w: w + bw * 2.0, h: bw);
+    cocoa\uiSetPanelFrame(stripAt(2), x: x - bw, y: akBottom, w: bw, h: h);
+    cocoa\uiSetPanelFrame(stripAt(3), x: x + w, y: akBottom, w: bw, h: h);
+    foreach (s in strips) {
+        cocoa\uiShow(s);
+    }
+    visible = true;
+}
+
+export fun ringHide() > void {
+    if (!visible) {
+        return;
+    }
+    visible = false;
+    lastKey = "";
+    foreach (s in strips) {
+        cocoa\uiHide(s);
+    }
+}

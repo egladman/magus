@@ -102,5 +102,15 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzStrVal(ret0), nil
 	}))
+	m.MapSet("retry", buzz.DirectValue("os.retry", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		max := bzInt(bzArgs, 0, 0)
+		fn := bzCallback(sess, bzArgs, 1)
+		opts := bzAnyMap(bzArgs, 2)
+		ret0, err := std.OsRetry(ctx, max, fn, opts)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzAnyVal(ret0), nil
+	}))
 	return m
 }

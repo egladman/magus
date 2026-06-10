@@ -190,8 +190,9 @@ func preloadMagusfiles(ctx context.Context, m *Magus) error {
 			}
 			return fmt.Errorf("magus: preload %q: %w", p.Path, err)
 		}
+		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
-			if _, err := interp.Parse(ctx, src); err != nil {
+			if _, err := interp.Parse(pctx, src); err != nil {
 				return fmt.Errorf("magus: preload %q: %w", p.Path, err)
 			}
 		}

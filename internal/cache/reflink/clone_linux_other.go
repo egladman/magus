@@ -13,10 +13,10 @@ import (
 	"os"
 )
 
-// Probe always returns false on 32-bit Linux; no CoW fast path is available.
-func Probe(_ string) bool { return false }
+// probe always returns false on 32-bit Linux; no CoW fast path is available.
+func probe(_ string) bool { return false }
 
-func Clone(src, dst string) error {
+func clone(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err

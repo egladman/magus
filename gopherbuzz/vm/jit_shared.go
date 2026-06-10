@@ -151,16 +151,28 @@ func depths(chunk *Chunk) (entry []int, maxDepth int, ok bool) {
 		case OpNop:
 		case OpLoadConst, OpGetLocal:
 			d++
-		case OpSetLocal, OpJumpFalse,
+		case OpSetLocal, OpJumpFalse, OpPop,
 			OpAdd, OpSub, OpMul, OpDiv, OpMod,
 			OpEqual, OpNotEqual, OpLess, OpLessEqual, OpGreater, OpGreaterEqual:
+			// OpPop drops the operand-stack top; in the backends' static-depth
+			// model that slot is simply abandoned (overwritten by the next push),
+			// so OpPop emits no code — only the depth decrements here.
 			d--
+		case OpJumpFalsePeek, OpJumpTruePeek:
+			// Short-circuit peek-jumps (the `and`/`or` operators). They test the
+			// top WITHOUT popping (depth unchanged) and the compiler only ever
+			// targets them forward (the end of the &&/|| expression). A backward
+			// peek-jump would be a control-flow shape the backends don't emit, so
+			// bail rather than miscompile it.
+			if int(ins.A) <= ip {
+				return nil, 0, false
+			}
 		case OpJump:
-		case OpForCondLC:
+		case OpCmpLC:
 			if !constIsNumeric(chunk, int(uint32(ins.B)&0xFFFFFF)) {
 				return nil, 0, false
 			}
-		case OpLocalConstOp:
+		case OpBinLC:
 			if !constIsNumeric(chunk, int(ins.B&0xFFFFFF)) {
 				return nil, 0, false
 			}
@@ -171,7 +183,7 @@ func depths(chunk *Chunk) (entry []int, maxDepth int, ok bool) {
 				}
 				d++
 			}
-		case OpLocalLocalOp:
+		case OpBinLL:
 			sub := OpCode(uint32(ins.B) >> 16 & 0x7FFF)
 			if ins.C == 0 {
 				if sub == OpAdd || sub == OpSub {

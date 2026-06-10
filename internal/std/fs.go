@@ -149,6 +149,53 @@ var Fs = Module{
 			Returns: nil,
 			Impl:    FsWatch,
 		},
+		{
+			Name: "walk",
+			Doc:  "Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.",
+			Args: []Arg{
+				{Name: "root", Type: TypeString},
+				{Name: "callback", Type: TypeFunc},
+			},
+			Returns: nil,
+			Impl:    FsWalk,
+		},
+		{
+			Name:    "append_file",
+			Doc:     "Append content to path (creating if absent, mode 0644).",
+			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "content", Type: TypeString}},
+			Returns: nil,
+			Impl:    FsAppendFile,
+		},
+		{
+			Name:    "chmod",
+			Doc:     "Change the permission bits of path to mode (octal integer, e.g. 0755).",
+			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "mode", Type: TypeInt}},
+			Returns: nil,
+			Impl:    FsChmod,
+		},
+		{
+			Name:    "symlink",
+			Doc:     "Create a symbolic link at link pointing to target.",
+			Args:    []Arg{{Name: "target", Type: TypeString}, {Name: "link", Type: TypeString}},
+			Returns: nil,
+			Impl:    FsSymlink,
+		},
+		{
+			Name:    "readlink",
+			Doc:     "Return the target of the symbolic link at path.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    FsReadlink,
+		},
+		{
+			Name: "temp_dir",
+			Doc:  "Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.",
+			Args: []Arg{
+				{Name: "prefix", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    FsTempDir,
+		},
 	},
 }
 
@@ -466,6 +513,101 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 			}
 		}
 	}
+}
+
+// FsWalk walks the directory tree rooted at root, calling cb(path, isDir) for
+// each entry in lexical order. If the callback returns true the walk stops early.
+// Sandbox-denied entries are silently skipped (dirs skip their whole subtree;
+// files are just omitted), matching the filtering policy of FsGlob.
+func FsWalk(ctx context.Context, root string, cb Callback) error {
+	if err := checkRead(ctx, root); err != nil {
+		return err
+	}
+	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if rerr := checkRead(ctx, path); rerr != nil {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil //nolint:nilerr // sandbox-denied path silently skipped
+		}
+		ret, callErr := cb.Call(ctx, path, d.IsDir())
+		if callErr != nil {
+			return callErr
+		}
+		if callbackTruthy(ret) {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+}
+
+// FsAppendFile appends content to path (creating the file if absent, mode 0644),
+// subject to the sandbox write policy.
+func FsAppendFile(ctx context.Context, path, content string) error {
+	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
+	if err != nil {
+		return fmt.Errorf("fs.append_file %q: %w", path, err)
+	}
+	_, werr := f.WriteString(content)
+	if cerr := f.Close(); cerr != nil && werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return fmt.Errorf("fs.append_file %q: %w", path, werr)
+	}
+	return nil
+}
+
+// FsChmod changes the permission bits of path, subject to the sandbox write policy.
+func FsChmod(ctx context.Context, path string, mode int) error {
+	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	if err := os.Chmod(path, os.FileMode(mode)); err != nil {
+		return fmt.Errorf("fs.chmod %q: %w", path, err)
+	}
+	return nil
+}
+
+// FsSymlink creates a symbolic link at link pointing to target, subject to the
+// sandbox write policy on link.
+func FsSymlink(ctx context.Context, target, link string) error {
+	if err := checkWrite(ctx, link); err != nil {
+		return err
+	}
+	if err := os.Symlink(target, link); err != nil {
+		return fmt.Errorf("fs.symlink %q -> %q: %w", link, target, err)
+	}
+	return nil
+}
+
+// FsReadlink returns the destination of the symbolic link at path, subject to
+// the sandbox read policy.
+func FsReadlink(ctx context.Context, path string) (string, error) {
+	if err := checkRead(ctx, path); err != nil {
+		return "", err
+	}
+	dst, err := os.Readlink(path)
+	if err != nil {
+		return "", fmt.Errorf("fs.readlink %q: %w", path, err)
+	}
+	return dst, nil
+}
+
+// FsTempDir creates a new temporary directory in os.TempDir() with an optional
+// name prefix and returns its path.
+func FsTempDir(_ context.Context, prefix string) (string, error) {
+	dir, err := os.MkdirTemp("", prefix)
+	if err != nil {
+		return "", fmt.Errorf("fs.temp_dir: %w", err)
+	}
+	return dir, nil
 }
 
 // relToCwd renders absolute watch paths relative to base when possible, so the

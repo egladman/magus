@@ -2,7 +2,7 @@
 
 Process environment variable access.
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.env.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "env"`) and call methods in `camelCase` (`env.someMethod`).
 
 ## Methods
 
@@ -10,9 +10,9 @@ Process environment variable access.
 
 Return the value of name, or "" if unset. Use lookup to tell unset from set-but-empty.
 
-**Signature:** `extra.env.get(name) → string`
+**Signature:** `env.get(name) → string`
 
-**Also in Buzz's stdlib:** `os.env` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `os.env` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -24,9 +24,9 @@ Return the value of name, or "" if unset. Use lookup to tell unset from set-but-
 
 Return (value, found); found is false when name is unset or stripped by the sandbox.
 
-**Signature:** `extra.env.lookup(name) → string, bool`
+**Signature:** `env.lookup(name) → string, bool`
 
-**Also in Buzz's stdlib:** `os.env (returns null when unset)` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `os.env (returns null when unset)` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -38,7 +38,7 @@ Return (value, found); found is false when name is unset or stripped by the sand
 
 Set name to value in the current process environment.
 
-**Signature:** `extra.env.set(name, value)`
+**Signature:** `env.set(name, value)`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -49,7 +49,7 @@ Set name to value in the current process environment.
 
 Return all environment variables as a name→value map.
 
-**Signature:** `extra.env.list() → map[string]string`
+**Signature:** `env.list() → map[string]string`
 
 **Returns:** map[string]string
 
@@ -57,7 +57,7 @@ Return all environment variables as a name→value map.
 
 Remove name from the current process environment.
 
-**Signature:** `extra.env.unset(name)`
+**Signature:** `env.unset(name)`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -67,7 +67,7 @@ Remove name from the current process environment.
 
 Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to "").
 
-**Signature:** `extra.env.expand(s) → string`
+**Signature:** `env.expand(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -79,7 +79,20 @@ Replace $VAR and ${VAR} references in s with their values (sandbox-stripped name
 
 Return the current user's home directory.
 
-**Signature:** `extra.env.home() → string`
+**Signature:** `env.home() → string`
+
+**Returns:** string
+
+### `get_or`
+
+Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.
+
+**Signature:** `env.getOr(name, def) → string`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` |  | |
+| `def` | `string` |  | |
 
 **Returns:** string
 

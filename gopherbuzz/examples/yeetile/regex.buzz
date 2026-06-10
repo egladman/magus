@@ -1,0 +1,339 @@
+// regex.buzz — a regular-expression matcher in pure Buzz, no host support.
+//
+// This exists so window rules don't need gopherbuzz's std\pattern extension:
+// everything here is portable Buzz. The dialect is the useful core — literals,
+// `.`, `*` `+` `?` repetition, `[a-z0-9_]` classes (ranges, `^` negation),
+// `\d \w \s` (and negations), `^` `$` anchors, top-level `|` alternation, and
+// a `(?i)` case-insensitive prefix. No capture groups: rules only ask "does
+// it match". Backtracking is the classic greedy-then-give-back loop.
+
+namespace regex;
+
+import "std";
+
+// Re is a compiled pattern: a list of alternatives, each a list of ReTok.
+export object Re {
+    ci: bool = false,
+    alts: [any] = [],
+}
+
+object ReTok {
+    kind: str = "",     // "lit" | "any" | "class" | "start" | "end"
+    ch: str = "",       // literal character ("lit")
+    set: str = "",      // expanded member characters ("class")
+    negate: bool = false,
+    rep: str = "",      // "" | "*" | "+" | "?"
+}
+
+final digits = "0123456789";
+final wordChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+final spaceChars = " \t\n\r";
+
+// reCompile compiles src, or returns null when it is malformed (unclosed
+// class, dangling escape or repetition, empty alternative).
+export fun reCompile(srcRaw: str) > Re? {
+    final re = mut Re{};
+    final alts = mut [];
+    var src = srcRaw;
+    if (src.startsWith("(?i)")) {
+        re.ci = true;
+        src = src.sub(4).lower();
+    }
+    foreach (alt in splitAlternatives(src)) {
+        if (alt.len() == 0) {
+            return null;
+        }
+        final toks = compileAlt(alt);
+        if (toks == null) {
+            return null;
+        }
+        alts.append(toks!);
+    }
+    if (alts.len() == 0) {
+        return null;
+    }
+    re.alts = alts;
+    return re;
+}
+
+// splitAlternatives splits on `|` outside classes and escapes.
+fun splitAlternatives(src: str) > [str] {
+    var res = [<str>];
+    var cur = "";
+    var i = 0;
+    var inClass = false;
+    while (i < src.len()) {
+        final ch = src.sub(i, len: 1);
+        if (ch == "\\" and i + 1 < src.len()) {
+            cur = cur + src.sub(i, len: 2);
+            i = i + 2;
+            continue;
+        }
+        if (ch == "[") {
+            inClass = true;
+        }
+        if (ch == "]") {
+            inClass = false;
+        }
+        if (ch == "|" and !inClass) {
+            res = res + [cur];
+            cur = "";
+            i = i + 1;
+            continue;
+        }
+        cur = cur + ch;
+        i = i + 1;
+    }
+    return res + [cur];
+}
+
+// compileAlt tokenizes one alternative; null on malformed input. Returned as
+// [any] (the untyped-accumulator idiom); reads re-type via tokAt.
+fun compileAlt(src: str) > [any]? {
+    final toks = mut [];
+    var i = 0;
+    while (i < src.len()) {
+        final ch = src.sub(i, len: 1);
+        var tok = mut ReTok{};
+        if (ch == "^" and i == 0) {
+            tok.kind = "start";
+            toks.append(tok);
+            i = i + 1;
+            continue;
+        }
+        if (ch == "$" and i == src.len() - 1) {
+            tok.kind = "end";
+            toks.append(tok);
+            i = i + 1;
+            continue;
+        }
+        if (ch == "*" or ch == "+" or ch == "?") {
+            return null; // repetition with nothing to repeat
+        }
+        if (ch == ".") {
+            tok.kind = "any";
+            i = i + 1;
+        } else if (ch == "\\") {
+            if (i + 1 >= src.len()) {
+                return null; // dangling escape
+            }
+            tok = escapeTok(src.sub(i + 1, len: 1));
+            i = i + 2;
+        } else if (ch == "[") {
+            final end = classEnd(src, start: i + 1);
+            if (end == 0 - 1) {
+                return null; // unclosed class
+            }
+            final parsed = classTok(src.sub(i + 1, len: end - i - 1));
+            if (parsed == null) {
+                return null;
+            }
+            tok = parsed!;
+            i = end + 1;
+        } else {
+            tok.kind = "lit";
+            tok.ch = ch;
+            i = i + 1;
+        }
+        if (i < src.len()) {
+            final rep = src.sub(i, len: 1);
+            if (rep == "*" or rep == "+" or rep == "?") {
+                tok.rep = rep;
+                i = i + 1;
+            }
+        }
+        toks.append(tok);
+    }
+    return toks;
+}
+
+fun escapeTok(c: str) > mut ReTok {
+    final tok = mut ReTok{};
+    if (c == "d" or c == "D") {
+        tok.kind = "class";
+        tok.set = digits;
+        tok.negate = c == "D";
+        return tok;
+    }
+    if (c == "w" or c == "W") {
+        tok.kind = "class";
+        tok.set = wordChars;
+        tok.negate = c == "W";
+        return tok;
+    }
+    if (c == "s" or c == "S") {
+        tok.kind = "class";
+        tok.set = spaceChars;
+        tok.negate = c == "S";
+        return tok;
+    }
+    if (c == "n") {
+        tok.kind = "lit";
+        tok.ch = "\n";
+        return tok;
+    }
+    if (c == "t") {
+        tok.kind = "lit";
+        tok.ch = "\t";
+        return tok;
+    }
+    tok.kind = "lit"; // \. \\ \[ \| … any escaped char is itself
+    tok.ch = c;
+    return tok;
+}
+
+// classEnd finds the index of the closing ']' (escapes skipped); -1 if none.
+fun classEnd(src: str, start: int) > int {
+    var i = start;
+    while (i < src.len()) {
+        final ch = src.sub(i, len: 1);
+        if (ch == "\\") {
+            i = i + 2;
+            continue;
+        }
+        if (ch == "]") {
+            return i;
+        }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+// classTok expands a class body ("a-z0-9_", leading ^ negates) into a member
+// set; null when empty or a range is inverted.
+fun classTok(bodyRaw: str) > mut ReTok? {
+    final tok = mut ReTok{};
+    tok.kind = "class";
+    var body = bodyRaw;
+    if (body.startsWith("^")) {
+        tok.negate = true;
+        body = body.sub(1);
+    }
+    if (body.len() == 0) {
+        return null;
+    }
+    var set = "";
+    var i = 0;
+    while (i < body.len()) {
+        var ch = body.sub(i, len: 1);
+        if (ch == "\\" and i + 1 < body.len()) {
+            final esc = escapeTok(body.sub(i + 1, len: 1));
+            if (esc.kind == "class") {
+                set = set + esc.set; // \d etc. inside a class: union the members
+            } else {
+                set = set + esc.ch;
+            }
+            i = i + 2;
+            continue;
+        }
+        if (i + 2 < body.len() and body.sub(i + 1, len: 1) == "-") {
+            final lo = charCode(ch);
+            final hi = charCode(body.sub(i + 2, len: 1));
+            if (hi < lo) {
+                return null;
+            }
+            var c = lo;
+            while (c <= hi) {
+                set = set + std\char(c);
+                c = c + 1;
+            }
+            i = i + 3;
+            continue;
+        }
+        set = set + ch;
+        i = i + 1;
+    }
+    tok.set = set;
+    return tok;
+}
+
+// charCode is the byte value of a single-character string (ASCII patterns).
+fun charCode(c: str) > int {
+    return c.byte(0);
+}
+
+// reMatch reports whether text contains a match (anchor with ^/$ for exact).
+export fun reMatch(re: Re, textRaw: str) > bool {
+    var text = textRaw;
+    if (re.ci) {
+        text = text.lower();
+    }
+    foreach (a in re.alts) {
+        final alt = (a as? [any])!;
+        var start = 0;
+        while (start <= text.len()) {
+            if (matchHere(alt, ti: 0, text: text, pos: start)) {
+                return true;
+            }
+            start = start + 1;
+        }
+    }
+    return false;
+}
+
+fun tokAt(alt: [any], i: int) > ReTok {
+    return (alt[i] as? ReTok)!;
+}
+
+fun matchHere(alt: [any], ti: int, text: str, pos: int) > bool {
+    if (ti == alt.len()) {
+        return true;
+    }
+    final tok = tokAt(alt, i: ti);
+    if (tok.kind == "start") {
+        return pos == 0 and matchHere(alt, ti: ti + 1, text: text, pos: pos);
+    }
+    if (tok.kind == "end") {
+        return pos == text.len() and matchHere(alt, ti: ti + 1, text: text, pos: pos);
+    }
+    if (tok.rep == "*") {
+        return matchStar(alt, ti: ti, text: text, pos: pos);
+    }
+    if (tok.rep == "+") {
+        if (!atomMatches(tok, text: text, pos: pos)) {
+            return false;
+        }
+        return matchStar(alt, ti: ti, text: text, pos: pos + 1);
+    }
+    if (tok.rep == "?") {
+        if (atomMatches(tok, text: text, pos: pos) and matchHere(alt, ti: ti + 1, text: text, pos: pos + 1)) {
+            return true;
+        }
+        return matchHere(alt, ti: ti + 1, text: text, pos: pos);
+    }
+    return atomMatches(tok, text: text, pos: pos) and matchHere(alt, ti: ti + 1, text: text, pos: pos + 1);
+}
+
+// matchStar: greedy, then give back one at a time (classic backtracking).
+fun matchStar(alt: [any], ti: int, text: str, pos: int) > bool {
+    final tok = tokAt(alt, i: ti);
+    var i = pos;
+    while (atomMatches(tok, text: text, pos: i)) {
+        i = i + 1;
+    }
+    while (i >= pos) {
+        if (matchHere(alt, ti: ti + 1, text: text, pos: i)) {
+            return true;
+        }
+        i = i - 1;
+    }
+    return false;
+}
+
+fun atomMatches(tok: ReTok, text: str, pos: int) > bool {
+    if (pos >= text.len()) {
+        return false;
+    }
+    final ch = text.sub(pos, len: 1);
+    if (tok.kind == "any") {
+        return true;
+    }
+    if (tok.kind == "lit") {
+        return ch == tok.ch;
+    }
+    final inSet = tok.set.indexOf(ch) != null;
+    if (tok.negate) {
+        return !inSet;
+    }
+    return inSet;
+}

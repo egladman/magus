@@ -2,7 +2,7 @@
 
 Filesystem and path primitives.
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.fs.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "fs"`) and call methods in `camelCase` (`fs.someMethod`).
 
 ## Methods
 
@@ -10,7 +10,7 @@ Filesystem and path primitives.
 
 Return paths matching pattern (doublestar-style).
 
-**Signature:** `extra.fs.glob(pattern) → []string`
+**Signature:** `fs.glob(pattern) → []string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -22,7 +22,7 @@ Return paths matching pattern (doublestar-style).
 
 Directory portion of path.
 
-**Signature:** `extra.fs.dirname(path) → string`
+**Signature:** `fs.dirname(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -34,7 +34,7 @@ Directory portion of path.
 
 Final element of path.
 
-**Signature:** `extra.fs.basename(path) → string`
+**Signature:** `fs.basename(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -46,9 +46,9 @@ Final element of path.
 
 True iff path exists.
 
-**Signature:** `extra.fs.exists(path) → bool`
+**Signature:** `fs.exists(path) → bool`
 
-**Also in Buzz's stdlib:** `fs.exists` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `fs.exists` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -60,7 +60,7 @@ True iff path exists.
 
 Return the contents of path as a string.
 
-**Signature:** `extra.fs.readFile(path) → string`
+**Signature:** `fs.readFile(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -72,7 +72,7 @@ Return the contents of path as a string.
 
 Write content to path (mode 0644).
 
-**Signature:** `extra.fs.writeFile(path, content)`
+**Signature:** `fs.writeFile(path, content)`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -83,9 +83,9 @@ Write content to path (mode 0644).
 
 Create path and parents (default mode 0755).
 
-**Signature:** `extra.fs.mkdirall(path, [perm])`
+**Signature:** `fs.mkdirall(path, [perm])`
 
-**Also in Buzz's stdlib:** `fs.makeDirectory` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `fs.makeDirectory` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -96,7 +96,7 @@ Create path and parents (default mode 0755).
 
 Join path elements with the OS separator.
 
-**Signature:** `extra.fs.join(parts...) → string`
+**Signature:** `fs.join(parts...) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -108,9 +108,9 @@ Join path elements with the OS separator.
 
 Recursively remove path (no error if missing).
 
-**Signature:** `extra.fs.removeAll(path)`
+**Signature:** `fs.removeAll(path)`
 
-**Also in Buzz's stdlib:** `fs.delete` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `fs.delete` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -120,9 +120,9 @@ Recursively remove path (no error if missing).
 
 Return directory entries; empty if path does not exist.
 
-**Signature:** `extra.fs.listDir(path) → []string`
+**Signature:** `fs.listDir(path) → []string`
 
-**Also in Buzz's stdlib:** `fs.list` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `fs.list` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -134,7 +134,7 @@ Return directory entries; empty if path does not exist.
 
 File-name extension of path, including the leading dot ("" if none).
 
-**Signature:** `extra.fs.ext(path) → string`
+**Signature:** `fs.ext(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -146,7 +146,7 @@ File-name extension of path, including the leading dot ("" if none).
 
 True iff path exists and is a directory (a sandbox-denied path reads as false).
 
-**Signature:** `extra.fs.isDir(path) → bool`
+**Signature:** `fs.isDir(path) → bool`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -158,7 +158,7 @@ True iff path exists and is a directory (a sandbox-denied path reads as false).
 
 True iff path exists and is a regular file (a sandbox-denied path reads as false).
 
-**Signature:** `extra.fs.isFile(path) → bool`
+**Signature:** `fs.isFile(path) → bool`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -170,7 +170,7 @@ True iff path exists and is a regular file (a sandbox-denied path reads as false
 
 Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.
 
-**Signature:** `extra.fs.stat(path) → map[string]any`
+**Signature:** `fs.stat(path) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -182,7 +182,7 @@ Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as
 
 Copy the file at src to dst (overwriting), preserving its permission bits.
 
-**Signature:** `extra.fs.copyFile(src, dst)`
+**Signature:** `fs.copyFile(src, dst)`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -193,7 +193,7 @@ Copy the file at src to dst (overwriting), preserving its permission bits.
 
 Recursively copy the directory tree at src to dst, preserving permission bits.
 
-**Signature:** `extra.fs.copyDir(src, dst)`
+**Signature:** `fs.copyDir(src, dst)`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -204,10 +204,78 @@ Recursively copy the directory tree at src to dst, preserving permission bits.
 
 Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.
 
-**Signature:** `extra.fs.watch(paths, callback)`
+**Signature:** `fs.watch(paths, callback)`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `paths` | `[]string` |  | |
 | `callback` | `Callback` |  | |
+
+### `walk`
+
+Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.
+
+**Signature:** `fs.walk(root, callback)`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `root` | `string` |  | |
+| `callback` | `Callback` |  | |
+
+### `append_file`
+
+Append content to path (creating if absent, mode 0644).
+
+**Signature:** `fs.appendFile(path, content)`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+| `content` | `string` |  | |
+
+### `chmod`
+
+Change the permission bits of path to mode (octal integer, e.g. 0755).
+
+**Signature:** `fs.chmod(path, mode)`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+| `mode` | `int` |  | |
+
+### `symlink`
+
+Create a symbolic link at link pointing to target.
+
+**Signature:** `fs.symlink(target, link)`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `target` | `string` |  | |
+| `link` | `string` |  | |
+
+### `readlink`
+
+Return the target of the symbolic link at path.
+
+**Signature:** `fs.readlink(path) → string`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+
+**Returns:** string
+
+### `temp_dir`
+
+Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.
+
+**Signature:** `fs.tempDir([prefix]) → string`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `prefix` | `string` | yes | |
+
+**Returns:** string
 

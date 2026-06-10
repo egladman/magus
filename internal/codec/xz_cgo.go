@@ -81,8 +81,8 @@ type xzCGOReader struct {
 	closed    bool
 }
 
-// NewXzReader returns a streaming xz decompressor reading from r.
-func NewXzReader(r io.Reader) (io.ReadCloser, error) {
+// newXzReader returns a streaming xz decompressor reading from r.
+func newXzReader(r io.Reader) (io.ReadCloser, error) {
 	strm := C.mg_lzma_alloc()
 	if strm == nil {
 		return nil, fmt.Errorf("liblzma: allocation failed")

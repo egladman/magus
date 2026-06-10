@@ -3,6 +3,8 @@ package retry_test
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -162,4 +164,165 @@ func TestDoBackoffCaps(t *testing.T) {
 			t.Errorf("gap[%d] = %v, want ≤ %v", i, g, cap+20*time.Millisecond)
 		}
 	}
+}
+
+// recordingTransport records the request body seen on each attempt and fails
+// the first failFor attempts with a transport error (which triggers a retry
+// for any method).
+type recordingTransport struct {
+	bodies  []string
+	failFor int
+	n       int
+}
+
+func (rt *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.n++
+	var body string
+	if req.Body != nil {
+		b, _ := io.ReadAll(req.Body)
+		body = string(b)
+	}
+	rt.bodies = append(rt.bodies, body)
+	if rt.n <= rt.failFor {
+		return nil, errFake // transport error → retry
+	}
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+}
+
+// TestRetryTransportRewindsBody verifies that a POST body is re-sent intact on
+// retry. Before the fix, the first attempt consumed the body and the retry
+// transmitted an empty one.
+func TestRetryTransportRewindsBody(t *testing.T) {
+	rec := &recordingTransport{failFor: 1}
+	client := retry.NewHTTPClient(&http.Client{Transport: rec},
+		retry.WithAttempts(3), retry.WithDelay(time.Millisecond))
+
+	req, err := http.NewRequest(http.MethodPost, "http://example.test/x", strings.NewReader("payload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Transport.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if len(rec.bodies) != 2 {
+		t.Fatalf("expected 2 attempts (1 fail + 1 retry), got %d", len(rec.bodies))
+	}
+	for i, b := range rec.bodies {
+		if b != "payload" {
+			t.Errorf("attempt %d body = %q, want %q (body not rewound across retries)", i+1, b, "payload")
+		}
+	}
+}
+
+// TestRetryTransportNonRewindableBodyNotRetried verifies that a request whose
+// body cannot be rewound (GetBody == nil) is attempted exactly once, so the
+// transport never re-sends it with an empty body.
+func TestRetryTransportNonRewindableBodyNotRetried(t *testing.T) {
+	rec := &recordingTransport{failFor: 3}
+	client := retry.NewHTTPClient(&http.Client{Transport: rec},
+		retry.WithAttempts(3), retry.WithDelay(time.Millisecond))
+
+	req, err := http.NewRequest(http.MethodPost, "http://example.test/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Attach a body with no GetBody (the http.NewRequest-with-nil case leaves
+	// Body nil, so set both fields to simulate an opaque, non-rewindable body).
+	req.Body = io.NopCloser(strings.NewReader("opaque"))
+	req.GetBody = nil
+
+	_, err = client.Transport.RoundTrip(req)
+	if err == nil {
+		t.Fatal("expected the transport error to surface after a single attempt")
+	}
+	if rec.n != 1 {
+		t.Errorf("non-rewindable body was attempted %d times; want exactly 1", rec.n)
+	}
+}
+
+// statusTransport returns the same status on every call (or a transport error
+// when status == 0) and counts the attempts it sees.
+type statusTransport struct {
+	status int
+	n      int
+}
+
+func (st *statusTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	st.n++
+	if st.status == 0 {
+		return nil, errFake
+	}
+	return &http.Response{StatusCode: st.status, Body: io.NopCloser(strings.NewReader("body"))}, nil
+}
+
+// TestRetryDeciderOverridesPolicy verifies WithRetryDecider replaces the default
+// idempotent-5xx policy: a decider can both suppress a would-be retry and force
+// one the default would skip.
+func TestRetryDeciderOverridesPolicy(t *testing.T) {
+	t.Parallel()
+
+	// Decider says "never retry": a 500 (normally retried for GET) is returned as-is.
+	st := &statusTransport{status: 500}
+	client := retry.NewHTTPClient(&http.Client{Transport: st},
+		retry.WithAttempts(4), retry.WithDelay(time.Millisecond),
+		retry.WithRetryDecider(func(_ *http.Response, _ error) bool { return false }))
+	resp, err := client.Transport.RoundTrip(mustGet(t))
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	_ = resp.Body.Close()
+	if st.n != 1 {
+		t.Errorf("decider=false: attempts = %d, want 1", st.n)
+	}
+
+	// Decider says "retry any 4xx": a 404 (normally terminal) is retried to exhaustion.
+	st2 := &statusTransport{status: 404}
+	client2 := retry.NewHTTPClient(&http.Client{Transport: st2},
+		retry.WithAttempts(3), retry.WithDelay(time.Millisecond),
+		retry.WithRetryDecider(func(resp *http.Response, _ error) bool {
+			return resp != nil && resp.StatusCode == 404
+		}))
+	resp2, err := client2.Transport.RoundTrip(mustGet(t))
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	_ = resp2.Body.Close()
+	if st2.n != 3 {
+		t.Errorf("decider 404: attempts = %d, want 3 (exhausted)", st2.n)
+	}
+}
+
+// TestRetryMaxElapsedStops verifies the maxElapsed budget halts retries before
+// the attempt count is reached.
+func TestRetryMaxElapsedStops(t *testing.T) {
+	t.Parallel()
+	st := &statusTransport{status: 0} // always a transport error
+	client := retry.NewHTTPClient(&http.Client{Transport: st},
+		retry.WithAttempts(20), retry.WithDelay(20*time.Millisecond), retry.WithFixedDelay(),
+		retry.WithMaxElapsed(50*time.Millisecond))
+
+	_, err := client.Transport.RoundTrip(mustGet(t))
+	if err == nil {
+		t.Fatal("expected the transport error to surface")
+	}
+	// With a 20ms fixed delay and a 50ms budget, only a couple of attempts fit;
+	// the loop must stop well short of the 20-attempt cap.
+	if st.n >= 20 {
+		t.Errorf("maxElapsed did not stop retries: attempts = %d, want < 20", st.n)
+	}
+	if st.n < 2 {
+		t.Errorf("expected at least one retry before the budget ran out, got %d attempts", st.n)
+	}
+}
+
+func mustGet(t *testing.T) *http.Request {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, "http://example.test/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return req
 }

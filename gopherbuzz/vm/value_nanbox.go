@@ -201,6 +201,7 @@ func sameObj(a, b Value) bool {
 
 func nanboxObj(v Value) heapVal             { return gHeapGet(uint64(v) & idxMask44) }
 func (v Value) asStr() *strObj             { return nanboxObj(v).(*strObj) }
+func (v Value) asUD() *udObj               { return nanboxObj(v).(*udObj) }
 func (v Value) asList() *listObj           { return nanboxObj(v).(*listObj) }
 func (v Value) asMap() *mapObj             { return nanboxObj(v).(*mapObj) }
 func (v Value) asFun() *funObj             { return nanboxObj(v).(*funObj) }

@@ -24,6 +24,8 @@ var chdirMu sync.Mutex
 type sourceCtxKey struct{}
 type normCtxKey struct{}
 
+type projectPathCtxKey struct{}
+
 // WithSource stores src in ctx so that bindings (e.g. magus.dispatch) can
 // retrieve the active magusfile source for pool lookup.
 func WithSource(ctx context.Context, src *Source) context.Context {
@@ -34,6 +36,20 @@ func WithSource(ctx context.Context, src *Source) context.Context {
 func SourceFromContext(ctx context.Context) *Source {
 	v, _ := ctx.Value(sourceCtxKey{}).(*Source)
 	return v
+}
+
+// WithProjectPath stores the workspace-relative path of the project whose
+// magusfile is being parsed, so magus.project.register(fn) — the contextual
+// form with no explicit path — can default to "this project".
+func WithProjectPath(ctx context.Context, path string) context.Context {
+	return context.WithValue(ctx, projectPathCtxKey{}, path)
+}
+
+// ProjectPathFromContext returns the project path stored by WithProjectPath, and
+// whether one was set.
+func ProjectPathFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(projectPathCtxKey{}).(string)
+	return v, ok
 }
 
 // WithTargetNameNormalizer stores n in ctx for use by target registration and lookup.
@@ -242,10 +258,13 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	// The buzz path uses the standalone interpreter's concrete API (Exec,
 	// Targets, CallVal) directly; the engine.Session adapter is only for generic
 	// registry consumers, so there's no need to round-trip through engine.Lookup.
-	buzzSess := buzz.NewSession(ctx)
-	// Override the env-var-derived include dirs with a workspace-sandboxed set
-	// so scripts cannot escape the project root via BUZZ_INCLUDE_PATH.
-	buzzSess.SetIncludeDirs(sandboxIncludeDirs(src.Dir))
+	// Confine imports to the magusfiles layout (see magusSearchPaths); WithSearchPaths
+	// replaces gopherbuzz's upstream default so a magusfile resolves siblings the same
+	// way regardless of the process cwd, and cannot escape via BUZZ_INCLUDE_PATH.
+	buzzSess := buzz.NewSession(ctx, buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
+	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
+	// stays limited to the magusfiles search paths above.
+	buzzSess.SetIncludeDirs(nil)
 	// Magusfiles run as whole files, not incrementally, so a non-exported,
 	// non-captured top-level var is chunk-private and can use a fast stack slot
 	// instead of an Env binding. The cross-file/cross-target surface is `export`ed
@@ -318,8 +337,8 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 // definitions are available at the prompt.
 // The returned engine.Session also satisfies the optional REPL/debug interfaces.
 func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session, error) {
-	buzzSess := buzz.NewSession(ctx)
-	buzzSess.SetIncludeDirs(sandboxIncludeDirs(autoloadDir))
+	buzzSess := buzz.NewSession(ctx, buzz.WithSearchPaths(magusSearchPaths(ctx, autoloadDir)...))
+	buzzSess.SetIncludeDirs(nil)
 	if buzzHostBindingsFn != nil {
 		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), false)
 	}
@@ -345,37 +364,23 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 	return buzzengine.Wrap(buzzSess), nil
 }
 
-// sandboxIncludeDirs reads BUZZ_INCLUDE_PATH and returns only the entries that
-// fall within root, preventing scripts from importing files outside the
-// workspace. Entries that cannot be resolved or escape via ".." are logged and
-// dropped. Returns nil when root is empty or BUZZ_INCLUDE_PATH is unset.
-func sandboxIncludeDirs(root string) []string {
-	if root == "" {
-		return nil
+// magusSearchPaths returns the import search path templates a magusfile resolves
+// against (see buzz.WithSearchPaths). magus deliberately does not adopt gopherbuzz's
+// upstream default; an `import "<name>"` resolves only to a magusfiles/ sibling,
+// looked up — in order — relative to the process cwd, the project root, and the
+// workspace root. `?` is the import name (filled in by the resolver). The
+// workspace root is read from ctx (types.WithWorkspace) and is omitted when absent
+// or identical to the project dir, so the common single-project case yields no
+// duplicate entry.
+func magusSearchPaths(ctx context.Context, projectDir string) []string {
+	paths := []string{
+		filepath.Join("magusfiles", "?.bzz"),
+		filepath.Join(projectDir, "magusfiles", "?.bzz"),
 	}
-	v := os.Getenv("BUZZ_INCLUDE_PATH")
-	if v == "" {
-		return nil
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, dir := range filepath.SplitList(v) {
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			slog.Warn("interp: BUZZ_INCLUDE_PATH entry could not be resolved, skipping",
-				slog.String("dir", dir), slog.String("error", err.Error()))
-			continue
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		if root := ws.Root(); root != "" && root != projectDir {
+			paths = append(paths, filepath.Join(root, "magusfiles", "?.bzz"))
 		}
-		rel, err := filepath.Rel(absRoot, abs)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			slog.Warn("interp: BUZZ_INCLUDE_PATH entry outside workspace, skipping",
-				slog.String("dir", dir), slog.String("workspace", absRoot))
-			continue
-		}
-		out = append(out, abs)
 	}
-	return out
+	return paths
 }

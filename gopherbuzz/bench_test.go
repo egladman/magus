@@ -267,7 +267,7 @@ while (i < 100) {
 // BenchmarkParse measures lexer + parser throughput on a realistic magusfile.
 func BenchmarkParse(b *testing.B) {
 	src := `
-import "magus";
+import "host";
 fun helper(x: int) int {
     return x * x + 1;
 }
@@ -279,7 +279,7 @@ object Config {
     }
 }
 enum Status { Ok, Err, Unknown }
-magus.project.register(".");
+host.project.register(".");
 export fun build(_args: [str]) > void {}
 export fun test(_args: [str]) > void {}
 `
@@ -295,14 +295,14 @@ export fun test(_args: [str]) > void {}
 // BenchmarkCompile measures parse + compile throughput.
 func BenchmarkCompile(b *testing.B) {
 	src := `
-import "magus";
+import "host";
 fun helper(x: int) int { return x * x + 1; }
 object Config {
     name: str = "default",
     count: int = 0,
 }
 enum Status { Ok, Err, Unknown }
-magus.project.register(".");
+host.project.register(".");
 export fun build(_args: [str]) > void {}
 `
 	b.ReportAllocs()
@@ -464,8 +464,8 @@ while (i < 1000000) {
 // BenchmarkThreeReg measures a tight loop where each iteration performs a
 // true 3-address operation (dst ≠ src1 ≠ src2): `c = a + b` with all three
 // variables being distinct stack slots. Before A2, the compiler emitted
-// OpLocalLocalOp (3-instr fusion, C=0) + OpSetLocal — two dispatches. After
-// A2 Pass 1L absorbs the SetLocal at compile time into OpLocalLocalOp with
+// OpBinLL (3-instr fusion, C=0) + OpSetLocal — two dispatches. After
+// A2 Pass 1L absorbs the SetLocal at compile time into OpBinLL with
 // C=dst+1 (4-instr fusion), saving one dispatch and one push/pop round-trip.
 func BenchmarkThreeReg(b *testing.B) {
 	chunk, env := benchSetup(b, "", `

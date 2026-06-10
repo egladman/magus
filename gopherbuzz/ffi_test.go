@@ -106,3 +106,112 @@ func TestRegisterFFIProviderIgnoresNil(t *testing.T) {
 		t.Fatal("RegisterFFIProvider(nil) overwrote the provider")
 	}
 }
+
+func TestParseCDeclsExternVar(t *testing.T) {
+	sigs, err := ParseCDecls(
+		"extern void *kBoolTrue;" +
+			"extern const char *greeting;" +
+			"extern int answer;" +
+			"extern struct Callbacks kCallbacks;" +
+			"double sqrt(double x);")
+	if err != nil {
+		t.Fatalf("ParseCDecls: %v", err)
+	}
+	if len(sigs) != 5 {
+		t.Fatalf("got %d sigs, want 5", len(sigs))
+	}
+	if !sigs[0].IsVar || sigs[0].Name != "kBoolTrue" || sigs[0].Ret != CVoidPtr {
+		t.Errorf("kBoolTrue sig wrong: %+v", sigs[0])
+	}
+	if !sigs[1].IsVar || sigs[1].Name != "greeting" || sigs[1].Ret != CCharPtr {
+		t.Errorf("greeting sig wrong: %+v", sigs[1])
+	}
+	if !sigs[2].IsVar || sigs[2].Name != "answer" || sigs[2].Ret != CInt || sigs[2].VarTypeName != "int" {
+		t.Errorf("answer sig wrong: %+v", sigs[2])
+	}
+	if !sigs[3].IsVar || sigs[3].Name != "kCallbacks" || sigs[3].Ret != CAddr {
+		t.Errorf("kCallbacks sig wrong: %+v", sigs[3])
+	}
+	if sigs[4].IsVar || sigs[4].Name != "sqrt" {
+		t.Errorf("sqrt sig wrong: %+v", sigs[4])
+	}
+}
+
+func TestParseCDeclsExternVarErrors(t *testing.T) {
+	if _, err := ParseCDecls("extern int;"); err == nil {
+		t.Error("extern without a name should fail")
+	}
+	if _, err := ParseCDecls("int loose;"); err == nil {
+		t.Error("a variable without the extern keyword should fail")
+	}
+}
+
+func TestParseCDeclsPoint2D(t *testing.T) {
+	sigs, err := ParseCDecls("CGPoint CGEventGetLocation(void *event); NSPoint mouseLocation(void);")
+	if err != nil {
+		t.Fatalf("ParseCDecls: %v", err)
+	}
+	if sigs[0].Ret != CPoint2D || sigs[1].Ret != CPoint2D {
+		t.Errorf("point returns wrong: %+v", sigs)
+	}
+	if _, err := ParseCDecls("void use(CGPoint p);"); err == nil {
+		t.Error("by-value struct parameter should be rejected with advice")
+	}
+}
+
+func TestParseZigDecls(t *testing.T) {
+	sigs, err := ParseZigDecls(
+		"fn add(a: c_int, b: c_int) c_int;" +
+			"fn sqrt(x: f64) f64;" +
+			"fn hello(name: [*:0]const u8) void;" +
+			"fn open(path: [*:0]const u8, out: **anyopaque, flags: ?*anyopaque) c_int;" +
+			"fn location(event: *anyopaque) CGPoint;" +
+			"var kCFBooleanTrue: *anyopaque;" +
+			"var kCallbacks: anyopaque;")
+	if err != nil {
+		t.Fatalf("ParseZigDecls: %v", err)
+	}
+	if len(sigs) != 7 {
+		t.Fatalf("got %d sigs, want 7", len(sigs))
+	}
+	if sigs[0].Ret != CInt || len(sigs[0].Params) != 2 || sigs[0].Params[0].Type != CInt {
+		t.Errorf("add sig wrong: %+v", sigs[0])
+	}
+	if sigs[1].Ret != CDouble || sigs[1].Params[0].Type != CDouble {
+		t.Errorf("sqrt sig wrong: %+v", sigs[1])
+	}
+	if sigs[2].Ret != CVoid || sigs[2].Params[0].Type != CCharPtr {
+		t.Errorf("hello sig wrong: %+v", sigs[2])
+	}
+	if sigs[3].Params[1].Type != CVoidPtr || sigs[3].Params[2].Type != CVoidPtr {
+		t.Errorf("open pointer params wrong: %+v", sigs[3])
+	}
+	if sigs[4].Ret != CPoint2D {
+		t.Errorf("location sig wrong: %+v", sigs[4])
+	}
+	if !sigs[5].IsVar || sigs[5].Ret != CVoidPtr {
+		t.Errorf("kCFBooleanTrue var wrong: %+v", sigs[5])
+	}
+	if !sigs[6].IsVar || sigs[6].Ret != CAddr {
+		t.Errorf("kCallbacks address-of var wrong: %+v", sigs[6])
+	}
+}
+
+func TestZigDeclSniffing(t *testing.T) {
+	zig := "fn add(a: c_int) c_int;"
+	c := "int add(int a);"
+	cExtern := "extern void *kFoo;"
+	zigVar := "var kFoo: *anyopaque;"
+	for src, sigs := range map[string]bool{zig: true, c: false, cExtern: false, zigVar: true} {
+		// parse through both entries to ensure each dialect accepts its own
+		if sigs {
+			if _, err := ParseZigDecls(src); err != nil {
+				t.Errorf("zig dialect rejected %q: %v", src, err)
+			}
+		} else {
+			if _, err := ParseCDecls(src); err != nil {
+				t.Errorf("c dialect rejected %q: %v", src, err)
+			}
+		}
+	}
+}

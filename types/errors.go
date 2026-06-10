@@ -42,8 +42,8 @@ func (e *UnregisteredDepError) Error() string {
 			fmt.Fprintf(&sb, "  - %s -> %s\n", m.Consumer, m.Dep)
 		}
 	}
-	sb.WriteString("\nfix: register the missing project(s) with magus.project.register(\"<path>\", ...)\n")
-	sb.WriteString("     in a magusfile.tl, or correct the path passed to magus.WithDependsOn\n")
+	sb.WriteString("\nfix: register the missing project(s) with magus.project.register(\"<path>\", fun(p, cb) { cb({...}); })\n")
+	sb.WriteString("     in a magusfile, or correct the path passed to magus.WithDependsOn\n")
 	sb.WriteString("     in the consuming magusfile.")
 	return sb.String()
 }

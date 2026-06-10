@@ -66,6 +66,13 @@ var Env = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    EnvHome,
 		},
+		{
+			Name:    "get_or",
+			Doc:     "Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.",
+			Args:    []Arg{{Name: "name", Type: TypeString}, {Name: "def", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    EnvGetOr,
+		},
 	},
 }
 
@@ -139,6 +146,20 @@ func EnvHome(_ context.Context) (string, error) {
 		return "", err
 	}
 	return home, nil
+}
+
+// EnvGetOr returns the value of name, or def if the variable is unset or stripped
+// by the sandbox. A variable that is set but empty returns its empty value — def
+// is only the fallback for absence.
+func EnvGetOr(ctx context.Context, name, def string) (string, error) {
+	v, ok, err := EnvLookup(ctx, name)
+	if err != nil {
+		return def, err
+	}
+	if !ok {
+		return def, nil
+	}
+	return v, nil
 }
 
 // EnvList returns all environment variables as a name→value map, omitting any the sandbox policy strips.

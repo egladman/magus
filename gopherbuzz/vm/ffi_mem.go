@@ -52,6 +52,21 @@ func CTypeLayout(name string) (size, align int, ok bool) {
 	if strings.HasSuffix(name, "*") {
 		return ptrSize, ptrSize, true
 	}
+	// Zig spellings (the zdef Zig dialect uses these as ffi.* type names too).
+	switch name {
+	case "i8", "u8":
+		return 1, 1, true
+	case "i16", "u16":
+		return 2, 2, true
+	case "i32", "u32", "f32", "c_int", "c_uint":
+		return 4, 4, true
+	case "i64", "u64", "f64", "usize", "isize", "c_long", "c_ulong", "c_longlong", "c_ulonglong":
+		return 8, 8, true
+	}
+	if strings.HasPrefix(name, "*") || strings.HasPrefix(name, "[*") || strings.HasPrefix(name, "?*") {
+		return ptrSize, ptrSize, true
+	}
+
 	switch name {
 	case "bool", "_Bool", "char", "signed char", "unsigned char", "int8_t", "uint8_t":
 		return 1, 1, true
@@ -188,9 +203,9 @@ func WriteScalar(addr uintptr, offset int, ctype string, i int64, f float64, isF
 		return err
 	}
 	switch ctype {
-	case "float":
+	case "float", "f32":
 		binary.NativeEndian.PutUint32(slot, math.Float32bits(float32(f)))
-	case "double":
+	case "double", "f64":
 		binary.NativeEndian.PutUint64(slot, math.Float64bits(f))
 	default:
 		u := uint64(i)
@@ -215,21 +230,38 @@ func ReadScalar(addr uintptr, offset int, ctype string) (i int64, f float64, isF
 		return 0, 0, false, err
 	}
 	switch ctype {
-	case "float":
+	case "float", "f32":
 		return 0, float64(math.Float32frombits(binary.NativeEndian.Uint32(slot))), true, nil
-	case "double":
+	case "double", "f64":
 		return 0, math.Float64frombits(binary.NativeEndian.Uint64(slot)), true, nil
 	default:
 		u := getUintN(slot, size)
+		if IsPointerCType(ctype) {
+			// A foreign pointer: return its raw bits as int64 (a lossless 64-bit
+			// container — pointers are not sign-extended); the caller wraps it in
+			// a `ud` value to preserve the full address.
+			return int64(u), 0, false, nil
+		}
 		return signExtend(u, size, isSignedCType(ctype)), 0, false, nil
 	}
+}
+
+// isPointerCType reports whether a C/Zig type spelling is a pointer (carried as
+// a float64 `ud`, not an int — see ReadScalar). Covers `*T`, `?*T`, `[*]T`,
+// `[*c]T`, `[*:0]T`, `void*` and the like.
+func IsPointerCType(name string) bool {
+	s := strings.TrimSpace(name)
+	s = strings.TrimPrefix(s, "?")
+	return strings.HasPrefix(s, "*") || strings.HasPrefix(s, "[*") ||
+		strings.HasSuffix(s, "*")
 }
 
 func isSignedCType(name string) bool {
 	switch name {
 	case "char", "signed char", "short", "short int", "int", "signed", "signed int",
 		"long", "long int", "long long", "long long int",
-		"int8_t", "int16_t", "int32_t", "int64_t", "ssize_t", "ptrdiff_t", "intptr_t":
+		"int8_t", "int16_t", "int32_t", "int64_t", "ssize_t", "ptrdiff_t", "intptr_t",
+		"i8", "i16", "i32", "i64", "isize", "c_int", "c_long", "c_longlong":
 		return true
 	default:
 		return false

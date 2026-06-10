@@ -2,7 +2,7 @@
 
 Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.charm.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "charm"`) and call methods in `camelCase` (`charm.someMethod`).
 
 ## Methods
 
@@ -10,7 +10,7 @@ Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see d
 
 Append vals to the end of the argv.
 
-**Signature:** `extra.charm.append(vals) → map[string]any`
+**Signature:** `charm.append(vals) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -22,7 +22,7 @@ Append vals to the end of the argv.
 
 Insert vals at the front of the argv, in order.
 
-**Signature:** `extra.charm.prepend(vals) → map[string]any`
+**Signature:** `charm.prepend(vals) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -34,7 +34,7 @@ Insert vals at the front of the argv, in order.
 
 Insert vals immediately after the first argv element equal to anchor.
 
-**Signature:** `extra.charm.after(argv, anchor, vals) → map[string]any`
+**Signature:** `charm.after(argv, anchor, vals) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -48,7 +48,7 @@ Insert vals immediately after the first argv element equal to anchor.
 
 Insert vals immediately before the first argv element equal to anchor.
 
-**Signature:** `extra.charm.before(argv, anchor, vals) → map[string]any`
+**Signature:** `charm.before(argv, anchor, vals) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -62,7 +62,7 @@ Insert vals immediately before the first argv element equal to anchor.
 
 Replace the first argv element equal to anchor with val.
 
-**Signature:** `extra.charm.set(argv, anchor, val) → map[string]any`
+**Signature:** `charm.set(argv, anchor, val) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -76,7 +76,7 @@ Replace the first argv element equal to anchor with val.
 
 Remove the first argv element equal to anchor.
 
-**Signature:** `extra.charm.remove(argv, anchor) → map[string]any`
+**Signature:** `charm.remove(argv, anchor) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -89,7 +89,7 @@ Remove the first argv element equal to anchor.
 
 Insert vals after the first argv element for which fn(s) is truthy.
 
-**Signature:** `extra.charm.afterFunc(argv, fn, vals) → map[string]any`
+**Signature:** `charm.afterFunc(argv, fn, vals) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -103,7 +103,7 @@ Insert vals after the first argv element for which fn(s) is truthy.
 
 Insert vals before the first argv element for which fn(s) is truthy.
 
-**Signature:** `extra.charm.beforeFunc(argv, fn, vals) → map[string]any`
+**Signature:** `charm.beforeFunc(argv, fn, vals) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -117,7 +117,7 @@ Insert vals before the first argv element for which fn(s) is truthy.
 
 Replace the first argv element for which fn(s) is truthy with val.
 
-**Signature:** `extra.charm.setFunc(argv, fn, val) → map[string]any`
+**Signature:** `charm.setFunc(argv, fn, val) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -131,7 +131,7 @@ Replace the first argv element for which fn(s) is truthy with val.
 
 Remove the first argv element for which fn(s) is truthy.
 
-**Signature:** `extra.charm.removeFunc(argv, fn) → map[string]any`
+**Signature:** `charm.removeFunc(argv, fn) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -144,7 +144,7 @@ Remove the first argv element for which fn(s) is truthy.
 
 Return the JSON Pointer ("/N") of the first argv element equal to anchor — the index, auto-calculated, for hand-built move/copy/test ops.
 
-**Signature:** `extra.charm.path(argv, anchor) → string`
+**Signature:** `charm.path(argv, anchor) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -157,7 +157,7 @@ Return the JSON Pointer ("/N") of the first argv element equal to anchor — the
 
 Return the JSON Pointer ("/N") of the first argv element for which fn(s) is truthy.
 
-**Signature:** `extra.charm.pathFunc(argv, fn) → string`
+**Signature:** `charm.pathFunc(argv, fn) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -170,7 +170,7 @@ Return the JSON Pointer ("/N") of the first argv element for which fn(s) is trut
 
 Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).
 
-**Signature:** `extra.charm.move(argv, anchor, to) → map[string]any`
+**Signature:** `charm.move(argv, anchor, to) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -184,7 +184,7 @@ Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
-**Signature:** `extra.charm.moveFunc(argv, fn, to) → map[string]any`
+**Signature:** `charm.moveFunc(argv, fn, to) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -198,7 +198,7 @@ Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
 Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).
 
-**Signature:** `extra.charm.copy(argv, anchor, to) → map[string]any`
+**Signature:** `charm.copy(argv, anchor, to) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -212,7 +212,7 @@ Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
-**Signature:** `extra.charm.copyFunc(argv, fn, to) → map[string]any`
+**Signature:** `charm.copyFunc(argv, fn, to) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -226,7 +226,7 @@ Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
 Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).
 
-**Signature:** `extra.charm.test(argv, anchor) → map[string]any`
+**Signature:** `charm.test(argv, anchor) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -239,7 +239,7 @@ Guard: assert the first argv element equal to anchor is still at its position wh
 
 Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.
 
-**Signature:** `extra.charm.testFunc(argv, fn) → map[string]any`
+**Signature:** `charm.testFunc(argv, fn) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

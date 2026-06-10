@@ -8,22 +8,50 @@ language with JIT support.
 
 ## Performance
 
-Two workloads vs other Go-embedded languages, each compiled once and run per
-iteration (benchstat median, n=6, amd64 Xeon @ 2.80 GHz, Go 1.25). `LoopSum` sums
-`0..1e6`; `Fib` is recursive `fib(30)` (call-heavy, so Buzz runs it on the
-interpreter — JIT'd calls aren't done yet). Harness: `benchmarks/comparison/`.
+A pure-Go VM with a baseline JIT: no cgo, no toolchain. Its standout case is a
+tight top-level numeric loop (`LoopSum`, sum `0..1e6`), one shape the JIT
+compiles to native code (it also compiles the nested float loops of the
+Mandelbrot kernel - see [`benchmarks/`](benchmarks/)):
 
-| Engine | LoopSum | Fib(30) | LoopSum mem |
-|---|--:|--:|--:|
-| **Buzz (JIT)** | **5.9 ms** | 188 ms | 5.7 KB |
-| **Buzz (interp)** | 36.7 ms | **182 ms** | 2.0 KB |
-| gopher-lua | 47.6 ms | 266 ms | 15 MB |
-| tengo | 78.3 ms | 217 ms | 15 MB |
-| goja (JS) | 395 ms | 403 ms | 107 MB |
+```mermaid
+xychart-beta
+    title "LoopSum 0..1e6, warm, ms/op (lower is better)"
+    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
+    y-axis "ms/op" 0 --> 430
+    bar [5.8, 50.5, 84.0, 424]
+```
 
-Buzz leads both — ~8× over gopher-lua and ~13× over tengo on the loop, and the
-interpreter even wins `fib` — at KB, not MB/GB, of allocation. Cross-language
-microbenchmarks differ in semantics; read as order-of-magnitude.
+```mermaid
+xychart-beta
+    title "LoopSum 0..1e6, warm, MB allocated (lower is better)"
+    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
+    y-axis "MB/op" 0 --> 110
+    bar [0, 15, 15, 107]
+```
+
+That 5.8 ms is the JIT engaged; the same VM with the JIT off runs the loop in
+35.9 ms, still ahead of the others, but the native-code path is the headline.
+Allocation is effectively zero either way: the NaN-boxed `[]uint64` stack has no
+GC-visible pointers.
+
+**The JIT compiles top-level numeric loops to native code; everything else runs
+on the interpreter.** Its wheelhouse now covers both `LoopSum` *and* the
+`Mandelbrot` kernel - the baseline JIT learned the `and` short-circuit and
+int→float promotion, so Mandelbrot's nested float loop compiles to native SSE and
+runs in ~30 ms, an ~8× lead over gopher-lua's 246 ms. On the interpreter
+gopherbuzz wins the lighter scripting microbenchmarks (loops, calls, `fib`,
+collection iteration) and, with the float fast path in the arithmetic dispatch,
+is competitive on the heavy compute kernels: it trails gopher-lua on un-JIT'd
+MatMul and tengo on BinaryTrees, edges past gopher-lua on NBody (a near-tie with
+tengo), and string building still goes to gopher-lua. Allocation stays well under
+the dynamically typed peers throughout, "kilobytes" on lean workloads and
+single-digit MB on collection- and string-heavy ones. The full win-and-lose
+matrix (10 workloads, warm + fresh, plus an opt-in LuaJIT / Umka tier that is
+faster still) lives in [`benchmarks/`](benchmarks/), kept deliberately honest.
+
+benchstat median, amd64 Xeon @ 2.80 GHz, Go 1.25; cross-language microbenchmarks
+differ in semantics (types, safety, GC), so read as order-of-magnitude, not a
+verdict.
 
 Reproduce:
 
@@ -31,6 +59,43 @@ Reproduce:
 go test -run='^$' -bench=. -benchmem ./...                # in-tree (BUZZ_JIT=0 for interp)
 cd benchmarks/comparison && GOWORK=off go test -bench=. . # cross-language
 ```
+
+## Why this matters
+
+gopherbuzz is the interpreter behind **magus**, whose one job is to fan out
+across a workspace, run the tasks, and get out of the way. The VM sits on the
+critical path of that flow, before any real work starts:
+
+```mermaid
+flowchart TD
+    A([magus run]) --> B["gopherbuzz: evaluate<br/>magusfile.bzz + host-call glue"]
+    B --> C{fan out across workspace}
+    C -->|widens| B
+    C --> D[run the real work]
+    B:::hot
+    classDef hot fill:#fde68a,stroke:#b45309,color:#111
+```
+
+Two constraints follow, and they're why this VM exists:
+
+- **No second toolchain.** magus is a single static Go binary that
+  cross-compiles cleanly and runs anywhere `go` does: no cgo, no C library,
+  nothing to install first. A faster engine that needs a C toolchain (the
+  [extended tier](benchmarks/comparison/): LuaJIT, Umka) would forfeit that, so
+  the engine has to be **pure Go**. That makes a fast pure-Go VM the only door,
+  not a preference.
+- **It's on every task's critical path.** The VM evaluates `magusfile.bzz` and
+  the host-call glue on every run, and again as the fan-out widens. A slow or
+  allocation-heavy layer pays that cost over and over, landing as latency and GC
+  pressure between you and your build.
+
+The bar is just this: **be invisible.** The benchmarks above are deliberately
+heavy stress loops; a real `magusfile.bzz` is orders of magnitude smaller, so
+the VM's slice of any run sits well below the work it dispatches. We're into
+diminishing returns now, and the [perf design notes](#performance-design) mostly
+exist to stop a future change from regressing what's here. The point was never
+to win microbenchmarks; it was to make the interpreter cheap enough that magus
+can treat it as free, without reaching for a second toolchain to get there.
 
 ## Building
 
@@ -44,9 +109,9 @@ No cgo, no external toolchain. Pure-Go deps:
 [`golang-asm`](https://github.com/twitchyliquid64/golang-asm) (JIT codegen, amd64).
 
 `default.pgo` is applied automatically by Go 1.21+ when building from this dir;
-regenerate with `magus run regen-pgo gopherbuzz` after hot-path changes (a stale
+regenerate with `magus run pgo-generate gopherbuzz` after hot-path changes (a stale
 profile is neutral). After bumping `BytecodeVersion`, run `go generate` in
-`../internal/spell` to rebuild the embedded spell bytecode.
+[`../internal/spell`](../internal/spell) to rebuild the embedded spell bytecode.
 
 ## CLI
 
@@ -58,13 +123,50 @@ go run ./cmd/buzz script.bzz          # run a file
 echo 'return 1 + 2;' | go run ./cmd/buzz -   # run stdin
 go run ./cmd/buzz -e 'import "std"; std.print("hi");'
 go run ./cmd/buzz -c script.bzz       # type-check only
+go run ./cmd/buzz -t script.bzz       # run its test "..." {} blocks
 go run ./cmd/buzz --ast script.bzz    # dump the AST as JSON
 go run ./cmd/buzz -L ./lib m.bzz      # add an import search path
 ```
 
 The Buzz standard library is available; magus host bindings are not (use
-`magus buzz` / `magus repl --engine buzz` for those). Test blocks are not
-supported by this implementation.
+`magus buzz` / `magus repl --engine buzz` for those).
+
+## Testing
+
+Upstream Buzz's `test "name" { … }` blocks are supported. A block runs only under
+`buzz -t` / `--test`; a normal run skips it. A block fails when its body raises —
+typically a `std.assert` that did not hold:
+
+```buzz
+import "std";
+
+test "addition" {
+    std.assert(1 + 1 == 2, "math broke");
+}
+```
+
+```sh
+go run ./cmd/buzz -t mytests.bzz
+# ok    test "addition"
+# ---
+# 1 passed, 0 failed
+```
+
+**Named arguments:** upstream Buzz labels call arguments (`f(a: 1, b: 2)`)
+and requires the labels on multi-argument calls. gopherbuzz accepts them as a
+superset: labels resolve against the callee's parameter names at check time
+(any order; positional arguments first), while unlabeled calls keep working.
+For dynamically typed callees (host functions, `any` values) labels cannot be
+verified and arguments pass in written order. After label resolution,
+arguments evaluate in parameter order.
+
+**Deliberate divergence:** upstream hard-reserves `test` as a keyword; gopherbuzz
+treats it as a *contextual* soft keyword — `test` introduces a block only in the
+`test "…" {` position and stays a normal identifier elsewhere. This runs every
+upstream test block verbatim while keeping `test` usable as an identifier, which
+the magus embedding needs (`export fun test` is a common target). It is therefore
+a strict superset of upstream — the same "match capabilities, diverge only where a
+Go embedding forces it" stance taken for [FFI](docs/ffi.md).
 
 ## Build tags
 
@@ -77,8 +179,8 @@ Three mutually exclusive `Value` representations; one is compiled at a time.
 | `buzz_unsafe` | 24-byte pointer struct | legacy baseline |
 
 The default build has **zero GC write barriers** on the push/arith/pop path (the
-operand stack is `[]uint64`). `buzz_safe` is behaviorally identical and slower —
-it lets CI validate the fast build. The [JIT](#baseline-jit) is built with the
+operand stack is `[]uint64`). `buzz_safe` is behaviorally identical and slower,
+which lets CI validate the fast build. The [JIT](#baseline-jit) is built with the
 default rep on amd64 and arm64; every other config (safe/unsafe, other arches,
 wasm) uses a no-op stub.
 
@@ -89,7 +191,9 @@ go test -tags buzz_unsafe ./...
 
 ## FFI (calling C)
 
-`zdef()` binds functions from a C shared library at runtime via
+`zdef()` binds functions — and data symbols like `kCFBooleanTrue` — from a C
+shared library at runtime, accepting both upstream-Buzz Zig declarations
+(`fn sqrt(x: f64) f64;`) and C prototypes, via
 [`purego`](https://github.com/ebitengine/purego) — no cgo, no build-time
 toolchain. The `ffi` module adds C-ABI type metadata and a pinned-memory API so
 scripts can drive the common patterns: scalar calls, pointer out-parameters,
@@ -107,7 +211,9 @@ compiler), gopherbuzz is C-ABI native: `zdef` takes C prototypes and `ffi.sizeOf
 where purego does, and returns a clear "unsupported" error elsewhere (e.g. wasm).
 
 Full reference: [`docs/ffi.md`](docs/ffi.md) · runnable demo:
-[`examples/ffi-c/`](examples/ffi-c/) (`go run .`).
+[`examples/ffi-c/`](examples/ffi-c/) (`go run .`) · a larger showcase:
+[`examples/yeetile/`](examples/yeetile/), an i3-flavored macOS tiling
+window manager written in pure Buzz on this FFI.
 
 ## WebAssembly
 
@@ -122,19 +228,26 @@ echo 'return (1 + 2) * 10;' | wasmtime buzz.wasm     # 30
 ```
 
 Both `wasip1/wasm` and `js/wasm` build. This makes gopherbuzz (to our knowledge
-the first Go implementation of Buzz) run **in the browser** — the magus docs
-site's Buzz playground (`magus/cmd/buzz-playground` over `magus/internal/playground`)
-evaluates Buzz live and dry-runs a `magusfile.bzz`, with host calls recorded.
+the first Go implementation of Buzz) run **in the browser**: the [magus](..) docs
+site's Buzz playground ([`magus/cmd/buzz-playground`](../cmd/buzz-playground) over
+[`magus/internal/playground`](../internal/playground)) evaluates Buzz live and
+dry-runs a `magusfile.bzz`, with host calls recorded.
 
 ## Architecture
 
-```
-source → Parse → ast.Program → Checker → Compiler (FoldConsts → FusePeephole)
-       → Chunk (bytecode) → VM.Exec (register-window stack) → Value
+```mermaid
+flowchart TD
+    A[source] --> B[Parse]
+    B --> C[ast.Program]
+    C --> D[Checker]
+    D --> E["Compiler<br/>FoldConsts, FusePeephole"]
+    E --> F["Chunk<br/>bytecode"]
+    F --> G["VM.Exec<br/>register-window stack"]
+    G --> H[Value]
 ```
 
-- **`Instr`** `{Op uint8, A, B int32}` — word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.
-- **`Value`** — 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in the payload; heap objects are indices into a per-VM handle table, so the operand stack is `[]uint64` with no GC-visible pointers.
+- **`Instr`** `{Op uint8, A, B int32}`: word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.
+- **`Value`**: 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in the payload; heap objects are indices into a per-VM handle table, so the operand stack is `[]uint64` with no GC-visible pointers.
 
 ## Baseline JIT
 
@@ -143,8 +256,8 @@ opcode subset is compiled to native code, deleting interpreter dispatch. On by
 default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
 
 - The pointerless `[]uint64` stack lets native code run with no GC cooperation; every value sits at a static slot offset at each opcode boundary, so interpreter state is always materialized.
-- Each op has an int and a double (SSE) fast path. Anything else — mixed
-  int/float, a non-number via `any`, NaN, float ÷0/`%` — **deopts** to the interpreter at the recorded ip; unsupported ops (calls, members, strings) make the chunk ineligible. The interpreter is the oracle, so the JIT is never wrong.
+- Each op has an int and a double (SSE) fast path. Anything else (mixed
+  int/float, a non-number via `any`, NaN, float ÷0/`%`) **deopts** to the interpreter at the recorded ip; unsupported ops (calls, members, strings) make the chunk ineligible. The interpreter is the oracle, so the JIT is never wrong.
 - Loop back-edges poll cancellation every 256 iterations (one predicted branch).
 
 Codegen uses [`golang-asm`](https://github.com/twitchyliquid64/golang-asm): same machine code (so same runtime speed) as a hand emitter, but toolchain-verified.
@@ -158,17 +271,17 @@ the hot path, baseline with `benchstat` over `-bench=. -count=10` and re-check
 under `buzz_safe`.
 
 - **`Exec` is I-cache-bound** (~50 KB single `switch`). Adding a new full `case`
-  regresses *all* benchmarks 25–55%. Add small branches inside existing handlers,
-  or move cold code to `//go:noinline` helpers — never a new case body.
-- **Superinstructions** (`FusePeephole`): `OpLocalConstOp`, `OpLocalLocalOp`,
-  `OpForCondLC` fuse the dominant `GetLocal/LoadConst/<op>/JumpFalse` patterns.
+  regresses *all* benchmarks 25-55%. Add small branches inside existing handlers,
+  or move cold code to `//go:noinline` helpers, never a new case body.
+- **Superinstructions** (`FusePeephole`): `OpBinLC`, `OpBinLL`,
+  `OpCmpLC` fuse the dominant `GetLocal/LoadConst/<op>/JumpFalse` patterns.
 - **SetLocal absorption**: fused ops peek ahead and write `x = x op y` straight
   to the slot.
 - **Static int proof**: bit 31 of a fused op's `B` means "both operands proven
   int" (drops the tag checks); sub-opcode is masked `& 0x7F` / `& 0x7FFF`. Sound
   because `OpCheckType` guards every `any → int` narrowing.
 - **Inline caches**: per-VM `mcache` (member access) and field-slot hints
-  (`OpGetField`/`OpSetField`) — pointer/index compares, no string scan. Per-VM,
+  (`OpGetField`/`OpSetField`): pointer/index compares, no string scan. Per-VM,
   not per-Chunk (chunks are shared; verified `-race`).
 - **NaN-box + handle table**: zero write barriers on push/pop; the table pins
   objects for the VM's life (fine for short per-target sessions).
@@ -181,7 +294,7 @@ Bump `vm.BytecodeVersion` (in `vm/marshal.go`) when opcode numbering, the
 
 ## Contributing gotchas
 
-1. No new `Exec` case bodies (I-cache — see above).
+1. No new `Exec` case bodies (I-cache; see above).
 2. Value changes must pass under all three build tags (CI runs default + `buzz_safe`; spot-check `buzz_unsafe`).
 3. Fused-op sub-opcode masking (`& 0x7F` / `& 0x7FFF`) must track any new flag bits, in both `chunk.go` and the VM handlers.
 4. `slotTypeInt = 1` (vm `chunk.go`) mirrors `buzz.sInt` so they must be kept in sync.

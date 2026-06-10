@@ -2,7 +2,7 @@
 
 Base64/hex/URL text codecs.
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.encoding.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "encoding"`) and call methods in `camelCase` (`encoding.someMethod`).
 
 ## Methods
 
@@ -10,7 +10,9 @@ Base64/hex/URL text codecs.
 
 Encode data as standard (padded) base64.
 
-**Signature:** `extra.encoding.base64Encode(data) → string`
+**Signature:** `encoding.base64Encode(data) → string`
+
+**Also in Buzz's stdlib:** `str.encodeBase64 (built-in string method)` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -22,7 +24,7 @@ Encode data as standard (padded) base64.
 
 Decode a standard (padded) base64 string; errors on malformed input.
 
-**Signature:** `extra.encoding.base64Decode(s) → string`
+**Signature:** `encoding.base64Decode(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -34,7 +36,7 @@ Decode a standard (padded) base64 string; errors on malformed input.
 
 Encode data as URL-safe (padded) base64.
 
-**Signature:** `extra.encoding.base64urlEncode(data) → string`
+**Signature:** `encoding.base64urlEncode(data) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -46,7 +48,7 @@ Encode data as URL-safe (padded) base64.
 
 Decode a URL-safe (padded) base64 string; errors on malformed input.
 
-**Signature:** `extra.encoding.base64urlDecode(s) → string`
+**Signature:** `encoding.base64urlDecode(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -58,7 +60,9 @@ Decode a URL-safe (padded) base64 string; errors on malformed input.
 
 Encode data as lowercase hex.
 
-**Signature:** `extra.encoding.hexEncode(data) → string`
+**Signature:** `encoding.hexEncode(data) → string`
+
+**Also in Buzz's stdlib:** `str.hex (built-in string method)` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -70,7 +74,7 @@ Encode data as lowercase hex.
 
 Decode a hex string; errors on malformed input.
 
-**Signature:** `extra.encoding.hexDecode(s) → string`
+**Signature:** `encoding.hexDecode(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -82,7 +86,7 @@ Decode a hex string; errors on malformed input.
 
 Percent-encode s for use in a URL query component.
 
-**Signature:** `extra.encoding.urlEncode(s) → string`
+**Signature:** `encoding.urlEncode(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -94,11 +98,35 @@ Percent-encode s for use in a URL query component.
 
 Decode a percent-encoded URL query component; errors on malformed input.
 
-**Signature:** `extra.encoding.urlDecode(s) → string`
+**Signature:** `encoding.urlDecode(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `s` | `string` |  | |
+
+**Returns:** string
+
+### `parse_url`
+
+Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.
+
+**Signature:** `encoding.parseUrl(raw_url) → map[string]any`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `raw_url` | `string` |  | |
+
+**Returns:** map[string]any
+
+### `build_url`
+
+Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.
+
+**Signature:** `encoding.buildUrl(parts) → string`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `parts` | `map[string]any` |  | |
 
 **Returns:** string
 

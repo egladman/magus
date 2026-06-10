@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus/project"
@@ -54,6 +55,22 @@ func (r *WorkspaceRegistry) RegisterProject(path string, opts ...ProjectOption) 
 	r.projectOpts[path] = append(r.projectOpts[path], opts...)
 }
 
+// registerPathHint explains the explicit-path form of magus.project.register when
+// the path didn't match a project — the classic footgun is passing the magusfile's
+// own directory name (relative to the workspace root) instead of omitting the path
+// to configure "this project". It lists the known projects so the caller can see
+// the right spelling.
+func registerPathHint(w types.WorkspaceRepository) string {
+	var known []string
+	for _, p := range w.All() {
+		known = append(known, p.Path)
+	}
+	slices.Sort(known)
+	return fmt.Sprintf("explicit register paths are relative to the workspace root (known projects: %s); "+
+		"to configure the magusfile's own project, omit the path: register(fun(p, cb) { cb({...}); })",
+		strings.Join(known, ", "))
+}
+
 // SetRemoteBackend records the spell name a magusfile chose as the remote cache
 // backend. Last writer wins; safe to call concurrently.
 func (r *WorkspaceRegistry) SetRemoteBackend(spellName string) {
@@ -94,8 +111,8 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 	for path, opts := range r.projectOpts {
 		p := w.Get(path)
 		if p == nil {
-			errs = append(errs, fmt.Errorf("magus: register: %q in workspace %q: %w",
-				path, w.Root(), types.ErrUnknownProject))
+			errs = append(errs, fmt.Errorf("magus: register: %q in workspace %q: %w; %s",
+				path, w.Root(), types.ErrUnknownProject, registerPathHint(w)))
 			continue
 		}
 		for _, o := range opts {

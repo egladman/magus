@@ -1,0 +1,65 @@
+// regex_test.buzz — tests for the pure-Buzz matcher. Runs anywhere:
+//
+//     go run ../../cmd/buzz -t -L . regex_test.buzz
+
+import "std";
+import "regex";
+
+fun hits(pattern: str, text: str) > bool {
+    final re = reCompile(pattern);
+    std\assert(re != null, message: "pattern compiles: {pattern}");
+    return reMatch(re!, textRaw: text);
+}
+
+test "literals, dot, and anchors" {
+    std\assert(hits("cat", text: "concatenate"), message: "substring match");
+    std\assert(!hits("cat", text: "dog"), message: "miss");
+    std\assert(hits("^cat", text: "catalog"), message: "start anchor");
+    std\assert(!hits("^cat", text: "concat"), message: "start anchor rejects offset");
+    std\assert(hits("log$", text: "catalog"), message: "end anchor");
+    std\assert(hits("^cat$", text: "cat"), message: "exact match");
+    std\assert(!hits("^cat$", text: "cats"), message: "exact rejects suffix");
+    std\assert(hits("c.t", text: "cut"), message: "dot matches any");
+}
+
+test "repetition with backtracking" {
+    std\assert(hits("^ab*c$", text: "ac"), message: "star matches zero");
+    std\assert(hits("^ab*c$", text: "abbbc"), message: "star matches many");
+    std\assert(hits("^ab+c$", text: "abc"), message: "plus needs one");
+    std\assert(!hits("^ab+c$", text: "ac"), message: "plus rejects zero");
+    std\assert(hits("^ab?c$", text: "ac"), message: "question optional");
+    std\assert(!hits("^ab?c$", text: "abbc"), message: "question at most one");
+    std\assert(hits("^a.*c$", text: "a tidy basket c"), message: "greedy star gives back");
+}
+
+test "classes, ranges, and escapes" {
+    std\assert(hits("^[abc]+$", text: "cab"), message: "member class");
+    std\assert(!hits("^[abc]+$", text: "cad"), message: "non-member rejected");
+    std\assert(hits("^[a-z0-9_]+$", text: "snake_case_99"), message: "ranges and underscore");
+    std\assert(hits("^[^0-9]+$", text: "letters"), message: "negated class");
+    std\assert(!hits("^[^0-9]+$", text: "le7ters"), message: "negated class rejects digit");
+    std\assert(hits("^\\d+$", text: "12345"), message: "digit escape");
+    std\assert(hits("^\\w+ \\w+$", text: "two words"), message: "word escape");
+    std\assert(hits("^\\s$", text: " "), message: "space escape");
+    std\assert(hits("^3\\.14$", text: "3.14"), message: "escaped dot is literal");
+    std\assert(!hits("^3\\.14$", text: "3914"), message: "escaped dot rejects any-char");
+    std\assert(hits("^[\\d-]+$", text: "20-26"), message: "class escape plus literal dash");
+}
+
+test "alternation and case-insensitive prefix" {
+    std\assert(hits("cat|dog", text: "dog"), message: "top-level alternation");
+    std\assert(hits("^cat$|^dog$", text: "dog"), message: "anchors apply per alternative");
+    std\assert(!hits("^cat$|^dog$", text: "hotdog"), message: "per-alternative anchors reject");
+    std\assert(hits("^Untitled \\d+$", text: "Untitled 42"), message: "the window-rule classic");
+    std\assert(!hits("^Untitled \\d+$", text: "an Untitled 42 story"), message: "anchors respected");
+    std\assert(hits("(?i)^code$", text: "Code"), message: "case-insensitive flag");
+    std\assert(hits("(?i)slack|discord", text: "DISCORD call"), message: "ci across alternation");
+}
+
+test "malformed patterns return null" {
+    std\assert(reCompile("[unclosed") == null, message: "unclosed class");
+    std\assert(reCompile("dangling\\") == null, message: "dangling escape");
+    std\assert(reCompile("*lead") == null, message: "leading repetition");
+    std\assert(reCompile("a||b") == null, message: "empty alternative");
+    std\assert(reCompile("[z-a]") == null, message: "inverted range");
+}

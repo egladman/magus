@@ -150,5 +150,53 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return buzz.Null, nil
 	}))
+	m.MapSet("walk", buzz.DirectValue("fs.walk", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		root := bzStr(bzArgs, 0)
+		callback := bzCallback(sess, bzArgs, 1)
+		if err := std.FsWalk(ctx, root, callback); err != nil {
+			return buzz.Null, err
+		}
+		return buzz.Null, nil
+	}))
+	m.MapSet("appendFile", buzz.DirectValue("fs.appendFile", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		path := bzStr(bzArgs, 0)
+		content := bzStr(bzArgs, 1)
+		if err := std.FsAppendFile(ctx, path, content); err != nil {
+			return buzz.Null, err
+		}
+		return buzz.Null, nil
+	}))
+	m.MapSet("chmod", buzz.DirectValue("fs.chmod", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		path := bzStr(bzArgs, 0)
+		mode := bzInt(bzArgs, 1, 0)
+		if err := std.FsChmod(ctx, path, mode); err != nil {
+			return buzz.Null, err
+		}
+		return buzz.Null, nil
+	}))
+	m.MapSet("symlink", buzz.DirectValue("fs.symlink", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		target := bzStr(bzArgs, 0)
+		link := bzStr(bzArgs, 1)
+		if err := std.FsSymlink(ctx, target, link); err != nil {
+			return buzz.Null, err
+		}
+		return buzz.Null, nil
+	}))
+	m.MapSet("readlink", buzz.DirectValue("fs.readlink", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		path := bzStr(bzArgs, 0)
+		ret0, err := std.FsReadlink(ctx, path)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
+	m.MapSet("tempDir", buzz.DirectValue("fs.tempDir", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		prefix := bzStr(bzArgs, 0)
+		ret0, err := std.FsTempDir(ctx, prefix)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
 	return m
 }

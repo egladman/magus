@@ -18,7 +18,7 @@ import (
 // module recovered from bytecode re-declares its exported names — without it a
 // bytecode-loaded spell module would expose none of its mgs_ contract.
 //
-// v3 adds the OpLocalConstOp superinstruction (FusePeephole). A v2 binary would
+// v3 adds the OpBinLC superinstruction (FusePeephole). A v2 binary would
 // hit it as an unknown opcode, so the version guard must reject v3 blobs.
 //
 // v4 adds OpCheckType (compiler-inserted any→typed-slot assertions). Same
@@ -27,7 +27,7 @@ import (
 // v5 adds OpGetField/OpSetField (inline-cached this.field access). Same reasoning.
 //
 // v6 encodes the compiler's static int-type proof in OpGetLocal.B and in bit 31
-// of OpLocalConstOp/OpLocalLocalOp.B. An older VM reads a bit-31-set B as
+// of OpBinLC/OpBinLL.B. An older VM reads a bit-31-set B as
 // sub-opcode 0x80|op, which no case matches — it falls to applyBinop (correct
 // but slow). Version guard prevents a stale VM from taking the implicit speed hit.
 //
@@ -325,6 +325,7 @@ const (
 	nodeFiberExpr    = 39
 	nodeResumeExpr   = 40
 	nodeResolveExpr  = 41
+	nodeCatchExpr    = 42
 )
 
 func (e *enc) node(n ast.Node) error {
@@ -592,6 +593,13 @@ func (e *enc) node(n ast.Node) error {
 		e.u8(nodeThrowStmt)
 		e.pos(p)
 		return e.node(v.Value)
+	case *ast.CatchExpr:
+		e.u8(nodeCatchExpr)
+		e.pos(p)
+		if err := e.node(v.Expr); err != nil {
+			return err
+		}
+		return e.node(v.Default)
 	case *ast.YieldExpr:
 		e.u8(nodeYieldExpr)
 		e.pos(p)
@@ -1451,6 +1459,16 @@ func (d *dec) node() (ast.Node, error) {
 			return nil, err
 		}
 		return &ast.ThrowStmt{Pos: p, Value: val}, nil
+	case nodeCatchExpr:
+		expr, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		def, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.CatchExpr{Pos: p, Expr: expr, Default: def}, nil
 	case nodeYieldExpr:
 		val, err := d.node()
 		if err != nil {

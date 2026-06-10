@@ -102,9 +102,9 @@ This writes a `magus.yaml` seeded with built-in defaults, stubs a starter `magus
 import "magus";
 import "spells/hello";   // ./spells/hello/spell.bzz
 
-magus.project.register(".", {
+magus.project.register(fun(p, cb) > bool { cb({
     "spells": [hello],
-});
+}); return true; });
 
 // Each exported function becomes a runnable target.
 // 'ci' is the canonical entry point for `magus affected ci`.
@@ -401,9 +401,9 @@ import "magus";
 import "magus/extra";
 import "magus/spell/go";
 
-magus.project.register(".", {
+magus.project.register(fun(p, cb) > bool { cb({
     "spells": [go],
-});
+}); return true; });
 
 export fun build_server(_args: [str]) > void {
     extra.os.exec("go", ["build", "-o", "bin/server", "./cmd/server"]);
@@ -479,7 +479,7 @@ Built-in spells are compiled into the magus binary.
 
 ```buzz
 import "magus/spell/go";
-magus.project.register(".", { "spells": [go] });
+magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
 ```
 
 Available built-ins:
@@ -512,7 +512,7 @@ matched verbatim, so kebab names are reached by subscript:
 
 ```buzz
 import "magus/spell/go";
-magus.project.register(".", { "spells": [go] });
+magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
 
 export fun build(_args: [str])  > void { go["go-build"]({ "cwd": "." }); }
 export fun lint(_args: [str])   > void { go["golangci-lint"]({ "cwd": "." }); }
@@ -540,7 +540,7 @@ the spell:
 ```buzz
 import "magus/spell/go";
 import "magus/extra";
-magus.project.register("api/", { "spells": [go] });
+magus.project.register("api/", fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
 
 export fun build(_args: [str]) > void { go["go-build"]({ "cwd": "api/" }); }
 export fun lint(_args: [str])  > void { go["golangci-lint"]({ "cwd": "api/" }); }
@@ -584,7 +584,7 @@ export fun mgs_listTargets() > any {
 
 ```buzz
 const rb = magus.spell.load("spells/ruby.bzz");
-magus.project.register("gems/", { "spells": [rb] });
+magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 
 export fun test(_args: [str]) > void { rb.rspec({ "cwd": "gems/" }); }
 export fun lint(_args: [str]) > void { rb.rubocop({ "cwd": "gems/" }); }
@@ -611,7 +611,7 @@ const rb = magus.spell.define({
                      "charms": { "rw": {"ops": [{"op": "replace", "path": "/2", "value": "-A"}]} } },
     },
 });
-magus.project.register("gems/", { "spells": [rb] });
+magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 ```
 
 For a step that needs a shell or arbitrary logic, skip the spell and write the
@@ -712,10 +712,10 @@ Magus infers dependencies between projects automatically from language manifests
 **In a magusfile.bzz:**
 
 ```buzz
-magus.project.register("apps/ui", {
+magus.project.register("apps/ui", fun(p, cb) > bool { cb({
     "spell":      { "name": "typescript" },
     "depends_on": ["api", "internal/schema"],
-});
+}); return true; });
 ```
 
 Paths can be repo-relative (`"api"`) or relative to the declaring project (`"../api"`).
@@ -726,7 +726,7 @@ Declared dependencies affect `magus affected`: when `api` changes, `apps/ui` is 
 >
 > ```buzz
 > // project-level: this project depends on ../api
-> magus.project.register(".", { "depends_on": ["../api"] });
+> magus.project.register(fun(p, cb) > bool { cb({ "depends_on": ["../api"] }); return true; });
 >
 > // target-level: this target depends on every *-build target
 > export fun build(_args: [str]) > void {

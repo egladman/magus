@@ -42,8 +42,8 @@ func TestBuildModulesOutput_Detail(t *testing.T) {
 	if !ok {
 		t.Fatal("env.lookup missing from detail view")
 	}
-	if !strings.HasPrefix(lk.buzz, "extra.env.lookup(") {
-		t.Errorf("Buzz sig = %q, want extra.env.lookup(...)", lk.buzz)
+	if !strings.HasPrefix(lk.buzz, "env.lookup(") {
+		t.Errorf("Buzz sig = %q, want env.lookup(...)", lk.buzz)
 	}
 	if lk.native == "" {
 		t.Error("env.lookup should carry a native Buzz cross-reference")

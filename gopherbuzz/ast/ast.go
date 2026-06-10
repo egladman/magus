@@ -123,6 +123,14 @@ type FunDecl struct {
 	Doc string
 }
 
+// TestDecl: test "name" { body } — a named test block (upstream Buzz). Its body
+// runs only under the test runner (buzz --test), never during a normal run.
+type TestDecl struct {
+	Pos
+	Name string
+	Body *BlockStmt
+}
+
 // ObjectDecl: object Name { fields; methods }
 type ObjectDecl struct {
 	Pos
@@ -164,11 +172,16 @@ type UnaryExpr struct {
 	Operand Node
 }
 
-// CallExpr: callee(args...)
+// CallExpr: callee(args...). ArgNames is parallel to Args when any argument
+// was labeled (upstream Buzz's `f(a: 1, b: 2)` named-argument syntax); "" in
+// a slot means that argument was positional. nil when every argument was
+// positional. The checker resolves labels against the callee's parameter
+// names and reorders Args, so later stages never see them.
 type CallExpr struct {
 	Pos
-	Callee Node
-	Args   []Node
+	Callee   Node
+	Args     []Node
+	ArgNames []string
 }
 
 // MemberExpr: object.name
@@ -309,6 +322,18 @@ type AsExpr struct {
 	Pos
 	Expr     Node
 	TypeName string
+	// Optional marks the `as?` form (upstream Buzz): a cast that yields null on
+	// a type mismatch instead of erroring. Plain `as` coerces or errors.
+	Optional bool
+}
+
+// CatchExpr: callExpr catch defaultExpr — upstream Buzz's inline catch. If the
+// call throws, the expression evaluates to Default instead. The thrown error is
+// not bound (matching upstream's call-suffix form).
+type CatchExpr struct {
+	Pos
+	Expr    Node
+	Default Node
 }
 
 // TryStmt: try { body } catch (name) { handler }

@@ -1,0 +1,13 @@
+// @expect: 49
+// Inline catch (upstream Buzz): `call(args) catch default`. If the call throws,
+// the expression evaluates to default; otherwise it is the call's value. catch
+// binds tighter than binary operators, and the default is a full expression.
+fun boom() > int {
+    throw "boom";
+}
+fun seven() > int {
+    return 7;
+}
+final a = boom() catch 42;      // throws → default 42
+final b = seven() catch 99;     // no throw → call value 7
+final __r = a + b;              // 49

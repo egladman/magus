@@ -87,6 +87,7 @@ func objAs[T heapVal](v Value, kind string) T {
 }
 
 func (v Value) asStr() *strObj             { return objAs[*strObj](v, "str") }
+func (v Value) asUD() *udObj               { return objAs[*udObj](v, "ud") }
 func (v Value) asList() *listObj           { return objAs[*listObj](v, "list") }
 func (v Value) asMap() *mapObj             { return objAs[*mapObj](v, "map") }
 func (v Value) asFun() *funObj             { return objAs[*funObj](v, "fun") }

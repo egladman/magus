@@ -9,10 +9,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Probe reports whether the filesystem containing dir supports CoW reflinks
+// probe reports whether the filesystem containing dir supports CoW reflinks
 // (clonefile). Returns false when dir doesn't exist, the probe files can't be
 // created, or the filesystem is not APFS.
-func Probe(dir string) bool {
+func probe(dir string) bool {
 	src, err := os.CreateTemp(dir, ".reflink-probe-src.*")
 	if err != nil {
 		return false
@@ -33,7 +33,7 @@ func Probe(dir string) bool {
 	return false
 }
 
-// Clone copies src to dst using the most efficient mechanism available
+// clone copies src to dst using the most efficient mechanism available
 // on the current filesystem:
 //
 //  1. clonefile(2) (APFS): O(1) copy-on-write reflink — APFS exposes true
@@ -44,7 +44,7 @@ func Probe(dir string) bool {
 // dst must not exist when Clone is called (the caller removes it first).
 // clonefile itself requires a non-existent destination and will return
 // EEXIST otherwise.
-func Clone(src, dst string) error {
+func clone(src, dst string) error {
 	// ── Path 1: clonefile (APFS CoW) ──────────────────────────────────
 	cloneErr := unix.Clonefile(src, dst, 0)
 	if cloneErr == nil {

@@ -19,6 +19,7 @@ type Session struct {
 	cancel        context.CancelFunc
 	env           *Env
 	targets       map[string]Callable
+	tests         []TestEntry
 	exportedNames map[string]bool
 	// curVM is the VM currently executing a chunk in this session, or nil between
 	// runs. The debugger (debug.go) reads it for stack introspection, and the run
@@ -27,9 +28,15 @@ type Session struct {
 	curVM    *vmpackage.VM
 	stepHook func(StepEvent, DebugFrame)
 	stepMask StepMask
-	// includeDirs is the ordered list of directories searched when an import
-	// statement names a module not yet bound in the session. NewSession populates
-	// it from BUZZ_INCLUDE_PATH; the host may override via SetIncludeDirs.
+	// searchPaths is the ordered list of path templates searched when an import
+	// statement names a module not yet bound in the session. Each template holds
+	// `?` (replaced with the import path) and may reference environment variables
+	// (e.g. $BUZZ_PATH). NewSession seeds it from DefaultSearchPaths; the host may
+	// override it at construction via WithSearchPaths. See findIncludeFile.
+	searchPaths []string
+	// includeDirs is an additional ordered list of plain directories searched
+	// after searchPaths, for the `-L` CLI flag and BUZZ_INCLUDE_PATH. NewSession
+	// populates it from BUZZ_INCLUDE_PATH; the host may override via SetIncludeDirs.
 	includeDirs []string
 	// loadedPaths tracks absolute paths already loaded to prevent re-execution
 	// and break import cycles.
@@ -87,6 +94,16 @@ func (s *Session) SetSyntheticModule(importPath string, v Value) {
 	s.syntheticModules[importPath] = v
 }
 
+// SyntheticModule returns the value registered for importPath via
+// SetSyntheticModule, or ok=false if none is registered. It lets a host that
+// layers its own methods onto a stdlib module under a shared name (e.g. magus
+// merging host methods onto Buzz's bare "os"/"fs"/"crypto") read the registered
+// module back so it can be extended in place rather than replaced.
+func (s *Session) SyntheticModule(importPath string) (Value, bool) {
+	v, ok := s.syntheticModules[importPath]
+	return v, ok
+}
+
 // SetSourceModule registers src as the embedded Buzz source imported by
 // `import "<importPath>"`. It resolves before the includeDirs file search and
 // flat-merges (its exported object/enum types become visible to the importer's
@@ -125,8 +142,38 @@ func newSession(ctx context.Context) *Session {
 	// user cannot shadow since resume/resolve are lexer keywords).
 	env.Define("resume", vmpackage.DirectValue("resume", s.builtinResume))
 	env.Define("resolve", vmpackage.DirectValue("resolve", s.builtinResolve))
+	// The test-block registrar (see compiler.compileTestDecl). Bound under a name
+	// no user identifier can spell, so `test "x" {…}` blocks register their bodies
+	// without any reserved-name collision.
+	env.Define(testRegistrarName, vmpackage.DirectValue(testRegistrarName, s.registerTest))
 	return s
 }
+
+// testRegistrarName is the session-env name the compiler lowers a test block to a
+// call of. The leading '$' makes it unspellable as a Buzz identifier.
+const testRegistrarName = "$buzz_test"
+
+// TestEntry is one registered `test "Name" { … }` block: its name and the
+// zero-argument closure that runs its body.
+type TestEntry struct {
+	Name string
+	Fn   Value
+}
+
+// registerTest is the session-bound implementation of the test-block registrar.
+// The compiler calls it once per test block with (name, bodyClosure).
+func (s *Session) registerTest(_ context.Context, args []Value) (Value, error) {
+	if len(args) != 2 || !args[0].IsStr() {
+		return Null, fmt.Errorf("buzz: internal: malformed test registration")
+	}
+	s.tests = append(s.tests, TestEntry{Name: args[0].AsString(), Fn: args[1]})
+	return Null, nil
+}
+
+// Tests returns the test blocks registered while executing this session's code,
+// in source order. A normal run never executes their bodies; a test runner calls
+// each Fn (e.g. via CallValue) and treats a returned error as a failure.
+func (s *Session) Tests() []TestEntry { return s.tests }
 
 // builtinResume is the session-aware implementation of `resume fiber`. It swaps
 // curVM to the fiber's VM via enter() so debug introspection (Frames,
@@ -221,16 +268,67 @@ func (s *Session) builtinResolve(ctx context.Context, args []Value) (Value, erro
 	}
 }
 
+// DefaultSearchPaths is the ordered list of path templates an unconfigured
+// Session searches to resolve `import "<name>"` to a file. In each template `?`
+// is replaced with the import path and environment variables are expanded (a
+// template referencing an unset variable is skipped, so an unset $BUZZ_PATH
+// drops its entries rather than searching the filesystem root).
+//
+// It mirrors the upstream Buzz search order (https://buzz-lang.dev). Both
+// extensions resolve — upstream's `.buzz` and gopherbuzz's traditional `.bzz`
+// (the .bzz template implicitly retries as .buzz; see findIncludeFile) — so
+// upstream-named module files import unchanged. Override per-session with
+// WithSearchPaths.
+var DefaultSearchPaths = []string{
+	"./?.bzz",
+	"./?/main.bzz",
+	"./?/src/main.bzz",
+	"./?/src/?.bzz",
+	"/usr/share/buzz/?.bzz",
+	"/usr/share/buzz/?/main.bzz",
+	"/usr/share/buzz/?/src/main.bzz",
+	"/usr/share/buzz/?/src/?.bzz",
+	"/usr/local/share/buzz/?.bzz",
+	"/usr/local/share/buzz/?/main.bzz",
+	"/usr/local/share/buzz/?/src/main.bzz",
+	"/usr/local/share/buzz/?/src/?.bzz",
+	"$BUZZ_PATH/?.bzz",
+	"$BUZZ_PATH/?/main.bzz",
+	"$BUZZ_PATH/?/src/main.bzz",
+	"$BUZZ_PATH/?/src/?.bzz",
+}
+
+// Option configures a Session at construction. See NewSession.
+type Option func(*Session)
+
+// WithSearchPaths replaces the session's import search path templates (see
+// DefaultSearchPaths for the syntax). Passing no paths is a no-op, leaving the
+// session on DefaultSearchPaths. A host that wants to confine imports to its own
+// layout passes its own templates here (e.g. magus restricts resolution to
+// `magusfiles/?.bzz` under the project and workspace roots).
+func WithSearchPaths(paths ...string) Option {
+	return func(s *Session) {
+		if len(paths) > 0 {
+			s.searchPaths = paths
+		}
+	}
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
-// BUZZ_INCLUDE_PATH (colon-separated on Unix, semicolon-separated on Windows)
-// is read to populate the initial include directory list. The host may override
-// it with SetIncludeDirs after construction.
-func NewSession(ctx context.Context) *Session {
+// Imports resolve against DefaultSearchPaths unless WithSearchPaths overrides it.
+// BUZZ_INCLUDE_PATH (colon-separated on Unix, semicolon-separated on Windows) is
+// read to populate the additional include directory list, searched after the
+// templates; the host may override it with SetIncludeDirs.
+func NewSession(ctx context.Context, opts ...Option) *Session {
 	s := newSession(ctx)
+	s.searchPaths = DefaultSearchPaths
 	if v := os.Getenv("BUZZ_INCLUDE_PATH"); v != "" {
 		s.includeDirs = filepath.SplitList(v)
+	}
+	for _, opt := range opts {
+		opt(s)
 	}
 	return s
 }
@@ -461,9 +559,14 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			}
 			s.loadedPaths[key] = true
 			s.collectImportedTypes(src)
+			beforeExports := make(map[string]bool, len(s.exportedNames))
+			for n := range s.exportedNames {
+				beforeExports[n] = true
+			}
 			if err := s.execImport(s.ctx, src); err != nil {
 				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
 			}
+			s.bindNamespaceObject(boundName, beforeExports)
 			continue
 		}
 
@@ -476,7 +579,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			}
 		}
 
-		path := s.findIncludeFile(basename)
+		path := s.findIncludeFile(imp.Path)
 		if path == "" {
 			continue
 		}
@@ -506,9 +609,17 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			// collect its exported object/enum types so the importer can name
 			// them (Exec only merges runtime values, not type declarations).
 			s.collectImportedTypes(string(data))
+			beforeExports := make(map[string]bool, len(s.exportedNames))
+			for n := range s.exportedNames {
+				beforeExports[n] = true
+			}
 			if err := s.execImport(s.ctx, string(data)); err != nil {
 				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
 			}
+			// Also bind a namespace object under the basename so upstream-Buzz
+			// qualified access (`regex\reCompile`) resolves the same export the
+			// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
+			s.bindNamespaceObject(boundName, beforeExports)
 		}
 	}
 	return nil
@@ -537,10 +648,32 @@ func (s *Session) collectImportedTypes(src string) {
 	}
 }
 
+// bindNamespaceObject binds, under name, a map of the exported globals a flat
+// import just added — those present in the env now but not in beforeNames, and
+// marked export. It lets upstream-style qualified access `name\export` resolve
+// the same value the unqualified splat also bound. Skipped if name is already
+// bound (e.g. the module exports something matching its own basename).
+func (s *Session) bindNamespaceObject(name string, beforeExports map[string]bool) {
+	if _, exists := s.env.Get(name); exists {
+		return
+	}
+	m := NewMap()
+	for n := range s.exportedNames {
+		if beforeExports[n] {
+			continue
+		}
+		if v, ok := s.env.Get(n); ok {
+			m.MapSet(n, v)
+		}
+	}
+	s.env.Define(name, m)
+}
+
 // loadImportAsAlias executes src in a sub-session that inherits the parent's
 // host globals, then binds the sub-session's new globals as a map under alias.
 func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	sub := newSession(s.ctx)
+	sub.searchPaths = s.searchPaths
 	sub.SetIncludeDirs(s.includeDirs)
 	sub.loadedPaths = s.loadedPaths
 	sub.syntheticModules = s.syntheticModules
@@ -571,18 +704,57 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	return nil
 }
 
-// findIncludeFile searches includeDirs for name.bzz (flat) or name/name.bzz
-// (directory-per-module, matching the built-in spell layout).
-func (s *Session) findIncludeFile(name string) string {
-	for _, dir := range s.includeDirs {
-		if p := filepath.Join(dir, name+".bzz"); bzzExists(p) {
+// findIncludeFile resolves an import path to a file. It first tries each
+// searchPaths template (the whole import path is substituted for `?`, matching
+// upstream Buzz where the import string — not just its basename — is the library
+// name), then falls back to the plain includeDirs (-L / BUZZ_INCLUDE_PATH),
+// searching importPath.bzz (flat) or importPath/<base>.bzz (directory-per-module).
+func (s *Session) findIncludeFile(importPath string) string {
+	for _, tmpl := range s.searchPaths {
+		p := expandSearchPath(tmpl, importPath)
+		if p == "" {
+			continue
+		}
+		if bzzExists(p) {
 			return p
 		}
-		if p := filepath.Join(dir, name, name+".bzz"); bzzExists(p) {
-			return p
+		// Upstream Buzz names module files .buzz; every .bzz candidate
+		// retries with the upstream extension so either spelling imports.
+		if alt, ok := strings.CutSuffix(p, ".bzz"); ok && bzzExists(alt+".buzz") {
+			return alt + ".buzz"
+		}
+	}
+	for _, dir := range s.includeDirs {
+		for _, ext := range []string{".bzz", ".buzz"} {
+			if p := filepath.Join(dir, importPath+ext); bzzExists(p) {
+				return p
+			}
+			if p := filepath.Join(dir, importPath, filepath.Base(importPath)+ext); bzzExists(p) {
+				return p
+			}
 		}
 	}
 	return ""
+}
+
+// expandSearchPath fills a search-path template: it expands environment
+// variables and substitutes `?` with importPath. It returns "" when the template
+// references an unset environment variable, so an unset $BUZZ_PATH skips its
+// entries instead of resolving to a bare "/?.bzz". Env expansion runs first so a
+// `?` is never introduced by an env value (import paths contain no `$`).
+func expandSearchPath(tmpl, importPath string) string {
+	missing := false
+	expanded := os.Expand(tmpl, func(key string) string {
+		v := os.Getenv(key)
+		if v == "" {
+			missing = true
+		}
+		return v
+	})
+	if missing {
+		return ""
+	}
+	return strings.ReplaceAll(expanded, "?", importPath)
 }
 
 func bzzExists(path string) bool { _, err := os.Stat(path); return err == nil }

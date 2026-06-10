@@ -29,18 +29,20 @@ package std
 // (Buzz's os.exit hard-exits the process), os.sleep is cancellable (Buzz's
 // blocks), and crypto.*_file hashes a file (Buzz's hash only takes a string).
 var nativeBuzzEquiv = map[string]string{
-	"fs.exists":         "fs.exists",
-	"fs.mkdirall":       "fs.makeDirectory",
-	"fs.remove_all":     "fs.delete",
-	"fs.list_dir":       "fs.list",
-	"crypto.sha256_hex": "crypto.hash(HashAlgorithm.Sha256, …)",
-	"crypto.sha512_hex": "crypto.hash(HashAlgorithm.Sha512, …)",
-	"crypto.sha1_hex":   "crypto.hash(HashAlgorithm.Sha1, …)",
-	"crypto.md5_hex":    "crypto.hash(HashAlgorithm.Md5, …)",
-	"json.parse":        "serialize.jsonDecode",
-	"json.stringify":    "serialize.jsonEncode",
-	"env.get":           "os.env",
-	"env.lookup":        "os.env (returns null when unset)",
+	"fs.exists":              "fs.exists",
+	"fs.mkdirall":            "fs.makeDirectory",
+	"fs.remove_all":          "fs.delete",
+	"fs.list_dir":            "fs.list",
+	"crypto.sha256_hex":      "crypto.hash(HashAlgorithm.Sha256, …)",
+	"crypto.sha512_hex":      "crypto.hash(HashAlgorithm.Sha512, …)",
+	"crypto.sha1_hex":        "crypto.hash(HashAlgorithm.Sha1, …)",
+	"crypto.md5_hex":         "crypto.hash(HashAlgorithm.Md5, …)",
+	"json.parse":             "serialize.jsonDecode",
+	"json.stringify":         "serialize.jsonEncode",
+	"env.get":                "os.env",
+	"env.lookup":             "os.env (returns null when unset)",
+	"encoding.base64_encode": `str.encodeBase64 (built-in string method)`,
+	"encoding.hex_encode":    `str.hex (built-in string method)`,
 }
 
 // NativeBuzzEquiv reports whether module.method has a Buzz stdlib call that

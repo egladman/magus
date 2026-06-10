@@ -130,6 +130,17 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			c.registerTypeDecls([]ast.Node{v})
 		case *ast.EnumDecl:
 			c.registerTypeDecls([]ast.Node{v})
+		case *ast.ExprStmt:
+			// A top-level `zdef("lib", "<decls>")` declares its symbols as free
+			// functions (upstream Buzz semantics; the compiler binds them as
+			// globals). Pre-declare each as a lenient variadic callable so bare
+			// calls type-check regardless of arity or argument labels.
+			if _, names, ok := zdefDeclNames(v.Expr); ok {
+				ffiFn := &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Any, Variadic: true}
+				for _, name := range names {
+					c.define(name, ffiFn, true)
+				}
+			}
 		}
 	}
 }
@@ -181,7 +192,7 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 	if fd.YieldAnnot != "" {
 		yield = c.resolveAnnot(fd.YieldAnnot)
 	}
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: fd.Params}
 }
 
 // resolveAnnot parses a type annotation string and resolves NamedType references.
@@ -265,6 +276,9 @@ func (c *checker) checkStmt(n ast.Node) {
 		c.checkForEach(v)
 	case *ast.FunDecl:
 		c.checkFunDecl(v)
+	case *ast.TestDecl:
+		// A test block body is checked in its own scope, like a void function body.
+		c.checkBlock(v.Body)
 	case *ast.ObjectDecl:
 		c.checkObjectDecl(v)
 	case *ast.EnumDecl:
@@ -503,6 +517,12 @@ func (c *checker) infer(n ast.Node) types.Type {
 	case *ast.AsExpr:
 		c.infer(v.Expr)
 		return c.resolveAnnot(v.TypeName)
+	case *ast.CatchExpr:
+		// `expr catch default` evaluates to expr's success type; infer the default
+		// too so type errors inside it still surface.
+		t := c.infer(v.Expr)
+		c.infer(v.Default)
+		return t
 	case *ast.YieldExpr:
 		vt := c.infer(v.Value)
 		if c.yieldTyp != nil && !types.Compat(vt, c.yieldTyp) {
@@ -511,6 +531,11 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return types.Null // yield expression evaluates to null (the resumed value)
 	case *ast.FiberExpr:
 		calleeTyp := c.infer(v.Call.Callee)
+		if ft, ok := calleeTyp.(*types.FuncType); ok {
+			c.resolveNamedArgs(v.Call, ft)
+		} else {
+			v.Call.ArgNames = nil
+		}
 		for _, a := range v.Call.Args {
 			c.infer(a)
 		}
@@ -625,10 +650,18 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 
 func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	calleeTyp := c.infer(v.Callee)
+	ft, ok := calleeTyp.(*types.FuncType)
+	if ok {
+		c.resolveNamedArgs(v, ft)
+	} else {
+		// Dynamic callee (any-typed value, host function): labels cannot be
+		// resolved, so arguments pass in written order. Upstream-style call
+		// sites write them in declaration order, which makes this correct.
+		v.ArgNames = nil
+	}
 	for _, a := range v.Args {
 		c.infer(a)
 	}
-	ft, ok := calleeTyp.(*types.FuncType)
 	if !ok {
 		return types.Any
 	}
@@ -639,6 +672,71 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		return types.Void
 	}
 	return ft.Ret
+}
+
+// resolveNamedArgs reorders a call's labeled arguments (upstream Buzz's
+// `f(a: 1, b: 2)` syntax) into the callee's declared parameter order, so the
+// compiler and VM only ever see positional calls. Positional arguments fill
+// parameter slots left to right and must precede named ones; every problem —
+// an unknown or duplicate label, a label colliding with a positional slot, a
+// missing parameter — is a checker error at the call site.
+func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
+	if v.ArgNames == nil {
+		return
+	}
+	defer func() { v.ArgNames = nil }()
+	if len(ft.ParamNames) == 0 || ft.Variadic {
+		// No declared names to resolve against (builtins, variadics): written
+		// order stands, mirroring the dynamic-callee rule.
+		return
+	}
+	n := len(ft.ParamNames)
+	slots := make([]ast.Node, n)
+	filled := make([]bool, n)
+	sawNamed := false
+	pos := 0
+	for i, arg := range v.Args {
+		name := v.ArgNames[i]
+		if name == "" {
+			if sawNamed {
+				c.errorf(v.Pos, "positional argument after named argument")
+				return
+			}
+			if pos >= n {
+				c.errorf(v.Pos, "wrong argument count: got %d, want %d", len(v.Args), n)
+				return
+			}
+			slots[pos] = arg
+			filled[pos] = true
+			pos++
+			continue
+		}
+		sawNamed = true
+		idx := -1
+		for j, pn := range ft.ParamNames {
+			if pn == name {
+				idx = j
+				break
+			}
+		}
+		if idx < 0 {
+			c.errorf(v.Pos, "unknown argument name %q (parameters are %s)", name, strings.Join(ft.ParamNames, ", "))
+			return
+		}
+		if filled[idx] {
+			c.errorf(v.Pos, "argument %q given more than once", name)
+			return
+		}
+		slots[idx] = arg
+		filled[idx] = true
+	}
+	for j, ok := range filled {
+		if !ok {
+			c.errorf(v.Pos, "missing argument %q", ft.ParamNames[j])
+			return
+		}
+	}
+	v.Args = slots
 }
 
 func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
@@ -720,7 +818,7 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.retTyp = savedRet
 	c.yieldTyp = savedYield
 
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: v.Params}
 }
 
 func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {

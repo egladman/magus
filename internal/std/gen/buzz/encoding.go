@@ -79,5 +79,21 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzStrVal(ret0), nil
 	}))
+	m.MapSet("parseUrl", buzz.DirectValue("encoding.parseUrl", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		raw_url := bzStr(bzArgs, 0)
+		ret0, err := std.EncodingParseURL(ctx, raw_url)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzAnyMapVal(ret0), nil
+	}))
+	m.MapSet("buildUrl", buzz.DirectValue("encoding.buildUrl", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		parts := bzAnyMap(bzArgs, 0)
+		ret0, err := std.EncodingBuildURL(ctx, parts)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzStrVal(ret0), nil
+	}))
 	return m
 }

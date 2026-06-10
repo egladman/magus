@@ -10,15 +10,55 @@ A [runnable C example](../examples/ffi-c/) accompanies this reference.
 
 ## Relationship to upstream Buzz
 
-Upstream Buzz's FFI is **Zig-ABI native**: `zdef` takes Zig source
-(`fn hello(name: [*:0]const u8) void;`, `extern struct { … }`) and
-`sizeOf`/`alignOf` are answered by the Zig compiler's comptime reflection
-embedded in the runtime. gopherbuzz is pure Go and has no Zig, so it offers the
-same *capabilities* expressed **C-ABI-natively**: `zdef` takes C prototypes, and
-every type argument to the `ffi` module is a **C type-name string**
-(`"int"`, `"double"`, `"char*"`, `"int64_t"`, …) rather than a Zig type.
+Upstream Buzz's FFI is **Zig-ABI native**: `zdef` takes Zig source and answers
+`sizeOf`/`alignOf` through the Zig compiler's comptime reflection embedded in
+the runtime. gopherbuzz is pure Go and has no Zig, so it *binds* C-ABI-natively
+through purego — but `zdef` accepts **both declaration dialects**, sniffed per
+call:
 
-This is a deliberate, permanent divergence — see [Limitations](#limitations).
+```buzz
+zdef("libm", "fn sqrt(x: f64) f64;");      // upstream-Buzz Zig declarations
+zdef("libm", "double sqrt(double x);");    // C prototypes
+```
+
+The `ffi` module's type-name arguments likewise accept both spellings
+(`"i64"`/`"int64_t"`, `"f64"`/`"double"`, `"*anyopaque"`/`"void*"`, …), and
+`extern struct` declarations are lowered to their C layout by gopherbuzz
+itself (see below). The remaining divergence is the engine: no embedded Zig
+compiler, so comptime-sized Zig types are out of scope and binding follows
+the C ABI — see [Limitations](#limitations).
+
+### Zig dialect mapping
+
+| Zig type | FFI kind |
+|---|---|
+| `bool`, `void` | bool / return-only void |
+| `i8…i64`, `isize`, `c_int`, `c_long`, … | int |
+| `u8…u64`, `usize`, `c_uint`, … | int (unsigned) |
+| `f32`, `f64` | float |
+| `[*:0]const u8` | str |
+| `*T`, `?*T`, `[*]T`, `**T` | opaque address (int) |
+| `CGPoint`/`NSPoint`/`CGSize` (return) | [double] of [x, y] |
+| `CGRect`/`NSRect` (return) | [double] of [x, y, w, h] |
+| `var name: *anyopaque;` | extern data symbol: the loaded pointer |
+| `var name: anyopaque;` | extern data symbol: the symbol's own address |
+| `const Name = extern struct { f: T, … };` | binds `Name` to its C layout `{size, align, offsets}` |
+
+A declared struct is usable as `*Name` parameters (by reference — upstream's
+own struct-passing rule) and, when its fields are exactly two or four `f64`,
+as a by-value return (the CGPoint/CGRect register paths). A Zig `extern
+struct`'s layout *is* the C layout by definition, so the portable layout
+engine computes it — no embedded Zig compiler needed. Multiline declaration
+blocks read best as backtick raw strings, exactly like upstream:
+
+```buzz
+final lib = zdef("sqlite3", `
+    const Rec = extern struct { id: c_int, score: f64 };
+    fn rec_init(r: *Rec, id: c_int, score: f64) void;
+`);
+final rec = ffi.alloc(lib.Rec["size"]);
+lib.rec_init(rec, 7, 9.5);
+```
 
 ## Platform support
 
@@ -44,6 +84,34 @@ final r = lib.sqrt(9.0);   // 3.0
 `lib<name>.so[.N]` / `lib<name>.dylib` decorations. `cdecl` is one or more C
 prototypes separated by `;`.
 
+### Data symbols (`extern`)
+
+A declaration without parentheses, introduced by `extern`, binds a **data
+symbol** instead of a function. The value is resolved and read once at `zdef()`
+time and lands in the returned map under the variable's name:
+
+```buzz
+final cf = zdef("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+    "extern void *kCFBooleanTrue;"
+    + "extern struct __CFDictKeyCBs kCFTypeDictionaryKeyCallBacks;");
+cf.kCFBooleanTrue;               // the CFBooleanRef itself (an int address)
+cf.kCFTypeDictionaryKeyCallBacks; // the *address of* the struct, for &-style args
+```
+
+The declared type picks the binding mode:
+
+| Declared as | Bound value |
+|---|---|
+| `extern void *name` (any non-`char` pointer) | the pointer stored at the symbol |
+| `extern const char *name` | that pointer followed to a Buzz str |
+| `extern int name`, `extern double name`, … | the scalar, loaded at its C width |
+| anything else (`extern struct Foo name`) | the symbol's own address (what C's `&name` is) |
+
+This exists because real C APIs hide required arguments in global constants —
+`kCFBooleanTrue` has no create function, run-loop modes and dictionary
+callbacks are exported variables — and a function-only FFI forces scripts into
+scavenging those values from other calls' results.
+
 ### Supported C types
 
 | C type(s) | Buzz value | Notes |
@@ -56,6 +124,7 @@ prototypes separated by `;`.
 | `double` | float | |
 | `char*`, `const char*` | str | auto null-terminated; a returned `char*` is copied to a Buzz str |
 | `void*`, `int*`, `T*`, `struct Foo*` | int | an **opaque machine address** (see below) |
+| `CGPoint`, `NSPoint`, `CGSize`, `NSSize` (return only) | [double] | a two-double struct returned by value, e.g. `CGEventGetLocation`; amd64/arm64. As a parameter, declare two `double`s instead (same registers) |
 
 Every non-`char*` pointer — `void*`, `int*`, `struct Foo*`, a function pointer —
 is an opaque address represented as an int. You obtain such addresses from

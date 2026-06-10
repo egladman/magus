@@ -18,6 +18,7 @@ func fsModule() buzz.Value {
 	m.MapSet("move", fn("fs.move", fsMove))
 	m.MapSet("list", fn("fs.list", fsList))
 	m.MapSet("exists", fn("fs.exists", fsExists))
+	m.MapSet("modified", fn("fs.modified", fsModified))
 	return m
 }
 
@@ -86,4 +87,19 @@ func fsExists(_ context.Context, args []buzz.Value) (buzz.Value, error) {
 		return buzz.False, nil
 	}
 	return buzz.Null, fmt.Errorf("fs.exists: %w", err)
+}
+
+// fsModified returns the file's modification time in milliseconds since the
+// Unix epoch, or null when the path cannot be stat'ed (missing file included).
+// Null-on-absence rather than an error makes it directly usable as a change
+// poller: watch for the value to move, including through create and delete.
+func fsModified(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	if len(args) < 1 || !args[0].IsStr() {
+		return buzz.Null, fmt.Errorf("fs.modified: requires a str path argument")
+	}
+	info, err := os.Stat(args[0].AsString())
+	if err != nil {
+		return buzz.Null, nil
+	}
+	return buzz.FloatValue(float64(info.ModTime().UnixMilli())), nil
 }

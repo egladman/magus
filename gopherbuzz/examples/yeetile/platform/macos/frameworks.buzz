@@ -1,0 +1,250 @@
+// platform/macos/frameworks.buzz — the shared CoreFoundation/CoreGraphics/AX
+// foundation of the macOS platform layer.
+//
+// This module owns the conversion helpers every other module in platform/macos
+// builds on (cfstr/cfToStr/cfNumber/copyAttr/releaseRef/sameRef and the
+// CFBoolean singletons). Everything platform-specific lives under
+// platform/macos; a future platform/linux would be a sibling exporting the
+// same surface (see platform/README.md).
+//
+// Everything bound here is public API reachable from a normal, unsandboxed
+// user process — the same surface Rectangle, Amethyst, and SIP-friendly yabai
+// build on. No private frameworks, no SIP changes, no root: the only gate is
+// the Accessibility checkbox in System Settings.
+//
+// Upstream-Buzz form: zdef is an eager top-level statement that declares free
+// functions into module scope (called bare), and FFI memory goes through the
+// Buffer object rather than ffi\alloc/read/write. zdef-declared symbols are
+// module-local, so each platform module declares the raw C functions it calls
+// itself; this module exports only the higher-level helpers and constants.
+//
+// COMPAT(buzz<=0.5): upstream buzz can't bind extern *data* symbols
+// (kCFBooleanTrue, the dictionary callbacks, kCFRunLoopDefaultMode, …) — a bare
+// `var name: T;` zdef even crashes `buzz -c`. dataSym() resolves those by
+// address with dlsym and dereferences the stored pointer, which type-checks on
+// upstream and runs on gopherbuzz.
+
+namespace frameworks;
+
+import "std";
+import "buffer";
+import "ffi";
+import "fs";
+
+// CoreFoundation constants (decimal — Buzz has no hex literals). Encodings and
+// option masks feed u32/u64 C parameters, which upstream maps to Buzz `double`.
+final encUTF8 = 134217984.0;             // kCFStringEncodingUTF8 (0x08000100)
+final numSInt32 = 3;                     // kCFNumberSInt32Type (c_int)
+export final axValuePoint = 1;           // kAXValueCGPointType (c_int)
+export final axValueSize = 2;            // kAXValueCGSizeType (c_int)
+export final winListOpts = 17.0;         // OnScreenOnly(1) | ExcludeDesktopElements(16)
+export final keyDownMask = 1024.0;       // CGEventMaskBit(kCGEventKeyDown=10)
+export final keycodeField = 9.0;         // kCGKeyboardEventKeycode
+
+// libSystem gives dlopen/dlsym/memcpy — the data-symbol workaround above.
+zdef("System", "fn dlopen(path: [*:0]const u8, mode: i32) ?*anyopaque; fn dlsym(handle: ?*anyopaque, symbol: [*:0]const u8) ?*anyopaque; fn memcpy(dst: ?*anyopaque, src: ?*anyopaque, n: i64) ?*anyopaque;");
+
+// The CoreFoundation functions the helpers below need (other modules declare
+// the CF/CG/AX functions they call themselves).
+zdef("CoreFoundation", "fn CFRelease(cf: ?*anyopaque) void; fn CFEqual(a: ?*anyopaque, b: ?*anyopaque) bool; fn CFStringCreateWithCString(alloc: ?*anyopaque, s: [*:0]const u8, encoding: u32) ?*anyopaque; fn CFStringGetCString(s: ?*anyopaque, buf: ?*anyopaque, size: i64, encoding: u32) bool; fn CFNumberGetValue(num: ?*anyopaque, kind: c_int, res: ?*anyopaque) bool;");
+
+// AXUIElementCopyAttributeValue backs copyAttr.
+zdef("ApplicationServices", "fn AXUIElementCopyAttributeValue(elem: ?*anyopaque, attr: ?*anyopaque, res: ?*anyopaque) c_int;");
+
+// The verbatim path handed to C's dlopen() in dataSym below (dlopen wants a
+// real path, unlike a zdef lib NAME which goes through buzz's library search).
+final cfPath = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
+
+// dataSym resolves a process-global CF/AX data symbol by name and returns the
+// CFTypeRef it stores. See the COMPAT note in the header.
+fun dataSym(name: str) > ud? {
+    final h = dlopen(ffi\cstr(cfPath), mode: 1); // RTLD_LAZY
+    final addr = dlsym(h, symbol: ffi\cstr(name));
+    if (addr == null) {
+        return null;
+    }
+    final buf = buffer\Buffer.init(8);
+    _ = memcpy(buf.ptr(), src: addr, n: 8.0);
+    var res: ud? = null;
+    try {
+        res = buf.readZAt::<ud>(at: 0, zigType: "*anyopaque");
+    } catch {
+        res = null;
+    }
+    return res;
+}
+
+// dataSymAddr returns a data symbol's own address (C's `&name`) rather than
+// the pointer it stores — for struct-valued globals (the CFDictionary
+// callbacks) whose address, not contents, is what the C API wants.
+fun dataSymAddr(name: str) > ud? {
+    final h = dlopen(ffi\cstr(cfPath), mode: 1); // RTLD_LAZY
+    return dlsym(h, symbol: ffi\cstr(name));
+}
+
+// openLib dlopen's a library by verbatim path (mode is an RTLD_* flag set).
+// Exported because upstream buzz makes a zdef'd symbol callable only inside the
+// module that declares it, yet forbids declaring it twice — so dlopen lives here
+// once and other modules (e.g. cocoa loading AppKit) reach it through this.
+export fun openLib(path: str, mode: int) > ud? {
+    return dlopen(ffi\cstr(path), mode: mode);
+}
+
+// onMacOS gates the FFI before any framework call, so an off-platform run is
+// one friendly line instead of a dlopen error from deep inside a binding.
+export fun onMacOS() > bool {
+    var present = false;
+    try {
+        present = fs\exists("/System/Library/Frameworks/CoreFoundation.framework");
+    } catch {
+        present = false;
+    }
+    return present;
+}
+
+// trueRef/falseRef are the CFBoolean singletons (CFBoolean has no create
+// function — the constants are the only way to obtain one). Cached for life.
+var trueCache: ud? = null;
+var falseCache: ud? = null;
+
+export fun trueRef() > ud? {
+    if (trueCache == null) {
+        trueCache = dataSym("kCFBooleanTrue");
+    }
+    return trueCache;
+}
+
+export fun falseRef() > ud? {
+    if (falseCache == null) {
+        falseCache = dataSym("kCFBooleanFalse");
+    }
+    return falseCache;
+}
+
+// runLoopDefaultMode / dictKeyCallBacks / dictValueCallBacks / axPromptKey
+// expose the remaining cross-module data symbols (used by events and
+// permissions, which can't bind them locally either).
+var runLoopModeCache: ud? = null;
+var dictKeyCBCache: ud? = null;
+var dictValueCBCache: ud? = null;
+var axPromptKeyCache: ud? = null;
+
+export fun runLoopDefaultMode() > ud? {
+    if (runLoopModeCache == null) {
+        runLoopModeCache = dataSym("kCFRunLoopDefaultMode");
+    }
+    return runLoopModeCache;
+}
+
+export fun dictKeyCallBacks() > ud? {
+    if (dictKeyCBCache == null) {
+        dictKeyCBCache = dataSymAddr("kCFTypeDictionaryKeyCallBacks");
+    }
+    return dictKeyCBCache;
+}
+
+export fun dictValueCallBacks() > ud? {
+    if (dictValueCBCache == null) {
+        dictValueCBCache = dataSymAddr("kCFTypeDictionaryValueCallBacks");
+    }
+    return dictValueCBCache;
+}
+
+export fun axPromptKey() > ud? {
+    if (axPromptKeyCache == null) {
+        axPromptKeyCache = dataSym("kAXTrustedCheckOptionPrompt");
+    }
+    return axPromptKeyCache;
+}
+
+// cfstr interns a Buzz string as a CFString. Entries live for the process —
+// the working set is the dozen attribute names this program uses, so nothing
+// is released.
+final cfstrCache = mut {<str: ud>};
+
+export fun cfstr(s: str) > ud? {
+    final hit = cfstrCache[s];
+    if (hit != null) {
+        return hit;
+    }
+    final ref = CFStringCreateWithCString(null, s: ffi\cstr(s), encoding: encUTF8);
+    if (ref != null) {
+        cfstrCache[s] = ref!;
+    }
+    return ref;
+}
+
+// cfToStr copies a CFString into a Buzz str, byte by byte out of pinned
+// memory (titles and subroles are short; 512 bytes of UTF-8 is plenty).
+export fun cfToStr(ref: ud?) > str {
+    if (ref == null) {
+        return "";
+    }
+    final cap = 512;
+    final buf = buffer\Buffer.init(cap);
+    final ok = CFStringGetCString(ref, buf: buf.ptr(), size: 512.0, encoding: encUTF8);
+    var res = "";
+    if (ok) {
+        var i = 0;
+        try {
+            while (i < cap) {
+                final c = buf.readZAt::<int>(at: i, zigType: "u8");
+                if (c == 0) {
+                    break;
+                }
+                res = res + std\char(c);
+                i = i + 1;
+            }
+        } catch {
+            res = res;
+        }
+    }
+    return res;
+}
+
+// cfNumber reads a CFNumber through an out-parameter; -1 when ref is null.
+export fun cfNumber(ref: ud?) > int {
+    if (ref == null) {
+        return 0 - 1;
+    }
+    // Read as SInt32: window layers and pids fit in 32 bits, and the values
+    // yeetile reads from CG/AX are int-typed CFNumbers.
+    final buf = buffer\Buffer.init(8);
+    _ = CFNumberGetValue(ref, kind: numSInt32, res: buf.ptr());
+    var v = 0;
+    try {
+        v = buf.readZAt::<int>(at: 0, zigType: "i32");
+    } catch {
+        v = 0;
+    }
+    return v;
+}
+
+// copyAttr copies an AX attribute value; the returned ref is owned by the
+// caller (CF "Copy" rule) and must be released. null when the attribute is unset.
+export fun copyAttr(elem: ud?, name: str) > ud? {
+    final buf = buffer\Buffer.init(8);
+    final err = AXUIElementCopyAttributeValue(elem, attr: cfstr(name), res: buf.ptr());
+    var ref: ud? = null;
+    if (err == 0) {
+        try {
+            ref = buf.readZAt::<ud>(at: 0, zigType: "*anyopaque");
+        } catch {
+            ref = null;
+        }
+    }
+    return ref;
+}
+
+export fun releaseRef(ref: ud?) > void {
+    if (ref != null) {
+        CFRelease(ref);
+    }
+}
+
+export fun sameRef(a: ud?, b: ud?) > bool {
+    if (a == null or b == null) {
+        return a == b;
+    }
+    return CFEqual(a, b: b);
+}

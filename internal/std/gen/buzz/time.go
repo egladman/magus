@@ -48,5 +48,23 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) buzz.Value {
 		}
 		return bzStrVal(ret0), nil
 	}))
+	m.MapSet("add", buzz.DirectValue("time.add", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		unix_millis := bzFloat(bzArgs, 0, 0)
+		duration := bzStr(bzArgs, 1)
+		ret0, err := std.TimeAdd(ctx, unix_millis, duration)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzFloatVal(ret0), nil
+	}))
+	m.MapSet("diff", buzz.DirectValue("time.diff", func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {
+		a := bzFloat(bzArgs, 0, 0)
+		b := bzFloat(bzArgs, 1, 0)
+		ret0, err := std.TimeDiff(ctx, a, b)
+		if err != nil {
+			return buzz.Null, err
+		}
+		return bzFloatVal(ret0), nil
+	}))
 	return m
 }

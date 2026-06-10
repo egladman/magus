@@ -18,11 +18,13 @@ import (
 // interpreter — the same sound fallback the amd64 backend uses for cases it
 // declines, just wider here. That keeps the unrunnable arm64 codegen small.
 //
-// IMPORTANT: this backend is compile-verified (GOARCH=arm64 build/vet) but has
-// NOT been executed on arm64 hardware. It is therefore OFF by default on arm64
-// (jitArchDefault=false); opt in with BUZZ_JIT=1 to run the differential tests
-// on real hardware. amd64 stays the runtime-verified, default-on backend.
-const jitArchDefault = false
+// This backend is enabled by default. Correctness is gated by the shared
+// differential suite (TestJITMatchesInterpreter runs every JIT program with the
+// JIT on and off and requires identical results), and any shape this backend
+// declines — floats, division, modulo, or an unhandled opcode — deopts to the
+// interpreter, so an un-handled case is slow, never wrong. amd64 remains the
+// primary, most-exercised backend.
+const jitArchDefault = true
 
 // registers (avoid R16-R18 veneer/platform, R27 REGTMP, R28 g, R29 FP, R30 LR).
 const (
@@ -130,6 +132,13 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		add(p)
 	}
 	cmpImm := func(imm int64, rn int16) { // flags = rn - imm
+		if imm == 0 {
+			// CMP $0 miscompiles: the assembler's cmp() lets the register-compare
+			// optab match a zero constant, and the unset From.Reg encodes as x0 —
+			// so `CMP $0, Rn` becomes `CMP R0, Rn`. Compare the zero register instead.
+			cmpRR(arm64.REGZERO, rn)
+			return
+		}
 		p := np()
 		p.As = arm64.ACMP
 		p.From.Type = obj.TYPE_CONST
@@ -153,7 +162,13 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		p.To.Val = target
 		add(p)
 	}
-	ret := func() { p := np(); p.As = obj.ARET; add(p) }
+	ret := func() {
+		p := np()
+		p.As = obj.ARET
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = arm64.REG_R30 // arm64 RET = BR R30; oplook requires explicit Rn
+		add(p)
+	}
 
 	// label anchors per ip (ANOP, zero bytes); deopt/cancel anchors lazily.
 	label := make([]*obj.Prog, len(code))
@@ -279,6 +294,15 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		}
 	}
 
+	// arm64's span7 starts at cursym.Func.Text.Link (the second instruction),
+	// skipping the first. Prepend a sentinel NOP so the real prologue starts
+	// at the second position.
+	{
+		p := np()
+		p.As = obj.ANOP
+		add(p)
+	}
+
 	// Prologue: R1 = &stack[base].
 	ld(aR1, aR0, offStackData)
 	ld(aR5, aR0, offBase)
@@ -332,7 +356,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			ld(aR4, aR1, opOff(d-1))
 			emitNumeric(ins.Op, ip, func(r int16) { st(aR1, opOff(d-2), r) })
 
-		case OpLocalConstOp:
+		case OpBinLC:
 			sub := OpCode(uint32(ins.B) >> 24 & 0x7F)
 			cbits := int64(uint64(chunk.Consts[int(ins.B&0xFFFFFF)]))
 			ld(aR3, aR1, slotOff(ins.A))
@@ -346,7 +370,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 				}
 			})
 
-		case OpLocalLocalOp:
+		case OpBinLL:
 			sub := OpCode(uint32(ins.B) >> 16 & 0x7FFF)
 			rslot := int32(ins.B & 0xFFFF)
 			ld(aR3, aR1, slotOff(ins.A))
@@ -360,7 +384,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 				}
 			})
 
-		case OpForCondLC:
+		case OpCmpLC:
 			sub := OpCode(uint32(ins.B) >> 24)
 			cbits := int64(uint64(chunk.Consts[int(uint32(ins.B)&0xFFFFFF)]))
 			target := int(code[ip+1].A)
@@ -371,6 +395,34 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			} else {
 				br(obj.AJMP, deoptFor(ip))
 			}
+
+		case OpPop:
+			// No code: the static-depth model abandons the dropped slot (the next
+			// push overwrites it); nanbox Values hold no Go pointer. See depths().
+
+		case OpJumpFalsePeek:
+			// `and` short-circuit: peek top (depth unchanged), jump forward if
+			// false. Mirrors OpJumpFalse's guard+compare without the pop;
+			// forward-only (depths() rejects backward peek-jumps).
+			ld(aR3, aR1, opOff(d-1))
+			shiftImm(arm64.ALSR, 48, aR3, aR5)
+			movImm(aR6, jitBoolHi16)
+			cmpRR(aR6, aR5)
+			br(arm64.ABNE, deoptFor(ip)) // non-bool → deopt
+			movImm(aR5, jitFalseBits)
+			cmpRR(aR5, aR3)              // aR3 - false
+			br(arm64.ABEQ, label[ins.A]) // false ⇒ forward jump
+
+		case OpJumpTruePeek:
+			// `or` short-circuit: peek; jump forward if true. Inverted branch.
+			ld(aR3, aR1, opOff(d-1))
+			shiftImm(arm64.ALSR, 48, aR3, aR5)
+			movImm(aR6, jitBoolHi16)
+			cmpRR(aR6, aR5)
+			br(arm64.ABNE, deoptFor(ip))
+			movImm(aR5, jitFalseBits)
+			cmpRR(aR5, aR3)
+			br(arm64.ABNE, label[ins.A]) // != false ⇒ true ⇒ forward jump
 
 		case OpJump:
 			if int(ins.A) <= ip {

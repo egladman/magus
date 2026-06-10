@@ -2,7 +2,7 @@
 
 Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.crypto.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "crypto"`) and call methods in `camelCase` (`crypto.someMethod`).
 
 ## Methods
 
@@ -10,9 +10,9 @@ Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).
 
 Return the lowercase hex SHA-256 digest of data.
 
-**Signature:** `extra.crypto.sha256Hex(data) → string`
+**Signature:** `crypto.sha256Hex(data) → string`
 
-**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Sha256, …)` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Sha256, …)` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -24,7 +24,7 @@ Return the lowercase hex SHA-256 digest of data.
 
 Return the lowercase hex SHA-256 digest of the file at path.
 
-**Signature:** `extra.crypto.sha256File(path) → string`
+**Signature:** `crypto.sha256File(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -36,9 +36,9 @@ Return the lowercase hex SHA-256 digest of the file at path.
 
 Return the lowercase hex SHA-512 digest of data.
 
-**Signature:** `extra.crypto.sha512Hex(data) → string`
+**Signature:** `crypto.sha512Hex(data) → string`
 
-**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Sha512, …)` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Sha512, …)` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -50,7 +50,7 @@ Return the lowercase hex SHA-512 digest of data.
 
 Return the lowercase hex SHA-512 digest of the file at path.
 
-**Signature:** `extra.crypto.sha512File(path) → string`
+**Signature:** `crypto.sha512File(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -62,9 +62,9 @@ Return the lowercase hex SHA-512 digest of the file at path.
 
 Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
 
-**Signature:** `extra.crypto.sha1Hex(data) → string`
+**Signature:** `crypto.sha1Hex(data) → string`
 
-**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Sha1, …)` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Sha1, …)` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -76,7 +76,7 @@ Return the lowercase hex SHA-1 digest of data. For interop with legacy/git check
 
 Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
 
-**Signature:** `extra.crypto.sha1File(path) → string`
+**Signature:** `crypto.sha1File(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -88,9 +88,9 @@ Return the lowercase hex SHA-1 digest of the file at path. For interop with lega
 
 Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.
 
-**Signature:** `extra.crypto.md5Hex(data) → string`
+**Signature:** `crypto.md5Hex(data) → string`
 
-**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Md5, …)` — the `extra` form is sandbox-aware.
+**Also in Buzz's stdlib:** `crypto.hash(HashAlgorithm.Md5, …)` — the magus form is sandbox-aware.
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -102,7 +102,7 @@ Return the lowercase hex MD5 digest of data. For interop with legacy checksum ma
 
 Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.
 
-**Signature:** `extra.crypto.md5File(path) → string`
+**Signature:** `crypto.md5File(path) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

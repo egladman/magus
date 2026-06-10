@@ -1,0 +1,18 @@
+// @expect: ok
+import "std";
+import "fs";
+import "io";
+import "os";
+
+final path = os.tmpDir() + "/buzz-fs-modified-test";
+final f = io.File.open(path, io.FileMode.write);
+f.write("stamp me");
+f.close();
+
+final stamp = fs.modified(path);
+std.assert(stamp != null, "existing file has a modification time");
+std.assert(stamp! > 0.0, "epoch milliseconds are positive");
+std.assert(fs.modified(path + "-missing") == null, "missing file reads as null");
+fs.delete(path);
+std.assert(fs.modified(path) == null, "deleted file reads as null again");
+final __r = "ok";

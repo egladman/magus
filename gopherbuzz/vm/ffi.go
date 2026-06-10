@@ -50,6 +50,9 @@ const (
 	CDouble        // double (64-bit)
 	CCharPtr       // char* / const char* → Buzz str
 	CVoidPtr       // void* → Buzz int (raw address)
+	CAddr          // extern variable of opaque type → the symbol's own address
+	CPoint2D       // CGPoint/NSPoint returned by value → Buzz map {x, y}
+	CRect4D        // CGRect/NSRect returned by value → Buzz map {x, y, w, h}
 	CUnsupported
 )
 
@@ -59,12 +62,29 @@ type CParam struct {
 	Type CType
 }
 
-// CFuncSig is a parsed C function prototype: its name, return type, and
-// parameters. ParseCDecls produces these; an FFIProvider binds them.
+// CFuncSig is a parsed C declaration: a function prototype (its name, return
+// type, and parameters) or, when IsVar is set, an `extern` variable
+// declaration. ParseCDecls produces these; an FFIProvider binds them.
+//
+// For a variable, Ret carries the load kind: a pointer type loads the pointer
+// stored at the symbol (CCharPtr additionally follows it to a Buzz str), a
+// scalar type loads a value of that width (VarTypeName preserves the exact C
+// token so the provider can size it), and CAddr — any type the parser does not
+// model, e.g. a struct — binds the symbol's own address, which is what C code
+// passing &someGlobal needs.
 type CFuncSig struct {
-	Name   string
-	Ret    CType
-	Params []CParam
+	Name        string
+	Ret         CType
+	Params      []CParam
+	IsVar       bool
+	VarTypeName string
+	// IsStruct marks a Zig `const Name = extern struct {…}` declaration: not a
+	// symbol at all, but a layout. The provider computes its C layout (a Zig
+	// extern struct's layout IS the C layout, by definition) and binds the
+	// name to a {size, align, offsets} map, so scripts can ffi.alloc and fill
+	// it by reference — upstream's struct semantics ("always by reference").
+	IsStruct       bool
+	FieldTypeNames []string
 }
 
 // FFIProvider binds parsed C function signatures from a shared library into
@@ -159,6 +179,9 @@ func callbackCType(name string, isRet bool) (CType, error) {
 	}
 	ct := parseCType(name)
 	if ct == CUnsupported {
+		ct = zigTypeToCType(name) // accept the Zig dialect's spellings too
+	}
+	if ct == CUnsupported {
 		// A trailing '*' (any pointer) is a valid integer-width address.
 		if strings.HasSuffix(strings.TrimSpace(name), "*") {
 			return CVoidPtr, nil
@@ -208,6 +231,16 @@ func parseCType(tok string) CType {
 		return CCharPtr
 	case "void *", "void*":
 		return CVoidPtr
+	case "CGPoint", "NSPoint", "CGSize", "NSSize":
+		// A struct of two doubles, by value. Supported in return position
+		// (registers on amd64/arm64); as a parameter, pass two doubles or a
+		// pointer instead — parseCParam rejects it with that advice.
+		return CPoint2D
+	case "CGRect", "NSRect":
+		// Four doubles by value (origin + size), e.g. CGDisplayBounds. Return
+		// only: registers on arm64 (HFA), hidden sret pointer on amd64 —
+		// purego builds both.
+		return CRect4D
 	default:
 		return CUnsupported
 	}
@@ -235,7 +268,10 @@ func ParseCDecls(src string) ([]CFuncSig, error) {
 func parseSingleCDecl(src string) (CFuncSig, error) {
 	lp := strings.Index(src, "(")
 	if lp < 0 {
-		return CFuncSig{}, fmt.Errorf("buzz: ffi: not a function prototype: %q", src)
+		if rest, ok := strings.CutPrefix(src, "extern "); ok {
+			return parseExternVar(strings.TrimSpace(rest))
+		}
+		return CFuncSig{}, fmt.Errorf("buzz: ffi: not a function prototype: %q (declare a data symbol as \"extern <type> name;\")", src)
 	}
 	rp := strings.LastIndex(src, ")")
 	if rp < 0 || rp < lp {
@@ -286,6 +322,37 @@ func parseSingleCDecl(src string) (CFuncSig, error) {
 	return CFuncSig{Name: funcName, Ret: retType, Params: params}, nil
 }
 
+// parseExternVar parses the body of an `extern <type> name` variable
+// declaration (the "extern " prefix already removed). The declared type picks
+// the binding mode documented on CFuncSig: pointer → load, known scalar →
+// load by width, anything else (struct, unknown typedef) → the symbol address.
+func parseExternVar(src string) (CFuncSig, error) {
+	fields := strings.Fields(src)
+	if len(fields) < 2 {
+		return CFuncSig{}, fmt.Errorf("buzz: ffi: extern declaration needs a type and a name: %q", src)
+	}
+	name := strings.TrimLeft(fields[len(fields)-1], "*")
+	if name == "" {
+		return CFuncSig{}, fmt.Errorf("buzz: ffi: extern declaration has no name: %q", src)
+	}
+	typeTok := strings.TrimSpace(strings.TrimSuffix(strings.Join(fields[:len(fields)-1], " "), "*"))
+	// A '*' attached to the name ("void *kFoo") belongs to the type.
+	starred := strings.Contains(src, "*")
+
+	kind := CAddr
+	switch {
+	case starred && (strings.Contains(src, "char *") || strings.Contains(src, "char*")):
+		kind = CCharPtr
+	case starred:
+		kind = CVoidPtr
+	default:
+		if k := parseCType(typeTok); k != CUnsupported && k != CVoid {
+			kind = k
+		}
+	}
+	return CFuncSig{Name: name, Ret: kind, IsVar: true, VarTypeName: typeTok}, nil
+}
+
 func parseCParam(s string) (CParam, error) {
 	s = strings.TrimSpace(s)
 	if strings.Contains(s, "char *") || strings.Contains(s, "char*") {
@@ -320,6 +387,9 @@ func parseCParam(s string) (CParam, error) {
 	if k == CUnsupported {
 		return CParam{}, fmt.Errorf("unsupported type %q", typeTok)
 	}
+	if k == CPoint2D || k == CRect4D {
+		return CParam{}, fmt.Errorf("by-value struct parameter %q not supported: declare separate double parameters or a pointer", typeTok)
+	}
 	return CParam{Name: name, Type: k}, nil
 }
 
@@ -330,6 +400,30 @@ func extractParamName(s string) string {
 	}
 	last := parts[len(parts)-1]
 	return strings.TrimLeft(last, "*")
+}
+
+// FFIDeclNames returns the names declared by a zdef cdecl string (functions,
+// extern vars, and structs), sniffing the Zig vs C dialect the same way
+// builtinZdef does. It is used by the compiler to lower a top-level
+// `zdef("lib", "<decls>")` statement into free-function declarations (upstream
+// Buzz's zdef semantics), so the declared symbols become callable by bare name.
+// Returns nil on a parse error — the runtime zdef() call surfaces the diagnostic.
+func FFIDeclNames(cdecl string) []string {
+	var sigs []CFuncSig
+	var err error
+	if looksLikeZigDecls(cdecl) {
+		sigs, err = ParseZigDecls(cdecl)
+	} else {
+		sigs, err = ParseCDecls(cdecl)
+	}
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(sigs))
+	for _, s := range sigs {
+		names = append(names, s.Name)
+	}
+	return names
 }
 
 // builtinZdef is the Buzz `zdef(libname, cdecl)` built-in. It parses the C
@@ -354,7 +448,16 @@ func builtinZdef(_ context.Context, args []Value) (Value, error) {
 	libName := args[0].asStr().V
 	cdecl := args[1].asStr().V
 
-	sigs, err := ParseCDecls(cdecl)
+	// Two declaration dialects, one type model: upstream-Buzz Zig
+	// declarations (fn add(a: c_int) c_int;) and C prototypes. Sniffed per
+	// call, so both styles coexist — see ffi_zig.go.
+	var sigs []CFuncSig
+	var err error
+	if looksLikeZigDecls(cdecl) {
+		sigs, err = ParseZigDecls(cdecl)
+	} else {
+		sigs, err = ParseCDecls(cdecl)
+	}
 	if err != nil {
 		return Null, err
 	}

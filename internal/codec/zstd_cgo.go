@@ -78,10 +78,10 @@ type zstdCGOWriter struct {
 	outBuf []byte // staging buffer for compressed output (len = zstdOutSize)
 }
 
-// NewZstdWriter returns a streaming zstd compressor that writes to w.
+// newZstdWriter returns a streaming zstd compressor that writes to w.
 // level is the user-specified compression level (-1 = default, 1-19).
 // threads controls encoder concurrency (0 = single-threaded).
-func NewZstdWriter(w io.Writer, level, threads int) (io.WriteCloser, error) {
+func newZstdWriter(w io.Writer, level, threads int) (io.WriteCloser, error) {
 	cctx := C.ZSTD_createCCtx()
 	if cctx == nil {
 		return nil, fmt.Errorf("zstd: ZSTD_createCCtx failed")
@@ -186,9 +186,9 @@ type zstdCGOReader struct {
 	closed   bool
 }
 
-// NewZstdReader returns a streaming zstd decompressor reading from r.
+// newZstdReader returns a streaming zstd decompressor reading from r.
 // threads controls decoder concurrency (0 = single-threaded).
-func NewZstdReader(r io.Reader, threads int) (io.ReadCloser, error) {
+func newZstdReader(r io.Reader, threads int) (io.ReadCloser, error) {
 	dctx := C.ZSTD_createDCtx()
 	if dctx == nil {
 		return nil, fmt.Errorf("zstd: ZSTD_createDCtx failed")

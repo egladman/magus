@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,6 +173,17 @@ var Os = Module{
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    OsHostname,
+		},
+		{
+			Name: "retry",
+			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.",
+			Args: []Arg{
+				{Name: "max", Type: TypeInt},
+				{Name: "fn", Type: TypeFunc},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny}},
+			Impl:    OsRetry,
 		},
 	},
 }
@@ -401,6 +413,67 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 	ctx = context.WithValue(ctx, withEnvKey{}, merged)
 	_, callErr := cb.Call(ctx)
 	return callErr
+}
+
+// OsRetry calls fn up to max times, retrying on error with exponential backoff.
+// On success it returns fn's first return value; on exhaustion it errors.
+// opts keys: backoff_ms (initial delay, default 500), max_backoff_ms (cap, default 30000).
+func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (any, error) {
+	if fn == nil {
+		return nil, fmt.Errorf("os.retry: fn must not be nil")
+	}
+	backoffMs := 500.0
+	maxBackoffMs := 30000.0
+	if opts != nil {
+		if v, ok := opts["backoff_ms"]; ok {
+			if f, ok := retryFloat(v); ok {
+				backoffMs = f
+			}
+		}
+		if v, ok := opts["max_backoff_ms"]; ok {
+			if f, ok := retryFloat(v); ok {
+				maxBackoffMs = f
+			}
+		}
+	}
+	var lastErr error
+	for i := 0; i < max; i++ {
+		ret, err := fn.Call(ctx)
+		if err == nil {
+			if len(ret) > 0 {
+				return ret[0], nil
+			}
+			return nil, nil
+		}
+		lastErr = err
+		if i < max-1 {
+			delay := backoffMs * math.Pow(2, float64(i))
+			if delay > maxBackoffMs {
+				delay = maxBackoffMs
+			}
+			t := time.NewTimer(time.Duration(delay * float64(time.Millisecond)))
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return nil, ctx.Err()
+			case <-t.C:
+			}
+		}
+	}
+	return nil, fmt.Errorf("os.retry: failed after %d attempt(s): %w", max, lastErr)
+}
+
+// retryFloat extracts a float64 from a Go any value (int, int64, or float64).
+func retryFloat(v any) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	}
+	return 0, false
 }
 
 // OsWithSlots reserves n slots from magus's concurrency limiter for the duration

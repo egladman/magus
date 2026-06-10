@@ -15,10 +15,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Probe reports whether the filesystem containing dir supports CoW reflinks
+// probe reports whether the filesystem containing dir supports CoW reflinks
 // (FICLONE ioctl). Returns false when dir doesn't exist, the probe files
 // can't be created, or the filesystem does not support FICLONE.
-func Probe(dir string) bool {
+func probe(dir string) bool {
 	src, err := os.CreateTemp(dir, ".reflink-probe-src.*")
 	if err != nil {
 		return false
@@ -49,7 +49,7 @@ func Probe(dir string) bool {
 	return cloneErr == nil
 }
 
-// Clone copies src to dst using the most efficient mechanism available
+// clone copies src to dst using the most efficient mechanism available
 // on the current filesystem:
 //
 //  1. FICLONE ioctl (btrfs, XFS, ext4 ≥ 4.5, OCFS2): O(1) copy-on-write
@@ -61,7 +61,7 @@ func Probe(dir string) bool {
 //
 // dst must not exist when Clone is called (the caller is responsible for
 // removing it first). On success, dst has the same content as src.
-func Clone(src, dst string) (err error) {
+func clone(src, dst string) (err error) {
 	in, err := os.Open(src)
 	if err != nil {
 		return err

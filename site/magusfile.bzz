@@ -1,8 +1,8 @@
 // magusfile.bzz — the magus documentation site, a standalone magus project.
 //
 // Renders the sibling magus/docs tree (Markdown) into ./gen as a static HTML
-// site. The render is dry — Buzz stdlib (fs/io/os/std) plus the magus host
-// aggregate (extra.markdown.toHtml for GFM->HTML, extra.os/fs for the rest) —
+// site. The render is dry — Buzz stdlib (io/std) plus the magus host modules
+// (markdown.toHtml for GFM->HTML, os.exec/fs for the rest) —
 // so it lives in this project's `generate` target and needs no separate
 // `magus buzz` script. Source docs live one level up (../docs, ../README.md);
 // git runs as `git -C ..` so the per-page commit footer keys off the same
@@ -17,13 +17,16 @@
 //   magus run serve site      -- watch ../docs and re-render on change
 
 import "magus";
-import "magus/extra";
+// Host utility modules under bare names. markdown (GFM->HTML) is magus-only; fs/os
+// carry magus's exec/watch/read methods layered onto Buzz's stdlib. io/std are
+// Buzz stdlib (File, print).
+import "markdown";
 import "fs";
 import "io";
 import "os";
 import "std";
 
-magus.project.register("site", {
+magus.project.register(fun(p, cb) > bool { cb({
     "outputs": ["gen/**"],
     "targets": {
         // generate renders the site and then gates on drift, mirroring the root
@@ -37,7 +40,7 @@ magus.project.register("site", {
         // interpreter or playground host changes (TinyGo is not a CI tool).
         "build-playground": {"cachable": false},
     },
-});
+}); return true; });
 
 // ── configuration ───────────────────────────────────────────────────────────
 final ROOT = "..";          // the magus/ workspace dir, relative to this project
@@ -211,7 +214,7 @@ fun renderRoot() > void {
     final md = f.readAll();
     f.close();
 
-    var html = extra.markdown.toHtml(md);
+    var html = markdown.toHtml(md);
     while (html.indexOf("href=\"docs/") != null) {
         html = html.replace("href=\"docs/", "href=\"");
     }
@@ -230,7 +233,7 @@ fun renderFile(rel: str) > void {
     final md = f.readAll();
     f.close();
 
-    final html = extra.markdown.toHtml(md);
+    final html = markdown.toHtml(md);
     final doc = page(titleOf(md, rel), html, DOCS + "/" + rel);
 
     final parts = rel.split("/");
@@ -303,7 +306,7 @@ export fun generate(_args: [str]) > void {
     site_render();
     if (magus.has_charm("rw")) { return; }
 
-    final drift = extra.os.exec("git", ["status", "--porcelain", "--", OUT]).stdout;
+    final drift = os.exec("git", ["status", "--porcelain", "--", OUT]).stdout;
     if (drift != "") {
         throw "generate: " + OUT + " drifted after render; re-run `magus run generate:rw site` and commit:\n" + drift;
     }
@@ -335,24 +338,24 @@ export fun build_playground(_args: [str]) > void {
     // interpreter has room to recurse (e.g. fib in the showcase magusfile).
     // -scheduler=asyncify is the wasm default, pinned so the status banner's
     // reported scheduler is guaranteed to match the build.
-    extra.os.exec("tinygo",
+    os.exec("tinygo",
         ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
          "-o", "site/playground/buzz.wasm", "./cmd/buzz-playground"],
         "..", {});
-    extra.os.exec("sh",
+    os.exec("sh",
         ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" site/playground/wasm_exec.js"],
         "..", {});
     magus.info("rebuilt site/playground/buzz.wasm + wasm_exec.js — commit the result");
 }
 
 // serve watches ../docs and re-renders gen/ on change — handy for local docs
-// work. extra.fs.watch BLOCKS until interrupted (Ctrl-C); the output lives
+// work. fs.watch BLOCKS until interrupted (Ctrl-C); the output lives
 // outside the watched tree (under gen), so a render can't retrigger the watch.
 // try/catch keeps a bad render from ending the watch; returning false keeps watching.
 export fun serve(_args: [str]) > void {
     site_render();
     magus.info("watching " + ROOT + "/" + DOCS + " — re-rendering " + OUT + " on change (Ctrl-C to stop)");
-    extra.fs.watch([ROOT + "/" + DOCS], fun(_changed: [str]) > bool {
+    fs.watch([ROOT + "/" + DOCS], fun(_changed: [str]) > bool {
         magus.info("change detected — re-rendering");
         try {
             site_render();

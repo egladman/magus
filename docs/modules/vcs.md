@@ -2,7 +2,7 @@
 
 Version-control queries for the current working tree.
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.vcs.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "vcs"`) and call methods in `camelCase` (`vcs.someMethod`).
 
 ## Fields
 
@@ -17,7 +17,7 @@ Version-control queries for the current working tree.
 
 Absolute path of the repository root.
 
-**Signature:** `extra.vcs.root() → string`
+**Signature:** `vcs.root() → string`
 
 **Returns:** string
 
@@ -25,7 +25,7 @@ Absolute path of the repository root.
 
 List files changed against the given base (defaults to vcs.base).
 
-**Signature:** `extra.vcs.diff([base]) → []string`
+**Signature:** `vcs.diff([base]) → []string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -37,7 +37,7 @@ List files changed against the given base (defaults to vcs.base).
 
 Short commit hash, or empty on error.
 
-**Signature:** `extra.vcs.shortHash() → string`
+**Signature:** `vcs.shortHash() → string`
 
 **Returns:** string
 
@@ -45,7 +45,7 @@ Short commit hash, or empty on error.
 
 Full commit hash, or empty on error.
 
-**Signature:** `extra.vcs.hash() → string`
+**Signature:** `vcs.hash() → string`
 
 **Returns:** string
 
@@ -53,7 +53,7 @@ Full commit hash, or empty on error.
 
 Current branch, or empty on error.
 
-**Signature:** `extra.vcs.branch() → string`
+**Signature:** `vcs.branch() → string`
 
 **Returns:** string
 
@@ -61,7 +61,7 @@ Current branch, or empty on error.
 
 Commit date string, or empty on error.
 
-**Signature:** `extra.vcs.commitDate() → string`
+**Signature:** `vcs.commitDate() → string`
 
 **Returns:** string
 
@@ -69,7 +69,7 @@ Commit date string, or empty on error.
 
 True if the working tree has uncommitted changes.
 
-**Signature:** `extra.vcs.isDirty() → bool`
+**Signature:** `vcs.isDirty() → bool`
 
 **Returns:** bool
 
@@ -77,7 +77,7 @@ True if the working tree has uncommitted changes.
 
 Full metadata table: short_hash, hash, branch, commit_date, is_dirty.
 
-**Signature:** `extra.vcs.metadata() → map[string]any`
+**Signature:** `vcs.metadata() → map[string]any`
 
 **Returns:** map[string]any
 
@@ -85,7 +85,7 @@ Full metadata table: short_hash, hash, branch, commit_date, is_dirty.
 
 Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns nil when no VCS is resolved or the revision can't be looked up.
 
-**Signature:** `extra.vcs.commit([rev]) → any`
+**Signature:** `vcs.commit([rev]) → any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -97,7 +97,7 @@ Resolve a revision (a VCS-native rev expression; omit for the current revision) 
 
 Up to limit recent commits, newest first; each is the same record vcs.commit returns. An empty list when no VCS is resolved.
 
-**Signature:** `extra.vcs.history(limit) → any`
+**Signature:** `vcs.history(limit) → any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -109,7 +109,7 @@ Up to limit recent commits, newest first; each is the same record vcs.commit ret
 
 Absolute path to the active VCS executable (git/hg/jj), or "" if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).
 
-**Signature:** `extra.vcs.exe() → string`
+**Signature:** `vcs.exe() → string`
 
 **Returns:** string
 

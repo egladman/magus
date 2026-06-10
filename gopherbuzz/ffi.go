@@ -22,6 +22,9 @@ const (
 	CDouble      = vmpackage.CDouble
 	CCharPtr     = vmpackage.CCharPtr
 	CVoidPtr     = vmpackage.CVoidPtr
+	CAddr        = vmpackage.CAddr
+	CPoint2D     = vmpackage.CPoint2D
+	CRect4D      = vmpackage.CRect4D
 	CUnsupported = vmpackage.CUnsupported
 )
 
@@ -47,11 +50,17 @@ var SetFFIProvider = vmpackage.SetFFIProvider
 // ParseCDecls parses one or more C function prototypes separated by semicolons.
 var ParseCDecls = vmpackage.ParseCDecls
 
+// ParseZigDecls parses Zig-style declarations (the upstream-Buzz zdef dialect).
+var ParseZigDecls = vmpackage.ParseZigDecls
+
 // FFI memory and C-ABI type metadata, backing the `ffi` std module. These are
 // portable (no cgo, no purego) — see vm/ffi_mem.go.
 var (
 	// CTypeLayout returns the size and alignment in bytes of a C type name.
 	CTypeLayout = vmpackage.CTypeLayout
+	// IsPointerCType reports whether a C/Zig type spelling is a pointer (carried
+	// as a float64 `ud` to preserve the full 64-bit address).
+	IsPointerCType = vmpackage.IsPointerCType
 	// StructLayout computes size, alignment, and field offsets of a C struct.
 	StructLayout = vmpackage.StructLayout
 	// AllocFFI pins n zeroed bytes at a fixed address and returns it.

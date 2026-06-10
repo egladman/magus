@@ -2,7 +2,7 @@
 
 Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).
 
-> **Naming convention:** Buzz reaches modules off the `import "magus/extra"` aggregate in `camelCase` (`extra.strings.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "strings"`) and call methods in `camelCase` (`strings.someMethod`).
 
 ## Methods
 
@@ -10,7 +10,7 @@ Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, e
 
 Convert s to camelCase.
 
-**Signature:** `extra.strings.camelCase(s) → string`
+**Signature:** `strings.camelCase(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -22,7 +22,7 @@ Convert s to camelCase.
 
 Convert s to snake_case.
 
-**Signature:** `extra.strings.snakeCase(s) → string`
+**Signature:** `strings.snakeCase(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -34,7 +34,7 @@ Convert s to snake_case.
 
 Convert s to kebab-case.
 
-**Signature:** `extra.strings.kebabCase(s) → string`
+**Signature:** `strings.kebabCase(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -46,7 +46,7 @@ Convert s to kebab-case.
 
 Convert s to PascalCase.
 
-**Signature:** `extra.strings.pascalCase(s) → string`
+**Signature:** `strings.pascalCase(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -58,7 +58,7 @@ Convert s to PascalCase.
 
 Uppercase the first rune of s and lowercase the rest.
 
-**Signature:** `extra.strings.capitalize(s) → string`
+**Signature:** `strings.capitalize(s) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -70,7 +70,7 @@ Uppercase the first rune of s and lowercase the rest.
 
 Split s into its constituent words (splitting on case changes, digits, and separators).
 
-**Signature:** `extra.strings.words(s) → []string`
+**Signature:** `strings.words(s) → []string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -82,7 +82,7 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 
 Trim s to at most length runes, appending "..." when truncated.
 
-**Signature:** `extra.strings.ellipsis(s, length) → string`
+**Signature:** `strings.ellipsis(s, length) → string`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

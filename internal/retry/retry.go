@@ -7,6 +7,7 @@ package retry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -25,6 +26,17 @@ type options struct {
 	delay    time.Duration
 	maxDelay time.Duration
 	onRetry  func(attempt int, err error)
+	// fixedDelay keeps the backoff constant at delay instead of doubling it each
+	// attempt — the curl --retry-delay model (a fixed pause between tries).
+	fixedDelay bool
+	// maxElapsed caps the total wall-clock time spent retrying (curl
+	// --retry-max-time). Zero means no cap. When exceeded between attempts the
+	// loop stops and returns the last error/response.
+	maxElapsed time.Duration
+	// decide, when non-nil, fully replaces the default retry policy of
+	// [retryTransport]: it is asked whether a given response/error pair warrants
+	// another attempt. Exactly one of resp/err is non-nil per call.
+	decide func(resp *http.Response, err error) bool
 }
 
 // Option configures a [Do] call.
@@ -49,6 +61,22 @@ func WithMaxDelay(d time.Duration) Option { return func(o *options) { o.maxDelay
 // attempt is 1-based. Not called after the final failure.
 func WithOnRetry(fn func(attempt int, err error)) Option {
 	return func(o *options) { o.onRetry = fn }
+}
+
+// WithFixedDelay holds the backoff constant at the [WithDelay] value rather than
+// doubling it each attempt — the curl --retry-delay behaviour.
+func WithFixedDelay() Option { return func(o *options) { o.fixedDelay = true } }
+
+// WithMaxElapsed caps the total wall-clock time a retry loop may spend (curl
+// --retry-max-time). Zero (the default) means no cap. When the budget would be
+// exceeded by the next backoff, the loop stops and surfaces the last result.
+func WithMaxElapsed(d time.Duration) Option { return func(o *options) { o.maxElapsed = d } }
+
+// WithRetryDecider replaces the default HTTP retry policy of the client built by
+// [NewHTTPClient]. fn is called with exactly one of resp/err non-nil and reports
+// whether another attempt should be made. It has no effect on [Do].
+func WithRetryDecider(fn func(resp *http.Response, err error) bool) Option {
+	return func(o *options) { o.decide = fn }
 }
 
 // Do runs fn with exponential backoff. It returns nil on the first success,
@@ -120,6 +148,23 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		cfg.attempts = 1
 	}
 
+	// retryErr/retryResp encode the policy: a custom decider (curl-style options)
+	// replaces the default of "retry every transport error; retry 5xx only for
+	// idempotent methods".
+	retryErr := func(err error) bool {
+		if cfg.decide != nil {
+			return cfg.decide(nil, err)
+		}
+		return true
+	}
+	retryResp := func(resp *http.Response) bool {
+		if cfg.decide != nil {
+			return cfg.decide(resp, nil)
+		}
+		return resp.StatusCode >= 500 && isIdempotent
+	}
+
+	start := time.Now()
 	var (
 		resp    *http.Response
 		lastErr error
@@ -145,21 +190,24 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		var err error
 		resp, err = t.base.RoundTrip(cur)
-		if err != nil { // transport-level error: always retry
+		if err != nil {
 			lastErr = err
-			if attempt == cfg.attempts {
+			if attempt == cfg.attempts || !retryErr(err) {
 				break
 			}
 			if cfg.onRetry != nil {
 				cfg.onRetry(attempt, err)
 			}
-			if sleep(req.Context(), backoff(cfg, attempt)) != nil {
-				return nil, req.Context().Err()
+			if werr := t.waitBeforeRetry(req.Context(), start, backoff(cfg, attempt)); werr != nil {
+				if errors.Is(werr, errRetryBudget) {
+					break // out of time: surface lastErr
+				}
+				return nil, werr // context cancelled
 			}
 			continue
 		}
 
-		if resp.StatusCode >= 500 && isIdempotent { // 5xx: retry only for idempotent methods
+		if retryResp(resp) {
 			lastErr = &httpError{code: resp.StatusCode}
 			if attempt == cfg.attempts {
 				break
@@ -170,8 +218,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			delay := retryAfterDelay(resp, backoff(cfg, attempt))
 			_ = resp.Body.Close()
 			resp = nil
-			if sleep(req.Context(), delay) != nil {
-				return nil, req.Context().Err()
+			if werr := t.waitBeforeRetry(req.Context(), start, delay); werr != nil {
+				if errors.Is(werr, errRetryBudget) {
+					break // out of time: surface lastErr (the status code)
+				}
+				return nil, werr // context cancelled
 			}
 			continue
 		}
@@ -183,6 +234,20 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, nil
 	}
 	return nil, lastErr
+}
+
+// errRetryBudget signals that the maxElapsed budget would be exceeded by waiting
+// for the next attempt, so the retry loop must stop and surface its last result.
+var errRetryBudget = errors.New("retry: max elapsed time exceeded")
+
+// waitBeforeRetry sleeps for delay before the next attempt. It returns
+// errRetryBudget when the maxElapsed budget (if set) would be exceeded by
+// waiting, the context error if the wait is cancelled, or nil to proceed.
+func (t *retryTransport) waitBeforeRetry(ctx context.Context, start time.Time, delay time.Duration) error {
+	if t.opts.maxElapsed > 0 && time.Since(start)+delay > t.opts.maxElapsed {
+		return errRetryBudget
+	}
+	return sleep(ctx, delay)
 }
 
 // NewHTTPClient returns a *http.Client whose transport retries failed requests
@@ -224,6 +289,9 @@ func isIdempotentMethod(method string) bool {
 }
 
 func backoff(cfg options, attempt int) time.Duration {
+	if cfg.fixedDelay {
+		return cfg.delay
+	}
 	shift := attempt - 1
 	if shift > 62 {
 		shift = 62

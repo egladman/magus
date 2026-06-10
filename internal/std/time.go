@@ -50,6 +50,20 @@ var Time = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    TimeNowISO,
 		},
+		{
+			Name:    "add",
+			Doc:     "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
+			Args:    []Arg{{Name: "unix_millis", Type: TypeFloat}, {Name: "duration", Type: TypeString}},
+			Returns: []Ret{{Type: TypeFloat}},
+			Impl:    TimeAdd,
+		},
+		{
+			Name:    "diff",
+			Doc:     "Return a minus b in milliseconds (positive when a is later than b).",
+			Args:    []Arg{{Name: "a", Type: TypeFloat}, {Name: "b", Type: TypeFloat}},
+			Returns: []Ret{{Type: TypeFloat}},
+			Impl:    TimeDiff,
+		},
 	},
 }
 
@@ -84,4 +98,19 @@ func TimeParseDuration(_ context.Context, duration string) (float64, error) {
 		return 0, fmt.Errorf("time.parse_duration: %w", err)
 	}
 	return float64(d.Milliseconds()), nil
+}
+
+// TimeAdd adds a Go duration string to a Unix-millis timestamp and returns the
+// resulting Unix-millis value.
+func TimeAdd(_ context.Context, unixMillis float64, duration string) (float64, error) {
+	d, err := time.ParseDuration(duration)
+	if err != nil {
+		return 0, fmt.Errorf("time.add: %w", err)
+	}
+	return float64(time.UnixMilli(int64(unixMillis)).Add(d).UnixMilli()), nil
+}
+
+// TimeDiff returns a minus b in milliseconds.
+func TimeDiff(_ context.Context, a, b float64) (float64, error) {
+	return a - b, nil
 }

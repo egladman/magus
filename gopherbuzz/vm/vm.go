@@ -2,6 +2,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -53,15 +54,34 @@ type envNameEntry struct {
 	slot int32
 }
 
+// icacheEntry is one slot in the per-VM OpInvoke inline cache for immutable-map
+// method calls (e.g. NBody's math.sqrt(d2)). An immutable map's members never
+// change, so for a fixed (chunk, ip, receiver) the resolved callee is permanent.
+// The chunk pointer is part of the key because a different chunk re-using the
+// same ip would name a different member — within one chunk an ip always names
+// the same member, so (chunk, ip) pins the name and recv pins the (immutable)
+// map. recv is the receiver Value itself (a heap index); identical bits ⇒ the
+// same pinned heap object, so the compare needs no heap dereference.
+type icacheEntry struct {
+	chunk  *Chunk
+	recv   Value
+	callee Value
+}
+
 // mcacheEntry is one slot in the per-VM member-access inline cache.
-// The def pointer is the verification key: it uniquely identifies the object type
-// seen at a given instruction IP. On a hit (entry.def == inst.Def), idx is the
-// correct field index for that (IP, type) pair without any string comparison.
+// The verification key is (chunk, def): the cache is indexed by instruction ip
+// alone, and different chunks reuse the same ip range, so an entry must name the
+// chunk it was learned in — two chunks can each have a member access at the same
+// ip on the *same* object type but for *different* fields, and a def-only check
+// would serve the other chunk's field index. With the chunk pinned, the def
+// pointer then guards receiver polymorphism at that exact instruction, and idx
+// is the correct field index without any string comparison.
 // The zero value (def==nil) is a guaranteed miss since inst.Def is never nil.
 type mcacheEntry struct {
-	def *objectDefObj
-	idx int32
-	_   int32 // pad to 16 bytes for aligned access
+	def   *objectDefObj
+	chunk *Chunk
+	idx   int32
+	_     int32 // pad to 24 bytes for aligned access
 }
 
 // vm executes compiled Buzz chunks. It is package-internal; embedders run code
@@ -76,14 +96,22 @@ type VM struct {
 	ncacheChunk *Chunk         // chunk for which ncache entries are valid
 	ncacheEnv   *Env           // resolving env those entries were resolved against
 	// mcache is a per-instruction inline cache for OpGetMember/OpSetMember on
-	// object receivers. Each entry stores the objectDef pointer and the field index
-	// for the last object type seen at that IP. The hit check is a single pointer
-	// compare (entry.def == inst.Def); a miss scans and relearns. Indexed by
-	// instruction position (f.ip-1). Grow-only and never reset — a stale entry
-	// (polymorphic receiver, or a different chunk re-using the same ip after a call)
-	// simply misses and is relearned; it can never yield the wrong field. Per-VM so
+	// object receivers. Each entry stores the chunk it was learned in, the
+	// objectDef pointer, and the field index for the last object type seen at that
+	// IP. The hit check is two pointer compares (entry.chunk == f.chunk &&
+	// entry.def == inst.Def); a miss scans and relearns. Indexed by instruction
+	// position (f.ip-1). Grow-only and never reset — a stale entry (polymorphic
+	// receiver, or a different chunk re-using the same ip after a call) fails the
+	// verification and is relearned; it can never yield the wrong field. Per-VM so
 	// concurrent VMs sharing a *Chunk never race. See mcacheEntry.
 	mcache []mcacheEntry
+	// icache is the per-instruction inline cache for OpInvoke on immutable-map
+	// receivers (std-module method calls like math.sqrt). Grow-only, never reset:
+	// a stale entry (different chunk or receiver at this ip) simply fails the
+	// (chunk, recv) verification and is relearned, so it can never call the wrong
+	// member. Per-VM, so concurrent VMs sharing a *Chunk never race. See
+	// icacheEntry and OpInvoke.
+	icache []icacheEntry
 	// Debugger step hook. nil in every normal run (set only while a magus.pry()
 	// session is stepping), so the per-instruction gate `if vm.stepHook != nil`
 	// is a single perfectly-predicted branch off the hot path; see the dispatch
@@ -146,16 +174,28 @@ func (vm *VM) ncacheEnsure(chunk *Chunk, env *Env) {
 	vm.ncacheEnv = env
 }
 
-// mcacheLearn records (def, idx) for the member-access instruction at ip,
-// growing the per-VM cache slice as needed. The zero value (def==nil) is a
+// mcacheLearn records (chunk, def, idx) for the member-access instruction at
+// ip, growing the per-VM cache slice as needed. The zero value (def==nil) is a
 // safe miss sentinel so no explicit init is needed for new slots.
-func (vm *VM) mcacheLearn(ip int, def *objectDefObj, idx int32) {
+func (vm *VM) mcacheLearn(ip int, chunk *Chunk, def *objectDefObj, idx int32) {
 	if ip >= len(vm.mcache) {
 		grown := make([]mcacheEntry, ip+1)
 		copy(grown, vm.mcache)
 		vm.mcache = grown
 	}
-	vm.mcache[ip] = mcacheEntry{def: def, idx: idx}
+	vm.mcache[ip] = mcacheEntry{def: def, chunk: chunk, idx: idx}
+}
+
+// icacheLearn records (chunk, recv, callee) for the OpInvoke instruction at ip,
+// growing the per-VM cache as needed. Called only for immutable-map receivers,
+// whose resolved member is permanently valid (see icacheEntry).
+func (vm *VM) icacheLearn(ip int, chunk *Chunk, recv, callee Value) {
+	if ip >= len(vm.icache) {
+		grown := make([]icacheEntry, ip+1)
+		copy(grown, vm.icache)
+		vm.icache = grown
+	}
+	vm.icache[ip] = icacheEntry{chunk: chunk, recv: recv, callee: callee}
 }
 
 // run executes chunk inside env and returns the program's result.
@@ -439,6 +479,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
+			// ultra-opt: float+float fast path — see floatBinop. A float carries no
+			// heap ref, so the dropped slot needs no clear (mirrors the int path).
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = FloatValue(left.AsFloat() + right.AsFloat())
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
 			r, err := vm.slowAdd(left, right)
 			if err != nil {
 				return Null, err
@@ -451,6 +498,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// ultra-opt: int-int fast path.
 			if left.tag() == tagInt && right.tag() == tagInt {
 				vm.stack[sp-2] = IntValue(int64(left.num()) - int64(right.num()))
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
+			// ultra-opt: float+float fast path; see OpAdd.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = FloatValue(left.AsFloat() - right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
@@ -468,6 +521,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
+			// ultra-opt: float+float fast path; see OpAdd.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = FloatValue(left.AsFloat() * right.AsFloat())
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
 			r, err := vm.slowMul(left, right)
 			if err != nil {
 				return Null, err
@@ -479,6 +538,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			right, left := vm.stack[sp-1], vm.stack[sp-2]
 			if left.tag() == tagInt && right.tag() == tagInt && right.num() != 0 {
 				vm.stack[sp-2] = IntValue(int64(left.num()) / int64(right.num()))
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
+			// ultra-opt: float/float fast path; see OpAdd. A zero divisor falls
+			// through so arith() raises buzz's float divide-by-zero error.
+			if left.tag() == tagFloat && right.tag() == tagFloat && right.AsFloat() != 0 {
+				vm.stack[sp-2] = FloatValue(left.AsFloat() / right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
@@ -513,6 +579,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
+			// ultra-opt: float==float fast path; matches valuesEqual's tagFloat case.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = BoolValue(left.AsFloat() == right.AsFloat())
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
 			vm.replaceTop2(BoolValue(vm.slowEqual(left, right)))
 
 		case OpNotEqual:
@@ -524,6 +596,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
+			// ultra-opt: float!=float fast path; see OpEqual.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = BoolValue(left.AsFloat() != right.AsFloat())
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
 			vm.replaceTop2(BoolValue(!vm.slowEqual(left, right)))
 
 		case OpLess:
@@ -532,6 +610,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// ultra-opt: int comparison fast path.
 			if left.tag() == tagInt && right.tag() == tagInt {
 				vm.stack[sp-2] = BoolValue(int64(left.num()) < int64(right.num()))
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
+			// ultra-opt: float<>float fast path; see OpAdd.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = BoolValue(left.AsFloat() < right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
@@ -549,6 +633,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
+			// ultra-opt: float<>float fast path; see OpAdd.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = BoolValue(left.AsFloat() <= right.AsFloat())
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
 			r, err := vm.slowCompare(OpLessEqual, left, right)
 			if err != nil {
 				return Null, err
@@ -563,6 +653,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
+			// ultra-opt: float<>float fast path; see OpAdd.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = BoolValue(left.AsFloat() > right.AsFloat())
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
 			r, err := vm.slowCompare(OpGreater, left, right)
 			if err != nil {
 				return Null, err
@@ -574,6 +670,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			right, left := vm.stack[sp-1], vm.stack[sp-2]
 			if left.tag() == tagInt && right.tag() == tagInt {
 				vm.stack[sp-2] = BoolValue(int64(left.num()) >= int64(right.num()))
+				vm.stack = vm.stack[:sp-1]
+				continue
+			}
+			// ultra-opt: float<>float fast path; see OpAdd.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				vm.stack[sp-2] = BoolValue(left.AsFloat() >= right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
@@ -633,22 +735,23 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 
 		case OpGetMember:
 			// Inline-cached member read. For an object receiver, the mcache entry at
-			// this IP stores (objectDefObj*, fieldIdx). A hit is a single pointer compare
-			// — no string comparison needed. On a miss the field index is found by name
-			// scan and learned. Non-object receivers (maps, lists, …) use getMember.
+			// this IP stores (chunk, objectDefObj*, fieldIdx). A hit is two pointer
+			// compares — no string comparison needed. On a miss the field index is
+			// found by name scan and learned. Non-object receivers (maps, lists, …)
+			// use getMember.
 			name := vm.asStr(f.chunk.Consts[ins.A]).V
 			obj := vm.pop()
 			if obj.tag() == tagObject {
 				inst := vm.asObject(obj)
 				ip := f.ip - 1
 				if ip < len(vm.mcache) {
-					if e := vm.mcache[ip]; e.def == inst.Def {
+					if e := vm.mcache[ip]; e.def == inst.Def && e.chunk == f.chunk {
 						vm.push(inst.Fields[e.idx])
 						continue
 					}
 				}
 				if hit := inst.Def.fieldIndex(name); hit >= 0 {
-					vm.mcacheLearn(ip, inst.Def, int32(hit))
+					vm.mcacheLearn(ip, f.chunk, inst.Def, int32(hit))
 					vm.push(inst.Fields[hit])
 					continue
 				}
@@ -672,13 +775,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				}
 				ip := f.ip - 1
 				if ip < len(vm.mcache) {
-					if e := vm.mcache[ip]; e.def == inst.Def {
+					if e := vm.mcache[ip]; e.def == inst.Def && e.chunk == f.chunk {
 						inst.Fields[e.idx] = val
 						continue
 					}
 				}
 				if hit := inst.Def.fieldIndex(name); hit >= 0 {
-					vm.mcacheLearn(ip, inst.Def, int32(hit))
+					vm.mcacheLearn(ip, f.chunk, inst.Def, int32(hit))
 					inst.Fields[hit] = val
 					continue
 				}
@@ -811,6 +914,11 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				//     magus host bindings all copy out or consume synchronously).
 				result, err := directFn.Fn(vm.ctx, vm.stack[calleeIdx+1:stackLen])
 				if err != nil {
+					if vm.raiseHostError(err) {
+						f = &vm.frames[len(vm.frames)-1] // refresh f/code: frames unwound
+						code = f.chunk.Code
+						continue
+					}
 					return Null, err
 				}
 				vm.stack[calleeIdx] = result
@@ -904,15 +1012,43 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// member) and dispatch it like an ordinary call. getMember may bind a
 			// method here (e.g. when recv is a map whose entry is a bound method),
 			// which is the uncommon path this opcode deliberately doesn't optimize.
-			callee, err := getMember(vm, receiver, name)
-			if err != nil {
-				return Null, err
+			//
+			// ultra-opt: an immutable-map receiver (e.g. the `math` module in
+			//   NBody's math.sqrt(d2)) resolves the same callee every call, so an
+			//   (chunk, ip, receiver) hit skips getMember's mapMethod string-switch
+			//   and map hash lookup — the per-call dispatch the NBody profile spent
+			//   ~3% in (getMember → mapaccess2_faststr). Only immutable maps are
+			//   learned; mutable maps and all other receivers resolve fresh.
+			//   measured: BenchmarkComparison/NBody/Warm/Gopherbuzz (benchstat n=6);
+			//     Mandelbrot/LoopSum unaffected (slot-mode, no OpInvoke).
+			ip := f.ip - 1
+			var callee Value
+			cached := false
+			if ip < len(vm.icache) {
+				if e := vm.icache[ip]; e.chunk == f.chunk && e.recv == receiver {
+					callee, cached = e.callee, true
+				}
+			}
+			if !cached {
+				c, err := getMember(vm, receiver, name)
+				if err != nil {
+					return Null, err
+				}
+				callee = c
+				if receiver.tag() == tagMap && !vm.asMap(receiver).Mut {
+					vm.icacheLearn(ip, f.chunk, receiver, c)
+				}
 			}
 			switch callee.tag() {
 			case tagDirect:
 				directFn := vm.asDirect(callee)
 				result, ferr := directFn.Fn(vm.ctx, vm.stack[recvIdx+1:stackLen])
 				if ferr != nil {
+					if vm.raiseHostError(ferr) {
+						f = &vm.frames[len(vm.frames)-1] // refresh f/code: frames unwound
+						code = f.chunk.Code
+						continue
+					}
 					return Null, ferr
 				}
 				vm.stack[recvIdx] = result
@@ -1097,6 +1233,10 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			val := vm.pop()
 			result, err := vm.buzzCast(val, name)
 			if err != nil {
+				if ins.B == 1 { // `as?`: a type mismatch yields null instead of erroring
+					vm.push(Null)
+					break
+				}
 				return Null, err
 			}
 			vm.push(result)
@@ -1187,7 +1327,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			vm.stack = vm.stack[:len(vm.stack)-n]
 			vm.push(StrValue(string(buf)))
 
-		case OpLocalConstOp:
+		case OpBinLC:
 			// ultra-opt: fused GetLocal;LoadConst;<binop>. Reads the local and the
 			//   constant directly — eliminating two pushes, two pops, and two switch
 			//   dispatches per occurrence — then runs the SAME polymorphic op as the
@@ -1300,6 +1440,23 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					continue
 				}
 			}
+			// ultra-opt: float+float fast path for the fused superinstruction — the
+			// float kernels' inner-loop locals (Mandelbrot zx/zy, NBody accumulators)
+			// land here. floatBinop returns ok==false for OpMod / float divide-by-zero,
+			// which fall through to applyBinop so arith() reports the exact error.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				if r, ok := floatBinop(sub, left.AsFloat(), right.AsFloat()); ok {
+					if dst > 0 {
+						vm.stack[f.base+int(dst-1)] = r
+					} else if code[f.ip].Op == OpSetLocal && code[f.ip].A == ins.A {
+						vm.stack[f.base+int(ins.A)] = r
+						f.ip++
+					} else {
+						vm.push(r)
+					}
+					continue
+				}
+			}
 			r, err := applyBinop(vm, sub, left, right)
 			if err != nil {
 				return Null, err
@@ -1310,7 +1467,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.push(r)
 			}
 
-		case OpLocalLocalOp:
+		case OpBinLL:
 			// ultra-opt: fused GetLocal;GetLocal;<binop>. Reads both locals directly,
 			// eliminating two pushes, two pops, and two switch dispatches per use.
 			//   A = left slot; B = right slot (low 16 bits) | sub-opcode (high 16 bits).
@@ -1419,6 +1576,23 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					continue
 				}
 			}
+			// ultra-opt: float+float fast path for the fused superinstruction — the
+			// float kernels' inner-loop locals (Mandelbrot zx/zy, NBody accumulators)
+			// land here. floatBinop returns ok==false for OpMod / float divide-by-zero,
+			// which fall through to applyBinop so arith() reports the exact error.
+			if left.tag() == tagFloat && right.tag() == tagFloat {
+				if r, ok := floatBinop(sub, left.AsFloat(), right.AsFloat()); ok {
+					if dst > 0 {
+						vm.stack[f.base+int(dst-1)] = r
+					} else if code[f.ip].Op == OpSetLocal && code[f.ip].A == ins.A {
+						vm.stack[f.base+int(ins.A)] = r
+						f.ip++
+					} else {
+						vm.push(r)
+					}
+					continue
+				}
+			}
 			r, err := applyBinop(vm, sub, left, right)
 			if err != nil {
 				return Null, err
@@ -1429,7 +1603,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.push(r)
 			}
 
-		case OpForCondLC:
+		case OpCmpLC:
 			// ultra-opt: fused GetLocal;LoadConst;<cmp>;JumpFalse.
 			//   A = local slot; B = const-pool index (low 24)|cmp-op (high 8).
 			//   Jump target is in code[f.ip].A (the first absorbed OpNop); skip 3 NOPs.
@@ -1441,6 +1615,24 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			var cond bool
 			if left.tag() == tagInt && right.tag() == tagInt {
 				a, b := int64(left.num()), int64(right.num())
+				switch sub {
+				case OpLess:
+					cond = a < b
+				case OpLessEqual:
+					cond = a <= b
+				case OpGreater:
+					cond = a > b
+				case OpGreaterEqual:
+					cond = a >= b
+				case OpEqual:
+					cond = a == b
+				case OpNotEqual:
+					cond = a != b
+				}
+			} else if left.tag() == tagFloat && right.tag() == tagFloat {
+				// ultra-opt: float loop-condition fast path (e.g. `while (x < 10.0)`),
+				// mirroring the int arm — skips applyBinopâcompareâasNumeric.
+				a, b := left.AsFloat(), right.AsFloat()
 				switch sub {
 				case OpLess:
 					cond = a < b
@@ -1780,6 +1972,33 @@ func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env, mut bool
 	return nil
 }
 
+// raiseHostError implements throw semantics for an error returned by a host
+// (Go-side) callable: like upstream Buzz's `!>` errors, a host failure is a
+// catchable Buzz error, not a VM abort. It unwinds to the innermost active try
+// handler — exactly OpThrow's discipline — and delivers the message as a str
+// for the catch body. It reports false, leaving all state untouched, when no
+// handler is active or the error is a control-flow sentinel (fiber yield,
+// context cancellation), which must keep propagating to the embedder.
+// Callers must refresh their cached frame/code pointers on true.
+func (vm *VM) raiseHostError(err error) bool {
+	if len(vm.catchStack) == 0 {
+		return false
+	}
+	if _, ok := err.(*yieldSignal); ok {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	entry := vm.catchStack[len(vm.catchStack)-1]
+	vm.catchStack = vm.catchStack[:len(vm.catchStack)-1]
+	vm.frames = vm.frames[:entry.frameIdx+1]
+	vm.stack = vm.stack[:entry.stackLen]
+	vm.frames[len(vm.frames)-1].ip = entry.catchIP
+	vm.push(StrValue(err.Error()))
+	return true
+}
+
 // purgeCatchFrame removes all catch entries that belong to the given frame index.
 // Called on frame exit (return / implicit return) to prevent stale catch handlers.
 func (vm *VM) purgeCatchFrame(frameIdx int) {
@@ -1860,7 +2079,11 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 	case "bool":
 		return BoolValue(v.Bool()), nil
 	}
-	return Null, fmt.Errorf("buzz: cannot cast %s to %s", v.buzzKind(), typeName)
+	// Non-primitive target (an object/list/map/named type): gopherbuzz is
+	// dynamically typed, so a cast to such a type is an identity assertion —
+	// the value already is whatever it is. `as?` callers still get null only on
+	// a failed *primitive* coercion above (e.g. a non-numeric string to int).
+	return v, nil
 }
 
 // --- Exported debug and control methods ---

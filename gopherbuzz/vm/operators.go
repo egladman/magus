@@ -90,7 +90,58 @@ func floatArith(op OpCode, a, b float64) (Value, error) {
 	}
 }
 
-// applyBinop dispatches a fused binary op (OpLocalConstOp) to the same semantics
+// floatBinop is the float+float fast path shared by the fused superinstruction
+// handlers (OpBinLL/OpBinLC). It mirrors what applyBinop would
+// compute for two float operands, but inline, skipping arith's int/str probes,
+// the two asNumeric type switches, and floatArith's opcode switch.
+//
+// ok==false means "not a float-handled op here, fall back to applyBinop": that
+// is OpMod (no float modulo) and float division by zero, both of which must
+// surface arith's exact error. The standalone OpAdd/OpSub/… handlers inline
+// their own single-op float path (the op is statically known there); this helper
+// exists only where the sub-opcode is a runtime value.
+//
+// ultra-opt: collapses the float arithmetic/compare dispatch the fused ops
+//
+//	otherwise pay via applyBinop→arith→asNumeric×2→floatArith. The float kernels
+//	(Mandelbrot, NBody) drive their inner-loop locals through the fused ops, so
+//	every iteration hit that chain before this path.
+//	measured: BenchmarkComparison/{Mandelbrot,NBody}/Warm/Gopherbuzz -14.8% /
+//	  -7.5% ns/op (benchstat n=10, Go 1.25.10, amd64; Mandelbrot -22% B/op);
+//	  see benchmarks/comparison and bench/floatfast.txt.
+//	trade-off: a second tag-pair test per fused op on the int-operand path
+//	  (one predicted-not-taken branch); int benches (LoopSum/Fib) unchanged.
+//	assumes: caller has verified both operands are tagFloat.
+func floatBinop(op OpCode, a, b float64) (Value, bool) {
+	switch op {
+	case OpAdd:
+		return FloatValue(a + b), true
+	case OpSub:
+		return FloatValue(a - b), true
+	case OpMul:
+		return FloatValue(a * b), true
+	case OpDiv:
+		if b == 0 {
+			return Null, false // let arith() raise buzz's float divide-by-zero error
+		}
+		return FloatValue(a / b), true
+	case OpLess:
+		return BoolValue(a < b), true
+	case OpLessEqual:
+		return BoolValue(a <= b), true
+	case OpGreater:
+		return BoolValue(a > b), true
+	case OpGreaterEqual:
+		return BoolValue(a >= b), true
+	case OpEqual:
+		return BoolValue(a == b), true
+	case OpNotEqual:
+		return BoolValue(a != b), true
+	}
+	return Null, false // OpMod (no float modulo) → applyBinop reports the error
+}
+
+// applyBinop dispatches a fused binary op (OpBinLC) to the same semantics
 // the unfused opcode would run. It is the polymorphic fallback the fused handler
 // uses once its inline int fast path misses; keeping it here means the fused op
 // and the standalone OpAdd/OpLess/… handlers can never drift apart.

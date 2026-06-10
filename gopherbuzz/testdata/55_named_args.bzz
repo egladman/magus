@@ -1,0 +1,23 @@
+// @expect: 1,2 3x4|1,2 3x4|1,2 3x4|11,22
+// Named arguments, upstream Buzz's call syntax: labels resolve against the
+// callee's parameter names and may arrive in any order (positional arguments
+// must come first). Note: arguments evaluate in *parameter* order after
+// reordering, so side-effecting argument expressions belong in locals.
+fun frame(x: double, y: double, w: double, h: double) > str {
+    return "{x},{y} {w}x{h}";
+}
+
+object Point {
+    x: double = 0.0,
+    y: double = 0.0,
+    fun shifted(dx: double, dy: double) > Point {
+        return mut Point{ x = this.x + dx, y = this.y + dy };
+    }
+}
+
+final a = frame(x: 1.0, y: 2.0, w: 3.0, h: 4.0);
+final b = frame(h: 4.0, w: 3.0, y: 2.0, x: 1.0);
+final c = frame(1.0, y: 2.0, w: 3.0, h: 4.0);
+final p = mut Point{ x = 10.0, y = 20.0 };
+final q = p.shifted(dy: 2.0, dx: 1.0);
+final __r = "{a}|{b}|{c}|{q.x},{q.y}";

@@ -123,9 +123,9 @@ type Field struct {
 	Resolver any
 }
 
-// Module is a named collection of Fields + Methods imported as
-// magus.extra.<name>: after `local fs = require("magus.extra.fs")`, fs.glob;
-// `local os = require("magus.extra.os")`, os.exec.
+// Module is a named collection of Fields + Methods imported under the module's
+// bare name: after `import "fs"`, fs.glob; after `import "os"`, os.exec. magus
+// layers these methods onto Buzz's own stdlib module of the same name.
 type Module struct {
 	Name    string
 	Doc     string

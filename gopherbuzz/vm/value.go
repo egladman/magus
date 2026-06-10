@@ -56,6 +56,7 @@ const (
 	tagRange              // obj: *rangeObj
 	tagFib                // obj: *fibObj
 	tagPat                // obj: *patObj
+	tagUD                 // obj: *udObj (foreign FFI pointer; heap-boxed to carry the full 64-bit address)
 )
 
 // Value is defined in value_unsafe.go / value_safe.go (build-tag-selected),
@@ -66,6 +67,12 @@ const (
 // --- heap payload types ---
 
 type strObj struct{ V string }
+
+// udObj boxes a foreign FFI pointer (`ud`). It is heap-allocated because a full
+// 64-bit address fits neither the NaN-boxed int's ~48-bit payload nor a float64
+// mantissa (tagged pointers like CFNumber set high bits AND carry a low-bit tag)
+// — only an out-of-line word preserves every bit losslessly.
+type udObj struct{ Addr uintptr }
 
 // listObj backs Buzz list literals. Mut reports whether the list may be mutated
 // in place (append, subscript-set, …); plain `[…]` literals are immutable, only
@@ -231,6 +238,7 @@ func (*enumValObj) heapKind() valueTag   { return tagEnumVal }
 func (*iterStateObj) heapKind() valueTag { return tagIterState }
 func (*rangeObj) heapKind() valueTag     { return tagRange }
 func (*fibObj) heapKind() valueTag       { return tagFib }
+func (*udObj) heapKind() valueTag        { return tagUD }
 
 // --- constructors ---
 //
@@ -259,6 +267,9 @@ func internStr(s string) *strObj {
 // equal strings always share the same pointer, enabling O(1) equality via
 // pointer comparison in valuesEqual.
 func StrValue(s string) Value { return heapValue(tagStr, internStr(s)) }
+
+// UDValue boxes a foreign FFI pointer (`ud`). See udObj for why it is heap-boxed.
+func UDValue(addr uintptr) Value { return heapValue(tagUD, &udObj{Addr: addr}) }
 
 // ListValue returns a Buzz list Value backed by items. items may be nil.
 func ListValue(items []Value) Value {
@@ -316,6 +327,12 @@ func (v Value) IsFloat() bool { return v.tag() == tagFloat }
 // IsStr reports whether v is a string.
 func (v Value) IsStr() bool { return v.tag() == tagStr }
 
+// IsUD reports whether v is a foreign FFI pointer (`ud`).
+func (v Value) IsUD() bool { return v.tag() == tagUD }
+
+// AsUD returns the boxed foreign pointer. Only valid when IsUD() is true.
+func (v Value) AsUD() uintptr { return v.asUD().Addr }
+
 // IsList reports whether v is a list.
 func (v Value) IsList() bool { return v.tag() == tagList }
 
@@ -371,6 +388,8 @@ func (v Value) buzzKind() string {
 		return "fib"
 	case tagPat:
 		return "pat"
+	case tagUD:
+		return "ud"
 	default:
 		return "unknown"
 	}
@@ -459,6 +478,8 @@ func (v Value) String() string {
 		}
 	case tagPat:
 		return v.asPat().src
+	case tagUD:
+		return fmt.Sprintf("ud:0x%x", v.AsUD())
 	default:
 		return "<unknown>"
 	}
@@ -556,6 +577,8 @@ func valuesEqual(a, b Value) bool {
 	case tagEnumVal:
 		ae, be := a.asEnumVal(), b.asEnumVal()
 		return ae.Enum == be.Enum && ae.Case == be.Case
+	case tagUD:
+		return a.AsUD() == b.AsUD() // foreign pointers compare by address
 	default:
 		return sameObj(a, b) // reference equality for collections/objects
 	}

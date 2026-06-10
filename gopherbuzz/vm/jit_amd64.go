@@ -15,8 +15,9 @@ import (
 // logic is in jit_shared.go; this file is the code generator.
 //
 // Each numeric op has an int fast path (inline) and a double (SSE) fast path (out
-// of line); anything else — mixed int/float, a non-number via `any`, NaN,
-// float ÷0/% — deopts to the interpreter. Codegen is golang-asm; only the
+// of line) that also promotes a mixed int operand to double (CVTSI2SD, matching
+// the interpreter's asNumeric); anything else — a non-number via `any`, a NaN
+// result, float ÷0/% — deopts to the interpreter. Codegen is golang-asm; only the
 // trampoline (jit_amd64.s) is hand asm. See the README "Baseline JIT" section.
 
 // jitArchDefault is the default-on state for this arch (amd64 is runtime-verified).
@@ -182,11 +183,31 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		ri(x86.AMOVQ, jitIntHeader, rDX)
 		rr(x86.AORQ, rDX, reg)
 	}
-	guardDoubleElseDeopt := func(reg int16, ip int) {
+	// toDoubleXmm loads reg into the SSE register xmm as a float64, promoting a
+	// tagged int operand to double (CVTSI2SD) — the interpreter's asNumeric
+	// promotion (e.g. `px * 0.0125` with px:int). A normal double is reinterpreted
+	// as-is; anything else (a non-number via `any`) deopts. reg is clobbered when
+	// it holds an int (decoded in place); callers no longer need it afterward.
+	toDoubleXmm := func(reg, xmm int16, ip int) {
+		isDouble := np()
+		isDouble.As = obj.ANOP
+		done := np()
+		done.As = obj.ANOP
 		rr(x86.AMOVQ, reg, rDX)
 		rr(x86.AANDQ, rR9, rDX)
 		rr(x86.ACMPQ, rR9, rDX)
-		br(x86.AJEQ, deoptFor(ip)) // (v & qnan)==qnan ⇒ not a normal double
+		br(x86.AJNE, isDouble) // (v & qnan)!=qnan ⇒ normal double
+		// tagged: must be int (else a non-number → deopt).
+		rr(x86.AMOVQ, reg, rDX)
+		ri(x86.ASHRQ, 48, rDX)
+		cmpImm(rDX, jitIntHi16)
+		br(x86.AJNE, deoptFor(ip))
+		decodeInt(reg)              // sign-extend the 48-bit int payload
+		rr(x86.ACVTSQ2SD, reg, xmm) // int64 → float64
+		br(obj.AJMP, done)
+		add(isDouble)
+		rr(x86.AMOVQ, reg, xmm) // reinterpret the double's raw bits
+		add(done)
 	}
 	boxBool := func(setcc obj.As) {
 		dst1(setcc, rDX)
@@ -294,26 +315,25 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		// Cold float path (emitted after the body). AX, CX still hold raw bits.
 		floatStubs = append(floatStubs, func() {
 			add(fstub)
-			guardDoubleElseDeopt(rAX, ip)
-			guardDoubleElseDeopt(rCX, ip)
 			if sub == OpMod {
 				br(obj.AJMP, deoptFor(ip)) // float % is a runtime error in the interpreter
 				return
 			}
+			// Promote each operand to a double in X0/X1 (int → CVTSI2SD), or deopt
+			// on a non-number. This handles mixed int/float operands (e.g.
+			// px*0.0125 with px:int) the interpreter's asNumeric also promotes.
+			toDoubleXmm(rAX, rX0, ip)
+			toDoubleXmm(rCX, rX1, ip)
 			if isCmp(sub) {
-				rr(x86.AMOVQ, rAX, rX0)
-				rr(x86.AMOVQ, rCX, rX1)
 				rr(x86.AUCOMISD, rX1, rX0) // below ⇒ X0 < X1 ⇒ left < right
 				boxBool(floatSetCC(sub))
 			} else {
-				if sub == OpDiv { // ±0 divisor ⇒ float division-by-zero error → deopt
-					rr(x86.AMOVQ, rCX, rDX)
+				if sub == OpDiv { // ±0.0 divisor ⇒ float division-by-zero error → deopt
+					rr(x86.AMOVQ, rX1, rDX) // promoted divisor bits
 					rr(x86.AADDQ, rDX, rDX) // raw<<1; ±0.0 → 0
 					cmpImm(rDX, 0)
 					br(x86.AJEQ, deoptFor(ip))
 				}
-				rr(x86.AMOVQ, rAX, rX0)
-				rr(x86.AMOVQ, rCX, rX1)
 				rr(floatArithAs(sub), rX1, rX0)
 				rr(x86.AUCOMISD, rX0, rX0) // NaN result → deopt (interp canonicalizes NaN)
 				br(x86.AJPS, deoptFor(ip))
@@ -394,7 +414,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			ld(rCX, rR8, opOff(d-1))
 			emitNumeric(ins.Op, ip, func(r int16) { st(rR8, opOff(d-2), r) })
 
-		case OpLocalConstOp:
+		case OpBinLC:
 			sub := OpCode(uint32(ins.B) >> 24 & 0x7F)
 			cbits := int64(uint64(chunk.Consts[int(ins.B&0xFFFFFF)]))
 			ld(rAX, rR8, slotOff(ins.A))
@@ -408,7 +428,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 				}
 			})
 
-		case OpLocalLocalOp:
+		case OpBinLL:
 			sub := OpCode(uint32(ins.B) >> 16 & 0x7FFF)
 			rslot := int32(ins.B & 0xFFFF)
 			ld(rAX, rR8, slotOff(ins.A))
@@ -422,13 +442,44 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 				}
 			})
 
-		case OpForCondLC:
+		case OpCmpLC:
 			sub := OpCode(uint32(ins.B) >> 24)
 			cbits := int64(uint64(chunk.Consts[int(uint32(ins.B)&0xFFFFFF)]))
 			target := int(code[ip+1].A)
 			ld(rAX, rR8, slotOff(ins.A))
 			ri(x86.AMOVQ, cbits, rCX)
 			emitNumeric(sub, ip, storeFalseBranch(target))
+
+		case OpPop:
+			// No code: the static-depth model abandons the dropped slot (the next
+			// push overwrites it); nanbox Values hold no Go pointer, so nothing to
+			// clear. depths() already decremented the depth for this ip.
+
+		case OpJumpFalsePeek:
+			// `and` short-circuit: peek the top (depth unchanged) and, if false,
+			// jump forward leaving it as the expression result. Mirrors the
+			// OpJumpFalse guard+compare but without the pop and forward-only (no
+			// back-edge poll — depths() rejects backward peek-jumps).
+			ld(rAX, rR8, opOff(d-1))
+			rr(x86.AMOVQ, rAX, rDX)
+			ri(x86.ASHRQ, 48, rDX)
+			cmpImm(rDX, jitBoolHi16)
+			br(x86.AJNE, deoptFor(ip)) // non-bool operand → deopt (interp does .Bool())
+			ri(x86.AMOVQ, jitFalseBits, rDX)
+			rr(x86.ACMPQ, rDX, rAX)
+			br(x86.AJEQ, label[ins.A]) // false ⇒ short-circuit forward jump
+
+		case OpJumpTruePeek:
+			// `or` short-circuit: peek; if true, jump forward leaving it. Mirror of
+			// OpJumpFalsePeek with the inverted branch sense.
+			ld(rAX, rR8, opOff(d-1))
+			rr(x86.AMOVQ, rAX, rDX)
+			ri(x86.ASHRQ, 48, rDX)
+			cmpImm(rDX, jitBoolHi16)
+			br(x86.AJNE, deoptFor(ip))
+			ri(x86.AMOVQ, jitFalseBits, rDX)
+			rr(x86.ACMPQ, rDX, rAX)
+			br(x86.AJNE, label[ins.A]) // != false ⇒ true ⇒ forward jump
 
 		case OpJump:
 			if int(ins.A) <= ip {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/gopherbuzz/ast"
+	vmpackage "github.com/egladman/gopherbuzz/vm"
 )
 
 // CompileOptions controls how a program's top-level scope is compiled.
@@ -61,7 +62,7 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*Chunk, error) {
 			return nil, err
 		}
 	}
-	c.chunk.Emit(OpReturnNull, 0, 0)
+	c.chunk.Emit(vmpackage.OpReturnNull, 0, 0)
 	// localCount is the register-window size for VM.Run pre-allocation.
 	// Even in SharedGlobals mode, block-local variables (depth > 0) use slots,
 	// so nextSlot may be > 0 and the window must be pre-allocated.
@@ -201,6 +202,9 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Expr, inFunc, keep)
 	case *ast.AsExpr:
 		collectFuncRefs(v.Expr, inFunc, keep)
+	case *ast.CatchExpr:
+		collectFuncRefs(v.Expr, inFunc, keep)
+		collectFuncRefs(v.Default, inFunc, keep)
 	case *ast.YieldExpr:
 		collectFuncRefs(v.Value, inFunc, keep)
 	case *ast.FiberExpr:
@@ -268,13 +272,13 @@ func annotStyp(annot string) styp {
 func checkCode(t styp) int32 {
 	switch t {
 	case sInt:
-		return CheckInt
+		return vmpackage.CheckInt
 	case sFloat:
-		return CheckFloat
+		return vmpackage.CheckFloat
 	case sStr:
-		return CheckStr
+		return vmpackage.CheckStr
 	case sBool:
-		return CheckBool
+		return vmpackage.CheckBool
 	default:
 		return 0
 	}
@@ -415,6 +419,9 @@ type compiler struct {
 	// which fall back to the name path). `this` is bound by dispatch, so it is
 	// always the object type — these accesses need no shape guard.
 	thisFields map[string]int32
+	// zdefSeq names the per-statement temporary that holds a lowered top-level
+	// zdef handle while its symbols are bound as globals (see zdef_decl.go).
+	zdefSeq int32
 }
 
 func newCompiler(parent *compiler, name string, params []string) *compiler {
@@ -514,6 +521,29 @@ func (c *compiler) nameConst(s string) int32 {
 	return c.chunk.AddConst(StrValue(s))
 }
 
+// compileZdefDecl lowers a top-level `zdef("lib", "<decls>")` statement into
+// module-global bindings for the symbols it declares (upstream Buzz zdef
+// semantics; see zdef_decl.go). It evaluates the zdef call once into a private
+// temp holding the handle map, then binds each declared name to handle[name].
+// The symbols are exported so importing modules can call them by bare name.
+func (c *compiler) compileZdefDecl(call *ast.CallExpr, names []string) error {
+	if err := c.compileExpr(call); err != nil { // → handle map on the stack
+		return err
+	}
+	tmp := fmt.Sprintf("$zdef%d", c.zdefSeq)
+	c.zdefSeq++
+	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(tmp), 0) // bind handle, pops it
+	c.chunk.Private = append(c.chunk.Private, tmp)
+	for _, name := range names {
+		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(tmp), 0)    // push handle
+		c.chunk.Emit(vmpackage.OpLoadConst, c.nameConst(name), 0)  // push key
+		c.chunk.Emit(vmpackage.OpGetIndex, 0, 0)                   // → handle[name]
+		c.chunk.Emit(vmpackage.OpDefName, c.nameConst(name), 0)    // bind global
+		c.chunk.Exports = append(c.chunk.Exports, name)
+	}
+	return nil
+}
+
 func (c *compiler) pushLoop(continueTarget int, isForeach bool) {
 	c.loops = append(c.loops, loopInfo{continueTarget: continueTarget, isForeach: isForeach})
 }
@@ -560,7 +590,7 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		if v.TypeAnnot != "" {
 			if at := annotStyp(v.TypeAnnot); at != sUnknown {
 				if slotType != at {
-					c.chunk.Emit(OpCheckType, checkCode(at), 0)
+					c.chunk.Emit(vmpackage.OpCheckType, checkCode(at), 0)
 				}
 				slotType = at
 			} else {
@@ -579,9 +609,9 @@ func (c *compiler) compileStmt(n ast.Node) error {
 					c.setSlotObjFields(slot, fields)
 				}
 			}
-			c.chunk.Emit(OpSetLocal, slot, 0)
+			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
 		} else {
-			c.chunk.Emit(OpDefName, c.nameConst(v.Name), 0)
+			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
 			if v.IsExported {
 				c.chunk.Exports = append(c.chunk.Exports, v.Name)
 			} else {
@@ -598,20 +628,30 @@ func (c *compiler) compileStmt(n ast.Node) error {
 
 	case *ast.ReturnStmt:
 		if v.Value == nil {
-			c.chunk.Emit(OpReturnNull, 0, 0)
+			c.chunk.Emit(vmpackage.OpReturnNull, 0, 0)
 			return nil
 		}
 		if err := c.compileExpr(v.Value); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpReturn, 0, 0)
+		c.chunk.Emit(vmpackage.OpReturn, 0, 0)
 		return nil
 
 	case *ast.ExprStmt:
+		// A top-level `zdef("lib", "<decls>")` declares its symbols as module
+		// globals (upstream Buzz semantics), rather than evaluating to a discarded
+		// handle. Only at module top level — inside a function it stays an ordinary
+		// expression returning the handle. The symbols bind as Env globals
+		// (OpDefName), reachable by bare name in both compile modes.
+		if c.depth == 0 {
+			if call, names, ok := zdefDeclNames(v.Expr); ok {
+				return c.compileZdefDecl(call, names)
+			}
+		}
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpPop, 0, 0)
+		c.chunk.Emit(vmpackage.OpPop, 0, 0)
 		return nil
 
 	case *ast.BlockStmt:
@@ -645,9 +685,9 @@ func (c *compiler) compileStmt(n ast.Node) error {
 			return fmt.Errorf("buzz: break outside loop")
 		}
 		if li.isForeach {
-			c.chunk.Emit(OpPop, 0, 0)
+			c.chunk.Emit(vmpackage.OpPop, 0, 0)
 		}
-		idx := c.chunk.EmitJump(OpJump)
+		idx := c.chunk.EmitJump(vmpackage.OpJump)
 		li.breakPatch = append(li.breakPatch, idx)
 		return nil
 
@@ -657,9 +697,9 @@ func (c *compiler) compileStmt(n ast.Node) error {
 			return fmt.Errorf("buzz: continue outside loop")
 		}
 		if li.continueTarget >= 0 {
-			c.chunk.Emit(OpJump, int32(li.continueTarget), 0)
+			c.chunk.Emit(vmpackage.OpJump, int32(li.continueTarget), 0)
 		} else {
-			idx := c.chunk.EmitJump(OpJump)
+			idx := c.chunk.EmitJump(vmpackage.OpJump)
 			li.continuePatch = append(li.continuePatch, idx)
 		}
 		return nil
@@ -669,12 +709,12 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		if err != nil {
 			return err
 		}
-		c.chunk.Emit(OpNewClosure, idx, 0)
+		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
 		if c.useSlots || c.depth > 0 {
 			slot := c.defineLocal(v.Name)
-			c.chunk.Emit(OpSetLocal, slot, 0)
+			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
 		} else {
-			c.chunk.Emit(OpDefName, c.nameConst(v.Name), 0)
+			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
 			if v.IsExported {
 				c.chunk.Exports = append(c.chunk.Exports, v.Name)
 			} else {
@@ -685,6 +725,9 @@ func (c *compiler) compileStmt(n ast.Node) error {
 			}
 		}
 		return nil
+
+	case *ast.TestDecl:
+		return c.compileTestDecl(v)
 
 	case *ast.ObjectDecl:
 		return c.compileObjectDecl(v)
@@ -699,7 +742,7 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		if err := c.compileExpr(v.Value); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpThrow, 0, 0)
+		c.chunk.Emit(vmpackage.OpThrow, 0, 0)
 		return nil
 
 	// yield is an expression; if reached here as a statement it was wrapped in ExprStmt.
@@ -720,7 +763,7 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 		// `_ = yield x`) and drop it. It binds no name, so this is valid anywhere,
 		// not only where `_` happens to be a loop variable.
 		if t.Name == "_" {
-			c.chunk.Emit(OpPop, 0, 0)
+			c.chunk.Emit(vmpackage.OpPop, 0, 0)
 			return nil
 		}
 		if slot := c.resolveLocal(t.Name); slot >= 0 {
@@ -729,29 +772,29 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 			// it (OpCheckType) so the invariant "this slot always holds T" still holds
 			// and downstream reads stay sound.
 			if st := c.slotType(slot); st != sUnknown && c.staticType(v.Value) != st {
-				c.chunk.Emit(OpCheckType, checkCode(st), 0)
+				c.chunk.Emit(vmpackage.OpCheckType, checkCode(st), 0)
 			}
 			c.clearSlotObjFields(slot)
-			c.chunk.Emit(OpSetLocal, slot, 0)
+			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
 			return nil
 		}
 		if c.useSlots {
 			if uv := c.resolveUpvalue(t.Name); uv >= 0 {
-				c.chunk.Emit(OpSetUpvalue, uv, 0)
+				c.chunk.Emit(vmpackage.OpSetUpvalue, uv, 0)
 				return nil
 			}
 		}
 		// OpStoreName consumes its operand (see the handler in vm.go); no
 		// trailing OpPop, mirroring OpSetLocal.
-		c.chunk.Emit(OpStoreName, c.nameConst(t.Name), 0)
+		c.chunk.Emit(vmpackage.OpStoreName, c.nameConst(t.Name), 0)
 		return nil
 	case *ast.MemberExpr:
 		if idx, ok := c.thisFieldIndex(t.Object, t.Name); ok {
-			c.chunk.Emit(OpLoadThis, 0, 0)
+			c.chunk.Emit(vmpackage.OpLoadThis, 0, 0)
 			if err := c.compileExpr(v.Value); err != nil {
 				return err
 			}
-			c.chunk.Emit(OpSetField, idx, c.nameConst(t.Name))
+			c.chunk.Emit(vmpackage.OpSetField, idx, c.nameConst(t.Name))
 			return nil
 		}
 		if idx, ok := c.localObjFieldIndex(t.Object, t.Name); ok {
@@ -761,7 +804,7 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 			if err := c.compileExpr(v.Value); err != nil {
 				return err
 			}
-			c.chunk.Emit(OpSetField, idx, c.nameConst(t.Name))
+			c.chunk.Emit(vmpackage.OpSetField, idx, c.nameConst(t.Name))
 			return nil
 		}
 		if err := c.compileExpr(t.Object); err != nil {
@@ -770,7 +813,7 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 		if err := c.compileExpr(v.Value); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpSetMember, c.nameConst(t.Name), 0)
+		c.chunk.Emit(vmpackage.OpSetMember, c.nameConst(t.Name), 0)
 		return nil
 	case *ast.IndexExpr:
 		if err := c.compileExpr(t.Object); err != nil {
@@ -782,7 +825,7 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 		if err := c.compileExpr(v.Value); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpSetIndex, 0, 0)
+		c.chunk.Emit(vmpackage.OpSetIndex, 0, 0)
 		return nil
 	default:
 		return fmt.Errorf("buzz: invalid assignment target %T", v.Target)
@@ -793,7 +836,7 @@ func (c *compiler) compileIf(v *ast.IfStmt) error {
 	if err := c.compileExpr(v.Cond); err != nil {
 		return err
 	}
-	jf := c.chunk.EmitJump(OpJumpFalse)
+	jf := c.chunk.EmitJump(vmpackage.OpJumpFalse)
 	c.enterBlock()
 	for _, s := range v.Then.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -805,7 +848,7 @@ func (c *compiler) compileIf(v *ast.IfStmt) error {
 		c.chunk.PatchJump(jf)
 		return nil
 	}
-	jmp := c.chunk.EmitJump(OpJump)
+	jmp := c.chunk.EmitJump(vmpackage.OpJump)
 	c.chunk.PatchJump(jf)
 	if err := c.compileStmt(v.Else); err != nil {
 		return err
@@ -820,7 +863,7 @@ func (c *compiler) compileWhile(v *ast.WhileStmt) error {
 	if err := c.compileExpr(v.Cond); err != nil {
 		return err
 	}
-	jf := c.chunk.EmitJump(OpJumpFalse)
+	jf := c.chunk.EmitJump(vmpackage.OpJumpFalse)
 	c.enterBlock()
 	for _, s := range v.Body.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -828,7 +871,7 @@ func (c *compiler) compileWhile(v *ast.WhileStmt) error {
 		}
 	}
 	c.exitBlock()
-	c.chunk.Emit(OpJump, int32(top), 0)
+	c.chunk.Emit(vmpackage.OpJump, int32(top), 0)
 	c.chunk.PatchJump(jf)
 	li := c.popLoop()
 	c.patchBreaks(li)
@@ -856,7 +899,7 @@ func (c *compiler) compileDoUntil(v *ast.DoStmt) error {
 		return err
 	}
 	// Jump back to top if condition is false (until = repeat while NOT true).
-	c.chunk.Emit(OpJumpFalse, int32(top), 0)
+	c.chunk.Emit(vmpackage.OpJumpFalse, int32(top), 0)
 	popped := c.popLoop()
 	c.patchBreaks(popped)
 	return nil
@@ -864,7 +907,7 @@ func (c *compiler) compileDoUntil(v *ast.DoStmt) error {
 
 func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	// Emit TryBegin with a placeholder for the catch IP.
-	tryBeginIdx := c.chunk.EmitJump(OpTryBegin)
+	tryBeginIdx := c.chunk.EmitJump(vmpackage.OpTryBegin)
 
 	// Compile the try body.
 	c.enterBlock()
@@ -876,8 +919,8 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	c.exitBlock()
 
 	// End of try body: pop catch context and jump over catch handler.
-	c.chunk.Emit(OpTryEnd, 0, 0)
-	skipCatchIdx := c.chunk.EmitJump(OpJump)
+	c.chunk.Emit(vmpackage.OpTryEnd, 0, 0)
+	skipCatchIdx := c.chunk.EmitJump(vmpackage.OpJump)
 
 	// Patch TryBegin to point here (the catch handler).
 	c.chunk.PatchJump(tryBeginIdx)
@@ -885,7 +928,7 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	// Compile the catch body: bind error to ErrName in a slot, then run handler.
 	c.enterBlock()
 	slot := c.defineLocal(v.ErrName)
-	c.chunk.Emit(OpSetLocal, slot, 0)
+	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
 	for _, s := range v.Catch.Stmts {
 		if err := c.compileStmt(s); err != nil {
 			return err
@@ -895,6 +938,29 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 
 	// Patch the jump-over-catch to here.
 	c.chunk.PatchJump(skipCatchIdx)
+	return nil
+}
+
+// compileCatchExpr compiles `expr catch default` (inline catch): expr runs under
+// a try handler; if it throws, the handler discards the error and the expression
+// evaluates to default. Mirrors compileTryCatch's jump discipline, but leaves
+// exactly one value on the stack. The throw machinery truncates the stack to the
+// depth recorded at OpTryBegin and pushes the error, so the handler pops that
+// error before evaluating the default — both paths net +1 on the stack.
+func (c *compiler) compileCatchExpr(v *ast.CatchExpr) error {
+	tryBeginIdx := c.chunk.EmitJump(vmpackage.OpTryBegin)
+	if err := c.compileExpr(v.Expr); err != nil {
+		return err
+	}
+	c.chunk.Emit(vmpackage.OpTryEnd, 0, 0)
+	skipIdx := c.chunk.EmitJump(vmpackage.OpJump)
+
+	c.chunk.PatchJump(tryBeginIdx)
+	c.chunk.Emit(vmpackage.OpPop, 0, 0) // discard the thrown error value
+	if err := c.compileExpr(v.Default); err != nil {
+		return err
+	}
+	c.chunk.PatchJump(skipIdx)
 	return nil
 }
 
@@ -913,7 +979,7 @@ func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 		if err := c.compileExpr(v.Cond); err != nil {
 			return err
 		}
-		jf = c.chunk.EmitJump(OpJumpFalse)
+		jf = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 	}
 	c.pushLoop(-1, false)
 	c.enterBlock()
@@ -934,7 +1000,7 @@ func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 			return err
 		}
 	}
-	c.chunk.Emit(OpJump, int32(top), 0)
+	c.chunk.Emit(vmpackage.OpJump, int32(top), 0)
 	popped := c.popLoop()
 	if hasCond {
 		c.chunk.PatchJump(jf)
@@ -948,7 +1014,7 @@ func (c *compiler) compileForEach(v *ast.ForEachStmt) error {
 	if err := c.compileExpr(v.Iter); err != nil {
 		return err
 	}
-	c.chunk.Emit(OpIterInit, 0, 0)
+	c.chunk.Emit(vmpackage.OpIterInit, 0, 0)
 
 	var keyB int32
 	if v.KeyName != "" {
@@ -958,15 +1024,15 @@ func (c *compiler) compileForEach(v *ast.ForEachStmt) error {
 	// Always slot-based: iteration variables are always block-local and never
 	// cross-chunk visible, so slots are correct in both slot and SharedGlobals mode.
 	top := c.chunk.Current()
-	jdone := c.chunk.Emit(OpIterNext, 0, keyB)
+	jdone := c.chunk.Emit(vmpackage.OpIterNext, 0, keyB)
 	c.pushLoop(top, true)
 	c.enterBlock()
 	// OpIterNext (not done) pushes: [key?,] val (val on top)
 	valSlot := c.defineLocal(v.ValName)
-	c.chunk.Emit(OpSetLocal, valSlot, 0)
+	c.chunk.Emit(vmpackage.OpSetLocal, valSlot, 0)
 	if v.KeyName != "" {
 		keySlot := c.defineLocal(v.KeyName)
-		c.chunk.Emit(OpSetLocal, keySlot, 0)
+		c.chunk.Emit(vmpackage.OpSetLocal, keySlot, 0)
 	}
 	for _, s := range v.Body.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -974,7 +1040,7 @@ func (c *compiler) compileForEach(v *ast.ForEachStmt) error {
 		}
 	}
 	c.exitBlock()
-	c.chunk.Emit(OpJump, int32(top), 0)
+	c.chunk.Emit(vmpackage.OpJump, int32(top), 0)
 	c.chunk.Code[jdone].A = int32(c.chunk.Current())
 	li := c.popLoop()
 	c.patchBreaks(li)
@@ -983,6 +1049,29 @@ func (c *compiler) compileForEach(v *ast.ForEachStmt) error {
 
 func (c *compiler) compileFunChunk(name, doc string, params []string, stmts []ast.Node) (int32, error) {
 	return c.compileFunChunkThis(name, doc, params, stmts, nil)
+}
+
+// compileTestDecl lowers `test "name" { body }` to a call that registers the body
+// (compiled as a zero-arg closure) with the session's test runner:
+//
+//	testRegistrarName("name", fun() { body });
+//
+// Registration is cheap and side-effect-free; the body runs only when the runner
+// (buzz --test → Session.Tests) invokes the closure, so a normal run never
+// executes a test block. The registrar is bound in the session env under a name
+// no user identifier can spell, so it never collides and the checker — which runs
+// on the AST before this lowering — never sees the synthetic reference.
+func (c *compiler) compileTestDecl(v *ast.TestDecl) error {
+	c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(testRegistrarName), 0)
+	c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(v.Name)), 0)
+	idx, err := c.compileFunChunk("test "+v.Name, "", nil, v.Body.Stmts)
+	if err != nil {
+		return err
+	}
+	c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
+	c.chunk.Emit(vmpackage.OpCall, 2, 0)
+	c.chunk.Emit(vmpackage.OpPop, 0, 0)
+	return nil
 }
 
 // compileFunChunkThis compiles a function/method body. thisFields is non-nil only
@@ -1011,7 +1100,7 @@ func (c *compiler) compileFunChunkThis(name, doc string, params []string, stmts 
 			return 0, err
 		}
 	}
-	fc.chunk.Emit(OpReturnNull, 0, 0)
+	fc.chunk.Emit(vmpackage.OpReturnNull, 0, 0)
 	fc.chunk.LocalCount = int(fc.nextSlot)
 	fc.chunk.UpvalInfos = make([]UpvalInfo, len(fc.upvals))
 	for i, u := range fc.upvals {
@@ -1046,22 +1135,22 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		if err != nil {
 			return err
 		}
-		c.chunk.Emit(OpLoadConst, c.nameConst(m.Name), 0)
-		c.chunk.Emit(OpNewClosure, idx, 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.nameConst(m.Name), 0)
+		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
 	}
 	c.typeDecls[v.Name] = v
 	nameIdx := c.nameConst(v.Name)
 	// Store the ObjectDecl as a const so the VM can access field info.
 	declIdx := c.chunk.AddConst(ObjDeclValue(v))
-	c.chunk.Emit(OpNewObject, declIdx, int32(len(v.Methods)))
-	c.chunk.Emit(OpDefName, nameIdx, 0)
+	c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
+	c.chunk.Emit(vmpackage.OpDefName, nameIdx, 0)
 	return nil
 }
 
 func (c *compiler) compileEnumDecl(v *ast.EnumDecl) error {
 	idx := c.chunk.AddConst(EnumDefValue(v.Name, v.Cases))
-	c.chunk.Emit(OpLoadConst, idx, 0)
-	c.chunk.Emit(OpDefName, c.nameConst(v.Name), 0)
+	c.chunk.Emit(vmpackage.OpLoadConst, idx, 0)
+	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
 	return nil
 }
 
@@ -1071,19 +1160,19 @@ func (c *compiler) compileExpr(n ast.Node) error {
 	}
 	switch v := n.(type) {
 	case *ast.NullLit:
-		c.chunk.Emit(OpLoadNull, 0, 0)
+		c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
 	case *ast.BoolLit:
 		if v.Val {
-			c.chunk.Emit(OpLoadTrue, 0, 0)
+			c.chunk.Emit(vmpackage.OpLoadTrue, 0, 0)
 		} else {
-			c.chunk.Emit(OpLoadFalse, 0, 0)
+			c.chunk.Emit(vmpackage.OpLoadFalse, 0, 0)
 		}
 	case *ast.IntLit:
-		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(IntValue(v.Val)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(IntValue(v.Val)), 0)
 	case *ast.FloatLit:
-		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(FloatValue(v.Val)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(FloatValue(v.Val)), 0)
 	case *ast.StringLit:
-		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(StrValue(v.Val)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(v.Val)), 0)
 	case *ast.PatLit:
 		// Compile the regex once, at compile time, so a malformed pattern is a
 		// compile error and the value lives in the const pool (no per-eval recompile,
@@ -1092,7 +1181,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if err != nil {
 			return fmt.Errorf("buzz: line %d:%d: %w", v.Line, v.Col, err)
 		}
-		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(pv), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(pv), 0)
 	case *ast.InterpExpr:
 		return c.compileInterp(v)
 	case *ast.IdentExpr:
@@ -1102,7 +1191,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		// and the call site allocates no Env for it. The checker governs where
 		// `this` is legal; outside a method frame.this is Null.
 		if v.Name == "this" {
-			c.chunk.Emit(OpLoadThis, 0, 0)
+			c.chunk.Emit(vmpackage.OpLoadThis, 0, 0)
 			return nil
 		}
 		if slot := c.resolveLocal(v.Name); slot >= 0 {
@@ -1113,16 +1202,16 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			// Limitation: valid only for slot-based locals — upvalues, globals,
 			// params, call/member/index results stay sUnknown (B=0). Sound because
 			// OpCheckType is emitted wherever an any-typed value enters a typed slot.
-			c.chunk.Emit(OpGetLocal, slot, int32(c.slotType(slot)))
+			c.chunk.Emit(vmpackage.OpGetLocal, slot, int32(c.slotType(slot)))
 			return nil
 		}
 		if c.useSlots {
 			if uv := c.resolveUpvalue(v.Name); uv >= 0 {
-				c.chunk.Emit(OpGetUpvalue, uv, 0)
+				c.chunk.Emit(vmpackage.OpGetUpvalue, uv, 0)
 				return nil
 			}
 		}
-		c.chunk.Emit(OpLoadName, c.nameConst(v.Name), 0)
+		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(v.Name), 0)
 	case *ast.BinaryExpr:
 		return c.compileBinary(v)
 	case *ast.UnaryExpr:
@@ -1131,18 +1220,18 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		return c.compileCall(v)
 	case *ast.MemberExpr:
 		if idx, ok := c.thisFieldIndex(v.Object, v.Name); ok {
-			c.chunk.Emit(OpLoadThis, 0, 0)
-			c.chunk.Emit(OpGetField, idx, c.nameConst(v.Name))
+			c.chunk.Emit(vmpackage.OpLoadThis, 0, 0)
+			c.chunk.Emit(vmpackage.OpGetField, idx, c.nameConst(v.Name))
 		} else if idx, ok := c.localObjFieldIndex(v.Object, v.Name); ok {
 			if err := c.compileExpr(v.Object); err != nil {
 				return err
 			}
-			c.chunk.Emit(OpGetField, idx, c.nameConst(v.Name))
+			c.chunk.Emit(vmpackage.OpGetField, idx, c.nameConst(v.Name))
 		} else {
 			if err := c.compileExpr(v.Object); err != nil {
 				return err
 			}
-			c.chunk.Emit(OpGetMember, c.nameConst(v.Name), 0)
+			c.chunk.Emit(vmpackage.OpGetMember, c.nameConst(v.Name), 0)
 		}
 	case *ast.IndexExpr:
 		if err := c.compileExpr(v.Object); err != nil {
@@ -1156,26 +1245,26 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if v.Optional {
 			opt = 1
 		}
-		c.chunk.Emit(OpGetIndex, opt, 0)
+		c.chunk.Emit(vmpackage.OpGetIndex, opt, 0)
 	case *ast.ForceExpr:
 		if err := c.compileExpr(v.Operand); err != nil {
 			return err
 		}
 		// Force-unwrap asserts non-null at runtime, leaving the value in place.
-		c.chunk.Emit(OpCheckType, CheckNonNull, 0)
+		c.chunk.Emit(vmpackage.OpCheckType, vmpackage.CheckNonNull, 0)
 	case *ast.FunExpr:
 		idx, err := c.compileFunChunk("<fun>", "", v.Params, v.Body.Stmts)
 		if err != nil {
 			return err
 		}
-		c.chunk.Emit(OpNewClosure, idx, 0)
+		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
 	case *ast.ListExpr:
 		for _, item := range v.Items {
 			if err := c.compileExpr(item); err != nil {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewList, int32(len(v.Items)), mutFlag(v.Mut))
+		c.chunk.Emit(vmpackage.OpNewList, int32(len(v.Items)), mutFlag(v.Mut))
 	case *ast.MapExpr:
 		for i, k := range v.Keys {
 			if err := c.compileExpr(k); err != nil {
@@ -1185,7 +1274,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewMap, int32(len(v.Keys)), mutFlag(v.Mut))
+		c.chunk.Emit(vmpackage.OpNewMap, int32(len(v.Keys)), mutFlag(v.Mut))
 	case *ast.ObjectLit:
 		return c.compileObjectLit(v)
 	case *ast.RangeExpr:
@@ -1195,22 +1284,28 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if err := c.compileExpr(v.Hi); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpRange, 0, 0)
+		c.chunk.Emit(vmpackage.OpRange, 0, 0)
 	case *ast.IsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpIs, c.nameConst(v.TypeName), 0)
+		c.chunk.Emit(vmpackage.OpIs, c.nameConst(v.TypeName), 0)
 	case *ast.AsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpAs, c.nameConst(v.TypeName), 0)
+		var opt int32
+		if v.Optional {
+			opt = 1
+		}
+		c.chunk.Emit(vmpackage.OpAs, c.nameConst(v.TypeName), opt)
+	case *ast.CatchExpr:
+		return c.compileCatchExpr(v)
 	case *ast.YieldExpr:
 		if err := c.compileExpr(v.Value); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpYield, 0, 0)
+		c.chunk.Emit(vmpackage.OpYield, 0, 0)
 	case *ast.FiberExpr:
 		// Compile callee then args, emit OpFiber(argc).
 		if err := c.compileExpr(v.Call.Callee); err != nil {
@@ -1221,21 +1316,21 @@ func (c *compiler) compileExpr(n ast.Node) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpFiber, int32(len(v.Call.Args)), 0)
+		c.chunk.Emit(vmpackage.OpFiber, int32(len(v.Call.Args)), 0)
 	case *ast.ResumeExpr:
 		// Compile as a call to the session-bound "resume" callable.
-		c.chunk.Emit(OpLoadName, c.nameConst("resume"), 0)
+		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst("resume"), 0)
 		if err := c.compileExpr(v.Fiber); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpCall, 1, 0)
+		c.chunk.Emit(vmpackage.OpCall, 1, 0)
 	case *ast.ResolveExpr:
 		// Compile as a call to the session-bound "resolve" callable.
-		c.chunk.Emit(OpLoadName, c.nameConst("resolve"), 0)
+		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst("resolve"), 0)
 		if err := c.compileExpr(v.Fiber); err != nil {
 			return err
 		}
-		c.chunk.Emit(OpCall, 1, 0)
+		c.chunk.Emit(vmpackage.OpCall, 1, 0)
 	default:
 		return fmt.Errorf("buzz: compile: unknown expression %T", n)
 	}
@@ -1244,20 +1339,20 @@ func (c *compiler) compileExpr(n ast.Node) error {
 
 func (c *compiler) compileInterp(v *ast.InterpExpr) error {
 	if len(v.Parts) == 0 {
-		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(StrValue("")), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue("")), 0)
 		return nil
 	}
 	// Push each part's value; OpBuildStr will convert and join them all at once.
 	for _, part := range v.Parts {
 		if part.Expr == nil {
-			c.chunk.Emit(OpLoadConst, c.chunk.AddConst(StrValue(part.Lit)), 0)
+			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(part.Lit)), 0)
 		} else {
 			if err := c.compileExpr(part.Expr); err != nil {
 				return err
 			}
 		}
 	}
-	c.chunk.Emit(OpBuildStr, int32(len(v.Parts)), 0)
+	c.chunk.Emit(vmpackage.OpBuildStr, int32(len(v.Parts)), 0)
 	return nil
 }
 
@@ -1267,8 +1362,8 @@ func (c *compiler) compileBinary(v *ast.BinaryExpr) error {
 		if err := c.compileExpr(v.Left); err != nil {
 			return err
 		}
-		j := c.chunk.EmitJump(OpJumpFalsePeek)
-		c.chunk.Emit(OpPop, 0, 0)
+		j := c.chunk.EmitJump(vmpackage.OpJumpFalsePeek)
+		c.chunk.Emit(vmpackage.OpPop, 0, 0)
 		if err := c.compileExpr(v.Right); err != nil {
 			return err
 		}
@@ -1278,8 +1373,8 @@ func (c *compiler) compileBinary(v *ast.BinaryExpr) error {
 		if err := c.compileExpr(v.Left); err != nil {
 			return err
 		}
-		j := c.chunk.EmitJump(OpJumpTruePeek)
-		c.chunk.Emit(OpPop, 0, 0)
+		j := c.chunk.EmitJump(vmpackage.OpJumpTruePeek)
+		c.chunk.Emit(vmpackage.OpPop, 0, 0)
 		if err := c.compileExpr(v.Right); err != nil {
 			return err
 		}
@@ -1289,7 +1384,7 @@ func (c *compiler) compileBinary(v *ast.BinaryExpr) error {
 		if err := c.compileExpr(v.Left); err != nil {
 			return err
 		}
-		j := c.chunk.EmitJump(OpJumpIfNull)
+		j := c.chunk.EmitJump(vmpackage.OpJumpIfNull)
 		if err := c.compileExpr(v.Right); err != nil {
 			return err
 		}
@@ -1305,27 +1400,27 @@ func (c *compiler) compileBinary(v *ast.BinaryExpr) error {
 	}
 	switch v.Op {
 	case "+":
-		c.chunk.Emit(OpAdd, 0, 0)
+		c.chunk.Emit(vmpackage.OpAdd, 0, 0)
 	case "-":
-		c.chunk.Emit(OpSub, 0, 0)
+		c.chunk.Emit(vmpackage.OpSub, 0, 0)
 	case "*":
-		c.chunk.Emit(OpMul, 0, 0)
+		c.chunk.Emit(vmpackage.OpMul, 0, 0)
 	case "/":
-		c.chunk.Emit(OpDiv, 0, 0)
+		c.chunk.Emit(vmpackage.OpDiv, 0, 0)
 	case "%":
-		c.chunk.Emit(OpMod, 0, 0)
+		c.chunk.Emit(vmpackage.OpMod, 0, 0)
 	case "==":
-		c.chunk.Emit(OpEqual, 0, 0)
+		c.chunk.Emit(vmpackage.OpEqual, 0, 0)
 	case "!=":
-		c.chunk.Emit(OpNotEqual, 0, 0)
+		c.chunk.Emit(vmpackage.OpNotEqual, 0, 0)
 	case "<":
-		c.chunk.Emit(OpLess, 0, 0)
+		c.chunk.Emit(vmpackage.OpLess, 0, 0)
 	case "<=":
-		c.chunk.Emit(OpLessEqual, 0, 0)
+		c.chunk.Emit(vmpackage.OpLessEqual, 0, 0)
 	case ">":
-		c.chunk.Emit(OpGreater, 0, 0)
+		c.chunk.Emit(vmpackage.OpGreater, 0, 0)
 	case ">=":
-		c.chunk.Emit(OpGreaterEqual, 0, 0)
+		c.chunk.Emit(vmpackage.OpGreaterEqual, 0, 0)
 	default:
 		return fmt.Errorf("buzz: compile: unknown binary op %q", v.Op)
 	}
@@ -1338,9 +1433,9 @@ func (c *compiler) compileUnary(v *ast.UnaryExpr) error {
 	}
 	switch v.Op {
 	case "-":
-		c.chunk.Emit(OpNeg, 0, 0)
+		c.chunk.Emit(vmpackage.OpNeg, 0, 0)
 	case "!":
-		c.chunk.Emit(OpNot, 0, 0)
+		c.chunk.Emit(vmpackage.OpNot, 0, 0)
 	default:
 		return fmt.Errorf("buzz: compile: unknown unary op %q", v.Op)
 	}
@@ -1362,7 +1457,7 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 				return err
 			}
 		}
-		c.chunk.Emit(OpInvoke, c.nameConst(m.Name), int32(len(v.Args)))
+		c.chunk.Emit(vmpackage.OpInvoke, c.nameConst(m.Name), int32(len(v.Args)))
 		return nil
 	}
 	if err := c.compileExpr(v.Callee); err != nil {
@@ -1373,7 +1468,7 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 			return err
 		}
 	}
-	c.chunk.Emit(OpCall, int32(len(v.Args)), 0)
+	c.chunk.Emit(vmpackage.OpCall, int32(len(v.Args)), 0)
 	return nil
 }
 
@@ -1381,12 +1476,12 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 	decl, ok := c.typeDecls[v.TypeName]
 	if !ok {
 		for i, key := range v.Keys {
-			c.chunk.Emit(OpLoadConst, c.chunk.AddConst(StrValue(key)), 0)
+			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(key)), 0)
 			if err := c.compileExpr(v.Values[i]); err != nil {
 				return err
 			}
 		}
-		c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys))|mutFlag(v.Mut))
+		c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys))|mutFlag(v.Mut))
 		return nil
 	}
 
@@ -1395,7 +1490,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 		overrides[k] = v.Values[i]
 	}
 	for _, f := range decl.Fields {
-		c.chunk.Emit(OpLoadConst, c.chunk.AddConst(StrValue(f.Name)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(f.Name)), 0)
 		if expr, hasOverride := overrides[f.Name]; hasOverride {
 			if err := c.compileExpr(expr); err != nil {
 				return err
@@ -1405,10 +1500,10 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 				return err
 			}
 		} else {
-			c.chunk.Emit(OpLoadNull, 0, 0)
+			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
 		}
 	}
-	c.chunk.Emit(OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut))
+	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut))
 	return nil
 }
 
@@ -1416,7 +1511,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 // B operand (OpNewList/OpNewMap/OpNewObject).
 func mutFlag(mut bool) int32 {
 	if mut {
-		return InstrMutBit
+		return vmpackage.InstrMutBit
 	}
 	return 0
 }

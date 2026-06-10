@@ -471,6 +471,8 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		return simple(Minus, size), nil
 	case '"':
 		return l.lexString(startLine, startCol)
+	case '`':
+		return l.lexRawString(startLine, startCol)
 	case '$':
 		if l.peekByte() == '"' {
 			return l.lexPattern(startLine, startCol)
@@ -586,6 +588,33 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 		}
 	}
 	return Token{}, fmt.Errorf("buzz: unterminated string at line %d:%d", line, col)
+}
+
+// lexRawString scans a backtick-quoted raw string — upstream Buzz's
+// multiline string form, used above all for zdef declaration blocks. No
+// escapes, no interpolation: every byte up to the closing backtick is
+// literal, newlines included.
+func (l *lexer) lexRawString(line, col int) (Token, error) {
+	l.pos++ // opening `
+	l.col++
+	start := l.pos
+	for l.pos < len(l.src) {
+		c := l.src[l.pos]
+		if c == '`' {
+			val := l.src[start:l.pos]
+			l.pos++
+			l.col++
+			return Token{Kind: String, Val: val, Line: line, Col: col}, nil
+		}
+		if c == '\n' {
+			l.line++
+			l.col = 1
+		} else {
+			l.col++
+		}
+		l.pos++
+	}
+	return Token{}, fmt.Errorf("buzz: unterminated raw string at line %d:%d", line, col)
 }
 
 // lexPattern scans a $"..." pattern literal. Unlike a string, backslash escapes

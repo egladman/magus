@@ -59,8 +59,10 @@ fun each(items: [str], visit: fun(str) void) > void {
 
 // ── the project graph ───────────────────────────────────────────────────────
 // A Go API and a TypeScript web app built on top of it. Each project binds the
-// spells that know how to build, test, and lint it.
-magus.project.register("api", {
+// spells that know how to build, test, and lint it. register takes a configurator
+// fun(p, cb) that emits the project's options via cb({...}); the leading path
+// selects which project — passed explicitly here since one magusfile declares two.
+magus.project.register("api", fun(p, cb) > bool { cb({
     "spells": [go],
     "outputs": ["bin/**"],
     // Per-target policy: codegen runs every time (a cache hit would skip the
@@ -69,12 +71,12 @@ magus.project.register("api", {
         "generate": {"cachable": false},
         "release":  {"isolated": true},
     },
-});
+}); return true; });
 
-magus.project.register("web", {
+magus.project.register("web", fun(p, cb) > bool { cb({
     "spells": [ts],
     "depends_on": ["api"],            // web is built after api
-});
+}); return true; });
 
 // ── targets ─────────────────────────────────────────────────────────────────
 // Every exported function is a runnable target; underscores become hyphens.
