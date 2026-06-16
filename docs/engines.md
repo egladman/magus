@@ -1,7 +1,7 @@
 # Engines: how magus runs a magusfile
 
 A **magusfile** is written in [Buzz](https://buzz-lang.dev/) and runs on the
-embedded Buzz VM through a small internal seam. A `magusfile.bzz` exposes the
+embedded Buzz VM through a small internal seam. A `magusfile.buzz` exposes the
 `magus.*` API and composes [spells](spells.md), [targets](targets.md), and
 [charms](charms.md). This document explains the seam and how a new language
 would plug in.
@@ -68,7 +68,7 @@ to the injected `cb` callback (the form the resolver also extracts statically).
 (the parser binds the comment to the function node; `FunDoc` reads it back), and
 `magus doctor` enforces one on each function-handler target. Note Buzz's
 `Chunk.Doc` is in-memory only and not serialized to bytecode, so Buzz captures
-docs only for freshly-compiled workspace `.bzz` spells, never the embedded
+docs only for freshly-compiled workspace `.buzz` spells, never the embedded
 built-ins.
 
 ## `extra` is self-complete
@@ -92,13 +92,13 @@ hard-exits the process), magus's `os.sleep` is cancellable (Buzz's blocks), and
 magus's `crypto.*_file` hashes a file (Buzz's `hash` only takes a string). These
 stay on the magus surface.
 
-A workspace spell lives at `spells/<name>/spell.bzz` (or flat
-`spells/<name>.bzz`).
+A workspace spell lives at `spells/<name>/spell.buzz` (or flat
+`spells/<name>.buzz`).
 
 ## "Built-in spell" vs language "builtins"
 
 A **built-in spell** is a spell whose bytecode is compiled from
-`magus/spells/<name>/spell.bzz` and embedded in the magus binary (`go`,
+`magus/spells/<name>/spell.buzz` and embedded in the magus binary (`go`,
 `typescript`, `docker`, …; see [spells.md](spells.md#built-in)). This is a magus
 concept and is unrelated to Buzz's language **builtins** (`spawn`, list/map
 methods, etc.), which are part of the Buzz language itself. The docs always write

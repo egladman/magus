@@ -1,4 +1,4 @@
-package cache_test
+package cache
 
 import (
 	"archive/tar"
@@ -16,8 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
 // TestRemoteBackendFSBuiltOnce verifies that two independent caches sharing a
@@ -26,19 +24,19 @@ import (
 // never runs, output is replayed) — i.e. the second workspace restores instead
 // of rebuilding.
 func TestRemoteBackendFSBuiltOnce(t *testing.T) {
-	remote, err := cache.NewFSRemoteBackend(t.TempDir())
+	remote, err := NewFSRemoteBackend(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewFSRemoteBackend: %v", err)
 	}
 
-	openWithRemote := func(t *testing.T) (root string, c *cache.Cache) {
+	openWithRemote := func(t *testing.T) (root string, c *Cache) {
 		t.Helper()
 		root = t.TempDir()
-		c, err = cache.Open(
+		c, err = Open(
 			filepath.Join(t.TempDir(), ".magus"),
-			cache.WithMutable(true),
-			cache.WithRemoteBackend(remote),
-			cache.WithInsecureRemote(), // this test exercises unsigned FS sharing
+			WithMutable(true),
+			WithRemoteBackend(remote),
+			WithInsecureRemote(),
 		)
 		if err != nil {
 			t.Fatalf("cache.Open: %v", err)
@@ -133,10 +131,10 @@ func flattenProject(p string) string {
 // content not matching its content-address.
 func buildEntry(t *testing.T, project, hash, outPath, manifestBlob string, casBlobs map[string][]byte) []byte {
 	t.Helper()
-	m := cache.Manifest{
+	m := Manifest{
 		ProjectPath: project,
 		Hash:        hash,
-		Outputs:     []cache.OutputRecord{{Path: outPath, Blob: manifestBlob, Mode: 0o644, Size: 5}},
+		Outputs:     []OutputRecord{{Path: outPath, Blob: manifestBlob, Mode: 0o644, Size: 5}},
 		CreatedAt:   time.Now().UTC(),
 	}
 	mb, err := json.Marshal(m)
@@ -196,12 +194,12 @@ func learnHash(t *testing.T) (project, hash string) {
 // reports whether it hit and what the output ended up as. The fn writes "built",
 // so a genuine rebuild yields "built" while an accepted poisoned entry would yield
 // the poisoned bytes.
-func runAgainst(t *testing.T, backend cache.RemoteBackend) (hit bool, output string, ran bool) {
+func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, ran bool) {
 	t.Helper()
 	root := t.TempDir()
-	c, err := cache.Open(filepath.Join(t.TempDir(), ".magus"),
-		cache.WithMutable(true), cache.WithRemoteBackend(backend),
-		cache.WithInsecureRemote()) // integrity-only path: no trust set
+	c, err := Open(filepath.Join(t.TempDir(), ".magus"),
+		WithMutable(true), WithRemoteBackend(backend),
+		WithInsecureRemote()) // integrity-only path: no trust set
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -278,19 +276,19 @@ func genKeypair(t *testing.T) (pub []byte, seed []byte) {
 
 // openSigned opens a fresh cache wired to remote, optionally with a signing seed
 // and/or a trust set.
-func openSigned(t *testing.T, remote cache.RemoteBackend, seed []byte, trusted [][]byte) (root string, c *cache.Cache) {
+func openSigned(t *testing.T, remote RemoteBackend, seed []byte, trusted [][]byte) (root string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
-	opts := []cache.Option{cache.WithMutable(true), cache.WithRemoteBackend(remote)}
+	opts := []Option{WithMutable(true), WithRemoteBackend(remote)}
 	if seed != nil {
-		opts = append(opts, cache.WithSigningKey(seed))
+		opts = append(opts, WithSigningKey(seed))
 	}
 	if trusted != nil {
-		opts = append(opts, cache.WithTrustedKeys(trusted))
+		opts = append(opts, WithTrustedKeys(trusted))
 	} else {
-		opts = append(opts, cache.WithInsecureRemote()) // no trust set: unsigned-producer case
+		opts = append(opts, WithInsecureRemote()) // no trust set: unsigned-producer case
 	}
-	c, err := cache.Open(filepath.Join(t.TempDir(), ".magus"), opts...)
+	c, err := Open(filepath.Join(t.TempDir(), ".magus"), opts...)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -299,7 +297,7 @@ func openSigned(t *testing.T, remote cache.RemoteBackend, seed []byte, trusted [
 
 // buildCanonical runs the canonical spec in c against workspace root, writing
 // "built" on a miss. It reports the result and whether fn actually ran.
-func buildCanonical(t *testing.T, root string, c *cache.Cache) (cache.Result, bool) {
+func buildCanonical(t *testing.T, root string, c *Cache) (Result, bool) {
 	t.Helper()
 	writeMain(t, root, "package main")
 	touchOut(t, root)
@@ -320,7 +318,7 @@ func buildCanonical(t *testing.T, root string, c *cache.Cache) (cache.Result, bo
 // TestRemoteSignedRoundTrip: an entry signed by a trusted key on push is accepted
 // and replayed on a fresh machine that trusts that key.
 func TestRemoteSignedRoundTrip(t *testing.T) {
-	remote, err := cache.NewFSRemoteBackend(t.TempDir())
+	remote, err := NewFSRemoteBackend(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewFSRemoteBackend: %v", err)
 	}
@@ -349,7 +347,7 @@ func TestRemoteSignedRoundTrip(t *testing.T) {
 // (pushed by a producer with no signing key — e.g. a developer laptop) is refused
 // and the consumer rebuilds locally.
 func TestRemoteRejectsUnsignedEntry(t *testing.T) {
-	remote, err := cache.NewFSRemoteBackend(t.TempDir())
+	remote, err := NewFSRemoteBackend(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewFSRemoteBackend: %v", err)
 	}
@@ -375,7 +373,7 @@ func TestRemoteRejectsUnsignedEntry(t *testing.T) {
 // TestRemoteRejectsUntrustedSigner: an entry validly signed by key A is refused by
 // a consumer that trusts only key B.
 func TestRemoteRejectsUntrustedSigner(t *testing.T) {
-	remote, err := cache.NewFSRemoteBackend(t.TempDir())
+	remote, err := NewFSRemoteBackend(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewFSRemoteBackend: %v", err)
 	}
@@ -403,17 +401,17 @@ func TestRemoteRejectsUntrustedSigner(t *testing.T) {
 // boundary — a remote backend with no trust set is refused at Open unless the
 // caller explicitly opts into insecure (unsigned) mode.
 func TestRemoteRequiresTrustSetOrOptOut(t *testing.T) {
-	remote, err := cache.NewFSRemoteBackend(t.TempDir())
+	remote, err := NewFSRemoteBackend(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewFSRemoteBackend: %v", err)
 	}
-	if _, err := cache.Open(filepath.Join(t.TempDir(), ".magus"),
-		cache.WithMutable(true), cache.WithRemoteBackend(remote)); err == nil {
+	if _, err := Open(filepath.Join(t.TempDir(), ".magus"),
+		WithMutable(true), WithRemoteBackend(remote)); err == nil {
 		t.Fatal("Open accepted a remote backend with no trust set and no opt-out")
 	}
-	if _, err := cache.Open(filepath.Join(t.TempDir(), ".magus"),
-		cache.WithMutable(true), cache.WithRemoteBackend(remote),
-		cache.WithInsecureRemote()); err != nil {
+	if _, err := Open(filepath.Join(t.TempDir(), ".magus"),
+		WithMutable(true), WithRemoteBackend(remote),
+		WithInsecureRemote()); err != nil {
 		t.Fatalf("Open rejected remote + explicit opt-out: %v", err)
 	}
 }
@@ -453,9 +451,9 @@ func buildRawEntry(t *testing.T, members []tarMember) []byte {
 func TestRemoteRejectsDuplicateManifest(t *testing.T) {
 	project, hash := learnHash(t)
 	good := sha256Hex([]byte("built"))
-	mb, err := json.Marshal(cache.Manifest{
+	mb, err := json.Marshal(Manifest{
 		ProjectPath: project, Hash: hash,
-		Outputs:   []cache.OutputRecord{{Path: "test/pkg/out.txt", Blob: good, Mode: 0o644, Size: 5}},
+		Outputs:   []OutputRecord{{Path: "test/pkg/out.txt", Blob: good, Mode: 0o644, Size: 5}},
 		CreatedAt: time.Now().UTC(),
 	})
 	if err != nil {
@@ -485,9 +483,9 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	blobA := bytes.Repeat([]byte("A"), 900)
 	blobB := bytes.Repeat([]byte("B"), 900)
 	hashA, hashB := sha256Hex(blobA), sha256Hex(blobB)
-	mb, err := json.Marshal(cache.Manifest{
+	mb, err := json.Marshal(Manifest{
 		ProjectPath: project, Hash: hash,
-		Outputs: []cache.OutputRecord{
+		Outputs: []OutputRecord{
 			{Path: "test/pkg/a", Blob: hashA, Mode: 0o644, Size: 900},
 			{Path: "test/pkg/b", Blob: hashB, Mode: 0o644, Size: 900},
 		},
@@ -504,11 +502,11 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	})
 
 	root := t.TempDir()
-	c, err := cache.Open(filepath.Join(t.TempDir(), ".magus"),
-		cache.WithMutable(true),
-		cache.WithRemoteBackend(&staticBackend{project: project, hash: hash, entry: entry}),
-		cache.WithInsecureRemote(),
-		cache.WithMaxImportBytes(2000)) // fits manifest + one blob, not both
+	c, err := Open(filepath.Join(t.TempDir(), ".magus"),
+		WithMutable(true),
+		WithRemoteBackend(&staticBackend{project: project, hash: hash, entry: entry}),
+		WithInsecureRemote(),
+		WithMaxImportBytes(2000)) // fits manifest + one blob, not both
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}

@@ -463,6 +463,10 @@ func TestSystemPathsNotExecutable(t *testing.T) {
 // can build and run binaries under the workspace root.
 func TestWorkspaceHasExec(t *testing.T) {
 	ws := t.TempDir()
+	// BuildPolicy stores symlink-resolved rule paths; resolve ws to match on macOS.
+	if resolved, err := filepath.EvalSymlinks(ws); err == nil {
+		ws = resolved
+	}
 	p := BuildPolicy(ws, nil, nil, nil, nil)
 	for _, rule := range p.FS.Rules {
 		if rule.Path == ws {

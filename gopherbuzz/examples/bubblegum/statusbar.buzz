@@ -1,0 +1,631 @@
+// statusbar.buzz — bubblegum's i3bar: workspace indicators on the left, a window
+// count plus clickable icons (cheatsheet/console/reconcile) on the right,
+// rendered by the platform toolkit along the bottom edge. The tiler reserves
+// barHeight when the bar is on.
+
+namespace statusbar;
+
+import "std";
+import "platform/macos/cocoa";
+
+// barHeight is matched to the system menu bar at startup (setBarHeight); 24 is the
+// fallback before that runs. A getter (not a const) so the tiler reads the live value.
+var barHeightV = 24.0;
+
+export fun barHeight() > double {
+    return barHeightV;
+}
+
+export fun setBarHeight(h: double) > void {
+    barHeightV = h;
+}
+
+var panel: ud? = null;
+var wsBg: ud? = null;   // accent pill behind the active workspace cell; moves with focus
+var occPills = mut [<ud>]; // subtle pills behind occupied, non-active cells; created once, shown per occupancy
+var wsNums = mut [<ud>];   // one center-aligned number label per cell; the OS centers the digit
+var lastWsSig = "";        // (active, occupancy) signature; skip re-laying-out unchanged cells
+var promptBg: ud? = null; // full-bar attention wash shown only while a prompt is up
+var promptLabel: ud? = null; // the prompt's message text; empty (invisible) unless a prompt is up
+var barWidth = 0.0;     // bar width recorded at init, so promptShow can size the wash
+var modeLabel: ud? = null;   // binding-mode tag, just past the cells; proportional (not a number)
+var plusLabel: ud? = null;   // "+" button after the last workspace cell; navigates to next empty workspace
+var rightLabel: ud? = null;
+var countLabel: ud? = null;  // "<n> windows", center-aligned across the whole bar
+var orientIcon: ud? = null;  // SF Symbol for the next-split orientation (macOS theme); a glyph in rightLabel on i3
+var reconcileIcon: ud? = null; // SF Symbol for auto-reconcile on/paused (macOS theme); a glyph in rightLabel on i3
+var lastMode = "";
+var lastCount = "";
+var lastRight = "";
+var lastOrient = "?";   // cached so the icon image is only swapped on a real state change
+var lastRecon = "?";
+var promptOn = false;   // true while a prompt owns the bar; barUpdate stands down
+
+// The right edge carries a fixed cluster of clickable icons (cheatsheet,
+// console, reconcile) anchored to the panel's right side. iconClusterW is the
+// width they reserve; the count/orientation/reconcile-pause text right-aligns
+// just left of it. iconAt maps a bar-local x to a cluster slot.
+export final iconClusterW = 96.0;
+final iconSlotW = 30.0;     // per-icon hit width within the cluster
+final nIcons = 3;
+
+// Cell geometry: each workspace is a fixed-width cell from barLeftX0. The cell
+// holds a center-aligned number label (the OS centers the digit using the real
+// font metrics) and a pill centered in the same cell — so the digit sits centered
+// in the pill by construction, with no glyph-offset fudge. barWsAt maps a bar-local
+// x back to a workspace; cellX is a cell's left edge.
+export final barLeftX0 = 12.0;  // first cell's x origin (see barInit)
+export final barCellW = 31.2;   // per-workspace cell width
+
+// pillW is narrower than the cell, so adjacent pills sit (barCellW - pillW) apart —
+// that's the padding between them. The pill is centered in its cell, the same
+// center the number label uses, so the two always agree.
+export final pillW = 22.0;
+
+// numInset — the workspace-number horizontal fudge, in points (negative = left,
+// positive = right). It looks like a magic number; here's exactly what it is.
+//
+// Each number label is barCellW (31.2pt) wide and SHOULD center its digit via
+// NSTextAlignmentCenter. But center alignment does NOT take effect on these
+// bezel-less NSTextFields (setAlignment:1/right works; setAlignment:2/center is
+// silently ignored — confirmed: every center-aligned label in the bar drifts the
+// same way). So the digit renders RIGHT-aligned, pinned to the right edge of its
+// cell instead of the middle.
+//
+// A right-aligned digit sits half the cell's empty space too far right. The pill is
+// centered in the cell, so to land the digit on the pill we shift the whole label
+// left by that amount:
+//
+//     numInset ≈ (barCellW - digitAdvance)/2 - textFieldInset
+//              ≈ (31.2   - 7.8)/2          - ~2.7
+//              ≈ 11.7                       - 2.7   ≈ 9    →  -9 to pull it left
+//
+// So -9 isn't arbitrary — it's the right-edge-to-center distance for one digit in a
+// 31.2pt cell. It's tied to barCellW and the font: change either and re-dial by eye.
+// The real fix is upstream (make setAlignment:2 work); until then this compensates.
+final numInset = 0.0 - 9.0;
+
+fun cellX(i: int) > double {
+    return barLeftX0 + std\toDouble(i) * barCellW;
+}
+
+export fun pillX(i: int) > double {
+    return cellX(i) + (barCellW - pillW) / 2.0;
+}
+
+// numX is where a cell's number label sits — the cell, nudged right by numInset so
+// the centered digit lands on the pill center.
+fun numX(i: int) > double {
+    return cellX(i) + numInset;
+}
+
+// wsShown counts the workspace cells the bar renders: the current workspace plus
+// every occupied workspace, packed together with no gaps between them.
+export fun wsShown(cur: int, counts: [int]) > int {
+    var n = 0;
+    foreach (i in 0..counts.len()) {
+        if (i == cur or counts[i] > 0) {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+// displaySlotOf maps a workspace index to its packed display position (0-based),
+// or -1 if that workspace is neither current nor occupied.
+fun displaySlotOf(ws: int, cur: int, counts: [int]) > int {
+    var slot = 0;
+    foreach (i in 0..counts.len()) {
+        if (i == cur or counts[i] > 0) {
+            if (i == ws) {
+                return slot;
+            }
+            slot = slot + 1;
+        }
+    }
+    return 0 - 1;
+}
+
+// wsAtSlot returns the workspace index at display slot `slot`, or -1 if out of range.
+fun wsAtSlot(slot: int, cur: int, counts: [int]) > int {
+    var n = 0;
+    foreach (i in 0..counts.len()) {
+        if (i == cur or counts[i] > 0) {
+            if (n == slot) {
+                return i;
+            }
+            n = n + 1;
+        }
+    }
+    return 0 - 1;
+}
+
+// barWsAt maps a bar-local x to a workspace index (0-based), or -1 if x is not
+// on any visible workspace cell. cur and counts are used to map display slots to
+// real workspace indices (populated workspaces are packed without gaps).
+export fun barWsAt(localX: double, cur: int, counts: [int]) > int {
+    final shown = wsShown(cur, counts: counts);
+    var slot = 0;
+    while (slot < shown) {
+        final lo = barLeftX0 + std\toDouble(slot) * barCellW;
+        if (localX >= lo and localX < lo + barCellW) {
+            return wsAtSlot(slot, cur: cur, counts: counts);
+        }
+        slot = slot + 1;
+    }
+    return 0 - 1;
+}
+
+// barPlusHit reports whether a bar-local x lands on the "+" cell (the slot
+// immediately after the last visible workspace). Returns false when all 9
+// workspace slots are already shown (no room for a new one).
+export fun barPlusHit(localX: double, cur: int, counts: [int]) > bool {
+    final shown = wsShown(cur, counts: counts);
+    if (shown >= counts.len()) {
+        return false;
+    }
+    final lo = barLeftX0 + std\toDouble(shown) * barCellW;
+    return localX >= lo and localX < lo + barCellW;
+}
+
+// barIconAt maps a bar-local x to a right-edge icon slot: 0 = cheatsheet,
+// 1 = console, 2 = reconcile, or -1 if x is outside the cluster.
+export fun barIconAt(localX: double, barW: double) > int {
+    final start = barW - iconClusterW;
+    if (localX < start) {
+        return 0 - 1;
+    }
+    var i = 0;
+    while (i < nIcons) {
+        final lo = start + std\toDouble(i) * iconSlotW;
+        if (localX >= lo and localX < lo + iconSlotW) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+// barToggleHit reports whether a bar-local x lands on the reconcile-pause toggle —
+// the rightmost glyph of the right label, which now right-aligns just left of the
+// icon cluster (barInit shifts it by iconClusterW).
+export fun barToggleHit(localX: double, barW: double) > bool {
+    final edge = barW - iconClusterW;
+    return localX > edge - 28.0 and localX <= edge;
+}
+
+// barOrientHit reports whether a bar-local x lands on the orientation glyph — the
+// band just left of the reconcile-pause toggle.
+export fun barOrientHit(localX: double, barW: double) > bool {
+    final edge = barW - iconClusterW;
+    return localX > edge - 58.0 and localX <= edge - 28.0;
+}
+
+// barCountHit reports whether a bar-local x lands on the centered window-count label.
+// That label doubles as the minimized indicator (⊟ app, app); clicking it opens the
+// recall picker. The box mirrors countLabel's frame in barInit (w/2 - 110 - 9, w 220).
+export fun barCountHit(localX: double, barW: double) > bool {
+    final lo = barW / 2.0 - 110.0 - 9.0;
+    return localX >= lo and localX < lo + 220.0;
+}
+
+// barInit places the bar along the bottom edge of the tiled display: x/y are the
+// display's AppKit origin (bottom-left), w its width. The look follows the toolkit
+// theme (cocoa\uiTheme): macOS = menu material + dynamic colors + SF Symbol icons +
+// accent pill; i3 = solid dark bar + light text + glyph icons + blue block.
+export fun barInit(x: double, y: double, w: double) > void {
+    if (panel != null) {
+        return;
+    }
+    cocoa\uiInit();
+    final mac = cocoa\uiIsMac();
+    if (mac) {
+        panel = cocoa\uiMenuBarPanel(x, y: y, w: w, h: barHeightV);
+    } else {
+        panel = cocoa\uiPanel(x, y: y, w: w, h: barHeightV, gray: 0.06, alpha: 0.97);
+    }
+    // Active-workspace pill (created before the labels so it sits beneath them):
+    // a soft system-accent highlight on macOS, an i3-style blue block otherwise.
+    var pillColor = cocoa\uiColorAlpha(cocoa\uiNamedColor("systemBlueColor"), alpha: 0.55);
+    var pillRadius = 3.0;
+    if (mac) {
+        pillColor = cocoa\uiColorAlpha(cocoa\uiNamedColor("controlAccentColor"), alpha: 0.30);
+        pillRadius = 6.0;
+    }
+    wsBg = cocoa\uiFill(panel, x: pillX(0), y: 3.0, w: pillW, h: barHeightV - 6.0, color: pillColor, radius: pillRadius);
+    // Occupied-but-inactive workspaces get a subtler pill: a touch darker than the
+    // bar on macOS, a touch lighter on the dark i3 bar. Create one per workspace up
+    // front (parked offscreen); barWorkspaces shows the ones that hold windows.
+    var occColor = cocoa\uiColorAlpha(cocoa\uiNamedColor("whiteColor"), alpha: 0.10);
+    if (mac) {
+        occColor = cocoa\uiColorAlpha(cocoa\uiNamedColor("blackColor"), alpha: 0.12);
+    }
+    foreach (_ in 0..9) {
+        final p = cocoa\uiFill(panel, x: 0.0 - 100.0, y: 3.0, w: 1.0, h: 1.0, color: occColor, radius: pillRadius);
+        if (p != null) {
+            occPills.append(p!);
+        }
+    }
+    // Full-bar attention wash for prompt mode (created before the labels so text
+    // and icons sit on top). Parked offscreen until promptShow slides it across the
+    // whole bar — a momentary question should be impossible to miss.
+    barWidth = w;
+    final washColor = cocoa\uiColorAlpha(cocoa\uiNamedColor("systemOrangeColor"), alpha: 0.35);
+    promptBg = cocoa\uiFill(panel, x: 0.0 - w - 10.0, y: 0.0, w: 1.0, h: 1.0, color: washColor, radius: 0.0);
+    // Labels live in a centered band (height ~ the line height) so the text is
+    // vertically centered in the bar regardless of how tall it is.
+    final labelH = 18.0;
+    final labelY = (barHeightV - labelH) / 2.0;
+    // Per-workspace number labels: one center-aligned NSTextField per cell, parked
+    // offscreen until barWorkspaces places the in-range ones. Center alignment makes
+    // the OS center the digit in the cell using the real font metrics, and the pill
+    // (centered in the same cell) lands on it exactly — that's what retires the
+    // glyph-offset fudge. Created after the pills so the numbers sit on top of them.
+    foreach (i in 0..9) {
+        final n = cocoa\uiLabel(panel, x: 0.0 - 100.0, y: labelY, w: barCellW, h: labelH, size: 13.0, gray: 0.92);
+        cocoa\uiAlignCenter(n); // note: this does NOT take effect here (the digit renders right-aligned); numInset compensates
+        cocoa\uiSetText(n, text: "{i + 1}");
+        if (mac) {
+            cocoa\uiSetTextColor(n, color: cocoa\uiNamedColor("labelColor"));
+        }
+        if (n != null) {
+            wsNums.append(n!);
+        }
+    }
+    // The prompt's message rides the left of the bar (proportional on macOS — it's a
+    // sentence, not numbers). Empty and invisible until promptShow fills it.
+    promptLabel = cocoa\uiLabel(panel, x: 12.0, y: labelY, w: w - 150.0, h: labelH, size: 13.0, gray: 0.92);
+    if (mac) {
+        cocoa\uiSetTextColor(promptLabel, color: cocoa\uiNamedColor("labelColor"));
+        cocoa\uiSetSystemFont(promptLabel, size: 13.0);
+    }
+    // The window-count text right-aligns just left of the orientation/reconcile
+    // indicators. On macOS those are SF Symbol icons in their own slots (created
+    // below), so the count stops short of them; on i3 they're glyphs appended to
+    // this label, so it runs right up to the cluster as before.
+    final edge = w - iconClusterW;
+    var rlX = edge - 138.0;
+    var rlW = 126.0;
+    if (mac) {
+        rlX = edge - 200.0;
+        rlW = 140.0;
+    }
+    rightLabel = cocoa\uiLabel(panel, x: rlX, y: labelY, w: rlW, h: labelH, size: 13.0, gray: 0.6);
+    cocoa\uiAlignRight(rightLabel);
+    // The window count sits in a bounded zone centered on the bar (not a full-width
+    // label, so even if alignment is knocked off it can't drift into the left cells or
+    // the right icon cluster). It also carries the ⊟ minimized-apps list, so the box is
+    // a touch wider (220) and clickable (barCountHit). The box centers on w/2, but the
+    // center-aligned text lands ~9px right of true center (the same bezel-less NSTextField
+    // bias the digit cells correct with numInset), so shift the box 9px left to compensate.
+    // Still bounded: this only moves it further from the icons. Re-dial by eye if the font changes.
+    countLabel = cocoa\uiLabel(panel, x: w / 2.0 - 110.0 - 9.0, y: labelY, w: 220.0, h: labelH, size: 13.0, gray: 0.6);
+    cocoa\uiAlignCenter(countLabel);
+    // The binding-mode tag rides just past the workspace cells; it's a word, not a
+    // number, so it gets the proportional font while the cells stay monospaced.
+    // barUpdate repositions it as the cell run grows/shrinks.
+    modeLabel = cocoa\uiLabel(panel, x: barLeftX0, y: labelY, w: 140.0, h: labelH, size: 13.0, gray: 0.6);
+    // The "+" button appears after the last visible workspace cell and navigates to
+    // the next empty workspace. Parked offscreen until barWorkspaces places it.
+    final plusLb = cocoa\uiLabel(panel, x: 0.0 - 100.0, y: labelY, w: barCellW, h: labelH, size: 13.0, gray: 0.35);
+    cocoa\uiAlignCenter(plusLb);
+    cocoa\uiSetText(plusLb, text: "+");
+    plusLabel = plusLb;
+    if (mac) {
+        cocoa\uiSetTextColor(rightLabel, color: cocoa\uiNamedColor("secondaryLabelColor"));
+        cocoa\uiSetSystemFont(rightLabel, size: 13.0); // macOS menu font for the count/right text
+        cocoa\uiSetTextColor(countLabel, color: cocoa\uiNamedColor("secondaryLabelColor"));
+        cocoa\uiSetSystemFont(countLabel, size: 13.0);
+        cocoa\uiAlignCenter(countLabel); // re-assert: setFont can reset the cell's alignment
+        cocoa\uiSetTextColor(modeLabel, color: cocoa\uiNamedColor("secondaryLabelColor"));
+        cocoa\uiSetSystemFont(modeLabel, size: 13.0);
+        // Orientation + auto-reconcile indicators as SF Symbol icons (barUpdate sets
+        // their images from state). Centered in the barOrientHit / barToggleHit zones
+        // so the existing click mapping still lands on them.
+        final iconTint = cocoa\uiNamedColor("labelColor");
+        orientIcon = cocoa\uiImageView(panel, x: edge - 52.0, y: 5.0, w: 18.0, h: barHeightV - 10.0, image: null, tint: iconTint);
+        cocoa\uiSetToolTip(orientIcon, text: "next split");
+        reconcileIcon = cocoa\uiImageView(panel, x: edge - 23.0, y: 5.0, w: 18.0, h: barHeightV - 10.0, image: null, tint: iconTint);
+        cocoa\uiSetToolTip(reconcileIcon, text: "auto-reconcile");
+    }
+    barInitIcons(w, mac: mac);
+    cocoa\uiShow(panel);
+}
+
+// barInitIcons drops the three clickable icons into the right-edge cluster, each
+// with a hover tooltip. Their hit zones are barIconAt's. macOS uses tinted SF
+// Symbols; i3 uses monochrome glyph labels.
+fun barInitIcons(w: double, mac: bool) > void {
+    final start = w - iconClusterW;
+    final tips = ["cheatsheet", "inspect", "reconcile"];
+    final glyphs = ["☰", "❯", "⊞"];
+    final symbols = ["keyboard", "magnifyingglass", "square.grid.2x2"];
+    final tint = cocoa\uiNamedColor("labelColor");
+    foreach (i in 0..nIcons) {
+        final lo = start + std\toDouble(i) * iconSlotW;
+        if (mac) {
+            final img = cocoa\uiSymbolImage(symbols[i], pointSize: 14.0, weight: 0.2);
+            final v = cocoa\uiImageView(panel, x: lo + 6.0, y: 5.0, w: 18.0, h: barHeightV - 10.0, image: img, tint: tint);
+            cocoa\uiSetToolTip(v, text: tips[i]);
+        } else {
+            final icon = cocoa\uiLabel(panel, x: lo, y: 3.0, w: iconSlotW, h: barHeightV - 6.0, size: 15.0, gray: 0.9);
+            cocoa\uiAlignCenter(icon);
+            cocoa\uiSetText(icon, text: glyphs[i]);
+            cocoa\uiSetToolTip(icon, text: tips[i]);
+        }
+    }
+}
+
+// barSetVisible follows the config's `bar on|off` across live reloads.
+export fun barSetVisible(on: bool, x: double, y: double, w: double) > void {
+    if (on) {
+        barInit(x: x, y: y, w: w);
+        cocoa\uiShow(panel);
+        return;
+    }
+    if (panel != null) {
+        cocoa\uiHide(panel);
+    }
+}
+
+// occupiedCell reports whether workspace cell i wears the subtle "occupied" pill:
+// it holds windows and isn't the active cell (which wears the accent pill instead).
+export fun occupiedCell(i: int, active: int, counts: [int]) > bool {
+    return i != active and i >= 0 and i < counts.len() and counts[i] > 0;
+}
+
+// barWorkspaces paints the left side: workspace cells for the current and every
+// occupied workspace (packed together with no gaps), the accent pill on the active
+// slot, a subtle pill on every other occupied slot, a "+" button after the last
+// cell (when fewer than 9 slots are shown), and the mode tag floated past them.
+// Diffed on an (active, shown, occupancy) signature so the 50ms refresh doesn't
+// re-lay-out a left side that didn't change. Suppressed while a prompt owns the bar.
+export fun barWorkspaces(active: int, counts: [int]) > void {
+    if (panel == null or promptOn) {
+        return;
+    }
+    final shown = wsShown(active, counts: counts);
+    var sig = "{active}.{shown}";
+    foreach (i in 0..counts.len()) {
+        if (counts[i] > 0) {
+            sig = sig + ".{i}";
+        }
+    }
+    if (sig == lastWsSig) {
+        return;
+    }
+    lastWsSig = sig;
+    final labelH = 18.0;
+    final labelY = (barHeightV - labelH) / 2.0;
+    // Position each workspace number at its packed display slot; park unused ones.
+    foreach (i in 0..wsNums.len()) {
+        final slot = displaySlotOf(i, cur: active, counts: counts);
+        if (slot >= 0) {
+            cocoa\uiSetFrame(wsNums[i], x: numX(slot), y: labelY, w: barCellW, h: labelH);
+        } else {
+            cocoa\uiSetFrame(wsNums[i], x: 0.0 - 100.0, y: labelY, w: barCellW, h: labelH);
+        }
+    }
+    // Accent pill on the active display slot; subtle pills on occupied-but-inactive slots.
+    final activeSlot = displaySlotOf(active, cur: active, counts: counts);
+    if (wsBg != null and activeSlot >= 0) {
+        cocoa\uiSetFrame(wsBg, x: pillX(activeSlot), y: 3.0, w: pillW, h: barHeightV - 6.0);
+    }
+    foreach (i in 0..occPills.len()) {
+        final slot = displaySlotOf(i, cur: active, counts: counts);
+        if (slot >= 0 and occupiedCell(i, active: active, counts: counts)) {
+            cocoa\uiSetFrame(occPills[i], x: pillX(slot), y: 3.0, w: pillW, h: barHeightV - 6.0);
+        } else {
+            cocoa\uiSetFrame(occPills[i], x: 0.0 - 100.0, y: 3.0, w: 1.0, h: 1.0);
+        }
+    }
+    // "+" button: one slot past the last shown workspace; hidden when all 9 are in use.
+    if (plusLabel != null) {
+        if (shown < counts.len()) {
+            cocoa\uiSetFrame(plusLabel, x: numX(shown), y: labelY, w: barCellW, h: labelH);
+        } else {
+            cocoa\uiSetFrame(plusLabel, x: 0.0 - 100.0, y: labelY, w: barCellW, h: labelH);
+        }
+    }
+    // Float the binding-mode tag just past the last visible cell (cells + "+" if shown).
+    var modeBase = shown;
+    if (shown < counts.len()) {
+        modeBase = shown + 1;
+    }
+    cocoa\uiSetFrame(modeLabel, x: cellX(modeBase) + 8.0, y: labelY, w: 140.0, h: labelH);
+}
+
+// orientGlyph / orientSymbol map the next-split orientation to its i3 glyph and its
+// macOS SF Symbol. "" means no orientation indicator (fewer than two tiled windows).
+fun orientGlyph(orient: str) > str {
+    if (orient == "stack") {
+        return "≡";
+    }
+    if (orient == "vert") {
+        return "⊟";
+    }
+    if (orient == "horiz") {
+        return "◫";
+    }
+    return "";
+}
+
+fun orientSymbol(orient: str) > str {
+    if (orient == "stack") {
+        return "rectangle.stack";
+    }
+    if (orient == "vert") {
+        return "rectangle.split.1x2"; // two rows stacked
+    }
+    if (orient == "horiz") {
+        return "rectangle.split.2x1"; // two columns side by side
+    }
+    return "";
+}
+
+// barUpdate redraws the mode tag, the centered window count, the right-aligned
+// status/eval text, and the orientation/auto-reconcile indicators on change only —
+// uiSetText allocates an NSString per call and the bar refreshes every poll tick. The
+// left side (number cells + pills + mode-tag position) is barWorkspaces' job. orient
+// ("", "horiz", "vert", "stack") and paused drive the indicators — SF Symbol icons on
+// macOS, glyphs appended to the right text on i3. Suppressed while a prompt owns the
+// bar.
+export fun barUpdate(mode: str, count: str, right: str, orient: str, paused: bool) > void {
+    if (panel == null or promptOn) {
+        return;
+    }
+    if (mode != lastMode) {
+        cocoa\uiSetText(modeLabel, text: mode);
+        lastMode = mode;
+    }
+    if (count != lastCount) {
+        cocoa\uiSetText(countLabel, text: count);
+        lastCount = count;
+    }
+    final mac = cocoa\uiIsMac();
+    // On i3 the indicators are glyphs in the right text; on macOS the text holds only
+    // the window count and the glyphs become the SF Symbol icons handled below.
+    var rightText = right;
+    if (!mac) {
+        if (orient != "") {
+            rightText = rightText + "  " + orientGlyph(orient);
+        }
+        if (paused) {
+            rightText = rightText + "  ⏸";
+        } else {
+            rightText = rightText + "  ⟳";
+        }
+    }
+    if (rightText != lastRight) {
+        cocoa\uiSetText(rightLabel, text: rightText);
+        lastRight = rightText;
+    }
+    if (mac) {
+        if (orient != lastOrient) {
+            if (orient == "") {
+                cocoa\uiImageViewSetImage(orientIcon, image: null);
+            } else {
+                cocoa\uiImageViewSetImage(orientIcon, image: cocoa\uiSymbolImage(orientSymbol(orient), pointSize: 13.0, weight: 0.2));
+            }
+            lastOrient = orient;
+        }
+        var recon = "on";
+        if (paused) {
+            recon = "paused";
+        }
+        if (recon != lastRecon) {
+            var sym = "arrow.triangle.2.circlepath"; // auto-reconcile running
+            if (paused) {
+                sym = "pause.circle.fill";
+            }
+            cocoa\uiImageViewSetImage(reconcileIcon, image: cocoa\uiSymbolImage(sym, pointSize: 13.0, weight: 0.2));
+            lastRecon = recon;
+        }
+    }
+}
+
+// --- prompt mode: the bar momentarily becomes a one-line question (same size and
+// placement as the status bar, so it never covers a window). The WM grabs the
+// keyboard while it's up and reverts the bar on the answer.
+
+export fun promptActive() > bool {
+    return promptOn;
+}
+
+// promptShow takes the bar over with `text` and washes the whole bar in the accent
+// color so it reads as active, not a passive status. The icons stay put; the
+// workspace/right text is replaced. promptHide reverts on the next barUpdate.
+export fun promptShow(text: str) > void {
+    if (panel == null) {
+        return;
+    }
+    promptOn = true;
+    cocoa\uiSetText(promptLabel, text: text);
+    cocoa\uiSetText(rightLabel, text: "");
+    cocoa\uiSetText(countLabel, text: ""); // the prompt owns the whole bar; hide the count
+    cocoa\uiSetText(modeLabel, text: ""); // the prompt owns the left edge; hide the mode tag
+    foreach (i in 0..wsNums.len()) {
+        cocoa\uiSetFrame(wsNums[i], x: 0.0 - 100.0, y: 3.0, w: 1.0, h: 1.0); // hide the number cells under the wash
+    }
+    if (wsBg != null) {
+        cocoa\uiSetFrame(wsBg, x: 0.0 - 100.0, y: 3.0, w: 1.0, h: 1.0); // park the accent pill offscreen
+    }
+    foreach (i in 0..occPills.len()) {
+        cocoa\uiSetFrame(occPills[i], x: 0.0 - 100.0, y: 3.0, w: 1.0, h: 1.0); // hide the occupancy pills under the wash
+    }
+    cocoa\uiImageViewSetImage(orientIcon, image: null); // clear the indicators under the wash
+    cocoa\uiImageViewSetImage(reconcileIcon, image: null);
+    if (promptBg != null) {
+        cocoa\uiSetFrame(promptBg, x: 0.0, y: 0.0, w: barWidth, h: barHeightV); // wash the whole bar
+    }
+}
+
+// promptSetText updates only the prompt's message, not the wash/layout, so the WM
+// can tick a live countdown into the prompt without redoing the whole bar takeover.
+export fun promptSetText(text: str) > void {
+    if (!promptOn) {
+        return;
+    }
+    cocoa\uiSetText(promptLabel, text: text);
+}
+
+export fun promptHide() > void {
+    promptOn = false;
+    cocoa\uiSetText(promptLabel, text: ""); // clear the message (empty = invisible)
+    if (promptBg != null) {
+        cocoa\uiSetFrame(promptBg, x: 0.0 - barWidth - 10.0, y: 0.0, w: 1.0, h: 1.0); // park the wash offscreen
+    }
+    lastMode = "?";   // invalidate the diff caches (never a real mode/count/right) so
+    lastCount = "?";  // the next barUpdate repaints the centered count, the right side,
+    lastRight = "?";  // and restores the orientation/reconcile indicators
+    lastOrient = "?";
+    lastRecon = "?";
+    lastWsSig = "?"; // and barWorkspaces repaints the number cells + pills
+}
+
+// --- menu-bar presence (the macOS "top right") ---
+
+var trayItem: ud? = null;
+var lastTray = "";
+
+// trayInit drops bubblegum into the system status bar; trayUpdate keeps it honest
+// ("⊞ 3" = tiling, workspace 3). macOS theme uses an SF Symbol; i3 uses a glyph.
+// The text passed to trayUpdate is the live part (workspace number or bind mode).
+export fun trayInit() > void {
+    if (trayItem != null) {
+        return;
+    }
+    if (cocoa\uiIsMac()) {
+        trayItem = cocoa\uiStatusItem("");
+        var icon = cocoa\uiImageFromFile("./bubblegum.png");
+        if (icon == null) {
+            icon = cocoa\uiSymbolImage("square.grid.3x3", pointSize: 16.0, weight: 0.2);
+        }
+        cocoa\uiStatusItemSetImage(trayItem, image: icon);
+    } else {
+        trayItem = cocoa\uiStatusItem("▦");
+    }
+    lastTray = "?"; // sentinel (never a real workspace/mode string) so the first trayUpdate applies
+}
+
+export fun trayUpdate(text: str) > void {
+    if (trayItem == null or text == lastTray) {
+        return;
+    }
+    lastTray = text;
+    if (cocoa\uiIsMac()) {
+        cocoa\uiStatusItemSetTitle(trayItem, title: " {text}"); // SF Symbol image + the live text
+    } else {
+        cocoa\uiStatusItemSetTitle(trayItem, title: "▦ {text}");
+    }
+}
+
+// trayButton returns the menu-bar item's button (an NSView), or null before
+// trayInit — the WM passes it to windows\viewFrameCG to learn where the tray
+// icon sits so it can hit-test clicks landing on it.
+export fun trayButton() > ud? {
+    if (trayItem == null) {
+        return null;
+    }
+    return cocoa\uiStatusItemButton(trayItem);
+}

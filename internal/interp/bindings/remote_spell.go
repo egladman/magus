@@ -171,17 +171,17 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 	return nil
 }
 
-// resolveBackendSpell turns a backend selector into a driver: a .bzz path is
+// resolveBackendSpell turns a backend selector into a driver: a .buzz path is
 // loaded (and registered) as a spell with function-op support; any other value
 // is a spell name looked up in the registry. The magusfile wires the backend by
 // calling magus.cache.remote(<spell handle>), which records the spell's name.
 func resolveBackendSpell(ctx context.Context, selector string) (types.SpellDriver, error) {
-	if strings.HasSuffix(selector, ".bzz") {
+	if strings.HasSuffix(selector, ".buzz") {
 		return loadSpellFile(ctx, selector)
 	}
 	drv, ok := project.DefaultSpellRegistry().Lookup(selector)
 	if !ok {
-		return nil, fmt.Errorf("spell %q is not registered (use a .bzz path or load it first)", selector)
+		return nil, fmt.Errorf("spell %q is not registered (use a .buzz path or load it first)", selector)
 	}
 	return drv, nil
 }

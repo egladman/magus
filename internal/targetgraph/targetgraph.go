@@ -30,95 +30,107 @@ var (
 	exportFunRe = regexp.MustCompile(`^export\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
 	dependsRe   = regexp.MustCompile(`magus\.depends_on\(\s*\[([^\]]*)\]`)
 	expandRe    = regexp.MustCompile(`expand_globs\(([^)]*)\)`)
-	quotedRe    = regexp.MustCompile(`"([^"]+)"`)
-	hasCharmRe  = regexp.MustCompile(`has_charm\(\s*"([^"]+)"`)
+	// magus.needs handles: per-leaf, not call-spanning, so a chained or multi-arg
+	// magus.needs(magus.target.named("a"), magus.target.glob("b")) yields both edges.
+	needsNamedRe = regexp.MustCompile(`magus\.target\.named\(\s*"([^"]+)"`)
+	needsGlobRe  = regexp.MustCompile(`magus\.target\.glob\(\s*"([^"]+)"`)
+	needsRegexRe = regexp.MustCompile(`magus\.target\.regex\(\s*"([^"]+)"`)
+	quotedRe     = regexp.MustCompile(`"([^"]+)"`)
+	hasCharmRe   = regexp.MustCompile(`has_charm\(\s*"([^"]+)"`)
 )
 
-// Node is one target: a runnable `magus run <Name>`. Deps are the resolved
-// dependency target names (literal depends_on names first, in source order, then
-// the names matched by each expand_globs pattern); self-edges and duplicates are
-// dropped. Charms are the charm names the body branches on (via magus.has_charm,
-// e.g. has_charm("rw") for the built-in read→write toggle), sorted; this catches
-// only the charms a target's own code reads, not those its spells declare.
-type Node struct {
-	Name   string   `json:"name"`
-	Doc    string   `json:"doc,omitempty"`
-	Deps   []string `json:"deps,omitempty"`
-	Charms []string `json:"charms,omitempty"`
-}
-
-// Graph is the target dependency graph for one magusfile, nodes in source order.
-type Graph struct {
-	Nodes []Node `json:"nodes"`
-}
-
-// Extract parses a Buzz magusfile's source into a Graph (best-effort, never
+// Extract parses a Buzz magusfile's source into its target nodes (best-effort, never
 // errors — malformed source yields a partial graph). Named Extract, not Build, to
 // signal static-source extraction and to not collide with depgraph.Build, which
 // constructs a different graph. Pass the concatenated contents of all of a
 // project's magusfile sources (load order).
-func Extract(source string) Graph {
+//
+// Each node's Dependencies are the resolved dependency target names — exact edges
+// first (magus.depends_on, magus.target.named, in source order), then the names
+// matched by each glob/regex edge (expand_globs, magus.target.glob/regex);
+// self-edges and duplicates are dropped. Charms are the has_charm names the body
+// reads, sorted.
+func Extract(source string) []types.TargetGraphNode {
 	lines := strings.Split(source, "\n")
-
-	type raw struct {
-		node     Node
-		depGlobs []string
-	}
-	// Node and dep names both go through the run path's kebab-case normalizer, so a
-	// node and an edge that name the same target always reconcile.
+	// Node and dependency names both go through the run path's kebab-case
+	// normalizer, so a node and an edge that name the same target reconcile.
 	norm := types.DefaultTargetNameNormalizer.NormalizeTargetName
-	var raws []raw
+
+	// First pass: collect every target name, so a glob or regex edge can resolve
+	// against a target defined later in the file (forward references).
+	var names []string
+	for _, line := range lines {
+		if m := exportFunRe.FindStringSubmatch(line); m != nil {
+			names = append(names, norm(m[1]))
+		}
+	}
+
+	// Second pass: build each node, resolving every edge straight into its
+	// Dependencies — exact edges (depends_on, named) by name; glob and regex edges
+	// by matching the names collected above.
+	nodes := make([]types.TargetGraphNode, 0, len(names))
 	for i, line := range lines {
 		m := exportFunRe.FindStringSubmatch(line)
 		if m == nil {
 			continue
 		}
-		r := raw{node: Node{Name: norm(m[1]), Doc: leadingDoc(lines, i)}}
+		node := types.TargetGraphNode{Name: norm(m[1]), Doc: leadingDoc(lines, i)}
 		body := codeBody(lines, i)
+
+		// Exact edges: magus.depends_on([...]) and magus.target.named("...").
 		for _, dm := range dependsRe.FindAllStringSubmatch(body, -1) {
 			for _, q := range quotedRe.FindAllStringSubmatch(dm[1], -1) {
-				r.node.Deps = appendUniq(r.node.Deps, norm(q[1]))
+				node.Dependencies = appendUniq(node.Dependencies, norm(q[1]))
 			}
 		}
+		for _, nm := range needsNamedRe.FindAllStringSubmatch(body, -1) {
+			node.Dependencies = appendUniq(node.Dependencies, norm(nm[1]))
+		}
+		// Glob edges: expand_globs(["..."]) and magus.target.glob("..."), matched
+		// against sibling target names.
 		for _, em := range expandRe.FindAllStringSubmatch(body, -1) {
 			for _, q := range quotedRe.FindAllStringSubmatch(em[1], -1) {
-				r.depGlobs = appendUniq(r.depGlobs, q[1])
+				node.Dependencies = appendMatching(node.Dependencies, names, node.Name, globRe(q[1]))
+			}
+		}
+		for _, gm := range needsGlobRe.FindAllStringSubmatch(body, -1) {
+			node.Dependencies = appendMatching(node.Dependencies, names, node.Name, globRe(gm[1]))
+		}
+		// Regex edges: magus.target.regex("..."). An invalid pattern is best-effort
+		// skipped (it contributes no edges).
+		for _, rm := range needsRegexRe.FindAllStringSubmatch(body, -1) {
+			if re, err := regexp.Compile(rm[1]); err == nil {
+				node.Dependencies = appendMatching(node.Dependencies, names, node.Name, re)
 			}
 		}
 		for _, cm := range hasCharmRe.FindAllStringSubmatch(body, -1) {
-			r.node.Charms = appendUniq(r.node.Charms, cm[1])
+			node.Charms = appendUniq(node.Charms, cm[1])
 		}
-		slices.Sort(r.node.Charms)
-		raws = append(raws, r)
+		slices.Sort(node.Charms)
+		nodes = append(nodes, node)
 	}
+	return nodes
+}
 
-	g := Graph{Nodes: make([]Node, 0, len(raws))}
-	names := make([]string, len(raws))
-	for i, r := range raws {
-		names[i] = r.node.Name
-	}
-	for _, r := range raws {
-		for _, glob := range r.depGlobs {
-			re := globRe(glob)
-			for _, n := range names {
-				if n != r.node.Name && re.MatchString(n) {
-					r.node.Deps = appendUniq(r.node.Deps, n)
-				}
-			}
+// appendMatching appends every name (other than self) that re matches, deduped,
+// in names order.
+func appendMatching(deps, names []string, self string, re *regexp.Regexp) []string {
+	for _, n := range names {
+		if n != self && re.MatchString(n) {
+			deps = appendUniq(deps, n)
 		}
-		g.Nodes = append(g.Nodes, r.node)
 	}
-	return g
+	return deps
 }
 
 // Cycle returns a dependency cycle as a path of node names ending where it began
 // (e.g. ["a","b","a"]), or nil if the graph is acyclic. Edges to undeclared
 // targets are ignored here — that is a separate "unknown target" error the run
 // path already raises.
-func (g Graph) Cycle() []string {
-	deps := make(map[string][]string, len(g.Nodes))
-	for _, n := range g.Nodes {
-		deps[n.Name] = n.Deps
+func Cycle(nodes []types.TargetGraphNode) []string {
+	deps := make(map[string][]string, len(nodes))
+	for _, n := range nodes {
+		deps[n.Name] = n.Dependencies
 	}
 	// Classic 3-color DFS: white (unvisited) is the implicit 0 zero-value, grey is
 	// on the current DFS stack (a back-edge to grey is a cycle), black is fully done.
@@ -154,7 +166,7 @@ func (g Graph) Cycle() []string {
 		stack = stack[:len(stack)-1]
 		return nil
 	}
-	for _, n := range g.Nodes {
+	for _, n := range nodes {
 		if state[n.Name] == 0 {
 			if c := visit(n.Name); c != nil {
 				return c

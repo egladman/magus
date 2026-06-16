@@ -161,12 +161,12 @@ func hasFunctionOp(m ispell.Spec) bool {
 
 // loadSpellFile loads a spell file as a function-op-capable SpellDriver and
 // registers it — the in-package entry point the remote cache backend uses to
-// resolve a backend selected by a file path. A .bzz spell loads through the Buzz
+// resolve a backend selected by a file path. A .buzz spell loads through the Buzz
 // path (registering a function-op spell eagerly, capturing its source for in-VM
 // dispatch).
 func loadSpellFile(ctx context.Context, path string) (types.SpellDriver, error) {
-	if !strings.HasSuffix(path, ".bzz") {
-		return nil, fmt.Errorf("spell file %q: must be a .bzz spell", path)
+	if !strings.HasSuffix(path, ".buzz") {
+		return nil, fmt.Errorf("spell file %q: must be a .buzz spell", path)
 	}
 	_, sp, err := loadBuzzSpell(ctx, path)
 	if err != nil {
@@ -177,7 +177,7 @@ func loadSpellFile(ctx context.Context, path string) (types.SpellDriver, error) 
 
 // loadLocalBuzzSpell compiles a workspace-local Buzz spell at path, returning its
 // spec and ok=false on any failure. Extract routes through the same
-// ispell.Decode a built-in uses, so a .bzz workspace spell and a built-in are
+// ispell.Decode a built-in uses, so a .buzz workspace spell and a built-in are
 // read and validated identically. Errors are logged, not raised, since discovery
 // paths cannot route an error back to the caller. Registration is deferred to
 // magus.project.register; the handle the caller builds carries the resolved spec

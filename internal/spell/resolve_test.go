@@ -1,4 +1,4 @@
-package spell_test
+package spell
 
 import (
 	"context"
@@ -6,23 +6,22 @@ import (
 	"testing"
 
 	"github.com/egladman/gopherbuzz"
-	ispell "github.com/egladman/magus/internal/spell"
 )
 
 // resolve builds a bare session with the magus/target types registered, execs
 // src, and resolves its spec in the given mode — the same setup Extract
 // uses, but with the mode passed explicitly so the FunctionOps branch can be
 // exercised without a host-importing spell.
-func resolve(t *testing.T, src string, mode ispell.ResolveMode) (ispell.Spec, error) {
+func resolve(t *testing.T, src string, mode ResolveMode) (Spec, error) {
 	t.Helper()
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx)
 	defer sess.Close()
-	sess.SetSourceModule(ispell.TargetModulePath, ispell.TargetModuleSource)
+	sess.SetSourceModule(TargetModulePath, TargetModuleSource)
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatalf("exec: %v", err)
 	}
-	return ispell.Resolve(ctx, sess, mode)
+	return Resolve(ctx, sess, mode)
 }
 
 // TestResolve_FunctionOpRecordsHandlerName pins that a function-op is
@@ -40,7 +39,7 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"enabled": enabled, "deploy": shipIt};
 }
 `
-	spec, err := resolve(t, src, ispell.FunctionOps)
+	spec, err := resolve(t, src, FunctionOps)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -64,7 +63,7 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"build": helper};
 }
 `
-	if _, err := resolve(t, src, ispell.FunctionOps); err == nil || !strings.Contains(err.Error(), "not exported") {
+	if _, err := resolve(t, src, FunctionOps); err == nil || !strings.Contains(err.Error(), "not exported") {
 		t.Errorf("Resolve error = %v, want one mentioning 'not exported'", err)
 	}
 }
@@ -84,7 +83,7 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"build": build};
 }
 `
-	if _, err := resolve(t, src, ispell.ForkExtract); err == nil || !strings.Contains(err.Error(), "exactly once") {
+	if _, err := resolve(t, src, ForkExtract); err == nil || !strings.Contains(err.Error(), "exactly once") {
 		t.Errorf("Resolve error = %v, want one mentioning 'exactly once'", err)
 	}
 }
@@ -111,7 +110,7 @@ export fun mgs_listTargets() > {str: fun(Target, any) bool} {
     return {"build": build, "test": test, "lint": lint};
 }
 `
-	spec, err := resolve(t, src, ispell.ForkExtract)
+	spec, err := resolve(t, src, ForkExtract)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -144,7 +143,7 @@ export fun mgs_listTargets() > any {
     };
 }
 `
-	spec, err := resolve(t, src, ispell.ForkExtract)
+	spec, err := resolve(t, src, ForkExtract)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -167,7 +166,7 @@ export fun mgs_listTargets() > {str: fun(Target, any) bool} {
     return {"deploy": deploy};
 }
 `
-	spec, err := resolve(t, src, ispell.FunctionOps)
+	spec, err := resolve(t, src, FunctionOps)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -191,7 +190,7 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"build": build};
 }
 `
-	if _, err := resolve(t, src, ispell.ForkExtract); err == nil {
+	if _, err := resolve(t, src, ForkExtract); err == nil {
 		t.Error("Resolve: expected error for a handler reading the Target, got nil")
 	}
 }

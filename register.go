@@ -1,57 +1,99 @@
 package magus
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
+// Option configures Open or Inspect.
+type Option = workspace.Option
+
+// WithConfigFile causes the constructor to load magus.yaml from path instead of <root>/magus.yaml.
+func WithConfigFile(path string) Option {
+	return func(o *workspace.Load) { o.ConfigPath = path }
+}
+
+// WithLoadedConfig injects an already-parsed configuration, bypassing the
+// default magus.yaml discovery. Env-var and flag overrides should be applied
+// before calling this.
+func WithLoadedConfig(cfg config.Config) Option {
+	return workspace.WithLoadedConfig(cfg)
+}
+
+// WorkspaceRegistry holds project-option overrides and target policies for a single Open.
+type WorkspaceRegistry = workspace.WorkspaceRegistry
+
+// NewWorkspaceRegistry returns an empty WorkspaceRegistry.
+func NewWorkspaceRegistry() *WorkspaceRegistry { return workspace.NewWorkspaceRegistry() }
+
+// WithWorkspaceRegistry injects a pre-built WorkspaceRegistry, replacing the default one.
+func WithWorkspaceRegistry(reg *WorkspaceRegistry) Option {
+	return func(o *workspace.Load) { o.Registry = reg }
+}
+
+// WithWorkspaceRegistryContext installs reg in ctx so interpreters can retrieve it.
+func WithWorkspaceRegistryContext(ctx context.Context, reg *WorkspaceRegistry) context.Context {
+	return workspace.ContextWithRegistry(ctx, reg)
+}
+
+// WorkspaceRegistryFromContext returns the WorkspaceRegistry from ctx, or nil.
+func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
+	return workspace.WorkspaceRegistryFromContext(ctx)
+}
+
+func installWorkspaceRegistry(ctx context.Context, reg *WorkspaceRegistry) context.Context {
+	return workspace.ContextWithRegistry(ctx, reg)
+}
+
 // ProjectOption mutates a Project at registration time. A non-nil error aborts Open.
-type ProjectOption = wire.ProjectOption
+type ProjectOption = workspace.ProjectOption
 
 // BindingOption mutates a spell Binding at registration time.
-type BindingOption = wire.BindingOption
+type BindingOption = workspace.BindingOption
 
 // TargetOption mutates a types.TargetPolicy at registration time.
-type TargetOption = wire.TargetOption
+type TargetOption = workspace.TargetOption
 
 // WithDependsOn adds upstream project paths as dependencies (repo-relative or project-relative).
-func WithDependsOn(paths ...string) ProjectOption { return wire.WithDependsOn(paths...) }
+func WithDependsOn(paths ...string) ProjectOption { return workspace.WithDependsOn(paths...) }
 
 // WithOutputs declares the project-relative file globs this project produces.
-func WithOutputs(paths ...string) ProjectOption { return wire.WithOutputs(paths...) }
+func WithOutputs(paths ...string) ProjectOption { return workspace.WithOutputs(paths...) }
 
 // WithExclusive marks a project as must-not-run-alongside-peers (also serializes multi-spell fan-out).
-func WithExclusive() ProjectOption { return wire.WithExclusive() }
+func WithExclusive() ProjectOption { return workspace.WithExclusive() }
 
 // WithWatchIgnore appends patterns to the project's watch ignore list; malformed patterns error at Open.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
-	return wire.WithWatchIgnore(patterns...)
+	return workspace.WithWatchIgnore(patterns...)
 }
 
 // IgnoreGlob constructs a doublestar-glob ignore pattern.
-func IgnoreGlob(pattern string) types.IgnorePattern { return wire.IgnoreGlob(pattern) }
+func IgnoreGlob(pattern string) types.IgnorePattern { return workspace.IgnoreGlob(pattern) }
 
 // IgnoreRegex constructs a Go-regexp ignore pattern.
-func IgnoreRegex(pattern string) types.IgnorePattern { return wire.IgnoreRegex(pattern) }
+func IgnoreRegex(pattern string) types.IgnorePattern { return workspace.IgnoreRegex(pattern) }
 
 // IgnoreLiteral constructs a literal ignore pattern matching any path segment at any depth.
-func IgnoreLiteral(pattern string) types.IgnorePattern { return wire.IgnoreLiteral(pattern) }
+func IgnoreLiteral(pattern string) types.IgnorePattern { return workspace.IgnoreLiteral(pattern) }
 
 // CheckClean enables the check-clean-after policy: fail if the working tree is dirty after the target.
-func CheckClean() TargetOption { return wire.CheckClean() }
+func CheckClean() TargetOption { return workspace.CheckClean() }
 
 // Isolated serializes the target against the whole batch: nothing else runs concurrently while it runs.
-func Isolated() TargetOption { return wire.Isolated() }
+func Isolated() TargetOption { return workspace.Isolated() }
 
 // TrackFlake enables flake detection and auto-retry for this target.
-func TrackFlake() TargetOption { return wire.TrackFlake() }
+func TrackFlake() TargetOption { return workspace.TrackFlake() }
 
 // WithTarget attaches a behavioural policy to the named target; multiple calls are merged.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {
-	return wire.WithTarget(name, opts...)
+	return workspace.WithTarget(name, opts...)
 }
 
 // WithSpell registers a built-in spell by name; multiple calls fan out in parallel (sequential with WithExclusive).

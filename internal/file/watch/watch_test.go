@@ -1,4 +1,4 @@
-package watch_test
+package watch
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/file/watch"
 )
 
 func TestWatcherDetectsFileWrite(t *testing.T) {
@@ -21,10 +19,10 @@ func TestWatcherDetectsFileWrite(t *testing.T) {
 	}
 	f.Close()
 
-	w, err := watch.New(
+	w, err := New(
 		context.Background(),
-		watch.WithRoot(dir),
-		watch.WithDebounce(50*time.Millisecond),
+		WithRoot(dir),
+		WithDebounce(50*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -62,10 +60,10 @@ func TestWatcherDebounceCoalesces(t *testing.T) {
 	}
 	f.Close()
 
-	w, err := watch.New(
+	w, err := New(
 		context.Background(),
-		watch.WithRoot(dir),
-		watch.WithDebounce(100*time.Millisecond),
+		WithRoot(dir),
+		WithDebounce(100*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -122,11 +120,11 @@ func TestWatcherIgnoresBuiltinPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w, err := watch.New(
+	w, err := New(
 		context.Background(),
-		watch.WithRoot(dir),
-		watch.WithDebounce(50*time.Millisecond),
-		watch.WithIgnore(watch.BuiltinIgnore),
+		WithRoot(dir),
+		WithDebounce(50*time.Millisecond),
+		WithIgnore(BuiltinIgnore),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -161,10 +159,10 @@ func TestWatcherDetectsNewSubdir(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := watch.New(
+	w, err := New(
 		context.Background(),
-		watch.WithRoot(dir),
-		watch.WithDebounce(50*time.Millisecond),
+		WithRoot(dir),
+		WithDebounce(50*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -215,10 +213,10 @@ func TestWatcherContextCancellation(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
-	w, err := watch.New(
+	w, err := New(
 		ctx,
-		watch.WithRoot(dir),
-		watch.WithDebounce(50*time.Millisecond),
+		WithRoot(dir),
+		WithDebounce(50*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +242,7 @@ func TestWatcherContextCancellation(t *testing.T) {
 func TestOutputsIgnoreDoublestar(t *testing.T) {
 	t.Parallel()
 	const wsRoot = "/repo"
-	ignore := watch.OutputsIgnore(wsRoot, []string{"dist/**", "build/output/**"})
+	ignore := OutputsIgnore(wsRoot, []string{"dist/**", "build/output/**"})
 
 	cases := []struct {
 		path    string
@@ -277,10 +275,10 @@ func TestWatcherCloseNoGoroutineLeak(t *testing.T) {
 	dir := t.TempDir()
 
 	// Use a background (non-cancellable) context to exercise the Close path.
-	w, err := watch.New(
+	w, err := New(
 		context.Background(),
-		watch.WithRoot(dir),
-		watch.WithDebounce(50*time.Millisecond),
+		WithRoot(dir),
+		WithDebounce(50*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -323,7 +321,7 @@ func TestBuiltinIgnore(t *testing.T) {
 		{"/repo/web/app.ts", false},
 	}
 	for _, tc := range cases {
-		got := watch.BuiltinIgnore(tc.path)
+		got := BuiltinIgnore(tc.path)
 		if got != tc.ignored {
 			t.Errorf("BuiltinIgnore(%q) = %v, want %v", tc.path, got, tc.ignored)
 		}

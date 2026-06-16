@@ -42,7 +42,7 @@ func TestPrintSourceContext_ValidFile(t *testing.T) {
 
 func writeBzzBP(t *testing.T, dir, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -184,7 +184,7 @@ magus.project.register(".", fun(p, cb) > bool { cb({"spells": [dockr]}); return 
 }
 
 // TestSpellModuleRequireLocal verifies a workspace-local Buzz spell is
-// importable by path — import "spells/locreq" resolves ./spells/locreq.bzz,
+// importable by path — import "spells/locreq" resolves ./spells/locreq.buzz,
 // binds the handle under the basename (locreq), so its target dispatches.
 func TestSpellModuleRequireLocal(t *testing.T) {
 	dir := t.TempDir()
@@ -192,7 +192,7 @@ func TestSpellModuleRequireLocal(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "spells"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "spells", "locreq.bzz"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "spells", "locreq.buzz"), []byte(`
 export fun mgs_getName() > str { return "locreq"; }
 export fun mgs_listTargets() > any {
     return {"build": {"cmd": "true"}};

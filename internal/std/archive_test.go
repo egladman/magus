@@ -1,4 +1,4 @@
-package std_test
+package std
 
 import (
 	"archive/tar"
@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
-	"github.com/egladman/magus/internal/std"
 )
 
 // makeTarGz creates a .tar.gz archive in t.TempDir() with the given files
@@ -94,7 +93,7 @@ func TestArchiveUncompressTarGz(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := std.ArchiveUncompress(context.Background(), src, dest, nil)
+	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +111,7 @@ func TestArchiveUncompressTar(t *testing.T) {
 	src := makeTar(t, map[string]string{"hello.txt": "hi"})
 	dest := t.TempDir()
 
-	result, err := std.ArchiveUncompress(context.Background(), src, dest, nil)
+	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +128,7 @@ func TestArchiveUncompressZip(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := std.ArchiveUncompress(context.Background(), src, dest, nil)
+	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +146,7 @@ func TestArchiveUncompressStrip(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := std.ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
+	result, err := ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +165,7 @@ func TestArchiveUncompressStripShallowEntrySkipped(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := std.ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
+	result, err := ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +192,7 @@ func TestArchiveUncompressPathTraversalDotDot(t *testing.T) {
 	gw.Close()
 	f.Close()
 
-	_, err := std.ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
 	if err == nil {
 		t.Fatal("expected error for path traversal entry, got nil")
 	}
@@ -215,7 +214,7 @@ func TestArchiveUncompressPathTraversalAbsolute(t *testing.T) {
 	gw.Close()
 	f.Close()
 
-	_, err := std.ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
 	if err == nil {
 		t.Fatal("expected error for absolute path entry, got nil")
 	}
@@ -225,7 +224,7 @@ func TestArchiveUncompressMaxSize(t *testing.T) {
 	// Create a tar.gz with content that exceeds a tiny cap.
 	src := makeTarGz(t, map[string]string{"big.txt": "0123456789"}) // 10 bytes
 
-	_, err := std.ArchiveUncompress(context.Background(), src, t.TempDir(), map[string]any{"max_size": 5})
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), map[string]any{"max_size": 5})
 	if err == nil {
 		t.Fatal("expected error when uncompressed size exceeds max_size")
 	}
@@ -272,7 +271,7 @@ func TestArchiveUncompressZipUndersizedHeader(t *testing.T) {
 	// max_size sits well above the forged declared size (10) so the
 	// pre-extraction cumulative check passes and the per-entry bound is
 	// what must reject the overrun.
-	_, err = std.ArchiveUncompress(context.Background(), path, t.TempDir(), map[string]any{"max_size": 1000})
+	_, err = ArchiveUncompress(context.Background(), path, t.TempDir(), map[string]any{"max_size": 1000})
 	if err == nil {
 		t.Fatal("expected error for entry exceeding its declared size, got nil")
 	}
@@ -285,7 +284,7 @@ func TestArchiveUncompressLimiter(t *testing.T) {
 	lim := cache.NewLimiter(2)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	_, err := std.ArchiveUncompress(ctx, src, dest, nil)
+	_, err := ArchiveUncompress(ctx, src, dest, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +296,7 @@ func TestArchiveUncompressLimiter(t *testing.T) {
 func TestArchiveUncompressNilLimiter(t *testing.T) {
 	src := makeTarGz(t, map[string]string{"f.txt": "hi"})
 	// No limiter in context — must work normally.
-	_, err := std.ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +326,7 @@ func TestArchiveCompressTarGzRoundTrip(t *testing.T) {
 	})
 	dest := filepath.Join(t.TempDir(), "out.tar.gz")
 
-	result, err := std.ArchiveCompress(context.Background(), src, dest, nil)
+	result, err := ArchiveCompress(context.Background(), src, dest, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +338,7 @@ func TestArchiveCompressTarGzRoundTrip(t *testing.T) {
 
 	// Round-trip: extract and verify content.
 	out := t.TempDir()
-	res2, err := std.ArchiveUncompress(context.Background(), dest, out, nil)
+	res2, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,12 +357,12 @@ func TestArchiveCompressTarZstRoundTrip(t *testing.T) {
 	src := makeTestDir(t, map[string]string{"x.txt": "zstd content"})
 	dest := filepath.Join(t.TempDir(), "out.tar.zst")
 
-	if _, err := std.ArchiveCompress(context.Background(), src, dest, nil); err != nil {
+	if _, err := ArchiveCompress(context.Background(), src, dest, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	out := t.TempDir()
-	res, err := std.ArchiveUncompress(context.Background(), dest, out, nil)
+	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,12 +383,12 @@ func TestArchiveCompressZipRoundTrip(t *testing.T) {
 	})
 	dest := filepath.Join(t.TempDir(), "out.zip")
 
-	if _, err := std.ArchiveCompress(context.Background(), src, dest, nil); err != nil {
+	if _, err := ArchiveCompress(context.Background(), src, dest, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	out := t.TempDir()
-	res, err := std.ArchiveUncompress(context.Background(), dest, out, nil)
+	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,11 +403,11 @@ func TestArchiveCompressTarRoundTrip(t *testing.T) {
 	src := makeTestDir(t, map[string]string{"bare.txt": "no compression"})
 	dest := filepath.Join(t.TempDir(), "out.tar")
 
-	if _, err := std.ArchiveCompress(context.Background(), src, dest, nil); err != nil {
+	if _, err := ArchiveCompress(context.Background(), src, dest, nil); err != nil {
 		t.Fatal(err)
 	}
 	out := t.TempDir()
-	res, err := std.ArchiveUncompress(context.Background(), dest, out, nil)
+	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +429,7 @@ func TestArchiveCompressMultiThreadZst(t *testing.T) {
 	lim := cache.NewLimiter(4)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	result, err := std.ArchiveCompress(ctx, src, dest, map[string]any{"threads": 4})
+	result, err := ArchiveCompress(ctx, src, dest, map[string]any{"threads": 4})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +443,7 @@ func TestArchiveCompressMultiThreadZst(t *testing.T) {
 
 	// Verify decompression also works multi-threaded.
 	out := t.TempDir()
-	_, err = std.ArchiveUncompress(ctx, dest, out, map[string]any{"threads": 4})
+	_, err = ArchiveUncompress(ctx, dest, out, map[string]any{"threads": 4})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +458,7 @@ func TestArchiveCompressThreadsExceedsPool(t *testing.T) {
 
 	// Requesting 100 threads with a cap=2 limiter: must be silently clamped,
 	// not error, since resolveThreads caps to limiter.cap.
-	_, err := std.ArchiveCompress(ctx, src, dest, map[string]any{"threads": 100})
+	_, err := ArchiveCompress(ctx, src, dest, map[string]any{"threads": 100})
 	if err != nil {
 		t.Fatalf("threads clamped to pool cap should succeed, got: %v", err)
 	}
@@ -476,7 +475,7 @@ func TestArchiveCompressSandboxReadDenied(t *testing.T) {
 	}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err := std.ArchiveCompress(ctx, src, dest, nil)
+	_, err := ArchiveCompress(ctx, src, dest, nil)
 	if err == nil {
 		t.Fatal("expected sandbox read denial, got nil")
 	}
@@ -493,7 +492,7 @@ func TestArchiveCompressSandboxWriteDenied(t *testing.T) {
 	}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err := std.ArchiveCompress(ctx, src, dest, nil)
+	_, err := ArchiveCompress(ctx, src, dest, nil)
 	if err == nil {
 		t.Fatal("expected sandbox write denial, got nil")
 	}
@@ -513,7 +512,7 @@ func TestArchiveCompressSymlinkPivotOnOutput(t *testing.T) {
 	// and writes to the real path (not a security violation here — the symlink
 	// points within the same tmpdir tree). This test verifies no panic and that
 	// the output is actually written somewhere sensible.
-	_, err := std.ArchiveCompress(context.Background(), src, link, nil)
+	_, err := ArchiveCompress(context.Background(), src, link, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -524,7 +523,7 @@ func TestArchiveCompressMaxSize(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "out.tar")
 
 	// Cap output at 1 byte — the tar header alone exceeds this.
-	_, err := std.ArchiveCompress(context.Background(), src, dest, map[string]any{"max_size": 1})
+	_, err := ArchiveCompress(context.Background(), src, dest, map[string]any{"max_size": 1})
 	if err == nil {
 		t.Fatal("expected max_size error, got nil")
 	}
@@ -534,7 +533,7 @@ func TestArchiveCompressUnknownFormat(t *testing.T) {
 	src := makeTestDir(t, map[string]string{"f.txt": "x"})
 	dest := filepath.Join(t.TempDir(), "out.7z") // unsupported extension
 
-	_, err := std.ArchiveCompress(context.Background(), src, dest, nil)
+	_, err := ArchiveCompress(context.Background(), src, dest, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown format, got nil")
 	}
@@ -545,13 +544,13 @@ func TestArchiveCompressFormatOverride(t *testing.T) {
 	// Extension says .bin but format is overridden to tar.gz.
 	dest := filepath.Join(t.TempDir(), "out.bin")
 
-	_, err := std.ArchiveCompress(context.Background(), src, dest, map[string]any{"format": "tar.gz"})
+	_, err := ArchiveCompress(context.Background(), src, dest, map[string]any{"format": "tar.gz"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Round-trip: the file should be decompressible as .tar.gz regardless of extension.
 	out := t.TempDir()
-	if _, err := std.ArchiveUncompress(context.Background(), dest, out, nil); err != nil {
+	if _, err := ArchiveUncompress(context.Background(), dest, out, nil); err != nil {
 		t.Fatalf("uncompress of format-overridden archive: %v", err)
 	}
 }
@@ -567,7 +566,7 @@ func TestArchiveUncompressMultiThreadZip(t *testing.T) {
 	lim := cache.NewLimiter(4)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	result, err := std.ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 3})
+	result, err := ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -588,7 +587,7 @@ func TestArchiveUncompressLimiterAcquiresN(t *testing.T) {
 	lim := cache.NewLimiter(4)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	_, err := std.ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 2})
+	_, err := ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 2})
 	if err != nil {
 		t.Fatal(err)
 	}

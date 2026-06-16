@@ -15,17 +15,17 @@ func openTempWorkspace(t *testing.T, projPath string, outputs []string) (*Magus,
 	t.Helper()
 	root := t.TempDir()
 
-	// An empty magusfile.bzz at the root marks it as the workspace root.
-	if err := os.WriteFile(filepath.Join(root, "magusfile.bzz"), []byte(""), 0o644); err != nil {
+	// An empty magusfile.buzz at the root marks it as the workspace root.
+	if err := os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// An empty magusfile.bzz in the project directory makes magus discover it.
+	// An empty magusfile.buzz in the project directory makes magus discover it.
 	projDir := filepath.Join(root, filepath.FromSlash(projPath))
 	if err := os.MkdirAll(projDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.bzz"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +125,9 @@ func TestCleanOutputsNoMatchIsNoop(t *testing.T) {
 // TestFindOutputOwnerMatchesDeclaration verifies that FindOutputOwner returns
 // the owning project for a path that matches one of its Output globs.
 func TestFindOutputOwnerMatchesDeclaration(t *testing.T) {
-	m, root := openTempWorkspace(t, "api", []string{"bin/**", "gen/**"})
+	// m.Root() is symlink-resolved by project.Discover; build query paths on it
+	// (not the raw t.TempDir) so they share that canonical base on macOS.
+	m, _ := openTempWorkspace(t, "api", []string{"bin/**", "gen/**"})
 
 	cases := []struct {
 		relPath string
@@ -138,7 +140,7 @@ func TestFindOutputOwnerMatchesDeclaration(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		abs := filepath.Join(root, filepath.FromSlash(tc.relPath))
+		abs := filepath.Join(m.Root(), filepath.FromSlash(tc.relPath))
 		p := m.FindOutputOwner(abs)
 		got := ""
 		if p != nil {

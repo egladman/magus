@@ -27,55 +27,73 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/wire"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
 // RunOption configures a [Run], [CI], or [RunAffected] invocation.
-type RunOption = wire.RunOption
+type RunOption func(*run)
+
+// run is the accumulated state of a Run/CI/RunAffected call.
+type run struct {
+	DryRun       bool
+	Charms       []string       // execution charms propagated via context; "rw" enables mutating targets
+	Report       *report.Writer // caller-owned; caller closes; mutually exclusive with ReportWriter
+	ReportWriter io.Writer      // run engine wraps this in its own Writer
+	NoFlakeRetry bool
+	BaseRef      string
+	Race         bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
+	RaceReplay   bool     // MGS4003 determinism replay; orthogonal to Race
+	Spell        string   // when set, restricts execution to this spell; unmatched projects are skipped
+	Step         bool     // forces Concurrency=1; StepGate comes from ctx
+	ExtraArgs    []string // forwarded to spells via project.WithExtraArgs
+	Normalizer   types.TargetNameNormalizer
+}
 
 // WithDryRun prints what would run without invoking any handler.
-func WithDryRun() RunOption { return wire.WithDryRun() }
+func WithDryRun() RunOption { return func(o *run) { o.DryRun = true } }
 
-// WithReportWriter streams one JSONL event per target to w.
-func WithReportWriter(w io.Writer) RunOption { return wire.WithReportWriter(w) }
+// WithReportWriter streams one JSONL event per target to w; the run engine
+// constructs and closes the report.Writer around it.
+func WithReportWriter(w io.Writer) RunOption { return func(o *run) { o.ReportWriter = w } }
 
 // WithWrite enables mutating mode for format/generate targets; sugar for the "rw" charm.
-func WithWrite() RunOption { return wire.WithWrite() }
+func WithWrite() RunOption { return WithCharms(types.CharmReadWrite) }
 
 // WithCharms sets execution charms propagated to spells via context.
-func WithCharms(charms ...string) RunOption { return wire.WithCharms(charms...) }
+func WithCharms(charms ...string) RunOption {
+	return func(o *run) { o.Charms = append(o.Charms, charms...) }
+}
 
 // WithNoFlakeRetry disables the flake auto-retry logic.
-func WithNoFlakeRetry() RunOption { return wire.WithNoFlakeRetry() }
+func WithNoFlakeRetry() RunOption { return func(o *run) { o.NoFlakeRetry = true } }
 
 // WithBaseRef overrides MAGUS_VCS_BASE_REF for RunAffected invocations.
-func WithBaseRef(ref string) RunOption { return wire.WithBaseRef(ref) }
+func WithBaseRef(ref string) RunOption { return func(o *run) { o.BaseRef = ref } }
 
 // WithSpellFilter restricts Run to projects that have the named spell.
-func WithSpellFilter(name string) RunOption { return wire.WithSpellFilter(name) }
+func WithSpellFilter(name string) RunOption { return func(o *run) { o.Spell = name } }
 
 // WithTargetNameNormalizer overrides how exported-function identifiers are
 // converted to target names. Defaults to kebab-case via lo.KebabCase.
 func WithTargetNameNormalizer(n types.TargetNameNormalizer) RunOption {
-	return func(o *wire.Run) { o.Normalizer = n }
+	return func(o *run) { o.Normalizer = n }
 }
 
 // WithStep enables per-subprocess stepping mode; forces Concurrency=1.
-func WithStep() RunOption { return func(o *wire.Run) { o.Step = true } }
+func WithStep() RunOption { return func(o *run) { o.Step = true } }
 
 // WithExtraArgs forwards args to spells via project.WithExtraArgs.
-func WithExtraArgs(args []string) RunOption { return func(o *wire.Run) { o.ExtraArgs = args } }
+func WithExtraArgs(args []string) RunOption { return func(o *run) { o.ExtraArgs = args } }
 
 // WithRace enables race-condition diagnostics (MGS4001/4002/4004). Diagnostic only.
-func WithRace() RunOption { return func(o *wire.Run) { o.Race = true } }
+func WithRace() RunOption { return func(o *run) { o.Race = true } }
 
 // WithRaceReplay enables determinism replay (MGS4003). Compose with WithRace for MGS4001/4002/4004.
-func WithRaceReplay() RunOption { return func(o *wire.Run) { o.RaceReplay = true } }
+func WithRaceReplay() RunOption { return func(o *run) { o.RaceReplay = true } }
 
-func applyRunOpts(opts []RunOption) wire.Run {
-	var o wire.Run
+func applyRunOpts(opts []RunOption) run {
+	var o run
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -94,7 +112,7 @@ func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOpti
 
 // runResolved groups targets by name and executes them with already-applied
 // options. Shared by Run and the read-only RunCI entry point.
-func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o wire.Run) error {
+func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
 	type targetGroup struct {
 		name    string
 		targets []types.Target
@@ -316,13 +334,13 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 }
 
 // executeOnProjects runs handler for every project for a single target.
-func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts wire.Run, handler func(context.Context, *types.Project) error) error {
+func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts run, handler func(context.Context, *types.Project) error) error {
 	return m.executeStages(ctx, []stage{{target: target, handler: handler, projects: projects}}, scopeLabel, opts)
 }
 
 // executeStages schedules every (project,target) pair via dependency-ordered RunAll;
 // afterTarget edges keep each project's CI steps sequential.
-func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts wire.Run) error {
+func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) error {
 	if opts.DryRun {
 		for _, st := range stages {
 			for _, p := range st.projects {

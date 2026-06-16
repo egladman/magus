@@ -83,14 +83,14 @@ func projectLabel(p types.TargetGraphProject) string {
 func catalogOrder(nodes []types.TargetGraphNode) []types.TargetGraphNode {
 	incoming := map[string]bool{}
 	for _, n := range nodes {
-		for _, d := range n.Deps {
+		for _, d := range n.Dependencies {
 			incoming[d] = true
 		}
 	}
 	primary := make([]types.TargetGraphNode, 0, len(nodes))
 	var workers []types.TargetGraphNode
 	for _, n := range nodes {
-		if len(n.Deps) == 0 && incoming[n.Name] {
+		if len(n.Dependencies) == 0 && incoming[n.Name] {
 			workers = append(workers, n)
 		} else {
 			primary = append(primary, n)
@@ -180,9 +180,9 @@ func writeTargetSection(b *bytes.Buffer, path string, n types.TargetGraphNode, e
 		writeCommandBlock(b, "Charms", charmLines)
 	}
 
-	if len(n.Deps) > 0 {
+	if len(n.Dependencies) > 0 {
 		b.WriteString("**Depends on:**\n\n")
-		for _, d := range n.Deps {
+		for _, d := range n.Dependencies {
 			// Link each dependency to its own section. GitHub derives a heading's
 			// anchor by lowercasing and stripping the backticks, so `man-generate`
 			// resolves to #man-generate.
@@ -215,12 +215,12 @@ func writeGlossary(b *bytes.Buffer) {
 	for _, g := range []struct{ term, def string }{
 		{"Workspace", "the magus root directory that owns a set of projects and shared config; the unit magus operates over."},
 		{"Project", "a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking."},
-		{"Magusfile", "the `magusfile.bzz` / `magusfile.tl` that declares a project's targets (as `export fun`s) and binds its spells."},
+		{"Magusfile", "the `magusfile.buzz` / `magusfile.tl` that declares a project's targets (as `export fun`s) and binds its spells."},
 		{"Target", "a named operation (`build`, `test`, …) you invoke with `magus run <target>`; it may compose a spell's tool-native operations and depend on other targets."},
 		{"Spell", "a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands."},
 		{"Charm", "an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it."},
 		{"Module", "a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more."},
-		{"Buzz", "the language magusfiles are written in (the `.bzz` engine)."},
+		{"Buzz", "the language magusfiles are written in (the `.buzz` engine)."},
 	} {
 		fmt.Fprintf(b, "- **%s**: %s\n", g.term, g.def)
 	}
@@ -288,128 +288,92 @@ func policyNotes(p *types.TargetPolicy) []string {
 	return out
 }
 
-// WriteTargetGraphMermaid emits a magus.depends_on target graph as a Mermaid
-// flowchart, rendered top-down. Within a project, worker targets that share a
-// trailing `-<segment>` (e.g. `man-generate`, `docs-generate`) are boxed together
-// in a stage subgraph; singletons stay loose. The composite that shares the box's
-// name (e.g. `generate`) stays outside the box, and an edge into the box lands on
-// the box itself rather than on a worker inside it. Nodes are styled by role —
-// anchors (nothing depends on them, i.e. the targets you invoke), leaves (no
-// deps), and the composites in between. With more than one project each is wrapped
-// in its own subgraph and node ids are prefixed, so a `build` in two projects
-// stays distinct. It is the one Mermaid emitter for the target graph: `magus
-// describe graph -o mermaid` and the markdown doc both route through it.
+// WriteTargetGraphMermaid emits a target dependency graph as a Mermaid flowchart.
+// It is the one Mermaid emitter for the target graph: `magus describe graph -o
+// mermaid` and the markdown doc both route through it. See targetGraphIR for the
+// stage-boxing and role-styling rules.
 func WriteTargetGraphMermaid(w io.Writer, out types.TargetGraphOutput) error {
+	return writeMermaid(w, targetGraphIR(out))
+}
+
+// targetGraphIR maps the target dependency graph onto the shared RenderGraph. With
+// more than one project, each is a subgraph and its node IDs are prefixed (so a
+// `build` in two projects stays distinct). Worker targets sharing a trailing
+// `-<segment>` (e.g. `man-generate`, `docs-generate`) are boxed into a collapsing
+// stage subgraph, so an edge lands on the box rather than a worker inside it; the
+// bare composite (`generate`) stays loose. Nodes are classed by role: anchors
+// (nothing depends on them), leaves (no deps), composites in between.
+func targetGraphIR(out types.TargetGraphOutput) RenderGraph {
 	projects := nonEmptyProjects(out)
 	multi := len(projects) > 1
-
-	var b strings.Builder
-	b.WriteString("graph TD\n")
-
-	// Collected for the trailing `class` assignments, one bucket per role.
-	var anchorIDs, leafIDs, midIDs []string
-	edges := false
+	g := RenderGraph{DOTName: "targets"}
 
 	for i, p := range projects {
-		prefix, base := "", "    "
+		prefix, projGroup := "", ""
 		if multi {
-			prefix, base = fmt.Sprintf("p%d_", i), "        "
-			fmt.Fprintf(&b, "    subgraph p%d[%q]\n", i, p.Path)
+			prefix = fmt.Sprintf("p%d_", i)
+			projGroup = fmt.Sprintf("p%d", i)
+			g.Groups = append(g.Groups, RenderGroup{ID: projGroup, Label: p.Path})
 		}
 
-		// A node is an anchor if nothing in the project depends on it; a leaf if it
-		// has no deps of its own; otherwise a composite ("mid").
-		known := map[string]bool{}
+		known := make(map[string]bool, len(p.Nodes))
 		for _, n := range p.Nodes {
 			known[n.Name] = true
 		}
 		incoming := map[string]bool{}
 		for _, n := range p.Nodes {
-			for _, d := range n.Deps {
+			for _, d := range n.Dependencies {
 				if known[d] {
 					incoming[d] = true
 				}
 			}
 		}
-		emit := func(n types.TargetGraphNode, indent string) {
-			id := prefix + mermaidID(n.Name)
-			fmt.Fprintf(&b, "%s%s(%q)\n", indent, id, n.Name)
-			switch {
-			case !incoming[n.Name]:
-				anchorIDs = append(anchorIDs, id)
-			case len(n.Deps) == 0:
-				leafIDs = append(leafIDs, id)
-			default:
-				midIDs = append(midIDs, id)
-			}
-		}
 
 		stageOf, stageOrder := stageGroups(p.Nodes)
 		for _, stage := range stageOrder {
-			fmt.Fprintf(&b, "%ssubgraph %sstage_%s[%q]\n", base, prefix, mermaidID(stage), stage)
-			for _, n := range p.Nodes {
-				if stageOf[n.Name] == stage {
-					emit(n, base+"    ")
-				}
+			g.Groups = append(g.Groups, RenderGroup{
+				ID:       prefix + "stage_" + mermaidID(stage),
+				Label:    stage,
+				Parent:   projGroup,
+				Collapse: true,
+			})
+		}
+
+		for _, n := range p.Nodes {
+			group := projGroup
+			if s := stageOf[n.Name]; s != "" {
+				group = prefix + "stage_" + mermaidID(s)
 			}
-			fmt.Fprintf(&b, "%send\n", base)
+			role := "mid"
+			switch {
+			case !incoming[n.Name]:
+				role = "anchor"
+			case len(n.Dependencies) == 0:
+				role = "leaf"
+			}
+			g.Nodes = append(g.Nodes, RenderNode{
+				ID:      prefix + mermaidID(n.Name),
+				DOTID:   p.Path + ":" + n.Name,
+				Label:   n.Name,
+				Shape:   ShapeRounded,
+				Classes: []string{role},
+				Group:   group,
+			})
 		}
 		for _, n := range p.Nodes {
-			if stageOf[n.Name] == "" {
-				emit(n, base)
+			from := prefix + mermaidID(n.Name)
+			for _, d := range n.Dependencies {
+				g.Edges = append(g.Edges, RenderEdge{From: from, To: prefix + mermaidID(d)})
 			}
-		}
-
-		// endpoint maps a target to the id an edge should touch: a node sitting in a
-		// stage box resolves to the box itself, so an edge lands on the box rather
-		// than burying itself among the workers inside.
-		endpoint := func(name string) string {
-			if s := stageOf[name]; s != "" {
-				return prefix + "stage_" + mermaidID(s)
-			}
-			return prefix + mermaidID(name)
-		}
-		seen := map[string]bool{}
-		for _, n := range p.Nodes {
-			src := endpoint(n.Name)
-			for _, d := range n.Deps {
-				dst := endpoint(d)
-				if src == dst {
-					continue // both ends collapse to the same stage box: nothing to draw
-				}
-				if key := src + "\x00" + dst; !seen[key] {
-					seen[key] = true
-					fmt.Fprintf(&b, "%s%s --> %s\n", base, src, dst)
-					edges = true
-				}
-			}
-		}
-
-		if multi {
-			b.WriteString("    end\n")
 		}
 	}
 
-	if len(projects) == 0 || !edges {
-		b.WriteString("    %% no dependency edges\n")
+	g.Classes = []RenderClass{
+		{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},
+		{Name: "mid", Style: "fill:#e2e8f0,color:#0f172a,stroke:#94a3b8"},
+		{Name: "leaf", Style: "fill:#dcfce7,color:#14532d,stroke:#86efac"},
 	}
-
-	// Role styling. Fills carry an explicit text color so they read on both the
-	// light and dark Mermaid themes GitHub picks per viewer.
-	b.WriteString("    classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px\n")
-	b.WriteString("    classDef mid fill:#e2e8f0,color:#0f172a,stroke:#94a3b8\n")
-	b.WriteString("    classDef leaf fill:#dcfce7,color:#14532d,stroke:#86efac\n")
-	for _, c := range []struct {
-		name string
-		ids  []string
-	}{{"anchor", anchorIDs}, {"mid", midIDs}, {"leaf", leafIDs}} {
-		if len(c.ids) > 0 {
-			fmt.Fprintf(&b, "    class %s %s\n", strings.Join(uniqSorted(c.ids), ","), c.name)
-		}
-	}
-
-	_, err := io.WriteString(w, b.String())
-	return err
+	return g
 }
 
 // stageGroups buckets a project's *worker* targets by their trailing `-<segment>`
@@ -462,33 +426,10 @@ func uniqSorted(s []string) []string {
 	return slices.Compact(s)
 }
 
-// WriteTargetGraphDOT emits the same target graph as Graphviz DOT, with nodes
-// qualified by project path so cross-project name clashes stay distinct.
+// WriteTargetGraphDOT emits the target graph as Graphviz DOT, nodes qualified by
+// project path so cross-project name clashes stay distinct.
 func WriteTargetGraphDOT(w io.Writer, out types.TargetGraphOutput) error {
-	if _, err := fmt.Fprintln(w, "digraph targets {"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "  rankdir=LR;"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "  node [shape=box, style=rounded];"); err != nil {
-		return err
-	}
-	for _, p := range nonEmptyProjects(out) {
-		for _, n := range p.Nodes {
-			qualified := p.Path + ":" + n.Name
-			if _, err := fmt.Fprintf(w, "  %q;\n", qualified); err != nil {
-				return err
-			}
-			for _, d := range n.Deps {
-				if _, err := fmt.Fprintf(w, "  %q -> %q;\n", qualified, p.Path+":"+d); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	_, err := fmt.Fprintln(w, "}")
-	return err
+	return writeDOT(w, targetGraphIR(out))
 }
 
 // nonEmptyProjects drops projects with no extracted targets (e.g. a not-yet-

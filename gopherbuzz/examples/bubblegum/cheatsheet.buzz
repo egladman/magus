@@ -1,0 +1,130 @@
+// cheatsheet.buzz — hold-to-peek keybinding reference.
+//
+// Hold the cheat chord (default cmd+ctrl+slash, `cheatsheet <chord>` to
+// change) and a centered panel lists every bind as "chord  command"; release
+// any part of the chord and it vanishes. The key tap listens to key-ups and
+// modifier changes precisely for this — the WM core calls sheetShow on the
+// chord's key-down and sheetHide on its release.
+//
+// Each row is two labels, not one: the chord in monospace (its columns are
+// meant to line up) right-aligned against the command, which is set in the
+// proportional system font so it reads like prose rather than code.
+
+namespace cheatsheet;
+
+import "std";
+import "config";
+import "platform/macos/cocoa";
+
+// Three columns deep enough to list every bind at once (the default config alone
+// has ~80). Each column splits into a right-aligned monospace chord and a
+// system-font command; capacity = columns * maxRows.
+final columns = 3;
+final maxRows = 30;
+final rowH = 20.0;
+final padding = 20.0;
+final colGap = 18.0;       // between columns
+final chordW = 158.0;      // monospace chord, right-aligned against the gap (fits "cmd+ctrl+shift+grave")
+final innerGap = 12.0;     // chord ↔ command
+final cmdW = 172.0;        // command, system font
+final colW = chordW + innerGap + cmdW;
+final titleH = 22.0;
+final titleGap = 12.0;
+final chordSize = 12.0;
+final cmdSize = 13.0;
+final titleSize = 15.0;
+
+var panel: ud? = null;
+var chordLabels = mut [<ud>]; // columns * maxRows, filled column-major
+var cmdLabels = mut [<ud>];
+var visible = false;
+
+// Panel frame in AppKit coordinates (recorded once at init) so the WM can
+// hit-test a click against it for click-outside-to-dismiss.
+var panelX = 0.0;
+var panelY = 0.0;
+var panelW = 0.0;
+var panelH = 0.0;
+
+fun chordAt(i: int) > ud? {
+    return chordLabels[i];
+}
+
+fun cmdAt(i: int) > ud? {
+    return cmdLabels[i];
+}
+
+fun sheetInit(cx: double, cy: double) > void {
+    if (panel != null) {
+        return;
+    }
+    cocoa\uiInit();
+    final w = padding * 2.0 + std\toDouble(columns) * colW + std\toDouble(columns - 1) * colGap;
+    final h = padding * 2.0 + titleH + titleGap + std\toDouble(maxRows) * rowH;
+    panelX = cx - w / 2.0;
+    panelY = cy - h / 2.0;
+    panelW = w;
+    panelH = h;
+    panel = cocoa\uiOverlayPanel(panelX, y: panelY, w: w, h: h);
+    cocoa\uiIgnoreMouse(panel);
+
+    final title = cocoa\uiThemedLabel(panel, x: padding, y: h - padding - titleH, w: w - padding * 2.0, h: titleH, size: titleSize, gray: 0.92);
+    cocoa\uiSetSystemFontWeighted(title, size: titleSize, weight: 0.3);
+    cocoa\uiSetText(title, text: "Keybindings");
+
+    final contentTop = h - padding - titleH - titleGap;
+    foreach (col in 0..columns) {
+        foreach (row in 0..maxRows) {
+            final colX = padding + std\toDouble(col) * (colW + colGap);
+            final y = contentTop - rowH * std\toDouble(row + 1);
+            final chord = cocoa\uiThemedLabel(panel, x: colX, y: y, w: chordW, h: rowH - 4.0, size: chordSize, gray: 0.6);
+            cocoa\uiAlignRight(chord);
+            chordLabels.append(chord!);
+            final cmd = cocoa\uiThemedLabel(panel, x: colX + chordW + innerGap, y: y, w: cmdW, h: rowH - 4.0, size: cmdSize, gray: 0.92);
+            cocoa\uiSetSystemFont(cmd, size: cmdSize);
+            cmdLabels.append(cmd!);
+        }
+    }
+}
+
+// sheetShow renders the current keymap centered at (cx, cy) — AppKit
+// coordinates of the active display's center.
+export fun sheetShow(binds: [any], cx: double, cy: double) > void {
+    sheetInit(cx, cy);
+    final total = maxRows * columns;
+    foreach (i in 0..total) {
+        var chordText = "";
+        var cmdText = "";
+        if (i < binds.len() and i < total) {
+            final b = config\bindAt(binds, i: i);
+            chordText = config\chordName(b.flags, keycode: b.keycode);
+            cmdText = b.command;
+        }
+        if (i == total - 1 and binds.len() > total) {
+            chordText = "";
+            cmdText = "… and {binds.len() - total + 1} more";
+        }
+        cocoa\uiSetText(chordAt(i), text: chordText);
+        cocoa\uiSetText(cmdAt(i), text: cmdText);
+    }
+    cocoa\uiShow(panel);
+    visible = true;
+}
+
+export fun sheetHide() > void {
+    if (!visible) {
+        return;
+    }
+    visible = false;
+    cocoa\uiHide(panel);
+}
+
+export fun sheetVisible() > bool {
+    return visible;
+}
+
+// sheetContains reports whether an AppKit-coordinate point lands inside the
+// panel — the WM uses it so a click outside dismisses the sheet.
+export fun sheetContains(x: double, y: double) > bool {
+    return x >= panelX and x < panelX + panelW and y >= panelY and y < panelY + panelH;
+}

@@ -1,5 +1,5 @@
 // Command ffi-c is a runnable demonstration of gopherbuzz's C FFI. It compiles
-// the bundled mathx.c into a shared library, then runs demo.bzz against it —
+// the bundled mathx.c into a shared library, then runs demo.buzz against it —
 // exercising a scalar call, pointer out-parameters, and a callback.
 //
 //	cd examples/ffi-c && go run .
@@ -41,7 +41,7 @@ func run() error {
 		return err
 	}
 
-	src, err := os.ReadFile(filepath.Join(dir, "demo.bzz"))
+	src, err := os.ReadFile(filepath.Join(dir, "demo.buzz"))
 	if err != nil {
 		return err
 	}

@@ -1,10 +1,9 @@
-package watch_test
+package watch
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/types"
 )
 
@@ -33,11 +32,11 @@ func FuzzParsePattern(f *testing.F) {
 		if strings.IndexByte(s, 0) >= 0 {
 			t.Skip()
 		}
-		got, err := watch.ParsePattern(s)
+		got, err := ParsePattern(s)
 		if err != nil {
 			return
 		}
-		if vErr := watch.ValidatePattern(got); vErr != nil {
+		if vErr := ValidatePattern(got); vErr != nil {
 			t.Fatalf("ParsePattern(%q) = %+v but ValidatePattern rejects it: %v", s, got, vErr)
 		}
 	})
@@ -57,7 +56,7 @@ func FuzzIgnorePatternsMatch(f *testing.F) {
 		if strings.IndexByte(typ+pat+abs, 0) >= 0 {
 			t.Skip()
 		}
-		match := watch.IgnorePatterns("/repo", []types.IgnorePattern{{Type: types.PatternType(typ), Pattern: pat}})
+		match := IgnorePatterns("/repo", []types.IgnorePattern{{Type: types.PatternType(typ), Pattern: pat}})
 		_ = match(abs) // panic = test failure
 	})
 }

@@ -1,4 +1,4 @@
-package vcs_test
+package vcs
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 func TestResolveAutodetect(t *testing.T) {
@@ -29,7 +28,7 @@ func TestResolveAutodetect(t *testing.T) {
 			if err := os.MkdirAll(filepath.Join(root, c.claim), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			res, err := vcs.Resolve(context.Background(), root, "origin/main", types.VCSOptions{})
+			res, err := Resolve(context.Background(), root, "origin/main", types.VCSOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -52,7 +51,7 @@ func TestResolveExplicitOverridesAutodetect(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	res, err := vcs.Resolve(context.Background(), root, "origin/main", types.VCSOptions{})
+	res, err := Resolve(context.Background(), root, "origin/main", types.VCSOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +65,7 @@ func TestResolveExplicitOverridesAutodetect(t *testing.T) {
 
 func TestResolveExplicitUnknown(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "fossil")
-	_, err := vcs.Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})
+	_, err := Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})
 	if err == nil {
 		t.Fatal("expected error for unknown VCS name, got nil")
 	}
@@ -77,7 +76,7 @@ func TestResolveExplicitUnknown(t *testing.T) {
 
 func TestResolveDefaultWhenNoMarker(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "")
-	res, err := vcs.Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})
+	res, err := Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +90,7 @@ func TestResolveDefaultWhenNoMarker(t *testing.T) {
 
 func TestResolveDisabled(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
-	res, err := vcs.Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
+	res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +107,7 @@ func TestResolvePerVCSBaseRef(t *testing.T) {
 	t.Setenv("MAGUS_VCS_BASE_REF", "")
 	t.Setenv("MAGUS_VCS_NAME", "jj")
 	t.Setenv("MAGUS_VCS_JJ_BASE_REF", "main@origin")
-	res, err := vcs.Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
+	res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +130,7 @@ func TestResolveBuiltinBaseRefs(t *testing.T) {
 			t.Setenv("MAGUS_VCS_BASE_REF", "")
 			t.Setenv("MAGUS_VCS_NAME", c.name)
 			t.Setenv(perVCSEnv(c.name, "BASE_REF"), "")
-			res, err := vcs.Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
+			res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +153,7 @@ func TestVCSClaims(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("MAGUS_VCS_NAME", c.name)
-			res, err := vcs.Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
+			res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
 			if err != nil {
 				t.Fatalf("Resolve(%q): %v", c.name, err)
 			}
@@ -199,7 +198,7 @@ func TestDiffCommandsGit(t *testing.T) {
 	wantSHA := strings.TrimSpace(string(out))
 
 	t.Setenv("MAGUS_VCS_NAME", "git")
-	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
+	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -240,7 +239,7 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 	mustRun("git", "commit", "--allow-empty", "-m", "first")
 	mustRun("git", "commit", "--allow-empty", "-m", "second line\n\nbody text")
 
-	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{Name: "git"})
+	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{Name: "git"})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -278,7 +277,7 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 }
 
 func TestInstallableAndInstaller(t *testing.T) {
-	names := vcs.InstallableVCSes()
+	names := InstallableVCSes()
 	// git and hg implement MergeDriverInstaller; jj does not.
 	want := map[string]bool{"git": true, "hg": true}
 	if len(names) != len(want) {
@@ -288,31 +287,17 @@ func TestInstallableAndInstaller(t *testing.T) {
 		if !want[n] {
 			t.Errorf("Installable() returned unexpected %q", n)
 		}
-		if _, ok := vcs.Installer(n); !ok {
+		if _, ok := Installer(n); !ok {
 			t.Errorf("Installer(%q): got !ok, want an installer", n)
 		}
 	}
 
 	// jj is a known VCS but exposes no merge-driver installer.
-	if _, ok := vcs.Installer("jj"); ok {
+	if _, ok := Installer("jj"); ok {
 		t.Error("Installer(\"jj\"): got ok, want false (no installer)")
 	}
 	// Unknown VCS name yields no installer.
-	if _, ok := vcs.Installer("svn"); ok {
+	if _, ok := Installer("svn"); ok {
 		t.Error("Installer(\"svn\"): got ok, want false (unknown VCS)")
 	}
-}
-
-func perVCSEnv(name, suffix string) string {
-	return "MAGUS_VCS_" + toUpper(name) + "_" + suffix
-}
-
-func toUpper(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'a' && c <= 'z' {
-			b[i] = c - 32
-		}
-	}
-	return string(b)
 }

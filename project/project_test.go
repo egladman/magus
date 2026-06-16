@@ -1,4 +1,4 @@
-package project_test
+package project
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
-
-	"github.com/egladman/magus/project"
 )
 
 func init() {
@@ -18,7 +16,7 @@ func init() {
 	// magusfile.tl and magusfiles/*.tl during project discovery in these tests.
 	// The real "magusfile" spell lives in internal/interp and can't be imported
 	// here (cycle).
-	project.DefaultSpellRegistry().RegisterSpell(types.NewSpell(
+	DefaultSpellRegistry().RegisterSpell(types.NewSpell(
 		"magusfile",
 		types.WithSources("magusfile.tl"),
 		types.WithDeclarationFiles("magusfile.tl"),
@@ -45,7 +43,7 @@ func TestSingleGoProject(t *testing.T) {
 	root := t.TempDir()
 	touch(t, root, "magusfile.tl", "")
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +68,7 @@ func TestNestedProjects(t *testing.T) {
 	touch(t, root, "api/magusfile.tl", "")
 	touch(t, root, "web/studio/magusfile.tl", "")
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +98,7 @@ func TestSkipDirs(t *testing.T) {
 		touch(t, root, skipped, "")
 	}
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,11 +121,11 @@ func TestScopeFromCwd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, ok := project.Where(ws, filepath.Join(root, "api", "internal", "store"))
+	p, ok := Where(ws, filepath.Join(root, "api", "internal", "store"))
 	if !ok {
 		t.Fatal("ScopeFromCwd: not found")
 	}
@@ -143,11 +141,11 @@ func TestScopeFromCwdAtRoot(t *testing.T) {
 	root := t.TempDir()
 	touch(t, root, "magusfile.tl", "")
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := project.Where(ws, root); ok {
+	if _, ok := Where(ws, root); ok {
 		t.Fatal("workspace root must not be returned as a cwd-scope project")
 	}
 }
@@ -159,7 +157,7 @@ func TestProjectPathSlashes(t *testing.T) {
 	root := t.TempDir()
 	touch(t, root, "web/studio/magusfile.tl", "")
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +179,7 @@ func TestUnderPath(t *testing.T) {
 	touch(t, root, "api/magusfile.tl", "")
 	touch(t, root, "magusfile.tl", "")
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +206,7 @@ func TestMagusfileTlIsTheOnlyFileMarker(t *testing.T) {
 	touch(t, root, "tools/go-form/magusfile.go", "")
 	touch(t, root, "tools/mage/magefile.go", "")
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +235,7 @@ func TestMagusFilesDirMarker(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,5 +267,5 @@ func TestRegisterSpellNilPanics(t *testing.T) {
 			t.Error("Register(nil) did not panic")
 		}
 	}()
-	project.DefaultSpellRegistry().RegisterSpell(nil)
+	DefaultSpellRegistry().RegisterSpell(nil)
 }

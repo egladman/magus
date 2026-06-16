@@ -1,0 +1,166 @@
+// ════════════════════════════════════════════════════════════════════════════
+//  magusfile.buzz — a guided tour of Buzz, the language magus is configured in.
+//
+//  This is real Buzz, running in your browser via WebAssembly. Drive it from the
+//  terminal on the right:
+//
+//      ls            the targets defined here
+//      graph         the projects, their spells, and the dependency edges
+//      run ci        dry-run a target — its dependencies first, then its steps
+//      fib(20)       evaluate any Buzz expression
+//
+//  Build steps (go-build, prettier, …) are *recorded, not executed* — a browser
+//  has no shell or filesystem. That is exactly what `magus run --dry-run` shows.
+// ════════════════════════════════════════════════════════════════════════════
+
+import "magus";            // project registration, targets, dependency edges
+import "magus/spell/go";   // the Go toolchain: go-build, go-test, go-vet, …
+import "magus/spell/ts";   // the TypeScript toolchain: tsc, eslint, vitest, …
+import "std";              // Buzz's standard library: print, assert, …
+
+// ── values & types ──────────────────────────────────────────────────────────
+// Buzz is gradually typed: annotate where it clarifies, infer where it doesn't.
+final VERSION: str = "1.0.0";   // final is immutable
+var builds = 0;                  // var is mutable; its type (int) is inferred
+
+// ── objects ─────────────────────────────────────────────────────────────────
+// Fields take defaults; methods see the receiver as `this`.
+object Project {
+    name: str = "app",
+    stars: int = 0,
+    fun badge() > str {
+        return "{this.name} ★{this.stars}";   // string interpolation
+    }
+}
+
+// ── enums ───────────────────────────────────────────────────────────────────
+enum Stage { Lint, Build, Test }
+
+// ── functions ───────────────────────────────────────────────────────────────
+// Typed parameters and return type. `!> str` declares the function may throw a str.
+fun stageName(s: Stage) > str !> str {
+    if (s == Stage.Lint)  { return "lint";  }
+    if (s == Stage.Build) { return "build"; }
+    if (s == Stage.Test)  { return "test";  }
+    throw "unknown stage";
+}
+
+// Recursion.
+fun fib(n: int) > int {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+// Higher-order: takes a function, invoked below with an inline closure. A
+// function *type* is written `fun(args) ret` — the `>` is only for declarations.
+fun each(items: [str], visit: fun(str) void) > void {
+    foreach (item in items) { visit(item); }
+}
+
+// ── the project graph ───────────────────────────────────────────────────────
+// A Go API and a TypeScript web app built on top of it. Each project binds the
+// spells that know how to build, test, and lint it. register takes a configurator
+// fun(p, cb) that emits the project's options via cb({...}); the leading path
+// selects which project — passed explicitly here since one magusfile declares two.
+magus.project.register("api", fun(p, cb) > bool { cb({
+    "spells": [go],
+    "outputs": ["bin/**"],
+    // Per-target policy: codegen runs every time (a cache hit would skip the
+    // check); the release runs isolated so nothing else touches the tree.
+    "targets": {
+        "generate": {"cachable": false},
+        "release":  {"isolated": true},
+    },
+}); return true; });
+
+magus.project.register("web", fun(p, cb) > bool { cb({
+    "spells": [ts],
+    "depends_on": ["api"],            // web is built after api
+}); return true; });
+
+// ── targets ─────────────────────────────────────────────────────────────────
+// Every exported function is a runnable target; underscores become hyphens.
+// `magus.depends_on([...])` declares order — magus runs the dependencies first,
+// deduplicated, and in parallel where the graph allows.
+
+export fun preflight(_args: [str]) > void {
+    // A map literal, iterated as (key, value) pairs.
+    final stack = {"api": "go", "web": "typescript"};
+    foreach (name, lang in stack) {
+        magus.info("{name} is a {lang} project");
+    }
+}
+
+export fun generate(_args: [str]) > void {
+    magus.depends_on(["preflight"]);
+    go["go-generate"]();
+}
+
+export fun format(_args: [str]) > void {
+    magus.depends_on(["generate"]);
+    go["go-fmt"]();
+    ts["prettier"]();
+}
+
+export fun lint(_args: [str]) > void {
+    magus.depends_on(["format"]);
+    go["go-vet"]();
+    go["golangci-lint"]();
+    ts["eslint"]();
+}
+
+export fun build(_args: [str]) > void {
+    magus.depends_on(["format"]);
+    builds = builds + 1;                   // mutate a global
+    go["go-build"]();
+    ts["tsc"]();
+}
+
+export fun test(_args: [str]) > void {
+    magus.depends_on(["format"]);
+
+    // A list, an inline closure, and a higher-order call.
+    each(["unit", "integration"], fun(kind: str) > void {
+        magus.info("running {kind} tests");
+    });
+
+    // try / catch around a function that declares it may throw.
+    try {
+        final s = stageName(Stage.Test);
+        magus.info("stage resolved to {s}");
+    } catch (err) {
+        magus.warn("stage error: {err}");
+    }
+
+    go["go-test"]();
+    ts["vitest"]();
+}
+
+// `ci` is the conventional anchor `magus affected ci` keys off — it fans the
+// pipeline out across lint, build, and test. Try `run ci` to see the full plan.
+export fun ci(_args: [str]) > void {
+    magus.depends_on(["lint", "build", "test"]);
+}
+
+// One more target, leaning on the language. Charms are run-time flags
+// (`magus run release:dry`); the playground reports none active.
+export fun release(_args: [str]) > void {
+    magus.depends_on(["ci"]);
+
+    final p = Project{ name = "magus", stars = 7 };
+    final nickname = null;
+    final label = nickname ?? p.badge();         // ?? is null-coalescing
+    magus.info("release {VERSION}: {label} ({builds} build(s), fib(10)={fib(10)})");
+
+    final ratio = 0.9;
+    if (ratio is double) {                         // `is` tests a type
+        final pct = ratio as int;                 // `as` converts
+        magus.info("ratio floors to {pct}");
+    }
+
+    if (magus.has_charm("dry")) {
+        magus.warn("dry charm active — not publishing");
+        return;
+    }
+    go["go-build"]();
+}

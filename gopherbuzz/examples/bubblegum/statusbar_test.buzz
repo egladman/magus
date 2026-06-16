@@ -1,0 +1,42 @@
+// statusbar_test.buzz — tests for the bar's pure text rendering. Runs anywhere:
+//
+//     go run ./cmd/buzz -t -L . statusbar_test.buzz
+
+import "std";
+import "statusbar";
+
+test "pillX centers the pill in its cell — symmetric padding by construction" {
+    // The pill sits inside the cell with equal margins on both sides, so the
+    // centered number label (centered in the same cell) always lands on it.
+    final i = 3;
+    final cellLeft = statusbar\barLeftX0 + std\toDouble(i) * statusbar\barCellW;
+    final leftPad = statusbar\pillX(i) - cellLeft;
+    final rightPad = (cellLeft + statusbar\barCellW) - (statusbar\pillX(i) + statusbar\pillW);
+    std\assert(leftPad == rightPad, message: "equal padding on both sides of the pill");
+    std\assert(leftPad > 0.0, message: "pill sits inside the cell with margin");
+}
+
+test "occupiedCell marks held, non-active workspaces" {
+    final counts = [2, 0, 1];
+    std\assert(statusbar\occupiedCell(2, active: 0, counts: counts), message: "ws3 holds windows and isn't active");
+    std\assert(!statusbar\occupiedCell(0, active: 0, counts: counts), message: "active cell wears the accent pill instead");
+    std\assert(!statusbar\occupiedCell(1, active: 0, counts: counts), message: "empty workspace gets no pill");
+    std\assert(statusbar\occupiedCell(0, active: 2, counts: counts), message: "a held workspace gets a pill when it isn't active");
+}
+
+test "barIconAt maps the right-edge cluster to slots" {
+    final w = 1000.0; // cluster starts at w - 96 = 904; slots are 30 wide
+    std\assert(statusbar\barIconAt(910.0, barW: w) == 0, message: "cheatsheet slot");
+    std\assert(statusbar\barIconAt(940.0, barW: w) == 1, message: "console slot");
+    std\assert(statusbar\barIconAt(970.0, barW: w) == 2, message: "reconcile slot");
+    std\assert(statusbar\barIconAt(900.0, barW: w) == 0 - 1, message: "left of cluster misses");
+    std\assert(statusbar\barIconAt(500.0, barW: w) == 0 - 1, message: "mid-bar misses");
+}
+
+test "toggle and orient zones sit left of the icon cluster" {
+    final w = 1000.0; // inner right edge = w - 96 = 904
+    std\assert(statusbar\barToggleHit(890.0, barW: w), message: "pause toggle just left of cluster");
+    std\assert(!statusbar\barToggleHit(910.0, barW: w), message: "cluster x is not the toggle");
+    std\assert(statusbar\barOrientHit(860.0, barW: w), message: "orientation glyph further left");
+    std\assert(!statusbar\barOrientHit(890.0, barW: w), message: "toggle band is not orient");
+}

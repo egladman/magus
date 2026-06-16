@@ -241,53 +241,21 @@ func FormatDur(d time.Duration) string {
 
 // WriteGraphDOT emits a deterministic Graphviz DOT digraph to w (rankdir=LR, paths quoted).
 func WriteGraphDOT(w io.Writer, out types.GraphOutput) error {
-	if _, err := fmt.Fprintln(w, "digraph magus {"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "  rankdir=LR;"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, `  node [shape=box, style=rounded];`); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, ""); err != nil {
-		return err
-	}
-
-	for _, n := range out.Nodes {
-		if _, err := fmt.Fprintf(w, "  %q;\n", n.Path); err != nil {
-			return err
-		}
-	}
-
-	hasEdges := false
-	for _, n := range out.Nodes {
-		if len(n.Children) > 0 {
-			hasEdges = true
-			break
-		}
-	}
-	if hasEdges {
-		if _, err := fmt.Fprintln(w, ""); err != nil {
-			return err
-		}
-		for _, n := range out.Nodes {
-			for _, child := range n.Children {
-				if _, err := fmt.Fprintf(w, "  %q -> %q;\n", n.Path, child); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	_, err := fmt.Fprintln(w, "}")
-	return err
+	return writeDOT(w, projectGraphIR(out))
 }
 
 // WriteGraphMermaid emits a Mermaid flowchart with spell subgraphs, BR/duration labels,
 // cross-spell edge labels, exclusive hexagons, and click-to-dir handlers.
 func WriteGraphMermaid(w io.Writer, out types.GraphOutput) error {
-	// Build ID map (path → safe mermaid identifier).
+	return writeMermaid(w, projectGraphIR(out))
+}
+
+// projectGraphIR maps the project dependency graph onto the shared RenderGraph:
+// spell buckets become subgraphs (and classes), blast-radius/duration ride in the
+// node label, exclusive nodes become hexagons, a cross-spell edge carries the
+// dependency's spell as its label, and a project dir becomes a click handler.
+func projectGraphIR(out types.GraphOutput) RenderGraph {
+	// Mermaid-safe IDs, de-duplicated with a numeric suffix on collision.
 	ids := make(map[string]string, len(out.Nodes))
 	seen := make(map[string]int)
 	for _, n := range out.Nodes {
@@ -299,64 +267,48 @@ func WriteGraphMermaid(w io.Writer, out types.GraphOutput) error {
 		ids[n.Path] = id
 	}
 
-	// Bucket nodes by spell name, preserving per-bucket sort order.
-	buckets := make(map[string][]types.Node)
-	for _, n := range out.Nodes {
-		key := n.SpellName
-		if key == "" {
-			key = "unspelled"
-		}
-		buckets[key] = append(buckets[key], n)
-	}
-	for k := range buckets {
-		slices.SortFunc(buckets[k], func(a, b types.Node) int {
-			return strings.Compare(a.Path, b.Path)
-		})
-	}
-	bucketKeys := make([]string, 0, len(buckets))
-	for k := range buckets {
-		bucketKeys = append(bucketKeys, k)
-	}
-	slices.Sort(bucketKeys)
-
-	// Spell-name lookup for edge labeling.
 	spellOf := make(map[string]string, len(out.Nodes))
+	bucketSet := map[string]bool{}
 	for _, n := range out.Nodes {
 		key := n.SpellName
 		if key == "" {
 			key = "unspelled"
 		}
 		spellOf[n.Path] = key
+		bucketSet[key] = true
 	}
+	bucketKeys := make([]string, 0, len(bucketSet))
+	for k := range bucketSet {
+		bucketKeys = append(bucketKeys, k)
+	}
+	slices.Sort(bucketKeys)
 
-	// Root set for class assignment.
 	rootSet := make(map[string]bool, len(out.Roots))
 	for _, r := range out.Roots {
 		rootSet[r] = true
 	}
 
-	// Frontmatter.
 	title := "magus dependency graph (" + out.Direction
 	if out.SpellName != "" {
 		title += ", spell=" + out.SpellName
 	}
 	title += ")"
-	if _, err := fmt.Fprintf(w, "---\ntitle: %s\n---\n", title); err != nil {
-		return err
-	}
+	g := RenderGraph{Title: title, DOTName: "magus"}
 
-	if _, err := fmt.Fprintln(w, "graph TD"); err != nil {
-		return err
-	}
-
-	// Subgraphs.
 	for _, key := range bucketKeys {
-		nodes := buckets[key]
-		if _, err := fmt.Fprintf(w, "  subgraph spell_%s[\"%s\"]\n", mermaidID(key), key); err != nil {
-			return err
+		g.Groups = append(g.Groups, RenderGroup{ID: "spell_" + mermaidID(key), Label: key})
+	}
+	// Nodes, bucket by bucket and sorted within, for deterministic output.
+	for _, key := range bucketKeys {
+		group := "spell_" + mermaidID(key)
+		var bucket []types.Node
+		for _, n := range out.Nodes {
+			if spellOf[n.Path] == key {
+				bucket = append(bucket, n)
+			}
 		}
-		for _, n := range nodes {
-			id := ids[n.Path]
+		slices.SortFunc(bucket, func(a, b types.Node) int { return strings.Compare(a.Path, b.Path) })
+		for _, n := range bucket {
 			label := n.Path
 			if n.BlastRadius > 0 {
 				label += fmt.Sprintf("<br/>BR=%d", n.BlastRadius)
@@ -364,126 +316,42 @@ func WriteGraphMermaid(w io.Writer, out types.GraphOutput) error {
 			if n.DurationMs > 0 {
 				label += "<br/>~" + FormatDur(time.Duration(n.DurationMs)*time.Millisecond)
 			}
-			var decl string
+			shape := ShapeBox
 			if n.Exclusive {
-				decl = fmt.Sprintf("    %s{{%q}}\n", id, label)
-			} else {
-				decl = fmt.Sprintf("    %s[%q]\n", id, label)
+				shape = ShapeHexagon
 			}
-			if _, err := fmt.Fprint(w, decl); err != nil {
-				return err
+			classes := []string{group}
+			if rootSet[n.Path] {
+				classes = append(classes, "root")
 			}
-		}
-		if _, err := fmt.Fprintln(w, "  end"); err != nil {
-			return err
+			rn := RenderNode{ID: ids[n.Path], DOTID: n.Path, Label: label, Shape: shape, Classes: classes, Group: group}
+			if n.Dir != "" {
+				rn.ClickURL = "file://" + n.Dir
+				rn.ClickTip = n.Path
+			}
+			g.Nodes = append(g.Nodes, rn)
 		}
 	}
-
-	// Edges.
-	hasEdges := false
+	// Edges: skip dangling children (not declared as nodes), matching prior behavior.
 	for _, n := range out.Nodes {
-		if len(n.Children) > 0 {
-			hasEdges = true
-			break
-		}
-	}
-	if hasEdges {
-		if _, err := fmt.Fprintln(w, ""); err != nil {
-			return err
-		}
-		for _, n := range out.Nodes {
-			srcSpell := spellOf[n.Path]
-			for _, child := range n.Children {
-				childID, ok := ids[child]
-				if !ok {
-					continue
-				}
-				dstSpell := spellOf[child]
-				var line string
-				if srcSpell != dstSpell {
-					line = fmt.Sprintf("  %s -->|%q| %s\n", ids[n.Path], dstSpell, childID)
-				} else {
-					line = fmt.Sprintf("  %s --> %s\n", ids[n.Path], childID)
-				}
-				if _, err := fmt.Fprint(w, line); err != nil {
-					return err
-				}
+		for _, child := range n.Children {
+			cid, ok := ids[child]
+			if !ok {
+				continue
 			}
+			label := ""
+			if spellOf[n.Path] != spellOf[child] {
+				label = spellOf[child]
+			}
+			g.Edges = append(g.Edges, RenderEdge{From: ids[n.Path], To: cid, Label: label})
 		}
-	}
-
-	// classDef declarations.
-	if _, err := fmt.Fprintln(w, ""); err != nil {
-		return err
 	}
 	for _, key := range bucketKeys {
 		fill, text := spellColor(key)
-		if _, err := fmt.Fprintf(w, "  classDef spell_%s fill:%s,color:%s\n",
-			mermaidID(key), fill, text); err != nil {
-			return err
-		}
+		g.Classes = append(g.Classes, RenderClass{Name: "spell_" + mermaidID(key), Style: fmt.Sprintf("fill:%s,color:%s", fill, text)})
 	}
 	if len(out.Roots) > 0 {
-		if _, err := fmt.Fprintln(w, "  classDef root stroke-width:3px,stroke:#000"); err != nil {
-			return err
-		}
+		g.Classes = append(g.Classes, RenderClass{Name: "root", Style: "stroke-width:3px,stroke:#000"})
 	}
-
-	// class assignments — one line per spell bucket.
-	if _, err := fmt.Fprintln(w, ""); err != nil {
-		return err
-	}
-	for _, key := range bucketKeys {
-		nodes := buckets[key]
-		nodeIDs := make([]string, len(nodes))
-		for i, n := range nodes {
-			nodeIDs[i] = ids[n.Path]
-		}
-		slices.Sort(nodeIDs)
-		if _, err := fmt.Fprintf(w, "  class %s spell_%s\n",
-			strings.Join(nodeIDs, ","), mermaidID(key)); err != nil {
-			return err
-		}
-	}
-	if len(out.Roots) > 0 {
-		var rootIDs []string
-		for _, r := range out.Roots {
-			if id, ok := ids[r]; ok {
-				rootIDs = append(rootIDs, id)
-			}
-		}
-		slices.Sort(rootIDs)
-		if len(rootIDs) > 0 {
-			if _, err := fmt.Fprintf(w, "  class %s root\n", strings.Join(rootIDs, ",")); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Click handlers.
-	hasClicks := false
-	for _, n := range out.Nodes {
-		if n.Dir != "" {
-			hasClicks = true
-			break
-		}
-	}
-	if hasClicks {
-		if _, err := fmt.Fprintln(w, ""); err != nil {
-			return err
-		}
-		for _, key := range bucketKeys {
-			for _, n := range buckets[key] {
-				if n.Dir == "" {
-					continue
-				}
-				if _, err := fmt.Fprintf(w, "  click %s \"file://%s\" \"%s\"\n",
-					ids[n.Path], n.Dir, n.Path); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
+	return g
 }

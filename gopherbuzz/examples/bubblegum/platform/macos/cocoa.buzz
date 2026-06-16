@@ -1,0 +1,501 @@
+// platform/macos/cocoa.buzz — a minimal AppKit toolkit, in pure Buzz.
+//
+// There is no GUI toolkit in Buzz and no C drawing API on macOS that can make
+// a window — windows belong to AppKit, which is Objective-C. But Objective-C
+// itself is driven entirely through a *C* runtime (/usr/lib/libobjc.A.dylib):
+// objc_getClass / sel_registerName / objc_msgSend. Binding those three gives
+// Buzz the whole framework, one message at a time.
+//
+// Two ABI rules shape everything here:
+//
+//   - objc_msgSend has no fixed signature; it must be called *as if* it were
+//     the target method. zdef binds one prototype per symbol, so each message
+//     shape gets its own module (platform/macos/objc/msgN.buzz) that exports a
+//     wrapper; cocoa imports the seven shapes and re-wraps them into its own
+//     send..sendPointSize API so callers stay unchanged.
+//   - Structs ≤16 bytes (NSPoint, NSSize) pass by value in registers — i.e.
+//     as two double arguments — on both arm64 and x86-64. Larger structs
+//     (NSRect, 32 bytes) diverge between the two ABIs, so this toolkit never
+//     passes one: windows are shaped with setContentSize:/setFrameOrigin:
+//     (NSSize/NSPoint) instead of initWithContentRect:(NSRect).
+//
+// Handles are foreign pointers, typed `ud?` (a nullable userdata): nil objects
+// surface as `null`. AppKit is single-thread-affine; cmd/buzz pins the
+// interpreter to the main OS thread (runtime.LockOSThread) so these calls are
+// safe. The toolkit is deliberately tiny: a borderless panel and text rows —
+// enough for a dmenu.
+//
+// Coordinates are AppKit-native: origin at the bottom-left of the screen.
+
+namespace cocoa;
+
+import "ffi";
+import "platform/macos/frameworks";
+import "platform/macos/objc/msg0";
+import "platform/macos/objc/msg1";
+import "platform/macos/objc/msg2";
+import "platform/macos/objc/msgStr";
+import "platform/macos/objc/msgI1";
+import "platform/macos/objc/msgB1";
+import "platform/macos/objc/msgD1";
+import "platform/macos/objc/msgD2";
+
+// objc_getClass / sel_registerName drive the runtime; co-located with their
+// callers (cls/sel) so the zdef-declared symbols stay in module scope.
+zdef("objc", "fn objc_getClass(name: [*:0]const u8) ?*anyopaque; fn sel_registerName(name: [*:0]const u8) ?*anyopaque;");
+
+// AppKit is a framework, not a plain dylib: its binary lives in the dyld
+// shared cache with no on-disk `.dylib` (since macOS Big Sur). Upstream buzz's
+// zdef lib-search only ever tries search-path templates with `.dylib` appended,
+// so it can't name a framework by path. Instead frameworks\openLib (a dlopen
+// wrapper) loads AppKit by its verbatim path at startup (see uiInit) — passing
+// the path straight to dlopen bypasses the lib-search, and dyld resolves it from
+// the shared cache. dlopen is declared once in frameworks (upstream forbids
+// re-declaring a zdef'd symbol), so we go through its export here.
+
+// send..sendPointSize forward to the per-shape objc_msgSend modules (see header).
+fun send(self: ud?, op: ud?) > ud? {
+    return msg0\send(self, op: op);
+}
+
+fun sendObject(self: ud?, op: ud?, a: ud?) > ud? {
+    return msg1\sendObject(self, op: op, a: a);
+}
+
+fun sendObject2(self: ud?, op: ud?, a: ud?, b: ud?) > ud? {
+    return msg2\sendObject2(self, op: op, a: a, b: b);
+}
+
+fun sendString(self: ud?, op: ud?, s: str) > ud? {
+    return msgStr\sendString(self, op: op, s: s);
+}
+
+fun sendInteger(self: ud?, op: ud?, a: double) > ud? {
+    return msgI1\sendInteger(self, op: op, a: a);
+}
+
+fun sendFlag(self: ud?, op: ud?, a: bool) > ud? {
+    return msgB1\sendFlag(self, op: op, a: a);
+}
+
+fun sendNumber(self: ud?, op: ud?, a: double) > ud? {
+    return msgD1\sendNumber(self, op: op, a: a);
+}
+
+fun sendPointSize(self: ud?, op: ud?, a: double, b: double) > ud? {
+    return msgD2\sendPointSize(self, op: op, a: a, b: b);
+}
+
+// cls/sel intern class and selector handles (both live for the process).
+final clsCache = mut {<str: ud>};
+final selCache = mut {<str: ud>};
+
+fun cls(name: str) > ud? {
+    final hit = clsCache[name];
+    if (hit != null) {
+        return hit;
+    }
+    final c = objc_getClass(ffi\cstr(name));
+    if (c != null) {
+        clsCache[name] = c!;
+    }
+    return c;
+}
+
+fun sel(name: str) > ud? {
+    final hit = selCache[name];
+    if (hit != null) {
+        return hit;
+    }
+    final s = sel_registerName(ffi\cstr(name));
+    if (s != null) {
+        selCache[name] = s!;
+    }
+    return s;
+}
+
+fun nsstr(s: str) > ud? {
+    return sendString(cls("NSString"), op: sel("stringWithUTF8String:"), s: s);
+}
+
+fun newObj(className: str) > ud? {
+    return send(send(cls(className), op: sel("alloc")), op: sel("init"));
+}
+
+var appKitLoaded = false;
+var pool: ud? = null;
+
+// uiInit stands up the shared NSApplication as an accessory (no Dock icon,
+// windows allowed) and opens an autorelease pool for the messages that follow.
+export fun uiInit() > void {
+    if (appKitLoaded) {
+        return;
+    }
+    // Pull AppKit into the process so its classes (NSApplication, NSWindow, …)
+    // register with the Objective-C runtime. The verbatim framework path goes
+    // straight to dlopen; dyld resolves it from the shared cache. RTLD_LAZY |
+    // RTLD_GLOBAL = 9. Must precede the first objc_getClass("NS…") below.
+    _ = frameworks\openLib("/System/Library/Frameworks/AppKit.framework/AppKit", mode: 9);
+    _ = send(cls("NSApplication"), op: sel("sharedApplication"));
+    _ = sendInteger(send(cls("NSApplication"), op: sel("sharedApplication")),
+        op: sel("setActivationPolicy:"), a: 1.0); // NSApplicationActivationPolicyAccessory
+    pool = newObj("NSAutoreleasePool");
+    appKitLoaded = true;
+}
+
+// --- theme: a single toolkit-wide switch every surface consults ---
+//
+// "macos" dresses panels in translucent system materials with dynamic (light/dark)
+// colors; "i3" uses solid dark panels with fixed light text. The WM sets it once
+// from config before any UI is built; uiOverlayPanel / uiThemedLabel / the status
+// bar read it so the whole UI moves together.
+var uiThemeName = "macos";
+
+export fun uiSetTheme(name: str) > void {
+    uiThemeName = name;
+}
+
+export fun uiTheme() > str {
+    return uiThemeName;
+}
+
+export fun uiIsMac() > bool {
+    return uiThemeName == "macos";
+}
+
+// uiMaterialPanel creates a borderless, always-on-top panel whose backdrop is a
+// translucent NSVisualEffectView of the given material (set as the content view),
+// so anything added afterward lands inside it and picks up vibrancy. material is an
+// NSVisualEffectMaterial raw value (5 = menu, 6 = popover, …).
+export fun uiMaterialPanel(x: double, y: double, w: double, h: double, material: double) > ud? {
+    final win = newObj("NSWindow");
+    _ = sendInteger(win, op: sel("setStyleMask:"), a: 0.0);   // borderless
+    _ = sendFlag(win, op: sel("setReleasedWhenClosed:"), a: false);
+    _ = sendInteger(win, op: sel("setLevel:"), a: 25.0);      // NSStatusWindowLevel
+    _ = sendFlag(win, op: sel("setOpaque:"), a: false);       // let the material show through
+    _ = sendFlag(win, op: sel("setHidesOnDeactivate:"), a: false);
+    _ = sendObject(win, op: sel("setBackgroundColor:"), a: send(cls("NSColor"), op: sel("clearColor")));
+    _ = sendPointSize(win, op: sel("setContentSize:"), a: w, b: h);
+    _ = sendPointSize(win, op: sel("setFrameOrigin:"), a: x, b: y);
+    final fx = newObj("NSVisualEffectView");
+    _ = sendInteger(fx, op: sel("setMaterial:"), a: material);
+    _ = sendInteger(fx, op: sel("setBlendingMode:"), a: 0.0);  // behind window (desktop tint)
+    _ = sendInteger(fx, op: sel("setState:"), a: 1.0);         // active: always materialized
+    _ = sendFlag(fx, op: sel("setWantsLayer:"), a: true);
+    final fxLayer = send(fx, op: sel("layer"));
+    _ = sendNumber(fxLayer, op: sel("setCornerRadius:"), a: 8.0);
+    _ = sendFlag(fxLayer, op: sel("setMasksToBounds:"), a: true);
+    _ = sendObject(win, op: sel("setContentView:"), a: fx);
+    return win;
+}
+
+// uiMenuBarPanel is the status bar's backdrop on the macOS theme: an OPAQUE window
+// painted with the system windowBackgroundColor (which adapts to light/dark). The
+// top menu bar only ever frosts the wallpaper, so on a solid desktop it looks
+// opaque; an opaque bottom bar matches that instead of frosting the windows behind
+// it (which read as busy/translucent). i3 uses a solid dark uiPanel.
+export fun uiMenuBarPanel(x: double, y: double, w: double, h: double) > ud? {
+    final win = newObj("NSWindow");
+    _ = sendInteger(win, op: sel("setStyleMask:"), a: 0.0);   // borderless
+    _ = sendFlag(win, op: sel("setReleasedWhenClosed:"), a: false);
+    _ = sendInteger(win, op: sel("setLevel:"), a: 25.0);      // NSStatusWindowLevel
+    _ = sendFlag(win, op: sel("setOpaque:"), a: true);
+    _ = sendFlag(win, op: sel("setHidesOnDeactivate:"), a: false);
+    _ = sendObject(win, op: sel("setBackgroundColor:"), a: send(cls("NSColor"), op: sel("windowBackgroundColor")));
+    _ = sendPointSize(win, op: sel("setContentSize:"), a: w, b: h);
+    _ = sendPointSize(win, op: sel("setFrameOrigin:"), a: x, b: y);
+    return win;
+}
+
+// uiSetSystemFont swaps a label to the proportional system font (SF) at the given
+// size — what macOS menus use, so bar/menu text matches the OS rather than the
+// monospaced default uiLabel ships with.
+export fun uiSetSystemFont(label: ud?, size: double) > void {
+    final font = sendPointSize(cls("NSFont"), op: sel("systemFontOfSize:weight:"), a: size, b: 0.0);
+    _ = sendObject(label, op: sel("setFont:"), a: font);
+}
+
+// uiSetSystemFontWeighted is uiSetSystemFont with an explicit NSFontWeight
+// (-1.0…1.0; 0.0 regular, 0.3 semibold, 0.4 bold) — for overlay titles that want
+// a touch more weight than the body text around them.
+export fun uiSetSystemFontWeighted(label: ud?, size: double, weight: double) > void {
+    final font = sendPointSize(cls("NSFont"), op: sel("systemFontOfSize:weight:"), a: size, b: weight);
+    _ = sendObject(label, op: sel("setFont:"), a: font);
+}
+
+// uiOverlayPanel is the themed backdrop for floating overlays (cheatsheet,
+// inspector, launcher, tray menu): a frosted popover material on macOS, a solid
+// dark panel on i3.
+export fun uiOverlayPanel(x: double, y: double, w: double, h: double) > ud? {
+    if (uiIsMac()) {
+        return uiMaterialPanel(x, y: y, w: w, h: h, material: 6.0); // NSVisualEffectMaterialPopover
+    }
+    return uiPanel(x, y: y, w: w, h: h, gray: 0.11, alpha: 0.96);
+}
+
+// uiNamedColor fetches a dynamic system color by its NSColor class-method name
+// (labelColor, secondaryLabelColor, controlAccentColor, …). These adapt to the
+// view's effective appearance, so text on the menu-material bar follows light/dark.
+export fun uiNamedColor(name: str) > ud? {
+    return send(cls("NSColor"), op: sel(name));
+}
+
+// uiColorAlpha returns a copy of color at the given alpha (NSColor
+// colorWithAlphaComponent:), e.g. the accent color softened for a highlight pill.
+export fun uiColorAlpha(color: ud?, alpha: double) > ud? {
+    return sendNumber(color, op: sel("colorWithAlphaComponent:"), a: alpha);
+}
+
+// uiImageFromFile loads an NSImage from a path (absolute or CWD-relative) and
+// marks it as a template so macOS auto-adapts it for light/dark menu bars.
+// Returns null if the file does not exist or cannot be decoded.
+export fun uiImageFromFile(path: str) > ud? {
+    final alloc = send(cls("NSImage"), op: sel("alloc"));
+    final img = sendObject(alloc, op: sel("initWithContentsOfFile:"), a: nsstr(path));
+    if (img != null) {
+        _ = sendPointSize(img, op: sel("setSize:"), a: 26.0, b: 26.0); // menu bar size (pt)
+        _ = sendFlag(img, op: sel("setTemplate:"), a: true);
+    }
+    return img;
+}
+
+// uiSymbolImage loads an SF Symbol (system template image) by name at a point size
+// and font weight, e.g. "magnifyingglass". Returns null if the symbol is unknown.
+export fun uiSymbolImage(name: str, pointSize: double, weight: double) > ud? {
+    final img = sendObject2(cls("NSImage"), op: sel("imageWithSystemSymbolName:accessibilityDescription:"), a: nsstr(name), b: null);
+    if (img == null) {
+        return null;
+    }
+    final cfg = sendPointSize(cls("NSImageSymbolConfiguration"), op: sel("configurationWithPointSize:weight:"), a: pointSize, b: weight);
+    return sendObject(img, op: sel("imageWithSymbolConfiguration:"), a: cfg);
+}
+
+// uiImageView adds an NSImageView holding image to the panel, tinted with color
+// (template images render in the tint). Returns its handle so the image can change.
+export fun uiImageView(panel: ud?, x: double, y: double, w: double, h: double, image: ud?, tint: ud?) > ud? {
+    final v = newObj("NSImageView");
+    _ = sendObject(v, op: sel("setImage:"), a: image);
+    _ = sendObject(v, op: sel("setContentTintColor:"), a: tint);
+    _ = sendPointSize(v, op: sel("setFrameOrigin:"), a: x, b: y);
+    _ = sendPointSize(v, op: sel("setFrameSize:"), a: w, b: h);
+    _ = sendObject(send(panel, op: sel("contentView")), op: sel("addSubview:"), a: v);
+    return v;
+}
+
+export fun uiImageViewSetImage(view: ud?, image: ud?) > void {
+    _ = sendObject(view, op: sel("setImage:"), a: image);
+}
+
+// uiPanel creates a borderless, always-on-top panel of the given frame and
+// background gray/alpha. Returns its handle.
+export fun uiPanel(x: double, y: double, w: double, h: double, gray: double, alpha: double) > ud? {
+    final win = newObj("NSWindow");
+    _ = sendInteger(win, op: sel("setStyleMask:"), a: 0.0); // NSWindowStyleMaskBorderless
+    _ = sendFlag(win, op: sel("setReleasedWhenClosed:"), a: false);
+    _ = sendInteger(win, op: sel("setLevel:"), a: 25.0);    // NSStatusWindowLevel: above normal windows
+    _ = sendFlag(win, op: sel("setOpaque:"), a: false);
+    _ = sendFlag(win, op: sel("setHidesOnDeactivate:"), a: false);
+    final bg = sendPointSize(cls("NSColor"), op: sel("colorWithCalibratedWhite:alpha:"), a: gray, b: alpha);
+    _ = sendObject(win, op: sel("setBackgroundColor:"), a: bg);
+    _ = sendPointSize(win, op: sel("setContentSize:"), a: w, b: h);   // NSSize: two doubles by value
+    _ = sendPointSize(win, op: sel("setFrameOrigin:"), a: x, b: y);   // NSPoint: likewise
+    return win;
+}
+
+// uiLabel adds a static text row to the panel: monospaced (dmenu heritage),
+// no border, no background, given point size and text gray level.
+export fun uiLabel(panel: ud?, x: double, y: double, w: double, h: double, size: double, gray: double) > ud? {
+    final label = newObj("NSTextField");
+    _ = sendFlag(label, op: sel("setBezeled:"), a: false);
+    _ = sendFlag(label, op: sel("setBordered:"), a: false);
+    _ = sendFlag(label, op: sel("setEditable:"), a: false);
+    _ = sendFlag(label, op: sel("setSelectable:"), a: false);
+    _ = sendFlag(label, op: sel("setDrawsBackground:"), a: false);
+    final font = sendPointSize(cls("NSFont"), op: sel("monospacedSystemFontOfSize:weight:"), a: size, b: 0.0);
+    _ = sendObject(label, op: sel("setFont:"), a: font);
+    final color = sendPointSize(cls("NSColor"), op: sel("colorWithCalibratedWhite:alpha:"), a: gray, b: 1.0);
+    _ = sendObject(label, op: sel("setTextColor:"), a: color);
+    _ = sendPointSize(label, op: sel("setFrameOrigin:"), a: x, b: y);
+    _ = sendPointSize(label, op: sel("setFrameSize:"), a: w, b: h);
+    _ = sendObject(send(panel, op: sel("contentView")), op: sel("addSubview:"), a: label);
+    return label;
+}
+
+// uiStatusItem puts bubblegum in the menu bar (top right): an NSStatusBar
+// item with a text title — presence plus a live glyph of state. Returned
+// retained (status items vanish if released). Click handling would need a
+// runtime ObjC class for the target/action pair; the indicator stays
+// passive instead.
+export fun uiStatusItem(title: str) > ud? {
+    uiInit();
+    final bar = send(cls("NSStatusBar"), op: sel("systemStatusBar"));
+    final item = sendNumber(bar, op: sel("statusItemWithLength:"), a: 0.0 - 1.0); // NSVariableStatusItemLength
+    _ = send(item, op: sel("retain"));
+    uiStatusItemSetTitle(item, title: title);
+    return item;
+}
+
+export fun uiStatusItemSetTitle(item: ud?, title: str) > void {
+    final button = send(item, op: sel("button"));
+    if (button != null) {
+        _ = sendObject(button, op: sel("setTitle:"), a: nsstr(title));
+    }
+}
+
+// uiStatusItemSetImage puts an image (e.g. an SF Symbol) on the menu-bar item's
+// button. Status-bar buttons render template images monochrome and auto-adapt to
+// light/dark, so no tint is needed.
+export fun uiStatusItemSetImage(item: ud?, image: ud?) > void {
+    final button = send(item, op: sel("button"));
+    if (button != null) {
+        _ = sendObject(button, op: sel("setImage:"), a: image);
+        _ = sendInteger(button, op: sel("setImagePosition:"), a: 2.0); // NSImageLeft: show image + title
+    }
+}
+
+// uiStatusItemButton returns the status item's NSStatusBarButton (an NSView) —
+// the click target whose on-screen frame locates the menu-bar icon.
+export fun uiStatusItemButton(item: ud?) > ud? {
+    return send(item, op: sel("button"));
+}
+
+// uiFill adds a layer-backed rounded rectangle to the panel: a plain filled
+// background (no text, no border), e.g. a subtle tint behind the workspace cells.
+// Added before the labels so it sits beneath them.
+export fun uiFill(panel: ud?, x: double, y: double, w: double, h: double, color: ud?, radius: double) > ud? {
+    final view = newObj("NSView");
+    _ = sendFlag(view, op: sel("setWantsLayer:"), a: true);
+    final layer = send(view, op: sel("layer"));
+    _ = sendObject(layer, op: sel("setBackgroundColor:"), a: send(color, op: sel("CGColor")));
+    _ = sendNumber(layer, op: sel("setCornerRadius:"), a: radius);
+    _ = sendFlag(layer, op: sel("setMasksToBounds:"), a: true);
+    _ = sendPointSize(view, op: sel("setFrameOrigin:"), a: x, b: y);
+    _ = sendPointSize(view, op: sel("setFrameSize:"), a: w, b: h);
+    _ = sendObject(send(panel, op: sel("contentView")), op: sel("addSubview:"), a: view);
+    return view;
+}
+
+// uiSetFillColor recolors a uiFill view in place — its color lives on the backing
+// layer as a CGColor (not the NSView's backgroundColor), so it needs the same path
+// uiFill used. Used for the tray menu's status dot (green running / amber paused).
+export fun uiSetFillColor(view: ud?, color: ud?) > void {
+    final layer = send(view, op: sel("layer"));
+    _ = sendObject(layer, op: sel("setBackgroundColor:"), a: send(color, op: sel("CGColor")));
+}
+
+// uiBorderPanel creates a borderless, always-on-top window that draws ONLY a
+// rounded-rectangle border — clear fill, colored stroke: the focus ring. radius is
+// the corner radius (match the window corner radius); color the stroke color. The
+// stroke width is set separately (uiSetBorderWidth) since it tracks the live config.
+// uiSetPanelFrame moves/resizes it; the backing layer re-rounds at the new size.
+export fun uiBorderPanel(radius: double, color: ud?) > ud? {
+    final win = newObj("NSWindow");
+    _ = sendInteger(win, op: sel("setStyleMask:"), a: 0.0);   // borderless
+    _ = sendFlag(win, op: sel("setReleasedWhenClosed:"), a: false);
+    _ = sendInteger(win, op: sel("setLevel:"), a: 25.0);      // NSStatusWindowLevel
+    _ = sendFlag(win, op: sel("setOpaque:"), a: false);
+    _ = sendFlag(win, op: sel("setHidesOnDeactivate:"), a: false);
+    _ = sendObject(win, op: sel("setBackgroundColor:"), a: send(cls("NSColor"), op: sel("clearColor")));
+    final view = newObj("NSView");
+    _ = sendFlag(view, op: sel("setWantsLayer:"), a: true);
+    final layer = send(view, op: sel("layer"));
+    // Clear fill so only the stroke shows; the window content behind shows through.
+    _ = sendObject(layer, op: sel("setBackgroundColor:"), a: send(send(cls("NSColor"), op: sel("clearColor")), op: sel("CGColor")));
+    _ = sendNumber(layer, op: sel("setCornerRadius:"), a: radius);
+    _ = sendObject(layer, op: sel("setBorderColor:"), a: send(color, op: sel("CGColor")));
+    _ = sendObject(win, op: sel("setContentView:"), a: view);
+    return win;
+}
+
+// uiSetBorderWidth sets the stroke width of a uiBorderPanel's rounded border (the
+// border is drawn inside the layer bounds, so it stays within the panel frame).
+export fun uiSetBorderWidth(panel: ud?, width: double) > void {
+    final layer = send(send(panel, op: sel("contentView")), op: sel("layer"));
+    _ = sendNumber(layer, op: sel("setBorderWidth:"), a: width);
+}
+
+// uiSetCornerRadius updates a uiBorderPanel's corner radius. The stroke is drawn
+// inside the bounds, so the border's INNER radius is (radius - borderWidth) — set
+// radius to windowRadius + borderWidth for the inner edge to hug the window.
+export fun uiSetCornerRadius(panel: ud?, radius: double) > void {
+    final layer = send(send(panel, op: sel("contentView")), op: sel("layer"));
+    _ = sendNumber(layer, op: sel("setCornerRadius:"), a: radius);
+}
+
+// uiSetFrame repositions and resizes a view within its superview (AppKit coords).
+export fun uiSetFrame(view: ud?, x: double, y: double, w: double, h: double) > void {
+    _ = sendPointSize(view, op: sel("setFrameOrigin:"), a: x, b: y);
+    _ = sendPointSize(view, op: sel("setFrameSize:"), a: w, b: h);
+}
+
+// uiSetPanelFrame repositions and resizes a panel (AppKit coordinates).
+export fun uiSetPanelFrame(panel: ud?, x: double, y: double, w: double, h: double) > void {
+    _ = sendPointSize(panel, op: sel("setContentSize:"), a: w, b: h);
+    _ = sendPointSize(panel, op: sel("setFrameOrigin:"), a: x, b: y);
+}
+
+// uiIgnoreMouse makes a panel click-through — overlay chrome (the focus
+// ring, the cheat sheet) must never steal a click from the window below.
+export fun uiIgnoreMouse(panel: ud?) > void {
+    _ = sendFlag(panel, op: sel("setIgnoresMouseEvents:"), a: true);
+}
+
+export fun uiAlignRight(label: ud?) > void {
+    _ = sendInteger(label, op: sel("setAlignment:"), a: 1.0); // NSTextAlignmentRight on macOS
+}
+
+export fun uiAlignCenter(label: ud?) > void {
+    _ = sendInteger(label, op: sel("setAlignment:"), a: 2.0); // NSTextAlignmentCenter on macOS
+}
+
+// uiSetToolTip attaches a hover tooltip to a view. Best-effort on the bar: a
+// borderless, non-activating panel may never receive the mouse-moved/tracking
+// events AppKit needs to fire the tooltip, so this can be a no-op there.
+export fun uiSetToolTip(view: ud?, text: str) > void {
+    _ = sendObject(view, op: sel("setToolTip:"), a: nsstr(text));
+}
+
+export fun uiSetText(label: ud?, text: str) > void {
+    _ = sendObject(label, op: sel("setStringValue:"), a: nsstr(text));
+}
+
+// uiSetTextColor overrides a label's text color, e.g. with a dynamic system color
+// from uiNamedColor so it follows the appearance.
+export fun uiSetTextColor(label: ud?, color: ud?) > void {
+    _ = sendObject(label, op: sel("setTextColor:"), a: color);
+}
+
+// uiThemedLabel is uiLabel with theme-aware color: on i3 it keeps the given gray;
+// on macOS it swaps to a dynamic system color (labelColor for bright grays ≥ 0.9,
+// secondaryLabelColor for dimmer ones) so overlay text follows light/dark.
+export fun uiThemedLabel(panel: ud?, x: double, y: double, w: double, h: double, size: double, gray: double) > ud? {
+    final lb = uiLabel(panel, x: x, y: y, w: w, h: h, size: size, gray: gray);
+    if (uiIsMac()) {
+        var c = uiNamedColor("labelColor");
+        if (gray < 0.9) {
+            c = uiNamedColor("secondaryLabelColor");
+        }
+        uiSetTextColor(lb, color: c);
+    }
+    return lb;
+}
+
+// uiSetPanelColor sets a panel/view's background color (used to tint the focus
+// ring's edge panels with the theme accent).
+export fun uiSetPanelColor(panel: ud?, color: ud?) > void {
+    _ = sendObject(panel, op: sel("setBackgroundColor:"), a: color);
+}
+
+export fun uiShow(panel: ud?) > void {
+    _ = send(panel, op: sel("orderFrontRegardless"));
+}
+
+// uiHide orders the panel out and cycles the autorelease pool, releasing the
+// NSStrings accumulated by uiSetText while the panel was up.
+export fun uiHide(panel: ud?) > void {
+    _ = sendObject(panel, op: sel("orderOut:"), a: null);
+    if (pool != null) {
+        _ = send(pool, op: sel("drain"));
+        pool = newObj("NSAutoreleasePool");
+    }
+}

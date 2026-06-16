@@ -1,10 +1,8 @@
-package types_test
+package types
 
 import (
 	"slices"
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
 func TestParseTarget(t *testing.T) {
@@ -27,7 +25,7 @@ func TestParseTarget(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			got, err := types.ParseTarget(tc.in)
+			got, err := ParseTarget(tc.in)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("ParseTarget(%q) = %+v, want error", tc.in, got)
@@ -48,20 +46,20 @@ func TestParseTarget(t *testing.T) {
 func TestValidateTargetName(t *testing.T) {
 	valid := []string{"build", "test", "lint-fix", "gen_2", "ABC123", "a"}
 	for _, n := range valid {
-		if err := types.ValidateTargetName(n); err != nil {
+		if err := ValidateTargetName(n); err != nil {
 			t.Errorf("ValidateTargetName(%q) = %v, want nil", n, err)
 		}
 	}
 	invalid := []string{"", "lint:read", "go::lint", "foo@bar", "web/studio", "build prod", "test.unit"}
 	for _, n := range invalid {
-		if err := types.ValidateTargetName(n); err == nil {
+		if err := ValidateTargetName(n); err == nil {
 			t.Errorf("ValidateTargetName(%q) = nil, want error", n)
 		}
 	}
 }
 
 func TestDefaultTargetNameNormalizer(t *testing.T) {
-	norm := types.DefaultTargetNameNormalizer
+	norm := DefaultTargetNameNormalizer
 	cases := []struct{ in, want string }{
 		{"go_build", "go-build"},
 		{"goBuild", "go-build"},
@@ -78,12 +76,12 @@ func TestDefaultTargetNameNormalizer(t *testing.T) {
 
 func TestValidateCharmName(t *testing.T) {
 	for _, n := range []string{"read", "write", "strict", "ci-only", "x"} {
-		if err := types.ValidateCharmName(n); err != nil {
+		if err := ValidateCharmName(n); err != nil {
 			t.Errorf("ValidateCharmName(%q) = %v, want nil", n, err)
 		}
 	}
 	for _, n := range []string{"", "read:write", "a b", "fast@v2"} {
-		if err := types.ValidateCharmName(n); err == nil {
+		if err := ValidateCharmName(n); err == nil {
 			t.Errorf("ValidateCharmName(%q) = nil, want error", n)
 		}
 	}

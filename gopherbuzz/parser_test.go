@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/ast"
 )
 
 func TestParse_ValidProgram(t *testing.T) {
@@ -26,6 +27,26 @@ func TestParse_ValidProgram(t *testing.T) {
 				t.Fatal("Parse returned nil program without error")
 			}
 		})
+	}
+}
+
+// A `::<T>` generic call argument must be captured on the CallExpr so the
+// checker can use it as the call's result type (upstream Buzz semantics).
+func TestParse_GenericCallTypeArg(t *testing.T) {
+	prog, err := buzz.Parse(`final x = b.readZAt::<double>(at: 0);`)
+	if err != nil {
+		t.Fatalf("Parse: unexpected error: %v", err)
+	}
+	decl, ok := prog.Stmts[0].(*ast.DeclStmt)
+	if !ok {
+		t.Fatalf("stmt 0 is %T, want *ast.DeclStmt", prog.Stmts[0])
+	}
+	call, ok := decl.Value.(*ast.CallExpr)
+	if !ok {
+		t.Fatalf("decl value is %T, want *ast.CallExpr", decl.Value)
+	}
+	if call.TypeArg != "double" {
+		t.Errorf("CallExpr.TypeArg = %q, want %q", call.TypeArg, "double")
 	}
 }
 

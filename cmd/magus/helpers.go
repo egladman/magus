@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -81,7 +81,7 @@ func loadMagus(ctx context.Context, rootOverride string) (*magus.Magus, error) {
 		stop := t.phase("magus.open")
 		opts := []magus.Option{magus.WithLoadedConfig(globalCfg)}
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
-			opts = append(opts, wire.WithLimiter(lim))
+			opts = append(opts, workspace.WithLimiter(lim))
 		}
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
 		stop()

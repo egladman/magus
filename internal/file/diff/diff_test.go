@@ -1,11 +1,9 @@
-package diff_test
+package diff
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/egladman/magus/internal/file/diff"
 )
 
 func TestTakeAndChanged(t *testing.T) {
@@ -20,14 +18,14 @@ func TestTakeAndChanged(t *testing.T) {
 	writeFile("a.txt", "hello")
 	writeFile("b.txt", "world")
 
-	pre := diff.Take([]string{dir})
+	pre := Take([]string{dir})
 
 	// Modify one file, add a new one.
 	writeFile("a.txt", "modified")
 	writeFile("c.txt", "new")
 
-	post := diff.Take([]string{dir})
-	changed := diff.Changed(pre, post)
+	post := Take([]string{dir})
+	changed := Changed(pre, post)
 
 	changedSet := make(map[string]bool, len(changed))
 	for _, p := range changed {
@@ -46,7 +44,7 @@ func TestTakeAndChanged(t *testing.T) {
 }
 
 func TestTakeMissingDir(t *testing.T) {
-	snap := diff.Take([]string{"/nonexistent/path/that/does/not/exist"})
+	snap := Take([]string{"/nonexistent/path/that/does/not/exist"})
 	if len(snap) != 0 {
 		t.Errorf("expected empty snap for missing dir, got %d entries", len(snap))
 	}
@@ -63,18 +61,18 @@ func TestHashContent_DetectsChange(t *testing.T) {
 
 	writeFile("a.txt", "hello")
 	writeFile("b.txt", "world")
-	pre := diff.HashContent([]string{dir})
+	pre := HashContent([]string{dir})
 
 	// Same content → no diff.
-	post := diff.HashContent([]string{dir})
-	if diffs := diff.DiffContent(pre, post); len(diffs) != 0 {
+	post := HashContent([]string{dir})
+	if diffs := DiffContent(pre, post); len(diffs) != 0 {
 		t.Errorf("expected no diffs for unchanged content, got %v", diffs)
 	}
 
 	// Change content → diff.
 	writeFile("a.txt", "HELLO")
-	post2 := diff.HashContent([]string{dir})
-	diffs := diff.DiffContent(pre, post2)
+	post2 := HashContent([]string{dir})
+	diffs := DiffContent(pre, post2)
 	if len(diffs) != 1 {
 		t.Errorf("expected 1 diff, got %d: %v", len(diffs), diffs)
 	}
@@ -83,8 +81,8 @@ func TestHashContent_DetectsChange(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "b.txt")); err != nil {
 		t.Fatal(err)
 	}
-	post3 := diff.HashContent([]string{dir})
-	diffs = diff.DiffContent(pre, post3)
+	post3 := HashContent([]string{dir})
+	diffs = DiffContent(pre, post3)
 	if len(diffs) != 2 {
 		t.Errorf("expected 2 diffs (modified+removed), got %d: %v", len(diffs), diffs)
 	}
@@ -102,7 +100,7 @@ func TestGlobBaseDirs(t *testing.T) {
 	}
 	root := "/workspace/api"
 	for _, tc := range tests {
-		dirs := diff.GlobBaseDirs(root, []string{tc.glob})
+		dirs := GlobBaseDirs(root, []string{tc.glob})
 		if len(dirs) == 0 {
 			t.Errorf("GlobBaseDirs(%q, %q): got no dirs", root, tc.glob)
 			continue

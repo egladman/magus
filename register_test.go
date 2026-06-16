@@ -59,9 +59,9 @@ func makeWorkspaceRoot(t *testing.T, manifests ...string) string {
 func TestWithDependsOnRelativeSibling(t *testing.T) {
 	root := makeWorkspaceRoot(
 		t,
-		"magusfile.bzz",                  // project "."
-		"extensions/api/magusfile.bzz",   // project "extensions/api"
-		"extensions/drape/magusfile.bzz", // project "extensions/drape"
+		"magusfile.buzz",                  // project "."
+		"extensions/api/magusfile.buzz",   // project "extensions/api"
+		"extensions/drape/magusfile.buzz", // project "extensions/drape"
 	)
 
 	reg := NewWorkspaceRegistry()
@@ -92,8 +92,8 @@ func TestWithDependsOnRelativeSibling(t *testing.T) {
 func TestWithDependsOnRelativeUpTwo(t *testing.T) {
 	root := makeWorkspaceRoot(
 		t,
-		"magusfile.bzz",
-		"a/b/c/magusfile.bzz",
+		"magusfile.buzz",
+		"a/b/c/magusfile.buzz",
 	)
 
 	reg := NewWorkspaceRegistry()
@@ -125,8 +125,8 @@ func TestWithDependsOnRelativeUpTwo(t *testing.T) {
 func TestWithDependsOnBarePathUnchanged(t *testing.T) {
 	root := makeWorkspaceRoot(
 		t,
-		"magusfile.bzz",
-		"api/magusfile.bzz",
+		"magusfile.buzz",
+		"api/magusfile.buzz",
 	)
 
 	reg := NewWorkspaceRegistry()
@@ -156,7 +156,7 @@ func TestWithDependsOnBarePathUnchanged(t *testing.T) {
 // TestWithDependsOnEscapesRoot verifies that a relative path that
 // would escape the workspace root is rejected.
 func TestWithDependsOnEscapesRoot(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("../outside"))
@@ -171,7 +171,7 @@ func TestWithDependsOnEscapesRoot(t *testing.T) {
 // both the Spell and Spells fields via Register.
 func TestWithSpellAddsLanguage(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "magusfile.bzz"), []byte("//go:build magus\npackage main\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("//go:build magus\npackage main\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,7 +197,7 @@ func TestWithSpellAddsLanguage(t *testing.T) {
 // TestWithSpellMultipleTools verifies that calling WithSpell twice registers
 // two tools and that both appear in p.Spells in registration order.
 func TestWithSpellMultipleTools(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"), WithSpell("rust"))
@@ -225,7 +225,7 @@ func TestWithSpellMultipleTools(t *testing.T) {
 // out at Open time rather than silently doing nothing.
 func TestWithSpellUnknownTool(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "magusfile.bzz"), []byte("//go:build magus\npackage main\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("//go:build magus\npackage main\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -243,7 +243,7 @@ func TestWithSpellUnknownTool(t *testing.T) {
 
 // TestWithExclusiveOption verifies that WithExclusive() sets p.Exclusive.
 func TestWithExclusiveOption(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithExclusive())
@@ -264,7 +264,7 @@ func TestWithExclusiveOption(t *testing.T) {
 // TestWithClaimExtendsClaims verifies that WithClaim adds globs to the
 // pack's Binding.AddedClaims.
 func TestWithClaimExtendsClaims(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go", WithClaim("**/*.proto", "**/*.thrift")))
@@ -295,7 +295,7 @@ func TestWithClaimExtendsClaims(t *testing.T) {
 // TestWithoutClaimOnBinding verifies that WithoutClaim inside
 // WithSpell populates the pack's Binding.RemovedClaims.
 func TestWithoutClaimOnBinding(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("ts", WithoutClaim("**/*.json")))
@@ -325,8 +325,8 @@ func TestWithoutClaimOnBinding(t *testing.T) {
 func TestApplyIdempotent(t *testing.T) {
 	root := makeWorkspaceRoot(
 		t,
-		"magusfile.bzz",
-		"api/magusfile.bzz",
+		"magusfile.buzz",
+		"api/magusfile.buzz",
 	)
 
 	reg := NewWorkspaceRegistry()
@@ -372,7 +372,7 @@ func TestApplyIdempotent(t *testing.T) {
 
 // TestWithSpell verifies that WithSpell registers a tool by name.
 func TestWithSpell(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
@@ -395,7 +395,7 @@ func TestWithSpell(t *testing.T) {
 
 // TestWithClaimWeight verifies that WithClaimWeight sets Binding.ClaimWeight.
 func TestWithClaimWeight(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(

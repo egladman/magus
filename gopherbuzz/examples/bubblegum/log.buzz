@@ -1,0 +1,70 @@
+// log.buzz - leveled trace/debug logging for troubleshooting.
+//
+// Off by default so normal runs stay quiet; turn it on with the BUBBLEGUM_LOG
+// environment variable to get a running narration of what the WM is doing:
+//
+//     BUBBLEGUM_LOG=debug buzz bubblegum.buzz     # the important steps
+//     BUBBLEGUM_LOG=trace buzz bubblegum.buzz     # debug + fine-grained detail
+//
+// These messages are meant to stay in the code permanently: the next person
+// chasing a config that won't apply, a window that won't tile, or a crash gets a
+// breadcrumb trail for free instead of re-instrumenting from scratch. Two levels:
+//   debug -- milestones a maintainer wants when something is wrong (config phases,
+//            artifact replay, workspace switches, adopt/evict decisions).
+//   trace -- per-call/per-item detail that is too noisy for normal debugging
+//            (every recorded config op, every serialized field).
+//
+// This is plain std/os only, so it behaves identically on gopherbuzz and upstream
+// buzz; nothing here is aware of which interpreter it runs under. Output goes to
+// stdout with a level-tagged prefix, alongside the WM's other `bubblegum:` lines.
+// (registry\logAct stays the always-on, user-facing action log; this is the
+// opt-in maintainer log underneath it.)
+
+namespace log;
+
+import "std";
+import "os";
+
+// Level cache: -1 = not yet read from the environment, then 0 off / 1 debug /
+// 2 trace. The env var doesn't change mid-run, so read it once.
+var levelV = 0 - 1;
+
+fun level() > int {
+    if (levelV == 0 - 1) {
+        final v = os\env("BUBBLEGUM_LOG") ?? "";
+        if (v == "trace") {
+            levelV = 2;
+        } else if (v == "debug") {
+            levelV = 1;
+        } else {
+            levelV = 0;
+        }
+    }
+    return levelV;
+}
+
+// enabled reports whether any maintainer logging is on. Guard a log call with it
+// when building the message is itself expensive (a hot-loop path, a frame read),
+// so a quiet run pays nothing for the string it would have printed.
+export fun enabled() > bool {
+    return level() > 0;
+}
+
+// traceEnabled reports whether trace-level (the noisy tier) is on.
+export fun traceEnabled() > bool {
+    return level() >= 2;
+}
+
+// debug logs a milestone (shown at BUBBLEGUM_LOG=debug or trace).
+export fun debug(msg: str) > void {
+    if (level() >= 1) {
+        std\print("bubblegum[debug]: {msg}");
+    }
+}
+
+// trace logs fine-grained detail (shown only at BUBBLEGUM_LOG=trace).
+export fun trace(msg: str) > void {
+    if (level() >= 2) {
+        std\print("bubblegum[trace]: {msg}");
+    }
+}

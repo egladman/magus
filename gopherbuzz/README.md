@@ -68,7 +68,7 @@ critical path of that flow, before any real work starts:
 
 ```mermaid
 flowchart TD
-    A([magus run]) --> B["gopherbuzz: evaluate<br/>magusfile.bzz + host-call glue"]
+    A([magus run]) --> B["gopherbuzz: evaluate<br/>magusfile.buzz + host-call glue"]
     B --> C{fan out across workspace}
     C -->|widens| B
     C --> D[run the real work]
@@ -84,13 +84,13 @@ Two constraints follow, and they're why this VM exists:
   [extended tier](benchmarks/comparison/): LuaJIT, Umka) would forfeit that, so
   the engine has to be **pure Go**. That makes a fast pure-Go VM the only door,
   not a preference.
-- **It's on every task's critical path.** The VM evaluates `magusfile.bzz` and
+- **It's on every task's critical path.** The VM evaluates `magusfile.buzz` and
   the host-call glue on every run, and again as the fan-out widens. A slow or
   allocation-heavy layer pays that cost over and over, landing as latency and GC
   pressure between you and your build.
 
 The bar is just this: **be invisible.** The benchmarks above are deliberately
-heavy stress loops; a real `magusfile.bzz` is orders of magnitude smaller, so
+heavy stress loops; a real `magusfile.buzz` is orders of magnitude smaller, so
 the VM's slice of any run sits well below the work it dispatches. We're into
 diminishing returns now, and the [perf design notes](#performance-design) mostly
 exist to stop a future change from regressing what's here. The point was never
@@ -119,13 +119,13 @@ profile is neutral). After bumping `BytecodeVersion`, run `go generate` in
 Go standard library alone (no third-party CLI framework):
 
 ```sh
-go run ./cmd/buzz script.bzz          # run a file
+go run ./cmd/buzz script.buzz          # run a file
 echo 'return 1 + 2;' | go run ./cmd/buzz -   # run stdin
 go run ./cmd/buzz -e 'import "std"; std.print("hi");'
-go run ./cmd/buzz -c script.bzz       # type-check only
-go run ./cmd/buzz -t script.bzz       # run its test "..." {} blocks
-go run ./cmd/buzz --ast script.bzz    # dump the AST as JSON
-go run ./cmd/buzz -L ./lib m.bzz      # add an import search path
+go run ./cmd/buzz -c script.buzz       # type-check only
+go run ./cmd/buzz -t script.buzz       # run its test "..." {} blocks
+go run ./cmd/buzz --ast script.buzz    # dump the AST as JSON
+go run ./cmd/buzz -L ./lib m.buzz      # add an import search path
 ```
 
 The Buzz standard library is available; magus host bindings are not (use
@@ -146,7 +146,7 @@ test "addition" {
 ```
 
 ```sh
-go run ./cmd/buzz -t mytests.bzz
+go run ./cmd/buzz -t mytests.buzz
 # ok    test "addition"
 # ---
 # 1 passed, 0 failed
@@ -212,7 +212,7 @@ where purego does, and returns a clear "unsupported" error elsewhere (e.g. wasm)
 
 Full reference: [`docs/ffi.md`](docs/ffi.md) · runnable demo:
 [`examples/ffi-c/`](examples/ffi-c/) (`go run .`) · a larger showcase:
-[`examples/yeetile/`](examples/yeetile/), an i3-flavored macOS tiling
+[`examples/bubblegum/`](examples/bubblegum/), an i3-flavored macOS tiling
 window manager written in pure Buzz on this FFI.
 
 ## WebAssembly
@@ -231,7 +231,7 @@ Both `wasip1/wasm` and `js/wasm` build. This makes gopherbuzz (to our knowledge
 the first Go implementation of Buzz) run **in the browser**: the [magus](..) docs
 site's Buzz playground ([`magus/cmd/buzz-playground`](../cmd/buzz-playground) over
 [`magus/internal/playground`](../internal/playground)) evaluates Buzz live and
-dry-runs a `magusfile.bzz`, with host calls recorded.
+dry-runs a `magusfile.buzz`, with host calls recorded.
 
 ## Architecture
 

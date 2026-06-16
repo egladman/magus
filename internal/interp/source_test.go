@@ -11,7 +11,7 @@ import (
 func TestFindMagusBzz(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,7 +50,7 @@ export fun build(_args: [str]) > void {}
 export fun test(_args: [str]) > void {}
 export fun go_vet(_args: [str]) > void {}
 `
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ export fun go_vet(_args: [str]) > void {}
 
 func TestRunAndParse(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	content := `
 import "magus";
 export fun build(_args: [str]) > void {}
@@ -115,7 +115,7 @@ func writeBzz(t *testing.T, dir, name, content string) string {
 func TestOsExecShExitCode(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := writeBzz(t, dir, "magusfile.bzz", `
+	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "os";
 
@@ -139,7 +139,7 @@ export fun check(_args: [str]) > void {
 func TestOsWithEnvShellCapture(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := writeBzz(t, dir, "magusfile.bzz", `
+	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "os";
 
@@ -161,7 +161,7 @@ export fun check(_args: [str]) > void {
 func TestFsJoinBinding(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := writeBzz(t, dir, "magusfile.bzz", `
+	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "fs";
 
@@ -189,7 +189,7 @@ func TestFsListDirBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path := writeBzz(t, dir, "magusfile.bzz", `
+	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "fs";
 
@@ -214,7 +214,7 @@ func TestFsRemoveAllBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path := writeBzz(t, dir, "magusfile.bzz", `
+	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "fs";
 
@@ -234,7 +234,7 @@ export fun check(_args: [str]) > void {
 func TestVcsBindings(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path := writeBzz(t, dir, "magusfile.bzz", `
+	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "vcs";
 

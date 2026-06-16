@@ -1,0 +1,126 @@
+// core/inspect.buzz - inspector and console overlay commands for bubblegum WM.
+
+namespace inspect;
+
+import "state";
+import "layout";
+import "config";
+import "statusbar";
+import "inspector";
+import "cheatsheet";
+import "focusring";
+import "platform/macos/windows";
+import "core/registry";
+import "core/floating";
+import "core/bar";
+import "core/screens";
+
+// inspectLines is what the inspector overlay renders: the live objects —
+// screens, trees (tagged with app names), the registry, the effective
+// config. Everything here is also reachable from eval; the overlay is the
+// read-only window, the buzz> prompt is the write end.
+export fun inspectLines() > [str] {
+    screens\saveActive(); // so every screen's stored state is current
+    var res = [<str>];
+    res = res + ["bubblegum - workspace {state\wm().curWs + 1}, {state\wm().managed.len()} managed, {state\wm().screens.len()} tiled display(s)"];
+    foreach (si in 0..state\wm().screens.len()) {
+        final sc = screens\screenAt(si);
+        var marker = " ";
+        if (si == state\wm().activeScreen) {
+            marker = "*";
+        }
+        res = res + [""];
+        res = res + ["{marker} screen {si + 1}  display {sc.disp}  {sc.cg[2]}x{sc.cg[3]} at {sc.cg[0]},{sc.cg[1]}  stacked={sc.stacked}"];
+        floating\stampTags(sc.root);
+        res = res + layout\treeLines(sc.root, prefix: "    ");
+    }
+    res = res + [""];
+    res = res + ["registry:"];
+    foreach (m in state\wm().managed) {
+        var flags = "";
+        if (m.floating) {
+            flags = " floating";
+        }
+        if (m.workspace == state\scratchWs) {
+            flags = flags + " scratchpad";
+        }
+        res = res + ["    #{m.id} {windows\appName(m.pid)} - \"{windows\windowTitle(m.ref)}\"  ws{m.workspace + 1} scr{m.screen + 1}{flags}"];
+    }
+    res = res + [""];
+    res = res + ["config: gaps {state\wm().cfg.gapInner}/{state\wm().cfg.gapOuter}  golden={state\wm().cfg.goldenOn}  ffm={state\wm().cfg.ffmOn}  border={state\wm().cfg.borderOn}  binds={state\wm().cfg.binds.len()}  rules={state\wm().cfg.rules.len()}+{state\wm().userWindowHooks.len()} hooks"];
+    return res;
+}
+
+// consoleLines is Retool's "explore what's available": every command the keymap,
+// rules, config.buzz, and the buzz> prompt can use — served by the live WM
+// itself, so it can't go stale the way external docs do.
+export fun consoleLines() > [str] {
+    var res = [<str>];
+    res = res + ["bubblegum console — every command (bindable, rule-able, eval-able) + what's in scope for buzz>"];
+    res = res + [""];
+    final cmds = [
+        "focus left|right|up|down|next|prev      move left|right|up|down",
+        "workspace N|back_and_forth              move workspace N",
+        "split horizontal|vertical               resize grow|shrink [width|height]",
+        "fullscreen [native]                     stacking toggle",
+        "golden toggle                           balance      undo",
+        "floating toggle                         frame X Y W H",
+        "snap left|right|top|bottom|topleft|topright|bottomleft|bottomright",
+        "snap first-third|center-third|last-third|first-two-thirds|last-two-thirds",
+        "snap max|center                         border",
+        "move scratchpad                         scratchpad show",
+        "mark <key>                              goto <key>",
+        "launcher [run|eval|windows]             inspector    console",
+        "rules apply                             layout save|restore|export",
+        "kill (also: yeetus)                     exec <shell> eval <buzz>",
+        "mode <name>                             retile       reload      quit",
+    ];
+    foreach (c in cmds) {
+        res = res + ["  " + c];
+    }
+    res = res + [""];
+    res = res + ["in scope for rules.buzz / config.buzz / eval (same session):"];
+    res = res + ["  runCommand(cmd)  runCommandFor(id, cmd: cmd)  onWindowRule(fn)"];
+    res = res + ["  wm().managed  wm().root  wm().screens  wm().cfg  wm().curWs  countLeaves(n)  displays()"];
+    res = res + ["  wsCounts()  binPackWorkspace(counts, lo:, hi:, cap:)  (spread windows)"];
+    res = res + ["  reCompile/reMatch  fuzzyScore  treeLines  ...and every module export"];
+    return res;
+}
+
+export fun cmdConsole() > void {
+    if (inspector\inspVisible()) {
+        inspector\inspHide();
+        state\wm().inspMode = "";
+        return;
+    }
+    final ak = screens\tiledAppKit();
+    cheatsheet\sheetHide(); // mutually exclusive overlays — never stack the cheatsheet under this
+    state\wm().inspMode = "console"; // tick() refreshes with consoleLines, not the registry
+    inspector\inspShow(consoleLines(), cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+}
+
+export fun cmdInspector() > void {
+    if (inspector\inspVisible()) {
+        inspector\inspHide();
+        state\wm().inspMode = "";
+        return;
+    }
+    final ak = screens\tiledAppKit();
+    cheatsheet\sheetHide(); // mutually exclusive overlays
+    state\wm().inspMode = "inspect";
+    inspector\inspShow(inspectLines(), cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+}
+
+// toggleCheatsheet shows or hides the keymap reference as a sticky overlay —
+// the click-to-open counterpart to the hold-to-peek cheat chord (handleKey).
+// Opened this way it stays up until the info icon is clicked again.
+export fun toggleCheatsheet() > void {
+    if (cheatsheet\sheetVisible()) {
+        cheatsheet\sheetHide();
+        return;
+    }
+    final ak = screens\tiledAppKit();
+    inspector\inspHide(); // mutually exclusive overlays
+    state\wm().inspMode = "";
+    cheatsheet\sheetShow(state\wm().cfg.binds, cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+}

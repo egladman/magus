@@ -1,18 +1,16 @@
-package types_test
+package types
 
 import (
 	"slices"
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
-func newWorkspace(paths ...string) *types.Workspace {
-	projects := make(map[string]*types.Project, len(paths))
+func newWorkspace(paths ...string) *Workspace {
+	projects := make(map[string]*Project, len(paths))
 	for _, p := range paths {
-		projects[p] = &types.Project{Path: p}
+		projects[p] = &Project{Path: p}
 	}
-	return &types.Workspace{Projects: projects}
+	return &Workspace{Projects: projects}
 }
 
 func TestWorkspaceAllIsSorted(t *testing.T) {
@@ -36,7 +34,7 @@ func TestWorkspaceGet(t *testing.T) {
 		t.Errorf("Get(missing) = %v, want nil", p)
 	}
 	// A nil workspace must not panic — Get guards the receiver.
-	var nilWS *types.Workspace
+	var nilWS *Workspace
 	if p := nilWS.Get("api"); p != nil {
 		t.Errorf("(*Workspace)(nil).Get(api) = %v, want nil", p)
 	}

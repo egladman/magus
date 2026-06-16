@@ -1,0 +1,507 @@
+// core/events.buzz - WM event handlers: key, mouse, drag, bar/overlay clicks,
+// the periodic tick, and window-lifecycle drain.
+
+namespace wmevents;
+
+import "state";
+import "layout";
+import "config";
+import "statusbar";
+import "os";
+import "std";
+import "launcher";
+import "inspector";
+import "cheatsheet";
+import "platform/macos/windows";
+import "platform/macos/events";
+import "core/registry";
+import "core/screens";
+import "core/tiling";
+import "core/scan";
+import "core/bar";
+import "core/focus";
+import "core/workspaces";
+import "core/floating";
+import "core/inspect";
+import "core/session";
+import "core/command";
+import "core/zlayer";
+
+// lastHover is the timestamp of the last focus-follows-mouse hover, used to
+// throttle the hit-test loop.
+var lastHover = 0.0;
+
+// edgeSnapZone is the pixel band around the tiling rect where a floating window
+// released inside it snaps into the grid.
+final edgeSnapZone = 32.0;
+
+// modsMatch compares exactly the four modifier bits: extra device-state bits
+// in CGEventFlags must not break matching, and a bind without shift must not
+// fire when shift is held.
+export fun modsMatch(flags: int, want: int) > bool {
+    foreach (m in state\modMask) {
+        if ((flags / m) % 2 != (want / m) % 2) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// handleKey processes one key event dequeued from the helper (etype is the
+// CGEventType: 10 key-down, 11 key-up, 12 flags-changed). Swallowing already
+// happened in the tap callback (against the chord table pushChords() publishes,
+// plus the launcher grab), so this only reacts.
+export fun handleKey(etype: int, code: int, flags: int) > void {
+    if (etype == 11 or etype == 12) { // keyUp / flagsChanged
+        if (cheatsheet\sheetVisible()) {
+            // Hold-to-peek: releasing the cheat key, or letting go of any of
+            // its modifiers, dismisses the sheet instantly.
+            if (etype == 11 and code == state\wm().cfg.cheatKey) {
+                cheatsheet\sheetHide();
+                return;
+            }
+            if (etype == 12 and !modsMatch(flags, want: state\wm().cfg.cheatFlags)) {
+                cheatsheet\sheetHide();
+            }
+        }
+        return;
+    }
+    if (etype != state\keyDownEvent) {
+        return;
+    }
+    state\wm().lastKeyAt = os\time();
+    if (launcher\launcherActive()) {
+        // The bar owns the keyboard while it is up, dmenu-style (the helper
+        // grabs every key while it is open); route the key to it.
+        _ = launcher\launcherKey(code, shiftHeld: (flags / 131072) % 2 == 1);
+        return;
+    }
+    if (state\wm().promptId != 0) {
+        // The bar is asking where to put a freshly-opened window; the keyboard is
+        // grabbed, so any key answers — Return moves it, anything else keeps it.
+        command\handlePromptKey(code);
+        return;
+    }
+    if (code == state\wm().cfg.cheatKey and modsMatch(flags, want: state\wm().cfg.cheatFlags)) {
+        // Hold to peek at the keymap; release hides it (handled above).
+        final ak = screens\tiledAppKit();
+        inspector\inspHide(); // mutually exclusive overlays — don't peek over the inspector
+        cheatsheet\sheetShow(state\wm().cfg.binds, cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+        return;
+    }
+    foreach (b in state\wm().cfg.binds) {
+        final bind = (b as? config\Bind)!;
+        if (bind.mode == state\wm().bindMode and bind.keycode == code and modsMatch(flags, want: bind.flags)) {
+            command\runCommand(bind.command);
+            return;
+        }
+    }
+}
+
+// handleMouse hands focus to the hovered window — X11's focus-follows-mouse,
+// which macOS still doesn't offer. The cursor position comes from the
+// (listen-only) mouse tap via the helper; hit-testing is pure geometry against
+// our own assigned frames, throttled so a fast move costs a couple of compares.
+export fun handleMouse(x: double, y: double) > void {
+    if (!state\wm().cfg.ffmOn or launcher\launcherActive() or state\wm().screens.len() == 0) {
+        return;
+    }
+    final now: double = os\time();
+    if (now - lastHover < 80.0) {
+        return;
+    }
+    if (now - state\wm().lastKeyAt < 700.0) {
+        return; // hands on keyboard: brushing the mouse must not steal focus
+    }
+    lastHover = now;
+    hoverFocus(x, y: y);
+}
+
+export fun hoverFocus(x: double, y: double) > void {
+    foreach (si in 0..state\wm().screens.len()) {
+        final r0 = screens\treeOf(si);
+        if (r0 == null) {
+            continue;
+        }
+        final ls = mut [];
+        layout\collectLeaves(r0!, res: ls);
+        foreach (l in ls) {
+            final leaf = (l as? mut layout\Node)!;
+            if (x >= leaf.x and x < leaf.x + leaf.w and y >= leaf.y and y < leaf.y + leaf.h) {
+                if (leaf.id != state\wm().focusedId or si != state\wm().activeScreen) {
+                    screens\setActive(si);
+                    state\wm().focusedId = leaf.id;
+                    windows\focusWindowNoRaise(registry\refOf(leaf.id), pid: registry\pidOf(leaf.id));
+                    if (state\wm().cfg.goldenOn) {
+                        tiling\retile(); // golden reflows around the hovered window
+                    }
+                    bar\updateBar();
+                }
+                return;
+            }
+        }
+    }
+}
+
+// detectMaximize promotes a managed tiled window the user blew up to full size
+// (the green-button zoom, a double-click on the title bar, a manual drag-resize out
+// to the edges) into bubblegum's own monocle fullscreen, rather than fighting it on
+// the next retile or mis-learning its minimum as screen-sized. Returns true if it
+// entered fullscreen so the event path can retile; tick retiles regardless.
+export fun detectMaximize() > bool {
+    if (state\wm().fullscreenId != 0 or state\wm().stacked or state\wm().focusedId == 0) {
+        return false; // already monocle or stacked, or nothing focused
+    }
+    if (layout\countLeaves(state\wm().root) < 2) {
+        return false; // a sole window fills the screen by right, not by being maximized
+    }
+    final mo = registry\managedById(state\wm().focusedId);
+    if (mo == null) {
+        return false;
+    }
+    final mm = mo!;
+    if (mm.floating or mm.workspace != state\wm().curWs) {
+        return false;
+    }
+    final f = windows\windowFrame(mm.ref);
+    if (f == null) {
+        return false;
+    }
+    final fr = f!;
+    if (fr[2] >= state\wm().tiledCG[2] * 0.92 and fr[3] >= state\wm().tiledCG[3] * 0.92) {
+        mm.slotW = 0.0; // re-gate learnWindowMins so the maximized frame is not learned as a min
+        mm.slotH = 0.0;
+        state\wm().fullscreenId = state\wm().focusedId;
+        registry\logAct("maximize: {registry\winLabel(state\wm().focusedId)} filled the screen, now fullscreen");
+        return true;
+    }
+    return false;
+}
+
+// dragHold reports that the user is holding the left mouse button down (a window
+// drag in progress). While it is true the reconcile freezes its layout work, so a
+// window being dragged is never snapped back and its slot stays reserved: the other
+// windows do not reflow to fill the gap until release. A safety timeout resumes the
+// reconcile if a mouse-up is ever missed.
+export fun dragHold() > bool {
+    return state\wm().mouseDownAt > 0.0 and os\time() - state\wm().mouseDownAt < state\dragHoldMaxMs;
+}
+
+// tick is the periodic scan: re-arm the taps, re-read display bounds, follow the
+// system focus, adopt/evict windows, retile, and refresh the chrome. Driven by
+// the poll loop in main every state\wm().cfg.pollMs.
+export fun tick() > void {
+    events\reenableTaps();
+    screens\refreshTiledBounds();
+    focus\syncFocus();
+    scan\rescan();
+    final held = dragHold();
+    if (!held) {
+        _ = detectMaximize(); // a window the user blew up to full size becomes monocle fullscreen
+    }
+    bar\updateBar(); // before retile: the bar reflects the new managed set/focus at once,
+                     // not after the (slower, AX-driven) retile has finished moving windows
+    if (!held) {
+        tiling\retile();
+        command\maybeRelieveStacked(); // stacked because windows don't fit, with an empty ws free? move one out
+        if (state\wm().cfg.hideMethod == "zlayer") {
+            _ = zlayer\layoutBackLayer(); // re-grid background layers: new/closed windows, or one that drifted
+            zlayer\raiseActiveLayer(); // re-assert the z-index after any external restack (cmd-tab, Dock, dialogs)
+        }
+    }
+    if (inspector\inspVisible()) {
+        final ak = screens\tiledAppKit();
+        // Refresh with the content the overlay was opened for — the console is a
+        // snapshot of commands/scope, not the live registry, so a window event must
+        // not silently swap it for inspectLines.
+        var lines = inspect\inspectLines();
+        if (state\wm().inspMode == "console") {
+            lines = inspect\consoleLines();
+        }
+        inspector\inspShow(lines, cx: ak[0] + ak[2] / 2.0, cy: ak[1] + ak[3] / 2.0);
+    }
+    session\maybeSaveSession(); // crash-safe: persist (window -> workspace) whenever it changes
+}
+
+// drainWindowEvents consumes the AX observer queue each pump and reacts at once,
+// so windows tile the instant they appear instead of waiting for the reconcile
+// timer. A burst (an app opening several windows) is coalesced into a single
+// reconcile. A bare move no longer triggers a full reconcile (our own retile moves
+// windows and would feed back), but it is checked for a manual maximize; ordinary
+// drags are handled by the reflow path (handleRelease).
+export fun drainWindowEvents() > void {
+    var we = events\pollWindowEvent();
+    var structural = false;
+    var focusChanged = false;
+    var moved = false;
+    while (we != 0) {
+        if (we == events\winFocus) {
+            focusChanged = true;
+        } else if (we == events\winMoved) {
+            moved = true; // a window was moved or resized: maybe the user maximized it
+        } else {
+            structural = true; // created / destroyed / minimize / deminimize
+        }
+        we = events\pollWindowEvent();
+    }
+    if (state\wm().reconcilePaused) {
+        return; // queue drained above so it can't overflow, but we don't act
+    }
+    if (structural) {
+        final before = state\wm().managed.len();
+        tick(); // full reconcile (also re-syncs focus + the bar); adopt/evict log specifics
+        registry\logAct("windows changed: {before} -> {state\wm().managed.len()} managed, focus {registry\winLabel(state\wm().focusedId)}");
+    } else if (focusChanged) {
+        final prevFocus = state\wm().focusedId;
+        focus\syncFocus();
+        bar\updateBar();
+        if (state\wm().focusedId != prevFocus) {
+            tiling\updateRing();  // follow click-to-focus too (no retile fires on a bare focus change)
+            registry\logAct("focus -> {registry\winLabel(state\wm().focusedId)}"); // only on a real change, not every focus event
+        }
+    }
+    // A bare move/resize, no structural change: catch a manual maximize promptly
+    // rather than waiting for the slow reconcile (tick already checks on structural).
+    if (moved and !structural and !dragHold() and detectMaximize()) {
+        tiling\retile();
+    }
+}
+
+// nearTilingEdge reports whether a drop point sits in that snap band around the
+// active screen's tiling rect. Corners are just where two edges meet — they qualify.
+export fun nearTilingEdge(x: double, y: double) > bool {
+    final l = state\wm().tiledCG[0];
+    final t = state\wm().tiledCG[1];
+    final rt = state\wm().tiledCG[0] + state\wm().tiledCG[2];
+    final b = state\wm().tiledCG[1] + state\wm().tiledCG[3];
+    if (x < l - edgeSnapZone or x > rt + edgeSnapZone or y < t - edgeSnapZone or y > b + edgeSnapZone) {
+        return false; // not over this display's tiling area
+    }
+    return x <= l + edgeSnapZone or x >= rt - edgeSnapZone or y <= t + edgeSnapZone or y >= b - edgeSnapZone;
+}
+
+// floatingAt returns the floating current-workspace window under (x, y) — the one
+// the user just dropped — or 0 if the drop didn't land on a floating window.
+export fun floatingAt(x: double, y: double) > int {
+    foreach (m in state\wm().managed) {
+        if (m.workspace != state\wm().curWs or !m.floating) {
+            continue;
+        }
+        final ref = registry\refOf(m.id);
+        if (ref == null) {
+            continue;
+        }
+        final f = windows\windowFrame(ref);
+        if (f == null) {
+            continue;
+        }
+        final fr = f!;
+        if (x >= fr[0] and x < fr[0] + fr[2] and y >= fr[1] and y < fr[1] + fr[3]) {
+            return m.id;
+        }
+    }
+    return 0;
+}
+
+// adoptFloating promotes a dragged floating window into the grid: it lands next to
+// the tile under the drop point (snapping in where you let go), or takes the default
+// slot if the grid is empty or the drop missed every tile. The mouse counterpart to
+// cmdFloating("off") / $mod+shift+space.
+export fun adoptFloating(id: int, dropX: double, dropY: double) > void {
+    final mo = registry\managedById(id);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    mm.floating = false;
+    mm.missing = 0;
+    var placed = false;
+    if (state\wm().root != null) {
+        final target = layout\leafAt(state\wm().root, x: dropX, y: dropY);
+        if (target != 0 and target != id) {
+            placed = layout\insertAt(state\wm().root!, target: target, id: id);
+            if (placed) {
+                tiling\seedDims(state\wm().root!, cg: screens\screenAt(state\wm().activeScreen).cg);
+            }
+        }
+    }
+    if (!placed) {
+        scan\adopt(id); // empty grid, or dropped past every tile -> default slot
+    }
+    state\wm().focusedId = id;
+    windows\focusWindow(mm.ref, pid: mm.pid);
+    tiling\retile();
+    registry\logAct("drag: adopted {registry\winLabel(id)} into the grid");
+}
+
+// handleRelease implements drag-to-reflow on a left-mouse-up that ended a drag.
+// First: a floating window shoved to a screen edge is promoted into the grid
+// (drag-to-tile). Otherwise the dragged tiled window swaps with the window whose
+// slot it was dropped on (i3-style move-by-mouse). Either way the drop snaps into
+// the grid; nothing overlaps.
+export fun handleRelease(ux: double, uy: double) > void {
+    if (state\wm().reconcilePaused) {
+        return;
+    }
+    if (nearTilingEdge(ux, y: uy)) {
+        final fid = floatingAt(ux, y: uy);
+        if (fid != 0) {
+            adoptFloating(fid, dropX: ux, dropY: uy);
+            return;
+        }
+    }
+    if (state\wm().root == null) {
+        return;
+    }
+    final r = state\wm().root!;
+    // The dragged window is the managed one whose real frame drifted from its
+    // assigned slot (apps honor position, so only a drag moves it far).
+    var draggedId = 0;
+    var best = 40.0;
+    foreach (m in state\wm().managed) {
+        if (m.workspace != state\wm().curWs or m.floating) {
+            continue;
+        }
+        final leaf = layout\findLeaf(r, target: m.id);
+        final ref = registry\refOf(m.id);
+        if (leaf == null or ref == null) {
+            continue;
+        }
+        final f = windows\windowFrame(ref);
+        if (f == null) {
+            continue;
+        }
+        final fr = f!;
+        final delta = tiling\absD(fr[0] - leaf!.x) + tiling\absD(fr[1] - leaf!.y);
+        if (delta > best) {
+            best = delta;
+            draggedId = m.id;
+        }
+    }
+    if (draggedId == 0) {
+        return;
+    }
+    final targetId = layout\leafAt(state\wm().root, x: ux, y: uy);
+    if (targetId != 0 and targetId != draggedId) {
+        _ = layout\swapIds(r, a: draggedId, b: targetId);
+        registry\logAct("drag: swapped {registry\winLabel(draggedId)} <-> {registry\winLabel(targetId)}");
+    } else {
+        final slot = layout\findLeaf(r, target: draggedId);
+        if (slot != null) {
+            registry\logAct("drag: {registry\winLabel(draggedId)} snapped back to ({std\toInt(slot!.x)},{std\toInt(slot!.y)})");
+        } else {
+            registry\logAct("drag: {registry\winLabel(draggedId)} snapped back");
+        }
+    }
+    tiling\retile(); // either swap-then-retile, or just snap the dragged window back
+}
+
+// handleBarClick routes a left-click (global CG coords) that lands on the status
+// bar: the reconcile toggle at the right edge, or a workspace cell on the left.
+export fun handleBarClick(gx: double, gy: double) > void {
+    if (!state\wm().cfg.barOn) {
+        return;
+    }
+    final barTop = state\wm().tiledCG[1] + state\wm().tiledCG[3] - statusbar\barHeight();
+    if (gy < barTop - 4.0 or gx < state\wm().tiledCG[0] or gx >= state\wm().tiledCG[0] + state\wm().tiledCG[2]) {
+        return; // not on the bar
+    }
+    final localX = gx - state\wm().tiledCG[0];
+    final icon = statusbar\barIconAt(localX, barW: state\wm().tiledCG[2]);
+    if (icon == 0) {
+        inspect\toggleCheatsheet(); // info icon — keymap reference
+        return;
+    }
+    if (icon == 1) {
+        inspect\cmdConsole(); // magnifier — live-state console overlay
+        return;
+    }
+    if (icon == 2) {
+        registry\logAct("reconcile (bar): rescan + retile");
+        scan\rescan();
+        tiling\retile(); // grid icon — sort every window back into the grid
+        return;
+    }
+    if (statusbar\barToggleHit(localX, barW: state\wm().tiledCG[2])) {
+        command\toggleReconcile();
+        return;
+    }
+    if (statusbar\barOrientHit(localX, barW: state\wm().tiledCG[2])) {
+        toggleOrientation();
+        return;
+    }
+    if (statusbar\barCountHit(localX, barW: state\wm().tiledCG[2])) {
+        floating\cmdRecallMinimized(); // the minimized indicator: pick a minimized window to recover
+        return;
+    }
+    final counts = registry\wsCounts();
+    if (statusbar\barPlusHit(localX, cur: state\wm().curWs, counts: counts)) {
+        final empty = scan\firstEmptyWorkspace();
+        if (empty >= 0) {
+            workspaces\cmdWorkspace(empty);
+        }
+        return;
+    }
+    final ws = statusbar\barWsAt(localX, cur: state\wm().curWs, counts: counts);
+    if (ws >= 0 and ws != state\wm().curWs) {
+        workspaces\cmdWorkspace(ws);
+    }
+}
+
+// handleOverlayClick dismisses an open centered overlay (launcher, inspector,
+// cheatsheet) when a click lands outside it — the macOS "click out to close"
+// gesture. Returns true if an overlay was up so the click is consumed (it never
+// also toggles the bar or tray underneath). The click coords are global CG
+// (top-left origin); the overlays know their frames in AppKit (bottom-left), so
+// convert with the main display's height, same as tiledAppKit.
+export fun handleOverlayClick(gx: double, gy: double) > bool {
+    final mainH = std\toDouble(windows\screenHeight());
+    final ax = gx;
+    final ay = mainH - gy;
+    if (launcher\launcherActive()) {
+        if (!launcher\launcherContains(ax, y: ay)) {
+            launcher\launcherDismiss();
+        }
+        return true;
+    }
+    if (inspector\inspVisible()) {
+        if (!inspector\inspContains(ax, y: ay)) {
+            inspector\inspHide();
+        }
+        return true;
+    }
+    if (cheatsheet\sheetVisible()) {
+        if (!cheatsheet\sheetContains(ax, y: ay)) {
+            cheatsheet\sheetHide();
+        }
+        return true;
+    }
+    return false;
+}
+
+// toggleOrientation sets how the focused window's container will split NEXT — the i3
+// `split` toggle. It does NOT rearrange the windows already on screen; it only
+// records, on the focused leaf, whether the next window opened here lands side by
+// side or stacked below. The choice is consumed by splitLeaf when that next
+// window arrives. Driven by clicking the orientation icon in the status bar; the
+// `split h|v` command sets it explicitly.
+export fun toggleOrientation() > void {
+    if (state\wm().root == null) {
+        return;
+    }
+    final leaf = layout\findLeaf(state\wm().root!, target: state\wm().focusedId);
+    if (leaf == null) {
+        return;
+    }
+    final l = leaf!;
+    // Toggle off the leaf's OWN pick (deterministic), not the geometry-derived
+    // pendingOrient: Auto/Horiz -> Vert, Vert -> Horiz.
+    if (l.pick == layout\Pick.Vert) {
+        l.pick = layout\Pick.Horiz;
+        registry\logAct("next split -> side by side: {registry\winLabel(state\wm().focusedId)}");
+    } else {
+        l.pick = layout\Pick.Vert;
+        registry\logAct("next split -> stack below: {registry\winLabel(state\wm().focusedId)}");
+    }
+    bar\updateBar();
+}

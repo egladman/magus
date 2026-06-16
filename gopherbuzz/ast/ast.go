@@ -182,6 +182,11 @@ type CallExpr struct {
 	Callee   Node
 	Args     []Node
 	ArgNames []string
+	// TypeArg holds an explicit generic type argument, e.g. "double" from
+	// `buf.readZAt::<double>(...)`. Empty for ordinary calls. The VM ignores it;
+	// the checker uses it as the call's result type for generic accessors whose
+	// return type the type arg names.
+	TypeArg string
 }
 
 // MemberExpr: object.name
@@ -239,6 +244,9 @@ type ListExpr struct {
 	Pos
 	Items []Node
 	Mut   bool
+	// ElemType holds the element-type annotation of an empty typed-list literal
+	// `[<T>]` (e.g. "str"). Empty when the literal has items or no annotation.
+	ElemType string
 }
 
 // ObjectLit: TypeName{ field = val, ... }. Mut is set for `mut TypeName{…}` (a

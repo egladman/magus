@@ -1,4 +1,4 @@
-package reflink_test
+package reflink
 
 import (
 	"bytes"
@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/egladman/magus/internal/cache/reflink"
 )
 
 func TestClone_RoundTrip(t *testing.T) {
@@ -25,7 +23,7 @@ func TestClone_RoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := reflink.Clone(src, dst); err != nil {
+	if err := Clone(src, dst); err != nil {
 		t.Fatalf("Clone: %v", err)
 	}
 
@@ -46,7 +44,7 @@ func TestClone_EmptyFile(t *testing.T) {
 	if err := os.WriteFile(src, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := reflink.Clone(src, dst); err != nil {
+	if err := Clone(src, dst); err != nil {
 		t.Fatalf("Clone empty: %v", err)
 	}
 	got, err := os.ReadFile(dst)
@@ -71,7 +69,7 @@ func TestClone_LargeFile(t *testing.T) {
 	if err := os.WriteFile(src, want, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := reflink.Clone(src, dst); err != nil {
+	if err := Clone(src, dst); err != nil {
 		t.Fatalf("Clone large: %v", err)
 	}
 	got, err := os.ReadFile(dst)
@@ -95,7 +93,7 @@ func TestClone_IndependentWrites(t *testing.T) {
 	if err := os.WriteFile(src, original, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := reflink.Clone(src, dst); err != nil {
+	if err := Clone(src, dst); err != nil {
 		t.Fatalf("Clone: %v", err)
 	}
 
@@ -126,7 +124,7 @@ func TestClone_DstExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := reflink.Clone(src, dst)
+	err := Clone(src, dst)
 	if err == nil {
 		t.Fatal("Clone: expected error when dst exists, got nil")
 	}
@@ -151,7 +149,7 @@ func TestClone_MissingSrc(t *testing.T) {
 	src := filepath.Join(dir, "no-such-src")
 	dst := filepath.Join(dir, "dst")
 
-	err := reflink.Clone(src, dst)
+	err := Clone(src, dst)
 	if err == nil {
 		t.Fatal("Clone: expected error for missing src, got nil")
 	}

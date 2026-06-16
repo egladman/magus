@@ -23,7 +23,7 @@ func replCmd(ctx context.Context, _ string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Open an interactive Buzz REPL with the same bindings available to magusfile")
 			fmt.Fprintln(os.Stderr, "scripts (magus, sh, fs, vcs, platform, spells).")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "If a magusfile.bzz is present in or above the cwd, it is executed on startup.")
+			fmt.Fprintln(os.Stderr, "If a magusfile.buzz is present in or above the cwd, it is executed on startup.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
 			fs.PrintDefaults()

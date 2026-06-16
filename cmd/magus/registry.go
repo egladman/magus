@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -43,7 +43,7 @@ func (e *wsEntry) load(_ context.Context, lim *cache.Limiter) {
 		m, err := magus.Open(
 			context.Background(), e.root,
 			magus.WithLoadedConfig(cfg),
-			wire.WithLimiter(lim),
+			workspace.WithLimiter(lim),
 		)
 		if err != nil {
 			e.loadErr = fmt.Errorf("daemon: open workspace %s: %w", e.root, err)

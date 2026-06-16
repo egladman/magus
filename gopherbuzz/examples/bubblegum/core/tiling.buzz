@@ -1,0 +1,284 @@
+namespace tiling;
+
+import "state";
+import "layout";
+import "statusbar";
+import "focusring";
+import "platform/macos/windows";
+import "std";
+import "core/screens";
+import "core/registry";
+
+export fun absD(x: double) > double {
+    if (x < 0.0) {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+export fun near(a: double, b: double) > bool {
+    final d = a - b;
+    return d < 1.5 and d > 0.0 - 1.5;
+}
+
+// tilingRect derives a screen's usable tiling rectangle from its CG frame
+// `cg` ([x, y, w, h]) -- insetting the outer gap, the top padding (menu bar) and
+// the status bar. Shared by retileOne and the build-time seedDims below.
+export fun tilingRect(cg: [double]) > [double] {
+    final ox = cg[0] + state\wm().cfg.gapOuter;
+    final oy = cg[1] + state\wm().cfg.topPadding + state\wm().cfg.gapOuter;
+    final ow = cg[2] - 2.0 * state\wm().cfg.gapOuter;
+    var oh = cg[3] - state\wm().cfg.topPadding - 2.0 * state\wm().cfg.gapOuter;
+    if (state\wm().cfg.barOn) {
+        // Reserve the bar height plus a 6px buffer so windows clear the bar
+        // instead of touching it (where shadows / slight app overflow get covered).
+        oh = oh - statusbar\barHeight() - 6.0;
+    }
+    return [ox, oy, ow, oh];
+}
+
+// seedDims re-assigns the tiling rect to a tree mid-build so the NEXT split's
+// chooseOrient sees real leaf shapes instead of zeros. Without it, a tree built
+// in one pass before the first retile (cold start with many windows, undo,
+// restore) splits every window horizontally -- full-height columns too narrow
+// for apps to honor, so they overlap. assign here only sets geometry; no window
+// moves until retile.
+export fun seedDims(r: mut layout\Node, cg: [double]) > void {
+    final t = tilingRect(cg);
+    layout\assign(r, x: t[0], y: t[1], w: t[2], h: t[3], gap: state\wm().cfg.gapInner, minW: state\wm().cfg.minWidth, minH: state\wm().cfg.minHeight);
+}
+
+export fun centerWindow(ref: ud?) > void {
+    final w = state\wm().tiledCG[2] * 0.55;
+    final h = state\wm().tiledCG[3] * 0.55;
+    windows\setWindowFrame(ref, x: state\wm().tiledCG[0] + (state\wm().tiledCG[2] - w) / 2.0, y: state\wm().tiledCG[1] + (state\wm().tiledCG[3] - h) / 2.0, w: w, h: h);
+}
+
+// applyFrame skips the AX round-trip when the window is already in place,
+// so the poll-driven retile is a cheap no-op for a settled layout.
+export fun applyFrame(ref: ud?, x: double, y: double, w: double, h: double) > void {
+    final cur = windows\windowFrame(ref);
+    if (cur != null) {
+        final c = cur!;
+        if (near(c[0], b: x) and near(c[1], b: y) and near(c[2], b: w) and near(c[3], b: h)) {
+            return;
+        }
+    }
+    windows\setWindowFrame(ref, x: x, y: y, w: w, h: h);
+}
+
+// learnWindowMins reads each leaf window's settled frame and, if it clamped
+// LARGER than the slot it was last given, records that as the window's learned
+// minimum (monotonic). It then stamps the leaves so the next assign stacks
+// exactly -- frame-readback is the only way macOS exposes a window's minimum
+// size (there is no AXMinSize). Runs once per retile, before assign, reading the
+// frame each window settled into since the previous retile.
+export fun learnWindowMins(r: mut layout\Node) > void {
+    final ls = mut [];
+    layout\collectLeaves(r, res: ls);
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        final mo = registry\managedById(leaf.id);
+        if (mo == null) {
+            continue;
+        }
+        final mm = mo!;
+        // Only learn from a window we actually squeezed into a real slot last cycle
+        // (slotW > 1) and that has had a cycle to settle. On a cold start slotW is 0,
+        // so a still-full-size window is never mistaken for one that clamped -- the bug
+        // that poisoned every min to ~full width and stacked everything on startup.
+        if (mm.slotW > 1.0 and mm.slotH > 1.0) {
+            final f = windows\windowFrame(mm.ref);
+            if (f != null) {
+                // Refused the slot (clamped wider) -> that IS its true min. Accepted a
+                // slot narrower than our estimate -> it can go smaller than we thought,
+                // so lower the estimate. This recovers -- the min is no longer a one-way
+                // ratchet that sticks high forever.
+                if (f![2] > mm.slotW + 2.0) {
+                    mm.minW = f![2];
+                } else if (mm.slotW + 2.0 < mm.minW) {
+                    mm.minW = mm.slotW;
+                }
+                if (f![3] > mm.slotH + 2.0) {
+                    mm.minH = f![3];
+                } else if (mm.slotH + 2.0 < mm.minH) {
+                    mm.minH = mm.slotH;
+                }
+            }
+        }
+        // Deliberately NOT stamped onto the leaf: assign's stack decision uses the
+        // fixed floor (cfg.minWidth/minHeight), never per-window learned mins, so the
+        // layout is constant across reconciles. The learned mm.minW/minH feed only
+        // floatOversized (popping a genuinely screen-sized window out of the grid).
+    }
+}
+
+// floatOversized is the honest-float half: a window whose learned minimum exceeds
+// the whole tiling area can never fit the grid (a fixed-size dialog bigger than
+// the usable space). Rather than let it overflow and fight the layout, drop it
+// out of the tree and float it centered. Never floats the last tiled window.
+export fun floatOversized(r: mut layout\Node, ow: double, oh: double) > void {
+    final ls = mut [];
+    layout\collectLeaves(r, res: ls);
+    final toFloat = mut [<int>];
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        final mo = registry\managedById(leaf.id);
+        if (mo == null) {
+            continue;
+        }
+        final mm = mo!;
+        // Only float a window that's GENUINELY too big for the screen (a fixed-size
+        // dialog), not one that merely clamped a little over a tight slot -- otherwise
+        // borderline windows pop out of the grid and pile up.
+        if (mm.minW > ow * 1.25 or mm.minH > oh * 1.25) {
+            toFloat.append(mm.id);
+        }
+    }
+    if (toFloat.len() >= ls.len()) {
+        return; // would float everything -- keep at least one tiled
+    }
+    foreach (idv in toFloat) {
+        final mo = registry\managedById(idv);
+        if (mo == null) {
+            continue;
+        }
+        final mm = mo!;
+        mm.floating = true;
+        _ = layout\removeAt(r, target: idv);
+        centerWindow(mm.ref);
+    }
+}
+
+export fun retileOne(r0: mut layout\Node?, cg: [double], focusId: int, fullId: int, stk: bool, golden: bool) > void {
+    if (r0 == null) {
+        return;
+    }
+    final r = r0!;
+    final t = tilingRect(cg);
+    final ox = t[0];
+    final oy = t[1];
+    final ow = t[2];
+    final oh = t[3];
+    if (fullId != 0 and registry\refOf(fullId) != null) {
+        applyFrame(registry\refOf(fullId), x: ox, y: oy, w: ow, h: oh);
+        return;
+    }
+    if (stk) {
+        // Stacked layout: every window takes the whole tiling area, the
+        // focused one on top -- cycle the pile with focus next/prev.
+        final ls = mut [];
+        layout\collectLeaves(r, res: ls);
+        foreach (l in ls) {
+            final leaf = (l as? mut layout\Node)!;
+            final ref = registry\refOf(leaf.id);
+            if (ref != null) {
+                applyFrame(ref, x: ox, y: oy, w: ow, h: oh);
+            }
+        }
+        if (focusId != 0 and registry\refOf(focusId) != null) {
+            windows\raiseWindow(registry\refOf(focusId));
+        }
+        return;
+    }
+    learnWindowMins(r); // learn each window's true min from its settled frame, stamp leaves
+    floatOversized(r, ow: ow, oh: oh); // honest float: a window that can't fit the tiling area at all leaves the grid
+    layout\assign(r, x: ox, y: oy, w: ow, h: oh, gap: state\wm().cfg.gapInner, minW: state\wm().cfg.minWidth, minH: state\wm().cfg.minHeight);
+    if (golden and state\wm().cfg.goldenOn and focusId != 0) {
+        // Golden-ratio mode: re-proportion the focused window's ancestor
+        // chain to phi (clamped to min_width/min_height), then re-assign.
+        if (layout\applyGolden(r, target: focusId, minW: state\wm().cfg.minWidth, minH: state\wm().cfg.minHeight)) {
+            layout\assign(r, x: ox, y: oy, w: ow, h: oh, gap: state\wm().cfg.gapInner, minW: state\wm().cfg.minWidth, minH: state\wm().cfg.minHeight);
+        }
+    }
+    final ls = mut [];
+    layout\collectLeaves(r, res: ls);
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        // i3-style inset border: reserve the border width INSIDE the slot by shrinking
+        // the window content on every side. The focus ring (updateRing/ringShow) paints
+        // that reserved band, so it frames the window without covering content or
+        // spilling onto a neighbor. Reserved for ALL tiled windows, not just the focused
+        // one, so moving focus never resizes anything.
+        var fx = leaf.x;
+        var fy = leaf.y;
+        var fw = leaf.w;
+        var fh = leaf.h;
+        if (state\wm().cfg.borderOn) {
+            fx = leaf.x + state\wm().cfg.borderWidth;
+            fy = leaf.y + state\wm().cfg.borderWidth;
+            fw = leaf.w - 2.0 * state\wm().cfg.borderWidth;
+            fh = leaf.h - 2.0 * state\wm().cfg.borderWidth;
+        }
+        final ref = registry\refOf(leaf.id);
+        if (ref != null) {
+            applyFrame(ref, x: fx, y: fy, w: fw, h: fh);
+        }
+        final mo = registry\managedById(leaf.id);
+        if (mo != null) {
+            // Remember the real slot we squeezed this window into; next cycle
+            // learnWindowMins reads its settled response to THIS slot. (A stacked leaf
+            // gets the full rect, which never reads back as a clamp, so it's harmless.)
+            mo!.slotW = fw;
+            mo!.slotH = fh;
+        }
+    }
+    // Stacked groups put several windows at the same rect (no partial overlap);
+    // raise the focused one so it's the visible member of its stack.
+    if (focusId != 0 and registry\refOf(focusId) != null) {
+        windows\raiseWindow(registry\refOf(focusId));
+    }
+}
+
+// updateRing keeps the focus border (focusring.buzz) glued to the focused
+// window: the tree's assigned frame when tiled, the real frame when
+// floating. Hidden while a fullscreen monocle owns the screen.
+export fun updateRing() > void {
+    if (!state\wm().cfg.borderOn or state\wm().focusedId == 0 or state\wm().fullscreenId != 0) {
+        focusring\ringHide();
+        return;
+    }
+    final mainH = std\toDouble(windows\screenHeight());
+    if (state\wm().root != null) {
+        final leaf = layout\findLeaf(state\wm().root!, target: state\wm().focusedId);
+        if (leaf != null and !state\wm().stacked) {
+            final l = leaf!;
+            focusring\ringShow(l.x, y: l.y, w: l.w, h: l.h, bw: state\wm().cfg.borderWidth, radius: state\wm().cfg.borderRadius, mainH: mainH);
+            return;
+        }
+    }
+    final mo = registry\managedById(state\wm().focusedId);
+    if (mo != null and mo!.floating) {
+        final fr = windows\windowFrame(mo!.ref);
+        if (fr != null) {
+            final f = fr!;
+            focusring\ringShow(f[0], y: f[1], w: f[2], h: f[3], bw: state\wm().cfg.borderWidth, radius: state\wm().cfg.borderRadius, mainH: mainH);
+            return;
+        }
+    }
+    focusring\ringHide();
+}
+
+// retile lays out every tiled screen: the active one from the live globals,
+// the rest from their stored state. Golden mode follows the global focus, so
+// only the active screen reflows around it.
+export fun retile() > void {
+    foreach (i in 0..state\wm().screens.len()) {
+        final sc = screens\screenAt(i);
+        if (i == state\wm().activeScreen) {
+            retileOne(state\wm().root, cg: sc.cg, focusId: state\wm().focusedId, fullId: state\wm().fullscreenId, stk: state\wm().stacked, golden: true);
+        } else {
+            retileOne(sc.root, cg: sc.cg, focusId: sc.focusedId, fullId: sc.fullscreenId, stk: sc.stacked, golden: false);
+        }
+    }
+    updateRing();
+}
+
+// pushUndo snapshots the active screen's tree before a mutating command;
+// `undo` pops back, pruning windows that closed in between.
+export fun pushUndo() > void {
+    state\wm().undoStack.append(layout\cloneTree(state\wm().root));
+    if (state\wm().undoStack.len() > 20) {
+        _ = state\wm().undoStack.remove(0);
+    }
+}

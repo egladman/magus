@@ -28,7 +28,7 @@ export fun clean(_args: [str]) > void {}
 
 func BenchmarkParse(b *testing.B) {
 	dir := b.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(largeMagefile), 0o644); err != nil {
 		b.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func BenchmarkParse(b *testing.B) {
 
 func BenchmarkFind(b *testing.B) {
 	dir := b.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte("import \"magus\";\nexport fun noop(_args: [str]) > void {}\n"), 0o644); err != nil {
 		b.Fatal(err)
 	}

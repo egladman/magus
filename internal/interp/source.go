@@ -15,13 +15,13 @@ var ErrUnknownTarget = errors.New("magusfile: unknown target")
 // scriptExts are the magusfile glob patterns, and enginePriority the engine
 // preference order. Both are keyed off the script extension so a future engine
 // only has to add its pattern here and a case to engineForExt.
-var scriptExts = []string{"*.bzz"}
+var scriptExts = []string{"*.buzz"}
 var enginePriority = []string{"buzz"}
 
 // engineForExt maps a file extension to an engine name.
 func engineForExt(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".bzz":
+	case ".buzz":
 		return "buzz"
 	default:
 		return "buzz"
@@ -61,8 +61,8 @@ func FindAll(dir string) ([]*Source, error) {
 		if len(entries) > 0 {
 			slices.Sort(entries)
 			// Guard against mixing single-file and directory forms.
-			if _, err2 := os.Stat(filepath.Join(dir, "magusfile.bzz")); err2 == nil {
-				return nil, errors.New("interp: both magusfile.bzz and magusfiles/ exist; remove one")
+			if _, err2 := os.Stat(filepath.Join(dir, "magusfile.buzz")); err2 == nil {
+				return nil, errors.New("interp: both magusfile.buzz and magusfiles/ exist; remove one")
 			}
 			return groupByEngine(dir, entries), nil
 		}
@@ -71,7 +71,7 @@ func FindAll(dir string) ([]*Source, error) {
 	}
 
 	// Single-file form.
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, ErrNoMagusfile

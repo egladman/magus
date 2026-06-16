@@ -1,0 +1,246 @@
+namespace rules;
+
+import "state";
+import "layout";
+import "config";
+import "regex";
+import "platform/macos/windows";
+import "fs";
+import "io";
+import "std";
+import "os";
+import "core/registry";
+import "core/paths";
+
+// --- typed rule commands ---
+//
+// Return these from onWindowRule hooks. Construct them with the helper
+// functions below; the WM dispatches on the concrete type -- no string parsing.
+
+export object IgnoreCmd      {}              // stop managing this window entirely
+export object FloatCmd       { mode: str }   // "on" | "off" | "toggle"
+export object MoveWsCmd      { n: int }      // 1-based workspace number
+export object MoveScratchpadCmd {}
+export object ScratchpadShowCmd {}
+export object FullscreenCmd  { native: bool }
+export object FrameCmd       { x: double, y: double, w: double, h: double }
+export object KillCmd        {}
+export object LaunchCmd      { shell: str }
+export object SnapCmd        { pos: str }
+
+export fun ignore()       > any { return IgnoreCmd{}; }
+export fun floating()     > any { return FloatCmd{ mode = "toggle" }; }
+export fun floatOn()      > any { return FloatCmd{ mode = "on" }; }
+export fun floatOff()     > any { return FloatCmd{ mode = "off" }; }
+export fun moveToWorkspace(n: int) > any { return MoveWsCmd{ n = n }; }
+export fun toScratchpad() > any { return MoveScratchpadCmd{}; }
+export fun showScratchpad() > any { return ScratchpadShowCmd{}; }
+export fun fullscreen()   > any { return FullscreenCmd{ native = false }; }
+export fun fullscreenNative() > any { return FullscreenCmd{ native = true }; }
+export fun frame(x: double, y: double, w: double, h: double) > any { return FrameCmd{ x = x, y = y, w = w, h = h }; }
+export fun close()        > any { return KillCmd{}; }
+export fun launch(shell: str) > any { return LaunchCmd{ shell = shell }; }
+export fun snapTo(pos: str) > any { return SnapCmd{ pos = pos }; }
+
+// reTest compiles pat and tests it against text in one call -- false on a bad
+// pattern instead of crashing. Use in place of reCompile(pat)!/reMatch pairs.
+export fun reTest(patRaw: str, textRaw: str) > bool {
+    final re = regex\reCompile(patRaw);
+    if (re == null) { return false; }
+    return regex\reMatch(re!, textRaw);
+}
+
+// onWindowRule registers a window hook written in Buzz -- the programmable
+// half of window rules. rules.buzz (loaded into this very session, so this
+// function is in its scope) calls it with a closure:
+//
+//     onWindowRule(fun (app: str, title: str, id: int) > [any] {
+//         if (app == "Music") { return [floating()]; }
+//         return [];
+//     });
+//
+// Return a list of typed command values (see helpers above); return [] for
+// no action. Hooks accumulate in registration order, so `layout export`'s
+// generated rules and hand-written ones coexist (hand-written run last --
+// they get the final word). Hooks may also ignore the contract entirely and
+// drive the WM directly -- runCommandFor(id, cmd: ...), anything.
+export fun onWindowRule(f: any) > void {
+    state\wm().userWindowHooks.append(f);
+}
+
+// loadRules (re)loads rules.generated.buzz (written by `layout export`) and
+// rules.buzz, re-registering hooks from scratch: an absent file simply drops
+// out, a broken one reports and the WM keeps going. Runs at startup and on
+// the explicit `reload` command -- nothing watches files behind your back.
+export fun loadRules() > void {
+    state\wm().userWindowHooks = mut [];
+    loadRuleFile(paths\generatedRulesPath());
+    loadRuleFile(paths\rulesPath());
+}
+
+export fun loadRuleFile(path: str) > void {
+    if (config\readConfigText(path) == null) {
+        return;
+    }
+    try {
+        io\runFile(path);
+        std\print("bubblegum: rules loaded from {path}");
+    } catch (e: any) {
+        std\print("bubblegum: {path}: {e}");
+    }
+}
+
+// runCommandFor runs a command with the given window as its target (commands
+// act on state\wm().focusedId); the previous focus is restored unless the command moved
+// it on purpose.
+export fun runCommandFor(id: int, cmd: str) > void {
+    final prev = state\wm().focusedId;
+    state\wm().focusedId = id;
+    state\wm().runCmd!(cmd);
+    if (state\wm().focusedId == id) {
+        state\wm().focusedId = prev;
+    }
+}
+
+// applyRules runs the declarative `rule` lines, then the rules.buzz hook,
+// against a freshly adopted window -- i3's for_window, programmable.
+export fun applyRules(id: int) > void {
+    if (state\wm().cfg.rules.len() == 0 and state\wm().userWindowHooks.len() == 0) {
+        return;
+    }
+    final app = windows\appName(registry\pidOf(id));
+    final title = windows\windowTitle(registry\refOf(id));
+    foreach (rr in state\wm().cfg.rules) {
+        final rule = (rr as? config\Rule)!;
+        if (config\ruleMatches(rule, app: app, title: title)) {
+            if (rule.command == "ignore") {
+                runCommandFor(id, cmd: "ignore");
+                return;
+            }
+            runCommandFor(id, cmd: rule.command);
+        }
+    }
+    foreach (h in state\wm().userWindowHooks) {
+        try {
+            final hook = h as? fun (app: str, title: str, id: int) > [any]?;
+            final cmds = hook!(app, title: title, id: id);
+            if (cmds != null) {
+                foreach (c in cmds!) {
+                    if (c as? IgnoreCmd != null) {
+                        runCommandFor(id, cmd: "ignore");
+                        return;
+                    }
+                    applyRuleCmd(id, cmd: c);
+                }
+            }
+        } catch (e: any) {
+            std\print("bubblegum: rules hook: {e}");
+        }
+    }
+}
+
+// applyRuleCmd dispatches a typed rule command against the given window,
+// temporarily pointing state\wm().focusedId at it (mirrors runCommandFor's contract).
+export fun applyRuleCmd(id: int, cmd: any) > void {
+    final prev = state\wm().focusedId;
+    state\wm().focusedId = id;
+    dispatchRuleCmd(cmd);
+    if (state\wm().focusedId == id) {
+        state\wm().focusedId = prev;
+    }
+}
+
+export fun dispatchRuleCmd(cmd: any) > void {
+    final fc = cmd as? FloatCmd;
+    if (fc != null) { state\wm().runCmd!("floating {fc!.mode}"); return; }
+
+    final mc = cmd as? MoveWsCmd;
+    if (mc != null) { state\wm().runCmd!("move workspace {mc!.n}"); return; }
+
+    final sc = cmd as? MoveScratchpadCmd;
+    if (sc != null) { state\wm().runCmd!("move scratchpad"); return; }
+
+    final ss = cmd as? ScratchpadShowCmd;
+    if (ss != null) { state\wm().runCmd!("scratchpad show"); return; }
+
+    final fsc = cmd as? FullscreenCmd;
+    if (fsc != null) {
+        if (fsc!.native) {
+            state\wm().runCmd!("fullscreen native");
+        } else {
+            state\wm().runCmd!("fullscreen");
+        }
+        return;
+    }
+
+    final frc = cmd as? FrameCmd;
+    if (frc != null) {
+        state\wm().runCmd!("frame {frc!.x} {frc!.y} {frc!.w} {frc!.h}");
+        return;
+    }
+
+    final kc = cmd as? KillCmd;
+    if (kc != null) { state\wm().runCmd!("kill"); return; }
+
+    final lc = cmd as? LaunchCmd;
+    if (lc != null) { state\wm().runCmd!("exec {lc!.shell}"); return; }
+
+    final snc = cmd as? SnapCmd;
+    if (snc != null) { state\wm().runCmd!("snap {snc!.pos}"); return; }
+}
+
+// cmdLayoutExport closes the loop: the live arrangement comes back as window
+// rules -- runnable, editable Buzz (rules.generated.buzz) -- instead of
+// bespoke values in a data file. Arrange by hand, export, done: every app
+// you placed gets pinned to its workspace (floating windows export as
+// floating) the next time it opens. First window of each app wins.
+export fun cmdLayoutExport() > void {
+    final apps = mut [];
+    final cmds = mut [];
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\scratchWs) {
+            continue;
+        }
+        final app = windows\appName(m.pid);
+        if (app.len() == 0 or apps.indexOf(app) != null) {
+            continue;
+        }
+        var cmd = "moveToWorkspace({m.workspace + 1})";
+        if (m.floating) {
+            // Floating windows export with their exact coordinates.
+            cmd = "floating()";
+            final fr = windows\windowFrame(m.ref);
+            if (fr != null) {
+                final f = fr!;
+                cmd = "frame({f[0]}, {f[1]}, {f[2]}, {f[3]})";
+            }
+        }
+        apps.append(app);
+        cmds.append(cmd);
+    }
+    if (apps.len() == 0) {
+        std\print("bubblegum: nothing to export -- no managed windows");
+        return;
+    }
+    var a = [<str>];
+    foreach (x in apps) {
+        final v = (x as? str)!;
+        a = a + [v];
+    }
+    var c = [<str>];
+    foreach (x in cmds) {
+        final v = (x as? str)!;
+        c = c + [v];
+    }
+    try {
+        fs\makeDirectory(paths\configDir());
+        final f = io\File.open(paths\generatedRulesPath(), mode: io\FileMode.write);
+        f.write(config\rulesSource(a, commands: c));
+        f.close();
+    } catch (e: any) {
+        std\print("bubblegum: layout export failed: {e}");
+        return;
+    }
+    loadRules();
+    std\print("bubblegum: exported {a.len()} window rules to {paths\generatedRulesPath()} -- edit freely");
+}

@@ -1,4 +1,4 @@
-package cache_test
+package cache
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
 // discardLogger is a slog.Logger that drops all output, keeping benchmark
@@ -18,9 +16,9 @@ var discardLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 // openBenchCache opens a cache at dir and a discarding logger so benchmark
 // output is not polluted with log lines.
-func openBenchCache(b *testing.B, dir string, mutable bool) *cache.Cache {
+func openBenchCache(b *testing.B, dir string, mutable bool) *Cache {
 	b.Helper()
-	c, err := cache.Open(dir, cache.WithMutable(mutable), cache.WithLogger(discardLogger))
+	c, err := Open(dir, WithMutable(mutable), WithLogger(discardLogger))
 	if err != nil {
 		b.Fatalf("cache.Open: %v", err)
 	}
@@ -42,8 +40,8 @@ func writeBenchProject(b *testing.B, root, project string) (outPath string) {
 }
 
 // benchSpec returns a Spec for a project in root with one declared output.
-func benchSpec(root, project, outRel string) cache.Spec {
-	return cache.Spec{
+func benchSpec(root, project, outRel string) Spec {
+	return Spec{
 		ProjectPath:   project,
 		Sources:       []string{project + "/*.go"},
 		Outputs:       []string{outRel},
@@ -127,7 +125,7 @@ func BenchmarkRunAll(b *testing.B) {
 			root := b.TempDir()
 			cdir := filepath.Join(b.TempDir(), ".magus")
 
-			specs := make([]cache.Spec, n)
+			specs := make([]Spec, n)
 			fns := make([]func(context.Context) error, n)
 			for i := range specs {
 				p := fmt.Sprintf("svc-%d", i+1)
@@ -151,11 +149,11 @@ func BenchmarkRunAll(b *testing.B) {
 			c := openBenchCache(b, cdir, true)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := c.RunAll(ctx, specs, func(_ context.Context, s cache.Spec) error {
+				if _, err := c.RunAll(ctx, specs, func(_ context.Context, s Spec) error {
 					// fn not called on hit; this closure is only needed for the
 					// RunAll signature. The warm cache ensures it is never invoked.
 					return nil
-				}, cache.WithConcurrency(concurrency)); err != nil {
+				}, WithConcurrency(concurrency)); err != nil {
 					b.Fatal(err)
 				}
 			}

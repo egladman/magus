@@ -1,31 +1,29 @@
-package types_test
+package types
 
 import (
 	"context"
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
-// stubEngine satisfies types.GraphEngine with no-op implementations.
-type stubEngine struct{}
+// stubRepo satisfies types.GraphRepository with no-op implementations.
+type stubRepo struct{}
 
-func (stubEngine) TopoSort() []string                                              { return nil }
-func (stubEngine) ReverseClosure([]string) []string                                { return nil }
-func (stubEngine) NearCycles(context.Context, int) []types.NearCycle               { return nil }
-func (stubEngine) BlastRadius() map[string]int                                     { return nil }
-func (stubEngine) NCCD() float64                                                   { return 0 }
-func (stubEngine) PathsFromSeeds([]string, string) []types.AffectedPath            { return nil }
-func (stubEngine) Successors(string) []string                                      { return nil }
-func (stubEngine) Predecessors(string) []string                                    { return nil }
-func (stubEngine) Nodes() []string                                                 { return nil }
+func (stubRepo) TopoSort() []string                             { return nil }
+func (stubRepo) ReverseClosure([]string) []string               { return nil }
+func (stubRepo) NearCycles(context.Context, int) []NearCycle    { return nil }
+func (stubRepo) BlastRadius() map[string]int                    { return nil }
+func (stubRepo) NCCD() float64                                  { return 0 }
+func (stubRepo) PathsFromSeeds([]string, string) []AffectedPath { return nil }
+func (stubRepo) Successors(string) []string                     { return nil }
+func (stubRepo) Predecessors(string) []string                   { return nil }
+func (stubRepo) Nodes() []string                                { return nil }
 
 func TestNewGraph_ProjectLookup(t *testing.T) {
-	projects := map[string]*types.Project{
+	projects := map[string]*Project{
 		"api/":     {Path: "api/"},
 		"gateway/": {Path: "gateway/"},
 	}
-	g := types.NewGraph(stubEngine{}, projects)
+	g := NewGraph(stubRepo{}, projects)
 	if p := g.Project("api/"); p == nil || p.Path != "api/" {
 		t.Errorf("Project(api/) = %v, want {Path:api/}", p)
 	}
@@ -35,13 +33,13 @@ func TestNewGraph_ProjectLookup(t *testing.T) {
 }
 
 func TestWithGraphObserver_ComposesOntoConfig(t *testing.T) {
-	cfg := types.NewGraphConfig(nil)
+	cfg := NewGraphConfig(nil)
 	if cfg == nil {
 		t.Fatal("NewGraphConfig returned nil")
 	}
 	var called int
 	obs := &countObserver{count: &called}
-	types.WithGraphObserver(obs)(cfg)
+	WithGraphObserver(obs)(cfg)
 	cfg.Obs.OnError(nil) // fires the observer
 	if called != 1 {
 		t.Errorf("observer called %d times, want 1", called)
@@ -50,6 +48,6 @@ func TestWithGraphObserver_ComposesOntoConfig(t *testing.T) {
 
 type countObserver struct{ count *int }
 
-func (o *countObserver) OnBuild(types.BuildStats) {}
-func (o *countObserver) OnQuery(types.QueryEvent)  {}
-func (o *countObserver) OnError(error)             { *o.count++ }
+func (o *countObserver) OnBuild(BuildStats) {}
+func (o *countObserver) OnQuery(QueryEvent) {}
+func (o *countObserver) OnError(error)      { *o.count++ }

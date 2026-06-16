@@ -1,4 +1,4 @@
-package project_test
+package project
 
 import (
 	"bytes"
@@ -13,8 +13,6 @@ import (
 	"github.com/egladman/magus/internal/depgraph"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
-
-	"github.com/egladman/magus/project"
 )
 
 // newAffectedWorkspace lays down a workspace with three projects in
@@ -35,7 +33,7 @@ func newAffectedWorkspace(t *testing.T) *types.Workspace {
 			t.Fatal(err)
 		}
 	}
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +45,7 @@ func newAffectedWorkspace(t *testing.T) *types.Workspace {
 func TestAffectedFromPathsHappyPath(t *testing.T) {
 	ws := newAffectedWorkspace(t)
 
-	r, err := project.AffectedFromPaths(context.Background(), ws, []string{
+	r, err := AffectedFromPaths(context.Background(), ws, []string{
 		"api/magusfile.tl",
 		"web/studio/magusfile.tl",
 	})
@@ -69,7 +67,7 @@ func TestAffectedDisabledReturnsErrFallback(t *testing.T) {
 	ws := newAffectedWorkspace(t)
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 
-	_, err := project.Affected(context.Background(), ws, "")
+	_, err := Affected(context.Background(), ws, "")
 	if !errors.Is(err, types.ErrAffectedFallback) {
 		t.Fatalf("err = %v, want errors.Is(err, ErrAffectedFallback)", err)
 	}
@@ -80,7 +78,7 @@ func TestAffectedDisabledReturnsErrFallback(t *testing.T) {
 func TestAffectedFromPathsOutsideWorkspace(t *testing.T) {
 	ws := newAffectedWorkspace(t)
 
-	r, err := project.AffectedFromPaths(context.Background(), ws, []string{
+	r, err := AffectedFromPaths(context.Background(), ws, []string{
 		"api/magusfile.tl",
 		"/tmp/outside-workspace/file.go",
 	})
@@ -122,10 +120,10 @@ func TestAffectedRequestScopedObserver(t *testing.T) {
 
 	obsA := &countObserver{}
 	obsB := &countObserver{}
-	if _, err := project.AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsA), ws, []string{"api/x.go"}); err != nil {
+	if _, err := AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsA), ws, []string{"api/x.go"}); err != nil {
 		t.Fatalf("call A: %v", err)
 	}
-	if _, err := project.AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsB), ws, []string{"api/x.go"}); err != nil {
+	if _, err := AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsB), ws, []string{"api/x.go"}); err != nil {
 		t.Fatalf("call B: %v", err)
 	}
 	if obsA.builds != 1 {
@@ -135,7 +133,7 @@ func TestAffectedRequestScopedObserver(t *testing.T) {
 		t.Errorf("observer B builds = %d, want 1", obsB.builds)
 	}
 
-	if _, err := project.AffectedFromPaths(context.Background(), ws, []string{"api/x.go"}); err != nil {
+	if _, err := AffectedFromPaths(context.Background(), ws, []string{"api/x.go"}); err != nil {
 		t.Fatalf("call C: %v", err)
 	}
 	if obsA.builds != 1 || obsB.builds != 1 {

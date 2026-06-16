@@ -1,8 +1,8 @@
 // Command magus-spells-gen compiles each built-in spell's Buzz source
-// (magus/spells/<name>/spell.bzz) to bytecode and writes magus/internal/spell/
+// (magus/spells/<name>/spell.buzz) to bytecode and writes magus/internal/spell/
 // gen/<name>.bo, which the spell package embeds at build time. The runtime
 // loader recovers each blob with UnmarshalChunk and runs it to extract the
-// spell's mgs_ functions — so the .bzz files are the source of truth and the committed
+// spell's mgs_ functions — so the .buzz files are the source of truth and the committed
 // .bo blobs are a generated build artifact.
 //
 // Only self-contained spells are compiled: a spell whose source imports a host
@@ -32,7 +32,7 @@ func main() {
 
 func run() error {
 	// Defaults assume invocation from the spell package dir via go:generate.
-	spellsDir := flag.String("spells", "../../spells", "directory of <name>/spell.bzz spell sources")
+	spellsDir := flag.String("spells", "../../spells", "directory of <name>/spell.buzz spell sources")
 	outDir := flag.String("out", "gen", "directory to write <name>.bo bytecode into")
 	flag.Parse()
 
@@ -51,7 +51,7 @@ func run() error {
 			continue
 		}
 		name := e.Name()
-		srcPath := filepath.Join(*spellsDir, name, "spell.bzz")
+		srcPath := filepath.Join(*spellsDir, name, "spell.buzz")
 		src, err := os.ReadFile(srcPath)
 		if err != nil {
 			continue // not a spell dir

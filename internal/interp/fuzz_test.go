@@ -8,7 +8,7 @@ import (
 )
 
 // FuzzParse verifies that Parse never panics on arbitrary Buzz source content.
-// The invariant: any bytes written as a .bzz file must produce either
+// The invariant: any bytes written as a .buzz file must produce either
 // (targets, nil) or (nil, error) — never a panic.
 func FuzzParse(f *testing.F) {
 	f.Add([]byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\n"))
@@ -20,7 +20,7 @@ func FuzzParse(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, "magusfile.bzz")
+		path := filepath.Join(dir, "magusfile.buzz")
 		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}

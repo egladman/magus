@@ -1,22 +1,20 @@
-package proc_test
+package proc
 
 import (
 	"context"
 	"sync"
 	"testing"
-
-	"github.com/egladman/magus/internal/proc"
 )
 
 func TestSubOpZeroValue(t *testing.T) {
-	var o proc.SubOp
+	var o SubOp
 	if got := o.Load(); got != "" {
 		t.Fatalf("zero value Load() = %q, want %q", got, "")
 	}
 }
 
 func TestSubOpSetLoad(t *testing.T) {
-	o := &proc.SubOp{}
+	o := &SubOp{}
 	o.Set("archive.uncompress foo.tar.zst [4×]")
 	if got := o.Load(); got != "archive.uncompress foo.tar.zst [4×]" {
 		t.Fatalf("Load() = %q, want label", got)
@@ -24,7 +22,7 @@ func TestSubOpSetLoad(t *testing.T) {
 }
 
 func TestSubOpSetEmptyClears(t *testing.T) {
-	o := &proc.SubOp{}
+	o := &SubOp{}
 	o.Set("something")
 	o.Set("")
 	if got := o.Load(); got != "" {
@@ -33,7 +31,7 @@ func TestSubOpSetEmptyClears(t *testing.T) {
 }
 
 func TestSubOpNilSafe(t *testing.T) {
-	var o *proc.SubOp
+	var o *SubOp
 	// Neither call should panic.
 	o.Set("label")
 	if got := o.Load(); got != "" {
@@ -42,7 +40,7 @@ func TestSubOpNilSafe(t *testing.T) {
 }
 
 func TestSubOpConcurrent(t *testing.T) {
-	o := &proc.SubOp{}
+	o := &SubOp{}
 	const writers = 8
 	const iters = 1000
 
@@ -71,16 +69,16 @@ func TestSubOpConcurrent(t *testing.T) {
 }
 
 func TestWithSubOpRoundTrip(t *testing.T) {
-	o := &proc.SubOp{}
-	ctx := proc.WithSubOp(context.Background(), o)
-	got := proc.SubOpFromContext(ctx)
+	o := &SubOp{}
+	ctx := WithSubOp(context.Background(), o)
+	got := SubOpFromContext(ctx)
 	if got != o {
 		t.Fatalf("SubOpFromContext returned different pointer")
 	}
 }
 
 func TestSubOpFromContextMissing(t *testing.T) {
-	got := proc.SubOpFromContext(context.Background())
+	got := SubOpFromContext(context.Background())
 	if got != nil {
 		t.Fatalf("SubOpFromContext on empty ctx = %v, want nil", got)
 	}
@@ -94,7 +92,7 @@ func TestSubOpFromContextMissing(t *testing.T) {
 func TestSubOpFromContextWrongType(t *testing.T) {
 	type otherKey struct{}
 	ctx := context.WithValue(context.Background(), otherKey{}, "not a SubOp")
-	got := proc.SubOpFromContext(ctx)
+	got := SubOpFromContext(ctx)
 	if got != nil {
 		t.Fatalf("SubOpFromContext with wrong-type value = %v, want nil", got)
 	}

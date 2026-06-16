@@ -1,9 +1,8 @@
-package ci_test
+package ci
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/types"
 )
 
@@ -16,7 +15,7 @@ func makeProjects(paths ...string) []*types.Project {
 	return ps
 }
 
-func shardSizes(shards []ci.Shard) []int {
+func shardSizes(shards []Shard) []int {
 	sizes := make([]int, len(shards))
 	for i, s := range shards {
 		sizes[i] = len(s.Projects)
@@ -26,7 +25,7 @@ func shardSizes(shards []ci.Shard) []int {
 
 func TestBuild_empty(t *testing.T) {
 	t.Parallel()
-	plan, err := ci.Build(nil, "test")
+	plan, err := Build(nil, "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -37,7 +36,7 @@ func TestBuild_empty(t *testing.T) {
 
 func TestBuild_oneProject(t *testing.T) {
 	t.Parallel()
-	plan, err := ci.Build(makeProjects("a"), "test", ci.WithMaxShards(8))
+	plan, err := Build(makeProjects("a"), "test", WithMaxShards(8))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,7 +54,7 @@ func TestBuild_exactlyCap(t *testing.T) {
 	for i := range paths {
 		paths[i] = string(rune('a' + i))
 	}
-	plan, err := ci.Build(makeProjects(paths...), "test", ci.WithMaxShards(8))
+	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +75,7 @@ func TestBuild_oneOverCap(t *testing.T) {
 	for i := range paths {
 		paths[i] = string(rune('a' + i))
 	}
-	plan, err := ci.Build(makeProjects(paths...), "test", ci.WithMaxShards(8))
+	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +97,7 @@ func TestBuild_100projects(t *testing.T) {
 	for i := range paths {
 		paths[i] = string(rune(i + 1)) // non-zero rune
 	}
-	plan, err := ci.Build(makeProjects(paths...), "test", ci.WithMaxShards(8))
+	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +115,7 @@ func TestBuild_100projects(t *testing.T) {
 
 func TestBuild_invalidMaxShards_zero(t *testing.T) {
 	t.Parallel()
-	_, err := ci.Build(makeProjects("a"), "test", ci.WithMaxShards(0))
+	_, err := Build(makeProjects("a"), "test", WithMaxShards(0))
 	if err == nil {
 		t.Fatal("expected error for WithMaxShards(0), got nil")
 	}
@@ -125,7 +124,7 @@ func TestBuild_invalidMaxShards_zero(t *testing.T) {
 func TestBuild_invalidMaxShards_negativeTwoOrLess(t *testing.T) {
 	t.Parallel()
 	for _, n := range []int{-2, -3, -100} {
-		_, err := ci.Build(makeProjects("a"), "test", ci.WithMaxShards(n))
+		_, err := Build(makeProjects("a"), "test", WithMaxShards(n))
 		if err == nil {
 			t.Fatalf("expected error for WithMaxShards(%d), got nil", n)
 		}
@@ -136,7 +135,7 @@ func TestBuild_unlimited(t *testing.T) {
 	t.Parallel()
 	// -1 = unlimited: 5 projects → 5 shards
 	paths := []string{"a", "b", "c", "d", "e"}
-	plan, err := ci.Build(makeProjects(paths...), "test", ci.WithMaxShards(-1))
+	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(-1))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,7 +147,7 @@ func TestBuild_unlimited(t *testing.T) {
 func TestBuild_clampAboveHardCeiling(t *testing.T) {
 	t.Parallel()
 	// 500 > hardCeiling(256): should clamp to 256, not error.
-	plan, err := ci.Build(makeProjects("a"), "test", ci.WithMaxShards(500))
+	plan, err := Build(makeProjects("a"), "test", WithMaxShards(500))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,7 +172,7 @@ func TestBuild_IDWidth(t *testing.T) {
 		for i := range paths {
 			paths[i] = string(rune(i + 1))
 		}
-		plan, err := ci.Build(makeProjects(paths...), "test", ci.WithMaxShards(tt.maxShards))
+		plan, err := Build(makeProjects(paths...), "test", WithMaxShards(tt.maxShards))
 		if err != nil {
 			t.Fatalf("maxShards=%d: unexpected error: %v", tt.maxShards, err)
 		}
@@ -207,7 +206,7 @@ func TestBuild_withForecaster_replacesCeilDivision(t *testing.T) {
 	// Forecaster groups everything into one shard regardless of count.
 	f := &stubForecaster{override: [][]*types.Project{projects}}
 
-	plan, err := ci.Build(projects, "test", ci.WithMaxShards(8), ci.WithForecaster(f))
+	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -228,7 +227,7 @@ func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
 	// Misbehaving forecaster: returns empty for non-empty input.
 	f := &stubForecaster{override: nil}
 
-	plan, err := ci.Build(projects, "test", ci.WithMaxShards(8), ci.WithForecaster(f))
+	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -240,7 +239,7 @@ func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
 
 func TestBuild_sourcePassthrough(t *testing.T) {
 	t.Parallel()
-	plan, err := ci.Build(makeProjects("a"), "git diff vs origin/main")
+	plan, err := Build(makeProjects("a"), "git diff vs origin/main")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

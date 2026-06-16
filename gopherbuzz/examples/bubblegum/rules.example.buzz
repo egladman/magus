@@ -1,0 +1,54 @@
+// bubblegum window rules, as code. Copy to ~/.config/bubblegum/rules.buzz —
+// it live-reloads on save, like the config.
+//
+// This is not a rules DSL: it's Buzz, executed inside the running window
+// manager's own interpreter session. Register a hook and return a list of
+// typed commands for each new window. Hooks from `layout export`
+// (rules.generated.buzz) run before these, so anything you write here gets
+// the final word:
+
+import "std";
+
+onWindowRule(fun (app: str, title: str, id: int) > [any] {
+    // Available commands — construct them with the helpers in scope:
+    //
+    //   ignore()            — stop managing this window entirely (no tiling, ever)
+    //   floating()          floatOn()          floatOff()
+    //   moveToWorkspace(n)  toScratchpad()     showScratchpad()
+    //   fullscreen()        fullscreenNative()
+    //   frame(x, y, w, h)  snapTo(pos)
+    //   close()             launch(shell)
+    //
+    // reTest(pattern, text) matches a regex against app or title — returns
+    // false (rather than crashing) on a bad pattern.
+    //
+    // Return [] (or just fall through) for no action.
+
+    // Some apps don't play nicely with tiling — ignore them entirely.
+    if (reTest("(?i)^1password$|^alfred$|^raycast$", app)) {
+        return [ignore()];
+    }
+
+    // Match app name with a regex.
+    if (reTest("(?i)^music$|^spotify$|^podcasts$", app)) {
+        return [floating()];
+    }
+
+    // Match window title with a regex — same engine, same syntax.
+    if (app == "Slack" and reTest("(?i)huddle", title)) {
+        return [moveToWorkspace(9), fullscreen()];
+    }
+
+    // Plain string comparison still works for exact app names.
+    if (app == "Terminal" and countLeaves(root) >= 4) {
+        return [moveToWorkspace(2)]; // overflow terminals to workspace 2
+    }
+
+    // Anything in the session is in scope — the registry, the tree, the
+    // clock. Rules can depend on *state*, not just names. Or skip the
+    // command contract entirely and drive the WM directly:
+    //     runCommandFor(id, cmd: "move scratchpad");
+    //     std\print("adopted {app} — \"{title}\"");
+
+    return [];
+});

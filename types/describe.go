@@ -64,11 +64,14 @@ const TargetGraphDefinition = "The target dependency graph is the magus.depends_
 
 // TargetGraphNode is one target in the graph: its run name, its doc comment, the
 // names of the targets it depends on, and the charm names its body branches on.
+// This is the single node type: the static extractor (internal/targetgraph)
+// populates it directly, and `magus describe graph` serializes it. The wire keys
+// stay short ("deps") for output stability.
 type TargetGraphNode struct {
-	Name   string   `json:"name"             yaml:"name"`
-	Doc    string   `json:"doc,omitempty"    yaml:"doc,omitempty"`
-	Deps   []string `json:"deps,omitempty"   yaml:"deps,omitempty"`
-	Charms []string `json:"charms,omitempty" yaml:"charms,omitempty"`
+	Name         string   `json:"name"             yaml:"name"`
+	Doc          string   `json:"doc,omitempty"    yaml:"doc,omitempty"`
+	Dependencies []string `json:"deps,omitempty"   yaml:"deps,omitempty"`
+	Charms       []string `json:"charms,omitempty" yaml:"charms,omitempty"`
 }
 
 // TargetGraphProject is one project's target graph, plus a detected cycle (a path
@@ -96,7 +99,7 @@ type TargetGraphOutput struct {
 // ProjectDefinition is the human-readable description of a project shown by "magus describe projects".
 const ProjectDefinition = "A project is a directory the workspace recognized as a " +
 	"unit of work, bound to one or more spells. Projects are " +
-	"discovered by the presence of a magusfile (magusfile.tl or magusfile.bzz, or a magusfiles/ subdirectory) " +
+	"discovered by the presence of a magusfile (magusfile.tl or magusfile.buzz, or a magusfiles/ subdirectory) " +
 	"and are the basic unit of caching, scheduling, and dependency tracking."
 
 // ProjectEntry is the structured view of a single project.

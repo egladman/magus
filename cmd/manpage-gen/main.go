@@ -6,7 +6,7 @@
 //	                 (default: manpage/gen).
 //	md             — Markdown for the docs site, written to -out
 //	                 (default: docs/manpage/gen). The static-site generator
-//	                 (site/sitegen.bzz) renders these to HTML like any other doc.
+//	                 (site/sitegen.buzz) renders these to HTML like any other doc.
 //
 // Both render from the same internal/manpage registry; they are independent
 // serializers, not a conversion of one format into the other.

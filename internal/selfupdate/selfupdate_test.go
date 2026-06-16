@@ -1,6 +1,6 @@
 //go:build !noselfmanage
 
-package selfupdate_test
+package selfupdate
 
 import (
 	"archive/tar"
@@ -18,8 +18,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/egladman/magus/internal/selfupdate"
 )
 
 // ── ParseManifest ──────────────────────────────────────────────────────────────
@@ -28,7 +26,7 @@ func TestParseManifestValid(t *testing.T) {
 	t.Parallel()
 	hash := strings.Repeat("a", 64) // 64 hex chars = sha256
 	data := fmt.Sprintf("version: v1.2.3\n%s  magus-linux-amd64.tar.gz\n", hash)
-	m, err := selfupdate.ParseManifest([]byte(data))
+	m, err := ParseManifest([]byte(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +42,7 @@ func TestParseManifestMissingVersion(t *testing.T) {
 	t.Parallel()
 	hash := strings.Repeat("b", 64)
 	data := fmt.Sprintf("%s  file.tar.gz\n", hash)
-	_, err := selfupdate.ParseManifest([]byte(data))
+	_, err := ParseManifest([]byte(data))
 	if err == nil {
 		t.Fatal("expected error for missing version, got nil")
 	}
@@ -54,7 +52,7 @@ func TestParseManifestBadSemver(t *testing.T) {
 	t.Parallel()
 	hash := strings.Repeat("c", 64)
 	data := fmt.Sprintf("version: not-semver\n%s  file.tar.gz\n", hash)
-	_, err := selfupdate.ParseManifest([]byte(data))
+	_, err := ParseManifest([]byte(data))
 	if err == nil {
 		t.Fatal("expected error for invalid semver, got nil")
 	}
@@ -63,7 +61,7 @@ func TestParseManifestBadSemver(t *testing.T) {
 func TestParseManifestShortHash(t *testing.T) {
 	t.Parallel()
 	data := "version: v1.0.0\ndeadbeef  file.tar.gz\n"
-	_, err := selfupdate.ParseManifest([]byte(data))
+	_, err := ParseManifest([]byte(data))
 	if err == nil {
 		t.Fatal("expected error for short hash, got nil")
 	}
@@ -71,7 +69,7 @@ func TestParseManifestShortHash(t *testing.T) {
 
 func TestParseManifestEmpty(t *testing.T) {
 	t.Parallel()
-	_, err := selfupdate.ParseManifest([]byte(""))
+	_, err := ParseManifest([]byte(""))
 	if err == nil {
 		t.Fatal("expected error for empty manifest, got nil")
 	}
@@ -81,7 +79,7 @@ func TestParseManifestCommentsSkipped(t *testing.T) {
 	t.Parallel()
 	hash := strings.Repeat("d", 64)
 	data := fmt.Sprintf("# this is a comment\nversion: v2.0.0\n%s  file.tar.gz\n", hash)
-	m, err := selfupdate.ParseManifest([]byte(data))
+	m, err := ParseManifest([]byte(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +92,7 @@ func TestParseManifestCommentsSkipped(t *testing.T) {
 
 func TestFindAssetsAllPresent(t *testing.T) {
 	t.Parallel()
-	rel := &selfupdate.GitHubRelease{
+	rel := &GitHubRelease{
 		TagName: "v1.0.0",
 		Assets: []struct {
 			Name               string `json:"name"`
@@ -105,7 +103,7 @@ func TestFindAssetsAllPresent(t *testing.T) {
 			{Name: "SHA256SUMS.sig", BrowserDownloadURL: "http://example.com/sig"},
 		},
 	}
-	assets, err := selfupdate.FindAssets(rel, "magus-linux-amd64.tar.gz")
+	assets, err := FindAssets(rel, "magus-linux-amd64.tar.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,8 +115,8 @@ func TestFindAssetsAllPresent(t *testing.T) {
 
 func TestFindAssetsMissing(t *testing.T) {
 	t.Parallel()
-	rel := &selfupdate.GitHubRelease{TagName: "v1.0.0"}
-	_, err := selfupdate.FindAssets(rel, "magus-linux-amd64.tar.gz")
+	rel := &GitHubRelease{TagName: "v1.0.0"}
+	_, err := FindAssets(rel, "magus-linux-amd64.tar.gz")
 	if err == nil {
 		t.Fatal("expected error for missing assets, got nil")
 	}
@@ -139,7 +137,7 @@ func TestCompare(t *testing.T) {
 		{"v1.0.0", "not-semver", 0},
 	}
 	for _, tc := range cases {
-		got := selfupdate.Compare(tc.a, tc.b)
+		got := Compare(tc.a, tc.b)
 		if got != tc.want {
 			t.Errorf("Compare(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
 		}
@@ -177,7 +175,7 @@ func TestExtractBinaryFound(t *testing.T) {
 		binaryName = "magus.exe"
 	}
 	data := makeTarGz(t, binaryName, "fake binary content")
-	r, err := selfupdate.ExtractBinary(data)
+	r, err := ExtractBinary(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +187,7 @@ func TestExtractBinaryFound(t *testing.T) {
 func TestExtractBinaryNotFound(t *testing.T) {
 	t.Parallel()
 	data := makeTarGz(t, "other-file", "content")
-	_, err := selfupdate.ExtractBinary(data)
+	_, err := ExtractBinary(data)
 	if err == nil {
 		t.Fatal("expected error when binary not in archive")
 	}
@@ -209,7 +207,7 @@ func TestExtractBinaryPathTraversal(t *testing.T) {
 	_, _ = tw.Write([]byte("hello"))
 	tw.Close()
 	gw.Close()
-	_, err := selfupdate.ExtractBinary(buf.Bytes())
+	_, err := ExtractBinary(buf.Bytes())
 	if err == nil {
 		t.Fatal("expected error for path traversal in archive")
 	}
@@ -219,13 +217,13 @@ func TestExtractBinaryPathTraversal(t *testing.T) {
 
 func TestFetchReleaseLatest(t *testing.T) {
 	t.Parallel()
-	rel := &selfupdate.GitHubRelease{TagName: "v3.0.0"}
+	rel := &GitHubRelease{TagName: "v3.0.0"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(rel)
 	}))
 	defer srv.Close()
 
-	got, err := selfupdate.FetchRelease(context.Background(), "", selfupdate.Options{APIBase: srv.URL})
+	got, err := FetchRelease(context.Background(), "", Options{APIBase: srv.URL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +239,7 @@ func TestFetchReleaseHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := selfupdate.FetchRelease(context.Background(), "", selfupdate.Options{APIBase: srv.URL})
+	_, err := FetchRelease(context.Background(), "", Options{APIBase: srv.URL})
 	if err == nil {
 		t.Fatal("expected error for HTTP 404, got nil")
 	}
@@ -270,9 +268,9 @@ func TestFetchAndVerifyManifestValid(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m, err := selfupdate.FetchAndVerifyManifest(
+	m, err := FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		selfupdate.Options{PubKey: pub},
+		Options{PubKey: pub},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -303,9 +301,9 @@ func TestFetchAndVerifyManifestBadSig(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err = selfupdate.FetchAndVerifyManifest(
+	_, err = FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		selfupdate.Options{PubKey: pub},
+		Options{PubKey: pub},
 	)
 	if err == nil {
 		t.Fatal("expected signature failure, got nil")
@@ -318,7 +316,7 @@ func TestFetchAndVerifyTarballHashMismatch(t *testing.T) {
 	t.Parallel()
 	content := makeTarGz(t, "magus", "binary content")
 	wrongHash := strings.Repeat("0", 64)
-	m := &selfupdate.Manifest{
+	m := &Manifest{
 		Version: "v1.0.0",
 		Hashes:  map[string]string{"asset.tar.gz": wrongHash},
 	}
@@ -328,7 +326,7 @@ func TestFetchAndVerifyTarballHashMismatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := selfupdate.FetchAndVerifyTarball(context.Background(), srv.URL+"/asset", "asset.tar.gz", m, selfupdate.Options{})
+	_, err := FetchAndVerifyTarball(context.Background(), srv.URL+"/asset", "asset.tar.gz", m, Options{})
 	if err == nil {
 		t.Fatal("expected hash mismatch error, got nil")
 	}
@@ -336,11 +334,11 @@ func TestFetchAndVerifyTarballHashMismatch(t *testing.T) {
 
 func TestFetchAndVerifyTarballMissingManifestEntry(t *testing.T) {
 	t.Parallel()
-	m := &selfupdate.Manifest{
+	m := &Manifest{
 		Version: "v1.0.0",
 		Hashes:  map[string]string{},
 	}
-	_, err := selfupdate.FetchAndVerifyTarball(context.Background(), "http://unused", "asset.tar.gz", m, selfupdate.Options{})
+	_, err := FetchAndVerifyTarball(context.Background(), "http://unused", "asset.tar.gz", m, Options{})
 	if err == nil {
 		t.Fatal("expected error for missing manifest entry, got nil")
 	}
@@ -351,7 +349,7 @@ func TestFetchAndVerifyTarballMissingManifestEntry(t *testing.T) {
 func TestResolveTargetPathWithBinDir(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	path, err := selfupdate.ResolveTargetPath(dir)
+	path, err := ResolveTargetPath(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +365,7 @@ func TestResolveTargetPathBinDirNotDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	_, err = selfupdate.ResolveTargetPath(f.Name())
+	_, err = ResolveTargetPath(f.Name())
 	if err == nil {
 		t.Fatal("expected error when --bin-dir points to a file, got nil")
 	}
@@ -378,7 +376,7 @@ func TestResolveTargetPathBinDirNotDir(t *testing.T) {
 func TestCheckParentWritable(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	err := selfupdate.CheckParentWritable(filepath.Join(dir, "magus"))
+	err := CheckParentWritable(filepath.Join(dir, "magus"))
 	if err != nil {
 		t.Errorf("CheckParentWritable on writable dir: %v", err)
 	}
@@ -402,9 +400,9 @@ func TestDownloadVerifyNilPubKeyFallsBack(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := selfupdate.FetchAndVerifyManifest(
+	_, err := FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		selfupdate.Options{},
+		Options{},
 	)
 	if err == nil {
 		t.Fatal("expected error with nil PubKey, got nil")

@@ -1,0 +1,221 @@
+// bubblegum 🪟💨 (yeet + tile) — a tiling window manager for macOS that yeets
+// windows into place, cobbled together entirely in Buzz for shits and giggles.
+//
+// It manages every standard
+// on-screen window in a binary split tree (layout.buzz), drives the actual
+// windows through the public accessibility API (macos/windows/events/
+// permissions.buzz), and reads a single i3-style config file (config.buzz,
+// live-reloaded on edit). Hotkeys arrive through a CGEventTap; a run-loop
+// timer rescans for new and closed windows.
+//
+//     go run ./cmd/buzz -L examples/bubblegum examples/bubblegum/bubblegum.buzz
+//
+// Needs macOS and the Accessibility permission and nothing else: no SIP
+// changes, no root, no private frameworks.
+
+import "std";
+import "os";
+import "layout";
+import "config";
+import "state";
+import "core/paths";
+import "core/eval";
+import "core/screens";
+import "core/tiling";
+import "core/floating";
+import "core/scan";
+import "core/rules";
+import "core/bar";
+import "core/focus";
+import "core/workspaces";
+import "core/tray";
+import "core/command";
+import "core/system";
+import "core/wmevents";
+import "core/zlayer";
+import "regex";
+import "log";
+import "launcher";
+import "statusbar";
+import "cheatsheet";
+import "focusring";
+import "inspector";
+import "traymenu";
+import "toast";
+import "serialize";
+import "io";
+import "platform/macos/cocoa";
+import "platform/macos/frameworks";
+import "platform/macos/windows";
+import "platform/macos/events";
+import "platform/macos/permissions";
+
+
+
+
+
+
+// --- entry point ---
+
+fun main(args: [str]) > void {
+    if (args.len() > 0 and args[0] == "init") {
+        paths\cmdInit(); // write a starter config and exit — needs neither macOS nor AX
+        return;
+    }
+
+    if (!frameworks\onMacOS()) {
+        std\print("bubblegum: this program drives macOS frameworks and only runs there.");
+        os\exit(1);
+        return;
+    }
+    if (!system\ensureAccessibility()) {
+        os\exit(1);
+        return;
+    }
+    log\debug("startup: accessibility granted");
+    // Seed the built-in defaults (the embedded keymap + default settings), then let
+    // the user's config.buzz override/extend via configure()/bind()/rule().
+    state\wm().cfg = (config\parseConfig(config\defaultConfigText()) as? mut config\Runtime)!;
+    state\wm().runCmd = command\runCommand; // wire the back-edge used by tray/rules/scan
+    _ = command\runBuzzConfig();
+    log\debug("startup: config loaded ({state\wm().cfg.binds.len()} binds)");
+    cocoa\uiSetTheme(state\wm().cfg.theme); // one toolkit-wide look for every panel/overlay (set before any UI)
+    cocoa\uiInit();
+    if (state\wm().cfg.barHeight > 0.0) {
+        statusbar\setBarHeight(state\wm().cfg.barHeight); // explicit thickness; tiler reserves this below
+    } else {
+        statusbar\setBarHeight(windows\menuBarHeight()); // 0 = auto: match the system menu bar
+    }
+    screens\initScreens();
+    log\debug("startup: screens initialized ({state\wm().screens.len()})");
+    rules\loadRules();
+    scan\rescan();
+    log\debug("startup: initial scan adopted {state\wm().managed.len()} window(s)");
+    floating\restoreSession(); // redistribute the adopted windows to their saved workspaces
+    focus\syncFocus();
+    tiling\retile();
+    log\debug("startup: first retile done");
+    if (state\wm().cfg.hideMethod == "zlayer") {
+        _ = zlayer\layoutBackLayer(); // grid windows already on inactive layers at startup (restored session)
+        zlayer\raiseActiveLayer();
+    }
+    if (!events\installTaps()) {
+        std\print("bubblegum: could not create the key event tap.");
+        std\print("  If the permission was granted just now, macOS may want a fresh");
+        std\print("  process before honoring it — run yeet once more.");
+        os\exit(1);
+        return;
+    }
+    command\pushChords(); // publish the swallow set to the tap helper
+    launcher\launcherOnEval(eval\onEvalLine);
+    launcher\launcherOnPick(floating\onWindowPick);
+    if (state\wm().cfg.trayOn) {
+        statusbar\trayInit(); // menu-bar presence (SF Symbol on macOS); updateBar keeps it live
+    }
+    if (state\wm().cfg.barOn) {
+        final ak = screens\tiledAppKit();
+        statusbar\barInit(ak[0], y: ak[1], w: ak[2]);
+        bar\updateBar();
+    }
+    foreach (e in state\wm().cfg.execs) {
+        final cmd = (e as? str)!;
+        command\runCommand("exec " + cmd); // autostart lines, i3-style (startup only)
+    }
+    std\print("bubblegum: managing {layout\countLeaves(state\wm().root)} windows, {state\wm().cfg.binds.len()} binds, event-driven, reconcile every {state\wm().cfg.pollMs}ms");
+
+    // Startup adopt is done; from here, new windows are interactive arrivals.
+    // started() now reads true (rules can defer to the bar prompt; the prompt
+    // itself only fires while this is set).
+    state\wm().wmStarted = true;
+    log\debug("startup: complete, entering event loop (pump every 0.04s, reconcile every {state\wm().cfg.pollMs}ms)");
+
+    // The WM loop: pump the run loop (the tap callbacks fire and the AppKit
+    // overlays redraw), drain the key/mouse queues, and rescan every pollMs.
+    var lastScanAt = os\time();
+    var lastBarAt = os\time();
+    while (true) {
+        events\pump(0.04); // ~25 Hz; hotkey latency is one pump at most
+        events\setGrab(launcher\launcherActive() or state\wm().promptId != 0); // grab while the launcher or a bar prompt is up
+        var et = events\pollKey();
+        while (et != 0) {
+            wmevents\handleKey(et, code: events\keycode(), flags: events\flags());
+            et = events\pollKey();
+        }
+        if (state\wm().cfg.ffmOn and events\pollMouse()) {
+            if (!wmevents\dragHold()) {
+                wmevents\handleMouse(events\mouseX(), y: events\mouseY()); // no focus-follow mid-drag
+            }
+        }
+        if (events\pollClick()) {
+            state\wm().lastDownX = events\clickX();
+            state\wm().lastDownY = events\clickY();
+            state\wm().mouseDownAt = os\time(); // button down: freeze the reconcile's layout work until release
+            // A click outside an open overlay dismisses it and is consumed there,
+            // so it never falls through to the tray or status bar underneath.
+            if (!wmevents\handleOverlayClick(state\wm().lastDownX, gy: state\wm().lastDownY)) {
+                if (!tray\handleTrayClick(state\wm().lastDownX, gy: state\wm().lastDownY)) { // menu-bar tray item + its drop-down
+                    wmevents\handleBarClick(state\wm().lastDownX, gy: state\wm().lastDownY); // clickable status bar
+                }
+            }
+        }
+        if (events\pollRelease()) {
+            state\wm().mouseDownAt = 0.0; // button up: the reconcile may move windows again
+            final rx = events\releaseX();
+            final ry = events\releaseY();
+            // Only a real drag (moved between down and up) triggers the reflow scan.
+            if (tiling\absD(rx - state\wm().lastDownX) + tiling\absD(ry - state\wm().lastDownY) > 24.0) {
+                wmevents\handleRelease(rx, uy: ry);
+            }
+        }
+        wmevents\drainWindowEvents(); // event-driven: react to window lifecycle immediately
+        final now: double = os\time();
+        if (state\wm().promptId != 0 and now - state\wm().promptAt >= state\promptTtlMs) {
+            // Ignored long enough — answer it as "keep here" so the held window is
+            // tiled onto the current workspace rather than left parked offscreen.
+            command\handlePromptKey(0 - 1);
+        }
+        // A timed pause (from the tray menu) re-enables auto-reconcile once it elapses.
+        if (state\wm().reconcilePaused and state\wm().reconcileResumeAt > 0.0 and now >= state\wm().reconcileResumeAt) {
+            command\resumeReconcile();
+            bar\showToast("Reconciliation resumed");
+            if (traymenu\isVisible()) {
+                tray\showTrayMenu(); // menu was open: rebuild it (Resume becomes Pause)
+            }
+        }
+        if (toast\toastVisible() and now >= state\wm().toastUntil) {
+            toast\toastHide(); // self-dismiss the notification once its moment has passed
+        }
+        // Keep the bar fresh on the fast pump loop, decoupled from the slow reconcile:
+        // barUpdate diffs and only re-sets changed text, so this is cheap, and the bar
+        // tracks state within state\barRefreshMs instead of waiting on the pollMs reconcile.
+        if (now - lastBarAt >= state\barRefreshMs) {
+            lastBarAt = now;
+            bar\updateBar();
+            // Tick the open menu's countdown on the Resume row without rebuilding it
+            // (string-diffed so the NSString churn is ~once a second, not every pump).
+            if (traymenu\isVisible() and state\wm().reconcilePaused and state\wm().reconcileResumeAt > 0.0) {
+                final t = tray\resumeRowText();
+                if (t != state\wm().lastTrayCountdown) {
+                    traymenu\setRowText(1, text: t); // the Resume row is index 1 (header is 0)
+                    state\wm().lastTrayCountdown = t;
+                }
+            }
+            // Tick the active prompt's response countdown the same way, so the user
+            // can see how long until it auto-decides (handlePromptKey on the TTL).
+            if (state\wm().promptId != 0) {
+                final pt = scan\promptText();
+                if (pt != state\wm().lastPromptText) {
+                    statusbar\promptSetText(pt);
+                    state\wm().lastPromptText = pt;
+                }
+            }
+        }
+        if (now - lastScanAt >= std\toDouble(state\wm().cfg.pollMs)) {
+            lastScanAt = now;
+            if (!state\wm().reconcilePaused) {
+                wmevents\tick(); // slow safety reconcile — catches anything the observers missed
+            }
+        }
+    }
+}
+

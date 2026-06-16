@@ -16,17 +16,18 @@ func (p *PrimitiveType) TypeName() string { return p.Name }
 
 // Pre-defined primitive type singletons.
 var (
-	Int    Type = &PrimitiveType{"int"}
-	Double Type = &PrimitiveType{"double"}
-	Str    Type = &PrimitiveType{"str"}
-	Bool   Type = &PrimitiveType{"bool"}
-	Null   Type = &PrimitiveType{"null"}
-	Void   Type = &PrimitiveType{"void"}
-	Any    Type = &PrimitiveType{"any"} // unknown / unresolved
-	Rng    Type = &PrimitiveType{"rng"} // range type (lo..hi)
-	Fib    Type = &PrimitiveType{"fib"} // unparameterized fiber type
-	Pat    Type = &PrimitiveType{"pat"} // pattern type ($"...")
-	Ud     Type = &PrimitiveType{"ud"}  // foreign userdata (FFI opaque pointer), matching upstream's `ud`
+	Int     Type = &PrimitiveType{"int"}
+	Double  Type = &PrimitiveType{"double"}
+	Str     Type = &PrimitiveType{"str"}
+	Bool    Type = &PrimitiveType{"bool"}
+	Null    Type = &PrimitiveType{"null"}
+	Void    Type = &PrimitiveType{"void"}
+	Any     Type = &PrimitiveType{"any"}       // user-written `any` annotation
+	Unknown Type = &PrimitiveType{"<unknown>"} // checker tracking failure (not user-written)
+	Rng     Type = &PrimitiveType{"rng"}       // range type (lo..hi)
+	Fib     Type = &PrimitiveType{"fib"}       // unparameterized fiber type
+	Pat     Type = &PrimitiveType{"pat"}       // pattern type ($"...")
+	Ud      Type = &PrimitiveType{"ud"}        // foreign userdata (FFI opaque pointer), matching upstream's `ud`
 )
 
 // FibType is the parameterized fiber type fib<Yield, Return>.
@@ -71,10 +72,14 @@ func (f *FuncType) TypeName() string {
 }
 
 // ObjectType is a named object type.
+// IsNamespace marks types built from imported module exports: they may have
+// untracked fields (exported finals, vars) so unknown member access returns
+// Unknown instead of an error.
 type ObjectType struct {
-	Name    string
-	Fields  map[string]Type
-	Methods map[string]*FuncType
+	Name        string
+	Fields      map[string]Type
+	Methods     map[string]*FuncType
+	IsNamespace bool
 }
 
 func (o *ObjectType) TypeName() string { return o.Name }
@@ -108,7 +113,14 @@ func ParseAnnot(s string) Type {
 
 // Compat reports whether got can be assigned to want.
 func Compat(got, want Type) bool {
-	if got == Any || want == Any {
+	// A nil leaf is a legitimate representation: a function type with no declared
+	// return (e.g. fun(any)) has Ret == nil, which FuncType.TypeName renders as "".
+	// The structural recursion below reaches such leaves directly, so guard nil the
+	// same way TypeName does: two nils match, nil vs non-nil does not.
+	if got == nil || want == nil {
+		return got == want
+	}
+	if got == Any || got == Unknown || want == Any || want == Unknown {
 		return true
 	}
 	if got == Null {
@@ -127,6 +139,20 @@ func Compat(got, want Type) bool {
 			}
 		}
 		return Compat(gf.Ret, wf.Ret)
+	}
+	// Container types: compare element-wise so the top-level Any-escape rule
+	// applies inside lists and maps too — `[any]` is compatible with `[double]`,
+	// just as `any` is with `double`. gopherbuzz uses Any as its dynamic-typing
+	// escape hatch, so an any-element list assigns to a typed-element one.
+	gl, glOK := got.(*ListType)
+	wl, wlOK := want.(*ListType)
+	if glOK && wlOK {
+		return Compat(gl.Elem, wl.Elem)
+	}
+	gm, gmOK := got.(*MapType)
+	wm, wmOK := want.(*MapType)
+	if gmOK && wmOK {
+		return Compat(gm.Key, wm.Key) && Compat(gm.Val, wm.Val)
 	}
 	return got.TypeName() == want.TypeName()
 }

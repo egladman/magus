@@ -1,12 +1,10 @@
-package project_test
+package project
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/egladman/magus/project"
 )
 
 // ExampleDiscover shows how to discover projects in a workspace root using
@@ -33,7 +31,7 @@ func ExampleDiscover() {
 		}
 	}
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		fmt.Println("inspect error:", err)
 		return

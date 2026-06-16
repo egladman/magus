@@ -1,4 +1,4 @@
-package std_test
+package std
 
 import (
 	"bufio"
@@ -10,17 +10,16 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
-	buzzstd "github.com/egladman/gopherbuzz/std"
 )
 
-// TestConformance runs all .bzz files in testdata/, registering the Buzz std
+// TestConformance runs all .buzz files in testdata/, registering the Buzz std
 // library so imports resolve. Each file may carry header directives:
 //
 //	// @expect: <value>  — run and assert __r.String() == <value>
 //	// @error: <substr>  — assert error contains <substr>
 //	// @skip: <reason>   — skip this test case
 func TestConformance(t *testing.T) {
-	files, err := filepath.Glob("testdata/*.bzz")
+	files, err := filepath.Glob("testdata/*.buzz")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +28,7 @@ func TestConformance(t *testing.T) {
 	}
 	for _, path := range files {
 		path := path
-		name := strings.TrimSuffix(filepath.Base(path), ".bzz")
+		name := strings.TrimSuffix(filepath.Base(path), ".buzz")
 		t.Run(name, func(t *testing.T) {
 			src, err := os.ReadFile(path)
 			if err != nil {
@@ -48,7 +47,7 @@ func TestConformance(t *testing.T) {
 func TestRegisterNoPanic(t *testing.T) {
 	sess := buzz.NewSession(context.Background())
 	defer func() { _ = sess.Close() }()
-	buzzstd.Register(sess) // must not panic
+	Register(sess) // must not panic
 }
 
 // TestAllModulesImportable verifies that every standard module can be imported
@@ -59,7 +58,7 @@ func TestAllModulesImportable(t *testing.T) {
 		t.Run(mod, func(t *testing.T) {
 			sess := buzz.NewSession(context.Background())
 			defer func() { _ = sess.Close() }()
-			buzzstd.Register(sess)
+			Register(sess)
 			src := fmt.Sprintf("import %q;", mod)
 			if err := sess.Exec(context.Background(), src); err != nil {
 				t.Errorf("import %q raised error: %v", mod, err)
@@ -99,7 +98,7 @@ func runCase(t *testing.T, src string, meta conformanceMeta) {
 	t.Helper()
 	sess := buzz.NewSession(context.Background())
 	defer func() { _ = sess.Close() }()
-	buzzstd.Register(sess)
+	Register(sess)
 
 	err := sess.Exec(context.Background(), src)
 	if meta.errStr != "" {

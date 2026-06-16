@@ -1,10 +1,8 @@
-package watch_test
+package watch
 
 import (
 	"fmt"
 	"testing"
-
-	"github.com/egladman/magus/internal/file/watch"
 )
 
 var builtinPaths = []string{
@@ -26,7 +24,7 @@ func BenchmarkBuiltinIgnore(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, p := range builtinPaths {
-			_ = watch.BuiltinIgnore(p)
+			_ = BuiltinIgnore(p)
 		}
 	}
 }
@@ -35,15 +33,15 @@ func BenchmarkBuiltinIgnore(b *testing.B) {
 // production: BuiltinIgnore + a set of glob patterns, composed via Compose.
 func BenchmarkComposedIgnore(b *testing.B) {
 	const wsRoot = "/repo"
-	patterns := []watch.IgnorePattern{
-		{Type: watch.PatternGlob, Pattern: "**/scratch/**"},
-		{Type: watch.PatternGlob, Pattern: "**/testdata/**"},
-		{Type: watch.PatternRegex, Pattern: `\.tmp$`},
-		{Type: watch.PatternLiteral, Pattern: "vendor"},
+	patterns := []IgnorePattern{
+		{Type: PatternGlob, Pattern: "**/scratch/**"},
+		{Type: PatternGlob, Pattern: "**/testdata/**"},
+		{Type: PatternRegex, Pattern: `\.tmp$`},
+		{Type: PatternLiteral, Pattern: "vendor"},
 	}
-	ignore := watch.Compose(
-		watch.BuiltinIgnore,
-		watch.IgnorePatterns(wsRoot, patterns),
+	ignore := Compose(
+		BuiltinIgnore,
+		IgnorePatterns(wsRoot, patterns),
 	)
 
 	b.ResetTimer()
@@ -62,7 +60,7 @@ func BenchmarkOutputsIgnore(b *testing.B) {
 	for i := range globs {
 		globs[i] = fmt.Sprintf("svc%02d/dist/**", i)
 	}
-	ignore := watch.OutputsIgnore(wsRoot, globs)
+	ignore := OutputsIgnore(wsRoot, globs)
 
 	paths := []string{
 		"/repo/svc00/dist/out.bin",

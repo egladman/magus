@@ -1,0 +1,52 @@
+// magusfile.buzz — magus workspace definition.
+//
+// Projects are declared explicitly with magus.project.register. A project names
+// the spell(s) that build it and, optionally, its regenerable outputs and any
+// cross-project dependency edges.
+//
+//   magus describe targets   -- show targets in this workspace
+//   magus describe spells    -- show all available spells
+
+import "magus";
+
+// The magus host utilities are imported under bare names — os, fs, vcs, http, … —
+// the same convention as Buzz's stdlib. magus layers its methods onto Buzz's
+// stdlib, so `import "os"` carries both surfaces (os.env from Buzz, os.exec from
+// magus). Methods are camelCase (Buzz's convention). Import each module you use.
+import "os";
+
+// Bind the spell(s) that build this project. Reach a built-in spell by importing
+// it; it binds under its basename. register takes a configurator: the host hands
+// it this project `p` and a sink `cb`, and you emit the project's options once via
+// cb({...}). Pass an explicit path — register("sub", fun(p, cb) {...}) — only to
+// configure a different project (e.g. one magusfile declaring several):
+//
+//   import "magus/spell/go";
+//   magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
+//
+magus.project.register(fun(p, cb) > bool { cb({
+    // "spells": [go],
+    // "outputs": ["bin/*", "dist/**"],
+    // "depends_on": ["../api"],
+}); return true; });
+
+// ── targets ──────────────────────────────────────────────────────────────────
+// Each exported function is a runnable target. Compose a stage by calling a bound
+// spell's tool-native op from its body, or run a command with os.exec
+// (build below). Leave a stage as a no-op until you wire it.
+
+export fun preflight(_args: [str]) > void {}
+export fun generate(_args: [str]) > void { magus.depends_on(["preflight"]); }
+export fun format(_args: [str]) > void { magus.depends_on(["generate"]); }
+export fun lint(_args: [str]) > void { magus.depends_on(["format"]); }
+export fun build(_args: [str]) > void { magus.depends_on(["format"]); os.exec("echo", ["Hello from magus"]); }
+export fun test(_args: [str]) > void { magus.depends_on(["format"]); }
+
+// 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
+// not hardcode its steps — compose them here with magus.depends_on. magus runs
+// ci read-only. Each stage declares its own prerequisites so the DAG is expressed
+// as edges: ci fans out lint/build/test in parallel; they each wait for format,
+// which waits for generate, which waits for preflight. Shared deps run once.
+export fun ci(_args: [str]) > void {
+    magus.depends_on(["lint", "build", "test"]);
+}

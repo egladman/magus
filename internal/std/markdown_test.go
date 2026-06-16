@@ -1,16 +1,14 @@
-package std_test
+package std
 
 import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/egladman/magus/internal/std"
 )
 
 func renderMD(t *testing.T, src string) string {
 	t.Helper()
-	out, err := std.MarkdownToHTML(context.Background(), src)
+	out, err := MarkdownToHTML(context.Background(), src)
 	if err != nil {
 		t.Fatalf("MarkdownToHTML: %v", err)
 	}

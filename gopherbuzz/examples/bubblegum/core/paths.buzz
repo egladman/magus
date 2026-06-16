@@ -1,0 +1,106 @@
+// core/paths.buzz - config directory, derived paths, and init helpers.
+
+namespace paths;
+
+import "state";
+import "os";
+import "fs";
+import "io";
+import "config";
+import "std";
+
+export fun configDir() > str {
+    final xdg = os\env("XDG_CONFIG_HOME");
+    if (xdg != null) {
+        return xdg! + "/bubblegum";
+    }
+    final home = os\env("HOME") ?? ".";
+    return home + "/.config/bubblegum";
+}
+
+export fun layoutPath() > str {
+    return configDir() + "/layout.json";
+}
+
+export fun rulesPath() > str {
+    return configDir() + "/rules.buzz";
+}
+
+export fun buzzConfigPath() > str {
+    return configDir() + "/config.buzz";
+}
+
+export fun generatedRulesPath() > str {
+    return configDir() + "/rules.generated.buzz";
+}
+
+export fun sessionPath() > str {
+    return configDir() + "/session";
+}
+
+// mkdirP creates path and any missing parents. fs\makeDirectory makes one level
+// at a time and throws on both a missing parent and an existing dir, so we walk
+// the segments and swallow each step's error - a real failure (e.g. permission)
+// resurfaces when the caller goes to write the file.
+export fun mkdirP(path: str) > void {
+    var cur = "";
+    foreach (seg in path.split("/")) {
+        if (seg.len() == 0) {
+            continue; // leading "/" (absolute) or a doubled slash
+        }
+        cur = cur + "/" + seg;
+        try {
+            fs\makeDirectory(cur);
+        } catch (_: any) {
+            // already exists (or will fail later at File.open) - keep walking
+        }
+    }
+}
+
+// writeDefaultConfig writes the starter config.buzz to buzzConfigPath() if none
+// exists, creating the directory. Returns true if a config is present afterward
+// (already there or freshly written), false only on a write error. Shared by the
+// `init` subcommand and the tray menu's "Edit config".
+export fun writeDefaultConfig() > bool {
+    final path = buzzConfigPath();
+    if (config\readConfigText(path) != null) {
+        return true; // never clobber a real config
+    }
+    try {
+        mkdirP(configDir());
+        final f = io\File.open(path, mode: io\FileMode.write);
+        f.write(config\defaultBuzzConfig());
+        f.close();
+    } catch (e: any) {
+        std\print("bubblegum: could not write {path}: {e}");
+        return false;
+    }
+    return true;
+}
+
+// cmdInit writes a starter config.buzz so a fresh install has a file to edit instead
+// of running on the built-in defaults. Invoked as `bubblegum init`; always exits.
+export fun cmdInit() > void {
+    final path = buzzConfigPath();
+    final existed = config\readConfigText(path) != null;
+    if (!writeDefaultConfig()) {
+        os\exit(1);
+        return;
+    }
+    if (existed) {
+        std\print("bubblegum: config already exists at {path} - leaving it untouched");
+    } else {
+        std\print("bubblegum: wrote starter config to {path}");
+    }
+    os\exit(0);
+}
+
+// openConfigInEditor hands config.buzz to the default editor (the tray menu's "Edit
+// config"). Writes the starter config first if the user is still on built-in
+// defaults, so the editor never opens on a missing file.
+export fun openConfigInEditor() > void {
+    if (!writeDefaultConfig()) {
+        return;
+    }
+    state\wm().runCmd!("exec open -t \"" + buzzConfigPath() + "\"");
+}

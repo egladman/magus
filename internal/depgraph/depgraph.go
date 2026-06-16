@@ -1,4 +1,4 @@
-// Package depgraph constructs the project dependency DAG, translating path strings to igraph IDs.
+// Package depgraph constructs the project dependency DAG, translating path strings to node IDs.
 package depgraph
 
 import (
@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	igraph "github.com/egladman/magus/internal/graph"
 	"github.com/egladman/magus/types"
 )
 
-type engine struct{ g *igraph.Graph }
+type engine struct{ g *Graph }
 
 func (e *engine) TopoSort() []string {
 	ids := e.g.TopoOrder()
@@ -22,7 +21,7 @@ func (e *engine) TopoSort() []string {
 }
 
 func (e *engine) ReverseClosure(seeds []string) []string {
-	seedIDs := make([]igraph.ID, 0, len(seeds))
+	seedIDs := make([]ID, 0, len(seeds))
 	for _, s := range seeds {
 		if id, ok := e.g.ID(s); ok {
 			seedIDs = append(seedIDs, id)
@@ -58,7 +57,7 @@ func (e *engine) BlastRadius() map[string]int {
 	rawBR := e.g.BlastRadius()
 	out := make(map[string]int, len(rawBR))
 	for id, count := range rawBR {
-		if path, ok := e.g.Path(igraph.ID(id)); ok {
+		if path, ok := e.g.Path(ID(id)); ok {
 			out[path] = int(count)
 		}
 	}
@@ -74,7 +73,7 @@ func (e *engine) PathsFromSeeds(seeds []string, target string) []types.AffectedP
 	if !ok {
 		return nil
 	}
-	seedIDs := make([]igraph.ID, 0, len(seeds))
+	seedIDs := make([]ID, 0, len(seeds))
 	for _, s := range seeds {
 		if id, ok := e.g.ID(s); ok {
 			seedIDs = append(seedIDs, id)
@@ -131,14 +130,14 @@ func (e *engine) Nodes() []string {
 	return out
 }
 
-// graphObsAdapter bridges types.Observer to igraph.Observer.
+// graphObsAdapter bridges types.Observer to Observer.
 type graphObsAdapter struct{ o types.Observer }
 
-func (a graphObsAdapter) OnBuild(s igraph.BuildStats) {
+func (a graphObsAdapter) OnBuild(s BuildStats) {
 	a.o.OnBuild(types.BuildStats{Nodes: s.Nodes, Edges: s.Edges, Duration: s.Duration})
 }
 
-func (a graphObsAdapter) OnQuery(e igraph.QueryEvent) {
+func (a graphObsAdapter) OnQuery(e QueryEvent) {
 	a.o.OnQuery(types.QueryEvent{Op: e.Op, Nodes: e.Nodes, Seeds: e.Seeds, Strategy: e.Strategy, ResultCount: e.ResultCount, Duration: e.Duration})
 }
 
@@ -159,7 +158,7 @@ func Build(w *types.Workspace, opts ...types.GraphOption) (*types.Graph, error) 
 		o(cfg)
 	}
 
-	b := igraph.New()
+	b := New()
 	var missing []types.UnregisteredDep
 	for _, p := range w.All() {
 		fromID := b.AddNode(p.Path)
@@ -199,7 +198,7 @@ func Build(w *types.Workspace, opts ...types.GraphOption) (*types.Graph, error) 
 		return nil, &types.UnregisteredDepError{Missing: missing}
 	}
 
-	g, err := b.Build(igraph.WithObserver(graphObsAdapter{cfg.Obs}))
+	g, err := b.Build(WithObserver(graphObsAdapter{cfg.Obs}))
 	if err != nil {
 		return nil, fmt.Errorf("magus/depgraph: build graph: %w", err)
 	}

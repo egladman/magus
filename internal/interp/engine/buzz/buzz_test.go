@@ -66,8 +66,8 @@ func TestIntegration_ParseTargets(t *testing.T) {
 		Engine: "buzz",
 	}
 
-	// Write a minimal magusfile.bzz to a temp file.
-	path := filepath.Join(src.Dir, "magusfile.bzz")
+	// Write a minimal magusfile.buzz to a temp file.
+	path := filepath.Join(src.Dir, "magusfile.buzz")
 	content := `
 import "magus";
 
@@ -97,7 +97,7 @@ export fun test(_args: [str]) > void {}
 
 func TestIntegration_RunTarget(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	ran := false
 	// We can't capture the side effect of an empty function body,
 	// so we test that Run succeeds without error.
@@ -118,7 +118,7 @@ export fun greet(_args: [str]) > void {}
 
 func TestIntegration_UnknownTarget(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	content := `import "magus";
 export fun build() > void {}
 `
@@ -134,7 +134,7 @@ export fun build() > void {}
 
 func TestIntegration_ProjectRegister(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	content := `
 import "magus";
 magus.project.register(".", fun(p, cb) > bool { cb({

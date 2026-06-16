@@ -1,0 +1,69 @@
+// bubblegum configuration, in Buzz — copy to ~/.config/bubblegum/config.buzz.
+//
+// This is the whole config: one typed file, live-reloaded on save ($mod+r). There
+// is no separate plain-text config anymore. An empty file runs the built-in
+// defaults (including the full default keymap); everything below only adds to or
+// overrides those defaults.
+//
+// The config is real Buzz: import the public `wm` package and call its verbs.
+// wm\configure() applies settings, wm\bind() adds keys, wm\rule() adds window
+// rules, wm\clearBinds() starts the keymap from scratch. Ordinary Buzz logic
+// (conditionals, loops, locals) works -- the config is evaluated and its result is
+// handed to the running WM. (It cannot register a live callback into the WM: a
+// config runs in its own pass, so window rules are declarative wm\rule() lines, not
+// a function the WM calls per window.)
+
+import "config";
+import "wm";
+
+// --- settings: fill a typed Config and hand it to wm\configure() ---
+//
+// Every field has a default, so set only what you want to change. See
+// config\Config in config.buzz for the full list and defaults.
+wm\configure(config\Config{
+    gapInner = 8.0,
+    gapOuter = 12.0,
+    topPadding = 36.0,
+    bar = true,
+    barHeight = 28.0,
+    tray = true,
+    border = true,
+    borderWidth = 3.0,
+    borderRadius = 10.0,
+    cheat = "cmd+ctrl+slash",
+    theme = config\Theme.macos,        // or config\Theme.i3
+    hideMethod = config\HideMethod.zlayer, // background z-index grid; or .offscreen / .hide / .minimize
+    focusFollowsMouse = true,
+    execs = ["open -a Terminal"],      // run once at startup
+});
+
+// Settings can branch on ordinary Buzz logic; a later wm\configure() overrides the
+// earlier one field-by-field. Wrap the branch in a function and call it: a bare
+// top-level `if` is a gopherbuzz convenience that upstream Buzz does not accept, so
+// keeping conditionals inside a function keeps the config portable across both.
+fun extras() > void {
+    final goldenRatio = false;
+    if (goldenRatio) {
+        wm\configure(config\Config{ golden = true, minWidth = 420.0, minHeight = 300.0 });
+    }
+}
+extras();
+
+// --- keybindings: added on top of the built-in keymap ---
+//
+// wm\bind(chord, command:). Build the command with the typed constructors so you
+// are not hand-writing the command language.
+wm\bind("cmd+ctrl+return", command: config\exec("open -a Terminal"));
+wm\bind("cmd+ctrl+y", command: config\focusNext());
+wm\bind("cmd+ctrl+f", command: config\fullscreen());
+wm\bind("cmd+ctrl+shift+space", command: config\floatingToggle());
+
+// clearBinds() first if you want a keymap that is entirely your own:
+// wm\clearBinds();
+
+// --- window rules: match newly opened windows and run a command on them ---
+//
+// wm\rule("app=<name> title=<text> <command>") -- app/title are case-insensitive
+// substrings, or /regex/ when slash-wrapped; either criterion may be omitted.
+wm\rule("app=Music floating toggle");
+wm\rule("app=Calculator floating toggle");

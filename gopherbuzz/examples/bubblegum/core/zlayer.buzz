@@ -1,0 +1,103 @@
+// core/zlayer.buzz - the "z-index" window model.
+//
+// Borrowing the CSS handle on purpose: each workspace is a layer, and its
+// number is its z-index. The active workspace is the top layer (tiled,
+// full-screen, no gaps); every inactive workspace sits at a lower z-index in a
+// background grid. Because the active layer covers the screen, the layers below
+// are never seen -- but unlike corner-parking (state\parkX/parkY), they stay
+// spread out and individually grabbable, so a glitch can't weld them into an
+// unreachable nub in the corner.
+//
+// The catch macOS hands us: there is no real z-index. No window level for a
+// foreign window, no send-to-back (AXRaise only raises). So "z-index" here means
+// "the order we re-assert," not "the order the system holds." raiseActiveLayer()
+// is that assertion; the reconcile loop calls it to keep reality matching the
+// declared layer order.
+
+namespace zlayer;
+
+import "std";
+import "state";
+import "platform/macos/windows";
+
+// gridGap is the margin between background cells (and around the rect edge), so
+// adjacent layered windows don't share a hairline border and stay distinct when
+// the active layer is pulled aside.
+final gridGap = 14.0;
+
+// gridCells lays n cells out in the smallest near-square grid that fits the
+// rect: cols is the smallest c with c*c >= n, rows is ceil(n/cols). Pure
+// geometry, no AX, so it is unit-tested directly. Returns one [x, y, w, h] per
+// cell in row-major order.
+export fun gridCells(n: int, x: double, y: double, w: double, h: double, gap: double) > [[double]] {
+    final cells = mut [<[double]>];
+    if (n <= 0) {
+        return cells;
+    }
+    var cols = 1;
+    while (cols * cols < n) {
+        cols = cols + 1;
+    }
+    final rows = (n + cols - 1) / cols; // ceil(n / cols), integer division
+    final cw = (w - gap * std\toDouble(cols + 1)) / std\toDouble(cols);
+    final ch = (h - gap * std\toDouble(rows + 1)) / std\toDouble(rows);
+    foreach (i in 0..n) {
+        final col = i % cols;
+        final row = i / cols;
+        final cx = x + gap + std\toDouble(col) * (cw + gap);
+        final cy = y + gap + std\toDouble(row) * (ch + gap);
+        cells.append([cx, cy, cw, ch]);
+    }
+    return cells;
+}
+
+// layoutBackLayer positions every inactive-workspace tiled window into the
+// background grid on its own screen. Idempotent: a window keeps its cell across
+// calls (same membership -> same order -> same frame), so re-running it on every
+// switch and reconcile tick doesn't visibly move a settled window. Floating
+// windows are left to parkLeaving (it minimizes them, preserving their hand-
+// placed frame); user-minimized windows stay in the Dock.
+export fun layoutBackLayer() > int {
+    var total = 0;
+    foreach (si in 0..state\wm().screens.len()) {
+        final sc = state\wm().screens[si];
+        final back = mut [<mut state\Managed>];
+        foreach (m in state\wm().managed) {
+            if (m.screen == si and m.workspace != state\wm().curWs and !m.floating and !m.minimized) {
+                back.append(m);
+            }
+        }
+        if (back.len() == 0) {
+            continue;
+        }
+        final cells = gridCells(back.len(), x: sc.cg[0], y: sc.cg[1], w: sc.cg[2], h: sc.cg[3], gap: gridGap);
+        foreach (i in 0..back.len()) {
+            final c = cells[i];
+            windows\setWindowFrame(back[i].ref, x: c[0], y: c[1], w: c[2], h: c[3]);
+        }
+        total = total + back.len();
+    }
+    return total;
+}
+
+// raiseActiveLayer asserts the z-index: every window on the current workspace is
+// raised above the background grid, the focused one raised last so it sits on
+// top of its peers. This is the entropy fighter -- macOS reshuffles the global
+// stack whenever the user cmd-tabs or a background app self-activates, and there
+// is no AXLower to push the intruder down, so we can only re-raise what we want
+// on top. Called after every retile and on the reconcile tick.
+export fun raiseActiveLayer() > void {
+    var fref: ud? = null;
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\wm().curWs and !m.minimized) {
+            if (m.id == state\wm().focusedId) {
+                fref = m.ref;
+            } else {
+                windows\raiseWindow(m.ref);
+            }
+        }
+    }
+    if (fref != null) {
+        windows\raiseWindow(fref);
+    }
+}

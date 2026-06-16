@@ -1,32 +1,30 @@
-package token_test
+package token
 
 import (
 	"fmt"
 	"strings"
 	"testing"
-
-	"github.com/egladman/gopherbuzz/token"
 )
 
-func tokenStr(t token.Token) string {
+func tokenStr(t Token) string {
 	switch t.Kind {
-	case token.Ident:
+	case Ident:
 		return fmt.Sprintf("ident(%s)", t.Val)
-	case token.String:
+	case String:
 		return fmt.Sprintf("string(%q)", t.Val)
-	case token.Int:
+	case Int:
 		return fmt.Sprintf("int(%s)", t.Val)
-	case token.Float:
+	case Float:
 		return fmt.Sprintf("float(%s)", t.Val)
-	case token.True:
+	case True:
 		return "bool(true)"
-	case token.False:
+	case False:
 		return "bool(false)"
-	case token.Null:
+	case Null:
 		return "null"
-	case token.Dot:
+	case Dot:
 		return "."
-	case token.EOF:
+	case EOF:
 		return "EOF"
 	default:
 		return fmt.Sprintf("tok(%d)", t.Kind)
@@ -46,7 +44,7 @@ func TestLexer_Basic(t *testing.T) {
 	}
 	for _, tc := range tests {
 		src := strings.ReplaceAll(tc.src, `\n`, "\n")
-		toks, err := token.Tokenize(src)
+		toks, err := Tokenize(src)
 		if err != nil {
 			t.Errorf("tokenize %q: %v", tc.src, err)
 			continue
@@ -69,9 +67,9 @@ func TestLexer_Basic(t *testing.T) {
 
 // firstDoc returns the Doc of the first token whose Val (or keyword) matches
 // ident, for asserting which declaration a comment block attached to.
-func docOfIdent(toks []token.Token, ident string) string {
+func docOfIdent(toks []Token, ident string) string {
 	for _, t := range toks {
-		if t.Kind == token.Ident && t.Val == ident {
+		if t.Kind == Ident && t.Val == ident {
 			return t.Doc
 		}
 	}
@@ -124,7 +122,7 @@ func TestLexer_DocComments(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			toks, err := token.Tokenize(tt.src)
+			toks, err := Tokenize(tt.src)
 			if err != nil {
 				t.Fatalf("tokenize: %v", err)
 			}

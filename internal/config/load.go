@@ -29,6 +29,18 @@ func DefaultHistoryPath() string {
 	return filepath.Join(".magus", "history", "v1.json")
 }
 
+// UserConfigDir returns the base directory for magus's user-global config,
+// honoring XDG_CONFIG_HOME on every platform. os.UserConfigDir consults
+// XDG_CONFIG_HOME only on Linux (macOS returns ~/Library/Application Support),
+// but magus documents its config home as $XDG_CONFIG_HOME/magus everywhere, so
+// check that first and fall back to the OS default when it is unset.
+func UserConfigDir() (string, error) {
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" && filepath.IsAbs(x) {
+		return x, nil
+	}
+	return os.UserConfigDir()
+}
+
 // EnvPrefix is the lowercase env-var prefix; Cache.Dir → MAGUS_CACHE_DIR.
 const EnvPrefix = "magus"
 
@@ -59,7 +71,7 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 	}
 
 	// Tier 2: user-global ($XDG_CONFIG_HOME/magus/)
-	if udc, err := os.UserConfigDir(); err == nil {
+	if udc, err := UserConfigDir(); err == nil {
 		loaded, err := loadDirInto(cfg, filepath.Join(udc, "magus"))
 		if err != nil {
 			return Config{}, err

@@ -38,7 +38,7 @@ export fun mgs_getName() > str { return "echo-import"; }
 export fun mgs_listTargets() > any { return {"echo": {"fn": "echo"}}; }
 export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "yo " + p["x"]; }
 `
-	path := filepath.Join(t.TempDir(), "echo-import.bzz")
+	path := filepath.Join(t.TempDir(), "echo-import.buzz")
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ export fun put_artifact(target: any, cb: fun(any)) > bool {
     return res[0] == 200;
 }
 `, name, srvURL)
-	path := filepath.Join(t.TempDir(), name+".bzz")
+	path := filepath.Join(t.TempDir(), name+".buzz")
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ export fun mgs_getName() > str { return "echo-spell"; }
 export fun mgs_listTargets() > any { return {"echo": {"fn": "echo"}}; }
 export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "hi " + p["who"]; }
 `
-	path := filepath.Join(t.TempDir(), "echo-spell.bzz")
+	path := filepath.Join(t.TempDir(), "echo-spell.buzz")
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func repoRoot(t *testing.T) string {
 
 func ghaBackend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "magus", "spells", "github", "actions", "spell.bzz")
+	path := filepath.Join(repoRoot(t), "magus", "spells", "github", "actions", "spell.buzz")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("github spell not found at %s: %v", path, err)
 	}
@@ -575,7 +575,7 @@ func TestDedupStrings(t *testing.T) {
 	}
 }
 
-// These tests exercise the real spells/aws/s3-cache/spell.bzz against an emulator that
+// These tests exercise the real spells/aws/s3-cache/spell.buzz against an emulator that
 // independently recomputes the AWS SigV4 signature for every request and rejects
 // a mismatch — the same check S3 performs. The signing-key chain is already
 // verified against AWS's published vector in internal/std/extra/crypto; here we
@@ -584,7 +584,7 @@ func TestDedupStrings(t *testing.T) {
 
 func s3Backend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "magus", "spells", "aws", "s3-cache", "spell.bzz")
+	path := filepath.Join(repoRoot(t), "magus", "spells", "aws", "s3-cache", "spell.buzz")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("s3 spell not found at %s: %v", path, err)
 	}

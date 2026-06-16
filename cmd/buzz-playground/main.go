@@ -62,10 +62,10 @@ func buildInfo() playground.BuildInfo {
 }
 
 // defaultSrc is the magusfile the editor opens with — a commented tour of the
-// language and magus's features. Kept as a real .bzz file so it reads (and
+// language and magus's features. Kept as a real .buzz file so it reads (and
 // highlights) the same in the repo as in the browser.
 //
-//go:embed showcase.bzz
+//go:embed showcase.buzz
 var defaultSrc string
 
 // ui bundles the DOM handles and the shell, captured by the event handlers.

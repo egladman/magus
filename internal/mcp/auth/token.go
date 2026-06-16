@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/egladman/magus/internal/config"
 )
 
 // ErrNoToken is returned by Load when no token file exists yet.
@@ -34,7 +36,7 @@ const tokenBytes = 32
 // <os.UserConfigDir>/magus/mcp_token. Both the CLI and the daemon resolve it
 // this way so they always agree on the location.
 func Path() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := config.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("mcpauth: locate config dir: %w", err)
 	}

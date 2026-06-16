@@ -143,6 +143,12 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("archive.uncompress: mkdir %s: %w", dest, err)
 	}
+	// Resolve dest after creating it so archiveSafePath's containment check and
+	// the returned relative paths share one canonical base (macOS /var ->
+	// /private/var). Mirrors ArchiveCompress.
+	if real, err := filepath.EvalSymlinks(dest); err == nil {
+		dest = real
+	}
 
 	f, err := os.Open(src)
 	if err != nil {

@@ -262,7 +262,7 @@ This is a deliberate, enforced boundary, not a missing feature.
 **Function target** (most common): write an exported function and call the tool via `extra.os.exec`:
 
 ```buzz
-// magusfile.bzz
+// magusfile.buzz
 export fun lint(args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }

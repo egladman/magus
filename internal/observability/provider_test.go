@@ -1,4 +1,4 @@
-package observability_test
+package observability
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/observability"
 )
 
 // TestNew_DisabledIsNoOp verifies that constructing a Provider with
@@ -16,7 +15,7 @@ import (
 // almost all magus invocations take, since telemetry is OFF by default.
 func TestNew_DisabledIsNoOp(t *testing.T) {
 	t.Parallel()
-	p, err := observability.New(context.Background(), observability.Config{Enabled: false})
+	p, err := New(context.Background(), Config{Enabled: false})
 	if err != nil {
 		t.Fatalf("New(disabled) returned error: %v", err)
 	}
@@ -40,7 +39,7 @@ func TestNew_DisabledIsNoOp(t *testing.T) {
 // init failed earlier in the boot path.
 func TestCacheRunOptions_NilProviderReturnsNil(t *testing.T) {
 	t.Parallel()
-	if got := observability.CacheRunOptions(context.Background(), nil); got != nil {
+	if got := CacheRunOptions(context.Background(), nil); got != nil {
 		t.Errorf("CacheRunOptions(nil) = %v, want nil", got)
 	}
 }
@@ -50,7 +49,7 @@ func TestCacheRunOptions_NilProviderReturnsNil(t *testing.T) {
 // need to re-implement that logic at every wiring point.
 func TestConfigFromTelemetry_AppliesFallbacks(t *testing.T) {
 	t.Parallel()
-	got := observability.ConfigFromTelemetry(config.Telemetry{}, "v1.2.3", "")
+	got := ConfigFromTelemetry(config.Telemetry{}, "v1.2.3", "")
 	if got.Protocol != "grpc" {
 		t.Errorf("Protocol = %q, want grpc", got.Protocol)
 	}
@@ -68,7 +67,7 @@ func TestConfigFromTelemetry_AppliesFallbacks(t *testing.T) {
 // TestNew_EnabledRequiresEndpoint exercises the validation path.
 func TestNew_EnabledRequiresEndpoint(t *testing.T) {
 	t.Parallel()
-	_, err := observability.New(context.Background(), observability.Config{Enabled: true})
+	_, err := New(context.Background(), Config{Enabled: true})
 	if err == nil {
 		t.Fatal("New(enabled, no endpoint) should error, got nil")
 	}
@@ -81,51 +80,51 @@ type recorder struct {
 	misses    []recCall
 	errs      []recCall
 	durs      []recDur
-	remoteOps []observability.RemoteOp
+	remoteOps []RemoteOp
 	spans     []string // names of spans started, in order
 	stops     int
 }
 
 type recCall struct {
 	ctx   context.Context
-	attrs []observability.Attr
+	attrs []Attr
 }
 
 type recDur struct {
 	ctx   context.Context
 	secs  float64
-	attrs []observability.Attr
+	attrs []Attr
 }
 
 func (r *recorder) Enabled() bool { return true }
-func (r *recorder) RecordCacheHit(ctx context.Context, attrs ...observability.Attr) {
+func (r *recorder) RecordCacheHit(ctx context.Context, attrs ...Attr) {
 	r.hits = append(r.hits, recCall{ctx, attrs})
 }
 
-func (r *recorder) RecordCacheMiss(ctx context.Context, attrs ...observability.Attr) {
+func (r *recorder) RecordCacheMiss(ctx context.Context, attrs ...Attr) {
 	r.misses = append(r.misses, recCall{ctx, attrs})
 }
 
-func (r *recorder) RecordCacheError(ctx context.Context, attrs ...observability.Attr) {
+func (r *recorder) RecordCacheError(ctx context.Context, attrs ...Attr) {
 	r.errs = append(r.errs, recCall{ctx, attrs})
 }
 
-func (r *recorder) RecordCacheDuration(ctx context.Context, secs float64, attrs ...observability.Attr) {
+func (r *recorder) RecordCacheDuration(ctx context.Context, secs float64, attrs ...Attr) {
 	r.durs = append(r.durs, recDur{ctx, secs, attrs})
 }
 
-func (r *recorder) RecordGraphQuery(_ context.Context, _ float64, _ ...observability.Attr) {}
+func (r *recorder) RecordGraphQuery(_ context.Context, _ float64, _ ...Attr) {}
 
-func (r *recorder) RecordRemoteOp(_ context.Context, op observability.RemoteOp) {
+func (r *recorder) RecordRemoteOp(_ context.Context, op RemoteOp) {
 	r.remoteOps = append(r.remoteOps, op)
 }
 
-func (r *recorder) StartSpan(ctx context.Context, name string, _ ...observability.Attr) (context.Context, func(error)) {
+func (r *recorder) StartSpan(ctx context.Context, name string, _ ...Attr) (context.Context, func(error)) {
 	r.spans = append(r.spans, name)
 	return ctx, func(error) {}
 }
 
-func (r *recorder) RecordTargetRun(_ context.Context, _ float64, _ ...observability.Attr) {}
+func (r *recorder) RecordTargetRun(_ context.Context, _ float64, _ ...Attr) {}
 
 func (r *recorder) RecordPoolAcquire(_ context.Context, _ float64, _ int64) {}
 
@@ -169,7 +168,7 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	}
 
 	rec := &recorder{}
-	opts := observability.CacheRunOptions(context.Background(), rec)
+	opts := CacheRunOptions(context.Background(), rec)
 	if len(opts) != 3 {
 		t.Fatalf("CacheRunOptions returned %d options, want 3", len(opts))
 	}
@@ -237,7 +236,7 @@ func TestMetricRecordNoProjectAttr(t *testing.T) {
 	}
 
 	rec := &recorder{}
-	opts := observability.CacheRunOptions(context.Background(), rec)
+	opts := CacheRunOptions(context.Background(), rec)
 
 	// Miss
 	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
@@ -275,7 +274,7 @@ func TestMetricRecordNoProjectAttr(t *testing.T) {
 // no-ops via disabledProvider — the cache.Run pipeline exercises
 // every disabled-provider record method through a hit path.
 func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
-	p, err := observability.New(context.Background(), observability.Config{Enabled: false})
+	p, err := New(context.Background(), Config{Enabled: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +297,7 @@ func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 		Outputs:       []string{"p/out.txt"},
 		WorkspaceRoot: root,
 	}
-	opts := observability.CacheRunOptions(context.Background(), p)
+	opts := CacheRunOptions(context.Background(), p)
 
 	// Drive a miss then a hit so OnMiss + OnHit + OnError-adjacent
 	// paths fire on the disabled provider. No assertion on counters
@@ -329,14 +328,14 @@ type recordingTargetProvider struct {
 
 type recTargetRun struct {
 	secs  float64
-	attrs []observability.Attr
+	attrs []Attr
 }
 
-func (r *recordingTargetProvider) RecordTargetRun(ctx context.Context, secs float64, attrs ...observability.Attr) {
+func (r *recordingTargetProvider) RecordTargetRun(ctx context.Context, secs float64, attrs ...Attr) {
 	r.targetRuns = append(r.targetRuns, recTargetRun{secs, attrs})
 }
 
-func attrVal(attrs []observability.Attr, key string) string {
+func attrVal(attrs []Attr, key string) string {
 	for _, a := range attrs {
 		if a.Key == key {
 			return a.Value
@@ -367,7 +366,7 @@ func TestTargetRunOptions(t *testing.T) {
 
 	rec := &recordingTargetProvider{}
 	spellsOf := func(projectPath string) []string { return []string{"go"} }
-	opts := observability.TargetRunOptions(context.Background(), rec, spellsOf)
+	opts := TargetRunOptions(context.Background(), rec, spellsOf)
 
 	// Miss: outcome=success, cache.hit=false.
 	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
@@ -412,7 +411,7 @@ func TestTargetRunOptions(t *testing.T) {
 
 	// Multi-spell: two spells → two rows per run.
 	multiSpellsOf := func(string) []string { return []string{"go", "typescript"} }
-	multiOpts := observability.TargetRunOptions(context.Background(), rec, multiSpellsOf)
+	multiOpts := TargetRunOptions(context.Background(), rec, multiSpellsOf)
 	multiSpec := cache.Spec{
 		ProjectPath:   "q",
 		Sources:       []string{"p/*.go"},

@@ -1,0 +1,45 @@
+// launcher_test.buzz — tests for the launcher's pure parts (matching,
+// quoting, key mapping). Runs anywhere:
+//
+//     go run ./cmd/buzz -t -L examples/bubblegum examples/bubblegum/launcher_test.buzz
+
+import "std";
+import "launcher";
+
+test "fuzzyScore rewards boundaries, prefixes, and tight matches" {
+    std\assert(fuzzyScore("Safari", queryRaw: "zzz") == 0 - 1, message: "no match is -1");
+    std\assert(fuzzyScore("Safari", queryRaw: "") == 0, message: "empty query matches at zero");
+    // word-boundary initials: the fzf party trick
+    std\assert(fuzzyScore("Visual Studio Code", queryRaw: "vsc") > fuzzyScore("Discovery", queryRaw: "vsc") or fuzzyScore("Discovery", queryRaw: "vsc") == 0 - 1,
+        message: "initials of words beat buried letters");
+    // real prefixes beat scattered subsequences
+    std\assert(fuzzyScore("Notes", queryRaw: "no") > fuzzyScore("Monotony", queryRaw: "no"), message: "prefix beats interior");
+    // tighter beats sparser
+    std\assert(fuzzyScore("Mail", queryRaw: "mal") > fuzzyScore("Material", queryRaw: "mal"), message: "fewer gaps win");
+    std\assert(fuzzyScore("CODE", queryRaw: "code") == fuzzyScore("code", queryRaw: "code"), message: "case-insensitive");
+}
+
+test "filterNames sorts by score, alphabetical on ties" {
+    final names = ["Monotony", "Notes", "Notion", "Safari"];
+    final hits = filterNames(names, queryRaw: "no");
+    std\assert(hits.len() == 3, message: "three match");
+    final first: str = hits[0];
+    std\assert(first == "Notes" or first == "Notion", message: "prefix matches lead");
+    final last: str = hits[2];
+    std\assert(last == "Monotony", message: "weak match trails");
+    std\assert(filterNames(names, queryRaw: "").len() == 4, message: "empty query lists everything");
+    std\assert(filterNames(names, queryRaw: "zzz").len() == 0, message: "no match, no rows");
+}
+
+test "shellQuote disarms shell metacharacters" {
+    std\assert(shellQuote("Safari") == "'Safari'", message: "plain name wrapped");
+    std\assert(shellQuote("My App") == "'My App'", message: "space safe inside quotes");
+    std\assert(shellQuote("a'b") == "'a'\\''b'", message: "embedded quote re-escaped");
+}
+
+test "typedKeyFor maps the ANSI letter rows" {
+    std\assert(typedKeyFor(0) == "a", message: "keycode 0 is a");
+    std\assert(typedKeyFor(46) == "m", message: "keycode 46 is m");
+    std\assert(typedKeyFor(49) == " ", message: "keycode 49 is space");
+    std\assert(typedKeyFor(36) == null, message: "return is not a typing key");
+}

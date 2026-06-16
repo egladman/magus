@@ -2,7 +2,7 @@ package magus
 
 import (
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus/internal/workspace"
 )
 
 // Limiter is a weighted semaphore that caps concurrent spell executions.
@@ -27,5 +27,5 @@ func (l *Limiter) Capacity() int { return l.lim.Capacity() }
 // WithLimiter injects a pre-built Limiter (e.g. shared across daemon workspaces).
 // When omitted, Open constructs a private limiter from magus.yaml/Concurrency.
 func WithLimiter(l *Limiter) Option {
-	return func(o *wire.Load) { o.Limiter = l.lim }
+	return func(o *workspace.Load) { o.Limiter = l.lim }
 }

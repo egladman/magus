@@ -1,0 +1,7 @@
+// @expect: ok
+import "io";
+final f = io.File.open("/tmp/buzz_runfile_test.buzz", io.FileMode.write);
+f.write("final _rftmp = 2 + 2;");
+f.close();
+io.runFile("/tmp/buzz_runfile_test.buzz");
+final __r = "ok";

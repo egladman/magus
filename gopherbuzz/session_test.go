@@ -132,14 +132,14 @@ func TestSession_Compile_And_ExecChunk(t *testing.T) {
 	}
 }
 
-// TestConformance runs all .bzz files in testdata/.
+// TestConformance runs all .buzz files in testdata/.
 // Each file may have header comments:
 //
 //	// @expect: <value>  — run and assert __r.String() == <value>
 //	// @error: <substr>  — assert parse/type/compile/runtime error contains <substr>
 //	// @skip: <reason>   — skip this test case
 func TestConformance(t *testing.T) {
-	files, err := filepath.Glob("testdata/*.bzz")
+	files, err := filepath.Glob("testdata/*.buzz")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestConformance(t *testing.T) {
 	}
 	for _, path := range files {
 		path := path
-		name := strings.TrimSuffix(filepath.Base(path), ".bzz")
+		name := strings.TrimSuffix(filepath.Base(path), ".buzz")
 		t.Run(name, func(t *testing.T) {
 			src, err := os.ReadFile(path)
 			if err != nil {

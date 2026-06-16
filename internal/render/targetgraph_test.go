@@ -13,7 +13,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		Path:   ".",
 		Engine: "buzz",
 		Nodes: []types.TargetGraphNode{
-			{Name: "build", Doc: "Build the binary.", Deps: []string{"fmt"}, Charms: []string{"rw"}},
+			{Name: "build", Doc: "Build the binary.", Dependencies: []string{"fmt"}, Charms: []string{"rw"}},
 			{Name: "fmt"},
 		},
 	}}}
@@ -59,7 +59,7 @@ func TestWriteTargetGraphMarkdownHeadingAndOrder(t *testing.T) {
 		Engine:  "buzz",
 		Nodes: []types.TargetGraphNode{
 			{Name: "worker"}, // no deps, depended on -> sorts last
-			{Name: "build", Deps: []string{"worker"}}, // primary
+			{Name: "build", Dependencies: []string{"worker"}}, // primary
 		},
 	}}}
 	var b bytes.Buffer
@@ -129,7 +129,7 @@ func TestWriteTargetGraphMermaidSingleProject(t *testing.T) {
 		Path:   ".",
 		Engine: "buzz",
 		Nodes: []types.TargetGraphNode{
-			{Name: "build", Deps: []string{"fmt"}},
+			{Name: "build", Dependencies: []string{"fmt"}},
 			{Name: "fmt"},
 		},
 	}}}
@@ -160,7 +160,7 @@ func TestWriteTargetGraphMermaidStages(t *testing.T) {
 			{Name: "man-generate"},
 			{Name: "docs-generate"},
 			{Name: "release"},
-			{Name: "generate", Deps: []string{"man-generate", "docs-generate"}},
+			{Name: "generate", Dependencies: []string{"man-generate", "docs-generate"}},
 		},
 	}}}
 	var b bytes.Buffer
@@ -190,7 +190,7 @@ func TestWriteTargetGraphMermaidStages(t *testing.T) {
 
 func TestWriteTargetGraphMermaidMultiProject(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
-		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build", Deps: []string{"fmt"}}, {Name: "fmt"}}},
+		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build", Dependencies: []string{"fmt"}}, {Name: "fmt"}}},
 		{Path: "web", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
 		{Path: "legacy", Engine: "lua"}, // no nodes: dropped
 	}}

@@ -1,4 +1,4 @@
-package cache_test
+package cache
 
 import (
 	"archive/tar"
@@ -10,18 +10,16 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
 // newMutableCache opens a mutable cache at <tmp>/.magus and
 // returns a fresh workspace root, the cache directory, and an open
 // cache. The caller may re-open the same cdir with different options.
-func newMutableCache(t *testing.T) (root, cdir string, c *cache.Cache) {
+func newMutableCache(t *testing.T) (root, cdir string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir = filepath.Join(t.TempDir(), ".magus")
-	c, err := cache.Open(cdir, cache.WithMutable(true))
+	c, err := Open(cdir, WithMutable(true))
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -45,8 +43,8 @@ func writeMain(t *testing.T, root, body string) {
 // makeSpec returns the canonical Spec used across these tests:
 // project test/pkg, sources "test/pkg/*.go", rooted at the given
 // workspace.
-func makeSpec(root string) cache.Spec {
-	return cache.Spec{
+func makeSpec(root string) Spec {
+	return Spec{
 		ProjectPath:   "test/pkg",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
@@ -95,7 +93,7 @@ func TestMissThenHit(t *testing.T) {
 	}
 
 	// Re-open in read-only mode so the second call can hit.
-	c2, err := cache.Open(cdir, cache.WithMutable(false))
+	c2, err := Open(cdir, WithMutable(false))
 	if err != nil {
 		t.Fatalf("cache.Open(read): %v", err)
 	}
@@ -151,7 +149,7 @@ func TestModeAutoWritesOnMiss(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	// Do NOT set MAGUS_CACHE_MODE — default (ModeAuto) must write.
-	c, err := cache.Open(cdir)
+	c, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -171,7 +169,7 @@ func TestModeAutoWritesOnMiss(t *testing.T) {
 	}
 
 	// Re-open (same dir, same default mode) — must hit.
-	c2, err := cache.Open(cdir)
+	c2, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open(auto, second): %v", err)
 	}
@@ -202,7 +200,7 @@ func TestModeAutoReplaysOnHit(t *testing.T) {
 	}
 
 	// Re-open (default mutable) — must hit without calling fn.
-	c2, err := cache.Open(cdir)
+	c2, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -230,7 +228,7 @@ func TestImmutableDoesNotWriteOnMiss(t *testing.T) {
 	spec.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
-	c, err := cache.Open(cdir, cache.WithMutable(false))
+	c, err := Open(cdir, WithMutable(false))
 	if err != nil {
 		t.Fatalf("cache.Open(immutable): %v", err)
 	}
@@ -239,7 +237,7 @@ func TestImmutableDoesNotWriteOnMiss(t *testing.T) {
 	}
 
 	// Re-open mutable — must still miss (nothing was written).
-	c2, err := cache.Open(cdir)
+	c2, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -345,7 +343,7 @@ func TestStats(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	want := cache.Stats{Hit: 0, Miss: 1, Error: 0}
+	want := Stats{Hit: 0, Miss: 1, Error: 0}
 	if got := c.Stats(); !reflect.DeepEqual(want, got) {
 		t.Fatalf("Stats: got %+v, want %+v", got, want)
 	}
@@ -358,7 +356,7 @@ func TestCacheSizeCapAccepted(t *testing.T) {
 	for _, env := range []string{"", "0", "1000", "500KB", "2MB", "1GB", "bad"} {
 		t.Run(env, func(t *testing.T) {
 			t.Setenv("MAGUS_CACHE_SIZE", env)
-			if _, err := cache.Open(filepath.Join(t.TempDir(), ".cap")); err != nil {
+			if _, err := Open(filepath.Join(t.TempDir(), ".cap")); err != nil {
 				t.Fatalf("Open with MAGUS_CACHE_SIZE=%q: %v", env, err)
 			}
 		})
@@ -411,7 +409,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 	// Import into a new cache directory (immutable so we test read-after-import).
 	dstDir := filepath.Join(t.TempDir(), ".magus-dst")
-	dst, err := cache.Open(dstDir, cache.WithMutable(false))
+	dst, err := Open(dstDir, WithMutable(false))
 	if err != nil {
 		t.Fatalf("Open dst: %v", err)
 	}
@@ -450,7 +448,7 @@ func TestOnResult(t *testing.T) {
 		err         error
 	}
 	var calls []call
-	onResult := cache.OnResult(func(s *cache.Spec, r *cache.Result, err error) {
+	onResult := OnResult(func(s *Spec, r *Result, err error) {
 		calls = append(calls, call{s.ProjectPath, r.Hit, err})
 	})
 
@@ -476,7 +474,7 @@ func TestOnResult(t *testing.T) {
 	}
 
 	// Error: fn fails; OnResult fires with the error.
-	errSpec := cache.Spec{
+	errSpec := Spec{
 		ProjectPath:   "test/pkg/err",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
@@ -496,7 +494,7 @@ func TestOnResult(t *testing.T) {
 // that would escape the cache directory via path traversal.
 func TestExportImportUnsafePath(t *testing.T) {
 	dir := t.TempDir()
-	c, err := cache.Open(filepath.Join(dir, ".magus"), cache.WithMutable(false))
+	c, err := Open(filepath.Join(dir, ".magus"), WithMutable(false))
 	if err != nil {
 		t.Fatal(err)
 	}

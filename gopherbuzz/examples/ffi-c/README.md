@@ -16,7 +16,7 @@ sum of squares 1..4 = 30
 Requires a C compiler (`cc`/`clang`/`gcc`) on `PATH` and a
 [purego](https://github.com/ebitengine/purego)-supported platform. `main.go`
 compiles [`clib/mathx.c`](clib/mathx.c) into a shared library and runs
-[`demo.bzz`](demo.bzz) against it.
+[`demo.buzz`](demo.buzz) against it.
 
 ## What it shows
 

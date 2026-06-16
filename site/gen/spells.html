@@ -52,7 +52,7 @@
 </tr>
 <tr>
 <td><strong>Who declares it</strong></td>
-<td>a built-in, a spell file (<code>spells/*.bzz</code>/<code>*.tl</code>), or <code>magus.spell.define</code></td>
+<td>a built-in, a spell file (<code>spells/*.buzz</code>/<code>*.tl</code>), or <code>magus.spell.define</code></td>
 <td>an exported function in your magusfile</td>
 </tr>
 <tr>
@@ -142,7 +142,7 @@ global function test(_args: {string})  go[&quot;go-test&quot;]({cwd = &quot;.&qu
 <p><strong>Forked command (declarative).</strong> The op is a <code>{cmd, args, charms}</code> record. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.</p>
 </li>
 <li>
-<p><strong>Typed handler.</strong> <code>mgs_listTargets</code> returns <code>{str: fun(Target, fun(any)) bool}</code>. A <strong>fork</strong> handler passes its command record to the injected <code>cb</code> callback; a <strong>function-op</strong> handler does host work in-VM (HTTP, signing, a cache backend's <code>get-entry</code>). The built-in spells use the handler form; read any <a href="../spells"><code>spells/&lt;name&gt;/spell.bzz</code></a> for a worked example.</p>
+<p><strong>Typed handler.</strong> <code>mgs_listTargets</code> returns <code>{str: fun(Target, fun(any)) bool}</code>. A <strong>fork</strong> handler passes its command record to the injected <code>cb</code> callback; a <strong>function-op</strong> handler does host work in-VM (HTTP, signing, a cache backend's <code>get-entry</code>). The built-in spells use the handler form; read any <a href="../spells"><code>spells/&lt;name&gt;/spell.buzz</code></a> for a worked example.</p>
 </li>
 </ol>
 <p>Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.</p>
@@ -157,8 +157,8 @@ magus.project.register(&quot;.&quot;, { spells = {go} })
 </code></pre>
 <p>Available built-ins: <code>go</code>, <code>typescript</code>, <code>javascript</code>, <code>python</code>, <code>rust</code>, <code>zig</code>, <code>bash</code>, <code>docker</code>, <code>compose</code>, <code>kind</code>, <code>terraform</code>, <code>kustomize</code>, <code>json</code>, <code>yaml</code>, <code>toml</code>, <code>html</code>, <code>markdown</code>, <code>css</code>, <code>sql</code>.</p>
 <h3 id="file-spell">File spell</h3>
-<p>A workspace-local <code>spells/&lt;name&gt;.bzz</code> (or <code>.tl</code>) loaded by path:</p>
-<pre><code class="language-lua">local rb = magus.spell.load(&quot;spells/ruby.bzz&quot;)
+<p>A workspace-local <code>spells/&lt;name&gt;.buzz</code> (or <code>.tl</code>) loaded by path:</p>
+<pre><code class="language-lua">local rb = magus.spell.load(&quot;spells/ruby.buzz&quot;)
 magus.project.register(&quot;gems/&quot;, { spells = {rb} })
 </code></pre>
 <h3 id="inline-spell">Inline spell</h3>
@@ -247,7 +247,7 @@ end
 </ul>
 <h2 id="authoring-a-custom-spell">Authoring a custom spell</h2>
 <p>A spell file exposes the spell contract as <code>mgs_</code>-prefixed functions: the required <code>mgs_getName</code>, plus optional <code>mgs_listRequiredGlobs</code>, <code>mgs_listProvidedGlobs</code>, <code>mgs_listClaimedGlobs</code>, <code>mgs_getVersionCommand</code>, <code>mgs_isForeignProcess</code>, and <code>mgs_listTargets</code>.</p>
-<p>Buzz (<code>spells/ruby.bzz</code>):</p>
+<p>Buzz (<code>spells/ruby.buzz</code>):</p>
 <pre><code class="language-buzz">export fun mgs_getName() &gt; str { return &quot;ruby&quot;; }
 export fun mgs_listRequiredGlobs(_dir: str) &gt; [str] {
     return [&quot;**/*.rb&quot;, &quot;Gemfile&quot;, &quot;Gemfile.lock&quot;, &quot;*.gemspec&quot;, &quot;.rubocop.yml&quot;];
@@ -263,7 +263,7 @@ export fun mgs_listTargets() &gt; any {
 }
 </code></pre>
 <p>Teal spell files (<code>.tl</code>) use the same function names as table keys in a returned module (see any <code>spells/*.tl</code> for the format). Then bind it and compose targets that call its ops:</p>
-<pre><code class="language-lua">local rb = magus.spell.load(&quot;spells/ruby.bzz&quot;)
+<pre><code class="language-lua">local rb = magus.spell.load(&quot;spells/ruby.buzz&quot;)
 magus.project.register(&quot;gems/&quot;, { spells = {rb} })
 
 global function test(_args: {string}) rb.rspec({cwd = &quot;gems/&quot;})  end
@@ -345,17 +345,17 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 </thead>
 <tbody>
 <tr>
-<td><a href="../spells/buf/spell.bzz"><code>buf</code></a></td>
+<td><a href="../spells/buf/spell.buzz"><code>buf</code></a></td>
 <td>fork (built-in)</td>
 <td>A <strong>codegen producer</strong>: <code>needs</code> (<code>.proto</code> + buf config) and <code>provides</code> (generated code), so editing a <code>.proto</code> reruns codegen and invalidates everything downstream of the generated files.</td>
 </tr>
 <tr>
-<td><a href="../spells/github/actions/spell.bzz"><code>actions</code></a></td>
+<td><a href="../spells/github/actions/spell.buzz"><code>actions</code></a></td>
 <td>function-op</td>
 <td>A <strong>remote cache backend</strong> over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (<code>magus/extra/http</code>), wired with <code>magus.cache.remote</code>.</td>
 </tr>
 <tr>
-<td><a href="../spells/aws/s3-cache/spell.bzz"><code>s3-cache</code></a></td>
+<td><a href="../spells/aws/s3-cache/spell.buzz"><code>s3-cache</code></a></td>
 <td>function-op</td>
 <td>A <strong>remote cache backend</strong> for S3/MinIO/R2/B2 that signs every request with <strong>AWS SigV4</strong> via <code>magus/extra/crypto</code>.</td>
 </tr>

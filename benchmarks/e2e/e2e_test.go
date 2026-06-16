@@ -17,11 +17,11 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 
-	// Link the host bindings so magusfile.bzz targets execute.
+	// Link the host bindings so magusfile.buzz targets execute.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 )
 
-// writeProject creates root/name/magusfile.bzz with body. No magus.project.register
+// writeProject creates root/name/magusfile.buzz with body. No magus.project.register
 // call is written: a bare magusfile that defines targets is expected to run via
 // the auto-bound magusfile spell.
 func writeProject(t *testing.T, root, name, body string) string {
@@ -30,7 +30,7 @@ func writeProject(t *testing.T, root, name, body string) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -121,7 +121,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell("faketool") })
 
 	// Register the project explicitly via a magusfile instead of marker-based auto-detection.
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.bzz"), []byte(
+	if err := os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(
 		`import "magus";`+"\n"+
 			`magus.project.register("svc", fun(p, cb) > bool { cb({"spells": [magus.spell.get("faketool")]}); return true; });`+"\n",
 	), 0o644); err != nil {
@@ -186,7 +186,7 @@ export fun hit(_args: [str]) > void {
     os.execSh("printf x >> count", "");
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.bzz"), []byte(src), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

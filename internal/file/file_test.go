@@ -1,11 +1,9 @@
-package file_test
+package file
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/egladman/magus/internal/file"
 )
 
 func TestWriteFileAtomic_CreatesFile(t *testing.T) {
@@ -13,7 +11,7 @@ func TestWriteFileAtomic_CreatesFile(t *testing.T) {
 	path := filepath.Join(dir, "output.txt")
 	data := []byte("hello atomic")
 
-	if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
+	if err := WriteFileAtomic(path, data, 0o644); err != nil {
 		t.Fatalf("WriteFileAtomic: %v", err)
 	}
 
@@ -30,10 +28,10 @@ func TestWriteFileAtomic_OverwritesExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "output.txt")
 
-	if err := file.WriteFileAtomic(path, []byte("old"), 0o644); err != nil {
+	if err := WriteFileAtomic(path, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := file.WriteFileAtomic(path, []byte("new"), 0o644); err != nil {
+	if err := WriteFileAtomic(path, []byte("new"), 0o644); err != nil {
 		t.Fatalf("WriteFileAtomic overwrite: %v", err)
 	}
 

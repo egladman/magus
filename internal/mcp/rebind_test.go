@@ -73,7 +73,7 @@ func TestAllowedHosts(t *testing.T) {
 		{"127.0.0.1:7391", "localhost", true},
 		{"127.0.0.1:7391", "::1", true},
 		{"127.0.0.1:7391", "::ffff:127.0.0.1", true}, // IPv4-mapped → Unmap → IsLoopback
-		{"127.0.0.1:7391", "127.0.0.2", true},         // whole 127.0.0.0/8 is loopback
+		{"127.0.0.1:7391", "127.0.0.2", true},        // whole 127.0.0.0/8 is loopback
 		{"127.0.0.1:7391", "attacker.com", false},
 
 		// Wildcard bind — only loopback allowed, not the wildcard IP itself

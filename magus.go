@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	ispell "github.com/egladman/magus/internal/spell"
-	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -57,7 +57,7 @@ type Magus struct {
 // rootMarkers lists workspace-root markers in priority order; magus markers precede go.mod.
 var rootMarkers = []string{
 	"magusfiles",
-	"magusfile.bzz",
+	"magusfile.buzz",
 	"magus.yaml",
 	"go.mod",
 }
@@ -96,7 +96,7 @@ func FindRoot(dir string) (string, error) {
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
-			return "", errors.New("magus: could not locate workspace root (no magusfiles/, magusfile.bzz, magus.yaml, or go.mod found)")
+			return "", errors.New("magus: could not locate workspace root (no magusfiles/, magusfile.buzz, magus.yaml, or go.mod found)")
 		}
 		cur = parent
 	}
@@ -138,7 +138,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 	ws.Strict = cfg.Strict
 	m := &Magus{ws: ws, cfg: cfg}
-	var o wire.Load
+	var o workspace.Load
 	for _, fn := range opts {
 		fn(&o)
 	}
@@ -154,7 +154,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 }
 
 func loadConfig(root string, opts ...Option) (config.Config, error) {
-	var o wire.Load
+	var o workspace.Load
 	for _, fn := range opts {
 		fn(&o)
 	}
@@ -498,9 +498,9 @@ func (m *Magus) baseSpec(p *types.Project) cache.Spec {
 func magusfileGlobs(projectPath string) []string {
 	names := []string{
 		"magusfile.tl",
-		"magusfile.bzz",
+		"magusfile.buzz",
 		"magusfiles/**/*.tl",
-		"magusfiles/**/*.bzz",
+		"magusfiles/**/*.buzz",
 	}
 	if projectPath == "." {
 		return names

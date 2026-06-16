@@ -1,4 +1,4 @@
-package bindings_test
+package bindings
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
-	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/project"
 )
 
@@ -42,21 +41,21 @@ func parseMagusfile(t *testing.T, dir string) error {
 }
 
 // TestSpellLoadRegistersForkBuzzSpell exercises magus.spell.load dispatching
-// to the Buzz engine for a .bzz workspace-local spell, registered by value when
+// to the Buzz engine for a .buzz workspace-local spell, registered by value when
 // bound via magus.project.register.
 func TestSpellLoadRegistersForkBuzzSpell(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir) // magus.spell.load resolves the path relative to the cwd
 
-	writeFile(t, dir, "spells/widget.bzz", `export fun mgs_getName() > str { return "widgetbuzzspell"; }
+	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "widgetbuzzspell"; }
 export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.ts", "package.json"]; }
 export fun mgs_listProvidedGlobs() > [str] { return ["dist/**"]; }
 export fun mgs_listTargets() > any {
     return {"build": {"cmd": "npm", "args": ["run", "build"]}};
 }
 `)
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
-final widget = magus.spell.load("spells/widget.bzz");
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+final widget = magus.spell.load("spells/widget.buzz");
 magus.project.register(".", fun(p, cb) > bool { cb({"spells": [widget]}); return true; });`)
 
 	if err := parseMagusfile(t, dir); err != nil {
@@ -81,20 +80,20 @@ magus.project.register(".", fun(p, cb) > bool { cb({"spells": [widget]}); return
 }
 
 // TestBuzzLocalSpellImport verifies a workspace-local Buzz spell is importable by
-// path — `import "spells/widget"` resolves ./spells/widget.bzz, binds the handle
+// path — `import "spells/widget"` resolves ./spells/widget.buzz, binds the handle
 // under the basename (widget), and binding it via magus.project.register registers
 // the spell by value. The import sugar for magus.spell.load on that path.
 func TestBuzzLocalSpellImport(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir) // the import resolves relative to the cwd
 
-	writeFile(t, dir, "spells/widget.bzz", `export fun mgs_getName() > str { return "widgetimport"; }
+	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "widgetimport"; }
 export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.ts"]; }
 export fun mgs_listTargets() > any {
     return {"build": {"cmd": "npm", "args": ["run", "build"]}};
 }
 `)
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
 magus.project.register(".", fun(p, cb) > bool { cb({"spells": [widget]}); return true; });`)
 
@@ -126,7 +125,7 @@ func TestBuzzSpellImport(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/go";
 import "magus/spell/json";
 
@@ -151,10 +150,10 @@ func TestSpellLoadBuzzNoOps(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/noops.bzz", `export fun mgs_getName() > str { return "noopsbuzzspell"; }
+	writeFile(t, dir, "spells/noops.buzz", `export fun mgs_getName() > str { return "noopsbuzzspell"; }
 `)
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
-final noops = magus.spell.load("spells/noops.bzz");
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+final noops = magus.spell.load("spells/noops.buzz");
 magus.project.register(".", fun(p, cb) > bool { cb({"spells": [noops]}); return true; });`)
 
 	if err := parseMagusfile(t, dir); err != nil {
@@ -176,7 +175,7 @@ func TestBuzzSpellMethodForwardsOpts(t *testing.T) {
 
 	// The "capture" target writes its forwarded args ($@) into captured.txt in the
 	// process cwd, so the test can assert both the args and the working directory.
-	writeFile(t, dir, "spells/widget.bzz", `export fun mgs_getName() > str { return "optswidget"; }
+	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "optswidget"; }
 export fun mgs_listTargets() > any {
     return {"capture": {"cmd": "sh", "args": ["-c", "printf '%s ' \"$@\" > captured.txt", "sh"]}};
 }
@@ -184,8 +183,8 @@ export fun mgs_listTargets() > any {
 	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
-final widget = magus.spell.load("spells/widget.bzz");
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+final widget = magus.spell.load("spells/widget.buzz");
 export fun build(args: [str]) > void {
     final names = widget.listTargets();
     if (names[0] != "capture") { error("listTargets mismatch"); }
@@ -219,13 +218,13 @@ func TestBuzzSpellMethodEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.bzz", `export fun mgs_getName() > str { return "envwidget"; }
+	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "envwidget"; }
 export fun mgs_listTargets() > any {
     return {"capture": {"cmd": "sh", "args": ["-c", "printf \"$MYVAR\" > out.txt"]}};
 }
 `)
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
-final widget = magus.spell.load("spells/widget.bzz");
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+final widget = magus.spell.load("spells/widget.buzz");
 export fun build(args: [str]) > void {
     widget.capture({"env": {"MYVAR": "overridden"}});
 }`)
@@ -254,13 +253,13 @@ func TestBuzzSpellCaptureReturnsRecord(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.bzz", `export fun mgs_getName() > str { return "capbuzzwidget"; }
+	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "capbuzzwidget"; }
 export fun mgs_listTargets() > any {
     return {"hash": {"cmd": "sh", "args": ["-c", "printf abc123"], "capture": true}};
 }
 `)
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
-final widget = magus.spell.load("spells/widget.bzz");
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+final widget = magus.spell.load("spells/widget.buzz");
 export fun build(args: [str]) > void {
     final r = widget.hash();
     if (r.stdout != "abc123") { error("stdout mismatch: " + r.stdout); }
@@ -283,7 +282,7 @@ func TestBuzzSpellPipeStdin(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.bzz", `export fun mgs_getName() > str { return "pipewidget"; }
+	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "pipewidget"; }
 export fun mgs_listTargets() > any {
     return {
         "emit": {"cmd": "sh", "args": ["-c", "printf alpha"], "capture": true},
@@ -291,8 +290,8 @@ export fun mgs_listTargets() > any {
     };
 }
 `)
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
-final widget = magus.spell.load("spells/widget.bzz");
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+final widget = magus.spell.load("spells/widget.buzz");
 export fun build(args: [str]) > void {
     final a = widget.emit();
     final b = widget.shout({"stdin": a.stdout});
@@ -309,7 +308,7 @@ export fun build(args: [str]) > void {
 }
 
 // TestVcsCommitFacadeBuzz exercises the vcs.commit() facade end-to-end the way
-// magusfile.bzz build_date() does — including the (c.committer ?? c.author)
+// magusfile.buzz build_date() does — including the (c.committer ?? c.author)
 // fallback that keeps it agnostic across VCSes.
 func TestVcsCommitFacadeBuzz(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -331,7 +330,7 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 		}
 	}
 
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
 export fun check(args: [str]) > void {
     final c = vcs.commit();
@@ -355,7 +354,7 @@ export fun check(args: [str]) > void {
 func TestVcsCommitNullOutsideRepo(t *testing.T) {
 	dir := t.TempDir() // a bare temp dir, not under version control
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.bzz", `import "magus";
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
 export fun check(args: [str]) > void {
     if (vcs.commit() != null) { error("expected null outside a repo"); }
@@ -392,7 +391,7 @@ export fun mgs_listTargets() > any {
 		t.Chdir(dir)
 		name := "spells/parity." + ext
 		writeFile(t, dir, name, src)
-		writeFile(t, dir, "magusfile.bzz", `import "magus";
+		writeFile(t, dir, "magusfile.buzz", `import "magus";
 final sp = magus.spell.load("`+name+`");
 magus.project.register(".", fun(p, cb) > bool { cb({"spells": [sp]}); return true; });`)
 		if err := parseMagusfile(t, dir); err != nil {

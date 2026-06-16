@@ -1,0 +1,200 @@
+// core/tray.buzz - tray menu item and drop-down menu for the bubblegum WM.
+
+namespace tray;
+
+import "state";
+import "os";
+import "std";
+import "statusbar";
+import "traymenu";
+import "platform/macos/windows";
+import "core/registry";
+import "core/paths";
+import "core/bar";
+
+// handleTrayClick routes a left-click (global CG coords) for the menu-bar tray
+// item: a click on the tray glyph opens the drop-down; with the menu open, a
+// click picks a row or (anywhere else) dismisses it. Returns true if it consumed
+// the click, so the caller skips the status-bar handler.
+export fun handleTrayClick(gx: double, gy: double) > bool {
+    if (traymenu\isVisible()) {
+        if (state\wm().trayMenuCG.len() == 4
+            and gx >= state\wm().trayMenuCG[0] and gx < state\wm().trayMenuCG[0] + state\wm().trayMenuCG[2]
+            and gy >= state\wm().trayMenuCG[1] and gy < state\wm().trayMenuCG[1] + state\wm().trayMenuCG[3]) {
+            final row = traymenu\rowAt(gy - state\wm().trayMenuCG[1]);
+            if (row < 0 or row >= state\wm().trayRowActs.len()) {
+                return true; // a gap (padding) inside the menu — keep it open
+            }
+            final act = state\wm().trayRowActs[row];
+            if (act == "expand") {
+                state\wm().trayExpanded = !state\wm().trayExpanded; // inline submenu: toggle the durations, keep the menu up
+                showTrayMenu();
+                return true;
+            }
+            if (act == "") {
+                return true; // the status header is inert — clicking it keeps the menu up
+            }
+            closeTrayMenu();
+            trayMenuAction(act);
+            return true;
+        }
+        closeTrayMenu(); // click outside the menu dismisses it
+        return true;
+    }
+    if (!state\wm().cfg.trayOn) {
+        return false;
+    }
+    final f = windows\viewFrameCG(statusbar\trayButton());
+    if (f.len() < 5) {
+        return false; // no tray item, or its window isn't placed yet
+    }
+    if (gx >= f[0] and gx < f[0] + f[2] and gy >= f[1] and gy < f[1] + f[3]) {
+        openTrayMenu(f);
+        return true;
+    }
+    return false;
+}
+
+// openTrayMenu drops the menu just under the tray icon: its right edge aligned
+// with the icon's, dropping downward. f is windows\viewFrameCG's [x,y,w,h,
+// primaryH] for the tray button (CG top-left + main-display height in points).
+// It records the menu's fixed top edge; showTrayMenu (re)draws and grows the
+// panel downward as the row set changes (the inline submenu expands/collapses).
+export fun openTrayMenu(f: [double]) > void {
+    final primaryH = f[4];
+    final cgX = (f[0] + f[2]) - traymenu\menuW; // right-align with the icon
+    final cgY = f[1] + f[3];                    // top of the menu = bottom of the icon
+    state\wm().trayExpanded = false;
+    state\wm().lastTrayCountdown = "";
+    state\wm().trayAppKitTop = primaryH - cgY;             // AppKit y of the (fixed) top edge
+    state\wm().trayMenuCG = mut [cgX, cgY, traymenu\menuW, 0.0]; // height set by showTrayMenu
+    showTrayMenu();
+    registry\logAct("tray menu opened");
+}
+
+// showTrayMenu rebuilds the row model for the current state and (re)draws the
+// open menu, keeping its top edge fixed while the height tracks the row count.
+export fun showTrayMenu() > void {
+    if (state\wm().trayMenuCG.len() != 4) {
+        return;
+    }
+    buildTrayMenu();
+    final menuH = traymenu\menuHeight(state\wm().trayRows.len());
+    state\wm().trayMenuCG = mut [state\wm().trayMenuCG[0], state\wm().trayMenuCG[1], traymenu\menuW, menuH];
+    // Convert the CG top-left origin back to AppKit's bottom-left for drawing.
+    traymenu\show(state\wm().trayMenuCG[0], y: state\wm().trayAppKitTop - menuH, rows: state\wm().trayRows, paused: state\wm().reconcilePaused);
+}
+
+export fun closeTrayMenu() > void {
+    traymenu\hide();
+    state\wm().trayMenuCG = mut [<double>];
+    state\wm().trayExpanded = false;
+}
+
+// trayHeaderText is the Docker-style status line: running or paused. The pause
+// countdown lives on the Resume row now (resumeRowText), not in this header.
+export fun trayHeaderText() > str {
+    if (state\wm().reconcilePaused) {
+        return "Bubblegum WM is paused";
+    }
+    return "Bubblegum WM is running";
+}
+
+// resumeRowText is the Resume menu item, carrying the live countdown to auto-resume
+// when the pause is timed. Ticked in place by the pump loop so the menu does not
+// rebuild every second.
+export fun resumeRowText() > str {
+    if (state\wm().reconcileResumeAt > 0.0) {
+        return "Resume reconciliation ({fmtClock(state\wm().reconcileResumeAt - os\time())})";
+    }
+    return "Resume reconciliation";
+}
+
+// fmtClock renders a millisecond span as M:SS (clamped at zero).
+export fun fmtClock(ms: double) > str {
+    var total = std\toInt(ms / 1000.0);
+    if (total < 0) {
+        total = 0;
+    }
+    final m = std\toInt(std\toDouble(total) / 60.0);
+    final s = total - m * 60;
+    var ss = "{s}";
+    if (s < 10) {
+        ss = "0{s}";
+    }
+    return "{m}:{ss}";
+}
+
+// displaySummary returns a one-line description of which displays are being tiled,
+// read from live state so it reflects config changes without a restart.
+fun displaySummary() > str {
+    final n = state\wm().screens.len();
+    if (n == 0) {
+        return "No displays tiled";
+    }
+    if (state\wm().cfg.tileAll) {
+        var word = "display";
+        if (n != 1) {
+            word = "displays";
+        }
+        return "Tiling all {n} {word}";
+    }
+    var parts = "";
+    foreach (i in 0..n) {
+        final sc = state\wm().screens[i];
+        if (i > 0) {
+            parts = parts + ", ";
+        }
+        parts = parts + "{sc.disp}";
+    }
+    if (n == 1) {
+        return "Tiling display {parts}";
+    }
+    return "Tiling displays {parts}";
+}
+
+// buildTrayMenu rebuilds state\wm().trayRows (what's drawn) and state\wm().trayRowActs (what each row
+// does) for the current state: a status header, a display-summary info row, the
+// reconcile control (Resume when paused, else Pause with its inline duration submenu),
+// then Edit config.
+export fun buildTrayMenu() > void {
+    final rows = mut [<traymenu\Row>];
+    final acts = mut [<str>];
+    rows.append(traymenu\Row{ text = trayHeaderText(), kind = traymenu\kindHeader });
+    acts.append("");
+    rows.append(traymenu\Row{ text = displaySummary(), kind = traymenu\kindItem });
+    acts.append("");
+    if (state\wm().reconcilePaused) {
+        rows.append(traymenu\Row{ text = resumeRowText(), kind = traymenu\kindItem });
+        acts.append("resume");
+    } else {
+        rows.append(traymenu\Row{ text = "Pause window reconciliation...", kind = traymenu\kindItem });
+        acts.append("expand");
+        if (state\wm().trayExpanded) {
+            rows.append(traymenu\Row{ text = "For 15 minutes", kind = traymenu\kindChild });
+            acts.append("pause15");
+            rows.append(traymenu\Row{ text = "For 30 minutes", kind = traymenu\kindChild });
+            acts.append("pause30");
+            rows.append(traymenu\Row{ text = "For 1 hour", kind = traymenu\kindChild });
+            acts.append("pause60");
+        }
+    }
+    rows.append(traymenu\Row{ text = "Edit configuration...", kind = traymenu\kindItem });
+    acts.append("config");
+    state\wm().trayRows = rows;
+    state\wm().trayRowActs = acts;
+}
+
+export fun trayMenuAction(act: str) > void {
+    if (act == "resume") {
+        state\wm().runCmd!("reconcile on");
+    } else if (act == "pause15") {
+        state\wm().runCmd!("reconcile pause 15");
+    } else if (act == "pause30") {
+        state\wm().runCmd!("reconcile pause 30");
+    } else if (act == "pause60") {
+        state\wm().runCmd!("reconcile pause 60");
+    } else if (act == "config") {
+        paths\openConfigInEditor();
+    }
+}

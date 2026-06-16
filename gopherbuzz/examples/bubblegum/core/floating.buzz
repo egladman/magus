@@ -1,0 +1,530 @@
+// core/floating.buzz - floating windows, scratchpad, undo, marks, session restore,
+// layout snapshots, and window utility commands.
+
+namespace floating;
+
+import "state";
+import "layout";
+import "config";
+import "serialize";
+import "launcher";
+import "fs";
+import "io";
+import "os";
+import "std";
+import "platform/macos/windows";
+import "platform/macos/frameworks";
+import "core/screens";
+import "core/tiling";
+import "core/registry";
+import "core/scan";
+import "core/session";
+import "core/paths";
+import "core/workspaces";
+import "core/bar";
+
+// cmdFloating moves the focused window out of (or back into) the tree. `mode` is
+// "toggle" (default), "on" (float -- idempotent), or "off" (tile -- idempotent).
+// Idempotent modes let a rule float a window without un-floating it when the rule
+// re-runs (rules apply / live reload). Floating windows keep whatever frame the
+// user gives them; the scanner tracks them but the tiler never touches them.
+export fun cmdFloating(mode: str) > void {
+    final mo = registry\managedById(state\wm().focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    final wantFloat = mode == "on" or (mode != "off" and !mm.floating);
+    if (wantFloat == mm.floating) {
+        return; // already in the requested state -- nothing to do
+    }
+    if (!wantFloat) {
+        mm.floating = false;
+        scan\adopt(mm.id);
+        tiling\retile();
+        return;
+    }
+    mm.floating = true;
+    scan\detachCurrent(mm.id);
+    tiling\centerWindow(mm.ref);
+    tiling\retile();
+}
+
+// cmdMoveScratchpad sends the focused window to the scratchpad: parked like
+// an inactive workspace, but belonging to none -- it comes back floating.
+export fun cmdMoveScratchpad() > void {
+    final mo = registry\managedById(state\wm().focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    scan\detachCurrent(mm.id);
+    mm.workspace = state\scratchWs;
+    mm.floating = true;
+    windows\setMinimized(mm.ref, minimized: true);
+    if (state\wm().scratchShown == mm.id) {
+        state\wm().scratchShown = 0;
+    }
+    tiling\retile();
+}
+
+// cmdScratchpadShow toggles: pop the next scratchpad window centered over the
+// current workspace, or stash the one already showing back.
+export fun cmdScratchpadShow() > void {
+    if (state\wm().scratchShown != 0) {
+        final mo = registry\managedById(state\wm().scratchShown);
+        if (mo != null) {
+            final mm = mo!;
+            mm.workspace = state\scratchWs;
+            windows\setMinimized(mm.ref, minimized: true);
+        }
+        state\wm().scratchShown = 0;
+        return;
+    }
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\scratchWs) {
+            m.workspace = state\wm().curWs;
+            m.screen = state\wm().activeScreen;
+            m.floating = true;
+            windows\setMinimized(m.ref, minimized: false);
+            tiling\centerWindow(m.ref);
+            windows\focusWindow(m.ref, pid: m.pid);
+            state\wm().scratchShown = m.id;
+            return;
+        }
+    }
+}
+
+// restoreSession runs once at startup, right after the initial adopt has tiled every
+// window onto the current workspace. It pulls the windows the saved session placed
+// elsewhere back off to their workspaces (and hides them), leaving the rest here.
+// Window rules run first (during rescan), so a rule that already moved a window off
+// the current workspace wins -- restoreSession only redistributes what's still here.
+export fun restoreSession() > void {
+    final saved = session\readSession();
+    if (saved.len() == 0) {
+        return;
+    }
+    // Claimable pool: everything just adopted onto the current workspace.
+    final pool = mut [<int>];
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\wm().curWs and !m.floating) {
+            pool.append(m.id);
+        }
+    }
+    var moved = 0;
+    foreach (ev in saved) {
+        final e = (ev as? session\SessionEntry)!;
+        if (e.ws == state\wm().curWs or e.ws < 0 or e.ws >= 9) {
+            continue; // already on the current workspace, or out of range
+        }
+        final id = registry\takeMatch(pool, tag: e.app);
+        if (id == 0) {
+            continue; // no unclaimed window of this app left
+        }
+        final mo = registry\managedById(id);
+        if (mo == null) {
+            continue;
+        }
+        final mm = mo!;
+        scan\detachOn(mm.screen, id: id); // out of the current live tree
+        mm.workspace = e.ws;
+        final target = screens\wsOn(mm.screen, i: e.ws);
+        if (target.root == null) {
+            target.root = layout\makeLeaf(id);
+            target.focusedId = id;
+        } else {
+            final tr = target.root!;
+            if (!layout\insertAt(tr, target: target.focusedId, id: id)) {
+                _ = layout\insertAt(tr, target: layout\lastLeaf(tr).id, id: id);
+            }
+        }
+        if (state\wm().cfg.hideMethod != "hide") {
+            session\parkRestored(mm);
+        }
+        moved = moved + 1;
+    }
+    if (moved > 0 and state\wm().cfg.hideMethod == "hide") {
+        workspaces\reconcileAppHide(); // app-hide method: hide apps with nothing on the current ws
+    }
+    if (moved > 0) {
+        registry\logAct("session: restored {moved} window(s) to their saved workspaces");
+    }
+}
+
+// stampTags labels every leaf with its app name so the snapshot can be
+// matched against live windows after a restart.
+export fun stampTags(t: layout\Node?) > void {
+    if (t == null) {
+        return;
+    }
+    final ls = mut [];
+    layout\collectLeaves(t!, res: ls);
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        leaf.tag = windows\appName(registry\pidOf(leaf.id));
+    }
+}
+
+// cmdLayoutSave snapshots the ACTIVE screen's workspaces (multi-display
+// snapshots would need per-screen files; one screen keeps it predictable).
+export fun cmdLayoutSave() > void {
+    final trees = mut [];
+    foreach (i in 0..9) {
+        var t: layout\Node? = null;
+        if (i == state\wm().curWs) {
+            t = state\wm().root;
+        } else {
+            t = screens\wsAt(i).root;
+        }
+        stampTags(t);
+        trees.append(layout\encodeTree(t));
+    }
+    final data = mut {};
+    data["ws"] = trees;
+    try {
+        fs\makeDirectory(paths\configDir());
+        final f = io\File.open(paths\layoutPath(), mode: io\FileMode.write);
+        f.write(serialize\jsonEncode(serialize\Boxed.init(data)));
+        f.close();
+    } catch (e: any) {
+        std\print("bubblegum: layout save failed: {e}");
+        return;
+    }
+    std\print("bubblegum: layout saved to {paths\layoutPath()}");
+}
+
+// cmdLayoutRestore reshapes the current workspace from the snapshot: saved
+// leaves claim live windows by app name, unmatched leaves are pruned, and
+// windows the snapshot doesn't know are appended.
+export fun cmdLayoutRestore() > void {
+    final text = config\readConfigText(paths\layoutPath());
+    if (text == null) {
+        std\print("bubblegum: no saved layout at {paths\layoutPath()} (use `layout save`)");
+        return;
+    }
+    var decoded: mut layout\Node? = null;
+    try {
+        final b = serialize\jsonDecode(text!);
+        final entries = b.q(["ws"]).listValue();
+        if (state\wm().curWs < entries.len()) {
+            decoded = layout\decodeTree(entries[state\wm().curWs]);
+        }
+    } catch (e: any) {
+        std\print("bubblegum: bad layout file: {e}");
+        return;
+    }
+    if (decoded == null) {
+        std\print("bubblegum: no saved layout for workspace {state\wm().curWs + 1}");
+        return;
+    }
+    // Pool of claimable windows on this workspace, zeroed as they match.
+    final live = mut [<int>];
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\wm().curWs and !m.floating) {
+            live.append(m.id);
+        }
+    }
+    final ls = mut [];
+    layout\collectLeaves(decoded!, res: ls);
+    foreach (l in ls) {
+        final leaf = (l as? mut layout\Node)!;
+        leaf.id = registry\takeMatch(live, tag: leaf.tag);
+    }
+    var rebuilt = layout\pruneZeroLeaves(decoded);
+    foreach (idv in live) {
+        if (idv == 0) {
+            continue;
+        }
+        if (rebuilt == null) {
+            rebuilt = layout\makeLeaf(idv);
+        } else {
+            final r = rebuilt!;
+            _ = layout\insertAt(r, target: layout\lastLeaf(r).id, id: idv);
+        }
+        tiling\seedDims(rebuilt!, cg: screens\screenAt(state\wm().activeScreen).cg);
+    }
+    if (rebuilt == null) {
+        std\print("bubblegum: nothing on this workspace matches the snapshot");
+        return;
+    }
+    state\wm().root = rebuilt;
+    state\wm().fullscreenId = 0;
+    state\wm().focusedId = layout\lastLeaf(rebuilt!).id;
+    tiling\retile();
+    std\print("bubblegum: layout restored for workspace {state\wm().curWs + 1}");
+}
+
+// cmdFrame floats the focused window at an exact position: `frame x y w h`.
+// This is how exported rules carry coordinates -- a floating window's frame
+// round-trips through `layout export` as a frame command.
+export fun cmdFrame(words: [str]) > void {
+    final mo = registry\managedById(state\wm().focusedId);
+    if (mo == null) {
+        return;
+    }
+    final x = std\parseDouble(words[1]);
+    final y = std\parseDouble(words[2]);
+    final w = std\parseDouble(words[3]);
+    final h = std\parseDouble(words[4]);
+    if (x == null or y == null or w == null or h == null) {
+        return;
+    }
+    final mm = mo!;
+    if (!mm.floating) {
+        mm.floating = true;
+        scan\detachCurrent(mm.id);
+    }
+    windows\setWindowFrame(mm.ref, x: x!, y: y!, w: w!, h: h!);
+    tiling\retile();
+}
+
+// cmdSnap floats the focused window into a Rectangle-style position within
+// the tiled display: halves, quarters, thirds, two-thirds, max -- plus
+// `snap center`, which keeps the window's size. The default binds mirror
+// Rectangle.app's (ctrl+alt+...), so it can be uninstalled without retraining.
+export fun cmdSnap(pos: str) > void {
+    final mo = registry\managedById(state\wm().focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    if (!mm.floating) {
+        mm.floating = true;
+        scan\detachCurrent(mm.id);
+    }
+    if (pos == "center") {
+        final fr = windows\windowFrame(mm.ref);
+        if (fr != null) {
+            final f = fr!;
+            windows\setWindowFrame(mm.ref,
+                x: state\wm().tiledCG[0] + (state\wm().tiledCG[2] - f[2]) / 2.0,
+                y: state\wm().tiledCG[1] + (state\wm().tiledCG[3] - f[3]) / 2.0, w: f[2], h: f[3]);
+        }
+        tiling\retile();
+        return;
+    }
+    final snapped = layout\snapFrame(pos, bx: state\wm().tiledCG[0], by: state\wm().tiledCG[1], bw: state\wm().tiledCG[2], bh: state\wm().tiledCG[3]);
+    if (snapped == null) {
+        std\print("bubblegum: unknown snap position \"{pos}\"");
+        return;
+    }
+    final f = snapped!;
+    windows\setWindowFrame(mm.ref, x: f[0], y: f[1], w: f[2], h: f[3]);
+    tiling\retile();
+}
+
+export fun cmdUndo() > void {
+    if (state\wm().undoStack.len() == 0) {
+        std\print("bubblegum: nothing to undo");
+        return;
+    }
+    final snap = state\wm().undoStack.pop();
+    final ids = mut [<int>];
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\wm().curWs and m.screen == state\wm().activeScreen and !m.floating) {
+            ids.append(m.id);
+        }
+    }
+    var restored = layout\pruneMissing(snap, keep: ids);
+    // windows that appeared since the snapshot get appended
+    foreach (idv in ids) {
+        if (restored == null) {
+            restored = layout\makeLeaf(idv);
+        } else if (layout\findLeaf(restored!, target: idv) == null) {
+            final r = restored!;
+            _ = layout\insertAt(r, target: layout\lastLeaf(r).id, id: idv);
+        }
+        tiling\seedDims(restored!, cg: screens\screenAt(state\wm().activeScreen).cg);
+    }
+    state\wm().root = restored;
+    if (state\wm().root != null and layout\findLeaf(state\wm().root!, target: state\wm().focusedId) == null) {
+        state\wm().focusedId = layout\lastLeaf(state\wm().root!).id;
+    }
+    tiling\retile();
+    bar\updateBar();
+}
+
+// cmdMark / cmdGoto: vim registers for windows. `mark a` tags the focused
+// window; `goto a` jumps to it -- switching workspace and screen if needed.
+export fun cmdMark(key: str) > void {
+    if (state\wm().focusedId != 0) {
+        state\wm().marks[key] = state\wm().focusedId;
+        std\print("bubblegum: marked '{key}'");
+    }
+}
+
+export fun jumpTo(id: int) > void {
+    final mo = registry\managedById(id);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    if (mm.workspace != state\wm().curWs and mm.workspace != state\scratchWs) {
+        workspaces\cmdWorkspace(mm.workspace);
+    }
+    screens\setActive(mm.screen);
+    state\wm().focusedId = mm.id;
+    windows\setMinimized(mm.ref, minimized: false); // a marked window may have been minimized since
+    windows\focusWindow(mm.ref, pid: mm.pid);
+    tiling\retile();
+    bar\updateBar();
+}
+
+export fun cmdGoto(key: str) > void {
+    final hit = state\wm().marks[key];
+    if (hit == null) {
+        std\print("bubblegum: no mark '{key}'");
+        return;
+    }
+    final id = (hit as? int)!;
+    if (registry\managedById(id) == null) {
+        std\print("bubblegum: mark '{key}' window is gone");
+        return;
+    }
+    jumpTo(id);
+}
+
+// recall brings a window to the here-and-now -- the one door back for anything
+// stashed out of sight: a window the user minimized (cmd+M, the yellow button, the
+// Dock), one parked on an inactive workspace, or a floating scratchpad window.
+// It un-minimizes, re-homes the window onto the current workspace, and tiles or
+// centers it. The window palette ($mod+o) opens onto this, so no window can end
+// up somewhere the WM -- and the user -- can't reach it.
+export fun recall(id: int) > void {
+    final mo = registry\managedById(id);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    final stashed = mm.workspace != state\wm().curWs or mm.pending or windows\isMinimized(mm.ref);
+    if (stashed) {
+        if (state\wm().scratchShown == mm.id) {
+            state\wm().scratchShown = 0;
+        }
+        // Pull it out of whatever tree currently claims it before re-homing.
+        if (mm.workspace != state\wm().curWs and mm.workspace != state\scratchWs) {
+            scan\detachParked(mm);               // a parked workspace's saved tree
+        } else {
+            scan\detachOn(mm.screen, id: mm.id); // the live tree (no-op if already out)
+        }
+        mm.workspace = state\wm().curWs;
+        mm.screen = state\wm().activeScreen;
+        mm.pending = false;
+        mm.missing = 0;
+        mm.minimized = false;
+        windows\setMinimized(mm.ref, minimized: false);
+        if (mm.floating) {
+            tiling\centerWindow(mm.ref);           // un-park to a sane centered frame
+        } else {
+            scan\adopt(mm.id);                   // slot back into the current tree
+        }
+    }
+    state\wm().focusedId = mm.id;
+    windows\focusWindow(mm.ref, pid: mm.pid);
+    tiling\retile();
+    bar\updateBar();
+}
+
+// cmdSummon opens launcher over every managed window ("#id app -- title"),
+// tagging the stashed ones (minimized, scratchpad, wsN on another
+// workspace) so they read apart from the visible ones -- and so typing "min"
+// filters to exactly what you lost. Picking one recalls it: the rofi window
+// switcher, doubling as the un-minimize mechanism.
+export fun cmdSummon() > void {
+    var rows = [<str>];
+    foreach (m in state\wm().managed) {
+        var tag = "";
+        if (m.workspace == state\scratchWs) {
+            tag = "scratch ";
+        } else if (windows\isMinimized(m.ref)) {
+            tag = "min ";
+        } else if (m.workspace != state\wm().curWs) {
+            tag = "ws{m.workspace + 1} ";
+        }
+        rows = rows + ["#{m.id} {tag}{windows\appName(m.pid)} - {windows\windowTitle(m.ref)}"];
+    }
+    if (rows.len() == 0) {
+        return;
+    }
+    final ak = screens\tiledAppKit();
+    launcher\launcherWindows(rows, ax: ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+}
+
+// cmdRecallMinimized opens the recall picker over just the minimized windows (the
+// ones the user sent to the Dock), each "#id app - title". Picking one runs recall:
+// un-minimize, re-home onto the current workspace, and tile it back. The bar's
+// indicator clicks into this.
+export fun cmdRecallMinimized() > void {
+    var rows = [<str>];
+    foreach (m in state\wm().managed) {
+        if (m.minimized) {
+            rows = rows + ["#{m.id} {windows\appName(m.pid)} - {windows\windowTitle(m.ref)}"];
+        }
+    }
+    if (rows.len() == 0) {
+        return;
+    }
+    final ak = screens\tiledAppKit();
+    launcher\launcherWindows(rows, ax: ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+}
+
+export fun onWindowPick(row: str) > void {
+    // rows are "#id ...": parse the id back out
+    final sp = row.indexOf(" ");
+    if (sp == null or !row.startsWith("#")) {
+        return;
+    }
+    final id = std\parseInt(row.sub(1, len: sp! - 1));
+    if (id != null) {
+        recall(id!);
+    }
+}
+
+export fun cmdKill() > void {
+    if (state\wm().focusedId == 0) {
+        return;
+    }
+    final ref = registry\refOf(state\wm().focusedId);
+    if (ref != null) {
+        windows\closeWindow(ref); // async; the next rescan tick reaps it from the tree
+    }
+}
+
+// cmdSweep is the panic button ($mod+shift+s): bring every window that belongs
+// on this workspace back into reach. It un-minimizes the ones stashed out of
+// sight (cmd+M, the yellow button, an app minimizing itself) and pulls any
+// window that drifted off the tiled display back on. The rescan re-adopts what
+// the un-minimize surfaces; retile re-slots it. Other workspaces and the
+// scratchpad are left alone: this recovers the *current* workspace, it doesn't
+// collapse them all into one. The surgical counterpart is $mod+o (recall one).
+export fun cmdSweep() > void {
+    // Un-minimize the windows stranded on this workspace so they rejoin the grid.
+    // appWindows filters minimized windows out, so walk the managed registry --
+    // where they survive (alive, just detached from the tree) -- instead.
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\wm().curWs and (m.missing >= 2 or windows\isMinimized(m.ref))) {
+            windows\setMinimized(m.ref, minimized: false);
+            m.missing = 0;
+            if (!m.floating) {
+                scan\detachOn(m.screen, id: m.id); // avoid a double insert
+                scan\adopt(m.id);
+            }
+        }
+    }
+    foreach (p in windows\onScreenPids()) {
+        final pid = (p as? int)!;
+        foreach (w in windows\appWindows(pid)) {
+            final ref = (w as? ud)!;
+            if (screens\screenForRef(ref) == 0 - 1) {
+                // off the tiled display -- park it near the top-left so the next
+                // rescan homes it here; retile gives it a real slot.
+                windows\setWindowFrame(ref, x: state\wm().tiledCG[0] + 24.0, y: state\wm().tiledCG[1] + 60.0, w: 800.0, h: 600.0);
+            }
+            frameworks\releaseRef(ref);
+        }
+    }
+    scan\rescan();
+    tiling\retile();
+    bar\updateBar();
+}

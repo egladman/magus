@@ -24,7 +24,7 @@
 <h1 id="engines-how-magus-runs-a-magusfile">Engines: how magus runs a magusfile</h1>
 <p>A <strong>magusfile</strong> can be written in either of two languages, and magus runs both
 through the same internal seam. A <code>magusfile.tl</code> is <a href="https://github.com/teal-language/tl">Teal</a>
-(typed Lua) executed on a Lua VM; a <code>magusfile.bzz</code> is <a href="https://buzz-lang.dev/">Buzz</a>,
+(typed Lua) executed on a Lua VM; a <code>magusfile.buzz</code> is <a href="https://buzz-lang.dev/">Buzz</a>,
 executed on the Buzz VM. They are interchangeable: the same <code>magus.*</code> API, the
 same <a href="spells.html">spells</a>, <a href="targets.html">targets</a>, and <a href="charms.html">charms</a> work on
 both. This document explains the seam, its deliberate asymmetries, and how a new
@@ -99,7 +99,7 @@ Buzz exposes <code>FunDoc</code>. Capturing it <em>reliably</em> (associating ea
 right op handler, including anonymous function literals) would mean extending the
 vendored Teal compiler — too much surface for too niche a payoff. Note Buzz's
 <code>Chunk.Doc</code> is in-memory only and not serialized to bytecode, so even Buzz
-captures docs only for freshly-compiled workspace <code>.bzz</code> spells, never the
+captures docs only for freshly-compiled workspace <code>.buzz</code> spells, never the
 embedded built-ins; a Teal solution would match exactly that scope.</li>
 </ul>
 <h2 id="intentional-luabuzz-asymmetries">Intentional Lua/Buzz asymmetries</h2>
@@ -134,12 +134,12 @@ both engines.</li>
 </ul>
 <p>The local-spell filename is the one place magus imposes a <strong>cross-language</strong>
 convention: a workspace spell lives at <code>spells/&lt;name&gt;/spell.&lt;ext&gt;</code> (or flat
-<code>spells/&lt;name&gt;.&lt;ext&gt;</code>), the same <code>spell.</code> basename for both <code>.tl</code> and <code>.bzz</code>.
+<code>spells/&lt;name&gt;.&lt;ext&gt;</code>), the same <code>spell.</code> basename for both <code>.tl</code> and <code>.buzz</code>.
 Lua's usual <code>init.lua</code> is intentionally not used, so the layout reads the same
 regardless of language.</p>
 <h2 id="built-in-spell-vs-language-builtins">&quot;Built-in spell&quot; vs language &quot;builtins&quot;</h2>
 <p>A <strong>built-in spell</strong> is a spell whose bytecode is compiled from
-<code>magus/spells/&lt;name&gt;/spell.bzz</code> and embedded in the magus binary (<code>go</code>,
+<code>magus/spells/&lt;name&gt;/spell.buzz</code> and embedded in the magus binary (<code>go</code>,
 <code>typescript</code>, <code>docker</code>, …; see <a href="spells.html#built-in">spells.md</a>). This is a magus
 concept and is unrelated to Buzz's language <strong>builtins</strong> (<code>spawn</code>, list/map
 methods, etc.), which are part of the Buzz language itself. The docs always write

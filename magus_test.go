@@ -282,7 +282,7 @@ func TestRunTarget_InjectsEffectiveClaims(t *testing.T) {
 // than panicking on a nil cache.
 func TestCacheOps_InspectReturnErrNoCache(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -343,7 +343,7 @@ func TestClose_Idempotent(t *testing.T) {
 
 func TestSetGraphObserver_Invoked(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +371,7 @@ func TestSetGraphObserver_Invoked(t *testing.T) {
 
 func TestSpecFor_RootProject(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -403,7 +403,7 @@ func TestSpecFor_RootProject(t *testing.T) {
 
 func TestSpecFor_NestedProject(t *testing.T) {
 	t.Parallel()
-	root := makeWorkspaceRoot(t, "magusfile.bzz", "api/magusfile.bzz")
+	root := makeWorkspaceRoot(t, "magusfile.buzz", "api/magusfile.buzz")
 	m, err := inspect(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -452,9 +452,9 @@ func TestMagusfileGlobs(t *testing.T) {
 		got := magusfileGlobs(".")
 		want := []string{
 			"magusfile.tl",
-			"magusfile.bzz",
+			"magusfile.buzz",
 			"magusfiles/**/*.tl",
-			"magusfiles/**/*.bzz",
+			"magusfiles/**/*.buzz",
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("magusfileGlobs(\".\") =\n  %v\nwant\n  %v", got, want)
@@ -466,9 +466,9 @@ func TestMagusfileGlobs(t *testing.T) {
 		got := magusfileGlobs("extensions/drape")
 		want := []string{
 			"extensions/drape/magusfile.tl",
-			"extensions/drape/magusfile.bzz",
+			"extensions/drape/magusfile.buzz",
 			"extensions/drape/magusfiles/**/*.tl",
-			"extensions/drape/magusfiles/**/*.bzz",
+			"extensions/drape/magusfiles/**/*.buzz",
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("magusfileGlobs(\"extensions/drape\") =\n  %v\nwant\n  %v", got, want)
@@ -514,13 +514,13 @@ func ExampleInspect() {
 	}
 	defer os.RemoveAll(root)
 
-	// A directory is a project if it contains a magusfile.bzz.
+	// A directory is a project if it contains a magusfile.buzz.
 	projDir := filepath.Join(root, "myapp")
 	if err := os.MkdirAll(projDir, 0o755); err != nil {
 		fmt.Println("setup error:", err)
 		return
 	}
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.bzz"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644); err != nil {
 		fmt.Println("setup error:", err)
 		return
 	}
@@ -584,11 +584,11 @@ func newWorkspace(t *testing.T) types.WorkspaceRepository {
 	t.Helper()
 	root := t.TempDir()
 	for _, rel := range []string{
-		"magusfile.bzz",                    // root project "."
-		"api/magusfile.bzz",                // "api"
-		"web/studio/magusfile.bzz",         // "web/studio"
-		"extensions/drape/magusfile.bzz",   // "extensions/drape"
-		"extensions/lattice/magusfile.bzz", // "extensions/lattice"
+		"magusfile.buzz",                    // root project "."
+		"api/magusfile.buzz",                // "api"
+		"web/studio/magusfile.buzz",         // "web/studio"
+		"extensions/drape/magusfile.buzz",   // "extensions/drape"
+		"extensions/lattice/magusfile.buzz", // "extensions/lattice"
 	} {
 		abs := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {

@@ -1,0 +1,68 @@
+// focusring.buzz — i3-style high-contrast border around the focused window.
+//
+// The AX API cannot draw, so the ring is a single always-on-top, click-through
+// (uiIgnoreMouse) window whose layer paints only a rounded-rectangle border — clear
+// fill, so the window behind shows through, and rounded to match the macOS window
+// corners. Like i3, the border is inset: the tiler reserves a band inside each
+// window's slot (shrinking the content), and the ring's stroke fills that band — so
+// it never covers content or spills onto a neighbor. Honest caveat versus i3: the
+// ring sits *above* the window rather than in its real frame, and follows
+// user-initiated drags only as fast as the poll tick re-reads frames. Off by default
+// (`border on` to enable).
+
+namespace focusring;
+
+import "platform/macos/cocoa";
+
+// Init placeholder for the panel's corner radius; ringShow sets the real value
+// (the configured window radius) once it knows the border width.
+final initRadius = 10.0;
+
+var ring: ud? = null;  // single rounded-border panel, created once
+var visible = false;
+var lastKey = "";      // frame+width signature; skip redundant repositioning
+
+fun ringInit() > void {
+    if (ring != null) {
+        return;
+    }
+    cocoa\uiInit();
+    // Same blue as the status bar's active-workspace pill: the system accent on the
+    // macOS theme, the fixed system blue on i3. Full opacity here (the bar softens its
+    // pill with alpha because it's a fill behind text; the ring is a thin stroke).
+    var color = cocoa\uiNamedColor("systemBlueColor");
+    if (cocoa\uiIsMac()) {
+        color = cocoa\uiNamedColor("controlAccentColor");
+    }
+    ring = cocoa\uiBorderPanel(radius: initRadius, color: color); // ringShow sets the configured radius
+    cocoa\uiIgnoreMouse(ring);
+}
+
+// ringShow frames (x, y, w, h) — CG global coordinates of the window's SLOT — with a
+// rounded border of the given stroke width, drawn inset (the stroke fills the band
+// just inside the slot edge, where the tiler reserved space by shrinking the window).
+// radius is the macOS window corner radius (from config); mainH converts to AppKit's
+// bottom-left origin.
+export fun ringShow(x: double, y: double, w: double, h: double, bw: double, radius: double, mainH: double) > void {
+    ringInit();
+    final key = "{x},{y},{w},{h},{bw},{radius}";
+    if (visible and key == lastKey) {
+        return;
+    }
+    lastKey = key;
+    final akBottom = mainH - (y + h); // AppKit y of the slot's bottom edge
+    cocoa\uiSetBorderWidth(ring, width: bw);
+    cocoa\uiSetCornerRadius(ring, radius: radius + bw); // inner edge = radius, hugs the window
+    cocoa\uiSetPanelFrame(ring, x: x, y: akBottom, w: w, h: h);
+    cocoa\uiShow(ring);
+    visible = true;
+}
+
+export fun ringHide() > void {
+    if (!visible) {
+        return;
+    }
+    visible = false;
+    lastKey = "";
+    cocoa\uiHide(ring);
+}

@@ -1,0 +1,73 @@
+// buzz — Buzz language spell: type-check, test, and run Buzz sources.
+//
+// Authored source for the built-in "buzz" spell; compiled to bytecode and embedded
+// at build time (see cmd/magus-spells-gen). magus authors its own config and spells
+// in Buzz, so this spell lets the project dogfood — `magus run buzz::buzz-check`
+// type-checks Buzz the way `go::go-vet` checks Go.
+//
+// It supports two interpreters, and a magusfile picks per op (the names don't
+// collide):
+//
+//   - `buzz-check`/`buzz-test` fork the *upstream* `buzz` toolchain (--check / --test).
+//   - `magus-buzz` forks `magus buzz` — magus's own embedded Buzz engine, always
+//     present wherever magus is — so running the fixtures here also exercises that
+//     engine (a second layer of dogfooding).
+//
+// Both interpreters only know the Buzz stdlib: magus's host modules (magus/target,
+// and the host methods magus layers onto os/fs/http/…) are not resolvable by
+// either, so these ops cover standalone Buzz sources. The spells and the magusfile
+// — which import those host modules — are
+// validated instead by magus-spells-gen (compiled to bytecode at generate time)
+// and by magus itself at load time.
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "buzz"; }
+
+export fun mgs_listRequiredGlobs(root: str) > [str] {
+    return ["**/*.buzz", "**/*.buzz"];
+}
+
+// No mgs_getVersionCommand: there's no useful Buzz-toolchain version to probe here.
+// `magus buzz` only reports magus's own version, and the upstream `buzz` toolchain
+// isn't reliably on PATH — a missing `buzz` would make every run that touches a
+// buzz-bound project warn on a failed probe. The toolchain version isn't mixed into
+// the cache key yet anyway.
+
+// check type-checks every Buzz source without running it (buzz --check). buzz takes
+// one script per invocation, so find feeds xargs one file at a time (-n1); -print0
+// pairs with -0 for safe paths, and -r skips an empty set — the shell pattern the
+// bash spell uses for shellcheck.
+fun buzzCheck(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "sh", "args": ["-c",
+        "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --check"]});
+    return true;
+}
+
+// test runs each source's Buzz `test {}` blocks (buzz --test).
+fun buzzTest(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "sh", "args": ["-c",
+        "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --test"]});
+    return true;
+}
+
+// magus-buzz executes each source through `magus buzz`, magus's own embedded Buzz
+// engine. It has no check-only mode — executing a file compiles, type-checks, and
+// runs it — so this is the runtime sibling of `buzz-check`. It invokes "$MAGUS": magus exports
+// MAGUS (the running binary's path, à la GNU Make's $(MAKE)) into every spell
+// subprocess, so this resolves to the current magus even uninstalled / under
+// `go run`, with no dependence on PATH. (A bare $MAGUS, not ${MAGUS:-magus}: Buzz
+// reads {...} in a string as interpolation, and MAGUS is always set here anyway.)
+fun magusBuzz(target: Target, cb: fun(any)) > bool {
+    cb({"cmd": "sh", "args": ["-c",
+        "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"]});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {
+        "buzz-check": buzzCheck,
+        "buzz-test": buzzTest,
+        "magus-buzz": magusBuzz,
+    };
+}

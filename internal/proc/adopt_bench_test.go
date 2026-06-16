@@ -1,12 +1,10 @@
-package proc_test
+package proc
 
 import (
 	"context"
 	"fmt"
 	"runtime"
 	"testing"
-
-	"github.com/egladman/magus/internal/proc"
 )
 
 // newBenchServer starts an proc server with a no-op handler and registers
@@ -14,7 +12,7 @@ import (
 // can dial it.
 func newBenchServer(b *testing.B) string {
 	b.Helper()
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Concurrency: runtime.GOMAXPROCS(0),
 		Handler:     func(_ context.Context, _ []string) error { return nil },
 	})
@@ -39,7 +37,7 @@ func BenchmarkForwardRoundTrip(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := proc.Forward(ctx, args, "", ""); err != nil {
+		if _, err := Forward(ctx, args, "", ""); err != nil {
 			b.Fatalf("Forward: %v", err)
 		}
 	}
@@ -57,7 +55,7 @@ func BenchmarkForwardParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := proc.Forward(ctx, args, "", ""); err != nil {
+			if _, err := Forward(ctx, args, "", ""); err != nil {
 				b.Errorf("Forward: %v", err)
 				return
 			}
@@ -74,7 +72,7 @@ func BenchmarkQueryStatusRoundTrip(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := proc.QueryStatus(ctx, addr); err != nil {
+		if _, err := QueryStatus(ctx, addr); err != nil {
 			b.Fatalf("QueryStatus: %v", err)
 		}
 	}
@@ -89,7 +87,7 @@ func BenchmarkQueryStatusInflight(b *testing.B) {
 	block := make(chan struct{})
 	ready := make(chan struct{}, inflightN)
 
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Concurrency: inflightN,
 		Handler: func(_ context.Context, _ []string) error {
 			ready <- struct{}{}
@@ -117,7 +115,7 @@ func BenchmarkQueryStatusInflight(b *testing.B) {
 	// triggers when (root, cwd, args) are identical across concurrent calls.
 	for i := range inflightN {
 		go func(i int) {
-			proc.Forward(ctx, []string{"run", "build", fmt.Sprintf("bench-inflight-%d", i)}, "", "")
+			Forward(ctx, []string{"run", "build", fmt.Sprintf("bench-inflight-%d", i)}, "", "")
 		}(i)
 	}
 	for range inflightN {
@@ -127,7 +125,7 @@ func BenchmarkQueryStatusInflight(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := proc.QueryStatus(ctx, addr); err != nil {
+		if _, err := QueryStatus(ctx, addr); err != nil {
 			b.Fatalf("QueryStatus: %v", err)
 		}
 	}

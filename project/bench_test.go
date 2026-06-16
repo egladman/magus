@@ -1,4 +1,4 @@
-package project_test
+package project
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 
 	"github.com/egladman/magus/internal/depgraph"
 	"github.com/egladman/magus/types"
-
-	"github.com/egladman/magus/project"
 )
 
 // writeMarker creates a magusfile.tl marker under root/path and returns the dir.
@@ -43,7 +41,7 @@ func BenchmarkInspect(b *testing.B) {
 			buildSyntheticWorkspace(b, root, n)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, err := project.Discover(context.Background(), root)
+				_, err := Discover(context.Background(), root)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -93,7 +91,7 @@ func BenchmarkAffectedFromPaths(b *testing.B) {
 	root := b.TempDir()
 	buildSyntheticWorkspace(b, root, n)
 
-	ws, err := project.Discover(context.Background(), root)
+	ws, err := Discover(context.Background(), root)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -102,7 +100,7 @@ func BenchmarkAffectedFromPaths(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := project.AffectedFromPaths(context.Background(), ws, changed)
+		_, err := AffectedFromPaths(context.Background(), ws, changed)
 		if err != nil {
 			b.Fatal(err)
 		}

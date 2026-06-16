@@ -53,17 +53,23 @@ type Session struct {
 	// return falls through to the file search. Set via SetModuleResolver.
 	moduleResolver func(importPath string) (Value, bool)
 	// importedTypes accumulates the exported object/enum declarations of flat
-	// imported .bzz modules, so compileShared can hand them to the checker and
+	// imported .buzz modules, so compileShared can hand them to the checker and
 	// the importing file can name those types in annotations and literals. The
 	// runtime values already merge via flat Exec; this carries the *types* the
 	// checker would otherwise never see. Populated in loadFileImports.
 	importedTypes []ast.Node
-	// sourceModules maps an import path to embedded .bzz source. Unlike a
+	// importedModuleFuncs maps each flat-imported module's bound name (basename
+	// or alias) to its exported function declarations. checkWithGlobals uses
+	// this to build a typed namespace object for each import instead of `any`,
+	// so qualified access like `state\wm()` resolves to its declared return type
+	// and field access on module-returned values is type-checked correctly.
+	importedModuleFuncs map[string][]*ast.FunDecl
+	// sourceModules maps an import path to embedded .buzz source. Unlike a
 	// synthetic module (a host Value carrying functions), a source module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
 	// importer's checker. It flat-merges like a file import. Set via
 	// SetSourceModule; used for shipped Buzz library modules (e.g. canonical
-	// magus types) that have no .bzz file on the include path.
+	// magus types) that have no .buzz file on the include path.
 	sourceModules map[string]string
 	// promoteTopLevel opts this session's compiles into top-level slot promotion
 	// (CompileOptions.PromoteTopLevel). The magusfile execution path enables it for
@@ -86,7 +92,7 @@ type Session struct {
 // SetSyntheticModule registers v as the module imported by `import "<importPath>"`.
 // The import binds v under the path's basename (e.g. "util" for "magus/extra"),
 // or under an explicit alias. Host-provided modules resolve before any file
-// search, so they need no .bzz file on disk.
+// search, so they need no .buzz file on disk.
 func (s *Session) SetSyntheticModule(importPath string, v Value) {
 	if s.syntheticModules == nil {
 		s.syntheticModules = map[string]Value{}
@@ -274,28 +280,25 @@ func (s *Session) builtinResolve(ctx context.Context, args []Value) (Value, erro
 // template referencing an unset variable is skipped, so an unset $BUZZ_PATH
 // drops its entries rather than searching the filesystem root).
 //
-// It mirrors the upstream Buzz search order (https://buzz-lang.dev). Both
-// extensions resolve — upstream's `.buzz` and gopherbuzz's traditional `.bzz`
-// (the .bzz template implicitly retries as .buzz; see findIncludeFile) — so
-// upstream-named module files import unchanged. Override per-session with
-// WithSearchPaths.
+// It mirrors the upstream Buzz search order (https://buzz-lang.dev); module files
+// use the `.buzz` extension. Override per-session with WithSearchPaths.
 var DefaultSearchPaths = []string{
-	"./?.bzz",
-	"./?/main.bzz",
-	"./?/src/main.bzz",
-	"./?/src/?.bzz",
-	"/usr/share/buzz/?.bzz",
-	"/usr/share/buzz/?/main.bzz",
-	"/usr/share/buzz/?/src/main.bzz",
-	"/usr/share/buzz/?/src/?.bzz",
-	"/usr/local/share/buzz/?.bzz",
-	"/usr/local/share/buzz/?/main.bzz",
-	"/usr/local/share/buzz/?/src/main.bzz",
-	"/usr/local/share/buzz/?/src/?.bzz",
-	"$BUZZ_PATH/?.bzz",
-	"$BUZZ_PATH/?/main.bzz",
-	"$BUZZ_PATH/?/src/main.bzz",
-	"$BUZZ_PATH/?/src/?.bzz",
+	"./?.buzz",
+	"./?/main.buzz",
+	"./?/src/main.buzz",
+	"./?/src/?.buzz",
+	"/usr/share/buzz/?.buzz",
+	"/usr/share/buzz/?/main.buzz",
+	"/usr/share/buzz/?/src/main.buzz",
+	"/usr/share/buzz/?/src/?.buzz",
+	"/usr/local/share/buzz/?.buzz",
+	"/usr/local/share/buzz/?/main.buzz",
+	"/usr/local/share/buzz/?/src/main.buzz",
+	"/usr/local/share/buzz/?/src/?.buzz",
+	"$BUZZ_PATH/?.buzz",
+	"$BUZZ_PATH/?/main.buzz",
+	"$BUZZ_PATH/?/src/main.buzz",
+	"$BUZZ_PATH/?/src/?.buzz",
 }
 
 // Option configures a Session at construction. See NewSession.
@@ -305,7 +308,7 @@ type Option func(*Session)
 // DefaultSearchPaths for the syntax). Passing no paths is a no-op, leaving the
 // session on DefaultSearchPaths. A host that wants to confine imports to its own
 // layout passes its own templates here (e.g. magus restricts resolution to
-// `magusfiles/?.bzz` under the project and workspace roots).
+// `magusfiles/?.buzz` under the project and workspace roots).
 func WithSearchPaths(paths ...string) Option {
 	return func(s *Session) {
 		if len(paths) > 0 {
@@ -333,6 +336,20 @@ func NewSession(ctx context.Context, opts ...Option) *Session {
 	return s
 }
 
+// NewChild creates an isolated session that inherits this session's import
+// resolution (search paths, include dirs, synthetic modules, module resolver)
+// but starts with a fresh top-level scope and its own loaded-path set. io.runFile
+// uses it so a run file cannot see or mutate the caller's globals — parity with
+// upstream buzz, whose runFile executes the file in its own scope, not the caller's.
+func (s *Session) NewChild() *Session {
+	c := newSession(s.ctx)
+	c.searchPaths = s.searchPaths
+	c.includeDirs = s.includeDirs
+	c.syntheticModules = s.syntheticModules
+	c.moduleResolver = s.moduleResolver
+	return c
+}
+
 // SetIncludeDirs replaces the directories searched for file-based imports.
 // The host (e.g. magus/internal/interp) calls this to enforce workspace
 // sandboxing before running any user code.
@@ -353,38 +370,49 @@ func (s *Session) Targets() map[string]Callable { return s.targets }
 // Exec parses, type-checks, compiles, and executes Buzz source code in the session's environment.
 // Type errors are returned as hard errors (Buzz is statically typed).
 func (s *Session) Exec(ctx context.Context, code string) error {
+	_, err := s.exec(ctx, code)
+	return err
+}
+
+// exec is Exec's workhorse, additionally returning the names this chunk
+// exported (chunk.Exports). Importers use that exact per-chunk list to build a
+// namespace object — a set-diff against the session-wide exportedNames can't
+// tell that a module re-exported a name another module already exported, which
+// would silently drop the later module's export from its namespace object.
+func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
 	chunk, err := s.compileShared(code)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
-	_, err = vm.Run(chunk, s.env)
-	if err == nil {
-		for _, name := range chunk.Exports {
-			s.exportedNames[name] = true
+	if _, err = vm.Run(chunk, s.env); err != nil {
+		return nil, err
+	}
+	for _, name := range chunk.Exports {
+		s.exportedNames[name] = true
+	}
+	if s.collectImportPrivate {
+		if s.importPrivate == nil {
+			s.importPrivate = map[string]bool{}
 		}
-		if s.collectImportPrivate {
-			if s.importPrivate == nil {
-				s.importPrivate = map[string]bool{}
-			}
-			for _, name := range chunk.Private {
-				s.importPrivate[name] = true
-			}
+		for _, name := range chunk.Private {
+			s.importPrivate[name] = true
 		}
 	}
-	return err
+	return chunk.Exports, nil
 }
 
 // execImport runs an imported module's source with import-private collection on,
 // so the module's non-exported top-level names are recorded in importPrivate and
 // hidden from the importer's checker (exports-only visibility). The flag is
-// save-and-restored so a nested import (a module importing another) still collects.
-func (s *Session) execImport(ctx context.Context, code string) error {
+// save-and-restored so a nested import (a module importing another) still
+// collects. It returns the chunk's exported names for the namespace-object bind.
+func (s *Session) execImport(ctx context.Context, code string) ([]string, error) {
 	prev := s.collectImportPrivate
 	s.collectImportPrivate = true
 	defer func() { s.collectImportPrivate = prev }()
-	return s.Exec(ctx, code)
+	return s.exec(ctx, code)
 }
 
 // enter makes vm the session's current VM (for debugger introspection) and
@@ -482,7 +510,7 @@ func (s *Session) compileShared(code string) (*Chunk, error) {
 		}
 		globals = append(globals, name)
 	}
-	if errs := checkWithGlobals(prog, globals, s.importedTypes, s.importPrivateHint()); len(errs) != 0 {
+	if errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importPrivateHint()); len(errs) != 0 {
 		return nil, errs[0]
 	}
 	// DebugLines so magus.pry() / the REPL can report a paused frame's line and
@@ -491,6 +519,7 @@ func (s *Session) compileShared(code string) (*Chunk, error) {
 		SharedGlobals:   true,
 		DebugLines:      true,
 		PromoteTopLevel: s.promoteTopLevel,
+		ImportedTypes:   s.importedTypes,
 	})
 }
 
@@ -511,7 +540,7 @@ func (s *Session) importPrivateHint() map[string]bool {
 }
 
 // loadFileImports scans prog for import statements and, for any module name not
-// yet bound in the session, searches includeDirs for a matching .bzz file. The
+// yet bound in the session, searches includeDirs for a matching .buzz file. The
 // file is executed (via Exec, which recurses through compileShared) before the
 // caller proceeds to type-check, so imported globals are visible to the checker.
 // loadedPaths prevents re-execution and breaks import cycles.
@@ -548,7 +577,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			continue
 		}
 
-		// Host-provided source modules ship as embedded .bzz source so the
+		// Host-provided source modules ship as embedded .buzz source so the
 		// importer can use their exported object/enum types. They flat-merge
 		// like a file import; the loadedPaths guard (keyed by import path)
 		// prevents a second exec.
@@ -558,15 +587,12 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 				continue
 			}
 			s.loadedPaths[key] = true
-			s.collectImportedTypes(src)
-			beforeExports := make(map[string]bool, len(s.exportedNames))
-			for n := range s.exportedNames {
-				beforeExports[n] = true
-			}
-			if err := s.execImport(s.ctx, src); err != nil {
+			s.collectImportedModule(boundName, src)
+			exports, err := s.execImport(s.ctx, src)
+			if err != nil {
 				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
 			}
-			s.bindNamespaceObject(boundName, beforeExports)
+			s.bindNamespaceObject(boundName, exports)
 			continue
 		}
 
@@ -606,30 +632,29 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			}
 		} else {
 			// Flat import: merge file's globals directly into this env, and
-			// collect its exported object/enum types so the importer can name
+			// collect its exported types and functions so the importer can name
 			// them (Exec only merges runtime values, not type declarations).
-			s.collectImportedTypes(string(data))
-			beforeExports := make(map[string]bool, len(s.exportedNames))
-			for n := range s.exportedNames {
-				beforeExports[n] = true
-			}
-			if err := s.execImport(s.ctx, string(data)); err != nil {
+			s.collectImportedModule(boundName, string(data))
+			exports, err := s.execImport(s.ctx, string(data))
+			if err != nil {
 				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
 			}
 			// Also bind a namespace object under the basename so upstream-Buzz
 			// qualified access (`regex\reCompile`) resolves the same export the
 			// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
-			s.bindNamespaceObject(boundName, beforeExports)
+			s.bindNamespaceObject(boundName, exports)
 		}
 	}
 	return nil
 }
 
-// collectImportedTypes parses a flat-imported module's source and records its
-// exported object/enum declarations on the session, so compileShared can hand
-// them to the checker. Parse errors are ignored here: the subsequent Exec
-// re-parses the same source and reports them authoritatively.
-func (s *Session) collectImportedTypes(src string) {
+// collectImportedModule parses a flat-imported module's source and records its
+// exported declarations on the session. Object/enum types go into importedTypes
+// (so the checker can resolve them in annotations and literals); exported
+// functions go into importedModuleFuncs[boundName] (so the checker can build a
+// typed namespace object for the import instead of using `any`). Parse errors
+// are ignored: the subsequent Exec re-parses the same source authoritatively.
+func (s *Session) collectImportedModule(boundName, src string) {
 	prog, err := Parse(src)
 	if err != nil {
 		return
@@ -644,24 +669,30 @@ func (s *Session) collectImportedTypes(src string) {
 			if d.IsExported {
 				s.importedTypes = append(s.importedTypes, d)
 			}
+		case *ast.FunDecl:
+			if d.IsExported {
+				if s.importedModuleFuncs == nil {
+					s.importedModuleFuncs = map[string][]*ast.FunDecl{}
+				}
+				s.importedModuleFuncs[boundName] = append(s.importedModuleFuncs[boundName], d)
+			}
 		}
 	}
 }
 
-// bindNamespaceObject binds, under name, a map of the exported globals a flat
-// import just added — those present in the env now but not in beforeNames, and
-// marked export. It lets upstream-style qualified access `name\export` resolve
-// the same value the unqualified splat also bound. Skipped if name is already
-// bound (e.g. the module exports something matching its own basename).
-func (s *Session) bindNamespaceObject(name string, beforeExports map[string]bool) {
+// bindNamespaceObject binds, under name, a map of the names a flat import just
+// exported (the chunk's own Exports). It lets upstream-style qualified access
+// `name\export` resolve the same value the unqualified splat also bound. Skipped
+// if name is already bound (e.g. the module exports something matching its own
+// basename). Using the chunk's exact export list — rather than diffing the
+// session-wide export set — keeps it correct when two modules export the same
+// identifier: each module's namespace object captures its own export.
+func (s *Session) bindNamespaceObject(name string, exports []string) {
 	if _, exists := s.env.Get(name); exists {
 		return
 	}
 	m := NewMap()
-	for n := range s.exportedNames {
-		if beforeExports[n] {
-			continue
-		}
+	for _, n := range exports {
 		if v, ok := s.env.Get(n); ok {
 			m.MapSet(n, v)
 		}
@@ -708,7 +739,7 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 // searchPaths template (the whole import path is substituted for `?`, matching
 // upstream Buzz where the import string — not just its basename — is the library
 // name), then falls back to the plain includeDirs (-L / BUZZ_INCLUDE_PATH),
-// searching importPath.bzz (flat) or importPath/<base>.bzz (directory-per-module).
+// searching importPath.buzz (flat). This matches upstream resolution exactly.
 func (s *Session) findIncludeFile(importPath string) string {
 	for _, tmpl := range s.searchPaths {
 		p := expandSearchPath(tmpl, importPath)
@@ -718,20 +749,10 @@ func (s *Session) findIncludeFile(importPath string) string {
 		if bzzExists(p) {
 			return p
 		}
-		// Upstream Buzz names module files .buzz; every .bzz candidate
-		// retries with the upstream extension so either spelling imports.
-		if alt, ok := strings.CutSuffix(p, ".bzz"); ok && bzzExists(alt+".buzz") {
-			return alt + ".buzz"
-		}
 	}
 	for _, dir := range s.includeDirs {
-		for _, ext := range []string{".bzz", ".buzz"} {
-			if p := filepath.Join(dir, importPath+ext); bzzExists(p) {
-				return p
-			}
-			if p := filepath.Join(dir, importPath, filepath.Base(importPath)+ext); bzzExists(p) {
-				return p
-			}
+		if p := filepath.Join(dir, importPath+".buzz"); bzzExists(p) {
+			return p
 		}
 	}
 	return ""
@@ -740,7 +761,7 @@ func (s *Session) findIncludeFile(importPath string) string {
 // expandSearchPath fills a search-path template: it expands environment
 // variables and substitutes `?` with importPath. It returns "" when the template
 // references an unset environment variable, so an unset $BUZZ_PATH skips its
-// entries instead of resolving to a bare "/?.bzz". Env expansion runs first so a
+// entries instead of resolving to a bare "/?.buzz". Env expansion runs first so a
 // `?` is never introduced by an env value (import paths contain no `$`).
 func expandSearchPath(tmpl, importPath string) string {
 	missing := false

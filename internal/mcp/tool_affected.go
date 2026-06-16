@@ -9,8 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/types"
 )
 
@@ -33,21 +32,24 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (
 	dryRun := paramBool(req.Params, "dry_run", false)
 
 	var buf bytes.Buffer
-	rw := report.NewWriter(&buf)
+	rw, err := magus.NewReportWriter(&buf, nil)
+	if err != nil {
+		return types.InvokeResponse{}, err
+	}
 	// Route graph events to this request's writer via context, not the shared
 	// workspace observer: the daemon serves concurrent requests on one *Magus,
 	// and a process-global observer would interleave their graph events.
-	ctx = types.ContextWithGraphObserver(ctx, report.GraphObserver(rw))
+	ctx = types.ContextWithGraphObserver(ctx, rw.GraphObserver())
 
-	runOpts := []wire.RunOption{wire.WithReport(rw)}
+	runOpts := []magus.RunOption{magus.WithReport(rw)}
 	if dryRun {
-		runOpts = append(runOpts, wire.WithDryRun())
+		runOpts = append(runOpts, magus.WithDryRun())
 	}
 	if base != "" {
-		runOpts = append(runOpts, wire.WithBaseRef(base))
+		runOpts = append(runOpts, magus.WithBaseRef(base))
 	}
 	if len(parsed.Charms) > 0 {
-		runOpts = append(runOpts, wire.WithCharms(parsed.Charms...))
+		runOpts = append(runOpts, magus.WithCharms(parsed.Charms...))
 	}
 
 	start := time.Now()

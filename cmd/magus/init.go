@@ -17,13 +17,13 @@ import (
 // directory has none. It doubles as the canonical example magusfile referenced in
 // the docs, so edits here are user-facing in both places.
 //
-//go:embed starter/magusfile.bzz
+//go:embed starter/magusfile.buzz
 var starterMagusfileBuzz string
 
 // initCmd implements `magus init`: bootstrap a magus workspace in the
 // current directory. It writes a magus.yaml to $XDG_CONFIG_HOME/magus/
 // by default (use --local to write into the repo instead), stubs a
-// magusfile.bzz when the directory has none, and wires the VCS merge driver
+// magusfile.buzz when the directory has none, and wires the VCS merge driver
 // so conflicts in declared outputs regenerate instead of producing conflict
 // markers.
 //
@@ -41,7 +41,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Bootstrap a magus workspace in the current directory:")
 		fmt.Fprintln(os.Stderr, "  - write magus.yaml to $XDG_CONFIG_HOME/magus/ (default) or CWD (--local)")
-		fmt.Fprintln(os.Stderr, "  - stub a magusfile.bzz when none exists")
+		fmt.Fprintln(os.Stderr, "  - stub a magusfile.buzz when none exists")
 		fmt.Fprintln(os.Stderr, "  - wire the VCS merge driver so conflicts in declared outputs regenerate")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "The VCS is taken from --vcs, or picked interactively when stdin is a")
@@ -106,7 +106,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 // xdgConfigPath returns $XDG_CONFIG_HOME/magus/magus.yaml, creating the
 // directory if it does not exist.
 func xdgConfigPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := config.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine config directory: %w", err)
 	}
@@ -119,7 +119,7 @@ func xdgConfigPath() (string, error) {
 
 // printInitNextSteps prints actionable hints after a successful init.
 // Gated on interactive.Enabled() so MAGUS_HINTS_ENABLED=false silences it.
-// cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.bzz
+// cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.buzz
 // was stubbed (false when --global was used); isLocal is true when --local was used.
 func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal bool) {
 	if !interactive.Enabled() {
@@ -129,7 +129,7 @@ func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal
 	interactive.Emit(os.Stderr, fmt.Sprintf("config written to %s", cfgPath))
 
 	if scaffolded {
-		interactive.Emit(os.Stderr, "magusfile scaffolded: magusfile.bzz")
+		interactive.Emit(os.Stderr, "magusfile scaffolded: magusfile.buzz")
 		interactive.Emit(os.Stderr, "run your first target:  magus run build")
 	}
 
@@ -151,14 +151,14 @@ func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal
 	interactive.Emit(os.Stderr, "stop with:  magus server stop")
 }
 
-// writeMagusfileStub writes a starter magusfile.bzz in dir when the directory has
-// no magus declaration file yet. A pre-existing magusfile.bzz or magusfiles/
+// writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has
+// no magus declaration file yet. A pre-existing magusfile.buzz or magusfiles/
 // directory is left untouched.
 func writeMagusfileStub(dir string) error {
 	if magusfilePresent(dir) {
 		return nil
 	}
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(starterMagusfileBuzz), 0o644); err != nil {
 		return fmt.Errorf("init: write %s: %w", path, err)
 	}
@@ -167,9 +167,9 @@ func writeMagusfileStub(dir string) error {
 }
 
 // magusfilePresent reports whether dir already holds a magus project
-// declaration: a magusfile.bzz file or a magusfiles/ directory.
+// declaration: a magusfile.buzz file or a magusfiles/ directory.
 func magusfilePresent(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, "magusfile.bzz")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err == nil {
 		return true
 	}
 	if fi, err := os.Stat(filepath.Join(dir, "magusfiles")); err == nil && fi.IsDir() {

@@ -11,12 +11,12 @@ import (
 func init() {
 	project.DefaultSpellRegistry().RegisterSpell(types.NewSpell(
 		"magusfile",
-		types.WithSources("magusfile.bzz"),
+		types.WithSources("magusfile.buzz"),
 		types.WithInvoker(func(ctx context.Context, req types.InvokeRequest) (any, error) {
 			return nil, runTarget(ctx, req.Dir, req.Target)
 		}),
-		types.WithDeclarationFiles("magusfile.bzz"),
-		types.WithDeclarationDirGlobs("magusfiles/*.bzz"),
+		types.WithDeclarationFiles("magusfile.buzz"),
+		types.WithDeclarationDirGlobs("magusfiles/*.buzz"),
 	))
 }
 

@@ -1,0 +1,9 @@
+// platform/macos/objc/msgD1.buzz — objc_msgSend, shape: id msg(id, SEL, double).
+// See msg0.buzz for why each shape binds a uniquely-named shim wrapper.
+namespace msgD1;
+
+zdef("bubblegum", "fn yt_send_number(self: ?*anyopaque, op: ?*anyopaque, a: f64) ?*anyopaque;");
+
+export fun sendNumber(self: ud?, op: ud?, a: double) > ud? {
+    return yt_send_number(self, op: op, a: a);
+}

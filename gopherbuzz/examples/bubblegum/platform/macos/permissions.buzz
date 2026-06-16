@@ -1,0 +1,72 @@
+// platform/macos/permissions.buzz — the one permission bubblegum needs, end to end: read the
+// live Accessibility trust state, trigger macOS's native prompt, and
+// deep-link System Settings to the exact pane. Builds on frameworks.buzz.
+//
+// Upstream-Buzz form: this module declares the AX/CF functions it calls in its
+// own top-level zdef. The prompt-options dictionary's key, value and callbacks
+// are process-global CF data symbols, resolved by frameworks (which can reach
+// them by address — see frameworks.buzz).
+
+namespace permissions;
+
+import "os";
+import "buffer";
+import "platform/macos/frameworks";
+
+zdef("ApplicationServices", `
+    fn AXIsProcessTrusted() bool;
+    fn AXIsProcessTrustedWithOptions(options: ?*anyopaque) bool;
+`);
+
+zdef("CoreFoundation", `
+    fn CFDictionaryCreate(alloc: ?*anyopaque, keys: ?*anyopaque, values: ?*anyopaque, n: i32, keyCB: ?*anyopaque, valueCB: ?*anyopaque) ?*anyopaque;
+`);
+
+export fun axTrusted() > bool {
+    return AXIsProcessTrusted();
+}
+
+// promptAccessibility asks macOS to show its native Accessibility permission
+// dialog (which also registers this process in the Settings list, so the user
+// only has to flip the toggle), and returns the current trust state.
+//
+// The options dictionary is built exactly like the C call site would:
+// { kAXTrustedCheckOptionPrompt: kCFBooleanTrue } with the CF-type callbacks.
+export fun promptAccessibility() > bool {
+    final promptKey = frameworks\axPromptKey();
+    final yes = frameworks\trueRef();
+    if (promptKey == null or yes == null) {
+        return axTrusted();
+    }
+    final keys = buffer\Buffer.init(8);
+    final vals = buffer\Buffer.init(8);
+    try {
+        keys.writeZAt::<ud>(at: 0, zigType: "*anyopaque", values: [promptKey!]);
+        vals.writeZAt::<ud>(at: 0, zigType: "*anyopaque", values: [yes!]);
+    } catch {
+        return axTrusted();
+    }
+    final opts = CFDictionaryCreate(null,
+        keys: keys.ptr(),
+        values: vals.ptr(),
+        n: 1,
+        keyCB: frameworks\dictKeyCallBacks(),
+        valueCB: frameworks\dictValueCallBacks());
+    if (opts == null) {
+        return axTrusted();
+    }
+    final trusted = AXIsProcessTrustedWithOptions(opts);
+    frameworks\releaseRef(opts);
+    return trusted;
+}
+
+// openAccessibilitySettings deep-links System Settings to Privacy & Security →
+// Accessibility — the exact pane with our toggle — via the public URL scheme.
+export fun openAccessibilitySettings() > void {
+    try {
+        _ = os\execute(["open",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"]);
+    } catch {
+        return;
+    }
+}

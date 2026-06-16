@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -23,7 +24,7 @@ import (
 	extracrypto "github.com/egladman/magus/internal/std/extra/crypto"
 	extrahttp "github.com/egladman/magus/internal/std/extra/http"
 	"github.com/egladman/magus/internal/std/gen/buzz"
-	"github.com/egladman/magus/internal/wire"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -57,6 +58,10 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	magus.MapSet("cache", buildCacheNS(ctx))
 	magus.MapSet("dispatch", buzzeng.DirectValue("dispatch", buildBuzzDispatch(targets)))
 	magus.MapSet("depends_on", buzzeng.DirectValue("magus.depends_on", buildBuzzDependsOn(targets)))
+	// magus.needs(...): the typed-handle successor to depends_on. Accepts Target
+	// handles from magus.target.named/glob/regex (and, for migration, bare target
+	// names) and awaits the matched same-project targets via the same VM pool path.
+	magus.MapSet("needs", buzzeng.DirectValue("magus.needs", buildBuzzNeeds(targets)))
 	// magus.has_charm(name): true when execution charm `name` is active — it lets a
 	// function target branch on any charm carried in context, e.g. build:container
 	// or the built-in rw (has_charm("rw")).
@@ -117,7 +122,7 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 		sess.SetSyntheticModule("magus/spell/"+spec.Name, buzzSpellObject(spec.Name))
 	}
 	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
-	// ./spells/hello.bzz on demand and binds its handle under the basename
+	// ./spells/hello.buzz on demand and binds its handle under the basename
 	// (hello). This is the import sugar for magus.spell.load on that path, and the
 	// handle registers by value when bound via magus.project.register.
 	sess.SetModuleResolver(func(importPath string) (buzzeng.Value, bool) {
@@ -126,7 +131,7 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 }
 
 // resolveLocalSpellImport resolves a path-style import (e.g. "spells/hello") to a
-// workspace-local spell at <importPath>.bzz, relative to the process cwd (the
+// workspace-local spell at <importPath>.buzz, relative to the process cwd (the
 // magusfile's directory at run time, matching magus.spell.load). It returns the
 // spell handle and ok=true when a file exists and parses as a spell; otherwise
 // ok=false, leaving the import to the normal file search.
@@ -140,10 +145,10 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Va
 	}
 	dirs = append(dirs, "")
 	for _, dir := range dirs {
-		// Two layouts are accepted: a flat spells/<name>.bzz, and the directory
-		// convention spells/<name>/spell.bzz (preferred — keeps a spell's source
+		// Two layouts are accepted: a flat spells/<name>.buzz, and the directory
+		// convention spells/<name>/spell.buzz (preferred — keeps a spell's source
 		// and any future companion files together, easy to discover).
-		for _, rel := range []string{importPath + ".bzz", filepath.Join(importPath, "spell.bzz")} {
+		for _, rel := range []string{importPath + ".buzz", filepath.Join(importPath, "spell.buzz")} {
 			path := rel
 			if dir != "" {
 				path = filepath.Join(dir, rel)
@@ -291,7 +296,7 @@ func buildProjectNS(ctx context.Context, sess *buzzeng.Session) buzzeng.Value {
 		if err != nil {
 			return buzzeng.Null, err
 		}
-		if reg := wire.WorkspaceRegistryFromContext(ctx); reg != nil {
+		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.RegisterProject(path, opts...)
 		}
 		return buzzeng.Null, nil
@@ -347,25 +352,25 @@ func registerMapHint(arg buzzeng.Value) string {
 	return ""
 }
 
-func parseBuzzProjectOpts(ctx context.Context, v buzzeng.Value) ([]wire.ProjectOption, error) {
+func parseBuzzProjectOpts(ctx context.Context, v buzzeng.Value) ([]workspace.ProjectOption, error) {
 	if !v.IsMap() {
 		return nil, nil
 	}
-	var opts []wire.ProjectOption
+	var opts []workspace.ProjectOption
 
 	if dv, ok := v.MapGet("depends_on"); ok {
 		if paths := buzzValToStringSlice(dv); len(paths) > 0 {
-			opts = append(opts, wire.WithDependsOn(paths...))
+			opts = append(opts, workspace.WithDependsOn(paths...))
 		}
 	}
 	if ov, ok := v.MapGet("outputs"); ok {
 		if paths := buzzValToStringSlice(ov); len(paths) > 0 {
-			opts = append(opts, wire.WithOutputs(paths...))
+			opts = append(opts, workspace.WithOutputs(paths...))
 		}
 	}
 	if ev, ok := v.MapGet("exclusive"); ok {
 		if ev.Bool() {
-			opts = append(opts, wire.WithExclusive())
+			opts = append(opts, workspace.WithExclusive())
 		}
 	}
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
@@ -388,28 +393,28 @@ func parseBuzzProjectOpts(ctx context.Context, v buzzeng.Value) ([]wire.ProjectO
 				}
 				registerLocalSpell(m)
 			}
-			opts = append(opts, wire.WithRegisteredSpell(name))
+			opts = append(opts, workspace.WithRegisteredSpell(name))
 		}
 	}
 	if wv, ok := v.MapGet("watch_ignore"); ok && wv.IsMap() {
 		var patterns []types.IgnorePattern
 		if gv, ok := wv.MapGet("glob"); ok {
 			for _, s := range buzzValToStringSlice(gv) {
-				patterns = append(patterns, wire.IgnoreGlob(s))
+				patterns = append(patterns, workspace.IgnoreGlob(s))
 			}
 		}
 		if rv, ok := wv.MapGet("regex"); ok {
 			for _, s := range buzzValToStringSlice(rv) {
-				patterns = append(patterns, wire.IgnoreRegex(s))
+				patterns = append(patterns, workspace.IgnoreRegex(s))
 			}
 		}
 		if lv, ok := wv.MapGet("literal"); ok {
 			for _, s := range buzzValToStringSlice(lv) {
-				patterns = append(patterns, wire.IgnoreLiteral(s))
+				patterns = append(patterns, workspace.IgnoreLiteral(s))
 			}
 		}
 		if len(patterns) > 0 {
-			opts = append(opts, wire.WithWatchIgnore(patterns...))
+			opts = append(opts, workspace.WithWatchIgnore(patterns...))
 		}
 	}
 	// targets maps a target name to a per-target policy table: cachable=false opts
@@ -421,10 +426,10 @@ func parseBuzzProjectOpts(ctx context.Context, v buzzeng.Value) ([]wire.ProjectO
 				continue
 			}
 			if cv, ok := pv.MapGet("cachable"); ok && !cv.Bool() {
-				opts = append(opts, wire.WithTarget(name, wire.NoCache()))
+				opts = append(opts, workspace.WithTarget(name, workspace.NoCache()))
 			}
 			if sv, ok := pv.MapGet("isolated"); ok && sv.Bool() {
-				opts = append(opts, wire.WithTarget(name, wire.Isolated()))
+				opts = append(opts, workspace.WithTarget(name, workspace.Isolated()))
 			}
 		}
 	}
@@ -600,6 +605,14 @@ func buildTargetNS(targets map[string]buzzeng.Callable) buzzeng.Value {
 		return strSliceToBuzzList(matched), nil
 	}))
 
+	// named/glob/regex return typed Target handles (a tagged map carrying the
+	// matching mode and the literal pattern) consumed by magus.needs. The pattern
+	// must be a string literal so the static extractor (internal/targetgraph) can
+	// recover the edge from source without evaluating the magusfile.
+	ns.MapSet("named", buzzeng.DirectValue("magus.target.named", buildBuzzTargetHandle("named")))
+	ns.MapSet("glob", buzzeng.DirectValue("magus.target.glob", buildBuzzTargetHandle("glob")))
+	ns.MapSet("regex", buzzeng.DirectValue("magus.target.regex", buildBuzzTargetHandle("regex")))
+
 	return ns
 }
 
@@ -647,7 +660,7 @@ func buildCacheNS(ctx context.Context) buzzeng.Value {
 		if !ok || !nv.IsStr() || nv.AsString() == "" {
 			return buzzeng.Null, fmt.Errorf("magus.cache.remote: argument is not a spell handle (no name)")
 		}
-		if reg := wire.WorkspaceRegistryFromContext(ctx); reg != nil {
+		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.SetRemoteBackend(nv.AsString())
 		}
 		return buzzeng.Null, nil
@@ -751,6 +764,129 @@ func buildBuzzDependsOn(targets map[string]buzzeng.Callable) func(context.Contex
 	}
 }
 
+// buzzTargetHandleKey tags the map returned by magus.target.named/glob/regex so
+// magus.needs can distinguish a Target handle from an ordinary value.
+const buzzTargetHandleKey = "__magus_target"
+
+// buildBuzzTargetHandle returns the magus.target.<mode> constructor. The pattern
+// is a required string literal (the literal-first-arg discipline: the static
+// extractor recovers the edge from source without running the VM).
+func buildBuzzTargetHandle(mode string) func(context.Context, []buzzeng.Value) (buzzeng.Value, error) {
+	return func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
+		if len(args) == 0 || !args[0].IsStr() {
+			return buzzeng.Null, fmt.Errorf("magus.target.%s: pattern must be a string literal", mode)
+		}
+		h := buzzeng.NewMap()
+		h.MapSet(buzzTargetHandleKey, buzzeng.BoolValue(true))
+		h.MapSet("mode", buzzeng.StrValue(mode))
+		h.MapSet("pattern", buzzeng.StrValue(args[0].AsString()))
+		return h, nil
+	}
+}
+
+func isBuzzTargetHandle(v buzzeng.Value) bool {
+	if !v.IsMap() {
+		return false
+	}
+	m, ok := v.MapGet(buzzTargetHandleKey)
+	return ok && m.Bool()
+}
+
+// resolveTargetHandle expands a Target handle to the matching same-project target
+// names: named is an exact (lowercased) name, glob matches via matchBuzzTargets,
+// regex matches registered names against the compiled pattern.
+func resolveTargetHandle(targets map[string]buzzeng.Callable, h buzzeng.Value) ([]string, error) {
+	var mode, pattern string
+	if v, ok := h.MapGet("mode"); ok && v.IsStr() {
+		mode = v.AsString()
+	}
+	if v, ok := h.MapGet("pattern"); ok && v.IsStr() {
+		pattern = v.AsString()
+	}
+	switch mode {
+	case "named":
+		return []string{strings.ToLower(pattern)}, nil
+	case "glob":
+		return matchBuzzTargets(targets, []string{pattern}), nil
+	case "regex":
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("target.regex %q: %w", pattern, err)
+		}
+		var matched []string
+		for name := range targets {
+			if re.MatchString(name) {
+				matched = append(matched, name)
+			}
+		}
+		slices.Sort(matched)
+		return matched, nil
+	default:
+		return nil, fmt.Errorf("target handle: unknown mode %q", mode)
+	}
+}
+
+// buildBuzzNeeds returns magus.needs(...), the typed-handle successor to
+// magus.depends_on. Each argument is a Target handle (magus.target.named/glob/
+// regex); bare strings and string lists are still accepted for compatibility
+// during migration. Matched same-project targets are awaited through the same VM
+// pool / TargetMemo path as depends_on (dispatchBuzzDeps).
+func buildBuzzNeeds(targets map[string]buzzeng.Callable) func(context.Context, []buzzeng.Value) (buzzeng.Value, error) {
+	return func(callCtx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
+		var names []string
+		for _, arg := range args {
+			switch {
+			case isBuzzTargetHandle(arg):
+				resolved, err := resolveTargetHandle(targets, arg)
+				if err != nil {
+					return buzzeng.Null, fmt.Errorf("magus.needs: %w", err)
+				}
+				names = append(names, resolved...)
+			case arg.IsStr():
+				names = append(names, strings.ToLower(arg.AsString()))
+			default:
+				for _, s := range buzzValToStringSlice(arg) {
+					names = append(names, strings.ToLower(s))
+				}
+			}
+		}
+		if err := dispatchBuzzDeps(callCtx, targets, names); err != nil {
+			return buzzeng.Null, fmt.Errorf("magus.needs: %w", err)
+		}
+		return buzzeng.Null, nil
+	}
+}
+
+// dispatchBuzzDeps awaits the named same-project targets: via the Buzz VM pool
+// when one is in ctx (parallel, TargetMemo-deduped), else inline sequential. It
+// returns unprefixed errors so each caller attaches its own verb name.
+func dispatchBuzzDeps(callCtx context.Context, targets map[string]buzzeng.Callable, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	names = dedupStrings(names)
+	if src := interp.SourceFromContext(callCtx); src != nil {
+		if reg := buzzeng.PoolRegistryFromContext(callCtx); reg != nil {
+			key := src.Dir + "\x00buzz"
+			p := reg.Get(key, interp.NewBuzzWorkerFunc(src))
+			return buzzDispatchViaPool(callCtx, p, names)
+		}
+	}
+	for _, name := range names {
+		fn, ok := targets[name]
+		if !ok {
+			return fmt.Errorf("unknown target %q", name)
+		}
+		if fn == nil {
+			continue
+		}
+		if _, err := fn(callCtx, nil); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 // buildBuzzDispatch returns the magus.dispatch direct callable, closing over targets.
 // When a PoolRegistry is present in ctx the matched targets are fanned out in
 // parallel through the Buzz VM pool (same semantics as depends_on).
@@ -850,7 +986,7 @@ func matchBuzzTargets(targets map[string]buzzeng.Callable, patterns []string) []
 // execution at the call site and opens the shared Pry REPL on the running
 // session, with stack introspection and (via the VM step hook) .step/.next/
 // .finish. In parse mode (target enumeration) it is a no-op so loading a
-// magusfile.bzz never blocks on a breakpoint.
+// magusfile.buzz never blocks on a breakpoint.
 func buildBuzzPry(sess *buzzeng.Session, parseMode bool) buzzeng.Callable {
 	if parseMode {
 		return func(_ context.Context, _ []buzzeng.Value) (buzzeng.Value, error) {

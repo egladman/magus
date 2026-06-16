@@ -77,7 +77,7 @@ data). The split is deliberate — a trust anchor is declarative config, not bui
 logic, so it lives in YAML where it can't branch or compute itself. The spell
 <strong>self-gates</strong> via <code>enabled()</code>, so the backend is a no-op anywhere it isn't
 configured (e.g. a developer machine with no credentials):</p>
-<pre><code class="language-buzz">// magusfile.bzz
+<pre><code class="language-buzz">// magusfile.buzz
 import &quot;spells/github/actions&quot; as github;
 magus.cache.remote(github);
 </code></pre>
@@ -92,7 +92,7 @@ during a run. Bind <strong>one</strong> backend. A non-empty <code>cache.remote.
 <strong>required</strong> alongside it — a remote backend with no trust set fails at load (see
 the next section). Generate a key with <code>magus config cache key generate</code>.</p>
 <h3 id="github-actions-cache">GitHub Actions Cache</h3>
-<p>The <code>actions</code> spell (<a href="../spells/github/actions/spell.bzz"><code>spells/github/actions</code></a>)
+<p>The <code>actions</code> spell (<a href="../spells/github/actions/spell.buzz"><code>spells/github/actions</code></a>)
 stores artifacts in the GitHub Actions Cache, over its v1 API.</p>
 <pre><code class="language-buzz">import &quot;spells/github/actions&quot; as github;
 magus.cache.remote(github);
@@ -130,7 +130,7 @@ dormant locally. You still declare a trust set and set the signing secret as for
 any backend (see <a href="#signing-is-required-trust-model">Signing is required</a>). GitHub
 evicts old artifacts on its own (7-day idle / repo size cap).</p>
 <h3 id="s3-minio-cloudflare-r2-backblaze-b2">S3, MinIO, Cloudflare R2, Backblaze B2</h3>
-<p>The <code>s3-cache</code> spell (<a href="../spells/aws/s3-cache/spell.bzz"><code>spells/aws/s3-cache</code></a>)
+<p>The <code>s3-cache</code> spell (<a href="../spells/aws/s3-cache/spell.buzz"><code>spells/aws/s3-cache</code></a>)
 stores artifacts in any S3-compatible bucket, signing every request with AWS
 Signature V4.</p>
 <pre><code class="language-buzz">import &quot;spells/aws/s3-cache&quot; as s3;

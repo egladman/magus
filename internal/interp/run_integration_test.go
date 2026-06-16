@@ -14,7 +14,7 @@ import (
 
 func writeMagusfile(t *testing.T, dir, body string) {
 	t.Helper()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestRunImportsMagusfilesSibling(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "magusfiles", "lib"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "magusfiles", "lib", "calc.bzz"),
+	if err := os.WriteFile(filepath.Join(dir, "magusfiles", "lib", "calc.buzz"),
 		[]byte(`export final tag = "calc-ok";`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -110,14 +110,14 @@ export fun build(_args: [str]) > void {
 	}
 }
 
-// TestRunBuzzStdModule exercises the std host surface from a magusfile.bzz
+// TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
 // end-to-end: the magus-bindings-gen-emitted buzzgen trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
 // charm.append), with camelCase methods (Buzz's convention).
 func TestRunBuzzStdModule(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "fs";
@@ -148,7 +148,7 @@ export fun verify(_opts: [str]) > void {
 // render Markdown to HTML in its own magusfile target.
 func TestRunBuzzMarkdownModule(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "fs";
@@ -177,7 +177,7 @@ export fun verify(_opts: [str]) > void {
 // magus-bindings-gen lua/buzz variadic-offset decode in addition to the formatting itself.
 func TestRunBuzzFmtSprintf(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "fmt";
@@ -209,7 +209,7 @@ export fun verify(_opts: [str]) > void {
 // fs/os modules, while hashing uses the stdlib `crypto.hash`.
 func TestRunBuzzAggregateUtil(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "fs";
@@ -305,10 +305,10 @@ export fun go(_a: [str]) > void { hello.build(); }`
 	if err := os.MkdirAll(filepath.Join(proj, "spells"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(proj, "spells", "hello.bzz"), []byte(spell), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(proj, "spells", "hello.buzz"), []byte(spell), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(proj, "magusfile.bzz"), []byte(magusfile), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(proj, "magusfile.buzz"), []byte(magusfile), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// Parse from the test's cwd, NOT from proj — exactly what workspace
@@ -350,7 +350,7 @@ export fun top(_args: [str]) > void {
 // normalize to the same canonical target must error.
 func TestRunBuzzTargetNameCollision(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 
@@ -373,7 +373,7 @@ export fun fooBar(_a: [str]) > void {}
 // typed error survives the VM boundary so the CLI/daemon can honor the code.
 func TestOsExitRaisesExitError(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "os";
@@ -400,7 +400,7 @@ export fun bail(_a: [str]) > void { os.exit(3); }
 // literals and returns.
 func TestOsSleep(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "os";
@@ -421,7 +421,7 @@ export fun nap(_a: [str]) > void {
 // returns "" for a missing one (asserted inside the magusfile via os.exit).
 func TestOsWhich(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "os";
@@ -442,7 +442,7 @@ export fun checkwhich(_a: [str]) > void {
 // tolerated — dedup happens in the shared channel).
 func TestMagusHint(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 
@@ -462,7 +462,7 @@ export fun nudge(_a: [str]) > void {
 // code 1 (Buzz preserves the typed error across the boundary).
 func TestMagusFatal(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 
@@ -487,7 +487,7 @@ export fun boom(_a: [str]) > void { magus.fatal("boom"); }
 // runs (sh is always present; the flag/derivation is unit-tested in host).
 func TestOsExecShShellOption(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "os";
@@ -507,7 +507,7 @@ export fun viash(_a: [str]) > void {
 // the footgun where a manually-listed target also matches an expand_globs glob.
 func TestDependsOnDedup(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 import "os";
@@ -533,7 +533,7 @@ export fun top(_a: [str]) > void { magus.depends_on(["dep", "dep"]); }
 // namespace from a Buzz magusfile (with and without a fields map).
 func TestMagusLoggingBuzz(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 
@@ -663,10 +663,10 @@ fun join(xs: [str], sep: str) > str {
 }
 
 // TestTargetNewBuzzIsGone verifies that magus.target.new no longer exists in
-// the Buzz binding: a magusfile.bzz using it must error at runtime.
+// the Buzz binding: a magusfile.buzz using it must error at runtime.
 func TestTargetNewBuzzIsGone(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "magusfile.bzz")
+	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
 import "magus";
 magus.target.new("build", fun(_args: [str]) void {});

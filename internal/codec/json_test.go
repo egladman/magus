@@ -1,10 +1,8 @@
-package codec_test
+package codec
 
 import (
 	"bytes"
 	"testing"
-
-	"github.com/egladman/magus/internal/codec"
 )
 
 type pair struct {
@@ -15,12 +13,12 @@ type pair struct {
 func TestMarshalUnmarshalRoundtrip(t *testing.T) {
 	t.Parallel()
 	in := pair{K: "hello", V: 42}
-	b, err := codec.Marshal(in)
+	b, err := Marshal(in)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out pair
-	if err := codec.Unmarshal(b, &out); err != nil {
+	if err := Unmarshal(b, &out); err != nil {
 		t.Fatal(err)
 	}
 	if out != in {
@@ -30,7 +28,7 @@ func TestMarshalUnmarshalRoundtrip(t *testing.T) {
 
 func TestMarshalIndent(t *testing.T) {
 	t.Parallel()
-	b, err := codec.MarshalIndent(map[string]int{"x": 1}, "", "  ")
+	b, err := MarshalIndent(map[string]int{"x": 1}, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,11 +40,11 @@ func TestMarshalIndent(t *testing.T) {
 func TestEncoderDecoder(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	enc := codec.NewEncoder(&buf)
+	enc := NewEncoder(&buf)
 	if err := enc.Encode(pair{K: "a", V: 1}); err != nil {
 		t.Fatal(err)
 	}
-	dec := codec.NewDecoder(&buf)
+	dec := NewDecoder(&buf)
 	var got pair
 	if err := dec.Decode(&got); err != nil {
 		t.Fatal(err)

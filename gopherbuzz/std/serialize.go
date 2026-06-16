@@ -33,9 +33,15 @@ func boxedInit(_ context.Context, args []buzz.Value) (buzz.Value, error) {
 	return makeBoxed(args[0]), nil
 }
 
+// boxedRawKey is the private map key under which makeBoxed stores the
+// underlying raw value so jsonEncode can extract it without serializing
+// the native Go method values that also live in the map.
+const boxedRawKey = "\x00boxed"
+
 // makeBoxed wraps a buzz Value in a Boxed map with typed accessor methods.
 func makeBoxed(v buzz.Value) buzz.Value {
 	m := mod()
+	m.MapSet(boxedRawKey, v)
 
 	m.MapSet("q", fn("Boxed.q", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
 		// Path segments come either as upstream's single list (q([any], with str
@@ -181,7 +187,13 @@ func serializeJSONEncode(_ context.Context, args []buzz.Value) (buzz.Value, erro
 	if len(args) < 1 {
 		return buzz.Null, fmt.Errorf("serialize.jsonEncode: requires a Boxed argument")
 	}
-	goVal, err := buzzToGo(args[0])
+	src := args[0]
+	// A Boxed value (from makeBoxed) stores its raw data under boxedRawKey.
+	// Extract it so we serialize the data, not the Go method wrappers.
+	if raw, ok := src.MapGet(boxedRawKey); ok {
+		src = raw
+	}
+	goVal, err := buzzToGo(src)
 	if err != nil {
 		return buzz.Null, fmt.Errorf("serialize.jsonEncode: %w", err)
 	}

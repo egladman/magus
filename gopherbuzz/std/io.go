@@ -27,7 +27,13 @@ func ioModule(sess *buzz.Session) buzz.Value {
 		if err != nil {
 			return buzz.Null, fmt.Errorf("io.runFile: %w", err)
 		}
-		return buzz.Null, sess.Exec(ctx, string(src))
+		// Run in an isolated child scope (upstream parity): a run file gets its own
+		// top-level scope and cannot see or mutate the caller's globals. Code that
+		// needs the caller's session is a divergence that breaks on upstream, so it
+		// is deliberately not offered here.
+		child := sess.NewChild()
+		defer child.Close()
+		return buzz.Null, child.Exec(ctx, string(src))
 	}))
 	return m
 }

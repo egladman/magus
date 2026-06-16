@@ -3,15 +3,17 @@ package targetgraph
 import (
 	"reflect"
 	"testing"
+
+	"github.com/egladman/magus/types"
 )
 
-func nodeByName(g Graph, name string) (Node, bool) {
-	for _, n := range g.Nodes {
+func nodeByName(nodes []types.TargetGraphNode, name string) (types.TargetGraphNode, bool) {
+	for _, n := range nodes {
 		if n.Name == name {
 			return n, true
 		}
 	}
-	return Node{}, false
+	return types.TargetGraphNode{}, false
 }
 
 func TestBuild(t *testing.T) {
@@ -38,19 +40,19 @@ export fun a_gen(args: [str]) > void { go["x"](); }
 
 	foo, ok := nodeByName(g, "foo-bar")
 	if !ok {
-		t.Fatalf("missing foo-bar; got %v", g.Nodes)
+		t.Fatalf("missing foo-bar; got %v", g)
 	}
 	if foo.Doc != "foo does a thing." {
 		t.Errorf("foo-bar doc = %q, want %q", foo.Doc, "foo does a thing.")
 	}
-	if !reflect.DeepEqual(foo.Deps, []string{"baz"}) {
-		t.Errorf("foo-bar deps = %v, want [baz] (comment mention ignored)", foo.Deps)
+	if !reflect.DeepEqual(foo.Dependencies, []string{"baz"}) {
+		t.Errorf("foo-bar deps = %v, want [baz] (comment mention ignored)", foo.Dependencies)
 	}
 	if baz, _ := nodeByName(g, "baz"); baz.Doc != "" {
 		t.Errorf("baz doc = %q, want empty (blank line breaks contiguity)", baz.Doc)
 	}
-	if genAll, _ := nodeByName(g, "gen-all"); !reflect.DeepEqual(genAll.Deps, []string{"a-gen"}) {
-		t.Errorf("gen-all deps = %v, want [a-gen] (*-gen glob)", genAll.Deps)
+	if genAll, _ := nodeByName(g, "gen-all"); !reflect.DeepEqual(genAll.Dependencies, []string{"a-gen"}) {
+		t.Errorf("gen-all deps = %v, want [a-gen] (*-gen glob)", genAll.Dependencies)
 	}
 }
 
@@ -90,11 +92,11 @@ func TestNameNormalization(t *testing.T) {
 export fun ci(args: [str]) > void { magus.depends_on(["goBuild"]); }
 `)
 	if _, ok := nodeByName(g, "go-build"); !ok {
-		t.Fatalf("camelCase goBuild should normalize to go-build; got %v", g.Nodes)
+		t.Fatalf("camelCase goBuild should normalize to go-build; got %v", g)
 	}
 	ci, _ := nodeByName(g, "ci")
-	if !reflect.DeepEqual(ci.Deps, []string{"go-build"}) {
-		t.Errorf("ci deps = %v, want [go-build] (dep name normalized to match node)", ci.Deps)
+	if !reflect.DeepEqual(ci.Dependencies, []string{"go-build"}) {
+		t.Errorf("ci deps = %v, want [go-build] (dep name normalized to match node)", ci.Dependencies)
 	}
 }
 
@@ -108,8 +110,8 @@ func TestBraceInString(t *testing.T) {
 export fun fmt(args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
-	if !reflect.DeepEqual(build.Deps, []string{"fmt"}) {
-		t.Errorf("build deps = %v, want [fmt] (brace in string must not truncate body)", build.Deps)
+	if !reflect.DeepEqual(build.Dependencies, []string{"fmt"}) {
+		t.Errorf("build deps = %v, want [fmt] (brace in string must not truncate body)", build.Dependencies)
 	}
 }
 
@@ -122,8 +124,8 @@ func TestTrailingComment(t *testing.T) {
 export fun real(args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
-	if !reflect.DeepEqual(build.Deps, []string{"real"}) {
-		t.Errorf("build deps = %v, want [real] (trailing comment ignored)", build.Deps)
+	if !reflect.DeepEqual(build.Dependencies, []string{"real"}) {
+		t.Errorf("build deps = %v, want [real] (trailing comment ignored)", build.Dependencies)
 	}
 }
 
@@ -138,8 +140,32 @@ export fun check_lint(args: [str]) > void { go["x"](); }
 `)
 	all, _ := nodeByName(g, "all")
 	want := []string{"docs-gen", "check-lint"}
-	if !reflect.DeepEqual(all.Deps, want) {
-		t.Errorf("all deps = %v, want %v (both glob patterns honored)", all.Deps, want)
+	if !reflect.DeepEqual(all.Dependencies, want) {
+		t.Errorf("all deps = %v, want %v (both glob patterns honored)", all.Dependencies, want)
+	}
+}
+
+// TestNeedsHandles guards the magus.needs handle edges: named is an exact dep,
+// glob and regex resolve against sibling target names, a multi-arg needs call
+// yields every edge (per-leaf extraction, not call-spanning), and a handle in a
+// trailing comment is prose, not an edge.
+func TestNeedsHandles(t *testing.T) {
+	g := Extract(`export fun build(args: [str]) > void { go["x"](); }
+export fun a_gen(args: [str]) > void { go["x"](); }
+export fun b_gen(args: [str]) > void { go["x"](); }
+export fun test(args: [str]) > void {
+    magus.needs(magus.target.named("build"));
+    magus.needs(magus.target.glob("*-gen"), magus.target.regex("^b-"));
+    // magus.target.named("ignored") in a comment must not count
+}
+`)
+	test, ok := nodeByName(g, "test")
+	if !ok {
+		t.Fatalf("missing test; got %v", g)
+	}
+	want := []string{"build", "a-gen", "b-gen"}
+	if !reflect.DeepEqual(test.Dependencies, want) {
+		t.Errorf("test deps = %v, want %v (named exact + glob + regex; comment ignored)", test.Dependencies, want)
 	}
 }
 
@@ -148,7 +174,7 @@ func TestCycle(t *testing.T) {
 export fun b(args: [str]) > void { magus.depends_on(["c"]); }
 export fun c(args: [str]) > void { go["x"](); }
 `)
-	if c := acyclic.Cycle(); c != nil {
+	if c := Cycle(acyclic); c != nil {
 		t.Errorf("acyclic graph reported cycle %v", c)
 	}
 
@@ -156,7 +182,7 @@ export fun c(args: [str]) > void { go["x"](); }
 export fun b(args: [str]) > void { magus.depends_on(["c"]); }
 export fun c(args: [str]) > void { magus.depends_on(["a"]); }
 `)
-	c := cyclic.Cycle()
+	c := Cycle(cyclic)
 	if c == nil {
 		t.Fatal("cyclic graph reported no cycle")
 	}
@@ -172,7 +198,7 @@ func TestCycleAcrossNormalization(t *testing.T) {
 	g := Extract(`export fun aB(args: [str]) > void { magus.depends_on(["bC"]); }
 export fun bC(args: [str]) > void { magus.depends_on(["aB"]); }
 `)
-	if g.Cycle() == nil {
+	if Cycle(g) == nil {
 		t.Error("mixed-case cycle aB→bC→aB not detected")
 	}
 }

@@ -1,0 +1,174 @@
+// platform/macos/events.buzz — the event source: the global key/mouse taps and
+// the run-loop pump that feeds them. Builds on frameworks.buzz.
+//
+// A CGEventTap delivers events through a C *callback*, and a global keyboard
+// grab must decide synchronously whether to SWALLOW a key. Stock upstream buzz
+// can call C but can't turn a Buzz function into a C callback — so that callback
+// lives in a tiny C helper (eventshim.c → libbubblegum.dylib, built by
+// gen-framework-stubs.sh), exactly as zdef() is meant to be used. The helper
+// owns the taps, makes the swallow decision against a chord table Buzz fills,
+// and queues events; Buzz drives it with plain zdef calls and polls the queue
+// while pumping the run loop itself (CFRunLoopRunInMode). Single-threaded — the
+// callbacks fire on the interpreter's thread during the pump. Identical on
+// gopherbuzz and upstream; no FFI callback, no interpreter changes.
+
+namespace events;
+
+import "platform/macos/frameworks";
+
+// The C event-tap helper (zdef finds ./libbubblegum.dylib via the lib search).
+zdef("bubblegum", `
+    fn yt_install() i32;
+    fn yt_reenable() void;
+    fn yt_set_grab(on: i32) void;
+    fn yt_clear_chords() void;
+    fn yt_add_chord(flags: i32, keycode: i32) void;
+    fn yt_poll_key() i32;
+    fn yt_last_keycode() i32;
+    fn yt_last_flags() i32;
+    fn yt_poll_mouse() i32;
+    fn yt_mouse_x() f64;
+    fn yt_mouse_y() f64;
+    fn yt_poll_click() i32;
+    fn yt_click_x() f64;
+    fn yt_click_y() f64;
+    fn yt_poll_release() i32;
+    fn yt_release_x() f64;
+    fn yt_release_y() f64;
+    fn yt_obs_watch_app(pid: i32) i32;
+    fn yt_obs_watch_window(pid: i32, element: ?*anyopaque, id: i32) i32;
+    fn yt_obs_poll() i32;
+    fn yt_obs_arg() i32;
+`);
+
+// Window-event types drained from the AX observers (see eventshim.c). created
+// and focus carry an app pid in the arg; destroyed/moved/mini/demini carry the
+// managed window id.
+export final winCreated = 1;
+export final winDestroyed = 2;
+export final winFocus = 3;
+export final winMoved = 4;
+export final winMini = 5;
+export final winDemini = 6;
+
+// CFRunLoopRunInMode pumps the run loop so the helper's tap callbacks fire (and
+// the AppKit panels update) without blocking the WM's poll loop.
+zdef("CoreFoundation", "fn CFRunLoopRunInMode(mode: ?*anyopaque, seconds: f64, returnAfterSourceHandled: bool) i32;");
+
+// installTaps creates the key + mouse taps. Returns false when the key tap is
+// refused — i.e. the Accessibility permission is missing.
+export fun installTaps() > bool {
+    return yt_install() != 0;
+}
+
+// reenableTaps re-arms either tap macOS disabled (slow callback, sleep, login).
+export fun reenableTaps() > void {
+    yt_reenable();
+}
+
+// pump runs the run loop for `seconds`: the taps deliver into the helper's queue
+// and the AppKit overlays redraw. Call once per WM loop iteration.
+export fun pump(seconds: double) > void {
+    _ = CFRunLoopRunInMode(frameworks\runLoopDefaultMode(), seconds: seconds, returnAfterSourceHandled: false);
+}
+
+// setGrab toggles the launcher's keyboard grab: while on, every key-down is
+// swallowed (the focused app sees nothing) and queued for the launcher.
+export fun setGrab(on: bool) > void {
+    var v = 0;
+    if (on) {
+        v = 1;
+    }
+    yt_set_grab(v);
+}
+
+// clearChords / addChord publish the swallow set: the helper returns NULL
+// (swallows) for a key-down matching one of these chords, so a bound hotkey
+// never reaches the focused app — i3's behavior, decided in the tap callback.
+export fun clearChords() > void {
+    yt_clear_chords();
+}
+
+export fun addChord(flags: int, keycode: int) > void {
+    yt_add_chord(flags, keycode: keycode);
+}
+
+// pollKey dequeues one key event: returns its CGEventType (10 key-down, 11
+// key-up, 12 flags-changed), or 0 when the queue is empty. The keycode/flags
+// of the dequeued event are then read with keycode()/flags().
+export fun pollKey() > int {
+    return yt_poll_key();
+}
+
+export fun keycode() > int {
+    return yt_last_keycode();
+}
+
+export fun flags() > int {
+    return yt_last_flags();
+}
+
+// pollMouse reports whether the cursor moved since the last poll; mouseX/mouseY
+// read the latest location (global, top-left origin).
+export fun pollMouse() > bool {
+    return yt_poll_mouse() != 0;
+}
+
+export fun mouseX() > double {
+    return yt_mouse_x();
+}
+
+export fun mouseY() > double {
+    return yt_mouse_y();
+}
+
+// pollClick reports a pending left-mouse-down (one per call); clickX/clickY read
+// its location (global, top-left origin). Drives the clickable status bar.
+export fun pollClick() > bool {
+    return yt_poll_click() != 0;
+}
+
+export fun clickX() > double {
+    return yt_click_x();
+}
+
+export fun clickY() > double {
+    return yt_click_y();
+}
+
+// pollRelease reports a pending left-mouse-up (the drop of a drag); releaseX/Y
+// read its location. Drives drag-to-reflow.
+export fun pollRelease() > bool {
+    return yt_poll_release() != 0;
+}
+
+export fun releaseX() > double {
+    return yt_release_x();
+}
+
+export fun releaseY() > double {
+    return yt_release_y();
+}
+
+// watchApp registers AX observers for an app's window lifecycle (window created,
+// focus changed). Idempotent per pid; call when a pid is first seen.
+export fun watchApp(pid: int) > bool {
+    return yt_obs_watch_app(pid) != 0;
+}
+
+// watchWindow registers per-window observers (destroyed, moved, minimize) tagged
+// with the managed id, so the drained event names the window directly. Call once
+// when a window is first adopted.
+export fun watchWindow(pid: int, element: ud?, id: int) > void {
+    _ = yt_obs_watch_window(pid, element: element, id: id);
+}
+
+// pollWindowEvent dequeues one window event: a winCreated/winDestroyed/… type,
+// or 0 when the queue is empty. windowEventArg() then reads its pid-or-id.
+export fun pollWindowEvent() > int {
+    return yt_obs_poll();
+}
+
+export fun windowEventArg() > int {
+    return yt_obs_arg();
+}

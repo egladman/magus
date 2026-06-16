@@ -1,0 +1,104 @@
+// core/session.buzz - session persistence: which workspace each window lives on.
+//
+// macOS forgets bubblegum's workspaces across a restart (they are emulated, not
+// real Spaces), and a fresh start adopts every window onto workspace 1. So we keep
+// our own note of each tiled window's workspace, keyed by app name - the same
+// identity the layout snapshots use, since window ids don't survive a restart - and
+// on launch we redistribute the adopted windows back to where they were. Best-effort
+// and granular to the app, not the individual window: the Nth window of an app
+// reclaims the Nth saved slot for that app. Split ratios are NOT saved (the tiler
+// re-derives those); this restores *which workspace*, the part macOS throws away.
+// Saved as plain text, not JSON - serialize\jsonEncode can't round-trip the tree on
+// this buzz. Delete ~/.config/bubblegum/session to forget everything and start clean.
+
+namespace session;
+
+import "state";
+import "core/paths";
+import "platform/macos/windows";
+import "config";
+import "fs";
+import "io";
+import "std";
+
+export object SessionEntry {
+    ws: int = 0,
+    app: str = "",
+}
+
+var lastSessionSig = ""; // (id:ws) digest; saveSession rewrites only when it changes
+
+// saveSession writes one "<ws>\t<app>" line per tiled window. Floating and
+// scratchpad windows are skipped - they are ephemeral, not part of the layout.
+export fun saveSession() > void {
+    var res = "# bubblegum session v1\n";
+    foreach (m in state\wm().managed) {
+        if (m.floating or m.workspace < 0 or m.workspace >= 9) {
+            continue;
+        }
+        res = res + "{m.workspace}\t{windows\appName(m.pid)}\n";
+    }
+    try {
+        fs\makeDirectory(paths\configDir());
+        final f = io\File.open(paths\sessionPath(), mode: io\FileMode.write);
+        f.write(res);
+        f.close();
+    } catch (e: any) {
+        _ = e; // best-effort: a failed session write must never disrupt the WM
+    }
+}
+
+// maybeSaveSession rewrites the session file only when the (window -> workspace)
+// mapping actually changed - the signature is plain struct reads, no AX, so it is
+// cheap to call every reconcile. Driven from tick(), so the file survives a crash,
+// not just a clean quit.
+export fun maybeSaveSession() > void {
+    var sig = "";
+    foreach (m in state\wm().managed) {
+        if (m.floating or m.workspace < 0 or m.workspace >= 9) {
+            continue;
+        }
+        sig = sig + "{m.id}:{m.workspace};";
+    }
+    if (sig != lastSessionSig) {
+        lastSessionSig = sig;
+        saveSession();
+    }
+}
+
+// readSession parses the session file into (ws, app) entries; empty when there is
+// no file (a first run, or the user deleted it).
+export fun readSession() > [any] {
+    final entries = mut [];
+    final text = config\readConfigText(paths\sessionPath());
+    if (text == null) {
+        return entries;
+    }
+    foreach (line in text!.split("\n")) {
+        final ln = line.trim();
+        if (ln.len() == 0 or ln.startsWith("#")) {
+            continue;
+        }
+        final tab = ln.indexOf("\t");
+        if (tab == null) {
+            continue;
+        }
+        final ws = std\parseInt(ln.sub(0, len: tab!));
+        if (ws == null) {
+            continue;
+        }
+        entries.append(SessionEntry{ ws = ws!, app = ln.sub(tab! + 1) });
+    }
+    return entries;
+}
+
+// parkRestored hides a window placed on an inactive workspace, the same way a
+// workspace switch would (state\wm().cfg.hideMethod). The "hide" (app-hide) method is
+// reconciled in one pass by the caller, since it keys on the app, not the window.
+export fun parkRestored(mm: mut state\Managed) > void {
+    if (mm.floating or state\wm().cfg.hideMethod == "minimize") {
+        windows\setMinimized(mm.ref, minimized: true);
+    } else {
+        windows\moveWindow(mm.ref, x: state\parkX, y: state\parkY); // "offscreen"
+    }
+}

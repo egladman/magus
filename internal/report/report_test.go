@@ -1,4 +1,4 @@
-package report_test
+package report
 
 import (
 	"bufio"
@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/report"
 )
 
 // failWriter returns an error on every Write. Used to verify that the
@@ -27,11 +26,11 @@ func (failWriter) Write(_ []byte) (int, error) { return 0, fmt.Errorf("disk full
 // failure on the drain goroutine ends up in Stats.LastErr after Close.
 func TestRecordSurfacesDrainErrorViaStats(t *testing.T) {
 	t.Parallel()
-	w := report.NewWriter(failWriter{}, report.WithBlockOnFull())
-	if err := report.Record(w, report.CacheHit{Project: "p", Target: "build"}); err != nil {
+	w := NewWriter(failWriter{}, WithBlockOnFull())
+	if err := Record(w, CacheHit{Project: "p", Target: "build"}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if err := report.Record(w, report.CacheHit{Project: "p", Target: "test"}); err != nil {
+	if err := Record(w, CacheHit{Project: "p", Target: "test"}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	_ = w.Close()
@@ -46,9 +45,9 @@ func TestRecordSurfacesDrainErrorViaStats(t *testing.T) {
 func TestSchemaFieldOnEveryLine(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf, report.WithBlockOnFull())
+	w := NewWriter(&buf, WithBlockOnFull())
 	for i := 0; i < 5; i++ {
-		if err := report.Record(w, report.CacheHit{Project: "p", Target: "build"}); err != nil {
+		if err := Record(w, CacheHit{Project: "p", Target: "build"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -65,11 +64,11 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 		if err := json.Unmarshal(line, &head); err != nil {
 			t.Fatalf("unmarshal %q: %v", line, err)
 		}
-		if head.Schema != report.Schema {
-			t.Errorf("schema = %d, want %d on line %q", head.Schema, report.Schema, line)
+		if head.Schema != Schema {
+			t.Errorf("schema = %d, want %d on line %q", head.Schema, Schema, line)
 		}
-		if head.Type != report.TypeCacheHit {
-			t.Errorf("type = %q, want %q", head.Type, report.TypeCacheHit)
+		if head.Type != TypeCacheHit {
+			t.Errorf("type = %q, want %q", head.Type, TypeCacheHit)
 		}
 	}
 }
@@ -79,20 +78,20 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 func TestRoundTripAllTypes(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := report.OpenWriter(path, report.WithBlockOnFull())
+	w, err := OpenWriter(path, WithBlockOnFull())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	events := []any{
-		report.CacheHit{Project: "svc-a", Target: "build", DurationMs: 342},
-		report.CacheMiss{Project: "svc-b", Target: "build", DurationMs: 12},
-		report.CacheError{Project: "svc-c", Target: "test", DurationMs: 1053, Message: "exit status 1"},
-		report.GraphBuild{Nodes: 120, DurationMs: 8},
-		report.GraphQuery{Op: "affected", Nodes: 120, Seeds: 3, Strategy: "reverse", ResultCount: 12, DurationMs: 4},
-		report.GraphError{Op: "build", Message: "cycle"},
-		report.FlakeCall{Project: "svc-a", Target: "test", Status: "retried_flake", Attempts: 2, RetryReason: "predicted_flake"},
-		report.ShardSetup{Shard: "0", NShards: 4, DurationMs: 230},
-		report.ShardTotal{Shard: "0", NShards: 4, DurationMs: 78321},
+		CacheHit{Project: "svc-a", Target: "build", DurationMs: 342},
+		CacheMiss{Project: "svc-b", Target: "build", DurationMs: 12},
+		CacheError{Project: "svc-c", Target: "test", DurationMs: 1053, Message: "exit status 1"},
+		GraphBuild{Nodes: 120, DurationMs: 8},
+		GraphQuery{Op: "affected", Nodes: 120, Seeds: 3, Strategy: "reverse", ResultCount: 12, DurationMs: 4},
+		GraphError{Op: "build", Message: "cycle"},
+		FlakeCall{Project: "svc-a", Target: "test", Status: "retried_flake", Attempts: 2, RetryReason: "predicted_flake"},
+		ShardSetup{Shard: "0", NShards: 4, DurationMs: 230},
+		ShardTotal{Shard: "0", NShards: 4, DurationMs: 78321},
 	}
 	for _, e := range events {
 		if err := recordAny(w, e); err != nil {
@@ -110,9 +109,9 @@ func TestRoundTripAllTypes(t *testing.T) {
 	defer f.Close()
 
 	wantTypes := []string{
-		report.TypeCacheHit, report.TypeCacheMiss, report.TypeCacheError,
-		report.TypeGraphBuild, report.TypeGraphQuery, report.TypeGraphError,
-		report.TypeFlake, report.TypeShardSetup, report.TypeShardTotal,
+		TypeCacheHit, TypeCacheMiss, TypeCacheError,
+		TypeGraphBuild, TypeGraphQuery, TypeGraphError,
+		TypeFlake, TypeShardSetup, TypeShardTotal,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
@@ -126,8 +125,8 @@ func TestRoundTripAllTypes(t *testing.T) {
 		if err := json.Unmarshal(sc.Bytes(), &head); err != nil {
 			t.Fatalf("line %d unmarshal: %v -- %q", i, err, sc.Bytes())
 		}
-		if head.Schema != report.Schema {
-			t.Errorf("line %d schema: got %d, want %d", i, head.Schema, report.Schema)
+		if head.Schema != Schema {
+			t.Errorf("line %d schema: got %d, want %d", i, head.Schema, Schema)
 		}
 		if head.Type != wantTypes[i] {
 			t.Errorf("line %d type: got %q, want %q", i, head.Type, wantTypes[i])
@@ -135,19 +134,19 @@ func TestRoundTripAllTypes(t *testing.T) {
 	}
 }
 
-func recordAny(w *report.Writer, e any) error {
-	return report.Record(w, e)
+func recordAny(w *Writer, e any) error {
+	return Record(w, e)
 }
 
 func TestAppend(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	for i := 0; i < 2; i++ {
-		w, err := report.OpenWriter(path, report.WithBlockOnFull())
+		w, err := OpenWriter(path, WithBlockOnFull())
 		if err != nil {
 			t.Fatalf("Open round %d: %v", i, err)
 		}
-		if err := report.Record(w, report.CacheHit{Project: "svc-a", Target: "build", DurationMs: 10}); err != nil {
+		if err := Record(w, CacheHit{Project: "svc-a", Target: "build", DurationMs: 10}); err != nil {
 			t.Fatalf("Record round %d: %v", i, err)
 		}
 		if err := w.Close(); err != nil {
@@ -176,7 +175,7 @@ func TestConcurrentWrites(t *testing.T) {
 	const goroutines = 64
 	const perG = 16
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := report.OpenWriter(path, report.WithBlockOnFull())
+	w, err := OpenWriter(path, WithBlockOnFull())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -187,7 +186,7 @@ func TestConcurrentWrites(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < perG; j++ {
-				_ = report.Record(w, report.CacheHit{Project: "svc-a", Target: "build", DurationMs: 1})
+				_ = Record(w, CacheHit{Project: "svc-a", Target: "build", DurationMs: 1})
 			}
 		}()
 	}
@@ -234,10 +233,10 @@ func TestDropOnFullPolicy(t *testing.T) {
 	// Slow-writer pattern: a writer that blocks on every Write so the
 	// drain goroutine is parked and the channel fills.
 	bw := &blockingWriter{ch: make(chan struct{})}
-	w := report.NewWriter(bw, report.WithQueueSize(4))
+	w := NewWriter(bw, WithQueueSize(4))
 	const total = 200
 	for i := 0; i < total; i++ {
-		_ = report.Record(w, report.CacheHit{Project: "p", Target: "t"})
+		_ = Record(w, CacheHit{Project: "p", Target: "t"})
 	}
 	// Release the drain goroutine so Close can complete.
 	close(bw.ch)
@@ -270,19 +269,19 @@ func (b *blockingWriter) Write(p []byte) (int, error) {
 // TestFilterIncludeOnly admits only listed types.
 func TestFilterIncludeOnly(t *testing.T) {
 	t.Parallel()
-	f, err := report.ParseFilter([]string{"+cache.hit"})
+	f, err := ParseFilter([]string{"+cache.hit"})
 	if err != nil {
 		t.Fatalf("ParseFilter: %v", err)
 	}
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf, report.WithBlockOnFull(), report.WithFilter(f))
-	if err := report.Record(w, report.CacheHit{Project: "p", Target: "t"}); err != nil {
+	w := NewWriter(&buf, WithBlockOnFull(), WithFilter(f))
+	if err := Record(w, CacheHit{Project: "p", Target: "t"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := report.Record(w, report.CacheMiss{Project: "p", Target: "t"}); err != nil {
+	if err := Record(w, CacheMiss{Project: "p", Target: "t"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := report.Record(w, report.GraphBuild{Nodes: 10}); err != nil {
+	if err := Record(w, GraphBuild{Nodes: 10}); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.Close(); err != nil {
@@ -300,22 +299,22 @@ func TestFilterIncludeOnly(t *testing.T) {
 // TestFilterExcludeOnly drops listed types, admits the rest.
 func TestFilterExcludeOnly(t *testing.T) {
 	t.Parallel()
-	f, err := report.ParseFilter([]string{"-graph.build", "-graph.query"})
+	f, err := ParseFilter([]string{"-graph.build", "-graph.query"})
 	if err != nil {
 		t.Fatalf("ParseFilter: %v", err)
 	}
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf, report.WithBlockOnFull(), report.WithFilter(f))
-	if err := report.Record(w, report.CacheHit{Project: "p", Target: "t"}); err != nil {
+	w := NewWriter(&buf, WithBlockOnFull(), WithFilter(f))
+	if err := Record(w, CacheHit{Project: "p", Target: "t"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := report.Record(w, report.GraphBuild{Nodes: 10}); err != nil {
+	if err := Record(w, GraphBuild{Nodes: 10}); err != nil {
 		t.Fatal(err)
 	}
-	if err := report.Record(w, report.GraphQuery{Op: "x"}); err != nil {
+	if err := Record(w, GraphQuery{Op: "x"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := report.Record(w, report.GraphError{Message: "boom"}); err != nil {
+	if err := Record(w, GraphError{Message: "boom"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.Close(); err != nil {
@@ -332,14 +331,14 @@ func TestFilterExcludeOnly(t *testing.T) {
 
 func TestFilterEmptyAdmitsAll(t *testing.T) {
 	t.Parallel()
-	f, err := report.ParseFilter(nil)
+	f, err := ParseFilter(nil)
 	if err != nil {
 		t.Fatalf("ParseFilter: %v", err)
 	}
 	if f != nil {
 		t.Errorf("ParseFilter(nil) = %v, want nil filter", f)
 	}
-	f2, err := report.ParseFilter([]string{"", " ", "\t"})
+	f2, err := ParseFilter([]string{"", " ", "\t"})
 	if err != nil {
 		t.Fatalf("ParseFilter(blanks): %v", err)
 	}
@@ -350,7 +349,7 @@ func TestFilterEmptyAdmitsAll(t *testing.T) {
 
 func TestFilterMalformedReturnsError(t *testing.T) {
 	t.Parallel()
-	_, err := report.ParseFilter([]string{"+", "-"})
+	_, err := ParseFilter([]string{"+", "-"})
 	if err == nil {
 		t.Errorf("ParseFilter(only-malformed) = nil error; want error")
 	}
@@ -359,8 +358,8 @@ func TestFilterMalformedReturnsError(t *testing.T) {
 func TestRecordUnregisteredType(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf, report.WithBlockOnFull())
-	err := report.Record(w, struct{ X int }{X: 1})
+	w := NewWriter(&buf, WithBlockOnFull())
+	err := Record(w, struct{ X int }{X: 1})
 	if err == nil {
 		t.Errorf("Record on unregistered type = nil error; want error")
 	}
@@ -369,7 +368,7 @@ func TestRecordUnregisteredType(t *testing.T) {
 
 func TestRecordNilWriterIsNoop(t *testing.T) {
 	t.Parallel()
-	if err := report.Record(nil, report.CacheHit{Project: "p"}); err != nil {
+	if err := Record(nil, CacheHit{Project: "p"}); err != nil {
 		t.Errorf("Record on nil Writer = %v; want nil", err)
 	}
 }
@@ -377,7 +376,7 @@ func TestRecordNilWriterIsNoop(t *testing.T) {
 func TestCacheRunOptions(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := report.OpenWriter(path, report.WithBlockOnFull())
+	w, err := OpenWriter(path, WithBlockOnFull())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -400,7 +399,7 @@ func TestCacheRunOptions(t *testing.T) {
 		Target:        "build",
 	}
 
-	opts := report.RunOptions(w)
+	opts := RunOptions(w)
 
 	c, err := cache.Open(cdir, cache.WithMutable(true))
 	if err != nil {
@@ -447,28 +446,28 @@ func TestCacheRunOptions(t *testing.T) {
 	if len(types) != 2 {
 		t.Fatalf("got %d events, want 2: %v", len(types), types)
 	}
-	if types[0] != report.TypeCacheMiss {
-		t.Errorf("first event type = %q, want %q", types[0], report.TypeCacheMiss)
+	if types[0] != TypeCacheMiss {
+		t.Errorf("first event type = %q, want %q", types[0], TypeCacheMiss)
 	}
-	if types[1] != report.TypeCacheHit {
-		t.Errorf("second event type = %q, want %q", types[1], report.TypeCacheHit)
+	if types[1] != TypeCacheHit {
+		t.Errorf("second event type = %q, want %q", types[1], TypeCacheHit)
 	}
 }
 
 func TestWriterContextRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := report.OpenWriter(path)
+	w, err := OpenWriter(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	ctx := report.WithWriter(context.Background(), w)
-	got := report.WriterFromContext(ctx)
+	ctx := WithWriter(context.Background(), w)
+	got := WriterFromContext(ctx)
 	if got != w {
 		t.Errorf("FromContext: got %p, want %p", got, w)
 	}
-	if report.WriterFromContext(context.Background()) != nil {
+	if WriterFromContext(context.Background()) != nil {
 		t.Error("FromContext on plain ctx should return nil")
 	}
 }
@@ -477,7 +476,7 @@ func TestWriterContextRoundTrip(t *testing.T) {
 func TestCloseIsIdempotent(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
+	w := NewWriter(&buf)
 	if err := w.Close(); err != nil {
 		t.Fatalf("first Close: %v", err)
 	}
@@ -495,14 +494,14 @@ func TestConcurrentRecordAndClose(t *testing.T) {
 	t.Parallel()
 	for range 50 {
 		var buf bytes.Buffer
-		w := report.NewWriter(&buf, report.WithBlockOnFull())
+		w := NewWriter(&buf, WithBlockOnFull())
 		var wg sync.WaitGroup
 		for range 8 {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				for range 32 {
-					_ = report.Record(w, report.CacheHit{Project: "p", Target: "t"})
+					_ = Record(w, CacheHit{Project: "p", Target: "t"})
 				}
 			}()
 		}

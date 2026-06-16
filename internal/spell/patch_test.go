@@ -122,9 +122,9 @@ func applyWithEvanphx(argv []string, ops []PatchOp) ([]string, error) {
 
 // goldenBuiltins is the original hand-maintained built-in table, frozen here as
 // a golden. The built-in registry is now produced by compiling each
-// magus/spells/<name>/spell.bzz to bytecode and running it (see loadBuiltins);
+// magus/spells/<name>/spell.buzz to bytecode and running it (see loadBuiltins);
 // TestBuiltinsMatchGolden asserts that pipeline reproduces these exact values,
-// so an accidental change in a built-in's .bzz — or in the Buzz toolchain — is
+// so an accidental change in a built-in's .buzz — or in the Buzz toolchain — is
 // caught. Update this table in lockstep with an intentional built-in change.
 var goldenBuiltins = map[string]Spec{
 	"bash": {
@@ -152,11 +152,11 @@ var goldenBuiltins = map[string]Spec{
 	},
 	"buzz": {
 		Name:  "buzz",
-		Needs: []string{"**/*.buzz", "**/*.bzz"},
+		Needs: []string{"**/*.buzz", "**/*.buzz"},
 		Targets: map[string]Target{
-			"buzz-check": {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.bzz' \\) -print0 | xargs -0 -r -n1 buzz --check"}},
-			"buzz-test":  {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.bzz' \\) -print0 | xargs -0 -r -n1 buzz --test"}},
-			"magus-buzz": {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.bzz' \\) -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}},
+			"buzz-check": {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --check"}},
+			"buzz-test":  {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --test"}},
+			"magus-buzz": {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}},
 		},
 	},
 	"compose": {

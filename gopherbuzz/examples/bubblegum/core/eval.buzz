@@ -1,0 +1,60 @@
+// core/eval.buzz - eval echo helpers and eval command for the buzz> prompt.
+
+namespace eval;
+
+import "state";
+import "os";
+import "std";
+import "io";
+import "core/tiling";
+import "core/bar";
+
+// evalEcho receives the wrapped expression's value; eval scripts call it
+// implicitly. The result lands on the bar and in the log.
+export fun evalEcho(v: any) > void {
+    noteEval("{v}");
+}
+
+export fun noteEval(msg: str) > void {
+    state\wm().evalNote = "eval -> {msg}";
+    state\wm().evalNoteAt = os\time();
+    std\print("bubblegum: {state\wm().evalNote}");
+}
+
+// cmdEval runs a line of Buzz inside this very session: the script shares
+// the WM's globals (the registry, the tree, every imported module), so it
+// can inspect or rewire the live window manager. The interpreter is the
+// feature — no other WM ships its own language in-process.
+export fun cmdEval(code: str) > void {
+    final path = os\tmpDir() + "/bubblegum-eval.buzz";
+    // Expression-wrap first so the result echoes (Retool console style: see
+    // what you got, not just side effects); statements fall back to raw.
+    var ran = false;
+    try {
+        final f = io\File.open(path, mode: io\FileMode.write);
+        f.write("evalEcho((" + code + "));\n");
+        f.close();
+        io\runFile(path);
+        ran = true;
+    } catch (_: any) {
+        ran = false;
+    }
+    if (!ran) {
+        try {
+            final f = io\File.open(path, mode: io\FileMode.write);
+            f.write(code + "\n");
+            f.close();
+            io\runFile(path);
+            noteEval("ok");
+        } catch (e: any) {
+            noteEval("error: {e}");
+            std\print("bubblegum: eval: {e}");
+        }
+    }
+    tiling\retile();
+    bar\updateBar();
+}
+
+export fun onEvalLine(code: str) > void {
+    cmdEval(code);
+}

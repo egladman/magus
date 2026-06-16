@@ -1,13 +1,11 @@
-package filesystem_test
+package filesystem
 
 import (
 	"testing"
-
-	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
 
 func TestExpandUserRule_AbsPath(t *testing.T) {
-	r, err := filesystem.ExpandUserRule("/tmp/mydir", true, false)
+	r, err := ExpandUserRule("/tmp/mydir", true, false)
 	if err != nil {
 		t.Fatalf("ExpandUserRule: %v", err)
 	}
@@ -27,7 +25,7 @@ func TestExpandUserRule_AbsPath(t *testing.T) {
 
 func TestExpandUserRule_EnvVar(t *testing.T) {
 	t.Setenv("TEST_EXPAND_PATH", "/var/test")
-	r, err := filesystem.ExpandUserRule("$TEST_EXPAND_PATH", true, false)
+	r, err := ExpandUserRule("$TEST_EXPAND_PATH", true, false)
 	if err != nil {
 		t.Fatalf("ExpandUserRule: %v", err)
 	}

@@ -1,13 +1,11 @@
-package spell_test
+package spell
 
 import (
 	"testing"
-
-	ispell "github.com/egladman/magus/internal/spell"
 )
 
 func TestBuiltins_NonEmpty(t *testing.T) {
-	m := ispell.Builtins()
+	m := Builtins()
 	if len(m) == 0 {
 		t.Fatal("Builtins() returned empty map")
 	}
@@ -23,7 +21,7 @@ func TestBuiltins_NonEmpty(t *testing.T) {
 }
 
 func TestBuiltins_KeyedByName(t *testing.T) {
-	m := ispell.Builtins()
+	m := Builtins()
 	// The golang spell renames itself to "go": it must be reachable by name…
 	if _, ok := m["go"]; !ok {
 		t.Error(`Builtins()["go"] not found`)
@@ -35,7 +33,7 @@ func TestBuiltins_KeyedByName(t *testing.T) {
 }
 
 func TestBuiltinsHash_Format(t *testing.T) {
-	h := ispell.BuiltinsHash()
+	h := BuiltinsHash()
 	if len(h) != 64 {
 		t.Errorf("BuiltinsHash() length = %d, want 64 (SHA-256 hex)", len(h))
 	}
@@ -48,13 +46,13 @@ func TestBuiltinsHash_Format(t *testing.T) {
 }
 
 func TestBuiltinsHash_Stable(t *testing.T) {
-	if h1, h2 := ispell.BuiltinsHash(), ispell.BuiltinsHash(); h1 != h2 {
+	if h1, h2 := BuiltinsHash(), BuiltinsHash(); h1 != h2 {
 		t.Errorf("BuiltinsHash() not stable: %q vs %q", h1, h2)
 	}
 }
 
 func TestGoSpell_TidyTarget(t *testing.T) {
-	goSpell := ispell.Builtins()["go"]
+	goSpell := Builtins()["go"]
 	tidy, ok := goSpell.Targets["go-mod-tidy"]
 	if !ok {
 		t.Fatalf("go spell has no go-mod-tidy target; targets: %v", goSpell.TargetNames())
@@ -75,7 +73,7 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 	if !ok {
 		t.Fatal("tidy has no rw charm")
 	}
-	want := ispell.PatchOp{Op: "remove", Path: "/2"}
+	want := PatchOp{Op: "remove", Path: "/2"}
 	if len(w.Ops) != 1 || w.Ops[0] != want {
 		t.Errorf("tidy rw charm Ops = %v, want [%v]", w.Ops, want)
 	}

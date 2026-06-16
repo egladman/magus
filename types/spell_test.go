@@ -1,19 +1,17 @@
-package types_test
+package types
 
 import (
 	"context"
 	"errors"
 	"slices"
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
 // TestSpellVersionProbe covers the toolchain version-probe accessor: a spell
 // with no probe reports false and returns ("", nil); a spell with a probe
 // surfaces its result (and error) verbatim.
 func TestSpellVersionProbe(t *testing.T) {
-	none := types.NewSpell("none")
+	none := NewSpell("none")
 	if none.HasVersionProbe() {
 		t.Error("HasVersionProbe = true for a spell with no probe")
 	}
@@ -21,7 +19,7 @@ func TestSpellVersionProbe(t *testing.T) {
 		t.Errorf("ProbeVersion (no probe) = %q, %v; want \"\", nil", v, err)
 	}
 
-	probed := types.NewSpell("go", types.WithVersionProbe(func(_ context.Context, dir string) (string, error) {
+	probed := NewSpell("go", WithVersionProbe(func(_ context.Context, dir string) (string, error) {
 		return "ver@" + dir, nil
 	}))
 	if !probed.HasVersionProbe() {
@@ -32,7 +30,7 @@ func TestSpellVersionProbe(t *testing.T) {
 	}
 
 	boom := errors.New("boom")
-	failing := types.NewSpell("rs", types.WithVersionProbe(func(_ context.Context, _ string) (string, error) {
+	failing := NewSpell("rs", WithVersionProbe(func(_ context.Context, _ string) (string, error) {
 		return "", boom
 	}))
 	if _, err := failing.ProbeVersion(context.Background(), "/d"); !errors.Is(err, boom) {
@@ -41,13 +39,13 @@ func TestSpellVersionProbe(t *testing.T) {
 }
 
 func TestNewSpellAccessors(t *testing.T) {
-	s := types.NewSpell(
+	s := NewSpell(
 		"go",
-		types.WithSources("**/*.go"),
-		types.WithClaims("**/*.go"),
-		types.WithSpellOutputs("bin/**"),
-		types.WithTargets("build", "test"),
-		types.WithForeignProcess(),
+		WithSources("**/*.go"),
+		WithClaims("**/*.go"),
+		WithSpellOutputs("bin/**"),
+		WithTargets("build", "test"),
+		WithForeignProcess(),
 	)
 	if s.Name() != "go" {
 		t.Errorf("Name() = %q, want go", s.Name())
@@ -64,7 +62,7 @@ func TestNewSpellAccessors(t *testing.T) {
 // original map after construction cannot corrupt the spell's internal state.
 func TestWithTargetSourcesClonesInput(t *testing.T) {
 	src := map[string][]string{"test": {"testdata/**"}}
-	s := types.NewSpell("go", types.WithTargetSources(src))
+	s := NewSpell("go", WithTargetSources(src))
 
 	// Mutate the caller's map after construction.
 	src["test"] = []string{"hacked"}
@@ -80,16 +78,16 @@ func TestWithTargetSourcesClonesInput(t *testing.T) {
 
 func TestSpellNilInvokerIsNoop(t *testing.T) {
 	// A spell with no invoke function is a graceful no-op, not a panic.
-	s := types.NewSpell("noop")
-	resp, err := s.Invoke(t.Context(), types.InvokeRequest{Target: "build"})
+	s := NewSpell("noop")
+	resp, err := s.Invoke(t.Context(), InvokeRequest{Target: "build"})
 	if err != nil {
 		t.Errorf("Invoke on nil-invoke spell: unexpected error %v", err)
 	}
-	if resp != (types.InvokeResponse{}) {
+	if resp != (InvokeResponse{}) {
 		t.Errorf("Invoke response = %+v, want zero", resp)
 	}
 }
 
 func TestSpellImplementsSpellDriver(t *testing.T) {
-	var _ types.SpellDriver = types.NewSpell("x")
+	var _ SpellDriver = NewSpell("x")
 }

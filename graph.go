@@ -4,42 +4,51 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/wire"
 	"github.com/egladman/magus/types"
 )
 
 // ComposeOption configures a ComposeGraph call.
-type ComposeOption = wire.ComposeOption
+type ComposeOption func(*compose)
+
+// compose is the accumulated state of a ComposeGraph call.
+type compose struct {
+	Graph       *types.Graph
+	History     *forecast.History
+	Target      string
+	Upstream    bool
+	SpellFilter string
+	RootFilter  []string
+}
 
 // WithGraphInput enables blast-radius enrichment.
 func WithGraphInput(g *types.Graph) ComposeOption {
-	return func(c *wire.Compose) { c.Graph = g }
+	return func(c *compose) { c.Graph = g }
 }
 
 // WithUpstream switches graph direction to upstream (dependents instead of dependencies).
 func WithUpstream() ComposeOption {
-	return func(c *wire.Compose) { c.Upstream = true }
+	return func(c *compose) { c.Upstream = true }
 }
 
 // WithComposeSpell limits the graph to projects that use the named spell.
 func WithComposeSpell(name string) ComposeOption {
-	return func(c *wire.Compose) { c.SpellFilter = name }
+	return func(c *compose) { c.SpellFilter = name }
 }
 
 // WithComposeRoots restricts the graph to the listed project paths.
 func WithComposeRoots(paths ...string) ComposeOption {
-	return func(c *wire.Compose) { c.RootFilter = append(c.RootFilter, paths...) }
+	return func(c *compose) { c.RootFilter = append(c.RootFilter, paths...) }
 }
 
 // WithGraphHistory enables per-node DurationMs prediction in ComposeGraph using
 // adaptive CI history for the given target (typically "ci" or "test").
 func WithGraphHistory(h *forecast.History, target string) ComposeOption {
-	return func(c *wire.Compose) { c.History = h; c.Target = target }
+	return func(c *compose) { c.History = h; c.Target = target }
 }
 
 // ComposeGraph assembles the structured graph view. Edges to unknown projects are dropped.
 func ComposeGraph(ws types.WorkspaceRepository, opts ...ComposeOption) types.GraphOutput {
-	cfg := &wire.Compose{}
+	cfg := &compose{}
 	for _, o := range opts {
 		o(cfg)
 	}

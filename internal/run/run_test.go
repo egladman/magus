@@ -1,4 +1,4 @@
-package run_test
+package run
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/egladman/magus/internal/run"
 )
 
 // TestExecInjectsMAGUS pins that Exec exports MAGUS — the running binary's
@@ -19,7 +17,7 @@ func TestExecInjectsMAGUS(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("'sh' not available")
 	}
-	res, err := run.Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS"`}, run.ExecSpec{Capture: true})
+	res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS"`}, ExecSpec{Capture: true})
 	if err != nil {
 		t.Fatalf("Exec: %v", err)
 	}
@@ -45,7 +43,7 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 	}
 	level := func(t *testing.T) string {
 		t.Helper()
-		res, err := run.Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_LEVEL"`}, run.ExecSpec{Capture: true})
+		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_LEVEL"`}, ExecSpec{Capture: true})
 		if err != nil {
 			t.Fatalf("Exec: %v", err)
 		}
@@ -69,15 +67,15 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 // nested (must not, to keep one socket / one pool). Mutates env; not parallel.
 func TestCurrentLevel(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	if got := run.CurrentLevel(); got != 0 {
+	if got := CurrentLevel(); got != 0 {
 		t.Errorf("top-level CurrentLevel = %d, want 0", got)
 	}
 	t.Setenv("MAGUS_LEVEL", "2")
-	if got := run.CurrentLevel(); got != 2 {
+	if got := CurrentLevel(); got != 2 {
 		t.Errorf("nested CurrentLevel = %d, want 2", got)
 	}
 	t.Setenv("MAGUS_LEVEL", "not-a-number")
-	if got := run.CurrentLevel(); got != 0 {
+	if got := CurrentLevel(); got != 0 {
 		t.Errorf("invalid CurrentLevel = %d, want 0", got)
 	}
 }
@@ -87,7 +85,7 @@ func TestRunSuccess(t *testing.T) {
 	if _, err := exec.LookPath("true"); err != nil {
 		t.Skip("'true' not available")
 	}
-	if err := run.Run(context.Background(), t.TempDir(), "true"); err != nil {
+	if err := Run(context.Background(), t.TempDir(), "true"); err != nil {
 		t.Errorf("Run('true') = %v, want nil", err)
 	}
 }
@@ -97,7 +95,7 @@ func TestRunFailure(t *testing.T) {
 	if _, err := exec.LookPath("false"); err != nil {
 		t.Skip("'false' not available")
 	}
-	if err := run.Run(context.Background(), t.TempDir(), "false"); err == nil {
+	if err := Run(context.Background(), t.TempDir(), "false"); err == nil {
 		t.Error("Run('false') = nil, want non-nil exit error")
 	}
 }
@@ -109,7 +107,7 @@ func TestRunContextCancel(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := run.Run(ctx, t.TempDir(), "sleep", "60")
+	err := Run(ctx, t.TempDir(), "sleep", "60")
 	if err == nil {
 		t.Error("Run with cancelled context should return an error")
 	}

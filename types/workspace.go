@@ -17,54 +17,6 @@ var ErrUnknownProject = errors.New("magus: unknown project")
 // ErrNoCache is returned by cache operations on a cache-free (Inspect) workspace.
 var ErrNoCache = errors.New("magus: no cache available")
 
-// WorkspaceReader is the read-only in-memory view of a discovered workspace.
-type WorkspaceReader interface {
-	Root() string
-	All() []*Project
-	Get(path string) *Project
-	Graph() (*Graph, error)
-	VCSOptions() VCSOptions
-	Where(dir string) (*Project, bool)
-}
-
-// TargetExpander resolves a Target into concrete per-project targets.
-type TargetExpander interface {
-	ExpandPath(t Target) ([]Target, error)
-	// ExpandCwd resolves t against the project containing the current working
-	// directory. found reports whether cwd is inside any project; when false,
-	// targets is empty and the caller typically falls back to ExpandPath or
-	// reports "not inside a project". found is a deliberate signal distinct from
-	// len(targets) — callers (e.g. magus tail) key their error message on it.
-	ExpandCwd(t Target) (targets []Target, found bool, err error)
-	ExpandAffected(ctx context.Context, target, baseRef string) ([]Target, string, error)
-}
-
-// AffectedComputer computes the VCS-impacted project set.
-type AffectedComputer interface {
-	Affected(ctx context.Context, base string) (*AffectedResult, error)
-	AffectedFromPaths(ctx context.Context, paths []string) (*AffectedResult, error)
-}
-
-// Describer returns the structured inventory behind `magus describe`.
-type Describer interface {
-	DescribeSpells() SpellsOutput
-	DescribeTargets() TargetsOutput
-	DescribeGraph() TargetGraphOutput
-	DescribeProjects() ProjectsOutput
-	DescribeWorkspaces(cfg WorkspaceConfig) WorkspacesOutput
-	DescribeTarget(t Target) (EvaluatedTargetsOutput, error)
-	DescribeEvaluatedProjects() EvaluatedProjectsOutput
-}
-
-// WorkspaceRepository is the full domain interface for a discovered workspace.
-// Prefer the narrowest embedded role a consumer actually uses.
-type WorkspaceRepository interface {
-	WorkspaceReader
-	TargetExpander
-	AffectedComputer
-	Describer
-}
-
 // Workspace is the discovered set of projects under a root directory.
 type Workspace struct {
 	// Root is the workspace root, always absolute and symlink-free.

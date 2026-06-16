@@ -12,11 +12,11 @@ import (
 )
 
 // newWorkspaceCustom creates a single-project workspace at a temp dir and
-// returns it after applying opts. The root project has an empty magusfile.bzz.
+// returns it after applying opts. The root project has an empty magusfile.buzz.
 func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "magusfile.bzz"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ws, err := Inspect(context.Background(), root, opts...)
@@ -329,7 +329,7 @@ func TestDescribeEvaluatedProjects_WorkspaceRootedSources(t *testing.T) {
 
 	// Build workspace with root + api project.
 	root := t.TempDir()
-	for _, rel := range []string{"magusfile.bzz", "api/magusfile.bzz"} {
+	for _, rel := range []string{"magusfile.buzz", "api/magusfile.buzz"} {
 		abs := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 			t.Fatal(err)

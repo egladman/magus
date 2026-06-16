@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/wire"
 	"github.com/egladman/magus/types"
 )
 
@@ -52,5 +51,5 @@ func (rw *ReportWriter) RecordShardTotal(shardID string, nShards int, duration t
 // WithReport attaches rw to receive one JSONL event per executed target.
 // Mutually exclusive with [WithReportWriter].
 func WithReport(rw *ReportWriter) RunOption {
-	return wire.WithReport(rw.w)
+	return func(o *run) { o.Report = rw.w }
 }

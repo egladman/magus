@@ -1,32 +1,30 @@
-package spell_test
+package spell
 
 import (
 	"testing"
-
-	ispell "github.com/egladman/magus/internal/spell"
 )
 
 func TestValidatePatch(t *testing.T) {
 	cases := []struct {
 		name    string
-		ops     []ispell.PatchOp
+		ops     []PatchOp
 		wantErr bool
 	}{
 		{"empty", nil, false},
-		{"add end", []ispell.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, false},
-		{"replace index", []ispell.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, false},
-		{"remove index", []ispell.PatchOp{{Op: "remove", Path: "/2"}}, false},
-		{"move", []ispell.PatchOp{{Op: "move", Path: "/0", From: "/1"}}, false},
-		{"copy", []ispell.PatchOp{{Op: "copy", Path: "/0", From: "/1"}}, false},
-		{"test", []ispell.PatchOp{{Op: "test", Path: "/0", Value: "go"}}, false},
-		{"unknown op", []ispell.PatchOp{{Op: "patch", Path: "/0"}}, true},
-		{"root path rejected", []ispell.PatchOp{{Op: "replace", Path: "", Value: "x"}}, true},
-		{"path without slash", []ispell.PatchOp{{Op: "add", Path: "0", Value: "x"}}, true},
-		{"move without from", []ispell.PatchOp{{Op: "move", Path: "/0"}}, true},
-		{"copy bad from", []ispell.PatchOp{{Op: "copy", Path: "/0", From: "1"}}, true},
+		{"add end", []PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, false},
+		{"replace index", []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, false},
+		{"remove index", []PatchOp{{Op: "remove", Path: "/2"}}, false},
+		{"move", []PatchOp{{Op: "move", Path: "/0", From: "/1"}}, false},
+		{"copy", []PatchOp{{Op: "copy", Path: "/0", From: "/1"}}, false},
+		{"test", []PatchOp{{Op: "test", Path: "/0", Value: "go"}}, false},
+		{"unknown op", []PatchOp{{Op: "patch", Path: "/0"}}, true},
+		{"root path rejected", []PatchOp{{Op: "replace", Path: "", Value: "x"}}, true},
+		{"path without slash", []PatchOp{{Op: "add", Path: "0", Value: "x"}}, true},
+		{"move without from", []PatchOp{{Op: "move", Path: "/0"}}, true},
+		{"copy bad from", []PatchOp{{Op: "copy", Path: "/0", From: "1"}}, true},
 	}
 	for _, tc := range cases {
-		err := ispell.ValidatePatch(tc.ops)
+		err := ValidatePatch(tc.ops)
 		if tc.wantErr && err == nil {
 			t.Errorf("ValidatePatch(%s) = nil, want error", tc.name)
 		}
@@ -37,9 +35,9 @@ func TestValidatePatch(t *testing.T) {
 }
 
 func TestSpec_TargetNames(t *testing.T) {
-	m := ispell.Spec{
+	m := Spec{
 		Name: "test",
-		Targets: map[string]ispell.Target{
+		Targets: map[string]Target{
 			"vet":   {},
 			"build": {},
 			"test":  {},
@@ -58,7 +56,7 @@ func TestSpec_TargetNames(t *testing.T) {
 }
 
 func TestSpec_TargetNamesEmpty(t *testing.T) {
-	m := ispell.Spec{Name: "empty"}
+	m := Spec{Name: "empty"}
 	got := m.TargetNames()
 	if len(got) != 0 {
 		t.Errorf("TargetNames() on empty Targets = %v, want []", got)

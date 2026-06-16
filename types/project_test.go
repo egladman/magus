@@ -1,21 +1,19 @@
-package types_test
+package types
 
 import (
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
 func TestTargetPolicy_IsZero(t *testing.T) {
 	cases := []struct {
 		name   string
-		p      types.TargetPolicy
+		p      TargetPolicy
 		isZero bool
 	}{
-		{"zero value", types.TargetPolicy{}, true},
-		{"CheckClean set", types.TargetPolicy{CheckClean: true}, false},
-		{"TrackFlake set", types.TargetPolicy{TrackFlake: true}, false},
-		{"both set", types.TargetPolicy{CheckClean: true, TrackFlake: true}, false},
+		{"zero value", TargetPolicy{}, true},
+		{"CheckClean set", TargetPolicy{CheckClean: true}, false},
+		{"TrackFlake set", TargetPolicy{TrackFlake: true}, false},
+		{"both set", TargetPolicy{CheckClean: true, TrackFlake: true}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -28,12 +26,12 @@ func TestTargetPolicy_IsZero(t *testing.T) {
 }
 
 func TestProject_AttachSpell(t *testing.T) {
-	goSpell := types.NewSpell("go",
-		types.WithSources("**/*.go"),
-		types.WithSpellOutputs("bin/**"),
+	goSpell := NewSpell("go",
+		WithSources("**/*.go"),
+		WithSpellOutputs("bin/**"),
 	)
 
-	p := &types.Project{Path: "api/"}
+	p := &Project{Path: "api/"}
 	p.AttachSpell(goSpell)
 
 	if p.Spell != "go" {
@@ -53,9 +51,9 @@ func TestProject_AttachSpell(t *testing.T) {
 	}
 
 	// Attaching a second spell must NOT overwrite the primary Spell field.
-	pySpell := types.NewSpell("python",
-		types.WithSources("**/*.py"),
-		types.WithSpellOutputs("dist/**"),
+	pySpell := NewSpell("python",
+		WithSources("**/*.py"),
+		WithSpellOutputs("dist/**"),
 	)
 	p.AttachSpell(pySpell)
 	if p.Spell != "go" {

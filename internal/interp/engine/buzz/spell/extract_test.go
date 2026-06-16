@@ -1,4 +1,4 @@
-package buzzspell_test
+package buzzspell
 
 import (
 	"context"
@@ -9,14 +9,13 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
-	buzzspell "github.com/egladman/magus/internal/interp/engine/buzz/spell"
 	ispell "github.com/egladman/magus/internal/spell"
 )
 
 const minimalSpellSrc = `export fun mgs_getName() > str { return "testspell"; }`
 
 func TestExtract_Name(t *testing.T) {
-	spec, err := buzzspell.Extract(context.Background(), minimalSpellSrc)
+	spec, err := Extract(context.Background(), minimalSpellSrc)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -26,7 +25,7 @@ func TestExtract_Name(t *testing.T) {
 }
 
 func TestExtract_MissingGetName(t *testing.T) {
-	_, err := buzzspell.Extract(context.Background(), `var x: int = 1;`)
+	_, err := Extract(context.Background(), `var x: int = 1;`)
 	if err == nil {
 		t.Error("Extract: expected error for missing mgs_getName, got nil")
 	}
@@ -39,7 +38,7 @@ export fun mgs_listTargets() > any {
     return {"build": {"cmd": "echo", "args": ["ok"]}};
 }
 `
-	spec, err := buzzspell.Extract(context.Background(), src)
+	spec, err := Extract(context.Background(), src)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -69,7 +68,7 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"build": build, "fmt": fmt};
 }
 `
-	spec, err := buzzspell.Extract(context.Background(), src)
+	spec, err := Extract(context.Background(), src)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -91,7 +90,7 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 }
 
 // TestBuiltinBytecodeParity proves the embedded-bytecode pipeline end to end for
-// every self-contained built-in: authored .bzz -> Compile -> Marshal ->
+// every self-contained built-in: authored .buzz -> Compile -> Marshal ->
 // UnmarshalChunk -> ExecChunk -> Resolve yields a Spec identical to the one in the
 // in-process registry (ispell.Builtins(), keyed by runtime name). It walks the
 // spells/ source tree, skipping function-op spells (e.g. github) that import host
@@ -110,7 +109,7 @@ func TestBuiltinBytecodeParity(t *testing.T) {
 			continue
 		}
 		dir := d.Name()
-		src, err := os.ReadFile(filepath.Join(spellsDir, dir, "spell.bzz"))
+		src, err := os.ReadFile(filepath.Join(spellsDir, dir, "spell.buzz"))
 		if err != nil {
 			continue // not a spell dir
 		}

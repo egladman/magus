@@ -18,7 +18,7 @@ const TargetModulePath = "magus/target"
 // runtime (as a source module) and at built-in generation time (inlined into each
 // built-in).
 //
-//go:embed buzzlib/target.bzz
+//go:embed buzzlib/target.buzz
 var TargetModuleSource string
 
 // SelfContainedBuiltinSource prepares a spell source for a bare compile into an

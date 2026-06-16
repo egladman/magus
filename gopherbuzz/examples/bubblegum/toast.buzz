@@ -1,0 +1,54 @@
+// toast.buzz — a brief, self-dismissing notification.
+//
+// The same borderless-overlay trick as the inspector and tray menu: a small panel
+// of text the WM shows and then hides a few seconds later. Overlays here do not
+// schedule themselves; the WM owns the timer (it stamps a deadline on toastShow and
+// calls toastHide once the pump loop passes it), the same discipline the cheat sheet
+// and tray countdown use.
+
+namespace toast;
+
+import "platform/macos/cocoa";
+
+final panelW = 320.0;
+final panelH = 42.0;
+
+var panel: ud? = null;
+var label: ud? = null;
+var visible = false;
+
+fun toastInit() > void {
+    if (panel != null) {
+        return;
+    }
+    cocoa\uiInit();
+    panel = cocoa\uiOverlayPanel(0.0 - panelW, y: 0.0, w: panelW, h: panelH);
+    cocoa\uiIgnoreMouse(panel); // a toast never eats a click
+    label = cocoa\uiThemedLabel(panel, x: 16.0, y: 11.0, w: panelW - 32.0, h: 20.0, size: 13.0, gray: 0.95);
+    cocoa\uiSetSystemFontWeighted(label, size: 13.0, weight: 0.2);
+}
+
+// toastShow centers the panel horizontally in [ax, ax + aw] and hangs it just below
+// ayTop (the AppKit top edge of the tiling area), where macOS notifications live.
+// The WM hides it later via toastHide once the deadline it recorded has passed.
+export fun toastShow(text: str, ax: double, ayTop: double, aw: double) > void {
+    toastInit();
+    final x = ax + (aw - panelW) / 2.0;
+    final y = ayTop - panelH - 12.0;
+    cocoa\uiSetPanelFrame(panel, x: x, y: y, w: panelW, h: panelH);
+    cocoa\uiSetText(label, text: text);
+    cocoa\uiShow(panel);
+    visible = true;
+}
+
+export fun toastHide() > void {
+    if (!visible) {
+        return;
+    }
+    visible = false;
+    cocoa\uiHide(panel);
+}
+
+export fun toastVisible() > bool {
+    return visible;
+}

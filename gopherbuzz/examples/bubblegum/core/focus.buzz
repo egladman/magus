@@ -1,0 +1,243 @@
+// core/focus.buzz - focus management and directional movement commands.
+
+namespace focus;
+
+import "state";
+import "layout";
+import "std";
+import "platform/macos/windows";
+import "platform/macos/frameworks";
+import "core/screens";
+import "core/tiling";
+import "core/registry";
+import "core/scan";
+import "core/bar";
+
+export fun cmdResetMins(allApps: bool) > void {
+    var fpid = 0;
+    final fmo = registry\managedById(state\wm().focusedId);
+    if (fmo != null) {
+        fpid = fmo!.pid;
+    }
+    if (!allApps and fpid == 0) {
+        registry\logAct("reset mins: no focused window to target");
+        return;
+    }
+    var n = 0;
+    foreach (m in state\wm().managed) {
+        if (allApps or m.pid == fpid) {
+            m.minW = 0.0;
+            m.minH = 0.0;
+            m.slotW = 0.0;
+            m.slotH = 0.0;
+            n = n + 1;
+        }
+    }
+    registry\logAct("reset learned minimums for {n} window(s) -- re-probing");
+    tiling\retile();
+}
+
+// syncFocus follows clicks: whatever macOS says is focused becomes our
+// focused leaf, so directional commands start from where the user actually is.
+export fun syncFocus() > void {
+    final ref = windows\focusedWindowRef();
+    if (ref == null) {
+        return;
+    }
+    final id = registry\idForRef(ref);
+    frameworks\releaseRef(ref);
+    if (id == 0) {
+        return;
+    }
+    final mo = registry\managedById(id);
+    if (mo != null and mo!.screen != state\wm().activeScreen) {
+        screens\setActive(mo!.screen);
+    }
+    state\wm().focusedId = id;
+}
+
+export fun dirVec(word: str) > [double]? {
+    if (word == "left") {
+        return [0.0 - 1.0, 0.0];
+    }
+    if (word == "right") {
+        return [1.0, 0.0];
+    }
+    if (word == "up") {
+        return [0.0, 0.0 - 1.0];
+    }
+    if (word == "down") {
+        return [0.0, 1.0];
+    }
+    return null;
+}
+
+export fun cmdFocus(word: str) > void {
+    if (state\wm().root == null) {
+        return;
+    }
+    if (word == "next") {
+        cmdFocusCycle(1);
+        return;
+    }
+    if (word == "prev") {
+        cmdFocusCycle(0 - 1);
+        return;
+    }
+    final v = dirVec(word);
+    if (v == null) {
+        return;
+    }
+    var target = 0;
+    if (state\wm().root != null) {
+        target = layout\neighbor(state\wm().root!, fromId: state\wm().focusedId, dx: v![0], dy: v![1]);
+    }
+    if (target == 0) {
+        // Nothing in this screen's tree: look across the other tiled
+        // displays geometrically (frames are global coordinates).
+        final cross = crossScreenNeighbor(v![0], dy: v![1]);
+        if (cross == 0 - 1) {
+            return;
+        }
+        screens\setActive(cross / 1000000);
+        target = cross % 1000000;
+    }
+    state\wm().focusedId = target;
+    windows\focusWindow(registry\refOf(target), pid: registry\pidOf(target));
+    tiling\retile();
+}
+
+// crossScreenNeighbor scans other screens' leaves for the nearest window in
+// the cone from the focused window's center; returns screen*1e6+id or -1.
+export fun crossScreenNeighbor(dx: double, dy: double) > int {
+    if (state\wm().root == null or state\wm().focusedId == 0) {
+        return 0 - 1;
+    }
+    final fromLeaf = layout\findLeaf(state\wm().root!, target: state\wm().focusedId);
+    if (fromLeaf == null) {
+        return 0 - 1;
+    }
+    final f = fromLeaf!;
+    final fcx = f.x + f.w / 2.0;
+    final fcy = f.y + f.h / 2.0;
+    var best = 0 - 1;
+    var bestDist = 0.0;
+    foreach (si in 0..state\wm().screens.len()) {
+        if (si == state\wm().activeScreen) {
+            continue;
+        }
+        final r0 = screens\screenAt(si).root;
+        if (r0 == null) {
+            continue;
+        }
+        final ls = mut [];
+        layout\collectLeaves(r0!, res: ls);
+        foreach (l in ls) {
+            final leaf = (l as? mut layout\Node)!;
+            final vx = leaf.x + leaf.w / 2.0 - fcx;
+            final vy = leaf.y + leaf.h / 2.0 - fcy;
+            final along = vx * dx + vy * dy;
+            if (along <= 0.0) {
+                continue;
+            }
+            var across = vx * dy - vy * dx;
+            if (across < 0.0) {
+                across = 0.0 - across;
+            }
+            if (across > along) {
+                continue;
+            }
+            final dist = vx * vx + vy * vy;
+            if (best == 0 - 1 or dist < bestDist) {
+                best = si * 1000000 + leaf.id;
+                bestDist = dist;
+            }
+        }
+    }
+    return best;
+}
+
+// cmdFocusCycle steps through the tree's leaves in order -- the alt-tab of a
+// keyboard-only workflow, and the fallback when directional focus has no
+// candidate (a lone column, say).
+export fun cmdFocusCycle(step: int) > void {
+    final ls = mut [];
+    layout\collectLeaves(state\wm().root!, res: ls);
+    final n = ls.len();
+    if (n <= 1) {
+        return;
+    }
+    var idx = 0;
+    foreach (i in 0..n) {
+        final cand = (ls[i] as? mut layout\Node)!;
+        if (cand.id == state\wm().focusedId) {
+            idx = i;
+            break;
+        }
+    }
+    final next = (ls[(idx + step + n) % n] as? mut layout\Node)!;
+    state\wm().focusedId = next.id;
+    windows\focusWindow(registry\refOf(next.id), pid: registry\pidOf(next.id));
+    if (state\wm().cfg.goldenOn or state\wm().stacked) {
+        tiling\retile();
+    }
+}
+
+export fun cmdMove(word: str) > void {
+    if (state\wm().root == null) {
+        return;
+    }
+    tiling\pushUndo();
+    final v = dirVec(word);
+    if (v == null) {
+        return;
+    }
+    final target = layout\neighbor(state\wm().root!, fromId: state\wm().focusedId, dx: v![0], dy: v![1]);
+    if (target == 0) {
+        return;
+    }
+    _ = layout\swapIds(state\wm().root!, a: state\wm().focusedId, b: target);
+    tiling\retile();
+}
+
+export fun cmdSplit(word: str) > void {
+    if (state\wm().root == null) {
+        return;
+    }
+    final leaf = layout\findLeaf(state\wm().root!, target: state\wm().focusedId);
+    if (leaf == null) {
+        return;
+    }
+    final l = leaf!;
+    if (word == "horizontal") {
+        l.pick = layout\Pick.Horiz;
+    }
+    if (word == "vertical") {
+        l.pick = layout\Pick.Vert;
+    }
+}
+
+// cmdResize: `resize grow|shrink` adjusts the innermost split; with an axis
+// (`resize grow width|height`, the arrow-key binds) it adjusts the nearest
+// split along that axis instead, like i3.
+export fun cmdResize(word: str, axis: str) > void {
+    if (state\wm().root == null) {
+        return;
+    }
+    tiling\pushUndo();
+    var delta = 0.05;
+    if (word == "shrink") {
+        delta = 0.0 - 0.05;
+    }
+    var changed = false;
+    if (axis == "width") {
+        changed = layout\growAxis(state\wm().root!, target: state\wm().focusedId, orient: layout\Orient.Horiz, delta: delta);
+    } else if (axis == "height") {
+        changed = layout\growAxis(state\wm().root!, target: state\wm().focusedId, orient: layout\Orient.Vert, delta: delta);
+    } else {
+        changed = layout\grow(state\wm().root!, target: state\wm().focusedId, delta: delta);
+    }
+    if (changed) {
+        tiling\retile();
+    }
+}

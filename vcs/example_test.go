@@ -1,11 +1,10 @@
-package vcs_test
+package vcs
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // ExampleResolve shows how to resolve the active VCS and base ref for a
@@ -16,7 +15,7 @@ func ExampleResolve() {
 	// The example uses a non-existent path so it falls back gracefully.
 	root := "/nonexistent/path"
 
-	res, err := vcs.Resolve(context.Background(), root, "", types.VCSOptions{})
+	res, err := Resolve(context.Background(), root, "", types.VCSOptions{})
 	if err != nil {
 		// Resolve returns an error when no VCS is detected. Callers may
 		// choose to proceed without VCS support (affected set = all projects).

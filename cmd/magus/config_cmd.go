@@ -164,7 +164,7 @@ func runConfigSet(args []string) error {
 
 	var cfgPath string
 	if *useGlobal {
-		dir, err := os.UserConfigDir()
+		dir, err := config.UserConfigDir()
 		if err != nil {
 			return fmt.Errorf("config set --global: cannot determine config directory: %w", err)
 		}

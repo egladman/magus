@@ -1,4 +1,4 @@
-package observability_test
+package observability
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/observability"
 )
 
 // fakeBackend is a minimal cache.RemoteBackend whose get/put behaviour the test
@@ -53,7 +52,7 @@ func (f *fakePruner) PruneArtifacts(context.Context, cache.RetentionPolicy) erro
 func TestInstrumentRemoteBackend_GetHit(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := observability.InstrumentRemoteBackend(&fakeBackend{data: []byte("hello")}, rec)
+	b := InstrumentRemoteBackend(&fakeBackend{data: []byte("hello")}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
 	if err != nil {
@@ -85,7 +84,7 @@ func TestInstrumentRemoteBackend_GetHit(t *testing.T) {
 func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := observability.InstrumentRemoteBackend(&fakeBackend{data: nil}, rec)
+	b := InstrumentRemoteBackend(&fakeBackend{data: nil}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
 	if err != nil {
@@ -102,7 +101,7 @@ func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 func TestInstrumentRemoteBackend_GetError(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := observability.InstrumentRemoteBackend(&fakeBackend{getErr: errors.New("boom")}, rec)
+	b := InstrumentRemoteBackend(&fakeBackend{getErr: errors.New("boom")}, rec)
 
 	if _, err := b.GetArtifact(context.Background(), "p", "h"); err == nil {
 		t.Fatal("expected error")
@@ -116,7 +115,7 @@ func TestInstrumentRemoteBackend_Put(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
 	fb := &fakeBackend{}
-	b := observability.InstrumentRemoteBackend(fb, rec)
+	b := InstrumentRemoteBackend(fb, rec)
 
 	if err := b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world"))); err != nil {
 		t.Fatalf("PutArtifact: %v", err)
@@ -141,12 +140,12 @@ func TestInstrumentRemoteBackend_Put(t *testing.T) {
 // the default (telemetry-off) path.
 func TestInstrumentRemoteBackend_DisabledPassthrough(t *testing.T) {
 	t.Parallel()
-	disabled, err := observability.New(context.Background(), observability.Config{Enabled: false})
+	disabled, err := New(context.Background(), Config{Enabled: false})
 	if err != nil {
 		t.Fatal(err)
 	}
 	fb := &fakeBackend{}
-	if got := observability.InstrumentRemoteBackend(fb, disabled); got != cache.RemoteBackend(fb) {
+	if got := InstrumentRemoteBackend(fb, disabled); got != cache.RemoteBackend(fb) {
 		t.Error("disabled provider should return the backend unwrapped")
 	}
 }
@@ -157,13 +156,13 @@ func TestInstrumentRemoteBackend_PrunePreserved(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
 
-	plain := observability.InstrumentRemoteBackend(&fakeBackend{}, rec)
+	plain := InstrumentRemoteBackend(&fakeBackend{}, rec)
 	if _, ok := plain.(cache.RemotePruner); ok {
 		t.Error("plain backend should not gain a prune capability")
 	}
 
 	fp := &fakePruner{fakeBackend: &fakeBackend{}}
-	wrapped := observability.InstrumentRemoteBackend(fp, rec)
+	wrapped := InstrumentRemoteBackend(fp, rec)
 	pr, ok := wrapped.(cache.RemotePruner)
 	if !ok {
 		t.Fatal("prune capability lost after wrapping")

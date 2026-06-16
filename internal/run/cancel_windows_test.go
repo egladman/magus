@@ -1,14 +1,12 @@
 //go:build windows
 
-package run_test
+package run
 
 import (
 	"context"
 	"os/exec"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/run"
 )
 
 // TestCancelDeliversCtrlBreak verifies that cancelling a Run context on Windows
@@ -26,7 +24,7 @@ func TestCancelDeliversCtrlBreak(t *testing.T) {
 	}()
 
 	start := time.Now()
-	err := run.Run(ctx, t.TempDir(), "ping", "-n", "60", "127.0.0.1")
+	err := Run(ctx, t.TempDir(), "ping", "-n", "60", "127.0.0.1")
 	elapsed := time.Since(start)
 
 	if err == nil {

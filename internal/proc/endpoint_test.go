@@ -1,4 +1,4 @@
-package proc_test
+package proc
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/proc"
 )
 
 func TestParseEndpoint(t *testing.T) {
@@ -36,7 +35,7 @@ func TestParseEndpoint(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		ep, err := proc.ParseEndpoint(tc.input)
+		ep, err := ParseEndpoint(tc.input)
 		if tc.wantErr {
 			if err == nil {
 				t.Errorf("ParseEndpoint(%q): expected error, got nil", tc.input)
@@ -63,7 +62,7 @@ func TestForwardRoundTrip(t *testing.T) {
 	var called atomic.Bool
 	var gotArgs atomic.Value // stores []string
 
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error {
 			gotArgs.Store(args)
 			called.Store(true)
@@ -80,7 +79,7 @@ func TestForwardRoundTrip(t *testing.T) {
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
-	code, err := proc.Forward(context.Background(), []string{"run", "build", "api"}, "test", "")
+	code, err := Forward(context.Background(), []string{"run", "build", "api"}, "test", "")
 	if err != nil {
 		t.Fatalf("Forward: %v", err)
 	}
@@ -96,7 +95,7 @@ func TestForwardRoundTrip(t *testing.T) {
 }
 
 func TestForwardHandlerError(t *testing.T) {
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error {
 			return errors.New("build failed")
 		},
@@ -111,7 +110,7 @@ func TestForwardHandlerError(t *testing.T) {
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
-	code, err := proc.Forward(context.Background(), []string{"run", "build", "broken"}, "", "")
+	code, err := Forward(context.Background(), []string{"run", "build", "broken"}, "", "")
 	if err != nil {
 		t.Fatalf("Forward transport error: %v", err)
 	}
@@ -123,7 +122,7 @@ func TestForwardHandlerError(t *testing.T) {
 func TestForwardInvalidSocket(t *testing.T) {
 	t.Setenv("MAGUS_DAEMON_SOCKET", "/nonexistent/path/magus.sock")
 
-	_, err := proc.Forward(context.Background(), []string{"run", "build", "foo"}, "", "")
+	_, err := Forward(context.Background(), []string{"run", "build", "foo"}, "", "")
 	if err == nil {
 		t.Fatal("expected error dialing nonexistent socket, got nil")
 	}
@@ -135,7 +134,7 @@ func TestForwardCycleDetection(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{})
 
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Concurrency: 4,
 		Handler: func(_ context.Context, args []string) error {
 			close(started)
@@ -160,13 +159,13 @@ func TestForwardCycleDetection(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		proc.Forward(context.Background(), args, "", "")
+		Forward(context.Background(), args, "", "")
 	}()
 
 	<-started // first call is inside handler
 
 	// Second call with same args: should get cycle error (exit code 1).
-	code, err := proc.Forward(context.Background(), args, "", "")
+	code, err := Forward(context.Background(), args, "", "")
 	if err != nil {
 		t.Fatalf("second Forward: %v", err)
 	}
@@ -179,7 +178,7 @@ func TestQueryStatus(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{}, 1)
 
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Concurrency: 4,
 		Handler: func(_ context.Context, args []string) error {
 			started <- struct{}{}
@@ -200,11 +199,11 @@ func TestQueryStatus(t *testing.T) {
 
 	// Launch a call and wait for it to be in-flight.
 	go func() {
-		proc.Forward(context.Background(), []string{"run", "build", "widget"}, "", "")
+		Forward(context.Background(), []string{"run", "build", "widget"}, "", "")
 	}()
 	<-started
 
-	status, err := proc.QueryStatus(context.Background(), srv.Addr())
+	status, err := QueryStatus(context.Background(), srv.Addr())
 	if err != nil {
 		t.Fatalf("QueryStatus: %v", err)
 	}
@@ -243,7 +242,7 @@ func TestRunChildSyncSlotLending(t *testing.T) {
 
 	// RunChildSync should release one slot (lending), run fn, then re-acquire.
 	var inUseDuringFn int
-	err := proc.RunChildSync(ctx, lim, func() error {
+	err := RunChildSync(ctx, lim, func() error {
 		inUseDuringFn = lim.Snapshot().InUse
 		return nil
 	})
@@ -274,7 +273,7 @@ func TestRunChildSyncNoLendWithoutSlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	var inUseDuringFn int
-	err := proc.RunChildSync(ctx, lim, func() error {
+	err := RunChildSync(ctx, lim, func() error {
 		inUseDuringFn = lim.Snapshot().InUse
 		return nil
 	})
@@ -293,7 +292,7 @@ func TestRunChildSyncNoLendWithoutSlot(t *testing.T) {
 func TestRunChildSyncNilLimiter(t *testing.T) {
 	t.Parallel()
 	called := false
-	err := proc.RunChildSync(context.Background(), nil, func() error {
+	err := RunChildSync(context.Background(), nil, func() error {
 		called = true
 		return nil
 	})
@@ -305,10 +304,10 @@ func TestRunChildSyncNilLimiter(t *testing.T) {
 func TestNewAlreadyAdopted(t *testing.T) {
 	t.Setenv("MAGUS_DAEMON_SOCKET", "/some/path")
 
-	_, err := proc.New(proc.Options{
+	_, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
-	if !errors.Is(err, proc.ErrAlreadyAdopted) {
+	if !errors.Is(err, ErrAlreadyAdopted) {
 		t.Errorf("New returned %v, want ErrAlreadyAdopted", err)
 	}
 }
@@ -317,7 +316,7 @@ func TestNewAlreadyAdopted(t *testing.T) {
 // maxArgs elements in Args is rejected with an error rather than silently
 // allocating unbounded memory.
 func TestRunRequestArgsCapEnforced(t *testing.T) {
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	if err != nil {
@@ -337,7 +336,7 @@ func TestRunRequestArgsCapEnforced(t *testing.T) {
 	}
 
 	// Forward should surface the server-side rejection as a transport error.
-	_, err = proc.Forward(context.Background(), oversized, "", "")
+	_, err = Forward(context.Background(), oversized, "", "")
 	if err == nil {
 		t.Fatal("expected an error for oversized Args, got nil")
 	}
@@ -347,7 +346,7 @@ func TestRunRequestArgsCapEnforced(t *testing.T) {
 // the supplied context is already cancelled, rather than blocking until an OS
 // timeout fires.
 func TestDialRespectsContextCancellation(t *testing.T) {
-	ep, err := proc.ParseEndpoint("/nonexistent/magus-test-cancel.sock")
+	ep, err := ParseEndpoint("/nonexistent/magus-test-cancel.sock")
 	if err != nil {
 		t.Fatalf("ParseEndpoint: %v", err)
 	}
@@ -378,7 +377,7 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 
 	const cycles = 5
 	for i := 0; i < cycles; i++ {
-		srv, err := proc.New(proc.Options{
+		srv, err := New(Options{
 			Handler: func(_ context.Context, args []string) error { return nil },
 		})
 		if err != nil {
@@ -406,7 +405,7 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 // TestShutdownRPC verifies that Shutdown dials the server, triggers a graceful
 // close, and that the server's socket file is removed afterward.
 func TestShutdownRPC(t *testing.T) {
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	if err != nil {
@@ -419,14 +418,14 @@ func TestShutdownRPC(t *testing.T) {
 	addr := srv.Addr()
 
 	// Shutdown should succeed and trigger srv.Close in a goroutine.
-	if err := proc.Shutdown(context.Background(), addr); err != nil {
+	if err := Shutdown(context.Background(), addr); err != nil {
 		t.Fatalf("Shutdown: %v", err)
 	}
 
 	// Wait for the server to close — QueryStatus should eventually fail.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := proc.QueryStatus(context.Background(), addr); err != nil {
+		if _, err := QueryStatus(context.Background(), addr); err != nil {
 			return // server stopped — test passes
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -437,7 +436,7 @@ func TestShutdownRPC(t *testing.T) {
 // TestShutdownIgnoresWrongMagic verifies that a Shutdown request with the wrong
 // magic string is silently ignored (server keeps running).
 func TestShutdownIgnoresWrongMagic(t *testing.T) {
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	if err != nil {
@@ -450,7 +449,7 @@ func TestShutdownIgnoresWrongMagic(t *testing.T) {
 
 	// A QueryStatus with an empty magic is silently ignored by the server.
 	// Re-use QueryStatus as a liveness probe — server should still answer.
-	if _, err := proc.QueryStatus(context.Background(), srv.Addr()); err != nil {
+	if _, err := QueryStatus(context.Background(), srv.Addr()); err != nil {
 		t.Fatalf("QueryStatus before shutdown attempt: %v", err)
 	}
 }
@@ -458,7 +457,7 @@ func TestShutdownIgnoresWrongMagic(t *testing.T) {
 // TestWireIsJSONL verifies that a raw connection receives exactly one
 // newline-terminated JSON object per reply with no embedded newlines.
 func TestWireIsJSONL(t *testing.T) {
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, _ []string) error { return nil },
 	})
 	if err != nil {
@@ -469,7 +468,7 @@ func TestWireIsJSONL(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	ep, err := proc.ParseEndpoint(srv.Addr())
+	ep, err := ParseEndpoint(srv.Addr())
 	if err != nil {
 		t.Fatalf("ParseEndpoint: %v", err)
 	}
@@ -508,7 +507,7 @@ func TestWireIsJSONL(t *testing.T) {
 // TestProtocolSkewRejectsV1 verifies that sending "protocol":"v1" causes
 // the server to return an error frame and Forward surfaces it as a Go error.
 func TestProtocolSkewRejectsV1(t *testing.T) {
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, _ []string) error { return nil },
 	})
 	if err != nil {
@@ -519,7 +518,7 @@ func TestProtocolSkewRejectsV1(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	ep, err := proc.ParseEndpoint(srv.Addr())
+	ep, err := ParseEndpoint(srv.Addr())
 	if err != nil {
 		t.Fatalf("ParseEndpoint: %v", err)
 	}
@@ -562,7 +561,7 @@ func TestProtocolSkewRejectsV1(t *testing.T) {
 func TestForwardArgsWithNewline(t *testing.T) {
 	var gotArgs atomic.Value
 
-	srv, err := proc.New(proc.Options{
+	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error {
 			gotArgs.Store(args)
 			return nil
@@ -578,7 +577,7 @@ func TestForwardArgsWithNewline(t *testing.T) {
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
-	code, err := proc.Forward(context.Background(), []string{"run", "build", "x\ny"}, "", "")
+	code, err := Forward(context.Background(), []string{"run", "build", "x\ny"}, "", "")
 	if err != nil {
 		t.Fatalf("Forward: %v", err)
 	}

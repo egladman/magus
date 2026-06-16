@@ -43,7 +43,7 @@ logic, so it lives in YAML where it can't branch or compute itself. The spell
 configured (e.g. a developer machine with no credentials):
 
 ```buzz
-// magusfile.bzz
+// magusfile.buzz
 import "spells/github/actions" as github;
 magus.cache.remote(github);
 ```
@@ -63,7 +63,7 @@ the next section). Generate a key with `magus config cache key generate`.
 
 ### GitHub Actions Cache
 
-The `actions` spell ([`spells/github/actions`](../spells/github/actions/spell.bzz))
+The `actions` spell ([`spells/github/actions`](../spells/github/actions/spell.buzz))
 stores artifacts in the GitHub Actions Cache, over its v1 API.
 
 ```buzz
@@ -87,7 +87,7 @@ evicts old artifacts on its own (7-day idle / repo size cap).
 
 ### S3, MinIO, Cloudflare R2, Backblaze B2
 
-The `s3-cache` spell ([`spells/aws/s3-cache`](../spells/aws/s3-cache/spell.bzz))
+The `s3-cache` spell ([`spells/aws/s3-cache`](../spells/aws/s3-cache/spell.buzz))
 stores artifacts in any S3-compatible bucket, signing every request with AWS
 Signature V4.
 

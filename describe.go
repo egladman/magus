@@ -172,11 +172,9 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 					sb.Write(b)
 					sb.WriteByte('\n')
 				}
-				g := targetgraph.Extract(sb.String())
-				for _, n := range g.Nodes {
-					entry.Nodes = append(entry.Nodes, types.TargetGraphNode{Name: n.Name, Doc: n.Doc, Deps: n.Deps, Charms: n.Charms})
-				}
-				entry.Cycle = g.Cycle()
+				nodes := targetgraph.Extract(sb.String())
+				entry.Nodes = nodes
+				entry.Cycle = targetgraph.Cycle(nodes)
 			}
 			out.Projects = append(out.Projects, entry)
 		}
@@ -208,8 +206,9 @@ func (m *Magus) DescribeProjects() types.ProjectsOutput {
 	}
 }
 
-// DescribeWorkspaces returns info about the active workspace.
-// TODO: support multiple workspaces when the daemon serves more than one root.
+// DescribeWorkspaces returns the single-entry view of m's workspace. A *Magus is
+// always exactly one workspace; the CLI's `describe workspaces` merges these
+// across the daemon's declared roots when daemon.workspaces is set.
 func (m *Magus) DescribeWorkspaces(cfg types.WorkspaceConfig) types.WorkspacesOutput {
 	entry := types.WorkspaceEntry{
 		Root:         m.ws.Root,

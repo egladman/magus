@@ -1,13 +1,11 @@
-package sandbox_test
+package sandbox
 
 import (
 	"testing"
-
-	"github.com/egladman/magus/internal/sandbox"
 )
 
 func TestBuildPolicy_NonNil(t *testing.T) {
-	p := sandbox.BuildPolicy("", nil, nil, nil, nil)
+	p := BuildPolicy("", nil, nil, nil, nil)
 	if p == nil {
 		t.Fatal("BuildPolicy returned nil")
 	}
@@ -15,7 +13,7 @@ func TestBuildPolicy_NonNil(t *testing.T) {
 
 func TestBuildPolicy_WithWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	p := sandbox.BuildPolicy(dir, nil, nil, nil, nil)
+	p := BuildPolicy(dir, nil, nil, nil, nil)
 	if p == nil {
 		t.Fatal("BuildPolicy returned nil")
 	}

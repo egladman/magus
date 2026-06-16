@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/mcp"
 	"github.com/egladman/magus/internal/render"
@@ -159,8 +160,8 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 			fmt.Printf("  CYCLE: %s\n", strings.Join(p.Cycle, " → "))
 		}
 		for _, n := range p.Nodes {
-			if len(n.Deps) > 0 {
-				fmt.Printf("  %s → %s\n", n.Name, strings.Join(n.Deps, ", "))
+			if len(n.Dependencies) > 0 {
+				fmt.Printf("  %s → %s\n", n.Name, strings.Join(n.Dependencies, ", "))
 			} else {
 				fmt.Printf("  %s\n", n.Name)
 			}
@@ -616,15 +617,10 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	ws, err := inspectWorkspace(ctx, root)
+	out, err := describeWorkspacesOutput(ctx, root)
 	if err != nil {
 		return err
 	}
-
-	out := ws.DescribeWorkspaces(types.WorkspaceConfig{
-		CacheDir:    globalCfg.Cache.Dir,
-		Concurrency: globalCfg.Concurrency,
-	})
 
 	switch spec.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -652,6 +648,44 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		}
 	}
 	return nil
+}
+
+// describeWorkspacesOutput builds the "describe workspaces" view: the single
+// active workspace by default, or one entry per workspace the daemon is declared
+// to serve (daemon.workspaces / MAGUS_DAEMON_WORKSPACES) when that list is set.
+func describeWorkspacesOutput(ctx context.Context, root string) (types.WorkspacesOutput, error) {
+	declared := resolveDeclaredWorkspaces(globalCfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
+	if len(declared) == 0 {
+		ws, err := inspectWorkspace(ctx, root)
+		if err != nil {
+			return types.WorkspacesOutput{}, err
+		}
+		return ws.DescribeWorkspaces(types.WorkspaceConfig{
+			CacheDir:    globalCfg.Cache.Dir,
+			Concurrency: globalCfg.Concurrency,
+		}), nil
+	}
+
+	entries := make([]types.WorkspaceEntry, 0, len(declared))
+	for _, wsRoot := range declared {
+		cfg, err := loadWorkspaceCfg(wsRoot)
+		if err != nil {
+			return types.WorkspacesOutput{}, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
+		}
+		w, err := magus.Inspect(ctx, wsRoot, magus.WithLoadedConfig(cfg))
+		if err != nil {
+			return types.WorkspacesOutput{}, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
+		}
+		entries = append(entries, w.DescribeWorkspaces(types.WorkspaceConfig{
+			CacheDir:    cfg.Cache.Dir,
+			Concurrency: cfg.Concurrency,
+		}).Workspaces...)
+	}
+	return types.WorkspacesOutput{
+		Definition: types.WorkspaceDefinition,
+		Count:      len(entries),
+		Workspaces: entries,
+	}, nil
 }
 
 // ── mcp-tools ─────────────────────────────────────────────────────────────────

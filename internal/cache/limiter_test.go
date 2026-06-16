@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 )
@@ -259,7 +260,14 @@ func TestLimiterHooks(t *testing.T) {
 		defer wg.Done()
 		_ = l2.Acquire(context.Background())
 	}()
-	l2.Release() // unblock the goroutine
+	// Wait until the goroutine is provably blocked in Acquire (Waiting==1) before
+	// releasing, so the contended path is real and the measured wait is non-zero.
+	// Without this, Release can win the race and the goroutine acquires an
+	// already-free slot in ~0ns (flaky on fast machines).
+	for l2.Snapshot().Waiting == 0 {
+		runtime.Gosched()
+	}
+	l2.Release() // unblock the now-blocked goroutine
 	wg.Wait()
 	if waitedNs == 0 {
 		t.Error("contended acquire reported wait == 0ns")

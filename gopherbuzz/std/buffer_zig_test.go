@@ -1,4 +1,4 @@
-package std_test
+package std
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
-	buzzstd "github.com/egladman/gopherbuzz/std"
 )
 
 // execBuffer runs src against a session with the std library registered and
@@ -15,7 +14,7 @@ func execBuffer(t *testing.T, src string) map[string]buzz.Value {
 	t.Helper()
 	sess := buzz.NewSession(context.Background())
 	defer func() { _ = sess.Close() }()
-	buzzstd.Register(sess)
+	Register(sess)
 	if err := sess.Exec(context.Background(), src); err != nil {
 		t.Fatalf("Exec: %v\nsrc:\n%s", err, src)
 	}
@@ -23,7 +22,7 @@ func execBuffer(t *testing.T, src string) map[string]buzz.Value {
 }
 
 // TestBufferZigRoundTrip writes f64/i64/u32 scalars at byte offsets through the
-// upstream-compatible Zig API and reads them back — the way yeetile exchanges
+// upstream-compatible Zig API and reads them back — the way bubblegum exchanges
 // CGPoint/CGSize and CGDirectDisplayID values with C.
 func TestBufferZigRoundTrip(t *testing.T) {
 	g := execBuffer(t, `
@@ -106,7 +105,7 @@ b.collect();
 
 	sess := buzz.NewSession(context.Background())
 	defer func() { _ = sess.Close() }()
-	buzzstd.Register(sess)
+	Register(sess)
 	err := sess.Exec(context.Background(), `
 import "buffer";
 final b = buffer.Buffer.init(8);

@@ -1,0 +1,169 @@
+namespace screens;
+
+import "state";
+import "layout";
+import "platform/macos/frameworks";
+import "platform/macos/windows";
+import "std";
+
+export fun screenAt(i: int) > mut state\Screen {
+    return state\wm().screens[i];
+}
+
+export fun wsAt(i: int) > mut state\Workspace {
+    return wsOn(state\wm().activeScreen, i: i);
+}
+
+export fun wsOn(si: int, i: int) > mut state\Workspace {
+    final s = screenAt(si);
+    return s.workspaces[i];
+}
+
+// saveActive/loadActive swap the live globals with a screen's stored state.
+export fun saveActive() > void {
+    final s = screenAt(state\wm().activeScreen);
+    s.root = state\wm().root;
+    s.focusedId = state\wm().focusedId;
+    s.fullscreenId = state\wm().fullscreenId;
+    s.stacked = state\wm().stacked;
+}
+
+export fun loadActive(i: int) > void {
+    state\wm().activeScreen = i;
+    final s = screenAt(i);
+    state\wm().root = s.root;
+    state\wm().focusedId = s.focusedId;
+    state\wm().fullscreenId = s.fullscreenId;
+    state\wm().stacked = s.stacked;
+    state\wm().tiledCG = s.cg;
+}
+
+export fun setActive(i: int) > void {
+    if (i == state\wm().activeScreen or i < 0 or i >= state\wm().screens.len()) {
+        return;
+    }
+    saveActive();
+    loadActive(i);
+}
+
+// pickedDisplays resolves the config into 1-based display indexes:
+// tile_displays wins, `all` means every active display, otherwise the
+// legacy single tile_display.
+export fun pickedDisplays() > [int] {
+    final ds = windows\displays();
+    final picks = mut [<int>];
+    if (state\wm().cfg.tileAll) {
+        foreach (i in 0..ds.len()) {
+            picks.append(i + 1);
+        }
+        return picks;
+    }
+    if (state\wm().cfg.tileDisplays.len() > 0) {
+        foreach (pv in state\wm().cfg.tileDisplays) {
+            final n = (pv as? int)!;
+            if (n >= 1 and n <= ds.len() and picks.indexOf(n) == null) {
+                picks.append(n);
+            }
+        }
+        if (picks.len() > 0) {
+            return picks;
+        }
+    }
+    var n = state\wm().cfg.tileDisplay;
+    if (n < 1 or n > ds.len()) {
+        n = 1;
+    }
+    picks.append(n);
+    return picks;
+}
+
+// initScreens (re)builds the screen set from the config. On a reload that
+// changes the picks, everything is released back to macOS and re-adopted
+// fresh -- predictable beats clever here.
+export fun initScreens() > void {
+    foreach (m in state\wm().managed) {
+        frameworks\releaseRef(m.ref);
+    }
+    state\wm().managed = mut [<mut state\Managed>];
+    state\wm().screens = mut [<mut state\Screen>];
+    state\wm().root = null;
+    state\wm().focusedId = 0;
+    state\wm().fullscreenId = 0;
+    state\wm().stacked = false;
+    state\wm().scratchShown = 0;
+    foreach (pv in pickedDisplays()) {
+        final sc = mut state\Screen{ disp = pv, workspaces = mut [<mut state\Workspace>] };
+        foreach (_ in 0..9) {
+            sc.workspaces.append(mut state\Workspace{});
+        }
+        state\wm().screens.append(sc);
+    }
+    state\wm().activeScreen = 0;
+    refreshTiledBounds();
+    loadActive(0);
+}
+
+// refreshTiledBounds re-reads each tiled display's bounds (displays move,
+// resolutions change); an unplugged pick falls back to the main display.
+export fun refreshTiledBounds() > void {
+    final ds = windows\displays();
+    if (ds.len() == 0 or state\wm().screens.len() == 0) {
+        return;
+    }
+    foreach (sv in state\wm().screens) {
+        var idx = sv.disp - 1;
+        if (idx < 0 or idx >= ds.len()) {
+            idx = 0;
+        }
+        final d = (ds[idx] as? [double])!;
+        sv.cg = [d[1], d[2], d[3], d[4]];
+    }
+    state\wm().tiledCG = screenAt(state\wm().activeScreen).cg;
+}
+
+export fun inScreen(sc: state\Screen, x: double, y: double) > bool {
+    return x >= sc.cg[0] and x < sc.cg[0] + sc.cg[2]
+        and y >= sc.cg[1] and y < sc.cg[1] + sc.cg[3];
+}
+
+export fun inTiled(x: double, y: double) > bool {
+    foreach (sv in state\wm().screens) {
+        if (inScreen(sv, x: x, y: y)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// screenForRef returns the tiled-screen index whose bounds hold the window's
+// center, or -1 (an untiled display: the window stays native).
+export fun screenForRef(ref: ud?) > int {
+    final fr = windows\windowFrame(ref);
+    if (fr == null) {
+        return 0 - 1;
+    }
+    final f = fr!;
+    final cx = f[0] + f[2] / 2.0;
+    final cy = f[1] + f[3] / 2.0;
+    foreach (i in 0..state\wm().screens.len()) {
+        if (inScreen(screenAt(i), x: cx, y: cy)) {
+            return i;
+        }
+    }
+    return 0 - 1;
+}
+
+// tiledAppKit converts the tiled bounds to AppKit coordinates (origin at the
+// main display's bottom-left, y up) for the bar and launcher panels.
+export fun tiledAppKit() > [double] {
+    final mainH = std\toDouble(windows\screenHeight());
+    return [state\wm().tiledCG[0], mainH - (state\wm().tiledCG[1] + state\wm().tiledCG[3]), state\wm().tiledCG[2], state\wm().tiledCG[3]];
+}
+
+// treeOf reads a screen's live tree (the globals for the active screen).
+export fun treeOf(si: int) > mut layout\Node? {
+    if (si == state\wm().activeScreen) {
+        return state\wm().root;
+    }
+    return screenAt(si).root;
+}

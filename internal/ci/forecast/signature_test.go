@@ -1,10 +1,8 @@
-package forecast_test
+package forecast
 
 import (
 	"reflect"
 	"testing"
-
-	"github.com/egladman/magus/internal/ci/forecast"
 )
 
 func TestTags(t *testing.T) {
@@ -83,7 +81,7 @@ func TestTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := forecast.Tags(tt.projectPath, tt.filesInProject)
+			got := Tags(tt.projectPath, tt.filesInProject)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Tags(%q, %v) = %v, want %v", tt.projectPath, tt.filesInProject, got, tt.want)
 			}

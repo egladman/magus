@@ -1,4 +1,4 @@
-package interactive_test
+package interactive
 
 import (
 	"encoding/json"
@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,7 +22,7 @@ func makeProjects(paths ...string) []*types.Project {
 func TestScoreProjectsNoFilter(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("api/users", "api/orders", "web/app")
-	got := interactive.ScoreProjects(all, nil)
+	got := ScoreProjects(all, nil)
 	if len(got) != 3 {
 		t.Fatalf("len = %d, want 3", len(got))
 	}
@@ -32,7 +31,7 @@ func TestScoreProjectsNoFilter(t *testing.T) {
 func TestScoreProjectsFilterMatchesSubset(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("api/users", "api/orders", "web/app")
-	got := interactive.ScoreProjects(all, []string{"api"})
+	got := ScoreProjects(all, []string{"api"})
 	if len(got) != 2 {
 		t.Fatalf("len = %d, want 2", len(got))
 	}
@@ -46,7 +45,7 @@ func TestScoreProjectsFilterMatchesSubset(t *testing.T) {
 func TestScoreProjectsMultipleFilters(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("api/users", "api/orders", "web/app", "api/users/v2")
-	got := interactive.ScoreProjects(all, []string{"api", "users"})
+	got := ScoreProjects(all, []string{"api", "users"})
 	for _, sp := range got {
 		if sp.P.Path == "api/orders" || sp.P.Path == "web/app" {
 			t.Errorf("unexpected project %q matched all filters", sp.P.Path)
@@ -57,7 +56,7 @@ func TestScoreProjectsMultipleFilters(t *testing.T) {
 func TestScoreProjectsEmptyFilterTokensIgnored(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("api/users")
-	got := interactive.ScoreProjects(all, []string{"", "   "})
+	got := ScoreProjects(all, []string{"", "   "})
 	if len(got) != 1 {
 		t.Fatalf("blank filters should not filter anything, got %d", len(got))
 	}
@@ -68,7 +67,7 @@ func TestScoreProjectsLeafRanking(t *testing.T) {
 	// "users" appears in two paths; the one where it's the leaf component
 	// should rank higher.
 	all := makeProjects("api/users", "services/users-svc")
-	got := interactive.ScoreProjects(all, []string{"users"})
+	got := ScoreProjects(all, []string{"users"})
 	if len(got) < 2 {
 		t.Fatal("expected both projects to match")
 	}
@@ -80,7 +79,7 @@ func TestScoreProjectsLeafRanking(t *testing.T) {
 func TestScoreProjectsCaseInsensitive(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("API/Users")
-	got := interactive.ScoreProjects(all, []string{"api"})
+	got := ScoreProjects(all, []string{"api"})
 	if len(got) != 1 {
 		t.Error("filter should be case-insensitive")
 	}
@@ -92,15 +91,15 @@ func TestSaveAndLoadState(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
 
-	s := interactive.State{
+	s := State{
 		LastTarget:     map[string]string{"/path/to/proj": "build"},
 		LastInvocation: []string{"magus", "build"},
 	}
-	if err := interactive.SaveState(s); err != nil {
+	if err := SaveState(s); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := interactive.LoadState()
+	got, err := LoadState()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +116,7 @@ func TestLoadStateMissingFile(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", dir)
 
 	// No file written — should not error.
-	_, err := interactive.LoadState()
+	_, err := LoadState()
 	if err == nil {
 		return // ideal: not an error
 	}
@@ -130,10 +129,10 @@ func TestSaveStateIsAtomic(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", dir)
 
 	// Confirm no .tmp file is left behind after a successful save.
-	if err := interactive.SaveState(interactive.State{}); err != nil {
+	if err := SaveState(State{}); err != nil {
 		t.Fatal(err)
 	}
-	path, err := interactive.StatePath()
+	path, err := StatePath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,11 +146,11 @@ func TestSaveStateValidJSON(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
 
-	s := interactive.State{LastTarget: map[string]string{"proj": "test"}}
-	if err := interactive.SaveState(s); err != nil {
+	s := State{LastTarget: map[string]string{"proj": "test"}}
+	if err := SaveState(s); err != nil {
 		t.Fatal(err)
 	}
-	path, err := interactive.StatePath()
+	path, err := StatePath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +158,7 @@ func TestSaveStateValidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var check interactive.State
+	var check State
 	if err := json.Unmarshal(b, &check); err != nil {
 		t.Fatalf("saved file is not valid JSON: %v", err)
 	}
@@ -169,7 +168,7 @@ func TestStatePathUsesXDGStateHome(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
 
-	p, err := interactive.StatePath()
+	p, err := StatePath()
 	if err != nil {
 		t.Fatal(err)
 	}

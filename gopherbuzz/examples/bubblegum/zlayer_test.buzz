@@ -1,0 +1,54 @@
+// zlayer_test.buzz - the background z-index grid geometry. Pure logic, runs
+// anywhere:
+//
+//     buzz -t -L . zlayer_test.buzz
+
+import "std";
+import "core/zlayer";
+
+test "gridCells returns nothing for a non-positive count" {
+    std\assert(zlayer\gridCells(0, x: 0.0, y: 0.0, w: 100.0, h: 100.0, gap: 0.0).len() == 0, message: "n=0 -> empty");
+    std\assert(zlayer\gridCells(0 - 3, x: 0.0, y: 0.0, w: 100.0, h: 100.0, gap: 0.0).len() == 0, message: "negative -> empty");
+}
+
+test "a single window fills the whole rect" {
+    final cells = zlayer\gridCells(1, x: 0.0, y: 0.0, w: 1000.0, h: 800.0, gap: 0.0);
+    std\assert(cells.len() == 1, message: "one cell");
+    std\assert(cells[0][0] == 0.0 and cells[0][1] == 0.0, message: "at origin");
+    std\assert(cells[0][2] == 1000.0 and cells[0][3] == 800.0, message: "full size");
+}
+
+test "four windows form a 2x2 grid, row-major" {
+    final cells = zlayer\gridCells(4, x: 0.0, y: 0.0, w: 1000.0, h: 800.0, gap: 0.0);
+    std\assert(cells.len() == 4, message: "four cells");
+    // cols=2, rows=2, cw=500, ch=400
+    std\assert(cells[0][0] == 0.0 and cells[0][1] == 0.0, message: "cell0 top-left");
+    std\assert(cells[0][2] == 500.0 and cells[0][3] == 400.0, message: "cell0 is 500x400");
+    std\assert(cells[1][0] == 500.0 and cells[1][1] == 0.0, message: "cell1 top-right");
+    std\assert(cells[2][0] == 0.0 and cells[2][1] == 400.0, message: "cell2 bottom-left");
+    std\assert(cells[3][0] == 500.0 and cells[3][1] == 400.0, message: "cell3 bottom-right");
+}
+
+test "three windows use a 2x2 grid with the last row half-filled" {
+    final cells = zlayer\gridCells(3, x: 0.0, y: 0.0, w: 1000.0, h: 800.0, gap: 0.0);
+    // cols: 1*1<3, 2*2>=3 -> cols=2; rows=ceil(3/2)=2
+    std\assert(cells.len() == 3, message: "three cells");
+    std\assert(cells[0][2] == 500.0 and cells[0][3] == 400.0, message: "still a 2x2 grid");
+    std\assert(cells[2][0] == 0.0 and cells[2][1] == 400.0, message: "cell2 starts the second row");
+}
+
+test "the gap insets the edges and separates cells" {
+    final cells = zlayer\gridCells(4, x: 0.0, y: 0.0, w: 1000.0, h: 800.0, gap: 10.0);
+    // cw = (1000 - 10*3)/2 = 485, ch = (800 - 10*3)/2 = 385
+    std\assert(cells[0][0] == 10.0 and cells[0][1] == 10.0, message: "cell0 inset by the gap");
+    std\assert(cells[0][2] == 485.0 and cells[0][3] == 385.0, message: "cell shrinks by the gaps");
+    std\assert(cells[1][0] == 505.0, message: "cell1 = gap + cw + gap = 10 + 485 + 10");
+}
+
+test "the rect origin offsets every cell" {
+    final cells = zlayer\gridCells(2, x: 100.0, y: 50.0, w: 1000.0, h: 800.0, gap: 0.0);
+    // cols: 1*1<2, 2*2>=2 -> cols=2, rows=1; cw=500, ch=800
+    std\assert(cells[0][0] == 100.0 and cells[0][1] == 50.0, message: "cell0 at the rect origin");
+    std\assert(cells[1][0] == 600.0 and cells[1][1] == 50.0, message: "cell1 offset by origin + cw");
+    std\assert(cells[0][3] == 800.0, message: "one row -> full height");
+}

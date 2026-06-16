@@ -1,4 +1,4 @@
-package cache_test
+package cache
 
 import (
 	"context"
@@ -7,8 +7,6 @@ import (
 	"slices"
 	"sync"
 	"testing"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
 // recTracer records the names of spans the cache opens, in order.
@@ -29,7 +27,7 @@ func (r *recTracer) StartSpan(ctx context.Context, name string) (context.Context
 func TestRun_PhaseSpans(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := cache.Open(cdir, cache.WithMutable(true))
+	c, err := Open(cdir, WithMutable(true))
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -42,7 +40,7 @@ func TestRun_PhaseSpans(t *testing.T) {
 		t.Fatal(err)
 	}
 	outPath := filepath.Join(srcDir, "out.txt")
-	spec := cache.Spec{
+	spec := Spec{
 		ProjectPath:   "p",
 		Sources:       []string{"p/*.go"},
 		Outputs:       []string{"p/out.txt"},
@@ -51,7 +49,7 @@ func TestRun_PhaseSpans(t *testing.T) {
 
 	// Miss: hash, then snapshot (no replay).
 	miss := &recTracer{}
-	_, err = c.Run(cache.ContextWithTracer(context.Background(), miss), spec, func(context.Context) error {
+	_, err = c.Run(ContextWithTracer(context.Background(), miss), spec, func(context.Context) error {
 		return os.WriteFile(outPath, []byte("ok"), 0o644)
 	})
 	if err != nil {
@@ -69,7 +67,7 @@ func TestRun_PhaseSpans(t *testing.T) {
 
 	// Hit: hash, then replay (no snapshot).
 	hit := &recTracer{}
-	r2, err := c.Run(cache.ContextWithTracer(context.Background(), hit), spec, func(context.Context) error {
+	r2, err := c.Run(ContextWithTracer(context.Background(), hit), spec, func(context.Context) error {
 		t.Error("fn should not run on a hit")
 		return nil
 	})

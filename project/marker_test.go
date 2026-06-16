@@ -1,9 +1,7 @@
-package project_test
+package project
 
 import (
 	"testing"
-
-	"github.com/egladman/magus/project"
 )
 
 func TestIsIgnoreDir(t *testing.T) {
@@ -27,7 +25,7 @@ func TestIsIgnoreDir(t *testing.T) {
 		{"internal", false},
 	}
 	for _, tc := range cases {
-		if got := project.IsIgnoreDir(tc.name); got != tc.want {
+		if got := IsIgnoreDir(tc.name); got != tc.want {
 			t.Errorf("IsIgnoreDir(%q) = %v, want %v", tc.name, got, tc.want)
 		}
 	}
@@ -37,7 +35,7 @@ func TestIgnoreDirs_ContainsExpected(t *testing.T) {
 	must := []string{".git", "vendor", "node_modules"}
 	for _, d := range must {
 		found := false
-		for _, v := range project.IgnoreDirs {
+		for _, v := range IgnoreDirs {
 			if v == d {
 				found = true
 				break

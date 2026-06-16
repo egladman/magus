@@ -1,4 +1,4 @@
-package cache_test
+package cache
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
 // TestSnapshotAtomicBlob verifies that if the blob copy fails (because the
@@ -27,7 +25,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	spec := cache.Spec{
+	spec := Spec{
 		ProjectPath:   "test/pkg",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
@@ -36,7 +34,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 
 	// Open a second write-mode cache that shares the same cache directory.
 	// We will interpose a failing fn to trigger snapshotOne against the CAS.
-	c2, err := cache.Open(cdir)
+	c2, err := Open(cdir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +82,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(casDir, 0o755) })
 
-	c3, err := cache.Open(cdir)
+	c3, err := Open(cdir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +147,7 @@ func TestExportFDsBounded(t *testing.T) {
 		outputs = append(outputs, filepath.ToSlash(rel))
 	}
 
-	spec := cache.Spec{
+	spec := Spec{
 		ProjectPath:   "test/pkg",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
@@ -210,7 +208,7 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	spec := makeSpec(root)
 	spec.Outputs = []string{"test/pkg/out.txt"}
 
-	c, err := cache.Open(cdir)
+	c, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -240,7 +238,7 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	// Re-open in read mode; truncated manifest should cause a rebuild (miss),
 	// not a panic or an error that surfaces to the caller.
 	t.Setenv("MAGUS_CACHE_MODE", "write")
-	c2, err := cache.Open(cdir)
+	c2, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open(second): %v", err)
 	}
@@ -271,7 +269,7 @@ func TestPermDeniedCacheDirReturnsError(t *testing.T) {
 
 	// Open itself may succeed (it doesn't necessarily create files),
 	// but a Run that needs to write a manifest must fail gracefully.
-	c, err := cache.Open(cdir)
+	c, err := Open(cdir)
 	if err != nil {
 		// Fine — some platforms reject unwritable dirs at Open.
 		return
@@ -297,7 +295,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	spec := makeSpec(root)
 	spec.Outputs = []string{"test/pkg/out.txt"}
 
-	c, err := cache.Open(cdir)
+	c, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -317,7 +315,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 
 	// A read-mode cache must not claim a hit when the blobs are gone.
 	t.Setenv("MAGUS_CACHE_MODE", "read")
-	c2, err := cache.Open(cdir)
+	c2, err := Open(cdir)
 	if err != nil {
 		t.Fatalf("cache.Open(read): %v", err)
 	}

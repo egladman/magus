@@ -1,0 +1,131 @@
+// wm.buzz - the public configuration API for bubblegum.
+//
+// This is the package a user's config.buzz imports to configure the window
+// manager: configure() applies a typed Config; bind()/rule() append; clearBinds()
+// starts the keymap from zero. It is the clean, public counterpart to the internal
+// core/system glue (which mutates live WM state and is not for end users).
+//
+// Why an artifact instead of mutating the WM directly: a config runs via
+// io\runFile, which spins up a brand-new, isolated VM. That VM gets its own fresh
+// copy of every module's globals, so anything the config mutated there (state\wm()
+// included) is discarded the instant runFile returns -- it can never reach the
+// running WM. The only thing that crosses the boundary is the filesystem. So these
+// verbs record what the config asked for as an ordered op list and write it to a
+// JSON artifact; the running WM reads that artifact back and replays the ops onto
+// its own live config. The config stays plain typed Buzz; only its result travels.
+
+namespace wm;
+
+import "std";
+import "os";
+import "io";
+import "serialize";
+import "config";
+import "log";
+
+// The ordered ops this config run has recorded. Fresh per run (each io\runFile is a
+// new VM), so it always starts empty -- no need to reset it.
+var ops = mut [<any>];
+
+// artifactPath mirrors core/paths\configDir() exactly (same process, same env, so
+// the same path), with the artifact file the running WM reads back. Kept here rather
+// than importing core/paths so the public package carries no dependency on WM internals.
+fun artifactPath() > str {
+    final xdg = os\env("XDG_CONFIG_HOME");
+    if (xdg != null) {
+        return xdg! + "/bubblegum/.config-artifact.json";
+    }
+    final home = os\env("HOME") ?? ".";
+    return home + "/.config/bubblegum/.config-artifact.json";
+}
+
+// flush rewrites the artifact with the ops recorded so far. Called after every verb
+// so a config that throws partway still leaves the WM a faithful record of what ran
+// before the error (the WM only applies it on a clean run).
+fun flush() > void {
+    try {
+        final f = io\File.open(artifactPath(), mode: io\FileMode.write);
+        f.write(serialize\jsonEncode(serialize\Boxed.init(ops)));
+        f.close();
+        log\trace("wm: artifact flushed, {ops.len()} op(s) -> {artifactPath()}");
+    } catch (e: any) {
+        // Best-effort: the WM logs when it cannot read the artifact.
+        log\debug("wm: artifact flush failed: {e}");
+    }
+}
+
+// configure applies a typed Config. It resolves the Config to the live Runtime's flat
+// scalar form (enums to their string names, the cheat chord to flags/keycode) by
+// reusing config\applyConfig, then snapshots those scalars into the op so the WM
+// assigns them directly without re-deriving anything.
+export fun configure(c: config\Config) > void {
+    final r = mut config\Runtime{ binds = mut [], execs = mut [], rules = mut [] };
+    config\applyConfig(c, into: r);
+    final disp = mut [<any>];
+    foreach (d in r.tileDisplays) {
+        disp.append(d);
+    }
+    final ex = mut [<any>];
+    foreach (e in r.execs) {
+        ex.append(e);
+    }
+    final m = mut {<str: any>};
+    m["op"] = "configure";
+    m["gapInner"] = r.gapInner;
+    m["gapOuter"] = r.gapOuter;
+    m["topPadding"] = r.topPadding;
+    m["pollMs"] = r.pollMs;
+    m["barOn"] = r.barOn;
+    m["barHeight"] = r.barHeight;
+    m["trayOn"] = r.trayOn;
+    m["statusFile"] = r.statusFile;
+    m["ffmOn"] = r.ffmOn;
+    m["tileAll"] = r.tileAll;
+    m["tileDisplays"] = disp;
+    m["borderOn"] = r.borderOn;
+    m["borderWidth"] = r.borderWidth;
+    m["borderRadius"] = r.borderRadius;
+    m["cheatFlags"] = r.cheatFlags;
+    m["cheatKey"] = r.cheatKey;
+    m["goldenOn"] = r.goldenOn;
+    m["minWidth"] = r.minWidth;
+    m["minHeight"] = r.minHeight;
+    m["hideMethod"] = r.hideMethod;
+    m["theme"] = r.theme;
+    m["binPackCap"] = r.binPackCap;
+    m["execs"] = ex;
+    ops.append(m);
+    log\trace("wm: recorded configure (border={r.borderOn}, gapInner={r.gapInner}, gapOuter={r.gapOuter}, theme={r.theme}, hideMethod={r.hideMethod}, bar={r.barOn})");
+    flush();
+}
+
+// bind appends a keybinding. The chord is validated and resolved on the WM side
+// (config\parseChord lives there), so a bad chord is reported once, where it lands.
+export fun bind(chord: str, command: str) > void {
+    final m = mut {<str: any>};
+    m["op"] = "bind";
+    m["chord"] = chord;
+    m["command"] = command;
+    ops.append(m);
+    log\trace("wm: recorded bind {chord} -> {command}");
+    flush();
+}
+
+// clearBinds drops the default keymap so the config can build one from scratch.
+export fun clearBinds() > void {
+    final m = mut {<str: any>};
+    m["op"] = "clearBinds";
+    ops.append(m);
+    log\debug("wm: recorded clearBinds (keymap will be rebuilt from the config)");
+    flush();
+}
+
+// rule appends a window rule (i3 for_window). Parsed on the WM side (config\parseRule).
+export fun rule(line: str) > void {
+    final m = mut {<str: any>};
+    m["op"] = "rule";
+    m["line"] = line;
+    ops.append(m);
+    log\trace("wm: recorded rule {line}");
+    flush();
+}

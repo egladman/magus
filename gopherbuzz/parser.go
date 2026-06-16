@@ -441,6 +441,38 @@ func (p *parser) skipGenericArgs() error {
 	return nil
 }
 
+// readGenericArg consumes a balanced <...> generic argument list and returns
+// the inner type text (e.g. "str" from "<str>"). Mirrors skipGenericArgs but
+// preserves the source so the checker can resolve the element type.
+func (p *parser) readGenericArg() (string, error) {
+	if _, err := p.eat(token.Lt); err != nil {
+		return "", err
+	}
+	before := p.pos
+	depth := 1
+	for depth > 0 {
+		switch p.peek().Kind {
+		case token.Lt:
+			depth++
+			p.advance()
+		case token.Gt:
+			depth--
+			if depth == 0 {
+				inner := p.joinTokens(before, p.pos)
+				p.advance()
+				return inner, nil
+			}
+			p.advance()
+		case token.EOF:
+			t := p.peek()
+			return "", fmt.Errorf("buzz: line %d:%d: unterminated generic argument list", t.Line, t.Col)
+		default:
+			p.advance()
+		}
+	}
+	return "", nil
+}
+
 // isTypeStart reports whether the current token can begin a type.
 func (p *parser) isTypeStart() bool {
 	switch p.peek().Kind {
@@ -1167,6 +1199,9 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	// pendingTypeArg carries a `::<T>` generic argument from where it is parsed
+	// to the call `(` that immediately follows, so it lands on that CallExpr.
+	pendingTypeArg := ""
 	for {
 		switch p.peek().Kind {
 		case token.Dot:
@@ -1193,16 +1228,17 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 		case token.Colon:
 			// Generic call type arguments: foo::<T>(args) / buf.readZAt::<f64>(...).
 			// Upstream Buzz attaches explicit type arguments to a generic
-			// function/method call. gopherbuzz tracks types dynamically, so the
-			// call's behavior doesn't depend on them — parse and discard, then let
-			// the loop fall through to the following '(' as an ordinary call. A lone
+			// function/method call. The VM tracks types dynamically and ignores
+			// them, but the static checker needs the hint: capture it and attach it
+			// to the following '(' call so the call's result type is known. A lone
 			// ':' here is not otherwise meaningful in postfix position.
 			if p.peekAt(1).Kind != token.Colon || p.peekAt(2).Kind != token.Lt {
 				return node, nil
 			}
 			p.advance() // first ':'
 			p.advance() // second ':'
-			if err := p.skipGenericArgs(); err != nil {
+			pendingTypeArg, err = p.readGenericArg()
+			if err != nil {
 				return nil, err
 			}
 		case token.LParen:
@@ -1214,7 +1250,8 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			if _, err := p.eat(token.RParen); err != nil {
 				return nil, err
 			}
-			node = &ast.CallExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Callee: node, Args: args, ArgNames: names}
+			node = &ast.CallExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Callee: node, Args: args, ArgNames: names, TypeArg: pendingTypeArg}
+			pendingTypeArg = ""
 			// Inline catch (upstream Buzz): `call(args) catch default`. If the call
 			// throws, the expression yields `default` instead. The default is a full
 			// expression and the error is not bound, matching upstream's call suffix.
@@ -1532,12 +1569,16 @@ func (p *parser) parseListLit() (*ast.ListExpr, error) {
 		return nil, err
 	}
 	lst := &ast.ListExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
-	// Typed empty-list literal `[<T>]` (upstream Buzz): the element type is a
-	// static hint only; skip it (gopherbuzz tracks element types dynamically).
+	// Typed empty-list literal `[<T>]` (upstream Buzz): capture the element type
+	// so the checker can infer `[T]` rather than defaulting to `[any]`. The VM
+	// tracks element types dynamically, but the static checker needs the hint to
+	// type-check returns of accumulated lists.
 	if p.check(token.Lt) {
-		if err := p.skipGenericArgs(); err != nil {
+		elem, err := p.readGenericArg()
+		if err != nil {
 			return nil, err
 		}
+		lst.ElemType = elem
 		if _, err := p.eat(token.RBracket); err != nil {
 			return nil, err
 		}

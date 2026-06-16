@@ -1,4 +1,4 @@
-package retry_test
+package retry
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/retry"
 )
 
 var errFake = errors.New("fake error")
@@ -17,7 +15,7 @@ var errFake = errors.New("fake error")
 func TestDoSucceedsFirstTry(t *testing.T) {
 	t.Parallel()
 	calls := 0
-	err := retry.Do(context.Background(), func() error {
+	err := Do(context.Background(), func() error {
 		calls++
 		return nil
 	})
@@ -32,13 +30,13 @@ func TestDoSucceedsFirstTry(t *testing.T) {
 func TestDoSucceedsAfterRetries(t *testing.T) {
 	t.Parallel()
 	calls := 0
-	err := retry.Do(context.Background(), func() error {
+	err := Do(context.Background(), func() error {
 		calls++
 		if calls < 3 {
 			return errFake
 		}
 		return nil
-	}, retry.WithAttempts(3), retry.WithDelay(time.Millisecond), retry.WithMaxDelay(time.Millisecond))
+	}, WithAttempts(3), WithDelay(time.Millisecond), WithMaxDelay(time.Millisecond))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,10 +48,10 @@ func TestDoSucceedsAfterRetries(t *testing.T) {
 func TestDoExhausts(t *testing.T) {
 	t.Parallel()
 	calls := 0
-	err := retry.Do(context.Background(), func() error {
+	err := Do(context.Background(), func() error {
 		calls++
 		return errFake
-	}, retry.WithAttempts(3), retry.WithDelay(time.Millisecond), retry.WithMaxDelay(time.Millisecond))
+	}, WithAttempts(3), WithDelay(time.Millisecond), WithMaxDelay(time.Millisecond))
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -74,13 +72,13 @@ func TestDoRespectsContext(t *testing.T) {
 
 	calls := 0
 	start := time.Now()
-	err := retry.Do(ctx, func() error {
+	err := Do(ctx, func() error {
 		calls++
 		if calls == 1 {
 			cancel()
 		}
 		return errFake
-	}, retry.WithAttempts(5), retry.WithDelay(10*time.Second), retry.WithMaxDelay(10*time.Second))
+	}, WithAttempts(5), WithDelay(10*time.Second), WithMaxDelay(10*time.Second))
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("want context.Canceled, got %v", err)
@@ -93,12 +91,12 @@ func TestDoRespectsContext(t *testing.T) {
 func TestDoCallsOnRetry(t *testing.T) {
 	t.Parallel()
 	var retries []int
-	err := retry.Do(
+	err := Do(
 		context.Background(), func() error { return errFake },
-		retry.WithAttempts(4),
-		retry.WithDelay(time.Millisecond),
-		retry.WithMaxDelay(time.Millisecond),
-		retry.WithOnRetry(func(attempt int, _ error) {
+		WithAttempts(4),
+		WithDelay(time.Millisecond),
+		WithMaxDelay(time.Millisecond),
+		WithOnRetry(func(attempt int, _ error) {
 			retries = append(retries, attempt)
 		}),
 	)
@@ -122,11 +120,11 @@ func TestDoAppliesDefaults(t *testing.T) {
 	// No options → default 3 attempts, 1s delay, 30s maxDelay.
 	// Override Delay to keep the test fast; observe Attempts via OnRetry.
 	calls := 0
-	err := retry.Do(
+	err := Do(
 		context.Background(), func() error { return errFake },
-		retry.WithDelay(time.Millisecond),
-		retry.WithMaxDelay(time.Millisecond),
-		retry.WithOnRetry(func(_ int, _ error) { calls++ }),
+		WithDelay(time.Millisecond),
+		WithMaxDelay(time.Millisecond),
+		WithOnRetry(func(_ int, _ error) { calls++ }),
 	)
 
 	if err == nil {
@@ -144,12 +142,12 @@ func TestDoBackoffCaps(t *testing.T) {
 	var gaps []time.Duration
 	prev := time.Now()
 
-	retry.Do(
+	Do(
 		context.Background(), func() error { return errFake },
-		retry.WithAttempts(5),
-		retry.WithDelay(2*time.Millisecond),
-		retry.WithMaxDelay(cap),
-		retry.WithOnRetry(func(_ int, _ error) {
+		WithAttempts(5),
+		WithDelay(2*time.Millisecond),
+		WithMaxDelay(cap),
+		WithOnRetry(func(_ int, _ error) {
 			now := time.Now()
 			gaps = append(gaps, now.Sub(prev))
 			prev = now
@@ -194,8 +192,8 @@ func (rt *recordingTransport) RoundTrip(req *http.Request) (*http.Response, erro
 // transmitted an empty one.
 func TestRetryTransportRewindsBody(t *testing.T) {
 	rec := &recordingTransport{failFor: 1}
-	client := retry.NewHTTPClient(&http.Client{Transport: rec},
-		retry.WithAttempts(3), retry.WithDelay(time.Millisecond))
+	client := NewHTTPClient(&http.Client{Transport: rec},
+		WithAttempts(3), WithDelay(time.Millisecond))
 
 	req, err := http.NewRequest(http.MethodPost, "http://example.test/x", strings.NewReader("payload"))
 	if err != nil {
@@ -222,8 +220,8 @@ func TestRetryTransportRewindsBody(t *testing.T) {
 // transport never re-sends it with an empty body.
 func TestRetryTransportNonRewindableBodyNotRetried(t *testing.T) {
 	rec := &recordingTransport{failFor: 3}
-	client := retry.NewHTTPClient(&http.Client{Transport: rec},
-		retry.WithAttempts(3), retry.WithDelay(time.Millisecond))
+	client := NewHTTPClient(&http.Client{Transport: rec},
+		WithAttempts(3), WithDelay(time.Millisecond))
 
 	req, err := http.NewRequest(http.MethodPost, "http://example.test/x", nil)
 	if err != nil {
@@ -266,9 +264,9 @@ func TestRetryDeciderOverridesPolicy(t *testing.T) {
 
 	// Decider says "never retry": a 500 (normally retried for GET) is returned as-is.
 	st := &statusTransport{status: 500}
-	client := retry.NewHTTPClient(&http.Client{Transport: st},
-		retry.WithAttempts(4), retry.WithDelay(time.Millisecond),
-		retry.WithRetryDecider(func(_ *http.Response, _ error) bool { return false }))
+	client := NewHTTPClient(&http.Client{Transport: st},
+		WithAttempts(4), WithDelay(time.Millisecond),
+		WithRetryDecider(func(_ *http.Response, _ error) bool { return false }))
 	resp, err := client.Transport.RoundTrip(mustGet(t))
 	if err != nil {
 		t.Fatalf("RoundTrip: %v", err)
@@ -280,9 +278,9 @@ func TestRetryDeciderOverridesPolicy(t *testing.T) {
 
 	// Decider says "retry any 4xx": a 404 (normally terminal) is retried to exhaustion.
 	st2 := &statusTransport{status: 404}
-	client2 := retry.NewHTTPClient(&http.Client{Transport: st2},
-		retry.WithAttempts(3), retry.WithDelay(time.Millisecond),
-		retry.WithRetryDecider(func(resp *http.Response, _ error) bool {
+	client2 := NewHTTPClient(&http.Client{Transport: st2},
+		WithAttempts(3), WithDelay(time.Millisecond),
+		WithRetryDecider(func(resp *http.Response, _ error) bool {
 			return resp != nil && resp.StatusCode == 404
 		}))
 	resp2, err := client2.Transport.RoundTrip(mustGet(t))
@@ -300,9 +298,9 @@ func TestRetryDeciderOverridesPolicy(t *testing.T) {
 func TestRetryMaxElapsedStops(t *testing.T) {
 	t.Parallel()
 	st := &statusTransport{status: 0} // always a transport error
-	client := retry.NewHTTPClient(&http.Client{Transport: st},
-		retry.WithAttempts(20), retry.WithDelay(20*time.Millisecond), retry.WithFixedDelay(),
-		retry.WithMaxElapsed(50*time.Millisecond))
+	client := NewHTTPClient(&http.Client{Transport: st},
+		WithAttempts(20), WithDelay(20*time.Millisecond), WithFixedDelay(),
+		WithMaxElapsed(50*time.Millisecond))
 
 	_, err := client.Transport.RoundTrip(mustGet(t))
 	if err == nil {

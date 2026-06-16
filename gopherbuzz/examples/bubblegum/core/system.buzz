@@ -1,0 +1,83 @@
+// core/system.buzz - internal config-setter glue and startup helpers for the WM.
+//
+// These setters (configure/bind/rule/clearBinds) mutate the "reload candidate"
+// config (cfgEdit) so changes are validated before going live. They are not called
+// by the user's config directly -- that is the public wm package's job; the config
+// runs in an isolated VM and its result is replayed here via these setters. This
+// module also holds the accessibility permission bootstrap.
+
+namespace system;
+
+import "state";
+import "config";
+import "std";
+import "os";
+import "platform/macos/permissions";
+
+// cfgEdit is what the config.buzz setters mutate: the reload candidate while
+// one is being validated, the live config otherwise (startup).
+export fun cfgEdit() > mut config\Runtime {
+    if (state\wm().cfgTarget != null) {
+        return state\wm().cfgTarget!;
+    }
+    return state\wm().cfg;
+}
+
+// The config.buzz API. configure() applies a typed Config (all the settings);
+// bind()/rule() append; clearBinds() starts the keymap from zero for purists; the
+// command constructors (config\focusLeft(), config\workspace(2), ...) build a bind's
+// command. The default keymap ships embedded (config\defaultConfigText), so a user
+// config only sets what it wants to change.
+export fun configure(c: config\Config) > void {
+    config\applyConfig(c, into: cfgEdit());
+}
+
+export fun bind(chord: str, command: str) > void {
+    final parsed = config\parseChord(chord);
+    if (parsed == null) {
+        std\print("bubblegum: config.buzz: unknown chord \"{chord}\"");
+        return;
+    }
+    cfgEdit().binds.append(mut config\Bind{ flags = parsed![0], keycode = parsed![1], command = command });
+}
+
+export fun clearBinds() > void {
+    cfgEdit().binds = mut [];
+}
+
+export fun rule(line: str) > void {
+    final r = config\parseRule(line);
+    if (r == null) {
+        std\print("bubblegum: config.buzz: bad rule \"{line}\"");
+        return;
+    }
+    cfgEdit().rules.append(r!);
+}
+
+// ensureAccessibility checks the one permission bubblegum needs and walks the
+// user through granting it: trigger macOS's native prompt (which registers
+// bubblegum in the Settings list), deep-link System Settings to the exact
+// pane, then poll the live trust state until the toggle flips. No SIP
+// changes, no root — one checkbox.
+export fun ensureAccessibility() > bool {
+    if (permissions\axTrusted()) {
+        return true;
+    }
+    std\print("bubblegum: macOS Accessibility permission needed (one checkbox; no SIP, no root).");
+    std\print("  Opening System Settings -> Privacy & Security -> Accessibility --");
+    std\print("  enable the terminal you run bubblegum from.");
+    _ = permissions\promptAccessibility();
+    permissions\openAccessibilitySettings();
+    std\print("bubblegum: waiting for the toggle (up to 2 minutes, Ctrl-C to give up)...");
+    var waited = 0;
+    while (waited < 120000) {
+        os\sleep(2000.0);
+        waited = waited + 2000;
+        if (permissions\axTrusted()) {
+            std\print("bubblegum: permission granted -- starting.");
+            return true;
+        }
+    }
+    std\print("bubblegum: still not trusted. Flip the toggle, then run bubblegum again.");
+    return false;
+}

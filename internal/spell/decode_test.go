@@ -1,11 +1,9 @@
-package spell_test
+package spell
 
 import (
 	"sort"
 	"strings"
 	"testing"
-
-	ispell "github.com/egladman/magus/internal/spell"
 )
 
 // mapObj is a test-only implementation of ispell.Obj backed by map[string]any.
@@ -38,7 +36,7 @@ func (m mapObj) Strs(key string) []string {
 	return ss
 }
 
-func (m mapObj) Obj(key string) (ispell.Obj, bool) {
+func (m mapObj) Obj(key string) (Obj, bool) {
 	v, ok := m[key]
 	if !ok {
 		return nil, false
@@ -50,7 +48,7 @@ func (m mapObj) Obj(key string) (ispell.Obj, bool) {
 	return mapObj(sub), true
 }
 
-func (m mapObj) Objs(key string) []ispell.Obj {
+func (m mapObj) Objs(key string) []Obj {
 	v, ok := m[key]
 	if !ok {
 		return nil
@@ -59,7 +57,7 @@ func (m mapObj) Objs(key string) []ispell.Obj {
 	if !ok {
 		return nil
 	}
-	var out []ispell.Obj
+	var out []Obj
 	for _, it := range list {
 		if sub, ok := it.(map[string]any); ok {
 			out = append(out, mapObj(sub))
@@ -93,7 +91,7 @@ func (m mapObj) CallStrs(key string, args ...string) ([]string, error) {
 
 // TestDecode_NoName ensures a missing name field returns an error.
 func TestDecode_NoName(t *testing.T) {
-	_, err := ispell.Decode(mapObj{})
+	_, err := Decode(mapObj{})
 	if err == nil {
 		t.Fatal("Decode with no name: want error, got nil")
 	}
@@ -105,7 +103,7 @@ func TestDecode_NoName(t *testing.T) {
 // TestDecode_NameOnly checks that a spell with only a name and no ops is decoded correctly.
 func TestDecode_NameOnly(t *testing.T) {
 	src := mapObj{"name": "myspell"}
-	m, err := ispell.Decode(src)
+	m, err := Decode(src)
 	if err != nil {
 		t.Fatalf("Decode with name only: unexpected error: %v", err)
 	}
@@ -128,7 +126,7 @@ func TestDecode_ForkOp(t *testing.T) {
 			},
 		},
 	}
-	m, err := ispell.Decode(src)
+	m, err := Decode(src)
 	if err != nil {
 		t.Fatalf("Decode fork op: unexpected error: %v", err)
 	}
@@ -166,7 +164,7 @@ func TestDecode_CharmReplaceOp(t *testing.T) {
 			},
 		},
 	}
-	m, err := ispell.Decode(src)
+	m, err := Decode(src)
 	if err != nil {
 		t.Fatalf("Decode charm replace: unexpected error: %v", err)
 	}
@@ -178,7 +176,7 @@ func TestDecode_CharmReplaceOp(t *testing.T) {
 	if !ok {
 		t.Fatal("Charms[\"write\"] missing")
 	}
-	want := ispell.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
+	want := PatchOp{Op: "replace", Path: "/0", Value: "-w"}
 	if len(charm.Ops) != 1 || charm.Ops[0] != want {
 		t.Errorf("Charm.Ops = %v, want [%v]", charm.Ops, want)
 	}
@@ -203,7 +201,7 @@ func TestDecode_CharmAddOp(t *testing.T) {
 			},
 		},
 	}
-	m, err := ispell.Decode(src)
+	m, err := Decode(src)
 	if err != nil {
 		t.Fatalf("Decode charm add: unexpected error: %v", err)
 	}
@@ -211,7 +209,7 @@ func TestDecode_CharmAddOp(t *testing.T) {
 	if !ok {
 		t.Fatal("Charms[\"debug\"] missing")
 	}
-	want := ispell.PatchOp{Op: "add", Path: "/-", Value: "-v"}
+	want := PatchOp{Op: "add", Path: "/-", Value: "-v"}
 	if len(charm.Ops) != 1 || charm.Ops[0] != want {
 		t.Errorf("Charm.Ops = %v, want [%v]", charm.Ops, want)
 	}
@@ -235,7 +233,7 @@ func TestDecode_CharmRootRejected(t *testing.T) {
 			},
 		},
 	}
-	if _, err := ispell.Decode(src); err == nil {
+	if _, err := Decode(src); err == nil {
 		t.Fatal("Decode with root-path charm op: want error, got nil")
 	}
 }
@@ -250,7 +248,7 @@ func TestDecode_InvalidTargetName(t *testing.T) {
 			},
 		},
 	}
-	_, err := ispell.Decode(src)
+	_, err := Decode(src)
 	if err == nil {
 		t.Fatal("Decode with invalid target name: want error, got nil")
 	}
@@ -262,7 +260,7 @@ func TestDecode_NeedsResolved(t *testing.T) {
 		"name":  "myspell",
 		"needs": []string{"**/*.go", "go.mod"},
 	}
-	m, err := ispell.Decode(src)
+	m, err := Decode(src)
 	if err != nil {
 		t.Fatalf("Decode needs: unexpected error: %v", err)
 	}

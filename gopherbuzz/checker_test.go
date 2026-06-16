@@ -15,7 +15,7 @@ func checkSrc(src string) []typeError {
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
 	}
-	return checkWithGlobals(prog, nil, nil, nil)
+	return checkWithGlobals(prog, nil, nil, nil, nil)
 }
 
 // checkOK asserts that Check reports no errors for src.
@@ -131,6 +131,28 @@ fun greet() str {
 `)
 }
 
+// Empty typed-list literal `[<T>]` must infer `[T]`, not `[any]`, so a list
+// accumulated with `+` and returned keeps its element type. Mirrors upstream
+// Buzz; see splitCommands in examples/bubblegum/config.buzz.
+func TestCheck_TypedEmptyListReturn(t *testing.T) {
+	checkOK(t, `
+fun build() [str] {
+    var res = [<str>];
+    res = res + ["a"];
+    return res;
+}
+`)
+}
+
+func TestCheck_TypedEmptyListElemMismatch(t *testing.T) {
+	checkErr(t, `
+fun build() [str] {
+    var res = [<int>];
+    return res;
+}
+`, "return type mismatch")
+}
+
 func TestCheck_ArithmeticTypes(t *testing.T) {
 	checkOK(t, `final r = 1 + 2;`)
 	checkOK(t, `final r = 1.5 + 2;`)
@@ -229,7 +251,7 @@ func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if errs := checkWithGlobals(prog, []string{"host"}, nil, nil); len(errs) != 0 {
+	if errs := checkWithGlobals(prog, []string{"host"}, nil, nil, nil); len(errs) != 0 {
 		t.Errorf("expected no errors, got:\n%s", fmtErrors(errs))
 	}
 }
@@ -407,7 +429,7 @@ func TestCheckTypeNoFalsePositives(t *testing.T) {
 	}
 }
 
-// writeModule drops a .bzz file into dir for an import test.
+// writeModule drops a .buzz file into dir for an import test.
 func writeModule(t *testing.T, dir, name, src string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0644); err != nil {
@@ -420,7 +442,7 @@ func writeModule(t *testing.T, dir, name, src string) {
 // type-check (during Exec) and the runtime construction/field read.
 func TestImport_ExportedObjectType(t *testing.T) {
 	dir := t.TempDir()
-	writeModule(t, dir, "lib.bzz", `export object Foo { n: int = 0 }`)
+	writeModule(t, dir, "lib.buzz", `export object Foo { n: int = 0 }`)
 
 	ctx := context.Background()
 	sess := NewSession(ctx)
@@ -448,7 +470,7 @@ export final result = make().n;
 // type resolves in the importer (annotation + case access).
 func TestImport_ExportedEnumType(t *testing.T) {
 	dir := t.TempDir()
-	writeModule(t, dir, "palette.bzz", `export enum Color { Red, Green, Blue }`)
+	writeModule(t, dir, "palette.buzz", `export enum Color { Red, Green, Blue }`)
 
 	ctx := context.Background()
 	sess := NewSession(ctx)
@@ -469,7 +491,7 @@ final c = pick();
 // reference each other (a field typed as a sibling imported object) resolve.
 func TestImport_CrossReferencingObjectTypes(t *testing.T) {
 	dir := t.TempDir()
-	writeModule(t, dir, "shapes.bzz", `
+	writeModule(t, dir, "shapes.buzz", `
 export object Inner { v: int = 0 }
 export object Outer { inner: Inner = Inner{} }
 `)
@@ -497,7 +519,7 @@ export final got = build().inner.v;
 }
 
 // TestSourceModule_ExportsTypes verifies a host-registered source module
-// (embedded .bzz, no file on the include path) exposes its exported object/enum
+// (embedded .buzz, no file on the include path) exposes its exported object/enum
 // types to the importer — including object-typed and list field defaults, which
 // the canonical magus/target module relies on.
 func TestSourceModule_ExportsTypes(t *testing.T) {
@@ -531,7 +553,7 @@ export final tname = pick().name;
 // the importer's checker, so using it is a compile-time "undefined type" error.
 func TestImport_NonExportedObjectType_Errors(t *testing.T) {
 	dir := t.TempDir()
-	writeModule(t, dir, "internal.bzz", `object Secret { n: int = 0 }`)
+	writeModule(t, dir, "internal.buzz", `object Secret { n: int = 0 }`)
 
 	ctx := context.Background()
 	sess := NewSession(ctx)

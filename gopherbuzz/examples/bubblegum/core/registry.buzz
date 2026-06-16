@@ -1,0 +1,123 @@
+// core/registry.buzz - managed-window registry helpers.
+// Pure lookup/mutation over state\wm().managed; no layout mutations.
+
+namespace registry;
+
+import "state";
+import "layout";
+import "platform/macos/frameworks";
+import "platform/macos/windows";
+import "std";
+
+export fun refOf(id: int) > ud? {
+    foreach (m in state\wm().managed) {
+        if (m.id == id) {
+            return m.ref;
+        }
+    }
+    return null;
+}
+
+export fun pidOf(id: int) > int {
+    foreach (m in state\wm().managed) {
+        if (m.id == id) {
+            return m.pid;
+        }
+    }
+    return 0;
+}
+
+// idForRef matches an AX handle against the registry. AX hands out a fresh
+// ref for the same window on every scan, so identity is CFEqual, not address.
+export fun idForRef(ref: ud?) > int {
+    foreach (m in state\wm().managed) {
+        if (frameworks\sameRef(m.ref, b: ref)) {
+            return m.id;
+        }
+    }
+    return 0;
+}
+
+export fun managedRemove(id: int) > void {
+    final keep = mut [<mut state\Managed>];
+    foreach (m in state\wm().managed) {
+        if (m.id != id) {
+            keep.append(m);
+        }
+    }
+    state\wm().managed = keep;
+}
+
+export fun managedById(id: int) > mut state\Managed? {
+    foreach (m in state\wm().managed) {
+        if (m.id == id) {
+            return m;
+        }
+    }
+    return null;
+}
+
+// logAct emits one stdout line per action the WM takes - commands, window
+// events, adopt/evict, workspace switches, retiles. Idle reconciles that change
+// nothing stay quiet. Same `bubblegum:` prefix as the status messages.
+export fun logAct(msg: str) > void {
+    std\print("bubblegum: {msg}");
+}
+
+// winLabel renders a managed window for a log line: `#5 Finder "Downloads"`.
+// Drops the title when empty/unreadable, and falls back to the bare id when the
+// window is already gone (evict can race a closed window).
+export fun winLabel(id: int) > str {
+    final m = managedById(id);
+    if (m == null) {
+        return "#{id}";
+    }
+    final mm = m!;
+    final app = windows\appName(mm.pid);
+    final title = windows\windowTitle(mm.ref);
+    if (title == "") {
+        return "#{id} {app}";
+    }
+    return "#{id} {app} \"{title}\"";
+}
+
+// frameLabel renders a window's live frame as `1200x800 @(0,26)` for log lines.
+export fun frameLabel(id: int) > str {
+    final f = windows\windowFrame(refOf(id));
+    if (f == null) {
+        return "?";
+    }
+    final fr = f!;
+    return "{std\toInt(fr[2])}x{std\toInt(fr[3])} @({std\toInt(fr[0])},{std\toInt(fr[1])})";
+}
+
+// wsCounts tallies managed windows per workspace -- shared by the bar render and
+// the bar-click workspace mapping.
+export fun wsCounts() > [int] {
+    final counts = mut [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    foreach (m in state\wm().managed) {
+        if (m.workspace >= 0 and m.workspace < counts.len()) {
+            counts[m.workspace] = counts[m.workspace] + 1;
+        }
+    }
+    return counts;
+}
+
+// takeMatch claims the first unclaimed live window whose app name equals the
+// saved tag (case-insensitive); 0 when none is left.
+export fun takeMatch(live: mut [int], tag: str) > int {
+    if (tag.len() == 0) {
+        return 0;
+    }
+    foreach (i in 0..live.len()) {
+        final id: int = live[i];
+        if (id == 0) {
+            continue;
+        }
+        if (windows\appName(pidOf(id)).lower() == tag.lower()) {
+            live[i] = 0;
+            return id;
+        }
+    }
+    return 0;
+}

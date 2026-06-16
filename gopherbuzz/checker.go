@@ -29,6 +29,10 @@ type checker struct {
 	retTyp   types.Type
 	yieldTyp types.Type            // non-nil when inside a function with a *> yield annotation
 	types    map[string]types.Type // named type definitions (objects, enums)
+	// moduleFuncs maps each imported module's bound name to its exported function
+	// declarations. collectTopLevel uses this to build a typed namespace ObjectType
+	// for the import so qualified access (e.g. state\wm()) resolves precisely.
+	moduleFuncs map[string][]*ast.FunDecl
 	// private names are visible in a flat-imported module's runtime Env but hidden
 	// from this file by exports-only import visibility; referencing one yields an
 	// "export it" hint rather than a bare "undefined". See session.importPrivate.
@@ -40,16 +44,17 @@ type checker struct {
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
 // the missing `export` instead of a bare "undefined".
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, private map[string]bool) []typeError {
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, private map[string]bool) []typeError {
 	c := &checker{
-		types:   map[string]types.Type{},
-		private: private,
+		types:       map[string]types.Type{},
+		moduleFuncs: moduleFuncs,
+		private:     private,
 	}
 	c.pushScope()
 	c.registerBuiltins()
 	for _, name := range extraGlobals {
 		if _, ok := c.scopes[len(c.scopes)-1][name]; !ok {
-			c.define(name, types.Any, false)
+			c.define(name, types.Unknown, false)
 		}
 	}
 	// Register object/enum types pulled in from flat imports before collecting
@@ -82,8 +87,9 @@ func (c *checker) registerBuiltins() {
 	c.define("assert", anyRet, true)
 	c.define("type", &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Str}, true)
 	// resume/resolve are keyword-expressions; they are not callable identifiers.
-	// zdef(libname str, cdecl str) → map of direct callables (FFI).
-	c.define("zdef", &types.FuncType{Params: []types.Type{types.Str, types.Str}, Ret: types.Any}, true)
+	// zdef(libname str, cdecl str) → map of direct callables (FFI). Return type
+	// is Unknown (not Any) so member access on the returned map doesn't fire E28.
+	c.define("zdef", &types.FuncType{Params: []types.Type{types.Str, types.Str}, Ret: types.Unknown}, true)
 }
 
 func (c *checker) pushScope() { c.scopes = append(c.scopes, map[string]scopeEntry{}) }
@@ -123,7 +129,21 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			if v.Alias != "" {
 				name = v.Alias
 			}
-			c.define(name, types.Any, false)
+			// If we have exported function signatures for this module, build a
+			// typed namespace object so qualified access (e.g. state\wm()) resolves
+			// to the declared return type instead of any. This lets the checker
+			// propagate types through cross-module calls and enforce E28 correctly.
+			if fds, ok := c.moduleFuncs[name]; ok && len(fds) > 0 {
+				nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
+				for _, fd := range fds {
+					nt.Fields[fd.Name] = c.funDeclType(fd)
+				}
+				c.define(name, nt, false)
+			} else {
+				// No tracked function signatures (synthetic module or no exported funs):
+				// use Unknown so member access on the namespace doesn't fire E28.
+				c.define(name, types.Unknown, false)
+			}
 		case *ast.FunDecl:
 			c.define(v.Name, c.funDeclType(v), true)
 		case *ast.ObjectDecl:
@@ -136,7 +156,10 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// globals). Pre-declare each as a lenient variadic callable so bare
 			// calls type-check regardless of arity or argument labels.
 			if _, names, ok := zdefDeclNames(v.Expr); ok {
-				ffiFn := &types.FuncType{Params: []types.Type{types.Any}, Ret: types.Any, Variadic: true}
+				// zdef symbols are FFI callables whose return types can't be tracked
+				// statically; return Unknown so field access on their results doesn't
+				// fire E28 (Unknown is the tracking-failure sentinel, not user `any`).
+				ffiFn := &types.FuncType{Params: []types.Type{types.Unknown}, Ret: types.Unknown, Variadic: true}
 				for _, name := range names {
 					c.define(name, ffiFn, true)
 				}
@@ -178,13 +201,13 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 	params := make([]types.Type, len(fd.Params))
 	for i := range fd.Params {
-		pt := types.Any
+		pt := types.Unknown // unannotated: tracking failure, not explicit any
 		if i < len(fd.ParamAnnots) && fd.ParamAnnots[i] != "" {
 			pt = c.resolveAnnot(fd.ParamAnnots[i])
 		}
 		params[i] = pt
 	}
-	ret := types.Any // unannotated: accept any return
+	ret := types.Unknown // unannotated: accept any return
 	if fd.RetAnnot != "" {
 		ret = c.resolveAnnot(fd.RetAnnot)
 	}
@@ -244,14 +267,14 @@ func (c *checker) checkStmt(n ast.Node) {
 		c.checkIf(v)
 	case *ast.WhileStmt:
 		cond := c.infer(v.Cond)
-		if cond != types.Any && cond != types.Bool {
+		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorf(ast.NodePos(v.Cond), "while condition must be bool, got %s", cond.TypeName())
 		}
 		c.checkBlock(v.Body)
 	case *ast.DoStmt:
 		c.checkBlock(v.Body)
 		cond := c.infer(v.Cond)
-		if cond != types.Any && cond != types.Bool {
+		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorf(ast.NodePos(v.Cond), "do-until condition must be bool, got %s", cond.TypeName())
 		}
 	case *ast.ForStmt:
@@ -261,7 +284,7 @@ func (c *checker) checkStmt(n ast.Node) {
 		}
 		if v.Cond != nil {
 			cond := c.infer(v.Cond)
-			if cond != types.Any && cond != types.Bool {
+			if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 				c.errorf(ast.NodePos(v.Cond), "for condition must be bool, got %s", cond.TypeName())
 			}
 		}
@@ -354,7 +377,7 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 
 func (c *checker) checkIf(v *ast.IfStmt) {
 	cond := c.infer(v.Cond)
-	if cond != types.Any && cond != types.Bool {
+	if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 		c.errorf(ast.NodePos(v.Cond), "if condition must be bool, got %s", cond.TypeName())
 	}
 	c.checkBlock(v.Then)
@@ -373,7 +396,10 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 
 func (c *checker) checkForEach(v *ast.ForEachStmt) {
 	iterTyp := c.infer(v.Iter)
-	valTyp, keyTyp := types.Any, types.Any
+	// Default to Unknown (tracking failure) so that iterating an unresolved
+	// iterable (e.g. a string method whose return type we don't track) doesn't
+	// assign Any to the loop variable and trigger spurious E28 errors.
+	valTyp, keyTyp := types.Unknown, types.Unknown
 	switch it := iterTyp.(type) {
 	case *types.ListType:
 		valTyp = it.Elem
@@ -416,9 +442,9 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 		c.yieldTyp = nil
 	}
 	c.pushScope()
-	c.define("this", types.Any, false)
+	c.define("this", types.Unknown, false)
 	for i, name := range fd.Params {
-		pt := types.Any
+		pt := types.Unknown
 		if i < len(ft.Params) {
 			pt = ft.Params[i]
 		}
@@ -444,7 +470,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		c.pushScope()
 		c.define("this", ot, false)
 		for i, name := range m.Params {
-			pt := types.Any
+			pt := types.Unknown
 			if i < len(ft.Params) {
 				pt = ft.Params[i]
 			}
@@ -603,13 +629,16 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 		if left == types.Double || right == types.Double {
 			return types.Double
 		}
+		if left == types.Unknown || right == types.Unknown {
+			return types.Unknown
+		}
 		return types.Int
 	case "<", ">", "<=", ">=", "==", "!=":
 		return types.Bool
 	case "and", "or":
 		return types.Bool
 	case "??":
-		if left != types.Null && left != types.Any {
+		if left != types.Null && left != types.Any && left != types.Unknown {
 			return left
 		}
 		return right
@@ -618,8 +647,8 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 }
 
 func (c *checker) numericResult(p ast.Pos, left, right types.Type) types.Type {
-	if left == types.Any || right == types.Any {
-		return types.Any
+	if left == types.Any || left == types.Unknown || right == types.Any || right == types.Unknown {
+		return types.Unknown
 	}
 	if left == types.Double || right == types.Double {
 		return types.Double
@@ -637,7 +666,7 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 	t := c.infer(v.Operand)
 	switch v.Op {
 	case "-":
-		if t == types.Any || t == types.Int || t == types.Double {
+		if t == types.Any || t == types.Unknown || t == types.Int || t == types.Double {
 			return t
 		}
 		c.errorf(v.Pos, "unary - requires numeric operand, got %s", t.TypeName())
@@ -662,8 +691,14 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	for _, a := range v.Args {
 		c.infer(a)
 	}
+	// An explicit generic type argument (`buf.readZAt::<double>(...)`) names the
+	// call's result type. gopherbuzz doesn't model generic signatures, so without
+	// this the result would be `any`; honoring the hint matches upstream Buzz.
+	if v.TypeArg != "" {
+		return c.resolveAnnot(v.TypeArg)
+	}
 	if !ok {
-		return types.Any
+		return types.Unknown
 	}
 	if !ft.Variadic && len(v.Args) != len(ft.Params) {
 		c.errorf(v.Pos, "wrong argument count: got %d, want %d", len(v.Args), len(ft.Params))
@@ -741,6 +776,23 @@ func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
 
 func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	ot := c.infer(v.Object)
+	// Resolve NamedType before the Any check: a field typed as Foo (unresolved
+	// at buildObjectType time) may be resolvable here. An unresolvable NamedType
+	// (e.g. Boxed from a synthetic Go module) returns Unknown rather than Any so
+	// chained member access on synthetic-module values doesn't fire E28.
+	if nt, ok := ot.(*types.NamedType); ok {
+		if resolved, ok2 := c.types[nt.Name]; ok2 {
+			ot = resolved
+		} else {
+			return types.Unknown
+		}
+	}
+	// E28: upstream buzz rejects field access on explicitly `any`-typed values.
+	// Unknown (tracking failure) passes through so zdef/host results stay quiet.
+	if ot == types.Any {
+		c.errorf(v.Pos, "`any` is not field accessible")
+		return types.Any
+	}
 	switch t := ot.(type) {
 	case *types.ObjectType:
 		if ft, ok := t.Fields[v.Name]; ok {
@@ -749,18 +801,23 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		if mt, ok := t.Methods[v.Name]; ok {
 			return mt
 		}
+		// Namespace objects (built from imported module exports) may have
+		// untracked exported finals/vars; treat missing fields as Unknown.
+		if t.IsNamespace {
+			return types.Unknown
+		}
 		c.errorf(v.Pos, "object %s has no field or method %q", t.Name, v.Name)
-		return types.Any
+		return types.Unknown
 	case *types.ListType:
 		if v.Name == "len" {
 			return types.Int
 		}
-		return types.Any
+		return types.Unknown
 	case *types.MapType:
 		if v.Name == "len" {
 			return types.Int
 		}
-		return types.Any
+		return types.Unknown
 	case *types.EnumType:
 		for _, cas := range t.Cases {
 			if cas == v.Name {
@@ -768,9 +825,9 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 			}
 		}
 		c.errorf(v.Pos, "enum %s has no case %q", t.Name, v.Name)
-		return types.Any
+		return types.Unknown
 	}
-	return types.Any
+	return types.Unknown
 }
 
 func (c *checker) inferIndex(v *ast.IndexExpr) types.Type {
@@ -782,19 +839,19 @@ func (c *checker) inferIndex(v *ast.IndexExpr) types.Type {
 	case *types.MapType:
 		return t.Val
 	}
-	return types.Any
+	return types.Unknown
 }
 
 func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	params := make([]types.Type, len(v.Params))
 	for i := range v.Params {
-		pt := types.Any
+		pt := types.Unknown
 		if i < len(v.ParamAnnots) && v.ParamAnnots[i] != "" {
 			pt = c.resolveAnnot(v.ParamAnnots[i])
 		}
 		params[i] = pt
 	}
-	ret := types.Any // unannotated: accept any return
+	ret := types.Unknown // unannotated: accept any return
 	if v.RetAnnot != "" {
 		ret = c.resolveAnnot(v.RetAnnot)
 	}
@@ -836,6 +893,9 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 
 func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 	if len(v.Items) == 0 {
+		if v.ElemType != "" {
+			return &types.ListType{Elem: c.resolveAnnot(v.ElemType)}
+		}
 		return &types.ListType{Elem: types.Any}
 	}
 	elemTyp := c.infer(v.Items[0])

@@ -1,4 +1,4 @@
-package cache_test
+package cache
 
 import (
 	"context"
@@ -8,14 +8,12 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
 // depSpec builds a minimal spec for project path p depending on deps. Sources
 // is left empty (no files), so the spec always misses and runs fn.
-func depSpec(root, p string, deps ...string) cache.Spec {
-	return cache.Spec{
+func depSpec(root, p string, deps ...string) Spec {
+	return Spec{
 		ProjectPath:   p,
 		WorkspaceRoot: root,
 		DependsOn:     deps,
@@ -52,11 +50,11 @@ func (r *orderRecorder) doneBefore(p string) bool {
 	return r.finished[p]
 }
 
-func openCache(t *testing.T) (root string, c *cache.Cache) {
+func openCache(t *testing.T) (root string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := cache.Open(cdir, cache.WithMutable(true))
+	c, err := Open(cdir, WithMutable(true))
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -78,16 +76,16 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 
 	// A hashes a real source file; B depends on A but declares no sources, so
 	// its key can only change via upstream-key propagation.
-	mkSpecs := func() []cache.Spec {
-		return []cache.Spec{
+	mkSpecs := func() []Spec {
+		return []Spec{
 			{ProjectPath: "A", WorkspaceRoot: root, Target: "build", Sources: []string{"a.txt"}},
 			{ProjectPath: "B", WorkspaceRoot: root, Target: "build", DependsOn: []string{"A"}},
 		}
 	}
 	run := func() (keyA, keyB string) {
 		results, err := c.RunAll(context.Background(), mkSpecs(),
-			func(_ context.Context, _ cache.Spec) error { return nil },
-			cache.WithConcurrency(4))
+			func(_ context.Context, _ Spec) error { return nil },
+			WithConcurrency(4))
 		if err != nil {
 			t.Fatalf("RunAll: %v", err)
 		}
@@ -126,11 +124,11 @@ func TestRunAllAfterCrossTargetOrdering(t *testing.T) {
 	root, c := openCache(t)
 	rec := newOrderRecorder()
 
-	specs := []cache.Spec{
-		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{cache.DepKey("P", "build")}},
+	specs := []Spec{
+		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{DepKey("P", "build")}},
 		{ProjectPath: "P", WorkspaceRoot: root, Target: "build"},
 	}
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		id := s.ProjectPath + ":" + s.Target
 		if s.Target == "test" && !rec.doneBefore("P:build") {
 			t.Errorf("P:test started before P:build finished")
@@ -138,7 +136,7 @@ func TestRunAllAfterCrossTargetOrdering(t *testing.T) {
 		rec.start(id)
 		rec.finish(id)
 		return nil
-	}, cache.WithConcurrency(8))
+	}, WithConcurrency(8))
 	if err != nil {
 		t.Fatalf("RunAll: %v", err)
 	}
@@ -151,13 +149,13 @@ func TestRunAllAfterCrossTargetOrdering(t *testing.T) {
 // P:build, P:build after P:test) is detected before any goroutine launches.
 func TestRunAllAfterCycleRejected(t *testing.T) {
 	root, c := openCache(t)
-	specs := []cache.Spec{
-		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{cache.DepKey("P", "build")}},
-		{ProjectPath: "P", WorkspaceRoot: root, Target: "build", After: []string{cache.DepKey("P", "test")}},
+	specs := []Spec{
+		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{DepKey("P", "build")}},
+		{ProjectPath: "P", WorkspaceRoot: root, Target: "build", After: []string{DepKey("P", "test")}},
 	}
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, _ cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, _ Spec) error {
 		return nil
-	}, cache.WithConcurrency(8))
+	}, WithConcurrency(8))
 	if err == nil {
 		t.Fatal("expected cycle error, got nil")
 	}
@@ -170,13 +168,13 @@ func TestRunAllDependencyOrdering(t *testing.T) {
 	root, c := openCache(t)
 	rec := newOrderRecorder()
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "C", "B"),
 		depSpec(root, "B", "A"),
 		depSpec(root, "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		// Upstream must already be finished when this fn runs.
 		switch s.ProjectPath {
 		case "B":
@@ -191,7 +189,7 @@ func TestRunAllDependencyOrdering(t *testing.T) {
 		rec.start(s.ProjectPath)
 		rec.finish(s.ProjectPath)
 		return nil
-	}, cache.WithConcurrency(8))
+	}, WithConcurrency(8))
 	if err != nil {
 		t.Fatalf("RunAll: %v", err)
 	}
@@ -207,14 +205,14 @@ func TestRunAllDependencyDiamond(t *testing.T) {
 	root, c := openCache(t)
 	rec := newOrderRecorder()
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "D", "B", "C"),
 		depSpec(root, "B", "A"),
 		depSpec(root, "C", "A"),
 		depSpec(root, "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		switch s.ProjectPath {
 		case "B", "C":
 			if !rec.doneBefore("A") {
@@ -228,7 +226,7 @@ func TestRunAllDependencyDiamond(t *testing.T) {
 		rec.start(s.ProjectPath)
 		rec.finish(s.ProjectPath)
 		return nil
-	}, cache.WithConcurrency(8))
+	}, WithConcurrency(8))
 	if err != nil {
 		t.Fatalf("RunAll: %v", err)
 	}
@@ -240,14 +238,14 @@ func TestRunAllDependencyOutOfScope(t *testing.T) {
 	root, c := openCache(t)
 	var ran bool
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "X", "not-in-this-run"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		ran = true
 		return nil
-	}, cache.WithConcurrency(4))
+	}, WithConcurrency(4))
 	if err != nil {
 		t.Fatalf("RunAll: %v", err)
 	}
@@ -263,14 +261,14 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 	root, c := openCache(t)
 	var ran bool
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "self", "self"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		ran = true
 		return nil
-	}, cache.WithConcurrency(4))
+	}, WithConcurrency(4))
 	if err != nil {
 		t.Fatalf("RunAll: %v", err)
 	}
@@ -286,11 +284,11 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 func TestRunAllIsolatedRunsAlone(t *testing.T) {
 	root, c := openCache(t)
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		{ProjectPath: "isolated", WorkspaceRoot: root, Target: "gen", Isolated: true},
 	}
 	for i := range 6 {
-		specs = append(specs, cache.Spec{
+		specs = append(specs, Spec{
 			ProjectPath: "p" + string(rune('0'+i)), WorkspaceRoot: root, Target: "build",
 		})
 	}
@@ -301,7 +299,7 @@ func TestRunAllIsolatedRunsAlone(t *testing.T) {
 		peak       int // max concurrent non-isolated specs — proves readers overlap
 		violations []string
 	)
-	enter := func(s cache.Spec) {
+	enter := func(s Spec) {
 		mu.Lock()
 		defer mu.Unlock()
 		inFlight++
@@ -312,7 +310,7 @@ func TestRunAllIsolatedRunsAlone(t *testing.T) {
 			peak = inFlight
 		}
 	}
-	leave := func(s cache.Spec) {
+	leave := func(s Spec) {
 		mu.Lock()
 		defer mu.Unlock()
 		if s.Isolated && inFlight != 1 {
@@ -321,12 +319,12 @@ func TestRunAllIsolatedRunsAlone(t *testing.T) {
 		inFlight--
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		enter(s)
 		time.Sleep(20 * time.Millisecond)
 		leave(s)
 		return nil
-	}, cache.WithConcurrency(8))
+	}, WithConcurrency(8))
 	if err != nil {
 		t.Fatalf("RunAll: %v", err)
 	}
@@ -348,12 +346,12 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 	var bRan bool
 	var mu sync.Mutex
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "B", "A"),
 		depSpec(root, "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		if s.ProjectPath == "A" {
 			return wantErr
 		}
@@ -361,7 +359,7 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 		bRan = true
 		mu.Unlock()
 		return nil
-	}, cache.WithConcurrency(8))
+	}, WithConcurrency(8))
 	if err == nil {
 		t.Fatal("expected RunAll to return the upstream error, got nil")
 	}
@@ -379,15 +377,15 @@ func TestRunAllDependencyCycleRejected(t *testing.T) {
 	root, c := openCache(t)
 	var ran bool
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "A", "B"),
 		depSpec(root, "B", "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		ran = true
 		return nil
-	}, cache.WithConcurrency(4))
+	}, WithConcurrency(4))
 	if err == nil {
 		t.Fatal("expected RunAll to reject the cyclic batch, got nil error")
 	}
@@ -401,15 +399,15 @@ func TestRunAllDependencyCycleRejected(t *testing.T) {
 func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 	root, c := openCache(t)
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "A", "B"),
 		depSpec(root, "B", "C"),
 		depSpec(root, "C", "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		return nil
-	}, cache.WithConcurrency(4))
+	}, WithConcurrency(4))
 	if err == nil {
 		t.Fatal("expected RunAll to reject the 3-node cycle, got nil error")
 	}
@@ -421,7 +419,7 @@ func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 func TestRunAllNoDependencies(t *testing.T) {
 	root, c := openCache(t)
 
-	specs := []cache.Spec{
+	specs := []Spec{
 		depSpec(root, "p0"),
 		depSpec(root, "p1"),
 		depSpec(root, "p2"),
@@ -429,12 +427,12 @@ func TestRunAllNoDependencies(t *testing.T) {
 
 	var count int
 	var mu sync.Mutex
-	results, err := c.RunAll(context.Background(), specs, func(_ context.Context, s cache.Spec) error {
+	results, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		mu.Lock()
 		count++
 		mu.Unlock()
 		return nil
-	}, cache.WithConcurrency(4))
+	}, WithConcurrency(4))
 	if err != nil {
 		t.Fatalf("RunAll: %v", err)
 	}

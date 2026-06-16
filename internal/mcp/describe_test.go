@@ -1,15 +1,13 @@
-package mcp_test
+package mcp
 
 import (
 	"testing"
-
-	"github.com/egladman/magus/internal/mcp"
 )
 
 func TestDescribeTools_CountMatchesRegistry(t *testing.T) {
-	out := mcp.DescribeTools()
-	if out.Count != len(mcp.Registry) {
-		t.Errorf("DescribeTools().Count = %d, want %d (len(Registry))", out.Count, len(mcp.Registry))
+	out := DescribeTools()
+	if out.Count != len(Registry) {
+		t.Errorf("DescribeTools().Count = %d, want %d (len(Registry))", out.Count, len(Registry))
 	}
 	if len(out.MCPTools) != out.Count {
 		t.Errorf("len(MCPTools) = %d, want %d", len(out.MCPTools), out.Count)
@@ -20,7 +18,7 @@ func TestDescribeTools_CountMatchesRegistry(t *testing.T) {
 }
 
 func TestDescribeTools_AllEntriesHaveNames(t *testing.T) {
-	out := mcp.DescribeTools()
+	out := DescribeTools()
 	for i, tool := range out.MCPTools {
 		if tool.Name == "" {
 			t.Errorf("MCPTools[%d].Name is empty", i)

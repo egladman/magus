@@ -1,6 +1,6 @@
 //go:build integration
 
-package run_test
+package run
 
 import (
 	"bytes"
@@ -13,8 +13,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/run"
 )
 
 // captureStdout redirects os.Stdout to a pipe and returns a function that
@@ -68,7 +66,7 @@ func TestIntegrationWorkdirRespected(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := captureStdout(t)
-	if err := run.Run(context.Background(), dir, "pwd"); err != nil {
+	if err := Run(context.Background(), dir, "pwd"); err != nil {
 		t.Fatalf("Run('pwd') = %v, want nil", err)
 	}
 	got := strings.TrimRight(string(read()), "\n")
@@ -82,7 +80,7 @@ func TestIntegrationStdoutPassthrough(t *testing.T) {
 		t.Skip("'echo' not available")
 	}
 	read := captureStdout(t)
-	if err := run.Run(context.Background(), t.TempDir(), "echo", "hello"); err != nil {
+	if err := Run(context.Background(), t.TempDir(), "echo", "hello"); err != nil {
 		t.Fatalf("Run = %v, want nil", err)
 	}
 	if got := string(read()); got != "hello\n" {
@@ -95,7 +93,7 @@ func TestIntegrationStderrPassthrough(t *testing.T) {
 		t.Skip("'sh' not available")
 	}
 	read := captureStderr(t)
-	if err := run.Run(context.Background(), t.TempDir(), "sh", "-c", "echo err 1>&2"); err != nil {
+	if err := Run(context.Background(), t.TempDir(), "sh", "-c", "echo err 1>&2"); err != nil {
 		t.Fatalf("Run = %v, want nil", err)
 	}
 	if got := string(read()); got != "err\n" {
@@ -108,7 +106,7 @@ func TestIntegrationNonZeroExit(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("'sh' not available")
 	}
-	err := run.Run(context.Background(), t.TempDir(), "sh", "-c", "exit 7")
+	err := Run(context.Background(), t.TempDir(), "sh", "-c", "exit 7")
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("want *exec.ExitError, got %T: %v", err, err)
@@ -120,7 +118,7 @@ func TestIntegrationNonZeroExit(t *testing.T) {
 
 func TestIntegrationMissingBinary(t *testing.T) {
 	t.Parallel()
-	err := run.Run(context.Background(), t.TempDir(), "magus-no-such-binary-xyzzy")
+	err := Run(context.Background(), t.TempDir(), "magus-no-such-binary-xyzzy")
 	if err == nil {
 		t.Fatal("want error for missing binary, got nil")
 	}
@@ -142,7 +140,7 @@ func TestIntegrationContextCancelMidRun(t *testing.T) {
 		cancel()
 	}()
 	start := time.Now()
-	err := run.Run(ctx, t.TempDir(), "sleep", "30")
+	err := Run(ctx, t.TempDir(), "sleep", "30")
 	if err == nil {
 		t.Error("want non-nil error after context cancel, got nil")
 	}
@@ -159,7 +157,7 @@ func TestIntegrationContextDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	err := run.Run(ctx, t.TempDir(), "sleep", "30")
+	err := Run(ctx, t.TempDir(), "sleep", "30")
 	if err == nil {
 		t.Error("want non-nil error after deadline, got nil")
 	}
@@ -173,7 +171,7 @@ func TestIntegrationArgsVerbatim(t *testing.T) {
 		t.Skip("'printf' not available")
 	}
 	read := captureStdout(t)
-	if err := run.Run(context.Background(), t.TempDir(), "printf", "%s\n", "*"); err != nil {
+	if err := Run(context.Background(), t.TempDir(), "printf", "%s\n", "*"); err != nil {
 		t.Fatalf("Run = %v, want nil", err)
 	}
 	if got := string(read()); got != "*\n" {

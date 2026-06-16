@@ -23,7 +23,7 @@
 //	magus config <subcommand>           view or update magus configuration
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
-//	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.bzz + merge driver)
+//	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
 //	magus self update [flags]           update magus to the latest release
 //	magus self install [flags]          install magus to ~/.local/bin
 //	magus version                       print version info
@@ -459,7 +459,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  repl           open an interactive Buzz interpreter")
 	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (stdlib only; no host bindings)")
 	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
-	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.bzz + merge driver)")
+	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
 	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")
 	fmt.Fprintln(os.Stderr, "  version        print version, commit, and build date")
 	fmt.Fprintln(os.Stderr, "  help           show this message")

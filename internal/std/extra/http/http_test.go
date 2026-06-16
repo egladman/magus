@@ -1,4 +1,4 @@
-package extrahttp_test
+package extrahttp
 
 import (
 	"bytes"
@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
-	extrahttp "github.com/egladman/magus/internal/std/extra/http"
 )
 
 // blob deliberately includes NUL and 0xFF bytes — invalid UTF-8 — to prove the
@@ -25,7 +24,7 @@ var blob = []byte{0x00, 0x01, 0xff, 0xfe, 'h', 'i', 0x00, 0x80, 0x7f, 0xff, 'b',
 func newSession(t *testing.T) *buzz.Session {
 	t.Helper()
 	sess := buzz.NewSession(context.Background())
-	sess.SetSyntheticModule("magus/extra/http", extrahttp.Register(context.Background(), sess))
+	sess.SetSyntheticModule("magus/extra/http", Register(context.Background(), sess))
 	return sess
 }
 

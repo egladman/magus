@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -19,12 +20,17 @@ func TestStatMtimeAllocsBudget(t *testing.T) {
 	allocs := testing.AllocsPerRun(200, func() {
 		_, _, _, _ = statMtime(f)
 	})
-	// Linux statx path: zero allocs. os.Stat fallback: 1 alloc (FileInfo).
-	// Use 1 as the budget so the test passes on all platforms while still
-	// catching regressions (e.g. a string conversion or error wrapping added
-	// to the hot path).
-	if allocs > 1 {
-		t.Fatalf("statMtime alloc budget exceeded: got %.0f allocs/op, want ≤1", allocs)
+	// Linux uses the statx fast path (zero allocs). os.Stat-based platforms
+	// (darwin, etc.) allocate inside os.Stat itself, so the floor there is 2,
+	// not a regression in this package. Keep the strict gate on Linux so a real
+	// statx-path regression (a string conversion or error wrapping on the hot
+	// path) is still caught.
+	budget := 1.0
+	if runtime.GOOS != "linux" {
+		budget = 2
+	}
+	if allocs > budget {
+		t.Fatalf("statMtime alloc budget exceeded: got %.0f allocs/op, want <=%.0f", allocs, budget)
 	}
 }
 

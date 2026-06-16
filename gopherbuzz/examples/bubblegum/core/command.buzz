@@ -1,0 +1,608 @@
+// core/command.buzz - command dispatch and reconcile control for bubblegum WM.
+
+namespace command;
+
+import "state";
+import "layout";
+import "config";
+import "serialize";
+import "log";
+import "statusbar";
+import "os";
+import "std";
+import "io";
+import "launcher";
+import "platform/macos/windows";
+import "platform/macos/events";
+import "core/registry";
+import "core/paths";
+import "core/system";
+import "core/screens";
+import "core/tiling";
+import "core/scan";
+import "core/bar";
+import "core/focus";
+import "core/workspaces";
+import "core/floating";
+import "core/rules";
+import "core/inspect";
+import "core/eval";
+
+export fun maybeRelieveStacked() > void {
+    if (!state\wm().wmStarted or state\wm().promptId != 0 or state\wm().fullscreenId != 0 or state\wm().stacked) {
+        return;
+    }
+    final victim = scan\stackedVictim();
+    if (victim == 0) {
+        state\wm().stackRelieved[state\wm().curWs] = false; // not stacking now: re-arm for next time
+        return;
+    }
+    if (state\wm().stackRelieved[state\wm().curWs]) {
+        return; // already relieved this crowding episode
+    }
+    final target = scan\firstEmptyWorkspace();
+    if (target < 0) {
+        return; // nowhere empty to send it
+    }
+    state\wm().stackRelieved[state\wm().curWs] = true;
+    final app = windows\appName(registry\pidOf(victim));
+    scan\sendToWorkspace(victim, ws: target);
+    tiling\retile(); // re-tile the windows that remain now the victim is gone
+    if (state\wm().focusedId != 0) {
+        windows\focusWindow(registry\refOf(state\wm().focusedId), pid: registry\pidOf(state\wm().focusedId)); // keep focus where it was
+    }
+    bar\showToast("{app} moved to ws{target + 1}");
+    registry\logAct("relief: moved #{victim} {app} to ws{target + 1} (was stacked)");
+}
+
+// handlePromptKey answers the bar prompt. The window has been held offscreen and
+// out of the tree since the prompt went up, so BOTH answers place it now: Return
+// moves it to the offered workspace and switches there (one motion); anything else
+// (esc, the TTL backstop) tiles it onto the current workspace after all. Either way
+// the prompt comes down and the keyboard ungrabs on the next tick.
+export fun handlePromptKey(code: int) > void {
+    final id = state\wm().promptId;
+    final target = state\wm().promptWs;
+    state\wm().promptId = 0;
+    state\wm().promptWs = 0;
+    statusbar\promptHide();
+    final mo = registry\managedById(id);
+    if (mo == null) {
+        bar\updateBar(); // window vanished while the prompt was up; nothing to place
+        return;
+    }
+    final mm = mo!;
+    mm.pending = false;
+    state\wm().focusedId = id;
+    if (code == 36) { // Return / Enter — accept the move
+        workspaces\cmdMoveToWs(target - 1); // 0-based; parks it on the target workspace
+        workspaces\cmdWorkspace(target - 1); // follow it there, so move + switch feel like one
+    } else {
+        // Keep it here: tile it onto the current workspace now (the deferred action).
+        scan\adoptOn(mm.screen, id: id);
+        tiling\retile();
+        windows\focusWindow(registry\refOf(id), pid: registry\pidOf(id));
+    }
+    bar\updateBar();
+}
+
+// toggleReconcile pauses/resumes the WM's automatic window management. Paused,
+// it stops adopting new windows and retiling on events/timer (manual commands
+// still work); resuming reconciles immediately. Driven by the `reconcile`
+// command and the status-bar toggle.
+export fun toggleReconcile() > void {
+    state\wm().reconcilePaused = !state\wm().reconcilePaused;
+    state\wm().reconcileResumeAt = 0.0; // a manual toggle clears any timer: resume now, or pause indefinitely
+    if (!state\wm().reconcilePaused) {
+        state\wm().runCmd!("retile"); // resuming: catch up the layout now
+    } else {
+        bar\updateBar();
+    }
+    std\print("bubblegum: auto-reconcile {!state\wm().reconcilePaused}");
+}
+
+// pauseReconcileFor pauses auto-reconcile and arms a timer to resume it after
+// `minutes`. Driven by the tray menu's Pause-reconciliation submenu; the poll
+// loop re-enables once os\time passes state\wm().reconcileResumeAt.
+export fun pauseReconcileFor(minutes: int) > void {
+    state\wm().reconcilePaused = true;
+    state\wm().reconcileResumeAt = os\time() + std\toDouble(minutes) * 60000.0;
+    bar\updateBar();
+    registry\logAct("tray: pause auto-reconcile for {minutes} min");
+    std\print("bubblegum: auto-reconcile paused for {minutes}m");
+}
+
+// resumeReconcile clears a pause (timed or indefinite) and catches the layout up.
+export fun resumeReconcile() > void {
+    state\wm().reconcilePaused = false;
+    state\wm().reconcileResumeAt = 0.0;
+    state\wm().runCmd!("retile"); // catch up the layout now
+    registry\logAct("tray: resume auto-reconcile");
+    std\print("bubblegum: auto-reconcile true");
+}
+
+// pushChords publishes the swallow set to the event-tap helper: the active
+// mode's bound chords plus the cheat chord, so a matched hotkey is consumed in
+// the tap callback (the focused app never sees it). Called on startup, reload,
+// and mode change.
+export fun pushChords() > void {
+    events\clearChords();
+    foreach (b in state\wm().cfg.binds) {
+        final bind = (b as? config\Bind)!;
+        if (bind.mode == state\wm().bindMode) {
+            events\addChord(bind.flags, keycode: bind.keycode);
+        }
+    }
+    events\addChord(state\wm().cfg.cheatFlags, keycode: state\wm().cfg.cheatKey);
+}
+
+// restoreAllWindows un-minimizes every managed window and pulls any corner-parked
+// one back onto the active display — so quitting never strands a window where it
+// can't be reached. (A force-kill skips this; relaunch + `sweep` recovers them.)
+export fun restoreAllWindows() > void {
+    foreach (pidv in state\wm().hiddenPids) {
+        windows\setAppHidden(pidv, hidden: false); // un-hide app-hidden workspaces
+    }
+    state\wm().hiddenPids = mut [<int>];
+    var off = 0.0;
+    foreach (m in state\wm().managed) {
+        windows\setMinimized(m.ref, minimized: false);
+        if (m.workspace != state\wm().curWs and !m.floating) {
+            // Corner-parked window (clamped to ~bottom-right) — cascade it back
+            // onto the active display so it's reachable.
+            windows\moveWindow(m.ref, x: state\wm().tiledCG[0] + 40.0 + off, y: state\wm().tiledCG[1] + 40.0 + off);
+            off = off + 28.0;
+        }
+    }
+}
+
+// configArtifactPath is where the user's config (running in its own process) leaves
+// the ops it recorded, for this side to replay. Must match wm\artifactPath; the
+// config process inherits this process's env (HOME/XDG), so configDir resolves to the
+// same path on both sides.
+fun configArtifactPath() > str {
+    return paths\configDir() + "/.config-artifact.json";
+}
+
+// boxDouble coerces a decoded JSON number to a double. jsonEncode stringifies an
+// integral double (3.0) without a decimal point, so jsonDecode reads it back as an
+// int; floatValue() would then miss it and return 0.0. Reading the int form and
+// widening it recovers the value (a genuine fraction like 8.5 keeps its decimal and
+// decodes as a double already).
+fun boxDouble(b: serialize\Boxed) > double {
+    if (b.integer() != null) {
+        return std\toDouble(b.integer()!);
+    }
+    return b.floatValue();
+}
+
+// applyConfigArtifact reads the ops the config recorded and replays them onto the
+// live config (cfgEdit() -- the reload candidate during a reload, the live config at
+// startup), in order. Scalars from a configure() are assigned directly (already
+// resolved on the config side); binds/rules go through the same system setters the
+// rest of the WM uses, so parsing and validation live in one place.
+fun applyConfigArtifact() > void {
+    final text = config\readConfigText(configArtifactPath());
+    if (text == null) {
+        log\debug("applyConfigArtifact: no artifact at {configArtifactPath()} (config recorded nothing)");
+        return;
+    }
+    log\trace("applyConfigArtifact: artifact json = {text!}");
+    try {
+        final decoded = serialize\jsonDecode(text!);
+        log\debug("applyConfigArtifact: replaying {decoded.listValue().len()} op(s)");
+        foreach (op in decoded.listValue()) {
+            final kind = op.q(["op"]).stringValue();
+            if (kind == "configure") {
+                final r = system\cfgEdit();
+                r.gapInner = boxDouble(op.q(["gapInner"]));
+                r.gapOuter = boxDouble(op.q(["gapOuter"]));
+                r.topPadding = boxDouble(op.q(["topPadding"]));
+                r.pollMs = op.q(["pollMs"]).integerValue();
+                r.barOn = op.q(["barOn"]).booleanValue();
+                r.barHeight = boxDouble(op.q(["barHeight"]));
+                r.trayOn = op.q(["trayOn"]).booleanValue();
+                r.statusFile = op.q(["statusFile"]).stringValue();
+                r.ffmOn = op.q(["ffmOn"]).booleanValue();
+                r.tileAll = op.q(["tileAll"]).booleanValue();
+                final disp = mut [<any>];
+                foreach (d in op.q(["tileDisplays"]).listValue()) {
+                    disp.append(d.integerValue());
+                }
+                r.tileDisplays = disp;
+                r.borderOn = op.q(["borderOn"]).booleanValue();
+                r.borderWidth = boxDouble(op.q(["borderWidth"]));
+                r.borderRadius = boxDouble(op.q(["borderRadius"]));
+                r.cheatFlags = op.q(["cheatFlags"]).integerValue();
+                r.cheatKey = op.q(["cheatKey"]).integerValue();
+                r.goldenOn = op.q(["goldenOn"]).booleanValue();
+                r.minWidth = boxDouble(op.q(["minWidth"]));
+                r.minHeight = boxDouble(op.q(["minHeight"]));
+                r.hideMethod = op.q(["hideMethod"]).stringValue();
+                r.theme = op.q(["theme"]).stringValue();
+                r.binPackCap = op.q(["binPackCap"]).integerValue();
+                final ex = mut [<any>];
+                foreach (e in op.q(["execs"]).listValue()) {
+                    ex.append(e.stringValue());
+                }
+                r.execs = ex;
+                log\debug("apply: configure (border={r.borderOn}, gapInner={r.gapInner}, gapOuter={r.gapOuter}, theme={r.theme}, hideMethod={r.hideMethod})");
+            } else if (kind == "bind") {
+                final chord = op.q(["chord"]).stringValue();
+                final cmd = op.q(["command"]).stringValue();
+                system\bind(chord, command: cmd);
+                log\debug("apply: bind {chord} -> {cmd}");
+            } else if (kind == "clearBinds") {
+                system\clearBinds();
+                log\debug("apply: clearBinds");
+            } else if (kind == "rule") {
+                final line = op.q(["line"]).stringValue();
+                system\rule(line);
+                log\debug("apply: rule {line}");
+            }
+        }
+    } catch (e: any) {
+        std\print("bubblegum: config artifact: {e}");
+        log\debug("applyConfigArtifact: aborted mid-replay: {e}");
+    }
+}
+
+// runConfigInProcess runs the config with io\runFile, in this process. Self-contained
+// (no external interpreter), so it works in a standalone/magus-compiled binary with no
+// `buzz` CLI around. This is the default. Safe on gopherbuzz (incl. magus binaries);
+// see runBuzzConfig's note on the upstream-binary caveat. Returns true if it ran.
+fun runConfigInProcess() > bool {
+    var ok = false;
+    try {
+        io\runFile(paths\buzzConfigPath());
+        ok = true;
+    } catch (e: any) {
+        std\print("bubblegum: config.buzz: {e}");
+        log\debug("runBuzzConfig: in-process config run failed, keeping previous config: {e}");
+    }
+    return ok;
+}
+
+// runConfigSubprocess runs the config as a separate `buzz` process (BUZZ), giving it a
+// clean heap. Opt-in via the BUZZ env var, for runtimes where in-process io\runFile is
+// unsafe (the upstream buzz binary). The config imports only pure-Buzz modules and
+// emits interpreter-agnostic JSON, so any working buzz will do. BUBBLEGUM_LIB is the
+// config's -L search path (where config.buzz/wm.buzz live; default the cwd). Returns
+// true if the config process exited cleanly.
+fun runConfigSubprocess(buzzCli: str) > bool {
+    final lib = os\env("BUBBLEGUM_LIB") ?? ".";
+    var ok = false;
+    try {
+        final code = os\execute([buzzCli, "-L", lib, paths\buzzConfigPath()]);
+        ok = code == 0;
+        if (!ok) {
+            std\print("bubblegum: config.buzz exited {code} -- keeping previous config");
+            log\debug("runBuzzConfig: config process [{buzzCli}] exited {code}");
+        }
+    } catch (e: any) {
+        std\print("bubblegum: config.buzz: could not run {buzzCli} ({e}) -- keeping previous config");
+        log\debug("runBuzzConfig: config subprocess [{buzzCli}] failed to launch: {e}");
+        ok = false;
+    }
+    return ok;
+}
+
+// runBuzzConfig runs the user's config.buzz to configure this WM session. Called at
+// startup and by cmdReload.
+//
+// The config runs in its own isolated scope (in-process io\runFile by default), so it
+// can't mutate our state directly; instead it records its settings to a JSON artifact
+// via the wm package and we replay that artifact here. The artifact is cleared first so
+// a failed config can't leave a previous run's ops applied; the replay only runs when
+// the config ran cleanly.
+//
+// Two runtimes, one code path, picked by configuration (not by detecting which
+// interpreter we are):
+//   * Default -- in-process io\runFile. Self-contained, no external `buzz` needed, so a
+//     magus-compiled standalone binary loads its config with no CLI around. Safe under
+//     gopherbuzz (Go GC), which is what magus binaries run on.
+//   * BUZZ set -- run the config as a separate process via that interpreter. This is
+//     for the upstream buzz *binary*, where in-process io\runFile parses a nested VM on
+//     a large heap and upstream's allocator/GC reliably corrupts memory. A subprocess
+//     gives the config a clean heap and sidesteps the upstream defect. Set BUZZ=buzz
+//     when running bubblegum under the upstream CLI.
+export fun runBuzzConfig() > bool {
+    if (config\readConfigText(paths\buzzConfigPath()) == null) {
+        log\debug("runBuzzConfig: no config.buzz at {paths\buzzConfigPath()}; built-in defaults stand");
+        return true; // no config.buzz is fine
+    }
+    try {
+        final f = io\File.open(configArtifactPath(), mode: io\FileMode.write);
+        f.write("[]"); // clear any stale artifact before the config runs
+        f.close();
+    } catch (_: any) {
+        // if we cannot clear it, applyConfigArtifact still only runs on a clean run below
+    }
+    final buzzCli = os\env("BUZZ");
+    var ok = false;
+    if (buzzCli != null) {
+        log\debug("runBuzzConfig: loading {paths\buzzConfigPath()} via subprocess [{buzzCli!}] -> artifact -> replay");
+        ok = runConfigSubprocess(buzzCli!);
+    } else {
+        log\debug("runBuzzConfig: loading {paths\buzzConfigPath()} in-process (io\\runFile) -> artifact -> replay");
+        ok = runConfigInProcess();
+    }
+    if (ok) {
+        applyConfigArtifact();
+        std\print("bubblegum: config.buzz applied");
+    }
+    return ok;
+}
+
+// writeLastGood snapshots the just-validated config.buzz next to itself.
+export fun writeLastGood() > void {
+    final text = config\readConfigText(paths\buzzConfigPath());
+    if (text == null) {
+        return;
+    }
+    try {
+        final f = io\File.open(paths\configDir() + "/config.buzz.last-good", mode: io\FileMode.write);
+        f.write(text!);
+        f.close();
+    } catch (_: any) {
+        // last-good snapshot is a convenience; never fail a reload over it
+    }
+}
+
+// cmdReload is the only way configuration changes apply (i3-style: edit,
+// then $mod+r — nothing watches files behind your back). It validates before
+// committing: the text config parses into a *candidate*, config.buzz runs
+// with its setters redirected at that candidate, and only if everything
+// succeeded does the candidate become live — a broken edit keeps the WM on
+// the previous configuration. On success the validated text config is
+// snapshotted to config.last-good, so reverting a bad edit is one copy.
+export fun cmdReload() > void {
+    final candidate = config\parseConfig(config\defaultConfigText()); // built-in defaults
+    state\wm().cfgTarget = (candidate as? mut config\Runtime)!;
+    final ok = runBuzzConfig(); // the user's config.buzz mutates the candidate
+    state\wm().cfgTarget = null;
+    if (!ok) {
+        std\print("bubblegum: reload aborted — kept the previous configuration");
+        return;
+    }
+    state\wm().cfg = (candidate as? mut config\Runtime)!;
+    writeLastGood();
+    rules\loadRules();
+    screens\initScreens();
+    scan\rescan();
+    final ak = screens\tiledAppKit();
+    statusbar\barSetVisible(state\wm().cfg.barOn, x: ak[0], y: ak[1], w: ak[2]);
+    tiling\retile();
+    bar\updateBar();
+    std\print("bubblegum: config reloaded ({state\wm().cfg.binds.len()} binds)");
+}
+
+export fun runCommand(cmd: str) > void {
+    registry\logAct("cmd '{cmd}'  (focus {registry\winLabel(state\wm().focusedId)})");
+    final words = cmd.split(" ");
+    final head: str = words[0];
+    if (head == "exec" and words.len() >= 2) {
+        // i3 semantics: hand the rest to a shell and don't block the WM on it.
+        _ = os\execute(["/bin/sh", "-c", cmd.sub(5) + " >/dev/null 2>&1 &"]) catch 0;
+        return;
+    }
+    if (head == "focus" and words.len() >= 2) {
+        focus\cmdFocus(words[1]);
+        return;
+    }
+    if (head == "workspace" and words.len() >= 2) {
+        if (words[1] == "back_and_forth") {
+            workspaces\cmdWorkspace(state\wm().lastWs);
+            return;
+        }
+        final n = std\parseInt(words[1]);
+        if (n != null) {
+            workspaces\cmdWorkspace(n! - 1); // user-facing workspaces are 1-based
+        }
+        return;
+    }
+    if (head == "floating") {
+        var mode = "toggle";
+        if (words.len() >= 2) {
+            mode = words[1]; // on | off | toggle
+        }
+        floating\cmdFloating(mode);
+        return;
+    }
+    if (head == "frame" and words.len() >= 5) {
+        floating\cmdFrame(words);
+        return;
+    }
+    if (head == "snap" and words.len() >= 2) {
+        floating\cmdSnap(words[1]);
+        return;
+    }
+    if (head == "golden") {
+        state\wm().cfg.goldenOn = !state\wm().cfg.goldenOn;
+        tiling\retile();
+        std\print("bubblegum: golden ratio {state\wm().cfg.goldenOn}");
+        return;
+    }
+    if (head == "stacking") {
+        state\wm().stacked = !state\wm().stacked;
+        tiling\retile();
+        bar\updateBar();
+        return;
+    }
+    if (head == "sweep") {
+        floating\cmdSweep();
+        return;
+    }
+    if (head == "reconcile") {
+        // reconcile [toggle|on|off|pause N] — pause/resume auto-adopt + auto-retile.
+        if (words.len() >= 2 and words[1] == "on") {
+            resumeReconcile();
+        } else if (words.len() >= 2 and words[1] == "off") {
+            state\wm().reconcilePaused = true;
+            state\wm().reconcileResumeAt = 0.0; // an explicit `reconcile off` pauses indefinitely
+            bar\updateBar();
+        } else if (words.len() >= 3 and words[1] == "pause") {
+            final n = std\parseInt(words[2]);
+            if (n != null) {
+                pauseReconcileFor(n!);
+            }
+        } else {
+            toggleReconcile();
+        }
+        return;
+    }
+    if (head == "eval" and words.len() >= 2) {
+        eval\cmdEval(cmd.sub(5));
+        return;
+    }
+    if (head == "move" and words.len() >= 2 and words[1] == "scratchpad") {
+        floating\cmdMoveScratchpad();
+        return;
+    }
+    if (head == "scratchpad" and words.len() >= 2 and words[1] == "show") {
+        floating\cmdScratchpadShow();
+        return;
+    }
+    if (head == "move" and words.len() >= 3 and words[1] == "workspace") {
+        final n = std\parseInt(words[2]);
+        if (n != null) {
+            workspaces\cmdMoveToWs(n! - 1);
+        }
+        return;
+    }
+    if (head == "move" and words.len() >= 2) {
+        focus\cmdMove(words[1]);
+        return;
+    }
+    if (head == "kill" or head == "yeetus") { // `yeetus deletus` also accepted
+        floating\cmdKill();
+        return;
+    }
+    if (head == "launcher") {
+        final ak = screens\tiledAppKit();
+        if (words.len() >= 2 and words[1] == "run") {
+            launcher\launcherRun(ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+        } else if (words.len() >= 2 and words[1] == "eval") {
+            launcher\launcherEval(ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+        } else if (words.len() >= 2 and words[1] == "windows") {
+            floating\cmdSummon();
+        } else {
+            launcher\launcherApps(ak[0], ay: ak[1], aw: ak[2], ah: ak[3]);
+        }
+        return;
+    }
+    if (head == "split" and words.len() >= 2) {
+        focus\cmdSplit(words[1]);
+        return;
+    }
+    if (head == "resize" and words.len() >= 2) {
+        var axis = "";
+        if (words.len() >= 3) {
+            axis = words[2];
+        }
+        focus\cmdResize(words[1], axis: axis);
+        return;
+    }
+    if (head == "fullscreen" and words.len() >= 2 and words[1] == "native") {
+        // macOS's own green-button fullscreen via AXFullScreen: the window
+        // takes its own Space and leaves management until it comes back.
+        if (state\wm().focusedId != 0 and registry\refOf(state\wm().focusedId) != null) {
+            final ref = registry\refOf(state\wm().focusedId);
+            windows\setNativeFullscreen(ref, on: !windows\isNativeFullscreen(ref));
+        }
+        return;
+    }
+    if (head == "fullscreen") {
+        if (state\wm().fullscreenId != 0) {
+            state\wm().fullscreenId = 0;
+        } else {
+            state\wm().fullscreenId = state\wm().focusedId;
+        }
+        tiling\retile();
+        return;
+    }
+    if (head == "balance") {
+        if (state\wm().root != null) {
+            tiling\pushUndo();
+            layout\balance(state\wm().root!);
+            tiling\retile();
+        }
+        return;
+    }
+    if (head == "layout" and words.len() >= 2) {
+        if (words[1] == "save") {
+            floating\cmdLayoutSave();
+        } else if (words[1] == "restore") {
+            floating\cmdLayoutRestore();
+        } else if (words[1] == "export") {
+            rules\cmdLayoutExport();
+        }
+        return;
+    }
+    if (head == "rules" and words.len() >= 2 and words[1] == "apply") {
+        // Re-run all rules over every managed window (handy after editing
+        // rules.buzz; mind that toggle-style commands do toggle again).
+        foreach (m in state\wm().managed) {
+            rules\applyRules(m.id);
+        }
+        tiling\retile();
+        return;
+    }
+    if (head == "inspector") {
+        inspect\cmdInspector();
+        return;
+    }
+    if (head == "console") {
+        inspect\cmdConsole();
+        return;
+    }
+    if (head == "mode" and words.len() >= 2) {
+        state\wm().bindMode = words[1];
+        if (state\wm().bindMode == "default") {
+            state\wm().bindMode = "";
+        }
+        pushChords(); // the active mode's bindings changed — refresh the swallow set
+        bar\updateBar();
+        return;
+    }
+    if (head == "mark" and words.len() >= 2) {
+        floating\cmdMark(words[1]);
+        return;
+    }
+    if (head == "goto" and words.len() >= 2) {
+        floating\cmdGoto(words[1]);
+        return;
+    }
+    if (head == "undo") {
+        floating\cmdUndo();
+        return;
+    }
+    if (head == "border") {
+        state\wm().cfg.borderOn = !state\wm().cfg.borderOn;
+        tiling\updateRing();
+        return;
+    }
+    if (head == "retile") {
+        scan\rescan();
+        tiling\retile();
+        return;
+    }
+    if (head == "reset" and words.len() >= 2 and words[1] == "mins") {
+        // Break-glass for a stubborn app whose learned minimum got stuck too large
+        // (so it stacks instead of tiling): wipe the learned mins and re-probe.
+        // `reset mins` targets the focused window's app; `reset mins all` everything.
+        focus\cmdResetMins(allApps: words.len() >= 3 and words[2] == "all");
+        return;
+    }
+    if (head == "reload") {
+        cmdReload();
+        return;
+    }
+    if (head == "quit") {
+        std\print("bubblegum: bye");
+        restoreAllWindows(); // AeroSpace-style: never leave a parked window off-screen
+        os\exit(0);
+        return;
+    }
+    std\print("bubblegum: unknown command \"{cmd}\"");
+}

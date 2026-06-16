@@ -20,7 +20,7 @@ Unfamiliar with a term? See the [Glossary](#glossary).
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
 
 ```text
-sources  **/*.MD, **/*.buzz, **/*.bzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.bzz, magusfile.tl, magusfiles/**/*.bzz, magusfiles/**/*.tl
+sources  **/*.MD, **/*.buzz, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfile.tl, magusfiles/**/*.buzz, magusfiles/**/*.tl
 outputs  internal/std/gen/lua/*.go, internal/std/gen/buzz/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
 spells   magusfile, go, buzz, md (claims: **/*.md, **/*.mdx)
 ```
@@ -126,7 +126,7 @@ magus run buzz-check .  # from the workspace root
 **Executes**
 
 ```sh
-sh -c find . \( -name '*.buzz' -o -name '*.bzz' \) -print0 | xargs -0 -r -n1 buzz --check
+sh -c find . \( -name '*.buzz' -o -name '*.buzz' \) -print0 | xargs -0 -r -n1 buzz --check
 ```
 
 ### `buzz-run`
@@ -361,7 +361,7 @@ magus run preflight .  # from the workspace root
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/site</code></summary>
 
 ```text
-sources  magusfile.bzz, magusfile.tl, magusfiles/**/*.bzz, magusfiles/**/*.tl, site/magusfile.bzz, site/magusfile.tl, site/magusfiles/**/*.bzz, site/magusfiles/**/*.tl
+sources  magusfile.buzz, magusfile.tl, magusfiles/**/*.buzz, magusfiles/**/*.tl, site/magusfile.buzz, site/magusfile.tl, site/magusfiles/**/*.buzz, site/magusfiles/**/*.tl
 outputs  site/gen/**
 spells   magusfile
 ```
@@ -486,12 +486,12 @@ magus run preflight site  # from the workspace root
 
 - **Workspace**: the magus root directory that owns a set of projects and shared config; the unit magus operates over.
 - **Project**: a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.
-- **Magusfile**: the `magusfile.bzz` / `magusfile.tl` that declares a project's targets (as `export fun`s) and binds its spells.
+- **Magusfile**: the `magusfile.buzz` / `magusfile.tl` that declares a project's targets (as `export fun`s) and binds its spells.
 - **Target**: a named operation (`build`, `test`, …) you invoke with `magus run <target>`; it may compose a spell's tool-native operations and depend on other targets.
 - **Spell**: a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands.
 - **Charm**: an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it.
 - **Module**: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.
-- **Buzz**: one of the magusfile languages magus supports (the `.bzz` engine); Teal (`.tl`) is the other.
+- **Buzz**: one of the magusfile languages magus supports (the `.buzz` engine); Teal (`.tl`) is the other.
 
 ## Dependency graph
 

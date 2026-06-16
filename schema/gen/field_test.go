@@ -1,24 +1,22 @@
-package gen_test
+package gen
 
 import (
 	"strings"
 	"testing"
-
-	"github.com/egladman/magus/schema/gen"
 )
 
 func TestKindString(t *testing.T) {
 	cases := []struct {
-		k    gen.Kind
+		k    Kind
 		want string
 	}{
-		{gen.KindString, "KindString"},
-		{gen.KindInt, "KindInt"},
-		{gen.KindBool, "KindBool"},
-		{gen.KindFloat64, "KindFloat64"},
-		{gen.KindBoolPtr, "KindBoolPtr"},
-		{gen.KindDuration, "KindDuration"},
-		{gen.KindStringSlice, "KindStringSlice"},
+		{KindString, "KindString"},
+		{KindInt, "KindInt"},
+		{KindBool, "KindBool"},
+		{KindFloat64, "KindFloat64"},
+		{KindBoolPtr, "KindBoolPtr"},
+		{KindDuration, "KindDuration"},
+		{KindStringSlice, "KindStringSlice"},
 	}
 	for _, tc := range cases {
 		if got := tc.k.String(); got != tc.want {
@@ -28,7 +26,7 @@ func TestKindString(t *testing.T) {
 }
 
 func TestKindString_Unknown(t *testing.T) {
-	var k gen.Kind = 255
+	var k Kind = 255
 	s := k.String()
 	if !strings.HasPrefix(s, "Kind(") {
 		t.Errorf("unknown Kind.String() = %q, want Kind(<n>)", s)

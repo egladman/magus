@@ -1,0 +1,267 @@
+// layout_test.buzz — tests for the tiling tree. Pure Buzz, runs anywhere:
+//
+//     go run ./cmd/buzz -t -L examples/bubblegum examples/bubblegum/layout_test.buzz
+
+import "std";
+import "serialize";
+import "layout";
+
+test "insert splits the focused leaf in place" {
+    final root = layout\makeLeaf(1);
+    std\assert(layout\insertAt(root, target: 1, id: 2), message: "insert at the root leaf");
+    std\assert(!root.isLeaf(), message: "root became a container");
+    std\assert(root.first!.id == 1, message: "old window is the first child");
+    std\assert(root.second!.id == 2, message: "new window is the second child");
+    std\assert(layout\countLeaves(root) == 2, message: "two windows managed");
+}
+
+test "assign splits frames along the orientation, gap between panes" {
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    layout\assign(root, x: 0.0, y: 0.0, w: 110.0, h: 50.0, gap: 10.0, minW: 0.0, minH: 0.0);
+    std\assert(root.first!.w == 50.0, message: "first pane takes ratio of the width minus gap");
+    std\assert(root.second!.x == 60.0, message: "second pane starts after pane + gap");
+    std\assert(root.second!.w == 50.0, message: "second pane takes the rest");
+    std\assert(root.first!.h == 50.0, message: "horizontal split keeps full height");
+}
+
+test "auto orientation splits the longer side" {
+    final wide = layout\makeLeaf(1);
+    layout\assign(wide, x: 0.0, y: 0.0, w: 200.0, h: 100.0, gap: 0.0, minW: 0.0, minH: 0.0);
+    _ = layout\insertAt(wide, target: 1, id: 2);
+    std\assert(wide.orient == layout\Orient.Horiz, message: "wide leaf splits side-by-side");
+
+    final tall = layout\makeLeaf(1);
+    layout\assign(tall, x: 0.0, y: 0.0, w: 100.0, h: 200.0, gap: 0.0, minW: 0.0, minH: 0.0);
+    _ = layout\insertAt(tall, target: 1, id: 2);
+    std\assert(tall.orient == layout\Orient.Vert, message: "tall leaf stacks");
+}
+
+test "remove collapses the surviving sibling into the parent" {
+    final root = layout\makeLeaf(1);
+    _ = layout\insertAt(root, target: 1, id: 2);
+    _ = layout\insertAt(root, target: 2, id: 3);
+    std\assert(layout\countLeaves(root) == 3, message: "three windows before");
+    std\assert(layout\removeAt(root, target: 2), message: "remove the middle window");
+    std\assert(layout\countLeaves(root) == 2, message: "two windows after");
+    std\assert(layout\findLeaf(root, target: 2) == null, message: "window 2 is gone");
+    std\assert(layout\findLeaf(root, target: 1) != null and layout\findLeaf(root, target: 3) != null, message: "the others survive");
+}
+
+test "neighbor finds the window in the requested direction" {
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    layout\assign(root, x: 0.0, y: 0.0, w: 210.0, h: 100.0, gap: 10.0, minW: 0.0, minH: 0.0);
+    std\assert(layout\neighbor(root, fromId: 1, dx: 1.0, dy: 0.0) == 2, message: "window 2 is right of window 1");
+    std\assert(layout\neighbor(root, fromId: 2, dx: 0.0 - 1.0, dy: 0.0) == 1, message: "window 1 is left of window 2");
+    std\assert(layout\neighbor(root, fromId: 1, dx: 0.0 - 1.0, dy: 0.0) == 0, message: "nothing left of window 1");
+    std\assert(layout\neighbor(root, fromId: 1, dx: 0.0, dy: 1.0) == 0, message: "nothing below in a horizontal split");
+}
+
+test "grow adjusts the innermost split and clamps" {
+    final root = layout\makeLeaf(1);
+    _ = layout\insertAt(root, target: 1, id: 2);
+    std\assert(layout\grow(root, target: 1, delta: 0.05), message: "grow the first pane");
+    std\assert(root.ratio == 0.55, message: "ratio moved toward the first pane");
+    foreach (i in 0..20) {
+        _ = layout\grow(root, target: 1, delta: 0.05);
+    }
+    std\assert(root.ratio == 0.9, message: "ratio clamps at 0.9");
+}
+
+test "swap exchanges leaf ids without touching geometry" {
+    final root = layout\makeLeaf(1);
+    _ = layout\insertAt(root, target: 1, id: 2);
+    layout\assign(root, x: 0.0, y: 0.0, w: 210.0, h: 100.0, gap: 10.0, minW: 0.0, minH: 0.0);
+    final beforeX = layout\findLeaf(root, target: 1)!.x;
+    std\assert(layout\swapIds(root, a: 1, b: 2), message: "swap the two windows");
+    std\assert(layout\findLeaf(root, target: 2)!.x == beforeX, message: "window 2 now occupies window 1's pane");
+}
+
+test "layout snapshots round-trip through json" {
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    _ = layout\grow(root, target: 1, delta: 0.2);
+    layout\findLeaf(root, target: 1)!.tag = "Terminal";
+    layout\findLeaf(root, target: 2)!.tag = "Safari";
+
+    final js = serialize\jsonEncode(serialize\Boxed.init(layout\encodeTree(root)));
+    final back = layout\decodeTree(serialize\jsonDecode(js));
+    std\assert(back != null, message: "tree decodes");
+    final t = back!;
+    std\assert(!t.isLeaf(), message: "split survives");
+    std\assert(t.orient == layout\Orient.Horiz, message: "orientation survives");
+    std\assert(t.ratio == 0.7, message: "ratio survives");
+    std\assert(t.first!.tag == "Terminal" and t.second!.tag == "Safari", message: "leaf tags survive in order");
+    std\assert(t.first!.id == 0, message: "decoded leaves await matching");
+}
+
+test "empty trees round-trip as empty" {
+    final js = serialize\jsonEncode(serialize\Boxed.init(layout\encodeTree(null)));
+    std\assert(layout\decodeTree(serialize\jsonDecode(js)) == null, message: "empty marker decodes to null");
+}
+
+test "pruneZeroLeaves collapses around unmatched leaves" {
+    final root = layout\makeLeaf(1);
+    _ = layout\insertAt(root, target: 1, id: 2);
+    _ = layout\insertAt(root, target: 2, id: 3);
+    layout\findLeaf(root, target: 2)!.id = 0; // pretend window 2 had no match
+    final pruned = layout\pruneZeroLeaves(root);
+    std\assert(pruned != null, message: "something survives");
+    std\assert(layout\countLeaves(pruned) == 2, message: "two matched leaves remain");
+    std\assert(layout\findLeaf(pruned!, target: 1) != null and layout\findLeaf(pruned!, target: 3) != null, message: "the right ones");
+
+    final lone = layout\makeLeaf(0);
+    std\assert(layout\pruneZeroLeaves(lone) == null, message: "a fully unmatched tree prunes to null");
+}
+
+test "growAxis resizes along the requested axis only" {
+    // Horizontal split [1 | (2 stacked over 3)]: window 3's width lives in
+    // the outer split, its height in the inner one.
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    final right = root.second!;
+    right.pick = layout\Pick.Vert;
+    _ = layout\insertAt(root, target: 2, id: 3);
+
+    std\assert(layout\growAxis(root, target: 3, orient: layout\Orient.Vert, delta: 0.1), message: "height resize finds the stack");
+    std\assert(root.second!.ratio == 0.4, message: "inner vertical ratio moved toward window 3");
+    std\assert(root.ratio == 0.5, message: "outer horizontal split untouched");
+
+    std\assert(layout\growAxis(root, target: 3, orient: layout\Orient.Horiz, delta: 0.1), message: "width resize climbs to the outer split");
+    std\assert(root.ratio == 0.4, message: "outer ratio moved toward the right column");
+
+    final lone = layout\makeLeaf(7);
+    std\assert(!layout\growAxis(lone, target: 7, orient: layout\Orient.Horiz, delta: 0.1), message: "a lone window has nothing to resize");
+}
+
+test "applyGolden gives the focused side the golden share" {
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    layout\assign(root, x: 0.0, y: 0.0, w: 1000.0, h: 500.0, gap: 0.0, minW: 0.0, minH: 0.0);
+    std\assert(layout\applyGolden(root, target: 1, minW: 100.0, minH: 80.0), message: "focused window found");
+    std\assert(root.ratio == 0.618, message: "first child takes phi");
+    std\assert(layout\applyGolden(root, target: 2, minW: 100.0, minH: 80.0), message: "focus moves");
+    std\assert(root.ratio > 0.38 and root.ratio < 0.385, message: "second child takes phi, ratio flips");
+    std\assert(!layout\applyGolden(root, target: 99, minW: 100.0, minH: 80.0), message: "unknown window untouched");
+}
+
+test "applyGolden honors the minimum window size" {
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    layout\assign(root, x: 0.0, y: 0.0, w: 400.0, h: 300.0, gap: 0.0, minW: 0.0, minH: 0.0);
+    // phi would leave the sibling 0.382 * 400 = 152.8px, under the 170px
+    // minimum, so the ratio clamps to 1 - 170/400 = 0.575.
+    _ = layout\applyGolden(root, target: 1, minW: 170.0, minH: 80.0);
+    std\assert(root.ratio == 0.575, message: "clamped so the sibling keeps its 170px");
+    // A split too narrow to honor the minimum twice is left alone.
+    layout\assign(root, x: 0.0, y: 0.0, w: 300.0, h: 300.0, gap: 0.0, minW: 0.0, minH: 0.0);
+    root.ratio = 0.44;
+    _ = layout\applyGolden(root, target: 1, minW: 200.0, minH: 80.0);
+    std\assert(root.ratio == 0.44, message: "impossible minimum leaves the split untouched");
+}
+
+test "snapFrame covers the Rectangle catalog" {
+    final l = layout\snapFrame("left", bx: 0.0, by: 0.0, bw: 1200.0, bh: 600.0)!;
+    std\assert(l[0] == 0.0 and l[2] == 600.0 and l[3] == 600.0, message: "left half");
+    final br = layout\snapFrame("bottomright", bx: 0.0, by: 0.0, bw: 1200.0, bh: 600.0)!;
+    std\assert(br[0] == 600.0 and br[1] == 300.0 and br[2] == 600.0, message: "bottom-right quarter");
+    final ct = layout\snapFrame("center-third", bx: 0.0, by: 0.0, bw: 1200.0, bh: 600.0)!;
+    std\assert(ct[0] == 400.0 and ct[2] == 400.0, message: "center third");
+    final tt = layout\snapFrame("last-two-thirds", bx: 0.0, by: 0.0, bw: 1200.0, bh: 600.0)!;
+    std\assert(tt[0] == 400.0 and tt[2] == 800.0, message: "last two thirds");
+    // Bounds with an origin (a non-main tiled display) offset correctly.
+    final r = layout\snapFrame("right", bx: 2000.0, by: 100.0, bw: 1000.0, bh: 500.0)!;
+    std\assert(r[0] == 2500.0 and r[1] == 100.0, message: "origin-aware");
+    std\assert(layout\snapFrame("diagonal", bx: 0.0, by: 0.0, bw: 1.0, bh: 1.0) == null, message: "unknown position");
+}
+
+test "treeLines renders the inspector view" {
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    layout\findLeaf(root, target: 1)!.tag = "Terminal";
+    final lines = layout\treeLines(root, prefix: "");
+    std\assert(lines.len() == 3, message: "split plus two leaves");
+    std\assert(lines[0].indexOf("H split") != null, message: "orientation shown");
+    std\assert(lines[1] == "  ◻ Terminal", message: "tagged leaf shows its app");
+    std\assert(lines[2] == "  ◻ #2", message: "untagged leaf shows its id");
+    std\assert(layout\treeLines(null, prefix: "")[0] == "(empty)", message: "empty tree says so");
+}
+
+test "cloneTree copies ids and is independent" {
+    final root = layout\makeLeaf(1);
+    _ = layout\insertAt(root, target: 1, id: 2);
+    _ = layout\grow(root, target: 1, delta: 0.1);
+    final copy = layout\cloneTree(root)!;
+    std\assert(copy.ratio == 0.6, message: "ratio copied");
+    std\assert(copy.first!.id == 1 and copy.second!.id == 2, message: "ids preserved");
+    _ = layout\grow(root, target: 1, delta: 0.1);
+    std\assert(copy.ratio == 0.6, message: "copy unaffected by later edits");
+}
+
+test "pruneMissing collapses around closed windows" {
+    final root = layout\makeLeaf(1);
+    _ = layout\insertAt(root, target: 1, id: 2);
+    _ = layout\insertAt(root, target: 2, id: 3);
+    final pruned = layout\pruneMissing(layout\cloneTree(root), keep: [1, 3]);
+    std\assert(layout\countLeaves(pruned) == 2, message: "closed window dropped");
+    std\assert(layout\findLeaf(pruned!, target: 2) == null, message: "the right one");
+    std\assert(layout\pruneMissing(layout\cloneTree(root), keep: [9]) == null, message: "nothing left prunes to null");
+}
+
+// --- stacking is decided by the fixed floor (minW/minH), NOT per-window learned
+// mins (which are never stamped onto leaves). So a region that fits two floor-sized
+// panes tiles into distinct, visible slots; only a genuinely too-small region
+// stacks. The ratio is always honored (resize works), and since the floor is
+// constant the layout never reshapes itself on reconcile.
+
+test "assign stacks a region too small for two floor panes, tiles otherwise" {
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    // 800 wide, floor 460: 460 + 460 + gap > 800 -> can't fit two -> stack.
+    layout\assign(root, x: 0.0, y: 0.0, w: 800.0, h: 500.0, gap: 10.0, minW: 460.0, minH: 0.0);
+    std\assert(root.stack, message: "too narrow for two floor panes -> stacked");
+    // 1000 wide: 460 + 460 + 10 = 930 < 1000 -> tile into distinct slots.
+    layout\assign(root, x: 0.0, y: 0.0, w: 1000.0, h: 500.0, gap: 10.0, minW: 460.0, minH: 0.0);
+    std\assert(!root.stack, message: "fits two floor panes -> tiled");
+    std\assert(root.first!.x == 0.0 and root.second!.x == 505.0, message: "distinct slots, not coincident");
+}
+
+test "two windows in a tall half tile, both visible (the kitty + Spotify case)" {
+    // The left half (855 wide, 1009 tall) splits vertically. Floor height 380:
+    // 380 + 380 + gap < 1009, so both windows get a row and stay visible — they must
+    // NOT collapse onto the same rect (the bug where Spotify hid behind kitty).
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Vert;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    layout\assign(root, x: 0.0, y: 0.0, w: 855.0, h: 1009.0, gap: 8.0, minW: 460.0, minH: 380.0);
+    std\assert(!root.stack, message: "tall region fits two floor-height rows -> tiled");
+    std\assert(root.first!.y != root.second!.y, message: "distinct rows, both visible");
+}
+
+test "resize sticks next to a window with a large minimum" {
+    // Regression: the re-proportion clamp used to pin this split at the neighbor's
+    // minimum, freezing `resize grow/shrink`. Honoring the ratio keeps it working.
+    final root = layout\makeLeaf(1);
+    root.pick = layout\Pick.Horiz;
+    _ = layout\insertAt(root, target: 1, id: 2);
+    final w = 1000.0;
+    root.second!.minW = 600.0; // a stubborn macOS app neighbor
+    layout\assign(root, x: 0.0, y: 0.0, w: w, h: 500.0, gap: 10.0, minW: 100.0, minH: 0.0);
+    final base = root.first!.w;
+    _ = layout\grow(root, target: 1, delta: 0.1);
+    layout\assign(root, x: 0.0, y: 0.0, w: w, h: 500.0, gap: 10.0, minW: 100.0, minH: 0.0);
+    std\assert(root.first!.w > base, message: "grow widened window 1 despite the big-min neighbor");
+    final wide = root.first!.w;
+    _ = layout\grow(root, target: 1, delta: 0.0 - 0.2);
+    layout\assign(root, x: 0.0, y: 0.0, w: w, h: 500.0, gap: 10.0, minW: 100.0, minH: 0.0);
+    std\assert(root.first!.w < wide, message: "shrink narrowed window 1");
+}

@@ -1,16 +1,14 @@
-package cache_test
+package cache
 
 import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
-func openMutableCache(t *testing.T) *cache.Cache {
+func openMutableCache(t *testing.T) *Cache {
 	t.Helper()
-	c, err := cache.Open(t.TempDir(), cache.WithMutable(true))
+	c, err := Open(t.TempDir(), WithMutable(true))
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
@@ -32,7 +30,7 @@ func TestPrune_DryRun_NothingDeleted(t *testing.T) {
 	c := openMutableCache(t)
 
 	// Populate one entry with a no-op function.
-	spec := cache.Spec{
+	spec := Spec{
 		WorkspaceRoot: t.TempDir(),
 		ProjectPath:   "api/",
 		Target:        "build",

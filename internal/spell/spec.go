@@ -95,7 +95,7 @@ type Target struct {
 }
 
 // Spec is a spell's static description. For built-ins it is produced by compiling
-// each magus/spells/<name>/spell.bzz to bytecode (go:generate magus-spells-gen),
+// each magus/spells/<name>/spell.buzz to bytecode (go:generate magus-spells-gen),
 // embedding the blob, and resolving its mgs_ functions at load time.
 type Spec struct {
 	Name        string              `json:"name"`

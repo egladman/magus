@@ -2,7 +2,7 @@ package engine
 
 // Frame describes one entry on a scripting engine's call stack as reported
 // by the engine's debug API. Source is the chunk name as the engine reports it
-// (e.g. "@magusfile.bzz"); ShortSrc is a truncated form suitable for display;
+// (e.g. "@magusfile.buzz"); ShortSrc is a truncated form suitable for display;
 // CurrentLine is the 1-based line number, or -1 if unknown.
 type Frame struct {
 	Source      string

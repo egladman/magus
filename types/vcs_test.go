@@ -1,16 +1,14 @@
-package types_test
+package types
 
 import (
 	"errors"
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
 func TestVCSErrorSentinels(t *testing.T) {
 	for _, sentinel := range []error{
-		types.ErrVCSUnsupported,
-		types.ErrVCSUnknown,
+		ErrVCSUnsupported,
+		ErrVCSUnknown,
 	} {
 		if sentinel == nil {
 			t.Errorf("%v is nil", sentinel)
@@ -25,13 +23,13 @@ func TestVCSErrorSentinels(t *testing.T) {
 }
 
 func TestVCSSourceConstants(t *testing.T) {
-	sources := []types.VCSSource{
-		types.VCSSourceExplicit,
-		types.VCSSourceAuto,
-		types.VCSSourceDefault,
-		types.VCSSourceDisabled,
+	sources := []VCSSource{
+		VCSSourceExplicit,
+		VCSSourceAuto,
+		VCSSourceDefault,
+		VCSSourceDisabled,
 	}
-	seen := map[types.VCSSource]bool{}
+	seen := map[VCSSource]bool{}
 	for _, s := range sources {
 		if string(s) == "" {
 			t.Errorf("VCSSource constant is empty")
@@ -44,7 +42,7 @@ func TestVCSSourceConstants(t *testing.T) {
 }
 
 func TestVCSResolution_ZeroValue(t *testing.T) {
-	var r types.VCSResolution
+	var r VCSResolution
 	if r.VCS != nil {
 		t.Error("zero VCSResolution should have nil VCS")
 	}

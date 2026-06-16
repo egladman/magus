@@ -1,4 +1,4 @@
-package forecast_test
+package forecast
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,8 +22,8 @@ func TestForecaster_Plan_emptyHistory(t *testing.T) {
 	// Empty history: predictor falls back to DefaultDurationMs per
 	// project, default constants. With 5 projects and defaults, the
 	// circuit breaker should NOT fire (W = 5×60s = 300s > 60s = 2×30s).
-	f := forecast.Forecaster{
-		History: forecast.History{},
+	f := Forecaster{
+		History: History{},
 		Target:  "ci",
 	}
 	ps := projects("a", "b", "c", "d", "e")
@@ -52,17 +51,17 @@ func TestForecaster_Plan_circuitBreakerOnTrivialPR(t *testing.T) {
 	// 60_000 < 60_000 is false. So we craft a small project explicitly
 	// in history to force the circuit breaker.
 	now := time.Now()
-	h := forecast.History{}
+	h := History{}
 	// Seed enough samples that PredictDuration uses the project value.
-	samples := make([]forecast.Sample, 0, 5)
+	samples := make([]Sample, 0, 5)
 	for i := 0; i < 5; i++ {
-		samples = append(samples, forecast.Sample{
+		samples = append(samples, Sample{
 			Project: "tiny", Target: "ci", DurationMs: 5_000, // 5s
 		})
 	}
 	h.Update(now, samples, nil)
 
-	f := forecast.Forecaster{History: h, Target: "ci"}
+	f := Forecaster{History: h, Target: "ci"}
 	shards := f.Plan(projects("tiny"), 8)
 	if len(shards) != 1 {
 		t.Fatalf("circuit breaker: want 1 shard for trivial PR, got %d", len(shards))
@@ -72,9 +71,9 @@ func TestForecaster_Plan_circuitBreakerOnTrivialPR(t *testing.T) {
 func TestHistory_PredictDuration(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	h := forecast.History{}
+	h := History{}
 	for i := 0; i < 5; i++ {
-		h.Update(now, []forecast.Sample{
+		h.Update(now, []Sample{
 			{Project: "a", Target: "ci", DurationMs: 10_000},
 		}, nil)
 	}
@@ -89,8 +88,8 @@ func TestHistory_PredictDuration(t *testing.T) {
 	}
 
 	// Brand-new history: hard default.
-	empty := forecast.History{}
-	want := time.Duration(forecast.DefaultDurationMs) * time.Millisecond
+	empty := History{}
+	want := time.Duration(DefaultDurationMs) * time.Millisecond
 	if got := empty.PredictDuration("x", "ci", nil); got != want {
 		t.Errorf("empty history: got %v, want %v", got, want)
 	}
@@ -100,8 +99,8 @@ func TestHistory_PredictDuration_lowSampleFloor(t *testing.T) {
 	t.Parallel()
 	// Fewer than 3 samples → fall through to workspace fallback.
 	now := time.Now()
-	h := forecast.History{}
-	h.Update(now, []forecast.Sample{
+	h := History{}
+	h.Update(now, []Sample{
 		{Project: "alpha", Target: "ci", DurationMs: 100_000}, // outlier
 		{Project: "other", Target: "ci", DurationMs: 1_000},
 		{Project: "other", Target: "ci", DurationMs: 1_000},
@@ -122,12 +121,12 @@ func TestHistory_SaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "history.json")
 
 	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
-	h := forecast.History{}
-	h.Update(now, []forecast.Sample{
+	h := History{}
+	h.Update(now, []Sample{
 		{Project: "api", Target: "ci", DurationMs: 42_000},
 		{Project: "api", Target: "ci", DurationMs: 45_000},
 		{Project: "api", Target: "ci", DurationMs: 40_000},
-	}, []forecast.ShardSample{
+	}, []ShardSample{
 		{SetupMs: 25_000, TotalMs: 100_000, WorkMs: 200_000, NShards: 4},
 	})
 
@@ -135,13 +134,13 @@ func TestHistory_SaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	var got forecast.History
+	var got History
 	if err := got.Load(context.Background(), path); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got.Version != forecast.HistoryVersion {
-		t.Errorf("Version: got %d, want %d", got.Version, forecast.HistoryVersion)
+	if got.Version != HistoryVersion {
+		t.Errorf("Version: got %d, want %d", got.Version, HistoryVersion)
 	}
 	if got.Projects["api"]["ci"].Samples != 3 {
 		t.Errorf("api/ci samples: got %d, want 3", got.Projects["api"]["ci"].Samples)
@@ -153,30 +152,30 @@ func TestHistory_SaveLoadRoundTrip(t *testing.T) {
 
 func TestLoad_missingFile(t *testing.T) {
 	t.Parallel()
-	var got forecast.History
+	var got History
 	if err := got.Load(context.Background(), filepath.Join(t.TempDir(), "does-not-exist.json")); err != nil {
 		t.Fatalf("missing file should not error, got %v", err)
 	}
-	if got.Version != forecast.HistoryVersion {
-		t.Errorf("missing file: got version %d, want %d", got.Version, forecast.HistoryVersion)
+	if got.Version != HistoryVersion {
+		t.Errorf("missing file: got version %d, want %d", got.Version, HistoryVersion)
 	}
 }
 
 func TestHistory_Update_capsAtSampleWindow(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	h := forecast.History{}
-	for i := 0; i < forecast.SampleWindow*2; i++ {
-		h.Update(now, []forecast.Sample{
+	h := History{}
+	for i := 0; i < SampleWindow*2; i++ {
+		h.Update(now, []Sample{
 			{Project: "p", Target: "ci", DurationMs: int64(1_000 + i)},
 		}, nil)
 	}
 	st := h.Projects["p"]["ci"]
-	if len(st.Recent) != forecast.SampleWindow {
-		t.Errorf("Recent length: got %d, want %d", len(st.Recent), forecast.SampleWindow)
+	if len(st.Recent) != SampleWindow {
+		t.Errorf("Recent length: got %d, want %d", len(st.Recent), SampleWindow)
 	}
-	if st.Samples != forecast.SampleWindow*2 {
-		t.Errorf("Samples counter: got %d, want %d", st.Samples, forecast.SampleWindow*2)
+	if st.Samples != SampleWindow*2 {
+		t.Errorf("Samples counter: got %d, want %d", st.Samples, SampleWindow*2)
 	}
 }
 
@@ -188,25 +187,25 @@ func TestHistory_Update_capsAtSampleWindow(t *testing.T) {
 func TestForecaster_Plan_hitRateReducesShards(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	h := forecast.History{}
+	h := History{}
 
 	// Seed 3 miss samples per project so p75 = 60_000 and Samples ≥ 3.
 	allProjects := []string{"a", "b", "c", "d", "e", "f"}
 	for _, proj := range allProjects {
 		for i := 0; i < 3; i++ {
-			h.Update(now, []forecast.Sample{
+			h.Update(now, []Sample{
 				{Project: proj, Target: "ci", DurationMs: 60_000},
 			}, nil)
 		}
 	}
 
 	// Seed the scheduler constants so OptimalShardCount is deterministic.
-	h.Update(now, nil, []forecast.ShardSample{
+	h.Update(now, nil, []ShardSample{
 		{SetupMs: 30_000, TotalMs: 100_000, WorkMs: 200_000, NShards: 4},
 	})
 
 	// Build a baseline forecaster (no hit history yet — cold start for all).
-	baseline := forecast.Forecaster{History: h, Target: "ci"}
+	baseline := Forecaster{History: h, Target: "ci"}
 	ps := projects(allProjects...)
 	baselineShards := baseline.Plan(ps, 8)
 
@@ -216,13 +215,13 @@ func TestForecaster_Plan_hitRateReducesShards(t *testing.T) {
 	highHitProjects := []string{"a", "b", "c", "d", "e"}
 	for _, proj := range highHitProjects {
 		for i := 0; i < 9; i++ {
-			h.Update(now, []forecast.Sample{
+			h.Update(now, []Sample{
 				{Project: proj, Target: "ci", Hit: true},
 			}, nil)
 		}
 	}
 
-	hitAware := forecast.Forecaster{History: h, Target: "ci"}
+	hitAware := Forecaster{History: h, Target: "ci"}
 	hitAwareShards := hitAware.Plan(ps, 8)
 
 	if len(hitAwareShards) >= len(baselineShards) {

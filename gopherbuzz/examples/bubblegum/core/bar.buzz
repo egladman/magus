@@ -1,0 +1,119 @@
+// core/bar.buzz - status bar updates and toast notifications.
+
+namespace bar;
+
+import "state";
+import "layout";
+import "config";
+import "statusbar";
+import "toast";
+import "os";
+import "std";
+import "platform/macos/windows";
+import "core/screens";
+import "core/registry";
+
+// showToast pops a brief notification centered near the top of the tiling area and
+// records when it should self-dismiss; the pump loop hides it once that time passes.
+export fun showToast(text: str) > void {
+    final ak = screens\tiledAppKit();
+    toast\toastShow(text, ax: ak[0], ayTop: ak[1] + ak[3], aw: ak[2]);
+    state\wm().toastUntil = os\time() + 3000.0;
+}
+
+export fun updateBar() > void {
+    if (!state\wm().cfg.barOn) {
+        return;
+    }
+    final counts = registry\wsCounts();
+    // The left side (workspace number cells + pills + the mode-tag position) is
+    // barWorkspaces' job, below. Here we build the right side: the binding-mode tag
+    // text, the window count, and the orientation/reconcile state. The focused
+    // window's title is deliberately omitted -- it churned every focus change.
+    var mode = "";
+    if (state\wm().bindMode != "") {
+        mode = "[{state\wm().bindMode}]"; // i3 shows the active binding mode
+    }
+    // Orientation of the next split, as state -- the bar renders it as an SF Symbol
+    // (macOS) or a glyph (i3): "stack" global stacking, "horiz" side-by-side (two
+    // columns), "vert" stacked below (two rows), "" when there's nothing to split.
+    var orient = "";
+    if (state\wm().stacked) {
+        orient = "stack";
+    } else {
+        // How the focused window's container will split NEXT (its pick, else geometry).
+        final ori = layout\pendingOrient(state\wm().root, target: state\wm().focusedId);
+        if (ori != null) {
+            if (ori! == layout\Orient.Vert) {
+                orient = "vert";
+            } else {
+                orient = "horiz";
+            }
+        }
+    }
+    final nwin = state\wm().managed.len();
+    var wword = "windows";
+    if (nwin == 1) {
+        wword = "window";
+    }
+    // The window count is centered in the bar (its own label); the right text carries
+    // only the status-file line and eval echo. The orientation and auto-reconcile
+    // indicators are the bar's own icons/glyphs, in their click zones.
+    // Minimized windows are stashed out of the grid (the user sent them to the Dock).
+    // List them by app so what's recoverable is visible at a glance, not just a number;
+    // clicking the count (barCountHit) opens the recall picker. Scratchpad windows keep
+    // their own tally. Only the stashed set is walked for names (usually a handful),
+    // so the per-refresh cost stays small.
+    final minApps = mut [<str>];
+    var scratch = 0;
+    foreach (m in state\wm().managed) {
+        if (m.minimized) {
+            final app = windows\appName(m.pid);
+            if (minApps.indexOf(app) == null) {
+                minApps.append(app);
+            }
+        } else if (m.workspace == state\scratchWs) {
+            scratch = scratch + 1;
+        }
+    }
+    var count = "{nwin} {wword}";
+    if (minApps.len() > 0) {
+        var names = minApps[0];
+        if (minApps.len() >= 2) {
+            names = "{minApps[0]}, {minApps[1]}";
+        }
+        if (minApps.len() > 2) {
+            names = "{names} +{minApps.len() - 2}";
+        }
+        count = "{count}  ⊟ {names}";
+    }
+    if (scratch > 0) {
+        count = "{count}  ▢{scratch}";
+    }
+    var right = "";
+    if (state\wm().cfg.statusFile.len() > 0) {
+        final status = config\readConfigText(state\wm().cfg.statusFile);
+        if (status != null) {
+            final line = status!.trim();
+            if (line.len() > 0) {
+                right = line;
+            }
+        }
+    }
+    if (state\wm().evalNote.len() > 0 and os\time() - state\wm().evalNoteAt < 6000.0) {
+        if (right.len() > 0) {
+            right = state\wm().evalNote + "  ·  " + right;
+        } else {
+            right = state\wm().evalNote;
+        }
+    }
+    statusbar\barWorkspaces(state\wm().curWs, counts: counts); // number cells + accent/occupied pills + mode-tag position
+    statusbar\barUpdate(mode: mode, count: count, right: right, orient: orient, paused: state\wm().reconcilePaused);
+    if (state\wm().cfg.trayOn) {
+        var tray = "{state\wm().curWs + 1}";
+        if (state\wm().bindMode != "") {
+            tray = "[{state\wm().bindMode}]";
+        }
+        statusbar\trayUpdate(tray);
+    }
+}

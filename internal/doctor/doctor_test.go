@@ -61,30 +61,30 @@ func TestCheckCITarget(t *testing.T) {
 		{"no projects skipped", nil, StatusOK},
 		{
 			"ci declared",
-			[]*types.Project{projectWith(map[string]string{"magusfile.bzz": "export fun ci(_a: [str]) > void {}\n"})},
+			[]*types.Project{projectWith(map[string]string{"magusfile.buzz": "export fun ci(_a: [str]) > void {}\n"})},
 			StatusOK,
 		},
 		{
 			"ci declared (buzz, any casing)",
-			[]*types.Project{projectWith(map[string]string{"magusfile.bzz": "export fun CI(_a: [str]) > void {}\n"})},
+			[]*types.Project{projectWith(map[string]string{"magusfile.buzz": "export fun CI(_a: [str]) > void {}\n"})},
 			StatusOK,
 		},
 		{
 			"ci declared in one of several projects",
 			[]*types.Project{
-				projectWith(map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void {}\n"}),
-				projectWith(map[string]string{"magusfile.bzz": "export fun ci(_a: [str]) > void {}\n"}),
+				projectWith(map[string]string{"magusfile.buzz": "export fun build(_a: [str]) > void {}\n"}),
+				projectWith(map[string]string{"magusfile.buzz": "export fun ci(_a: [str]) > void {}\n"}),
 			},
 			StatusOK,
 		},
 		{
 			"no ci anywhere fails",
-			[]*types.Project{projectWith(map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void {}\n"})},
+			[]*types.Project{projectWith(map[string]string{"magusfile.buzz": "export fun build(_a: [str]) > void {}\n"})},
 			StatusFail,
 		},
 		{
 			"cipher is not ci",
-			[]*types.Project{projectWith(map[string]string{"magusfile.bzz": "export fun cipher(_a: [str]) > void {}\n"})},
+			[]*types.Project{projectWith(map[string]string{"magusfile.buzz": "export fun cipher(_a: [str]) > void {}\n"})},
 			StatusFail,
 		},
 	}
@@ -102,7 +102,7 @@ func TestCheckCITarget(t *testing.T) {
 // define ci and references the MGS1001 doc.
 func TestCheckCITarget_FailDetails(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "magusfile.bzz"), "export fun build(_a: [str]) > void {}\n")
+	writeFile(t, filepath.Join(dir, "magusfile.buzz"), "export fun build(_a: [str]) > void {}\n")
 	got := (&runner{}).checkCITarget([]*types.Project{{Dir: dir}})
 	if got.Status != StatusFail {
 		t.Fatalf("status = %q, want fail", got.Status)
@@ -191,24 +191,24 @@ func TestCheckTargetNameConventions(t *testing.T) {
 	}{
 		{
 			"consistent snake_case",
-			map[string]string{"magusfile.bzz": "export fun go_build(_a: [str]) > void {}\nexport fun go_test(_a: [str]) > void {}\n"},
+			map[string]string{"magusfile.buzz": "export fun go_build(_a: [str]) > void {}\nexport fun go_test(_a: [str]) > void {}\n"},
 			StatusOK,
 		},
 		{
 			"neutral names only",
-			map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void {}\nexport fun test(_a: [str]) > void {}\n"},
+			map[string]string{"magusfile.buzz": "export fun build(_a: [str]) > void {}\nexport fun test(_a: [str]) > void {}\n"},
 			StatusOK,
 		},
 		{
 			"snake and camel mixed",
-			map[string]string{"magusfile.bzz": "export fun go_build(_a: [str]) > void {}\nexport fun goTest(_a: [str]) > void {}\n"},
+			map[string]string{"magusfile.buzz": "export fun go_build(_a: [str]) > void {}\nexport fun goTest(_a: [str]) > void {}\n"},
 			StatusWarn,
 		},
 		{
 			"mixed across magusfiles dir",
 			map[string]string{
-				"magusfiles/a.bzz": "export fun go_build(_a: [str]) > void {}\n",
-				"magusfiles/b.bzz": "export fun GoTest(_a: [str]) > void {}\n",
+				"magusfiles/a.buzz": "export fun go_build(_a: [str]) > void {}\n",
+				"magusfiles/b.buzz": "export fun GoTest(_a: [str]) > void {}\n",
 			},
 			StatusWarn,
 		},
@@ -244,22 +244,22 @@ func TestCheckCharmTargetCollision(t *testing.T) {
 	}{
 		{
 			"no charms, no collision",
-			map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void {}\n"},
+			map[string]string{"magusfile.buzz": "export fun build(_a: [str]) > void {}\n"},
 			StatusOK,
 		},
 		{
 			"charm distinct from every target",
-			map[string]string{"magusfile.bzz": "export fun build(_a: [str]) > void { magus.has_charm(\"container\"); }\n"},
+			map[string]string{"magusfile.buzz": "export fun build(_a: [str]) > void { magus.has_charm(\"container\"); }\n"},
 			StatusOK,
 		},
 		{
 			"body charm shares a target name",
-			map[string]string{"magusfile.bzz": "export fun container(_a: [str]) > void {}\nexport fun build(_a: [str]) > void { magus.has_charm(\"container\"); }\n"},
+			map[string]string{"magusfile.buzz": "export fun container(_a: [str]) > void {}\nexport fun build(_a: [str]) > void { magus.has_charm(\"container\"); }\n"},
 			StatusWarn,
 		},
 		{
 			"target named like a reserved charm",
-			map[string]string{"magusfile.bzz": "export fun cd(_a: [str]) > void {}\n"},
+			map[string]string{"magusfile.buzz": "export fun cd(_a: [str]) > void {}\n"},
 			StatusWarn,
 		},
 	}

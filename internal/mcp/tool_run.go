@@ -11,9 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
-	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/wire"
 	"github.com/egladman/magus/types"
 )
 
@@ -84,20 +83,23 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 	}
 
 	var buf bytes.Buffer
-	rw := report.NewWriter(&buf)
+	rw, err := magus.NewReportWriter(&buf, nil)
+	if err != nil {
+		return types.InvokeResponse{}, err
+	}
 	// Run dispatches explicit targets and builds no affected graph, so it needs
 	// no graph observer. (Graph events come from the affected path; see
 	// tool_affected, which routes them request-scoped via context.)
 
-	runOpts := []wire.RunOption{wire.WithReport(rw)}
+	runOpts := []magus.RunOption{magus.WithReport(rw)}
 	if dryRun {
-		runOpts = append(runOpts, wire.WithDryRun())
+		runOpts = append(runOpts, magus.WithDryRun())
 	}
 	if len(parsed.Charms) > 0 {
-		runOpts = append(runOpts, wire.WithCharms(parsed.Charms...))
+		runOpts = append(runOpts, magus.WithCharms(parsed.Charms...))
 	}
 	if spellFilter != "" {
-		runOpts = append(runOpts, wire.WithSpellFilter(spellFilter))
+		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
 	}
 
 	start := time.Now()

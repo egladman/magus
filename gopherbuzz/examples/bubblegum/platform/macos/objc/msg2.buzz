@@ -1,0 +1,10 @@
+// platform/macos/objc/msg2.buzz — objc_msgSend, shape: id msg(id, SEL, id, id).
+// See msg0.buzz for why each shape binds a uniquely-named shim wrapper. Used for
+// two-object selectors like imageWithSystemSymbolName:accessibilityDescription:.
+namespace msg2;
+
+zdef("bubblegum", "fn yt_send_object2(self: ?*anyopaque, op: ?*anyopaque, a: ?*anyopaque, b: ?*anyopaque) ?*anyopaque;");
+
+export fun sendObject2(self: ud?, op: ud?, a: ud?, b: ud?) > ud? {
+    return yt_send_object2(self, op: op, a: a, b: b);
+}

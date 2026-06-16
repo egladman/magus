@@ -305,7 +305,7 @@ func toSlashRel(root, p string) string {
 }
 
 func (*runner) checkMagefileCoexistence(_ []*types.Project) Check {
-	return Check{Name: "magefile coexistence", Status: StatusOK, Message: "single magusfile.bzz layout enforced"}
+	return Check{Name: "magefile coexistence", Status: StatusOK, Message: "single magusfile.buzz layout enforced"}
 }
 
 func (*runner) checkLegacyMageForms(_ []*types.Project) Check {
@@ -443,7 +443,7 @@ func configFilePaths(root string) []string {
 			paths = append(paths, p)
 		}
 	}
-	if udc, err := os.UserConfigDir(); err == nil {
+	if udc, err := config.UserConfigDir(); err == nil {
 		add(filepath.Join(udc, "magus"))
 	}
 	if root != "" {
@@ -834,13 +834,13 @@ func nameConvention(name string) string {
 }
 
 // magusfileSourcesInDir returns every Buzz magusfile source for a project
-// directory: the top-level magusfile.bzz plus magusfiles/*.bzz.
+// directory: the top-level magusfile.buzz plus magusfiles/*.buzz.
 func magusfileSourcesInDir(dir string) []string {
 	var out []string
-	if _, err := os.Stat(filepath.Join(dir, "magusfile.bzz")); err == nil {
-		out = append(out, filepath.Join(dir, "magusfile.bzz"))
+	if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err == nil {
+		out = append(out, filepath.Join(dir, "magusfile.buzz"))
 	}
-	entries, _ := filepath.Glob(filepath.Join(dir, "magusfiles", "*.bzz"))
+	entries, _ := filepath.Glob(filepath.Join(dir, "magusfiles", "*.buzz"))
 	out = append(out, entries...)
 	slices.Sort(out)
 	return out

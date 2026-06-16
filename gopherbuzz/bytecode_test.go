@@ -22,7 +22,7 @@ import (
 // exercises the serializer across scalars, strings, enums, objects (including
 // field defaults), closures, fibers, and control flow.
 func TestBytecodeRoundTrip(t *testing.T) {
-	files, err := filepath.Glob("testdata/*.bzz")
+	files, err := filepath.Glob("testdata/*.buzz")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestBytecodeRoundTrip(t *testing.T) {
 		t.Fatal("no conformance test files found in testdata/")
 	}
 	for _, path := range files {
-		name := strings.TrimSuffix(filepath.Base(path), ".bzz")
+		name := strings.TrimSuffix(filepath.Base(path), ".buzz")
 		t.Run(name, func(t *testing.T) {
 			src, err := os.ReadFile(path)
 			if err != nil {
@@ -660,7 +660,7 @@ export final x = 42;
 // TestImport_AsAlias verifies that `import "file" as alias` binds under the alias.
 func TestImport_AsAlias(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "util.bzz"), []byte(`final helper = 99;`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "util.buzz"), []byte(`final helper = 99;`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -675,14 +675,14 @@ func TestImport_AsAlias(t *testing.T) {
 	}
 }
 
-// TestCyclicImportTerminates verifies that mutually-importing .bzz files do
+// TestCyclicImportTerminates verifies that mutually-importing .buzz files do
 // not cause infinite recursion. loadedPaths in the Session guards the cycle.
 func TestCyclicImportTerminates(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a.bzz"), []byte(`import "b"; final from_a = 1;`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.buzz"), []byte(`import "b"; final from_a = 1;`), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "b.bzz"), []byte(`import "a"; final from_b = 2;`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "b.buzz"), []byte(`import "a"; final from_b = 2;`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -698,18 +698,18 @@ func TestCyclicImportTerminates(t *testing.T) {
 
 // TestImport_SearchPathFullImportPath verifies the whole import path — not just
 // its trailing segment — is substituted for `?` in a search-path template,
-// matching upstream Buzz: import "lib/mod" resolves lib/mod.bzz, not mod.bzz.
+// matching upstream Buzz: import "lib/mod" resolves lib/mod.buzz, not mod.buzz.
 func TestImport_SearchPathFullImportPath(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "lib", "mod.bzz"), []byte(`export final answer = 42;`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "lib", "mod.buzz"), []byte(`export final answer = 42;`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	ctx := context.Background()
-	sess := NewSession(ctx, WithSearchPaths(filepath.Join(dir, "?.bzz")))
+	sess := NewSession(ctx, WithSearchPaths(filepath.Join(dir, "?.buzz")))
 	defer sess.Close()
 
 	v, err := sess.Eval(ctx, `import "lib/mod"; return answer;`)
@@ -722,17 +722,17 @@ func TestImport_SearchPathFullImportPath(t *testing.T) {
 }
 
 // TestImport_DefaultSearchPathsNested verifies an unconfigured session resolves
-// the upstream `./?/main.bzz` layout relative to the working directory, and that
+// the upstream `./?/main.buzz` layout relative to the working directory, and that
 // WithSearchPaths() with no arguments leaves the session on DefaultSearchPaths.
 func TestImport_DefaultSearchPathsNested(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "widget"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "widget", "main.bzz"), []byte(`export final tag = "w";`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "widget", "main.buzz"), []byte(`export final tag = "w";`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir) // ./widget/main.bzz resolves relative to cwd
+	t.Chdir(dir) // ./widget/main.buzz resolves relative to cwd
 
 	ctx := context.Background()
 	sess := NewSession(ctx, WithSearchPaths()) // no paths -> DefaultSearchPaths

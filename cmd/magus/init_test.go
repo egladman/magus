@@ -12,9 +12,9 @@ func TestWriteMagusfileStub(t *testing.T) {
 	if err := writeMagusfileStub(dir); err != nil {
 		t.Fatalf("writeMagusfileStub: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "magusfile.bzz"))
+	data, err := os.ReadFile(filepath.Join(dir, "magusfile.buzz"))
 	if err != nil {
-		t.Fatalf("expected magusfile.bzz: %v", err)
+		t.Fatalf("expected magusfile.buzz: %v", err)
 	}
 	body := string(data)
 	for _, want := range []string{
@@ -24,13 +24,13 @@ func TestWriteMagusfileStub(t *testing.T) {
 		`export fun test`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("magusfile.bzz missing %q", want)
+			t.Errorf("magusfile.buzz missing %q", want)
 		}
 	}
 }
 
 func TestMagusfilePresent(t *testing.T) {
-	for _, name := range []string{"magusfile.bzz"} {
+	for _, name := range []string{"magusfile.buzz"} {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
@@ -54,7 +54,7 @@ func TestMagusfilePresent(t *testing.T) {
 // An existing magusfile must not be clobbered by a stub write.
 func TestWriteMagusfileStubSkipsExisting(t *testing.T) {
 	dir := t.TempDir()
-	existing := filepath.Join(dir, "magusfile.bzz")
+	existing := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(existing, []byte("// mine\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +63,6 @@ func TestWriteMagusfileStubSkipsExisting(t *testing.T) {
 	}
 	data, _ := os.ReadFile(existing)
 	if string(data) != "// mine\n" {
-		t.Errorf("existing magusfile.bzz was modified: %q", string(data))
+		t.Errorf("existing magusfile.buzz was modified: %q", string(data))
 	}
 }

@@ -1,0 +1,99 @@
+// inspector.buzz — the Retool move: inspect the live app's state, any time.
+//
+// Toggle the overlay ($mod+i) and bubblegum shows the objects it is actually
+// running on: every tiled screen with its bounds and split tree (apps at the
+// leaves), the managed-window registry, and the effective configuration.
+// It refreshes every tick while open, so it is a window into the live
+// session — the same one `eval` and rules.buzz scripts run in. See
+// something odd in the inspector, poke it from the buzz> prompt.
+//
+// The body stays monospace on purpose: it is a debug readout of trees and
+// aligned columns. Only the title is set in the proportional system font, to
+// mark the panel chrome apart from its data.
+
+namespace inspector;
+
+import "std";
+import "platform/macos/cocoa";
+
+final maxRows = 30;
+final rowH = 20.0;
+final padding = 18.0;
+final panelW = 660.0;
+final titleH = 22.0;
+final titleGap = 10.0;
+final titleSize = 15.0;
+
+var panel: ud? = null;
+var labels = mut [<ud>];
+var visible = false;
+
+// Panel frame in AppKit coordinates (recorded once at init) so the WM can
+// hit-test a click against it for click-outside-to-dismiss.
+var panelX = 0.0;
+var panelY = 0.0;
+var panelH = 0.0;
+
+fun labelAt(i: int) > ud? {
+    return labels[i];
+}
+
+fun inspInit(cx: double, cy: double) > void {
+    if (panel != null) {
+        return;
+    }
+    cocoa\uiInit();
+    final h = padding * 2.0 + titleH + titleGap + std\toDouble(maxRows) * rowH;
+    panelX = cx - panelW / 2.0;
+    panelY = cy - h / 2.0;
+    panelH = h;
+    panel = cocoa\uiOverlayPanel(panelX, y: panelY, w: panelW, h: h);
+    cocoa\uiIgnoreMouse(panel);
+
+    final title = cocoa\uiThemedLabel(panel, x: padding, y: h - padding - titleH, w: panelW - padding * 2.0, h: titleH, size: titleSize, gray: 0.92);
+    cocoa\uiSetSystemFontWeighted(title, size: titleSize, weight: 0.3);
+    cocoa\uiSetText(title, text: "Inspector");
+
+    final contentTop = h - padding - titleH - titleGap;
+    foreach (row in 0..maxRows) {
+        final y = contentTop - rowH * std\toDouble(row + 1);
+        final lb = cocoa\uiThemedLabel(panel, x: padding, y: y, w: panelW - padding * 2.0, h: rowH - 3.0, size: 12.0, gray: 0.92);
+        labels.append(lb!);
+    }
+}
+
+// inspShow renders lines (the WM builds them from live state) centered at
+// (cx, cy) in AppKit coordinates; call again while visible to refresh.
+export fun inspShow(lines: [str], cx: double, cy: double) > void {
+    inspInit(cx, cy);
+    foreach (i in 0..maxRows) {
+        var text = "";
+        if (i < lines.len() and i < maxRows) {
+            text = lines[i];
+        }
+        if (i == maxRows - 1 and lines.len() > maxRows) {
+            text = "… {lines.len() - maxRows + 1} more lines (eval has it all)";
+        }
+        cocoa\uiSetText(labelAt(i), text: text);
+    }
+    cocoa\uiShow(panel);
+    visible = true;
+}
+
+export fun inspHide() > void {
+    if (!visible) {
+        return;
+    }
+    visible = false;
+    cocoa\uiHide(panel);
+}
+
+export fun inspVisible() > bool {
+    return visible;
+}
+
+// inspContains reports whether an AppKit-coordinate point lands inside the
+// panel — the WM uses it so a click outside dismisses the inspector.
+export fun inspContains(x: double, y: double) > bool {
+    return x >= panelX and x < panelX + panelW and y >= panelY and y < panelY + panelH;
+}

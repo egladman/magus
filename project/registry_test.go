@@ -1,14 +1,13 @@
-package project_test
+package project
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
 func TestNewSpellRegistry_Empty(t *testing.T) {
-	r := project.NewSpellRegistry()
+	r := NewSpellRegistry()
 	if r == nil {
 		t.Fatal("NewSpellRegistry returned nil")
 	}
@@ -18,7 +17,7 @@ func TestNewSpellRegistry_Empty(t *testing.T) {
 }
 
 func TestSpellRegistry_RegisterAndLookup(t *testing.T) {
-	r := project.NewSpellRegistry()
+	r := NewSpellRegistry()
 	s := types.NewSpell("myspell")
 	r.RegisterSpell(s)
 
@@ -32,7 +31,7 @@ func TestSpellRegistry_RegisterAndLookup(t *testing.T) {
 }
 
 func TestSpellRegistry_Unregister(t *testing.T) {
-	r := project.NewSpellRegistry()
+	r := NewSpellRegistry()
 	s := types.NewSpell("gone")
 	r.RegisterSpell(s)
 	r.UnregisterSpell("gone")
@@ -43,7 +42,7 @@ func TestSpellRegistry_Unregister(t *testing.T) {
 }
 
 func TestDefaultSpellRegistry_NonNil(t *testing.T) {
-	if project.DefaultSpellRegistry() == nil {
+	if DefaultSpellRegistry() == nil {
 		t.Error("DefaultSpellRegistry() returned nil")
 	}
 }

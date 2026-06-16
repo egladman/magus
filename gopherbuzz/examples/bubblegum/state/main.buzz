@@ -1,0 +1,162 @@
+// state.buzz — shared WM state: type declarations, the WM object, and its
+// singleton getter. Every core module imports this and operates on wm().
+// Imports only leaf modules layout and config; no back-imports of bubblegum.
+
+namespace state;
+
+import "layout";
+import "config";
+import "traymenu";
+
+export object Managed {
+    id: int = 0,
+    ref: ud? = null,
+    pid: int = 0,
+    workspace: int = 0,
+    screen: int = 0,
+    floating: bool = false,
+    pending: bool = false,
+    missing: int = 0,
+    minimized: bool = false, // the user minimized it (the Dock holds it); stays down, listed in the bar for recall
+    minW: double = 0.0,
+    minH: double = 0.0,
+    slotW: double = 0.0,
+    slotH: double = 0.0,
+}
+
+export object Workspace {
+    root: mut layout\Node? = null,
+    focusedId: int = 0,
+    fullscreenId: int = 0,
+    stacked: bool = false,
+}
+
+export object Screen {
+    disp: int = 1,
+    cg: [double] = [0.0, 0.0, 1280.0, 800.0],
+    workspaces: mut [mut Workspace],
+    root: mut layout\Node? = null,
+    focusedId: int = 0,
+    fullscreenId: int = 0,
+    stacked: bool = false,
+}
+
+// WM holds every piece of shared mutable state for the window manager.
+// All fields that were top-level globals in bubblegum.buzz live here.
+// The runCmd callback is wired by main.buzz to break the rules->command cycle.
+export object WM {
+    // Config (config.buzz-owned types; mutable fields have no default)
+    cfg: mut config\Runtime,
+    cfgTarget: mut config\Runtime? = null,
+
+    // Window registry
+    managed: mut [mut Managed],
+    nextId: int = 1,
+    userWindowHooks: mut [any],
+
+    // Active-screen live state (swapped on screen/workspace switch)
+    root: mut layout\Node? = null,
+    focusedId: int = 0,
+    fullscreenId: int = 0,
+    stacked: bool = false,
+
+    // Screen set
+    screens: mut [mut Screen],
+    activeScreen: int = 0,
+    tiledCG: [double] = [0.0, 0.0, 1280.0, 800.0],
+
+    // Workspace navigation
+    curWs: int = 0,
+    lastWs: int = 0,
+    scratchShown: int = 0,
+
+    // Hidden-app tracking (hide method)
+    hiddenPids: mut [int],
+
+    // Undo stack (cloned trees; bounded to 20)
+    undoStack: mut [mut layout\Node?],
+
+    // Binding mode
+    bindMode: str = "",
+
+    // Marks (vim registers: letter -> window id)
+    marks: mut {str: any},
+
+    // Eval echo
+    evalNote: str = "",
+    evalNoteAt: double = 0.0,
+
+    // Reconcile pause
+    reconcilePaused: bool = false,
+    reconcileResumeAt: double = 0.0,
+
+    // Startup flag
+    wmStarted: bool = false,
+
+    // Bin-pack prompt
+    promptId: int = 0,
+    promptWs: int = 0,
+    promptAt: double = 0.0,
+    promptBase: str = "",
+    lastPromptText: str = "",
+    stackRelieved: mut [bool],
+
+    // Mouse state
+    lastKeyAt: double = 0.0,
+    lastDownX: double = 0.0,
+    lastDownY: double = 0.0,
+    mouseDownAt: double = 0.0,
+
+    // Tray menu
+    trayMenuCG: mut [double],
+    trayAppKitTop: double = 0.0,
+    trayRows: mut [traymenu\Row],
+    trayRowActs: mut [str],
+    trayExpanded: bool = false,
+    lastTrayCountdown: str = "",
+
+    // Toast
+    toastUntil: double = 0.0,
+
+    // Inspector / console overlay
+    inspMode: str = "",
+
+    // Back-edge: rules/scan call runCmd to dispatch a command string
+    // without importing the command module (which would create a cycle).
+    // Wired in main.buzz after all modules are loaded.
+    runCmd: fun (cmd: str) > void? = null,
+}
+
+var wmSingleton: mut WM? = null;
+
+export fun wm() > mut WM {
+    if (wmSingleton == null) {
+        final w = mut WM{
+            cfg = mut config\Runtime{ binds = mut [], execs = mut [], rules = mut [] },
+            managed = mut [<mut Managed>],
+            screens = mut [<mut Screen>],
+            hiddenPids = mut [<int>],
+            undoStack = mut [<mut layout\Node?>],
+            marks = mut {<str: int>},
+            userWindowHooks = mut [],
+            stackRelieved = mut [false, false, false, false, false, false, false, false, false],
+            trayMenuCG = mut [<double>],
+            trayRows = mut [<traymenu\Row>],
+            trayRowActs = mut [<str>],
+        };
+        wmSingleton = w;
+    }
+    return wmSingleton!;
+}
+
+// Shared constants (formerly top-level finals in bubblegum.buzz).
+export final scratchWs = 0 - 1;
+export final promptTtlMs = 8000.0;
+export final parkX = 60000.0;
+export final parkY = 60000.0;
+export final dragHoldMaxMs = 15000.0;
+export final keyDownEvent = 10;
+export final barRefreshMs = 50.0;
+export final tapDisabledTimeout = 4294967294;
+export final tapDisabledUserInput = 4294967295;
+export final modMask = [131072, 262144, 524288, 1048576];

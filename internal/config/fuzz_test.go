@@ -1,11 +1,9 @@
-package config_test
+package config
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/egladman/magus/internal/config"
 )
 
 // FuzzLoadFile feeds arbitrary bytes through the YAML loader. The
@@ -35,7 +33,7 @@ func FuzzLoadFile(f *testing.F) {
 		}
 		// Both modes; strict adds KnownFields + Validate. Either path
 		// must terminate in (Config, error) and never panic.
-		_, _ = config.LoadFile(path, false)
-		_, _ = config.LoadFile(path, true)
+		_, _ = LoadFile(path, false)
+		_, _ = LoadFile(path, true)
 	})
 }

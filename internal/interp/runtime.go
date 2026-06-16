@@ -332,7 +332,7 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 }
 
 // NewBuzzReplSession creates a Buzz session with host bindings installed, ready
-// for the shared REPL. When autoloadDir is non-empty and a magusfile.bzz is
+// for the shared REPL. When autoloadDir is non-empty and a magusfile.buzz is
 // found in or above it, its files are executed first so their top-level
 // definitions are available at the prompt.
 // The returned engine.Session also satisfies the optional REPL/debug interfaces.
@@ -374,12 +374,12 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 // duplicate entry.
 func magusSearchPaths(ctx context.Context, projectDir string) []string {
 	paths := []string{
-		filepath.Join("magusfiles", "?.bzz"),
-		filepath.Join(projectDir, "magusfiles", "?.bzz"),
+		filepath.Join("magusfiles", "?.buzz"),
+		filepath.Join(projectDir, "magusfiles", "?.buzz"),
 	}
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		if root := ws.Root(); root != "" && root != projectDir {
-			paths = append(paths, filepath.Join(root, "magusfiles", "?.bzz"))
+			paths = append(paths, filepath.Join(root, "magusfiles", "?.buzz"))
 		}
 	}
 	return paths

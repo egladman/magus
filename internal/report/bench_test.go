@@ -1,11 +1,9 @@
-package report_test
+package report
 
 import (
 	"io"
 	"sync/atomic"
 	"testing"
-
-	"github.com/egladman/magus/internal/report"
 )
 
 // devNullWriter discards every write but counts bytes so the
@@ -25,12 +23,12 @@ var _ io.Writer = (*devNullWriter)(nil)
 // Uses WithBlockOnFull so the drain stays caught up and we measure
 // steady-state throughput, not drop-rate.
 func BenchmarkRecord_serial(b *testing.B) {
-	w := report.NewWriter(&devNullWriter{}, report.WithBlockOnFull(), report.WithQueueSize(1024))
+	w := NewWriter(&devNullWriter{}, WithBlockOnFull(), WithQueueSize(1024))
 	defer w.Close()
-	e := report.CacheHit{Project: "apps/my-service", Target: "build", DurationMs: 342}
+	e := CacheHit{Project: "apps/my-service", Target: "build", DurationMs: 342}
 	b.ResetTimer()
 	for range b.N {
-		if err := report.Record(w, e); err != nil {
+		if err := Record(w, e); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -41,12 +39,12 @@ func BenchmarkRecord_serial(b *testing.B) {
 // will accumulate; ns/op should still be very low because the hot
 // path is a non-blocking select.
 func BenchmarkRecord_serial_dropOnFull(b *testing.B) {
-	w := report.NewWriter(&devNullWriter{}, report.WithQueueSize(1024))
+	w := NewWriter(&devNullWriter{}, WithQueueSize(1024))
 	defer w.Close()
-	e := report.CacheHit{Project: "apps/my-service", Target: "build", DurationMs: 342}
+	e := CacheHit{Project: "apps/my-service", Target: "build", DurationMs: 342}
 	b.ResetTimer()
 	for range b.N {
-		_ = report.Record(w, e)
+		_ = Record(w, e)
 	}
 }
 
@@ -54,13 +52,13 @@ func BenchmarkRecord_serial_dropOnFull(b *testing.B) {
 // b.RunParallel. Demonstrates the win of an async writer over the
 // previous Mutex-around-encode design.
 func BenchmarkRecord_parallel(b *testing.B) {
-	w := report.NewWriter(&devNullWriter{}, report.WithBlockOnFull(), report.WithQueueSize(8192))
+	w := NewWriter(&devNullWriter{}, WithBlockOnFull(), WithQueueSize(8192))
 	defer w.Close()
-	e := report.CacheHit{Project: "apps/my-service", Target: "build", DurationMs: 342}
+	e := CacheHit{Project: "apps/my-service", Target: "build", DurationMs: 342}
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if err := report.Record(w, e); err != nil {
+			if err := Record(w, e); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -70,23 +68,23 @@ func BenchmarkRecord_parallel(b *testing.B) {
 // BenchmarkRecord_mixed records a realistic ratio of cache vs graph
 // events to surface any per-type cost imbalance.
 func BenchmarkRecord_mixed(b *testing.B) {
-	w := report.NewWriter(&devNullWriter{}, report.WithBlockOnFull(), report.WithQueueSize(8192))
+	w := NewWriter(&devNullWriter{}, WithBlockOnFull(), WithQueueSize(8192))
 	defer w.Close()
-	hit := report.CacheHit{Project: "a", Target: "build", DurationMs: 1}
-	miss := report.CacheMiss{Project: "a", Target: "build", DurationMs: 1}
-	gq := report.GraphQuery{Op: "affected", Nodes: 100, Seeds: 3, ResultCount: 5, DurationMs: 1}
-	flk := report.FlakeCall{Project: "a", Target: "test", Status: "retried_flake", Attempts: 2}
+	hit := CacheHit{Project: "a", Target: "build", DurationMs: 1}
+	miss := CacheMiss{Project: "a", Target: "build", DurationMs: 1}
+	gq := GraphQuery{Op: "affected", Nodes: 100, Seeds: 3, ResultCount: 5, DurationMs: 1}
+	flk := FlakeCall{Project: "a", Target: "test", Status: "retried_flake", Attempts: 2}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		switch i % 10 {
 		case 0, 1, 2, 3, 4, 5, 6:
-			_ = report.Record(w, hit)
+			_ = Record(w, hit)
 		case 7:
-			_ = report.Record(w, miss)
+			_ = Record(w, miss)
 		case 8:
-			_ = report.Record(w, gq)
+			_ = Record(w, gq)
 		case 9:
-			_ = report.Record(w, flk)
+			_ = Record(w, flk)
 		}
 	}
 }
@@ -95,12 +93,12 @@ func BenchmarkRecord_mixed(b *testing.B) {
 // the event. Should be the cheapest case: a single map lookup, no
 // channel send.
 func BenchmarkRecord_filtered(b *testing.B) {
-	f, _ := report.ParseFilter([]string{"+cache.hit"})
-	w := report.NewWriter(&devNullWriter{}, report.WithBlockOnFull(), report.WithFilter(f))
+	f, _ := ParseFilter([]string{"+cache.hit"})
+	w := NewWriter(&devNullWriter{}, WithBlockOnFull(), WithFilter(f))
 	defer w.Close()
-	e := report.GraphQuery{Op: "affected", Nodes: 100}
+	e := GraphQuery{Op: "affected", Nodes: 100}
 	b.ResetTimer()
 	for range b.N {
-		_ = report.Record(w, e)
+		_ = Record(w, e)
 	}
 }

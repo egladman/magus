@@ -8,7 +8,6 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/egladman/magus/internal/wire"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,7 +81,7 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 			}
 		}
 		projects := m.targetProjects(batchTargets)
-		if err := m.executeOnProjects(ctx, projects, target, "stream", wire.Run{DryRun: so.DryRun, ExtraArgs: so.ExtraArgs}, handler); err != nil {
+		if err := m.executeOnProjects(ctx, projects, target, "stream", run{DryRun: so.DryRun, ExtraArgs: so.ExtraArgs}, handler); err != nil {
 			errFn(fmt.Errorf("magus: stream: %s: %w", target, err))
 		}
 	}

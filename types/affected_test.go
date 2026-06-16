@@ -1,26 +1,24 @@
-package types_test
+package types
 
 import (
 	"errors"
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
 func TestErrAffectedFallback(t *testing.T) {
-	if types.ErrAffectedFallback == nil {
+	if ErrAffectedFallback == nil {
 		t.Fatal("ErrAffectedFallback is nil")
 	}
-	if types.ErrAffectedFallback.Error() == "" {
+	if ErrAffectedFallback.Error() == "" {
 		t.Fatal("ErrAffectedFallback.Error() is empty")
 	}
-	if !errors.Is(types.ErrAffectedFallback, types.ErrAffectedFallback) {
+	if !errors.Is(ErrAffectedFallback, ErrAffectedFallback) {
 		t.Fatal("errors.Is identity check failed")
 	}
 }
 
 func TestAffectedResult(t *testing.T) {
-	r := types.AffectedResult{
+	r := AffectedResult{
 		Base:        "main",
 		Changed:     []string{"api/main.go", "api/handler.go"},
 		Seed:        []string{"api/"},

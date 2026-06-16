@@ -1,10 +1,9 @@
-package project_test
+package project
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,12 +29,12 @@ func TestEffectiveClaimsLastWins(t *testing.T) {
 		},
 	)
 
-	jsonClaims := project.EffectiveClaims(p, 0)
+	jsonClaims := EffectiveClaims(p, 0)
 	if len(jsonClaims) != 0 {
 		t.Errorf("idx=0 (json) effective claims = %v; want empty (ts outranks by order)", jsonClaims)
 	}
 
-	tsClaims := project.EffectiveClaims(p, 1)
+	tsClaims := EffectiveClaims(p, 1)
 	want := []string{"**/*.json", "**/*.ts"}
 	if !slices.Equal(tsClaims, want) {
 		t.Errorf("idx=1 (ts) effective claims = %v; want %v", tsClaims, want)
@@ -56,13 +55,13 @@ func TestEffectiveClaimsWeightWins(t *testing.T) {
 		},
 	)
 
-	tsClaims := project.EffectiveClaims(p, 0)
+	tsClaims := EffectiveClaims(p, 0)
 	wantTS := []string{"**/*.json", "**/*.ts"}
 	if !slices.Equal(tsClaims, wantTS) {
 		t.Errorf("ts effective claims = %v; want %v", tsClaims, wantTS)
 	}
 
-	jsonClaims := project.EffectiveClaims(p, 1)
+	jsonClaims := EffectiveClaims(p, 1)
 	if len(jsonClaims) != 0 {
 		t.Errorf("json effective claims = %v; want empty (ts outranks by weight)", jsonClaims)
 	}
@@ -80,7 +79,7 @@ func TestEffectiveClaimsRemovedClaimsStillApplied(t *testing.T) {
 		},
 	)
 
-	got := project.EffectiveClaims(p, 0)
+	got := EffectiveClaims(p, 0)
 	want := []string{"**/*.ts"}
 	if !slices.Equal(got, want) {
 		t.Errorf("effective claims = %v; want %v", got, want)

@@ -13,7 +13,7 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 | **What it is**          | a library of tool-native operations (+ cache metadata)                               | an addressable unit of work you run                                                     |
 | **Answers**             | _how_ a tool performs an operation                                                   | _what_ operation runs on _which_ project                                                |
 | **Vocabulary**          | the tool's own CLI command (`go-vet`, `cargo-clippy`, `tsc`, `eslint`, `ruff-check`) | magus's lifecycle (`build`, `test`, `lint`, `format`, `clean`, `generate`, `preflight`) |
-| **Who declares it**     | a built-in, a spell file (`spells/*.bzz`), or `magus.spell.define`                   | an exported function in your magusfile                                                  |
+| **Who declares it**     | a built-in, a spell file (`spells/*.buzz`), or `magus.spell.define`                   | an exported function in your magusfile                                                  |
 | **How it enters a run** | **bound** to a project via `magus.project.register`                                  | **invoked** via `magus run <name>`                                                      |
 | **Runs on its own?**    | **No**: it only contributes ops + cache inputs                                       | **Yes**: it is the entry point                                                          |
 | **Cardinality**         | many ops per spell; many spells per project                                          | one function per target name per project                                                |
@@ -63,7 +63,7 @@ Binding a spell contributes its `needs`/`claims`/`provides` to that project's ca
 
 1. **Forked command (declarative).** The op is a `{cmd, args, charms}` record. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.
 
-2. **Typed handler.** `mgs_listTargets` returns `{str: fun(Target, fun(any)) bool}`. A **fork** handler passes its command record to the injected `cb` callback; a **function-op** handler does host work in-VM (HTTP, signing, a cache backend's `get-entry`). The built-in spells use the handler form; read any [`spells/<name>/spell.bzz`](../spells) for a worked example.
+2. **Typed handler.** `mgs_listTargets` returns `{str: fun(Target, fun(any)) bool}`. A **fork** handler passes its command record to the injected `cb` callback; a **function-op** handler does host work in-VM (HTTP, signing, a cache backend's `get-entry`). The built-in spells use the handler form; read any [`spells/<name>/spell.buzz`](../spells) for a worked example.
 
 Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.
 
@@ -88,10 +88,10 @@ Available built-ins: `go`, `typescript`, `javascript`, `python`, `rust`, `zig`, 
 
 ### File spell
 
-A workspace-local `spells/<name>.bzz` loaded by path:
+A workspace-local `spells/<name>.buzz` loaded by path:
 
 ```buzz
-const rb = magus.spell.load("spells/ruby.bzz");
+const rb = magus.spell.load("spells/ruby.buzz");
 magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 ```
 
@@ -170,7 +170,7 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 
 A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_getVersionCommand`, `mgs_isForeignProcess`, and `mgs_listTargets`.
 
-Buzz (`spells/ruby.bzz`):
+Buzz (`spells/ruby.buzz`):
 
 ```buzz
 export fun mgs_getName() > str { return "ruby"; }
@@ -191,7 +191,7 @@ export fun mgs_listTargets() > any {
 Then bind it and compose targets that call its ops:
 
 ```buzz
-const rb = magus.spell.load("spells/ruby.bzz");
+const rb = magus.spell.load("spells/ruby.buzz");
 magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 
 export fun test(_args: [str]) > void { rb.rspec({ "cwd": "gems/" }); }
@@ -240,9 +240,9 @@ Read these spells under [`magus/spells/`](../spells) when you outgrow a plain fo
 
 | Spell                                           | Kind            | What it demonstrates                                                                                                                                                                        |
 | ----------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`buf`](../spells/buf/spell.bzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files. |
-| [`actions`](../spells/github/actions/spell.bzz) | function-op     | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (`magus/extra/http`), wired with `magus.cache.remote`.  |
-| [`s3-cache`](../spells/aws/s3-cache/spell.bzz)  | function-op     | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `magus/extra/crypto`.                                                                         |
+| [`buf`](../spells/buf/spell.buzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files. |
+| [`actions`](../spells/github/actions/spell.buzz) | function-op     | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (`magus/extra/http`), wired with `magus.cache.remote`.  |
+| [`s3-cache`](../spells/aws/s3-cache/spell.buzz)  | function-op     | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `magus/extra/crypto`.                                                                         |
 
 ## See also
 

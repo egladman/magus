@@ -1,11 +1,10 @@
-package render_test
+package render
 
 import (
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )
 
@@ -46,7 +45,7 @@ func emptyOutput() types.GraphOutput {
 func TestWriteGraphDOT_Single(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := render.WriteGraphDOT(&b, singleOutput()); err != nil {
+	if err := WriteGraphDOT(&b, singleOutput()); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -61,7 +60,7 @@ func TestWriteGraphDOT_Single(t *testing.T) {
 func TestWriteGraphDOT_Linear(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := render.WriteGraphDOT(&b, linearOutput()); err != nil {
+	if err := WriteGraphDOT(&b, linearOutput()); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -76,7 +75,7 @@ func TestWriteGraphDOT_Linear(t *testing.T) {
 func TestWriteGraphDOT_Diamond(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := render.WriteGraphDOT(&b, diamondOutput()); err != nil {
+	if err := WriteGraphDOT(&b, diamondOutput()); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -91,7 +90,7 @@ func TestWriteGraphDOT_Diamond(t *testing.T) {
 func TestWriteGraphDOT_Empty(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := render.WriteGraphDOT(&b, emptyOutput()); err != nil {
+	if err := WriteGraphDOT(&b, emptyOutput()); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -106,7 +105,7 @@ func TestWriteGraphDOT_Empty(t *testing.T) {
 func TestWriteGraphMermaid_Linear(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, linearOutput()); err != nil {
+	if err := WriteGraphMermaid(&b, linearOutput()); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -139,7 +138,7 @@ func TestWriteGraphMermaid_PathEscaping(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -161,7 +160,7 @@ func TestWriteGraphMermaid_IDCollision(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -182,7 +181,7 @@ func TestWriteGraphMermaid_Subgraphs(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -204,7 +203,7 @@ func TestWriteGraphMermaid_CrossSpellEdgeLabel(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -228,7 +227,7 @@ func TestWriteGraphMermaid_RootHighlight(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -250,7 +249,7 @@ func TestWriteGraphMermaid_Exclusive(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -273,7 +272,7 @@ func TestWriteGraphMermaid_ClickHandler(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -295,7 +294,7 @@ func TestWriteGraphMermaid_BlastRadius(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -319,7 +318,7 @@ func TestWriteGraphMermaid_Duration(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, out); err != nil {
+	if err := WriteGraphMermaid(&b, out); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -350,7 +349,7 @@ func TestFormatDur(t *testing.T) {
 		{80000 * time.Millisecond, "1m20s"},
 	}
 	for _, tc := range cases {
-		got := render.FormatDur(tc.d)
+		got := FormatDur(tc.d)
 		if got != tc.want {
 			t.Errorf("FormatDur(%v) = %q; want %q", tc.d, got, tc.want)
 		}
@@ -360,7 +359,7 @@ func TestFormatDur(t *testing.T) {
 func TestWriteGraphMermaid_Empty(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := render.WriteGraphMermaid(&b, emptyOutput()); err != nil {
+	if err := WriteGraphMermaid(&b, emptyOutput()); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
@@ -373,10 +372,10 @@ func TestWriteGraphMermaid_Determinism(t *testing.T) {
 	t.Parallel()
 	out := diamondOutput()
 	var b1, b2 strings.Builder
-	if err := render.WriteGraphMermaid(&b1, out); err != nil {
+	if err := WriteGraphMermaid(&b1, out); err != nil {
 		t.Fatal(err)
 	}
-	if err := render.WriteGraphMermaid(&b2, out); err != nil {
+	if err := WriteGraphMermaid(&b2, out); err != nil {
 		t.Fatal(err)
 	}
 	if b1.String() != b2.String() {

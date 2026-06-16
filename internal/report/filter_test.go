@@ -1,13 +1,11 @@
-package report_test
+package report
 
 import (
 	"testing"
-
-	"github.com/egladman/magus/internal/report"
 )
 
 func TestParseFilter_Nil_AdmitsAll(t *testing.T) {
-	f, err := report.ParseFilter(nil)
+	f, err := ParseFilter(nil)
 	if err != nil {
 		t.Fatalf("ParseFilter(nil): %v", err)
 	}
@@ -17,7 +15,7 @@ func TestParseFilter_Nil_AdmitsAll(t *testing.T) {
 }
 
 func TestParseFilter_BlankTerms_Nil(t *testing.T) {
-	f, err := report.ParseFilter([]string{"", "  "})
+	f, err := ParseFilter([]string{"", "  "})
 	if err != nil {
 		t.Fatalf("ParseFilter blank: %v", err)
 	}
@@ -27,7 +25,7 @@ func TestParseFilter_BlankTerms_Nil(t *testing.T) {
 }
 
 func TestFilter_Admit_DefaultAllow(t *testing.T) {
-	f, err := report.ParseFilter([]string{"-run"})
+	f, err := ParseFilter([]string{"-run"})
 	if err != nil {
 		t.Fatalf("ParseFilter: %v", err)
 	}
@@ -40,7 +38,7 @@ func TestFilter_Admit_DefaultAllow(t *testing.T) {
 }
 
 func TestFilter_Admit_DefaultDeny(t *testing.T) {
-	f, err := report.ParseFilter([]string{"+log"})
+	f, err := ParseFilter([]string{"+log"})
 	if err != nil {
 		t.Fatalf("ParseFilter: %v", err)
 	}

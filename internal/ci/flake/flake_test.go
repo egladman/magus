@@ -1,19 +1,18 @@
-package flake_test
+package flake
 
 import (
 	"math"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/ci/flake"
 	"github.com/egladman/magus/internal/ci/forecast"
 )
 
-var testCfg = flake.Config{
+var testCfg = Config{
 	Enabled:          true,
 	BootstrapSamples: 5,
 	MinSamples:       5,
-	Threshold: 0.05,
+	Threshold:        0.05,
 }
 
 const (
@@ -22,9 +21,9 @@ const (
 )
 
 // buildRuntime constructs a Runtime with n recorded outcomes.
-func buildRuntime(results []string, affected bool) *flake.Runtime {
+func buildRuntime(results []string, affected bool) *Runtime {
 	h := &forecast.History{}
-	rt := flake.NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil)
 	now := time.Now()
 	for i, r := range results {
 		rt.Record(testProject, testTarget, forecast.Outcome{
@@ -44,7 +43,7 @@ func TestShouldRetry_Bootstrap(t *testing.T) {
 	t.Parallel()
 	rt := buildRuntime([]string{"pass", "pass"}, true) // only 2 outcomes < 5
 	d := rt.Decide(testProject, testTarget, true)
-	if !d.Retry || d.Reason != flake.ReasonBootstrap {
+	if !d.Retry || d.Reason != ReasonBootstrap {
 		t.Errorf("bootstrap: Retry=%v Reason=%q, want Retry=true Reason=bootstrap", d.Retry, d.Reason)
 	}
 }
@@ -56,7 +55,7 @@ func TestShouldRetry_UnaffectedFailure(t *testing.T) {
 	// 10 clean passes → score = 0 (no flakes), well past bootstrap.
 	rt := buildRuntime([]string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass"}, true)
 	d := rt.Decide(testProject, testTarget, false /*not affected*/)
-	if !d.Retry || d.Reason != flake.ReasonUnaffectedFailure {
+	if !d.Retry || d.Reason != ReasonUnaffectedFailure {
 		t.Errorf("unaffected: Retry=%v Reason=%q, want Retry=true Reason=unaffected_failure", d.Retry, d.Reason)
 	}
 }
@@ -68,7 +67,7 @@ func TestShouldRetry_PredictedFlake(t *testing.T) {
 	// 3 flakes, 7 passes → flake rate 30%; Wilson LB should be well above 5%.
 	rt := buildRuntime([]string{"pass", "flake", "pass", "flake", "pass", "flake", "pass", "pass", "pass", "pass"}, true)
 	d := rt.Decide(testProject, testTarget, true /*affected*/)
-	if !d.Retry || d.Reason != flake.ReasonPredictedFlake {
+	if !d.Retry || d.Reason != ReasonPredictedFlake {
 		t.Errorf("predicted_flake: Retry=%v Reason=%q, want Retry=true Reason=predicted_flake", d.Retry, d.Reason)
 	}
 }
@@ -136,7 +135,7 @@ func TestIsSuspectedRegression_FalsePositive(t *testing.T) {
 func TestIsSuspectedRegression_UnaffectedFails(t *testing.T) {
 	t.Parallel()
 	h := &forecast.History{}
-	rt := flake.NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil)
 	results := []string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "fail", "fail"}
 	now := time.Now()
 	for i, r := range results {
@@ -162,7 +161,7 @@ func TestIsSuspectedRegression_UnaffectedFails(t *testing.T) {
 func TestRecordOutcome_Eviction(t *testing.T) {
 	t.Parallel()
 	h := &forecast.History{}
-	rt := flake.NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil)
 	now := time.Now()
 	total := forecast.OutcomeWindow + 10
 	for i := range total {
@@ -193,7 +192,7 @@ func TestLastPassTime(t *testing.T) {
 	t.Parallel()
 	now := time.Now().Truncate(time.Second)
 	h := &forecast.History{}
-	rt := flake.NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil)
 	for i, r := range []string{"pass", "pass", "fail", "fail"} {
 		rt.Record(testProject, testTarget, forecast.Outcome{
 			Result: r, At: now.Add(time.Duration(i) * time.Minute),

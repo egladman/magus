@@ -1,11 +1,9 @@
-package forecast_test
+package forecast
 
 import (
 	"encoding/json"
 	"testing"
 	"time"
-
-	"github.com/egladman/magus/internal/ci/forecast"
 )
 
 // TestHistorySchemaLock asserts that the JSON representation of a fully
@@ -15,14 +13,14 @@ import (
 // store in a shared CI cache (see the cache-safety notice at the top of
 // history.go).
 func TestHistorySchemaLock(t *testing.T) {
-	h := forecast.History{
-		Version:   forecast.HistoryVersion,
+	h := History{
+		Version:   HistoryVersion,
 		UpdatedAt: time.Now(),
-		Constants: forecast.Constants{
+		Constants: Constants{
 			SetupP50Ms: 30_000,
 			AlphaMs:    5_000,
 		},
-		Projects: map[string]map[string]forecast.Stats{
+		Projects: map[string]map[string]Stats{
 			"services/api": {
 				"ci": {
 					P75Ms:       12_000,
@@ -35,7 +33,7 @@ func TestHistorySchemaLock(t *testing.T) {
 					PassCount:   7,
 					FailCount:   1,
 					FlakeCount:  2,
-					RecentOutcomes: []forecast.Outcome{
+					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
 						{Result: "flake", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2},
 					},
@@ -152,7 +150,7 @@ func TestHistoryV1LoadsIntoV2(t *testing.T) {
 		"workspace_fallback_ms": 9000
 	}`
 
-	var h forecast.History
+	var h History
 	if err := json.Unmarshal([]byte(v1JSON), &h); err != nil {
 		t.Fatalf("unmarshal v1 history: %v", err)
 	}
@@ -195,7 +193,7 @@ func TestHistoryV2LoadsIntoV3(t *testing.T) {
 		"workspace_fallback_ms": 20000
 	}`
 
-	var h forecast.History
+	var h History
 	if err := json.Unmarshal([]byte(v2JSON), &h); err != nil {
 		t.Fatalf("unmarshal v2 history: %v", err)
 	}
@@ -212,11 +210,11 @@ func TestHistoryV2LoadsIntoV3(t *testing.T) {
 func TestHistory_PredictDuration_hitRateDiscount(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	h := forecast.History{}
+	h := History{}
 
 	// Seed 3 miss samples so the project-wide p75 = 60_000 and Samples ≥ 3.
 	for i := 0; i < 3; i++ {
-		h.Update(now, []forecast.Sample{
+		h.Update(now, []Sample{
 			{Project: "svc", Target: "ci", DurationMs: 60_000},
 		}, nil)
 	}
@@ -224,7 +222,7 @@ func TestHistory_PredictDuration_hitRateDiscount(t *testing.T) {
 	// hits 8 and 9 evict misses one by one so the window settles at
 	// HitCount=9, MissCount=1 → hit_rate=0.9, total=10 ≥ hitColdStart=5.
 	for i := 0; i < 9; i++ {
-		h.Update(now, []forecast.Sample{
+		h.Update(now, []Sample{
 			{Project: "svc", Target: "ci", Hit: true},
 		}, nil)
 	}
@@ -253,18 +251,18 @@ func TestHistory_PredictDuration_hitRateDiscount(t *testing.T) {
 func TestHistory_PredictDuration_coldStart(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	h := forecast.History{}
+	h := History{}
 
 	// 3 misses → p75 = 60_000, Samples = 3.
 	for i := 0; i < 3; i++ {
-		h.Update(now, []forecast.Sample{
+		h.Update(now, []Sample{
 			{Project: "svc", Target: "ci", DurationMs: 60_000},
 		}, nil)
 	}
 	// 2 hits → total hit+miss = 2+3 = 5... wait, 3 misses already count.
 	// We need HitCount+MissCount < 5. With 3 misses, MissCount = 3 (within window).
 	// Add only 1 hit → total = 4 < 5.
-	h.Update(now, []forecast.Sample{
+	h.Update(now, []Sample{
 		{Project: "svc", Target: "ci", Hit: true},
 	}, nil)
 
@@ -302,7 +300,7 @@ func TestHistoryV3LoadsIntoV4(t *testing.T) {
 		"workspace_fallback_ms": 15000
 	}`
 
-	var h forecast.History
+	var h History
 	if err := json.Unmarshal([]byte(v3JSON), &h); err != nil {
 		t.Fatalf("unmarshal v3 history: %v", err)
 	}
@@ -327,20 +325,20 @@ func TestHistoryV3LoadsIntoV4(t *testing.T) {
 func TestHistory_Update_hitRateProperty(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	h := forecast.History{}
+	h := History{}
 
 	observations := []bool{
 		true, false, true, true, false, true, true, true, false, true,
 		false, true, false, false, true, true, true, false, true, false,
 	}
 	for _, hit := range observations {
-		s := forecast.Sample{Project: "p", Target: "ci"}
+		s := Sample{Project: "p", Target: "ci"}
 		if hit {
 			s.Hit = true
 		} else {
 			s.DurationMs = 10_000
 		}
-		h.Update(now, []forecast.Sample{s}, nil)
+		h.Update(now, []Sample{s}, nil)
 
 		st := h.Projects["p"]["ci"]
 		total := st.HitCount + st.MissCount
@@ -363,24 +361,24 @@ func TestHistoryMerge(t *testing.T) {
 	newer := older.Add(time.Hour)
 
 	// Base both shards share (project "a"), plus each shard's own project.
-	shard0 := forecast.History{
-		Version:   forecast.HistoryVersion,
+	shard0 := History{
+		Version:   HistoryVersion,
 		UpdatedAt: older,
-		Projects: map[string]map[string]forecast.Stats{
+		Projects: map[string]map[string]Stats{
 			"a": {"test": {P75Ms: 100, LastUpdated: older}}, // stale base copy
 			"b": {"test": {P75Ms: 200, LastUpdated: newer}}, // shard 0 ran b
 		},
 	}
-	shard1 := forecast.History{
-		Version:   forecast.HistoryVersion,
+	shard1 := History{
+		Version:   HistoryVersion,
 		UpdatedAt: newer,
-		Projects: map[string]map[string]forecast.Stats{
+		Projects: map[string]map[string]Stats{
 			"a": {"test": {P75Ms: 150, LastUpdated: newer}}, // shard 1 ran a (fresher)
 			"c": {"test": {P75Ms: 300, LastUpdated: newer}}, // shard 1 ran c
 		},
 	}
 
-	var merged forecast.History
+	var merged History
 	merged.Merge(&shard0)
 	merged.Merge(&shard1)
 

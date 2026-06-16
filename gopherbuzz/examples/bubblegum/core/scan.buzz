@@ -1,0 +1,412 @@
+// core/scan.buzz - window lifecycle: adopt, evict, rescan, workspace relief.
+// Drives the scan loop that adopts new windows and evicts closed ones, plus
+// the workspace-crowding prompt and stacked-window relief.
+
+namespace scan;
+
+import "state";
+import "layout";
+import "config";
+import "statusbar";
+import "os";
+import "std";
+import "platform/macos/windows";
+import "platform/macos/events";
+import "platform/macos/frameworks";
+import "core/screens";
+import "core/tiling";
+import "core/registry";
+import "core/rules";
+import "core/session";
+
+// started reports whether the WM has finished its initial adopt. Exposed to rules
+// hooks so a rule can bin-pack only at startup and defer interactive arrivals to
+// the prompt, e.g.  if (ws > 0 and !started()) { return "move workspace {ws}"; }
+export fun started() > bool {
+    return state\wm().wmStarted;
+}
+
+export fun adopt(id: int) > void {
+    if (state\wm().root == null) {
+        state\wm().root = layout\makeLeaf(id);
+        if (state\wm().focusedId == 0) {
+            state\wm().focusedId = id;
+        }
+        tiling\seedDims(state\wm().root!, cg: screens\screenAt(state\wm().activeScreen).cg);
+        return;
+    }
+    final r = state\wm().root!;
+    if (!layout\insertAt(r, target: state\wm().focusedId, id: id)) {
+        _ = layout\insertAt(r, target: layout\lastLeaf(r).id, id: id);
+    }
+    tiling\seedDims(r, cg: screens\screenAt(state\wm().activeScreen).cg);
+}
+
+// adoptOn inserts a window into a screen's live tree -- through the globals
+// for the active screen, directly into stored state otherwise.
+export fun adoptOn(si: int, id: int) > void {
+    if (si == state\wm().activeScreen) {
+        adopt(id);
+        return;
+    }
+    final sc = screens\screenAt(si);
+    if (sc.root == null) {
+        sc.root = layout\makeLeaf(id);
+        if (sc.focusedId == 0) {
+            sc.focusedId = id;
+        }
+        tiling\seedDims(sc.root!, cg: sc.cg);
+        return;
+    }
+    final r = sc.root!;
+    if (!layout\insertAt(r, target: sc.focusedId, id: id)) {
+        _ = layout\insertAt(r, target: layout\lastLeaf(r).id, id: id);
+    }
+    tiling\seedDims(r, cg: sc.cg);
+}
+
+// detachOn removes a window from a screen's live tree (current workspace).
+export fun detachOn(si: int, id: int) > void {
+    if (si == state\wm().activeScreen) {
+        detachCurrent(id);
+        return;
+    }
+    final sc = screens\screenAt(si);
+    if (sc.fullscreenId == id) {
+        sc.fullscreenId = 0;
+    }
+    if (sc.root == null) {
+        return;
+    }
+    final r = sc.root!;
+    if (r.isLeaf() and r.id == id) {
+        sc.root = null;
+        sc.focusedId = 0;
+        return;
+    }
+    _ = layout\removeAt(r, target: id);
+    if (sc.focusedId == id) {
+        sc.focusedId = layout\lastLeaf(r).id;
+    }
+}
+
+// detachCurrent removes a window from the active tree (the globals).
+export fun detachCurrent(id: int) > void {
+    if (state\wm().fullscreenId == id) {
+        state\wm().fullscreenId = 0;
+    }
+    if (state\wm().root == null) {
+        return;
+    }
+    final r = state\wm().root!;
+    if (r.isLeaf() and r.id == id) {
+        state\wm().root = null;
+        state\wm().focusedId = 0;
+        return;
+    }
+    _ = layout\removeAt(r, target: id);
+    if (state\wm().focusedId == id) {
+        state\wm().focusedId = layout\lastLeaf(r).id;
+    }
+}
+
+// detachParked is detachCurrent against an inactive workspace's saved state
+// on the window's own screen.
+export fun detachParked(m: state\Managed) > void {
+    final w = screens\wsOn(m.screen, i: m.workspace);
+    if (w.fullscreenId == m.id) {
+        w.fullscreenId = 0;
+    }
+    if (w.root == null) {
+        return;
+    }
+    final r = w.root!;
+    if (r.isLeaf() and r.id == m.id) {
+        w.root = null;
+        w.focusedId = 0;
+        return;
+    }
+    _ = layout\removeAt(r, target: m.id);
+    if (w.focusedId == m.id) {
+        w.focusedId = layout\lastLeaf(r).id;
+    }
+}
+
+export fun evict(m: state\Managed) > void {
+    registry\logAct("evict #{m.id} {windows\appName(m.pid)} (ws{m.workspace + 1})");
+    frameworks\releaseRef(m.ref);
+    if (state\wm().scratchShown == m.id) {
+        state\wm().scratchShown = 0;
+    }
+    if (m.workspace == state\wm().curWs) {
+        detachOn(m.screen, id: m.id);
+    } else if (m.workspace != state\scratchWs) {
+        detachParked(m);
+    }
+}
+
+// ignoreWindow un-manages a window: evicts it from the tree and removes it
+// from the managed registry so the next retile never places it.
+export fun ignoreWindow(id: int) > void {
+    final mo = registry\managedById(id);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    registry\logAct("ignore #{id} {windows\appName(mm.pid)} \"{windows\windowTitle(mm.ref)}\"");
+    evict(mm);
+    registry\managedRemove(id);
+}
+
+// promptText renders the active prompt's message with a live seconds countdown to its
+// auto-dismiss (state\promptTtlMs), so the user can see how long they have to answer before
+// it decides for them.
+export fun promptText() > str {
+    var left = state\promptTtlMs - (os\time() - state\wm().promptAt);
+    if (left < 0.0) {
+        left = 0.0;
+    }
+    final secs = std\toInt((left + 999.0) / 1000.0); // ceil to whole seconds
+    return "{state\wm().promptBase}   ({secs}s)";
+}
+
+// raiseRelief holds a window aside (out of the tree, parked offscreen) and puts the
+// "move to a roomier workspace?" question on the bar. handlePromptKey resolves it:
+// Return moves it to `target` and follows; anything else tiles it back here. Shared
+// by the count-based crowd check and the fit-based stack check below.
+export fun raiseRelief(id: int, target: int) > void {
+    final mo = registry\managedById(id);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    detachOn(mm.screen, id: id);
+    mm.pending = true;
+    windows\moveWindow(mm.ref, x: state\parkX, y: state\parkY);
+    state\wm().promptId = id;
+    state\wm().promptWs = target;
+    state\wm().promptAt = os\time();
+    final app = windows\appName(mm.pid);
+    state\wm().promptBase = "ws{state\wm().curWs + 1} full. Move {app} to ws{target}?   return yes   esc no";
+    final pt = promptText();
+    statusbar\promptShow(pt);
+    state\wm().lastPromptText = pt;
+    registry\logAct("prompt #{id} {app}: move to ws{target}");
+}
+
+// stackedVictim returns a current-workspace window the tiler stacked coincident with
+// another (the no-overlap fallback when windows don't fit), preferring one that is
+// not focused so relief moves a background window, not the one in use. Returns 0 when
+// nothing is stacked. Monocle and the stacked layout make windows coincident on
+// purpose, so callers skip this when fullscreenId or `stacked` is set.
+export fun stackedVictim() > int {
+    if (state\wm().root == null) {
+        return 0;
+    }
+    final ls = mut [];
+    layout\collectLeaves(state\wm().root!, res: ls);
+    var fallback = 0;
+    foreach (i in 0..ls.len()) {
+        final a = (ls[i] as? mut layout\Node)!;
+        foreach (j in 0..ls.len()) {
+            if (j == i) {
+                continue;
+            }
+            final b = (ls[j] as? mut layout\Node)!;
+            if (tiling\absD(a.x - b.x) < 2.0 and tiling\absD(a.y - b.y) < 2.0) {
+                if (a.id != state\wm().focusedId) {
+                    return a.id;
+                }
+                if (fallback == 0) {
+                    fallback = a.id;
+                }
+            }
+        }
+    }
+    return fallback;
+}
+
+// firstEmptyWorkspace returns the nearest workspace (0-based) holding no windows,
+// other than the current one, or -1 if every other workspace is occupied.
+export fun firstEmptyWorkspace() > int {
+    final counts = registry\wsCounts();
+    foreach (i in 0..9) {
+        if (i != state\wm().curWs and counts[i] == 0) {
+            return i;
+        }
+    }
+    return 0 - 1;
+}
+
+// sendToWorkspace sends a specific window to workspace `ws` and hides it there (per
+// hideMethod), without changing focus or following it. The relief counterpart to
+// cmdMoveToWs, which acts on the focused window for an explicit, deliberate move.
+export fun sendToWorkspace(id: int, ws: int) > void {
+    final mo = registry\managedById(id);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    detachOn(mm.screen, id: id);
+    mm.workspace = ws;
+    final target = screens\wsOn(mm.screen, i: ws);
+    if (target.root == null) {
+        target.root = layout\makeLeaf(id);
+        target.focusedId = id;
+    } else {
+        final tr = target.root!;
+        if (!layout\insertAt(tr, target: target.focusedId, id: id)) {
+            _ = layout\insertAt(tr, target: layout\lastLeaf(tr).id, id: id);
+        }
+    }
+    session\parkRestored(mm); // hide it on the now-inactive workspace
+}
+
+// maybePromptCrowded raises the bar prompt for a window adopted this scan that
+// stayed on the current workspace while that workspace is over binPackCap. Only
+// the first such window is offered (one question at a time); explicitly-placed
+// windows have already been moved off curWs by applyRules, so they're skipped.
+export fun maybePromptCrowded(ids: [any]) > void {
+    if (state\wm().promptId != 0 or !state\wm().wmStarted) {
+        return; // a prompt is already up, or the WM is still starting
+    }
+    final target = config\promptTarget(registry\wsCounts(), curWs: state\wm().curWs, cap: state\wm().cfg.binPackCap);
+    if (target == 0) {
+        return; // feature off, current ws has room, or nowhere less crowded to offer
+    }
+    foreach (aid in ids) {
+        final id = (aid as? int)!;
+        final mo = registry\managedById(id);
+        if (mo == null) {
+            continue;
+        }
+        final mm = mo!;
+        if (mm.workspace == state\wm().curWs and !mm.floating) {
+            raiseRelief(id, target: target); // hold it offscreen and ask before placing
+            return;
+        }
+    }
+}
+
+export fun rescan() > void {
+    final seen = mut [<int>];
+    final adopted = mut [<int>]; // ids of windows adopted this scan; rules run AFTER the
+                            // loop (below), never mid-loop -- a rule that moves/floats
+                            // a window retiles and reshuffles focus, which corrupts
+                            // the in-progress scan (only the first window survived).
+    foreach (p in windows\onScreenPids()) {
+        final pid = (p as? int)!;
+        _ = events\watchApp(pid); // event-driven: react to this app's window lifecycle (idempotent)
+        foreach (w in windows\appWindows(pid)) {
+            final ref = (w as? ud)!;
+            final known = registry\idForRef(ref);
+            if (known != 0) {
+                frameworks\releaseRef(ref); // duplicate handle to a window already managed
+                final mo = registry\managedById(known);
+                if (mo != null) {
+                    final mm = mo!;
+                    mm.missing = 0;
+                    mm.minimized = false; // listed in appWindows, so it is not minimized
+                    if (mm.pending) {
+                        // Held aside for the crowded prompt: parked offscreen and
+                        // out of the tree on purpose. Don't evict, re-home, or
+                        // re-adopt it -- placement waits on the answer.
+                        seen.append(known);
+                        continue;
+                    }
+                    if (mm.workspace != state\wm().curWs) {
+                        // Parked on another workspace (off-screen or minimized).
+                        // Leave it entirely -- don't evict, re-home, or pull it
+                        // onto the current workspace. Surfacing is explicit now
+                        // (workspace switch), not a passive rescan side effect.
+                        seen.append(known);
+                        continue;
+                    }
+                    final nowOn = screens\screenForRef(mm.ref);
+                    if (!mm.floating and nowOn == 0 - 1) {
+                        // The window moved to an untiled display: hand it
+                        // back to macOS entirely (floating windows may roam).
+                        evict(mm);
+                        registry\managedRemove(mm.id);
+                        continue;
+                    }
+                    if (!mm.floating and nowOn != mm.screen and mm.workspace == state\wm().curWs) {
+                        // Dragged across tiled displays: re-home its tree.
+                        detachOn(mm.screen, id: mm.id);
+                        mm.screen = nowOn;
+                        adoptOn(nowOn, id: mm.id);
+                    }
+                    // Past the parked guard above, this window belongs to the
+                    // current workspace. Re-tile it if it fell out of the tree
+                    // (restored after a transient minimize) or the tree is empty.
+                    if (!mm.floating and screens\treeOf(mm.screen) != null and layout\findLeaf(screens\treeOf(mm.screen)!, target: mm.id) == null) {
+                        adoptOn(mm.screen, id: mm.id);
+                    } else if (!mm.floating and screens\treeOf(mm.screen) == null) {
+                        adoptOn(mm.screen, id: mm.id);
+                    }
+                }
+                seen.append(known);
+                continue;
+            }
+            final home = screens\screenForRef(ref);
+            if (home == 0 - 1) {
+                frameworks\releaseRef(ref); // lives on an untiled display: stays native
+                continue;
+            }
+            final id = state\wm().nextId;
+            state\wm().nextId = state\wm().nextId + 1;
+            state\wm().managed.append(mut state\Managed{ id = id, ref = ref, pid = pid, workspace = state\wm().curWs, screen = home });
+            registry\logAct("adopt #{id} {windows\appName(pid)} \"{windows\windowTitle(ref)}\" -> ws{state\wm().curWs + 1} ({registry\frameLabel(id)})");
+            events\watchWindow(pid, element: ref, id: id); // destroyed/moved/minimize for this window
+            adoptOn(home, id: id);
+            seen.append(id);
+            adopted.append(id); // defer applyRules until the scan finishes (below)
+        }
+    }
+    final keep = mut [<mut state\Managed>];
+    foreach (m in state\wm().managed) {
+        if (seen.indexOf(m.id) != null) {
+            keep.append(m);
+            continue;
+        }
+        // Not on screen but the element is dead: the window closed. Evict.
+        if (!windows\windowAlive(m.ref)) {
+            evict(m);
+            continue;
+        }
+        // Alive but invisible on the current workspace. Two cases, told apart by the
+        // live AXMinimized flag:
+        //   1. The user minimized it (Dock / yellow button / cmd-M). Honor it now: pull
+        //      it out of the tree this same tick, before the retile that follows. Leave
+        //      it in for even one tick and retile writes it a frame, and on macOS
+        //      writing a frame to a minimized window restores it: that was the old
+        //      "minimize bounces back" bug. It stays down; the bar lists it by app for
+        //      one-click recall. (Restore it via the Dock and the next scan re-adopts.)
+        //   2. Invisible for another reason (a slow workspace-switch un-minimize still
+        //      animating). Grace tick before untiling so it is not punished; the
+        //      re-adopt path above re-tiles it on restore.
+        if (m.workspace == state\wm().curWs) {
+            if (m.minimized or windows\isMinimized(m.ref)) {
+                if (!m.minimized) {
+                    detachOn(m.screen, id: m.id);
+                    m.minimized = true;
+                    registry\logAct("minimize: {registry\winLabel(m.id)} stashed; recall from the bar");
+                }
+            } else {
+                m.missing = m.missing + 1;
+                if (m.missing == 2) {
+                    detachOn(m.screen, id: m.id);
+                }
+            }
+        }
+        keep.append(m);
+    }
+    state\wm().managed = keep;
+    // Now that the scan is finished and `managed` is settled, run the rules for the
+    // windows adopted this pass. Their move/float commands retile and reshuffle the
+    // tree on a stable state instead of mid-scan.
+    foreach (aid in adopted) {
+        rules\applyRules(aid);
+    }
+    maybePromptCrowded(adopted); // a window that stayed on a crowded ws? offer to move it
+}

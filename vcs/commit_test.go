@@ -48,9 +48,9 @@ func TestParents(t *testing.T) {
 	}{
 		{"", nil},
 		{"a b c", []string{"a", "b", "c"}},
-		{"a  b", []string{"a", "b"}},      // collapse runs of whitespace
-		{"a " + null40, []string{"a"}},    // drop the null p2node sentinel
-		{null40, nil},                     // all-null → empty
+		{"a  b", []string{"a", "b"}},   // collapse runs of whitespace
+		{"a " + null40, []string{"a"}}, // drop the null p2node sentinel
+		{null40, nil},                  // all-null → empty
 	}
 	for _, tc := range cases {
 		got := parents(tc.in)

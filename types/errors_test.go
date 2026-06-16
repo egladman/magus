@@ -1,16 +1,14 @@
-package types_test
+package types
 
 import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/egladman/magus/types"
 )
 
 func TestUnregisteredDepError_Error(t *testing.T) {
-	err := &types.UnregisteredDepError{
-		Missing: []types.UnregisteredDep{
+	err := &UnregisteredDepError{
+		Missing: []UnregisteredDep{
 			{Consumer: "api/", Dep: "shared/", DidYouMean: "common/"},
 			{Consumer: "gateway/", Dep: "missing/"},
 		},
@@ -28,17 +26,17 @@ func TestUnregisteredDepError_Error(t *testing.T) {
 }
 
 func TestUnregisteredDepError_Is(t *testing.T) {
-	err := &types.UnregisteredDepError{}
-	if !errors.Is(err, types.ErrUnregisteredDep) {
+	err := &UnregisteredDepError{}
+	if !errors.Is(err, ErrUnregisteredDep) {
 		t.Error("errors.Is(UnregisteredDepError, ErrUnregisteredDep) = false, want true")
 	}
 }
 
 func TestSpellErrors_Error(t *testing.T) {
-	err := &types.SpellErrors{
+	err := &SpellErrors{
 		Project: "api/",
 		Target:  "build",
-		Failed: []types.SpellError{
+		Failed: []SpellError{
 			{Spell: "go", Err: errors.New("exit 1")},
 		},
 	}
@@ -56,8 +54,8 @@ func TestSpellErrors_Error(t *testing.T) {
 
 func TestSpellErrors_Unwrap(t *testing.T) {
 	inner := errors.New("exit 2")
-	err := &types.SpellErrors{
-		Failed: []types.SpellError{{Spell: "go", Err: inner}},
+	err := &SpellErrors{
+		Failed: []SpellError{{Spell: "go", Err: inner}},
 	}
 	if !errors.Is(err, inner) {
 		t.Error("errors.Is via Unwrap failed")
@@ -66,12 +64,12 @@ func TestSpellErrors_Unwrap(t *testing.T) {
 
 func TestDiagnosticCode_URL(t *testing.T) {
 	cases := []struct {
-		code    types.DiagnosticCode
+		code    DiagnosticCode
 		wantSub string
 	}{
-		{types.PathReadDenied, "MGS2001"},
-		{types.RaceDetected, "MGS4001"},
-		{types.NoCITarget, "MGS1001"},
+		{PathReadDenied, "MGS2001"},
+		{RaceDetected, "MGS4001"},
+		{NoCITarget, "MGS1001"},
 	}
 	for _, tc := range cases {
 		url := tc.code.URL()
@@ -83,28 +81,28 @@ func TestDiagnosticCode_URL(t *testing.T) {
 		}
 	}
 	// MGS1xxx routes to the magusfile docs dir, not the sandbox/race bases.
-	if url := types.NoCITarget.URL(); !strings.Contains(url, "/docs/codes/magusfile/") {
+	if url := NoCITarget.URL(); !strings.Contains(url, "/docs/codes/magusfile/") {
 		t.Errorf("NoCITarget.URL() = %q, want to route to /docs/codes/magusfile/", url)
 	}
 }
 
 func TestDiagnosticError_Is(t *testing.T) {
-	err := types.DiagnosticErrorf(types.PathReadDenied, "test")
-	if !errors.Is(err, types.ErrDiag) {
+	err := DiagnosticErrorf(PathReadDenied, "test")
+	if !errors.Is(err, ErrDiag) {
 		t.Error("DiagnosticError should match ErrDiag")
 	}
-	same := types.DiagnosticErrorf(types.PathReadDenied, "other")
+	same := DiagnosticErrorf(PathReadDenied, "other")
 	if !errors.Is(err, same) {
 		t.Error("DiagnosticError should match same-code DiagnosticError")
 	}
-	other := types.DiagnosticErrorf(types.PathWriteDenied, "test")
+	other := DiagnosticErrorf(PathWriteDenied, "test")
 	if errors.Is(err, other) {
 		t.Error("DiagnosticError should not match different-code DiagnosticError")
 	}
 }
 
 func TestDiagnosticErrorf(t *testing.T) {
-	err := types.DiagnosticErrorf(types.EnvStripped, "var %s was stripped", "HOME")
+	err := DiagnosticErrorf(EnvStripped, "var %s was stripped", "HOME")
 	msg := err.Error()
 	if !strings.Contains(msg, "MGS2003") {
 		t.Errorf("Error() = %q, want MGS2003", msg)

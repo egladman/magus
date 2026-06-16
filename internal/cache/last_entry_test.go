@@ -1,4 +1,4 @@
-package cache_test
+package cache
 
 import (
 	"context"
@@ -7,13 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/egladman/magus/internal/cache"
 )
 
 func TestLastEntryFor_NoEntries(t *testing.T) {
 	cdir := t.TempDir()
-	c, err := cache.Open(cdir)
+	c, err := Open(cdir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +34,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 		t.Fatal(err)
 	}
 	outRel := filepath.Join("myservice", "out.bin")
-	spec := cache.Spec{
+	spec := Spec{
 		ProjectPath:   "myservice",
 		Sources:       []string{"myservice/*.go"},
 		Outputs:       []string{outRel},
@@ -51,7 +49,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 		return os.WriteFile(abs, []byte("binary"), 0o755)
 	}
 
-	c, err := cache.Open(cdir, cache.WithMutable(true), cache.WithLogger(discardLogger))
+	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,19 +94,19 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c, err := cache.Open(cdir, cache.WithMutable(true), cache.WithLogger(discardLogger))
+	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	buildSpec := cache.Spec{
+	buildSpec := Spec{
 		ProjectPath:   "svc",
 		Sources:       []string{"svc/*.go"},
 		Outputs:       []string{"svc/build.out"},
 		WorkspaceRoot: root,
 		Target:        "build",
 	}
-	testSpec := cache.Spec{
+	testSpec := Spec{
 		ProjectPath:   "svc",
 		Sources:       []string{"svc/*.go"},
 		Outputs:       []string{"svc/test.out"},

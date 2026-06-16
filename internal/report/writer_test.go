@@ -1,16 +1,14 @@
-package report_test
+package report
 
 import (
 	"bytes"
 	"strings"
 	"testing"
-
-	"github.com/egladman/magus/internal/report"
 )
 
 func TestNewWriter_NonNil(t *testing.T) {
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
+	w := NewWriter(&buf)
 	if w == nil {
 		t.Fatal("NewWriter returned nil")
 	}
@@ -19,7 +17,7 @@ func TestNewWriter_NonNil(t *testing.T) {
 
 func TestWriter_Stats_InitialZero(t *testing.T) {
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
+	w := NewWriter(&buf)
 	defer w.Close()
 
 	s := w.Stats()
@@ -33,7 +31,7 @@ func TestWriter_Stats_InitialZero(t *testing.T) {
 
 func TestWriter_Close_NoError(t *testing.T) {
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
+	w := NewWriter(&buf)
 	if err := w.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -41,8 +39,8 @@ func TestWriter_Close_NoError(t *testing.T) {
 
 func TestWriter_RecordAndClose(t *testing.T) {
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf, report.WithBlockOnFull())
-	if err := report.Record(w, report.CacheHit{Project: "p", Target: "build"}); err != nil {
+	w := NewWriter(&buf, WithBlockOnFull())
+	if err := Record(w, CacheHit{Project: "p", Target: "build"}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	if err := w.Close(); err != nil {
@@ -59,7 +57,7 @@ func TestWriter_RecordAndClose(t *testing.T) {
 
 func TestWriter_WithQueueSize(t *testing.T) {
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf, report.WithQueueSize(4))
+	w := NewWriter(&buf, WithQueueSize(4))
 	if w == nil {
 		t.Fatal("NewWriter with custom queue returned nil")
 	}

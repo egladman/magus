@@ -1,0 +1,9 @@
+// platform/macos/objc/msgB1.buzz — objc_msgSend, shape: id msg(id, SEL, bool).
+// See msg0.buzz for why each shape binds a uniquely-named shim wrapper.
+namespace msgB1;
+
+zdef("bubblegum", "fn yt_send_flag(self: ?*anyopaque, op: ?*anyopaque, a: bool) ?*anyopaque;");
+
+export fun sendFlag(self: ud?, op: ud?, a: bool) > ud? {
+    return yt_send_flag(self, op: op, a: a);
+}

@@ -1,0 +1,176 @@
+// traymenu.buzz — the menu-bar item's drop-down, as a bubblegum-drawn overlay.
+//
+// AppKit's own NSMenu needs an Objective-C target/action pair to deliver a click,
+// and this toolkit has no runtime ObjC class to host one (see cocoa.buzz). So the
+// tray menu is the same trick as the launcher: a borderless panel of text rows,
+// positioned just under the status item, with clicks hit-tested off the global
+// mouse tap (the WM owns that — see handleTrayClick). This module only draws and
+// reports its row geometry; placement, hit-testing, and the row *meaning*
+// (which row does what, the inline-expand submenu) live in the WM.
+//
+// Rows are a flat list the WM rebuilds on every state change: a status header
+// (app name + a green/amber dot, Docker-style), normal items, and indented
+// children revealed when an item is expanded. Drawing reads each row's kind for
+// its color/indent; the WM keeps the parallel action mapping.
+
+namespace traymenu;
+
+import "std";
+import "platform/macos/cocoa";
+
+// Row kinds drive how a row is drawn: the header gets the status dot, children sit
+// indented under their parent, items are plain. The WM owns what each row *does*.
+export final kindItem = 0;
+export final kindHeader = 1;
+export final kindChild = 2;
+
+export object Row {
+    text: str = "",
+    kind: int = 0,
+}
+
+export final menuW = 256.0;
+final rowH = 26.0;
+final padding = 6.0;
+final headerGap = 8.0;  // breathing room between the header (+ its divider) and the items below
+final indentX = 16.0;   // children sit this far right of items
+final dotD = 9.0;       // status-dot diameter
+final maxRows = 8;      // label pool size (header + resume/pause + 3 children + config = 6; headroom)
+
+var panel: ud? = null;
+var labels = mut [<ud>];
+var statusDot: ud? = null;  // green/amber dot in the header row (macOS only)
+var divider: ud? = null;    // hairline under the header (macOS only)
+var visible = false;
+var rowCount = 0;           // rows currently shown; rowAt clamps to this
+
+// menuHeight is the panel height for n rows — the WM needs it to place the panel
+// (it drops down from the tray icon) and to size the click target. With items
+// present (n >= 2) it reserves headerGap below the header for the divider + space.
+export fun menuHeight(n: int) > double {
+    var h = padding * 2.0 + std\toDouble(n) * rowH;
+    if (n >= 2) {
+        h = h + headerGap;
+    }
+    return h;
+}
+
+// rowAt maps a y measured DOWN from the menu's top edge to a row index, or -1 if
+// it lands in the padding, the header gap, or past the last shown row. The header
+// (row 0) sits in the top slot; the items below are offset by headerGap.
+export fun rowAt(yFromTop: double) > int {
+    var inner = yFromTop - padding;
+    if (inner < 0.0) {
+        return 0 - 1;
+    }
+    if (inner < rowH) {
+        return 0; // the header row
+    }
+    if (rowCount >= 2) {
+        inner = inner - headerGap; // skip the gap between the header and the items
+    }
+    final row = std\toInt(inner / rowH);
+    if (row < 1 or row >= rowCount) {
+        return 0 - 1; // landed in the gap, or past the last row
+    }
+    return row;
+}
+
+fun init(x: double, y: double) > void {
+    if (panel != null) {
+        return;
+    }
+    cocoa\uiInit();
+    final h = menuHeight(maxRows);
+    panel = cocoa\uiOverlayPanel(x, y: y, w: menuW, h: h);
+    if (cocoa\uiIsMac()) {
+        // Header chrome: a status dot (recolored per state in show) and a hairline
+        // divider beneath the header. Parked offscreen until show places them.
+        statusDot = cocoa\uiFill(panel, x: 0.0 - 100.0, y: 0.0, w: dotD, h: dotD, color: cocoa\uiNamedColor("systemGreenColor"), radius: dotD / 2.0);
+        final sep = cocoa\uiColorAlpha(cocoa\uiNamedColor("labelColor"), alpha: 0.18);
+        divider = cocoa\uiFill(panel, x: 0.0 - 100.0, y: 0.0, w: menuW - padding * 2.0, h: 1.0, color: sep, radius: 0.0);
+    }
+    foreach (_ in 0..maxRows) {
+        final lb = cocoa\uiThemedLabel(panel, x: padding + 8.0, y: 0.0, w: menuW - padding * 2.0 - 16.0, h: rowH - 6.0, size: 13.0, gray: 0.92);
+        cocoa\uiSetSystemFont(lb, size: 13.0); // these are menu items, not code — match the OS menu font
+        labels.append(lb!);
+    }
+}
+
+// show draws the menu with its bottom-left at AppKit (x, y) and the given rows
+// (header first). `paused` colors the status dot: green running, amber paused.
+// Repositions an already-built panel and parks any unused labels offscreen.
+export fun show(x: double, y: double, rows: [Row], paused: bool) > void {
+    init(x, y);
+    rowCount = rows.len();
+    if (rowCount > maxRows) {
+        rowCount = maxRows;
+    }
+    final h = menuHeight(rowCount);
+    cocoa\uiSetPanelFrame(panel, x: x, y: y, w: menuW, h: h);
+    final mac = cocoa\uiIsMac();
+    var headerX = padding + 8.0;
+    if (mac) {
+        headerX = padding + 8.0 + dotD + 6.0; // leave room for the status dot on macOS
+    }
+    foreach (i in 0..maxRows) {
+        if (i < rowCount) {
+            final r = rows[i];
+            var ly = h - padding - rowH * std\toDouble(i + 1);
+            if (i >= 1) {
+                ly = ly - headerGap; // items sit below the header gap
+            }
+            var lx = padding + 8.0;
+            if (r.kind == kindHeader) {
+                lx = headerX;
+            } else if (r.kind == kindChild) {
+                lx = padding + 8.0 + indentX;
+            }
+            cocoa\uiSetFrame(labels[i], x: lx, y: ly + 4.0, w: menuW - lx - padding, h: rowH - 6.0);
+            cocoa\uiSetText(labels[i], text: r.text);
+        } else {
+            cocoa\uiSetFrame(labels[i], x: 0.0 - 200.0, y: 0.0, w: 1.0, h: 1.0);
+            cocoa\uiSetText(labels[i], text: "");
+        }
+    }
+    if (mac) {
+        // Dot centered in the header row (row 0, at the menu's top).
+        final r0Bottom = h - padding - rowH;
+        cocoa\uiSetFrame(statusDot, x: padding + 9.0, y: r0Bottom + (rowH - dotD) / 2.0, w: dotD, h: dotD);
+        var dotColor = cocoa\uiNamedColor("systemGreenColor");
+        if (paused) {
+            dotColor = cocoa\uiNamedColor("systemYellowColor");
+        }
+        cocoa\uiSetFillColor(statusDot, color: dotColor);
+        // Divider on the boundary between the header row and the rest.
+        if (rowCount >= 2) {
+            // Centered in the gap between the header and the first item.
+            cocoa\uiSetFrame(divider, x: padding, y: r0Bottom - headerGap / 2.0, w: menuW - padding * 2.0, h: 1.0);
+        } else {
+            cocoa\uiSetFrame(divider, x: 0.0 - 200.0, y: 0.0, w: 1.0, h: 1.0);
+        }
+    }
+    cocoa\uiShow(panel);
+    visible = true;
+}
+
+// setRowText updates a single row's text without rebuilding the whole menu: the
+// WM ticks the pause countdown on the Resume row this way.
+export fun setRowText(i: int, text: str) > void {
+    if (!visible or i < 0 or i >= labels.len()) {
+        return;
+    }
+    cocoa\uiSetText(labels[i], text: text);
+}
+
+export fun hide() > void {
+    if (!visible) {
+        return;
+    }
+    visible = false;
+    cocoa\uiHide(panel);
+}
+
+export fun isVisible() > bool {
+    return visible;
+}

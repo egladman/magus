@@ -34,6 +34,15 @@ type CompileOptions struct {
 	// is unchanged for them. Leave it false for the REPL/incremental path, where a
 	// later chunk may reference any earlier top-level name by name.
 	PromoteTopLevel bool
+
+	// ImportedTypes are the exported object/enum declarations of flat-imported
+	// modules (the same set handed to the checker). They are seeded into the
+	// compiler's typeDecls so an object literal of an imported type
+	// (`config\Config{...}`) applies that type's field defaults, exactly as a
+	// local-type literal does. Without this, an imported-type literal only carries
+	// the fields it sets and leaves the rest null — upstream Buzz applies the
+	// defaults, so this is a parity fix, not an extension.
+	ImportedTypes []ast.Node
 }
 
 // CompileWith compiles prog under opts. See CompileOptions. Pass the zero
@@ -45,12 +54,23 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*Chunk, error) {
 	c := newCompiler(nil, "<main>", nil)
 	c.useSlots = !opts.SharedGlobals
 	c.debugLines = opts.DebugLines
+	if opts.SharedGlobals {
+		c.initModuleScope(prog) // per-module Env keys for private globals
+	}
 	if opts.SharedGlobals && opts.PromoteTopLevel {
 		c.promoteTopLevel = true
 		c.keepEnv = topLevelKeepEnv(prog)
 	}
 	if opts.DebugLines {
 		c.chunk.Lines = []int32{} // non-nil: emit now records a line per instruction
+	}
+	// Imported object types first, keyed by bare name (the last segment, which is
+	// how a `ns\Name{...}` literal resolves -- see the parser). Local declarations
+	// below overwrite on a name clash, so a local type always shadows an import.
+	for _, n := range opts.ImportedTypes {
+		if od, ok := n.(*ast.ObjectDecl); ok {
+			c.typeDecls[od.Name] = od
+		}
 	}
 	for _, s := range prog.Stmts {
 		if od, ok := s.(*ast.ObjectDecl); ok {
@@ -422,6 +442,17 @@ type compiler struct {
 	// zdefSeq names the per-statement temporary that holds a lowered top-level
 	// zdef handle while its symbols are bound as globals (see zdef_decl.go).
 	zdefSeq int32
+	// nsPrefix and privTop give a namespaced module its own Env keys for PRIVATE
+	// top-level vars and funcs. In SharedGlobals mode every module's top-level
+	// declarations land in one shared Env keyed by bare name, so two modules that
+	// each declare a private `var panel` would collide on the same slot. When a
+	// module has a `namespace X;`, privTop holds its private top-level names and
+	// nsPrefix ("\0X\0") qualifies them at every def/load/store (see globalName).
+	// Exports stay bare — they're unique across modules and reached via the
+	// namespace object. Inherited by nested function compilers so a reference to a
+	// private global inside a function mangles to the same key as its definition.
+	nsPrefix string
+	privTop  map[string]bool
 }
 
 func newCompiler(parent *compiler, name string, params []string) *compiler {
@@ -521,6 +552,54 @@ func (c *compiler) nameConst(s string) int32 {
 	return c.chunk.AddConst(StrValue(s))
 }
 
+// globalName maps a top-level identifier to its shared-Env key. A private var or
+// func of a namespaced module is qualified with nsPrefix so it can't collide with
+// a same-named private in another module; exports, imports, builtins, and any name
+// not declared private here keep their bare spelling. Called at every OpDefName /
+// OpLoadName / OpStoreName site that touches a user-level top-level name.
+func (c *compiler) globalName(name string) string {
+	if c.privTop != nil && c.privTop[name] {
+		return c.nsPrefix + name
+	}
+	return name
+}
+
+// initModuleScope records the module's namespace and the set of its private
+// top-level vars/funcs, so globalName can give them per-module Env keys. Only
+// meaningful in SharedGlobals mode (where modules share one Env); a module with no
+// `namespace` — the entry program — keeps bare keys, which is unambiguous because
+// it is the only namespace-less module in a program.
+func (c *compiler) initModuleScope(prog *ast.Program) {
+	var ns string
+	for _, s := range prog.Stmts {
+		if n, ok := s.(*ast.NamespaceStmt); ok {
+			ns = n.Name
+			break
+		}
+	}
+	if ns == "" {
+		return
+	}
+	priv := map[string]bool{}
+	for _, s := range prog.Stmts {
+		switch d := s.(type) {
+		case *ast.DeclStmt:
+			if !d.IsExported {
+				priv[d.Name] = true
+			}
+		case *ast.FunDecl:
+			if !d.IsExported {
+				priv[d.Name] = true
+			}
+		}
+	}
+	if len(priv) == 0 {
+		return
+	}
+	c.nsPrefix = "\x00" + ns + "\x00"
+	c.privTop = priv
+}
+
 // compileZdefDecl lowers a top-level `zdef("lib", "<decls>")` statement into
 // module-global bindings for the symbols it declares (upstream Buzz zdef
 // semantics; see zdef_decl.go). It evaluates the zdef call once into a private
@@ -611,7 +690,7 @@ func (c *compiler) compileStmt(n ast.Node) error {
 			}
 			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
 		} else {
-			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
+			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(c.globalName(v.Name)), 0)
 			if v.IsExported {
 				c.chunk.Exports = append(c.chunk.Exports, v.Name)
 			} else {
@@ -714,7 +793,7 @@ func (c *compiler) compileStmt(n ast.Node) error {
 			slot := c.defineLocal(v.Name)
 			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
 		} else {
-			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
+			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(c.globalName(v.Name)), 0)
 			if v.IsExported {
 				c.chunk.Exports = append(c.chunk.Exports, v.Name)
 			} else {
@@ -786,7 +865,7 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 		}
 		// OpStoreName consumes its operand (see the handler in vm.go); no
 		// trailing OpPop, mirroring OpSetLocal.
-		c.chunk.Emit(vmpackage.OpStoreName, c.nameConst(t.Name), 0)
+		c.chunk.Emit(vmpackage.OpStoreName, c.nameConst(c.globalName(t.Name)), 0)
 		return nil
 	case *ast.MemberExpr:
 		if idx, ok := c.thisFieldIndex(t.Object, t.Name); ok {
@@ -1084,6 +1163,11 @@ func (c *compiler) compileFunChunkThis(name, doc string, params []string, stmts 
 		useSlots:   true,
 		debugLines: c.debugLines,
 		thisFields: thisFields,
+		// Inherit the module's private-global mangling so a reference to a private
+		// top-level name inside this function resolves to the same Env key as its
+		// definition (see compiler.nsPrefix).
+		nsPrefix: c.nsPrefix,
+		privTop:  c.privTop,
 	}
 	if c.debugLines {
 		fc.chunk.Lines = []int32{} // non-nil: record a line per instruction
@@ -1144,6 +1228,13 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	declIdx := c.chunk.AddConst(ObjDeclValue(v))
 	c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
 	c.chunk.Emit(vmpackage.OpDefName, nameIdx, 0)
+	if c.depth == 0 {
+		if v.IsExported {
+			c.chunk.Exports = append(c.chunk.Exports, v.Name)
+		} else {
+			c.chunk.Private = append(c.chunk.Private, v.Name)
+		}
+	}
 	return nil
 }
 
@@ -1151,6 +1242,13 @@ func (c *compiler) compileEnumDecl(v *ast.EnumDecl) error {
 	idx := c.chunk.AddConst(EnumDefValue(v.Name, v.Cases))
 	c.chunk.Emit(vmpackage.OpLoadConst, idx, 0)
 	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
+	if c.depth == 0 {
+		if v.IsExported {
+			c.chunk.Exports = append(c.chunk.Exports, v.Name)
+		} else {
+			c.chunk.Private = append(c.chunk.Private, v.Name)
+		}
+	}
 	return nil
 }
 
@@ -1211,7 +1309,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 				return nil
 			}
 		}
-		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(v.Name), 0)
+		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(c.globalName(v.Name)), 0)
 	case *ast.BinaryExpr:
 		return c.compileBinary(v)
 	case *ast.UnaryExpr:

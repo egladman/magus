@@ -1,0 +1,177 @@
+// core/workspaces.buzz - workspace switching and window-to-workspace movement.
+
+namespace workspaces;
+
+import "state";
+import "layout";
+import "platform/macos/windows";
+import "platform/macos/events";
+import "statusbar";
+import "core/screens";
+import "core/tiling";
+import "core/registry";
+import "core/scan";
+import "core/bar";
+import "core/zlayer";
+
+// parkLeaving hides the windows of the workspace being left (state\wm().curWs at call time),
+// per state\wm().cfg.hideMethod. The "hide" (app-hide) method is reconciled in showArriving
+// (after state\wm().curWs flips) since it keys on the destination, not the origin.
+export fun parkLeaving() > void {
+    if (state\wm().cfg.hideMethod == "hide") {
+        return;
+    }
+    foreach (m in state\wm().managed) {
+        if (m.workspace == state\wm().curWs) {
+            if (m.floating or state\wm().cfg.hideMethod == "minimize") {
+                windows\setMinimized(m.ref, minimized: true);
+            } else if (state\wm().cfg.hideMethod != "zlayer") {
+                windows\moveWindow(m.ref, x: state\parkX, y: state\parkY); // "offscreen": park off the visible area
+            }
+            // zlayer: a tiled window is dropped into the background z-index grid after
+            // the switch completes (layoutBackLayer in cmdWorkspace, once curWs flips).
+        }
+    }
+}
+
+// showArriving reveals the windows of the workspace just switched to (n == state\wm().curWs).
+export fun showArriving(n: int) > void {
+    if (state\wm().cfg.hideMethod == "hide") {
+        reconcileAppHide();
+        return;
+    }
+    foreach (m in state\wm().managed) {
+        if (m.workspace == n) {
+            windows\setMinimized(m.ref, minimized: false); // unminimize; tiled also get repositioned by retile
+        }
+    }
+}
+
+// reconcileAppHide ("hide" method): every app with a managed window on the current
+// workspace is shown; every app without one is hidden (cmd+H). A window of a shown
+// app that lives on another workspace (the app spans workspaces) is corner-parked,
+// since app-hide is all-or-nothing. We track what we hid (state\wm().hiddenPids) because
+// AXHidden's read lags its async set.
+export fun reconcileAppHide() > void {
+    final seen = mut [<int>];
+    foreach (m in state\wm().managed) {
+        if (seen.indexOf(m.pid) != null) {
+            continue;
+        }
+        seen.append(m.pid);
+        var hasHere = false;
+        foreach (m2 in state\wm().managed) {
+            if (m2.pid == m.pid and m2.workspace == state\wm().curWs) {
+                hasHere = true;
+            }
+        }
+        if (hasHere) {
+            final idx = state\wm().hiddenPids.indexOf(m.pid);
+            if (idx != null) {
+                windows\setAppHidden(m.pid, hidden: false);
+                _ = state\wm().hiddenPids.remove(idx!);
+            }
+            foreach (m2 in state\wm().managed) {
+                if (m2.pid == m.pid and m2.workspace != state\wm().curWs and !m2.floating) {
+                    windows\moveWindow(m2.ref, x: state\parkX, y: state\parkY); // spanning window: corner-park
+                }
+            }
+        } else if (state\wm().hiddenPids.indexOf(m.pid) == null) {
+            windows\setAppHidden(m.pid, hidden: true);
+            state\wm().hiddenPids.append(m.pid);
+        }
+    }
+}
+
+// cmdWorkspace switches to workspace n (0-based): save the active tree into
+// its slot, park its windows, restore the target's windows and tree.
+// Re-requesting the current workspace bounces to the previous one -- i3's
+// workspace_auto_back_and_forth, always on.
+export fun cmdWorkspace(nRequested: int) > void {
+    var n = nRequested;
+    if (n == state\wm().curWs) {
+        n = state\wm().lastWs;
+    }
+    if (n == state\wm().curWs or n < 0 or n >= 9) {
+        return;
+    }
+    final wsc = registry\wsCounts();
+    registry\logAct("workspace {state\wm().curWs + 1} -> {n + 1} (leaving {wsc[state\wm().curWs]} win, entering {wsc[n]} win)");
+    state\wm().scratchShown = 0; // a popped scratchpad window stays with the ws it is on
+    screens\saveActive();
+    foreach (si in 0..state\wm().screens.len()) {
+        final sc = screens\screenAt(si);
+        final cur = screens\wsOn(si, i: state\wm().curWs);
+        cur.root = sc.root;
+        cur.focusedId = sc.focusedId;
+        cur.fullscreenId = sc.fullscreenId;
+        cur.stacked = sc.stacked;
+    }
+    parkLeaving(); // hide the leaving workspace's windows (method-aware; "hide" method reconciles below)
+    state\wm().lastWs = state\wm().curWs;
+    state\wm().curWs = n;
+    foreach (si in 0..state\wm().screens.len()) {
+        final sc = screens\screenAt(si);
+        final nxt = screens\wsOn(si, i: n);
+        sc.root = nxt.root;
+        sc.focusedId = nxt.focusedId;
+        sc.fullscreenId = nxt.fullscreenId;
+        sc.stacked = nxt.stacked;
+    }
+    screens\loadActive(state\wm().activeScreen);
+    showArriving(n); // reveal the arriving workspace's windows (method-aware)
+    tiling\retile(); // positions the arriving workspace's tiled windows into their slots
+    if (state\wm().focusedId != 0) {
+        windows\focusWindow(registry\refOf(state\wm().focusedId), pid: registry\pidOf(state\wm().focusedId));
+    }
+    if (state\wm().cfg.hideMethod == "zlayer") {
+        // curWs has flipped, so every other layer is now "inactive": grid them all
+        // into the background, then re-raise the active layer on top. Done before the
+        // drain below so the frame-moves we just made are dropped, not re-reconciled.
+        final gridded = zlayer\layoutBackLayer();
+        zlayer\raiseActiveLayer();
+        registry\logAct("zlayer: {gridded} window(s) in the background grid, active layer raised");
+    }
+    // Drop the move/minimize events this switch generated so the next pump's
+    // reconcile can't re-adopt a parked window onto the wrong workspace.
+    while (events\pollWindowEvent() != 0) {
+        _ = events\windowEventArg();
+    }
+}
+
+// cmdMoveToWs sends the focused window to workspace n (0-based) and parks it
+// there; the window leaves the active tree immediately.
+export fun cmdMoveToWs(n: int) > void {
+    if (n == state\wm().curWs or n < 0 or n >= 9 or state\wm().focusedId == 0) {
+        return;
+    }
+    final mo = registry\managedById(state\wm().focusedId);
+    if (mo == null) {
+        return;
+    }
+    final mm = mo!;
+    final id = mm.id;
+    scan\detachOn(mm.screen, id: id);
+    mm.workspace = n;
+    if (state\wm().cfg.hideMethod != "zlayer") {
+        windows\setMinimized(mm.ref, minimized: true); // zlayer grids it into the background instead
+    }
+    final target = screens\wsOn(mm.screen, i: n);
+    if (target.root == null) {
+        target.root = layout\makeLeaf(id);
+        target.focusedId = id;
+    } else {
+        final tr = target.root!;
+        if (!layout\insertAt(tr, target: target.focusedId, id: id)) {
+            _ = layout\insertAt(tr, target: layout\lastLeaf(tr).id, id: id);
+        }
+    }
+    tiling\retile();
+    if (state\wm().focusedId != 0) {
+        windows\focusWindow(registry\refOf(state\wm().focusedId), pid: registry\pidOf(state\wm().focusedId));
+    }
+    if (state\wm().cfg.hideMethod == "zlayer") {
+        _ = zlayer\layoutBackLayer(); // grid the window we just sent away into the background layer
+        zlayer\raiseActiveLayer();
+    }
+}
