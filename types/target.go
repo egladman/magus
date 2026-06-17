@@ -25,7 +25,7 @@ var DefaultTargetNameNormalizer TargetNameNormalizer = kebabTargetNormalizer{}
 
 // TargetCI is the one reserved built-in target: the affected-set anchor that
 // `magus affected ci` and `magus affected --plan` key off. It lives in the
-// magusfile (composed via magus.depends_on), never in a spell. Compare against
+// magusfile (composed via magus.needs), never in a spell. Compare against
 // it only after normalizing the candidate name (see DefaultTargetNameNormalizer).
 const TargetCI = "ci"
 

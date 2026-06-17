@@ -40,6 +40,11 @@ import "magus/spell/buzz";
 // markdownlint/prettier into lint/format.
 import "magus/spell/md";
 
+// magus embeds the gopherbuzz module (require + replace => ./gopherbuzz), so the
+// binary depends on gopherbuzz's build. Importing it by path binds its targets as
+// cross-project handles (gopherbuzz.build), referenced from go_build below.
+import "project/gopherbuzz" as gopherbuzz;
+
 // Cross-shard remote cache: share dependency builds between CI shards via GitHub
 // Actions Cache. The github spell self-gates on GITHUB_ACTIONS, so this is a
 // no-op locally (no remote calls, no exports) and only active in GHA.
@@ -116,6 +121,9 @@ fun ld_flags() > str {
 // encoding/json/v2 codec (internal/codec) for faster JSON marshaling — matching
 // CI and the Dockerfiles, so a dogfooded build is not silently stuck on v1.
 export fun go_build(args: [str]) > void {
+    // Build gopherbuzz first (magus embeds it); also marks magus affected when
+    // gopherbuzz changes. gopherbuzz is the project import declared at the top.
+    magus.needs(gopherbuzz.build);
     go["go-build"]({
         "env": {"GOEXPERIMENT": "jsonv2"},
         "args": ["-trimpath",
@@ -158,7 +166,7 @@ export fun image_build(args: [str]) > void {
 // under the scan's charms, keeping the two on the same image_tag() address (charms
 // propagate to dependencies, so a charm that retags the build is mirrored here).
 export fun image_scan(args: [str]) > void {
-    magus.depends_on(["image-build"]);
+    magus.needs(magus.target.literal("image-build"));
     if (magus.has_charm("rw")) {
         fs.makeDirectory("dist");
         os.exec("trivy", ["image",
@@ -237,8 +245,8 @@ export fun md_generate(args: [str]) > void {
 // marked isolated (see register) so no sibling mutates the tree mid-check. Run the
 // `rw` charm (`generate:rw`) to keep the result instead of gating.
 export fun generate(args: [str]) > void {
-    magus.depends_on(["preflight"]);
-    magus.depends_on(magus.target.expand_globs("*-generate"));
+    magus.needs(magus.target.literal("preflight"));
+    magus.needs(magus.target.glob("*-generate"));
     if (magus.has_charm("rw")) { return; }
 
     final drift = os.exec("git", ["status", "--porcelain", "--", "."]).stdout;
@@ -395,23 +403,23 @@ export fun preflight(args: [str]) > void { magus.cmd(["doctor"]); }
 // build:container` builds the docker image instead. Mirrors the `write` charm's
 // shape: absence is the common, lighter path; the charm flips to the heavier one.
 export fun build(args: [str])  > void {
-    magus.depends_on(["format"]);
+    magus.needs(magus.target.literal("format"));
     if (magus.has_charm("container")) {
-        magus.depends_on(["image-build"]);
+        magus.needs(magus.target.literal("image-build"));
     } else {
-        magus.depends_on(["go-build"]);
+        magus.needs(magus.target.literal("go-build"));
     }
 }
 // Formats first, then runs the Go test suite.
-export fun test(args: [str])   > void { magus.depends_on(["format"]); go["go-test"](); }
+export fun test(args: [str])   > void { magus.needs(magus.target.literal("format")); go["go-test"](); }
 // Formats first, then runs golangci-lint, `go vet`, govulncheck, and markdownlint.
-export fun lint(args: [str])   > void { magus.depends_on(["format"]); go["golangci-lint"](); go["go-vet"](); go["govulncheck"](); md.markdownlint(); }
+export fun lint(args: [str])   > void { magus.needs(magus.target.literal("format")); go["golangci-lint"](); go["go-vet"](); go["govulncheck"](); md.markdownlint(); }
 // Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs.
-export fun format(args: [str]) > void { magus.depends_on(["generate"]); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
+export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
 
 // Runs lint, build, and test read-only; the affected/pipeline anchor.
 export fun ci(args: [str]) > void {
-    magus.depends_on(["lint", "build", "test"]);
+    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }
 
 // Translates a `magus affected --plan` document (read on stdin) into the GitHub

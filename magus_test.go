@@ -390,8 +390,8 @@ func TestSpecFor_RootProject(t *testing.T) {
 	if !slices.Contains(spec.Sources, "**/*.go") {
 		t.Errorf("Sources = %v, must contain \"**/*.go\"", spec.Sources)
 	}
-	if !slices.Contains(spec.Sources, "magusfile.tl") {
-		t.Errorf("Sources = %v, must contain root magusfile glob \"magusfile.tl\"", spec.Sources)
+	if !slices.Contains(spec.Sources, "magusfile.buzz") {
+		t.Errorf("Sources = %v, must contain root magusfile glob \"magusfile.buzz\"", spec.Sources)
 	}
 	if len(spec.Outputs) != 1 || spec.Outputs[0] != "bin/app" {
 		t.Errorf("Outputs = %v, want [\"bin/app\"]", spec.Outputs)
@@ -419,12 +419,12 @@ func TestSpecFor_NestedProject(t *testing.T) {
 		t.Errorf("Sources = %v, must contain \"api/**/*.go\"", spec.Sources)
 	}
 	// Project-local magusfile glob is included.
-	if !slices.Contains(spec.Sources, "api/magusfile.tl") {
-		t.Errorf("Sources = %v, must contain \"api/magusfile.tl\"", spec.Sources)
+	if !slices.Contains(spec.Sources, "api/magusfile.buzz") {
+		t.Errorf("Sources = %v, must contain \"api/magusfile.buzz\"", spec.Sources)
 	}
 	// Root magusfile glob is always included for non-root projects.
-	if !slices.Contains(spec.Sources, "magusfile.tl") {
-		t.Errorf("Sources = %v, must contain root \"magusfile.tl\"", spec.Sources)
+	if !slices.Contains(spec.Sources, "magusfile.buzz") {
+		t.Errorf("Sources = %v, must contain root \"magusfile.buzz\"", spec.Sources)
 	}
 	if len(spec.Outputs) != 1 || spec.Outputs[0] != "api/bin/server" {
 		t.Errorf("Outputs = %v, want [\"api/bin/server\"]", spec.Outputs)
@@ -451,9 +451,7 @@ func TestMagusfileGlobs(t *testing.T) {
 		t.Parallel()
 		got := magusfileGlobs(".")
 		want := []string{
-			"magusfile.tl",
 			"magusfile.buzz",
-			"magusfiles/**/*.tl",
 			"magusfiles/**/*.buzz",
 		}
 		if !slices.Equal(got, want) {
@@ -465,9 +463,7 @@ func TestMagusfileGlobs(t *testing.T) {
 		t.Parallel()
 		got := magusfileGlobs("extensions/drape")
 		want := []string{
-			"extensions/drape/magusfile.tl",
 			"extensions/drape/magusfile.buzz",
-			"extensions/drape/magusfiles/**/*.tl",
 			"extensions/drape/magusfiles/**/*.buzz",
 		}
 		if !slices.Equal(got, want) {

@@ -11,6 +11,49 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// TestDeriveCrossProjectDeps verifies that a target-level cross-project dependency
+// (a project import + <alias>.<target>) is folded into the depending project's
+// DependsOn, so it counts toward the affected set without a separate project-level
+// depends_on.
+func TestDeriveCrossProjectDeps(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"gopherbuzz/magusfile.buzz": "export fun build(args: [str]) > void {}\n",
+		"web/magusfile.buzz": `import "project/../gopherbuzz" as gopherbuzz;
+export fun build(args: [str]) > void {
+    magus.needs(gopherbuzz.build);
+}
+`,
+	}
+	for rel, body := range files {
+		abs := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(abs, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ws, err := Inspect(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	var web *types.TargetGraphProject
+	for i, p := range ws.DescribeGraph().Projects {
+		if p.Path == "web" {
+			web = &ws.DescribeGraph().Projects[i]
+			break
+		}
+	}
+	if web == nil {
+		t.Fatal("web project missing from graph")
+	}
+	if !slices.Contains(web.DependsOn, "gopherbuzz") {
+		t.Errorf("web.DependsOn = %v, want it to contain \"gopherbuzz\" (derived from the target-level external dep)", web.DependsOn)
+	}
+}
+
 // newWorkspaceCustom creates a single-project workspace at a temp dir and
 // returns it after applying opts. The root project has an empty magusfile.buzz.
 func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository {

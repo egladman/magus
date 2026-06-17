@@ -26,7 +26,7 @@ type normCtxKey struct{}
 
 type projectPathCtxKey struct{}
 
-// WithSource stores src in ctx so that bindings (e.g. magus.dispatch) can
+// WithSource stores src in ctx so that bindings (e.g. magus.needs) can
 // retrieve the active magusfile source for pool lookup.
 func WithSource(ctx context.Context, src *Source) context.Context {
 	return context.WithValue(ctx, sourceCtxKey{}, src)

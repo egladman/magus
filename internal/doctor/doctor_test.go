@@ -108,7 +108,7 @@ func TestCheckCITarget_FailDetails(t *testing.T) {
 		t.Fatalf("status = %q, want fail", got.Status)
 	}
 	joined := strings.Join(got.Details, "\n")
-	if !strings.Contains(joined, "magus.depends_on") {
+	if !strings.Contains(joined, "magus.needs") {
 		t.Errorf("details should show how to define ci; got: %v", got.Details)
 	}
 	if !strings.Contains(joined, string(types.NoCITarget)) {

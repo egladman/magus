@@ -41,16 +41,16 @@ magus.project.register(fun(p, cb) > bool {
 // Go lifecycle only — no docs/generate machinery.
 
 export fun preflight(_args: [str]) > void {}
-export fun generate(_args: [str]) > void { magus.depends_on(["preflight"]); }
-export fun format(_args: [str]) > void { magus.depends_on(["generate"]); go["go-fmt"](); go["go-mod-tidy"](); }
-export fun lint(_args: [str]) > void { magus.depends_on(["format"]); go["go-vet"](); }
-export fun build(_args: [str]) > void { magus.depends_on(["format"]); go["go-build"](); }
-export fun test(_args: [str]) > void { magus.depends_on(["format"]); go["go-test"](); }
+export fun generate(_args: [str]) > void { magus.needs(magus.target.literal("preflight")); }
+export fun format(_args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); }
+export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
+export fun build(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }
+export fun test(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-test"](); }
 
 // 'ci' is the conventional anchor `magus affected ci` keys off; it fans out
 // lint/build/test in parallel, each waiting on format.
 export fun ci(_args: [str]) > void {
-    magus.depends_on(["lint", "build", "test"]);
+    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }
 
 // ── pgo ───────────────────────────────────────────────────────────────────────

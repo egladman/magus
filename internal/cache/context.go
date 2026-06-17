@@ -25,7 +25,7 @@ func SlotHeld(ctx context.Context) bool {
 	return v
 }
 
-// ContextWithLimiter stores lim in ctx for nested callers (e.g. magus.dispatch) to yield their slot.
+// ContextWithLimiter stores lim in ctx for nested callers (e.g. magus.needs) to yield their slot.
 func ContextWithLimiter(ctx context.Context, lim *Limiter) context.Context {
 	return context.WithValue(ctx, limiterKey{}, lim)
 }

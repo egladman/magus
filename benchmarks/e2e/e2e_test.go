@@ -269,7 +269,7 @@ func readFile(t *testing.T, path string) string {
 }
 
 // TestRunCIComposesMagusfileTarget verifies ci is an ordinary magusfile target:
-// the magusfile defines `ci` and composes the pipeline with magus.depends_on, so
+// the magusfile defines `ci` and composes the pipeline with magus.needs, so
 // running it executes the declared steps. magus no longer hardcodes the chain —
 // it only forces read-only mode. Step ordering is the magusfile's concern (here
 // test depends on build), so the recorded order is build-then-test.
@@ -283,11 +283,11 @@ fun record(name: str) > void {
 }
 export fun build(_args: [str]) > void { record("build"); }
 export fun test(_args: [str]) > void {
-    magus.depends_on(["build"]);
+    magus.needs(magus.target.literal("build"));
     record("test");
 }
 export fun ci(_args: [str]) > void {
-    magus.depends_on(["test"]);
+    magus.needs(magus.target.literal("test"));
 }
 `
 	writeProject(t, root, "svc", body)

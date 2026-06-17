@@ -334,7 +334,7 @@ func TestDependsOnUnknownTargetFails(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 export fun top(_args: [str]) > void {
-    magus.depends_on(["does_not_exist"]);
+    magus.needs(magus.target.literal("does_not_exist"));
 }
 `)
 	err := runTarget(t, dir, "top")
@@ -503,9 +503,9 @@ export fun viash(_a: [str]) > void {
 	}
 }
 
-// TestDependsOnDedup verifies magus.depends_on runs a duplicated target once —
+// TestNeedsDedup verifies magus.needs runs a duplicated target once —
 // the footgun where a manually-listed target also matches an expand_globs glob.
-func TestDependsOnDedup(t *testing.T) {
+func TestNeedsDedup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(`
@@ -513,7 +513,7 @@ import "magus";
 import "os";
 
 export fun dep(_a: [str]) > void { os.execSh("printf x >> mark", ""); }
-export fun top(_a: [str]) > void { magus.depends_on(["dep", "dep"]); }
+export fun top(_a: [str]) > void { magus.needs(magus.target.literal("dep"), magus.target.literal("dep")); }
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -583,11 +583,11 @@ export fun build(_args: [str]) > void {}
 	}
 }
 
-// TestTargetDependsOnExpandGlobs covers magus.target.expand_globs feeding a
+// TestNeedsGlobHandle covers a magus.target.glob handle feeding a
 // meta-target's depends_on: the matched targets run (sorted) before the body,
 // and non-matching targets are skipped. With no pool in ctx the deps run
 // sequentially in the current VM, so the order is deterministic.
-func TestTargetDependsOnExpandGlobs(t *testing.T) {
+func TestNeedsGlobHandle(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
@@ -599,7 +599,7 @@ export fun go_build(_a: [str]) > void { note("go-build"); }
 export fun image_build(_a: [str]) > void { note("image-build"); }
 export fun go_test(_a: [str]) > void { note("go-test"); }
 export fun build(_a: [str]) > void {
-   magus.depends_on(magus.target.expand_globs("*-build"));
+   magus.needs(magus.target.glob("*-build"));
    note("build-body");
 }
 `)

@@ -80,7 +80,7 @@ magus.project.register("web", fun(p, cb) > bool { cb({
 
 // ── targets ─────────────────────────────────────────────────────────────────
 // Every exported function is a runnable target; underscores become hyphens.
-// `magus.depends_on([...])` declares order — magus runs the dependencies first,
+// `magus.needs()` declares order — magus runs the dependencies first,
 // deduplicated, and in parallel where the graph allows.
 
 export fun preflight(_args: [str]) > void {
@@ -92,32 +92,32 @@ export fun preflight(_args: [str]) > void {
 }
 
 export fun generate(_args: [str]) > void {
-    magus.depends_on(["preflight"]);
+    magus.needs(magus.target.literal("preflight"));
     go["go-generate"]();
 }
 
 export fun format(_args: [str]) > void {
-    magus.depends_on(["generate"]);
+    magus.needs(magus.target.literal("generate"));
     go["go-fmt"]();
     ts["prettier"]();
 }
 
 export fun lint(_args: [str]) > void {
-    magus.depends_on(["format"]);
+    magus.needs(magus.target.literal("format"));
     go["go-vet"]();
     go["golangci-lint"]();
     ts["eslint"]();
 }
 
 export fun build(_args: [str]) > void {
-    magus.depends_on(["format"]);
+    magus.needs(magus.target.literal("format"));
     builds = builds + 1;                   // mutate a global
     go["go-build"]();
     ts["tsc"]();
 }
 
 export fun test(_args: [str]) > void {
-    magus.depends_on(["format"]);
+    magus.needs(magus.target.literal("format"));
 
     // A list, an inline closure, and a higher-order call.
     each(["unit", "integration"], fun(kind: str) > void {
@@ -139,13 +139,13 @@ export fun test(_args: [str]) > void {
 // `ci` is the conventional anchor `magus affected ci` keys off — it fans the
 // pipeline out across lint, build, and test. Try `run ci` to see the full plan.
 export fun ci(_args: [str]) > void {
-    magus.depends_on(["lint", "build", "test"]);
+    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }
 
 // One more target, leaning on the language. Charms are run-time flags
 // (`magus run release:dry`); the playground reports none active.
 export fun release(_args: [str]) > void {
-    magus.depends_on(["ci"]);
+    magus.needs(magus.target.literal("ci"));
 
     final p = Project{ name = "magus", stars = 7 };
     final nickname = null;

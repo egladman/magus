@@ -85,5 +85,5 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 	if len(opts.Roots) > 0 {
 		rOpts = append(rOpts, render.WithRoots(opts.Roots...))
 	}
-	return render.Render(g, os.Stdout, rOpts...)
+	return render.WriteTree(os.Stdout, g, rOpts...)
 }

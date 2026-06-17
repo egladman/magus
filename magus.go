@@ -123,6 +123,11 @@ func (m *Magus) finishConstruction(ctx context.Context) error {
 	if err := m.wsReg.Apply(m); err != nil {
 		return err
 	}
+	// Fold target-level cross-project deps (project imports) into DependsOn so
+	// they count toward the affected set, just like a project-level depends_on.
+	if err := m.applyCrossProjectDependencies(ctx); err != nil {
+		return err
+	}
 	m.autobindMagusfileSpell()
 	return nil
 }
@@ -497,9 +502,7 @@ func (m *Magus) baseSpec(p *types.Project) cache.Spec {
 
 func magusfileGlobs(projectPath string) []string {
 	names := []string{
-		"magusfile.tl",
 		"magusfile.buzz",
-		"magusfiles/**/*.tl",
 		"magusfiles/**/*.buzz",
 	}
 	if projectPath == "." {

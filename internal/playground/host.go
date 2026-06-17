@@ -34,6 +34,13 @@ func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) 
 	return buzz.DirectValue(name, f)
 }
 
+// buildMagus builds the recording `magus` module. It MUST cover the same member
+// surface the real bindings register (internal/interp/bindings: MagusModuleKeys) —
+// a magusfile referencing a member this host omits would fail to evaluate. The
+// guard test TestMagusSurfaceMatchesBindings enforces that parity, so a new (or
+// removed) real binding can't silently drift from this dry-run host. Members the
+// dry run doesn't meaningfully act on are stubbed; only structure-declaring members
+// (project.register, target.*, needs, spell.get) are modeled into the graph.
 func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 	m := buzz.NewMap()
 
@@ -48,18 +55,54 @@ func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 	}))
 	m.MapSet("project", project)
 
+	// magus.target.<mode>(...) return handles (mode-tagged maps) consumed by needs;
+	// expand_globs returns an empty list (its standalone, non-dependency use).
+	// Cross-project deps (import "project/...") aren't modeled in the single-file dry
+	// run — there's no sibling project to enumerate in the sandbox.
 	target := buzz.NewMap()
+	target.MapSet("literal", targetHandle("literal"))
+	target.MapSet("glob", targetHandle("glob"))
+	target.MapSet("regex", targetHandle("regex"))
 	target.MapSet("expand_globs", fn("magus.target.expand_globs", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
 		return buzz.ListValue(nil), nil
 	}))
 	m.MapSet("target", target)
 
-	m.MapSet("depends_on", fn("magus.depends_on", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
-		for _, dep := range flattenStrings(args) {
-			rec.addEdge(normalizeTarget(dep))
+	// magus.needs(handle, ...): record an exact same-project edge per literal handle;
+	// glob/regex aren't expanded in the dry run (no project target set to match
+	// against) — recorded as nothing.
+	m.MapSet("needs", fn("magus.needs", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+		for _, a := range args {
+			if !a.IsMap() {
+				continue
+			}
+			mode, _ := a.MapGet("mode")
+			if !mode.IsStr() || mode.AsString() != "literal" {
+				continue
+			}
+			if t := mapStr(a, "pattern").AsString(); t != "" {
+				rec.addEdge(normalizeTarget(t))
+			}
 		}
 		return buzz.Null, nil
 	}))
+
+	// magus.spell.get(name) returns a handle carrying the spell name, matching how a
+	// register "spells" list reads it; load is a no-op in the dry run.
+	spell := buzz.NewMap()
+	spell.MapSet("get", fn("magus.spell.get", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+		h := buzz.NewMap()
+		h.MapSet("name", buzz.StrValue(strArg(args, 0, "")))
+		return h, nil
+	}))
+	spell.MapSet("load", fn("magus.spell.load", retNull))
+	m.MapSet("spell", spell)
+
+	// magus.cache.<...>: a namespace in the real module (cache.remote, …); stub it as
+	// a no-op namespace so cache.remote(github) at magusfile top level doesn't blow up.
+	cache := buzz.NewMap()
+	cache.MapSet("remote", fn("magus.cache.remote", retNull))
+	m.MapSet("cache", cache)
 
 	m.MapSet("has_charm", fn("magus.has_charm", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
 		return buzz.BoolValue(false), nil
@@ -75,16 +118,47 @@ func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 		}))
 	}
 
-	// dispatch/cache exist on the real magus module; stub them so a reference
-	// doesn't blow up, returning Null.
-	for _, name := range []string{"dispatch", "cache"} {
-		m.MapSet(name, fn("magus."+name, func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
-			return buzz.Null, nil
-		}))
+	// magus.cmd(...) returns a captured-command result on the real module; stub it as
+	// an empty success so `magus.cmd(...).stdout` doesn't blow up in a dry run.
+	m.MapSet("cmd", fn("magus.cmd", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+		res := buzz.NewMap()
+		res.MapSet("stdout", buzz.StrValue(""))
+		res.MapSet("stderr", buzz.StrValue(""))
+		res.MapSet("code", buzz.IntValue(0))
+		res.MapSet("success", buzz.BoolValue(true))
+		return res, nil
+	}))
+
+	// Runtime-only members (a debugger, hints, fatal-abort) have no dry-run effect;
+	// stub them as no-ops so a reference resolves. They're here to satisfy the surface
+	// parity guard, not because the dry run acts on them.
+	for _, name := range []string{"hint", "fatal", "pry"} {
+		m.MapSet(name, fn("magus."+name, retNull))
 	}
 
 	return m
 }
+
+// targetHandle returns the magus.target.<mode> callable producing a mode-tagged
+// handle map ({mode, pattern}) for magus.needs to read.
+func targetHandle(mode string) buzz.Value {
+	return fn("magus.target."+mode, func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+		h := buzz.NewMap()
+		h.MapSet("mode", buzz.StrValue(mode))
+		h.MapSet("pattern", buzz.StrValue(strArg(args, 0, "")))
+		return h, nil
+	})
+}
+
+// mapStr reads a string field from a map value, or returns the empty string value.
+func mapStr(m buzz.Value, key string) buzz.Value {
+	if v, ok := m.MapGet(key); ok && v.IsStr() {
+		return v
+	}
+	return buzz.StrValue("")
+}
+
+func retNull(context.Context, []buzz.Value) (buzz.Value, error) { return buzz.Null, nil }
 
 // captureRegister runs a magus.project.register configurator and returns the
 // project path plus the options map it emits. It mirrors recordProjectOpts in the
@@ -258,15 +332,6 @@ func valToStrings(v buzz.Value) []string {
 		return out
 	}
 	return nil
-}
-
-// flattenStrings reads every str across the args (each a str or [str]).
-func flattenStrings(args []buzz.Value) []string {
-	var out []string
-	for _, a := range args {
-		out = append(out, valToStrings(a)...)
-	}
-	return out
 }
 
 // strArg returns args[i] as a string, or fallback if it is absent or not a str.

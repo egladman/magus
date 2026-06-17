@@ -75,7 +75,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "Nouns (each accepts singular or plural):")
 	fmt.Fprintln(os.Stderr, "  spell        language/runtime adapters")
 	fmt.Fprintln(os.Stderr, "  target       targets dispatched to projects; `target <path:target>` evaluates one")
-	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (magus.depends_on DAG) per project")
+	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (magus.needs DAG) per project")
 	fmt.Fprintln(os.Stderr, "  project      directories recognized as units of work; `project <path>` details one")
 	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
 	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")
@@ -141,7 +141,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 					continue // best-effort: a target we can't evaluate just omits its plan
 				}
 				for _, e := range et.Targets {
-					eval[e.Project+"\x00"+e.Target] = e
+					eval[render.EvalKey(e.Project, e.Target)] = e
 				}
 			}
 		}

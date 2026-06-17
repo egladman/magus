@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RenderableGraph is the subset of *types.Graph used by Render. It is satisfied
+// RenderableGraph is the subset of *types.Graph used by WriteTree. It is satisfied
 // by any *types.Graph returned from (*Magus).Graph or depgraph.Build.
 type RenderableGraph interface {
 	Successors(path string) []string
@@ -22,7 +22,7 @@ type RenderableGraph interface {
 	Project(path string) *types.Project
 }
 
-// RenderOption configures a Render call.
+// RenderOption configures a WriteTree call.
 type RenderOption func(*renderConfig)
 
 type renderConfig struct {
@@ -54,8 +54,9 @@ func WithSpell(name string) RenderOption {
 	return func(c *renderConfig) { c.spell = name }
 }
 
-// Render writes a deterministic ASCII dependency tree to w.
-func Render(g RenderableGraph, w io.Writer, opts ...RenderOption) error {
+// WriteTree writes a deterministic ASCII dependency tree to w. Writer-first, like
+// its WriteGraph*/WriteTargetGraph* siblings.
+func WriteTree(w io.Writer, g RenderableGraph, opts ...RenderOption) error {
 	cfg := &renderConfig{}
 	for _, o := range opts {
 		o(cfg)
@@ -219,8 +220,8 @@ func mermaidID(path string) string {
 	return b.String()
 }
 
-// FormatDur formats a duration as a human-readable string.
-func FormatDur(d time.Duration) string {
+// FormatDuration formats a duration as a human-readable string.
+func FormatDuration(d time.Duration) string {
 	ms := d.Milliseconds()
 	switch {
 	case ms < 1000:
@@ -250,21 +251,28 @@ func WriteGraphMermaid(w io.Writer, out types.GraphOutput) error {
 	return writeMermaid(w, projectGraphIR(out))
 }
 
-// projectGraphIR maps the project dependency graph onto the shared RenderGraph:
+// projectGraphIR maps the project dependency graph onto the shared renderGraph:
 // spell buckets become subgraphs (and classes), blast-radius/duration ride in the
 // node label, exclusive nodes become hexagons, a cross-spell edge carries the
 // dependency's spell as its label, and a project dir becomes a click handler.
-func projectGraphIR(out types.GraphOutput) RenderGraph {
-	// Mermaid-safe IDs, de-duplicated with a numeric suffix on collision.
+func projectGraphIR(out types.GraphOutput) renderGraph {
+	// Mermaid-safe IDs, de-duplicated with a numeric suffix on collision. Assigned
+	// in path order so which colliding path keeps the bare ID is deterministic
+	// regardless of out.Nodes ordering (the output feeds the MAGUS.md drift gate).
+	paths := make([]string, len(out.Nodes))
+	for i, n := range out.Nodes {
+		paths[i] = n.Path
+	}
+	slices.Sort(paths)
 	ids := make(map[string]string, len(out.Nodes))
 	seen := make(map[string]int)
-	for _, n := range out.Nodes {
-		id := mermaidID(n.Path)
+	for _, p := range paths {
+		id := mermaidID(p)
 		if count := seen[id]; count > 0 {
 			id = fmt.Sprintf("%s_%d", id, count)
 		}
 		seen[id]++
-		ids[n.Path] = id
+		ids[p] = id
 	}
 
 	spellOf := make(map[string]string, len(out.Nodes))
@@ -293,10 +301,10 @@ func projectGraphIR(out types.GraphOutput) RenderGraph {
 		title += ", spell=" + out.SpellName
 	}
 	title += ")"
-	g := RenderGraph{Title: title, DOTName: "magus"}
+	g := renderGraph{Title: title, DOTName: "magus"}
 
 	for _, key := range bucketKeys {
-		g.Groups = append(g.Groups, RenderGroup{ID: "spell_" + mermaidID(key), Label: key})
+		g.Groups = append(g.Groups, renderGroup{ID: "spell_" + mermaidID(key), Label: key})
 	}
 	// Nodes, bucket by bucket and sorted within, for deterministic output.
 	for _, key := range bucketKeys {
@@ -314,17 +322,17 @@ func projectGraphIR(out types.GraphOutput) RenderGraph {
 				label += fmt.Sprintf("<br/>BR=%d", n.BlastRadius)
 			}
 			if n.DurationMs > 0 {
-				label += "<br/>~" + FormatDur(time.Duration(n.DurationMs)*time.Millisecond)
+				label += "<br/>~" + FormatDuration(time.Duration(n.DurationMs)*time.Millisecond)
 			}
-			shape := ShapeBox
+			shape := shapeBox
 			if n.Exclusive {
-				shape = ShapeHexagon
+				shape = shapeHexagon
 			}
 			classes := []string{group}
 			if rootSet[n.Path] {
 				classes = append(classes, "root")
 			}
-			rn := RenderNode{ID: ids[n.Path], DOTID: n.Path, Label: label, Shape: shape, Classes: classes, Group: group}
+			rn := renderNode{ID: ids[n.Path], DOTID: n.Path, Label: label, Shape: shape, Classes: classes, Group: group}
 			if n.Dir != "" {
 				rn.ClickURL = "file://" + n.Dir
 				rn.ClickTip = n.Path
@@ -343,15 +351,15 @@ func projectGraphIR(out types.GraphOutput) RenderGraph {
 			if spellOf[n.Path] != spellOf[child] {
 				label = spellOf[child]
 			}
-			g.Edges = append(g.Edges, RenderEdge{From: ids[n.Path], To: cid, Label: label})
+			g.Edges = append(g.Edges, renderEdge{From: ids[n.Path], To: cid, Label: label})
 		}
 	}
 	for _, key := range bucketKeys {
 		fill, text := spellColor(key)
-		g.Classes = append(g.Classes, RenderClass{Name: "spell_" + mermaidID(key), Style: fmt.Sprintf("fill:%s,color:%s", fill, text)})
+		g.Classes = append(g.Classes, renderClass{Name: "spell_" + mermaidID(key), Style: fmt.Sprintf("fill:%s,color:%s", fill, text)})
 	}
 	if len(out.Roots) > 0 {
-		g.Classes = append(g.Classes, RenderClass{Name: "root", Style: "stroke-width:3px,stroke:#000"})
+		g.Classes = append(g.Classes, renderClass{Name: "root", Style: "stroke-width:3px,stroke:#000"})
 	}
 	return g
 }

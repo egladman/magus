@@ -102,7 +102,7 @@ func applyRunOpts(opts []RunOption) run {
 
 // Run executes targets against their projects. Independent pairs run concurrently
 // up to the limiter budget. "ci" is an ordinary magusfile target (compose its
-// pipeline with magus.depends_on); magus no longer hardcodes a CI chain.
+// pipeline with magus.needs); magus no longer hardcodes a CI chain.
 func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	if len(targets) == 0 {
 		return nil
@@ -143,7 +143,7 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 // RunCI runs the ci target(s) with write mode forced off. "ci" is an ordinary
 // magusfile-defined target; magus keeps it only as the affected-set anchor,
 // not a hardcoded preflight→…→test chain. The magusfile composes the pipeline
-// order via magus.depends_on.
+// order via magus.needs.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
 	o.Charms = slices.DeleteFunc(slices.Clone(o.Charms), func(s string) bool {
@@ -163,7 +163,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	if projects := m.targetProjects(targets); len(projects) > 0 {
 		if has, scanErr := anyProjectDeclaresCI(projects); !has && scanErr == nil {
 			interactive.Emit(os.Stderr, "define a ci target in your magusfile to compose the gate, e.g.  "+
-				"export fun ci(_a: [str]) > void { magus.depends_on([\"build\", \"test\", \"lint\"]) }  "+
+				"export fun ci(_a: [str]) > void { magus.needs(magus.target.literal(\"build\"), magus.target.literal(\"test\"), magus.target.literal(\"lint\")) }  "+
 				"(run 'magus describe targets' to see available stages)")
 			return types.DiagnosticErrorf(types.NoCITarget,
 				"no %q target defined in the selected project(s); it is the anchor %q and %q key off, "+
@@ -179,7 +179,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 var ciDeclRe = regexp.MustCompile(`(?im)^\s*export\s+fun\s+ci\b`)
 
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
-// ci lives in the magusfile (composed via magus.depends_on), never in a spell, so
+// ci lives in the magusfile (composed via magus.needs), never in a spell, so
 // it scans the magusfile sources (no VM parse needed — just locate and read them)
 // and short-circuits on the first ci found. The returned error is non-nil if a
 // source couldn't be located/read, so a (false, err) result means "couldn't
@@ -472,6 +472,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	ctx = buzzeng.WithPoolRegistry(ctx, m.buzzPoolRegistry())
+	// One coordinator per run so target-level cross-project deps (project imports)
+	// run their remote target at most once and detect cross-project cycles.
+	ctx = interp.WithCrossDispatch(ctx, interp.NewCrossDispatch())
 	lim := m.limiter()
 	if opts.Step {
 		slog.Info("magus: --step forces Concurrency=1")

@@ -1,11 +1,13 @@
 package magus
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/targetgraph"
 	"github.com/egladman/magus/project"
@@ -143,6 +145,58 @@ func vcsRoot(dir string) string {
 	}
 }
 
+// applyCrossProjectDependencies unions each project's target-level cross-project
+// dependencies (project imports, recovered statically) into its DependsOn, so
+// the affected set and scheduling treat them exactly like a project-level depends_on
+// — letting a magusfile declare a cross-project dependency once, at the target,
+// rather than also in project.register. It mutates the workspace's projects in
+// place. ctx is honored between projects so a cancelled construction stops promptly;
+// a project whose source can't be read or whose dep path won't resolve contributes
+// nothing (best-effort, matching the static extractor's never-error contract).
+func (m *Magus) applyCrossProjectDependencies(ctx context.Context) error {
+	for _, p := range m.ws.All() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		srcs, err := interp.FindAll(p.Dir)
+		if err != nil {
+			continue
+		}
+		var extra []string
+		for _, src := range srcs {
+			if src.Engine != "buzz" {
+				continue
+			}
+			for _, n := range targetgraph.Extract(concatSource(src)) {
+				for _, ref := range n.CrossDependencies {
+					if r, err := file.Resolve(ref.Project, p.Path); err == nil {
+						extra = append(extra, r)
+					}
+				}
+			}
+		}
+		if len(extra) > 0 {
+			p.DependsOn = append(p.DependsOn, extra...)
+			slices.Sort(p.DependsOn)
+			p.DependsOn = slices.Compact(p.DependsOn)
+		}
+	}
+	return nil
+}
+
+// concatSource reads a project source's files in load order into one string for the
+// static extractor, skipping any file that can't be read (best-effort).
+func concatSource(src *interp.Source) string {
+	var sb strings.Builder
+	for _, f := range src.Files {
+		if b, err := os.ReadFile(f); err == nil {
+			sb.Write(b)
+			sb.WriteByte('\n')
+		}
+	}
+	return sb.String()
+}
+
 // DescribeGraph returns the target dependency graph of each project, extracted
 // statically from its magusfile (no target body is evaluated). Buzz magusfiles
 // are supported; a project on any other engine yields an engine-tagged entry
@@ -156,23 +210,15 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 			continue // best-effort introspection: a project we can't read just omits its graph
 		}
 		for _, src := range srcs {
-			entry := types.TargetGraphProject{Path: p.Path, Engine: src.Engine}
+			entry := types.TargetGraphProject{Path: p.Path, Engine: src.Engine, DependsOn: p.DependsOn}
 			if repoRoot != "" {
 				if rel, err := filepath.Rel(repoRoot, p.Dir); err == nil {
 					entry.RelPath = filepath.ToSlash(rel)
 				}
 			}
 			if src.Engine == "buzz" {
-				var sb strings.Builder
-				for _, f := range src.Files {
-					b, err := os.ReadFile(f)
-					if err != nil {
-						continue
-					}
-					sb.Write(b)
-					sb.WriteByte('\n')
-				}
-				nodes := targetgraph.Extract(sb.String())
+				nodes := targetgraph.Extract(concatSource(src))
+				resolveCrossDependencies(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = targetgraph.Cycle(nodes)
 			}
@@ -180,6 +226,28 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 		}
 	}
 	return out
+}
+
+// resolveCrossDependencies rewrites each node's cross-project dependency paths from the
+// dot-/repo-relative form written in the magusfile to the workspace-relative path
+// the rest of the graph keys projects by — the same resolution WithDependsOn does
+// for project-level deps. An unresolvable path is dropped (best-effort, matching
+// the static extractor's never-error contract).
+func resolveCrossDependencies(nodes []types.TargetGraphNode, projectPath string) {
+	for i := range nodes {
+		if len(nodes[i].CrossDependencies) == 0 {
+			continue
+		}
+		resolved := make([]types.CrossTargetRef, 0, len(nodes[i].CrossDependencies))
+		for _, ref := range nodes[i].CrossDependencies {
+			r, err := file.Resolve(ref.Project, projectPath)
+			if err != nil {
+				continue
+			}
+			resolved = append(resolved, types.CrossTargetRef{Project: r, Target: ref.Target})
+		}
+		nodes[i].CrossDependencies = resolved
+	}
 }
 
 // DescribeProjects returns the project inventory of the workspace.

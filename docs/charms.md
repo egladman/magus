@@ -149,8 +149,8 @@ A function target reads the active charm set directly with **`magus.has_charm(na
 
 ```buzz
 export fun build(args: [str]) > void {
-    if (magus.has_charm("container")) { magus.depends_on(["image-build"]); }
-    else { magus.depends_on(["go-build"]); }
+    if (magus.has_charm("container")) { magus.needs(magus.target.literal("image-build")); }
+    else { magus.needs(magus.target.literal("go-build")); }
 }
 ```
 

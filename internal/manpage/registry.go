@@ -83,7 +83,7 @@ if the current directory is not inside a project. Explicit project paths on the
 command line select exactly those projects.
 
 The target ci is an ordinary magusfile-defined target — magus does not hardcode
-its steps; your magusfile composes them with magus.depends_on. magus keeps ci as
+its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
 the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 	Usage: "magus run <target> [flags] [project...]",

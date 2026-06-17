@@ -227,9 +227,9 @@ magus.project.register(fun(p, cb) > bool { cb({
 }); return true; });
 
 export fun format(_args: [str]) > void { go["go-fmt"](); }
-export fun lint(_args: [str]) > void { magus.depends_on(["format"]); go["go-vet"](); }
-export fun build(_args: [str]) > void { magus.depends_on(["format"]); go["go-build"](); }
-export fun ci(_args: [str]) > void { magus.depends_on(["lint", "build"]); }
+export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
+export fun build(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }
+export fun ci(_args: [str]) > void { magus.needs(magus.target.literal("lint"), magus.target.literal("build")); }
 `
 
 func TestLoadMagusfile_graph(t *testing.T) {

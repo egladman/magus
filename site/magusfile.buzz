@@ -25,9 +25,17 @@ import "fs";
 import "io";
 import "os";
 import "std";
+// The playground embeds the gopherbuzz Buzz VM, so build-playground depends on
+// gopherbuzz's build. Importing it by path binds its targets as cross-project
+// handles (gopherbuzz.build), referenced from build_playground below.
+import "project/../gopherbuzz" as gopherbuzz;
 
 magus.project.register(fun(p, cb) > bool { cb({
     "outputs": ["gen/**"],
+    // The cross-project dependency on gopherbuzz is declared via the project import
+    // above (build_playground uses gopherbuzz.build); magus folds that into this
+    // project's affected set, so a gopherbuzz change still marks the site affected —
+    // no separate project-level depends_on.
     "targets": {
         // generate renders the site and then gates on drift, mirroring the root
         // project's generate: a cache hit would skip the render, and the gate
@@ -58,7 +66,7 @@ var metaBranch: str = "";
 var metaFull: str = "";
 var metaShort: str = "";
 var metaStamp: str = "";
-var metaCommits: {str: any} = {};
+var metaCommits: {str: str} = {};
 var metaLoaded: bool = false;
 
 // ── shell capture ─────────────────────────────────────────────────────────────
@@ -89,8 +97,8 @@ fun gitBranch() > str {
 // so it cleanly marks each commit header; the file names follow until the next.
 // Run with `git -C ..` so the pathspecs (README.md, docs) and emitted paths are
 // magus/-relative, matching metaPrefix.
-fun buildCommits() > {str: any} {
-    var m = {};
+fun buildCommits() > {str: str} {
+    var m: {str: str} = {};
     final log = capture("TZ=UTC git -C " + ROOT + " log --first-parent --diff-merges=first-parent --name-only "
         + "--date=format-local:'%Y-%m-%d %H:%M:%S UTC' "
         + "--format='>>>%H|%h|%cd' -- README.md docs");
@@ -302,7 +310,7 @@ export fun preflight(_args: [str]) > void {}
 // when gen/ actually changed (i.e. a doc edit wasn't re-rendered and committed).
 // Run the `rw` charm (`generate:rw`) to keep the result instead of gating.
 export fun generate(_args: [str]) > void {
-    magus.depends_on(["preflight"]);
+    magus.needs(magus.target.literal("preflight"));
     site_render();
     if (magus.has_charm("rw")) { return; }
 
@@ -312,15 +320,15 @@ export fun generate(_args: [str]) > void {
     }
 }
 
-export fun format(_args: [str]) > void { magus.depends_on(["generate"]); }
-export fun lint(_args: [str]) > void { magus.depends_on(["format"]); }
-export fun build(_args: [str]) > void { magus.depends_on(["generate"]); }
-export fun test(_args: [str]) > void { magus.depends_on(["format"]); }
+export fun format(_args: [str]) > void { magus.needs(magus.target.literal("generate")); }
+export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
+export fun build(_args: [str]) > void { magus.needs(magus.target.literal("generate")); }
+export fun test(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
 
 // 'ci' is the conventional anchor `magus affected ci` keys off; it fans out
 // lint/build/test, each of which waits for the render via generate.
 export fun ci(_args: [str]) > void {
-    magus.depends_on(["lint", "build", "test"]);
+    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground page
@@ -332,7 +340,10 @@ export fun ci(_args: [str]) > void {
 // then commit the refreshed artifacts. TinyGo ≥ 0.40 is required; the glue must
 // come from the same TinyGo that built the wasm.
 export fun build_playground(_args: [str]) > void {
-    magus.depends_on(["preflight"]);
+    magus.needs(magus.target.literal("preflight"));
+    // The playground embeds the gopherbuzz Buzz VM, so this target depends on
+    // gopherbuzz's build specifically — a target-level cross-project dependency.
+    magus.needs(gopherbuzz.build);
     // Run from the magus module root (..) so TinyGo resolves the go.mod there.
     // -stack-size lifts TinyGo's small default goroutine stack so the embedded
     // interpreter has room to recurse (e.g. fib in the showcase magusfile).

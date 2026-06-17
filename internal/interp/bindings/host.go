@@ -52,7 +52,7 @@ func compileTargetPatterns(patterns []string) []*regexp.Regexp {
 }
 
 // dedupStrings returns names with duplicates removed, preserving first-occurrence
-// order. magus.depends_on uses it so a target listed manually *and* matched by a
+// order. magus.needs uses it so a target listed manually *and* matched by a
 // magus.target.expand_globs glob in the same list runs once, not twice. Names are
 // already lowercased by the callers, so the dedup is case-insensitive.
 func dedupStrings(names []string) []string {

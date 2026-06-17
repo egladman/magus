@@ -333,7 +333,7 @@ func TestWriteGraphMermaid_Duration(t *testing.T) {
 	}
 }
 
-func TestFormatDur(t *testing.T) {
+func TestFormatDuration(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		d    time.Duration
@@ -349,9 +349,9 @@ func TestFormatDur(t *testing.T) {
 		{80000 * time.Millisecond, "1m20s"},
 	}
 	for _, tc := range cases {
-		got := FormatDur(tc.d)
+		got := FormatDuration(tc.d)
 		if got != tc.want {
-			t.Errorf("FormatDur(%v) = %q; want %q", tc.d, got, tc.want)
+			t.Errorf("FormatDuration(%v) = %q; want %q", tc.d, got, tc.want)
 		}
 	}
 }

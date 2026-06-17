@@ -38,7 +38,7 @@ const TargetDefinition = "A target is a named operation (e.g. build, test, lint)
 	"exported function in a project's magusfile, which may compose a spell's " +
 	"tool-native operations. 'ci' is the conventional anchor that the affected set " +
 	"keys off — magus runs it read-only but does not hardcode its steps; the magusfile " +
-	"composes them with magus.depends_on."
+	"composes them with magus.needs."
 
 // TargetEntry describes a single target available in the workspace.
 type TargetEntry struct {
@@ -56,7 +56,7 @@ type TargetsOutput struct {
 }
 
 // TargetGraphDefinition describes "magus describe graph".
-const TargetGraphDefinition = "The target dependency graph is the magus.depends_on " +
+const TargetGraphDefinition = "The target dependency graph is the magus.needs " +
 	"DAG of a project's magusfile: each node is a target (an exported function), each " +
 	"edge a dependency it composes. It is extracted statically from the magusfile " +
 	"source, so it shows every edge — including both arms of a runtime branch — and " +
@@ -65,13 +65,38 @@ const TargetGraphDefinition = "The target dependency graph is the magus.depends_
 // TargetGraphNode is one target in the graph: its run name, its doc comment, the
 // names of the targets it depends on, and the charm names its body branches on.
 // This is the single node type: the static extractor (internal/targetgraph)
-// populates it directly, and `magus describe graph` serializes it. The wire keys
-// stay short ("deps") for output stability.
+// populates it directly, and `magus describe graph` serializes it. Wire keys
+// mirror the field names in snake_case (dependencies, not the abbreviated deps),
+// matching the project-level depends_on and the rest of this file.
 type TargetGraphNode struct {
-	Name         string   `json:"name"             yaml:"name"`
-	Doc          string   `json:"doc,omitempty"    yaml:"doc,omitempty"`
-	Dependencies []string `json:"deps,omitempty"   yaml:"deps,omitempty"`
-	Charms       []string `json:"charms,omitempty" yaml:"charms,omitempty"`
+	Name         string   `json:"name"                   yaml:"name"`
+	Doc          string   `json:"doc,omitempty"          yaml:"doc,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
+	Charms       []string `json:"charms,omitempty"       yaml:"charms,omitempty"`
+	// Spells are the spell ops the target's body invokes, captured statically from
+	// the bracket (`go["go-test"]()`) and dotted (`md.markdownlint()`) call forms,
+	// grouped by spell in first-appearance order. It shows which toolchain a
+	// composite target actually drives — the part `deps` (sibling targets) omits.
+	Spells []TargetSpellUse `json:"spells,omitempty" yaml:"spells,omitempty"`
+	// CrossDependencies are dependencies on specific targets in *other* projects,
+	// declared via a project import (<alias>.<target>). Unlike Dependencies (same-project target
+	// names), each carries the other project's path, so the graph can draw a target →
+	// target edge across project boundaries instead of a coarse project → project one.
+	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
+}
+
+// CrossTargetRef names one target in another project: a target-level cross-project
+// dependency. Project is workspace-relative (resolved from the dot-/repo-relative
+// path written in the magusfile); Target is the kebab-normalized target name.
+type CrossTargetRef struct {
+	Project string `json:"project" yaml:"project"`
+	Target  string `json:"target"  yaml:"target"`
+}
+
+// TargetSpellUse is one spell a target invokes and the ops it calls on it.
+type TargetSpellUse struct {
+	Spell string   `json:"spell"         yaml:"spell"`
+	Ops   []string `json:"ops,omitempty" yaml:"ops,omitempty"`
 }
 
 // TargetGraphProject is one project's target graph, plus a detected cycle (a path
@@ -81,6 +106,11 @@ type TargetGraphProject struct {
 	Engine string            `json:"engine,omitempty" yaml:"engine,omitempty"`
 	Nodes  []TargetGraphNode `json:"nodes,omitempty"  yaml:"nodes,omitempty"`
 	Cycle  []string          `json:"cycle,omitempty"  yaml:"cycle,omitempty"`
+	// DependsOn are the workspace-relative paths of the projects this project
+	// depends on (its project-level deps, declared in magus.project.register).
+	// They draw the project → project arrows in the combined workspace graph;
+	// intra-project target edges live on each node's Dependencies.
+	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	// RelPath is Path expressed relative to the VCS (repo) root, used only for an
 	// unambiguous MAGUS.md heading when a project sits at the workspace root (Path
 	// is "."). Display-only and repo-derived, so it is not serialized; the run path
@@ -99,7 +129,7 @@ type TargetGraphOutput struct {
 // ProjectDefinition is the human-readable description of a project shown by "magus describe projects".
 const ProjectDefinition = "A project is a directory the workspace recognized as a " +
 	"unit of work, bound to one or more spells. Projects are " +
-	"discovered by the presence of a magusfile (magusfile.tl or magusfile.buzz, or a magusfiles/ subdirectory) " +
+	"discovered by the presence of a magusfile (magusfile.buzz, or a magusfiles/ subdirectory) " +
 	"and are the basic unit of caching, scheduling, and dependency tracking."
 
 // ProjectEntry is the structured view of a single project.

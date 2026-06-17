@@ -12,14 +12,16 @@ import (
 
 // WriteTargetGraphMarkdown renders a workspace's target graph as a one-stop
 // MAGUS.md cheat sheet: a quick-start, then a per-project section where every
-// target carries its doc, both invocation forms, the charm example commands, its
-// dependencies, and any rendered command or non-default policy — followed by a
-// glossary and the Mermaid dependency graph. eval supplies the fully-evaluated
-// dispatch plan keyed by evalKey(path, target); when it is nil (e.g. a unit test
+// project section opens with that project's own Mermaid dependency graph, then
+// every target carries its doc, both invocation forms, the charm example commands,
+// its dependencies, and any rendered command or non-default policy — followed by a
+// glossary. eval supplies the fully-evaluated
+// dispatch plan keyed by EvalKey(path, target); when it is nil (e.g. a unit test
 // that has only the static graph) the dispatch-derived bits are simply omitted.
 // It is engine- and repo-agnostic — `magus describe graph -o markdown` produces
 // it for any magus workspace, which is how a project's MAGUS.md is generated and
-// drift-checked.
+// drift-checked. Markdown is target-graph-only (it backs MAGUS.md); the project
+// dependency graph offers only Mermaid/DOT (WriteGraphMermaid / WriteGraphDOT).
 func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map[string]types.EvaluatedTargetEntry) error {
 	var b bytes.Buffer // accumulate, then one write — keeps the body free of per-line error checks
 
@@ -38,12 +40,24 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 	b.WriteString("```\n\n")
 	b.WriteString("Unfamiliar with a term? See the [Glossary](#glossary).\n\n")
 
-	for _, p := range nonEmptyProjects(out) {
-		fmt.Fprintf(&b, "## `%s`\n\n", projectLabel(p))
+	projects := nonEmptyProjects(out)
+	if len(projects) > 0 {
+		if err := writeLegend(&b); err != nil {
+			return err // bytes.Buffer never errors; satisfies the interface
+		}
+	}
+	for _, p := range projects {
+		fmt.Fprintf(&b, "## Project: %s\n\n", projectLabel(p))
 		if len(p.Cycle) > 0 {
 			fmt.Fprintf(&b, "> ⚠️ dependency cycle: %s\n\n", strings.Join(p.Cycle, " → "))
 		}
 		writeDispatchDefaults(&b, p.Path, projectLabel(p), eval)
+		if err := writeProjectGraph(&b, p); err != nil {
+			return err // bytes.Buffer never errors; satisfies the interface
+		}
+		if err := writeToolchainGraph(&b, p); err != nil {
+			return err // bytes.Buffer never errors; satisfies the interface
+		}
 		for _, n := range catalogOrder(p.Nodes) {
 			writeTargetSection(&b, p.Path, n, eval)
 		}
@@ -51,19 +65,13 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 
 	writeGlossary(&b)
 
-	b.WriteString("## Dependency graph\n\n```mermaid\n")
-	if err := WriteTargetGraphMermaid(&b, out); err != nil {
-		return err // bytes.Buffer never errors; satisfies the interface
-	}
-	b.WriteString("```\n")
-
 	_, err := w.Write(b.Bytes())
 	return err
 }
 
-// evalKey is the lookup key for an evaluated target, joining project path and
+// EvalKey is the lookup key for an evaluated target, joining project path and
 // target name on a NUL that can't occur in either.
-func evalKey(path, target string) string { return path + "\x00" + target }
+func EvalKey(path, target string) string { return path + "\x00" + target }
 
 // projectLabel is the heading shown for a project: its path relative to the repo
 // root (so a project at the workspace root reads as e.g. `magus`, not the
@@ -131,6 +139,181 @@ func writeDispatchDefaults(b *bytes.Buffer, path, label string, eval map[string]
 	b.WriteString("```\n\n</details>\n\n")
 }
 
+// targetRoleClasses style target nodes by role; externalClass styles a
+// cross-project dependency node. Shared by the per-project graphs and the legend
+// so the key always matches what it documents.
+var targetRoleClasses = []renderClass{
+	{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},
+	{Name: "mid", Style: "fill:#e2e8f0,color:#0f172a,stroke:#94a3b8"},
+	{Name: "leaf", Style: "fill:#dcfce7,color:#14532d,stroke:#86efac"},
+}
+
+var externalClass = renderClass{Name: "external", Style: "fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3"}
+
+// writeLegend emits a one-off Mermaid key for the per-project graphs below: the
+// role colors and the external-project shape, plus a note for the two conventions
+// a legend node can't show on its own (the spell box and the dotted cross-project
+// arrow).
+func writeLegend(b *bytes.Buffer) error {
+	b.WriteString("## Reading the graphs\n\n")
+	b.WriteString("```mermaid\n")
+	g := renderGraph{Direction: "LR"}
+	g.Groups = []renderGroup{{ID: "legend", Label: "Legend"}}
+	g.Nodes = []renderNode{
+		{ID: "lg_anchor", Label: "Invoke directly", Shape: shapeRounded, Classes: []string{"anchor"}, Group: "legend"},
+		{ID: "lg_mid", Label: "Intermediate", Shape: shapeRounded, Classes: []string{"mid"}, Group: "legend"},
+		{ID: "lg_leaf", Label: "No dependencies", Shape: shapeRounded, Classes: []string{"leaf"}, Group: "legend"},
+		{ID: "lg_ext", Label: "Other project", Shape: shapeSubroutine, Classes: []string{"external"}, Group: "legend"},
+		{ID: "lg_spell", Label: "Spell", Shape: shapeHexagon, Classes: []string{"spell"}, Group: "legend"},
+	}
+	g.Classes = append(slices.Clone(targetRoleClasses), externalClass, spellClass)
+	if err := writeMermaid(b, g); err != nil {
+		return err
+	}
+	b.WriteString("```\n\n")
+	b.WriteString("- Node color is graph position only: **blue** = nothing depends on it (you invoke it directly); " +
+		"**green** = it has no dependencies of its own; **gray** = in between.\n")
+	b.WriteString("- A dotted arrow marks a **cross-project dependency**.\n")
+	b.WriteString("- Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.\n\n")
+	return nil
+}
+
+// writeProjectGraph emits the project's own Mermaid dependency graph (LR) under a
+// bold label, inline at the top of its section: its targets, coloured by role, their
+// dependency edges, and a dotted "needs" edge to each [[project:target]] it depends
+// on across project boundaries (declared via project imports). A target's spells live in
+// writeToolchainGraph, not here.
+func writeProjectGraph(b *bytes.Buffer, p types.TargetGraphProject) error {
+	b.WriteString("**Dependency graph**\n\n```mermaid\n")
+	g := targetGraphIR(types.TargetGraphOutput{Projects: []types.TargetGraphProject{p}})
+	addEntryPointCluster(&g, p)
+	addCrossTargetDependencies(&g, p)
+	if err := writeMermaid(b, g); err != nil {
+		return err
+	}
+	b.WriteString("```\n\n")
+	return nil
+}
+
+// addEntryPointCluster groups a project's entry-point targets (the ones nothing
+// depends on) into one *invisible* subgraph — transparent fill and stroke, blank
+// label — so dagre keeps them together in the layout without drawing a box. No-op
+// for fewer than two entry points (nothing to cluster). The grouping carries no
+// styling of its own; the nodes keep their role colors.
+func addEntryPointCluster(g *renderGraph, p types.TargetGraphProject) {
+	anchors := anchorNames(p.Nodes)
+	if len(anchors) < 2 {
+		return
+	}
+	anchorIDs := make(map[string]bool, len(anchors))
+	for name := range anchors {
+		anchorIDs[mermaidID(name)] = true // per-project graph is single-project: no id prefix
+	}
+	const clusterID = "entry_cluster"
+	moved := 0
+	for i := range g.Nodes {
+		if anchorIDs[g.Nodes[i].ID] && g.Nodes[i].Group == "" {
+			g.Nodes[i].Group = clusterID
+			moved++
+		}
+	}
+	if moved < 2 {
+		return
+	}
+	g.Groups = append(g.Groups, renderGroup{ID: clusterID, Label: " ", Style: "fill:transparent,stroke:transparent"})
+}
+
+// anchorNames returns the targets nothing else in the project depends on — the
+// entry points you invoke directly.
+func anchorNames(nodes []types.TargetGraphNode) map[string]bool {
+	incoming := map[string]bool{}
+	for _, n := range nodes {
+		for _, d := range n.Dependencies {
+			incoming[d] = true
+		}
+	}
+	anchors := make(map[string]bool)
+	for _, n := range nodes {
+		if !incoming[n.Name] {
+			anchors[n.Name] = true
+		}
+	}
+	return anchors
+}
+
+// spellClass styles a spell node in the Toolchain graph (and its legend entry).
+var spellClass = renderClass{Name: "spell", Style: "fill:#ede9fe,color:#4c1d95,stroke:#a78bfa"}
+
+// writeToolchainGraph emits a project's Toolchain graph: a top-down (TB) Mermaid
+// chart drawing each spell-driving target to the spell it drives, with the tool-
+// native operations on the edge. It is a deliberately separate graph from the LR
+// dependency graph above — spells are a different relationship, and Mermaid can't
+// reliably mix flow directions within one diagram. Skipped when no target in the
+// project drives a spell.
+func writeToolchainGraph(b *bytes.Buffer, p types.TargetGraphProject) error {
+	hasSpell := false
+	for _, n := range p.Nodes {
+		if len(n.Spells) > 0 {
+			hasSpell = true
+			break
+		}
+	}
+	if !hasSpell {
+		return nil
+	}
+
+	b.WriteString("**Toolchain**\n\n")
+	b.WriteString("Which spell each target drives; edge labels are the tool-native operations.\n\n")
+	b.WriteString("```mermaid\n")
+	g := renderGraph{Direction: "TB"}
+	spellSeen := map[string]bool{}
+	for _, n := range p.Nodes {
+		if len(n.Spells) == 0 {
+			continue
+		}
+		tid := "t_" + mermaidID(n.Name)
+		g.Nodes = append(g.Nodes, renderNode{ID: tid, Label: n.Name, Shape: shapeRounded})
+		for _, s := range n.Spells {
+			sid := "sp_" + mermaidID(s.Spell)
+			if !spellSeen[s.Spell] {
+				spellSeen[s.Spell] = true
+				g.Nodes = append(g.Nodes, renderNode{ID: sid, Label: s.Spell, Shape: shapeHexagon, Classes: []string{"spell"}})
+			}
+			g.Edges = append(g.Edges, renderEdge{From: tid, To: sid, Label: strings.Join(s.Ops, ", ")})
+		}
+	}
+	g.Classes = []renderClass{spellClass}
+	if err := writeMermaid(b, g); err != nil {
+		return err
+	}
+	b.WriteString("```\n\n")
+	return nil
+}
+
+// addCrossTargetDependencies draws p's target-level cross-project dependencies
+// (node.CrossDependencies, from project imports): a dotted "needs" edge from the
+// specific target to an external [[project:target]] node, deduped. This is the only
+// cross-project representation — project-level depends_on is an affected/scheduling
+// concern that isn't drawn (a magusfile that wants the edge in the graph declares it
+// at the target via a project import). No-op when p has no cross-target deps.
+func addCrossTargetDependencies(g *renderGraph, p types.TargetGraphProject) {
+	extSeen := map[string]bool{}
+	for _, n := range p.Nodes {
+		from := mermaidID(n.Name)
+		for _, ref := range n.CrossDependencies {
+			id := "xt_" + mermaidID(ref.Project) + "_" + mermaidID(ref.Target)
+			if !extSeen[id] {
+				extSeen[id] = true
+				g.Nodes = append(g.Nodes, renderNode{ID: id, Label: ref.Project + ":" + ref.Target, Shape: shapeSubroutine, Classes: []string{"external"}})
+			}
+			g.Edges = append(g.Edges, renderEdge{From: from, To: id, Label: "needs", Dashed: true})
+		}
+	}
+	if len(extSeen) > 0 {
+		g.Classes = append(g.Classes, externalClass)
+	}
+}
+
 // cmdLine is one `magus run …` example with its trailing explanatory comment.
 type cmdLine struct{ code, note string }
 
@@ -191,7 +374,13 @@ func writeTargetSection(b *bytes.Buffer, path string, n types.TargetGraphNode, e
 		b.WriteString("\n")
 	}
 
-	e, ok := eval[evalKey(path, n.Name)]
+	// Note: a target's spells are not restated here — they ride in its graph node
+	// (as per-spell boxes inside the target's subgraph), which is the section's
+	// authoritative view of the toolchain a target drives. A prose block would only
+	// duplicate that, the way `**Depends on:**` does not (it earns its place with
+	// anchor links spells lack).
+
+	e, ok := eval[EvalKey(path, n.Name)]
 	if !ok {
 		return
 	}
@@ -215,7 +404,7 @@ func writeGlossary(b *bytes.Buffer) {
 	for _, g := range []struct{ term, def string }{
 		{"Workspace", "the magus root directory that owns a set of projects and shared config; the unit magus operates over."},
 		{"Project", "a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking."},
-		{"Magusfile", "the `magusfile.buzz` / `magusfile.tl` that declares a project's targets (as `export fun`s) and binds its spells."},
+		{"Magusfile", "the `magusfile.buzz` that declares a project's targets (as `export fun`s) and binds its spells."},
 		{"Target", "a named operation (`build`, `test`, …) you invoke with `magus run <target>`; it may compose a spell's tool-native operations and depend on other targets."},
 		{"Spell", "a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands."},
 		{"Charm", "an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it."},
@@ -227,16 +416,25 @@ func writeGlossary(b *bytes.Buffer) {
 	b.WriteString("\n")
 }
 
-// projectDefaults returns any evaluated target belonging to path; every target in
-// a project shares the same base-spec sources, outputs, and spells, so the first
-// match speaks for all. The bool is false when eval carries nothing for the path.
+// projectDefaults returns the evaluated target that stands in for path's shared
+// defaults. Every target in a project keys off the same base spec, so any of them
+// carries the same sources, outputs, and spells. We pick the one with the
+// lexicographically-smallest target name rather than ranging the map and taking
+// whatever comes first: Go randomizes map iteration order, so "first match" makes
+// the rendered defaults block nondeterministic the moment that invariant is even
+// slightly off. The bool is false when eval carries nothing for the path.
 func projectDefaults(path string, eval map[string]types.EvaluatedTargetEntry) (types.EvaluatedTargetEntry, bool) {
+	var best types.EvaluatedTargetEntry
+	found := false
 	for _, e := range eval {
-		if e.Project == path {
-			return e, true
+		if e.Project != path {
+			continue
+		}
+		if !found || e.Target < best.Target {
+			best, found = e, true
 		}
 	}
-	return types.EvaluatedTargetEntry{}, false
+	return best, found
 }
 
 // spellsLine renders the project's spells as a comma-separated list, annotating
@@ -296,24 +494,33 @@ func WriteTargetGraphMermaid(w io.Writer, out types.TargetGraphOutput) error {
 	return writeMermaid(w, targetGraphIR(out))
 }
 
-// targetGraphIR maps the target dependency graph onto the shared RenderGraph. With
+// targetGraphIR maps the target dependency graph onto the shared renderGraph. With
 // more than one project, each is a subgraph and its node IDs are prefixed (so a
 // `build` in two projects stays distinct). Worker targets sharing a trailing
 // `-<segment>` (e.g. `man-generate`, `docs-generate`) are boxed into a collapsing
 // stage subgraph, so an edge lands on the box rather than a worker inside it; the
 // bare composite (`generate`) stays loose. Nodes are classed by role: anchors
 // (nothing depends on them), leaves (no deps), composites in between.
-func targetGraphIR(out types.TargetGraphOutput) RenderGraph {
+func targetGraphIR(out types.TargetGraphOutput) renderGraph {
 	projects := nonEmptyProjects(out)
 	multi := len(projects) > 1
-	g := RenderGraph{DOTName: "targets"}
+	// LR so the graph reads left-to-right like a pipeline. The extra rank/node
+	// spacing gives dagre room to route around the per-target spell boxes (GitHub
+	// has no ELK engine to lean on). DOT ignores these layout hints.
+	g := renderGraph{DOTName: "targets", Direction: "LR", NodeSpacing: 50, RankSpacing: 80}
+
+	// projGroupOf maps a project path to its wrapper-subgraph id, filled as each
+	// project is emitted below; the cross-project edge pass (after the loop) reads
+	// the completed map so a dependency on a later-listed project still resolves.
+	projGroupOf := make(map[string]string, len(projects))
 
 	for i, p := range projects {
 		prefix, projGroup := "", ""
 		if multi {
 			prefix = fmt.Sprintf("p%d_", i)
 			projGroup = fmt.Sprintf("p%d", i)
-			g.Groups = append(g.Groups, RenderGroup{ID: projGroup, Label: p.Path})
+			projGroupOf[p.Path] = projGroup
+			g.Groups = append(g.Groups, renderGroup{ID: projGroup, Label: p.Path})
 		}
 
 		known := make(map[string]bool, len(p.Nodes))
@@ -331,7 +538,7 @@ func targetGraphIR(out types.TargetGraphOutput) RenderGraph {
 
 		stageOf, stageOrder := stageGroups(p.Nodes)
 		for _, stage := range stageOrder {
-			g.Groups = append(g.Groups, RenderGroup{
+			g.Groups = append(g.Groups, renderGroup{
 				ID:       prefix + "stage_" + mermaidID(stage),
 				Label:    stage,
 				Parent:   projGroup,
@@ -344,6 +551,9 @@ func targetGraphIR(out types.TargetGraphOutput) RenderGraph {
 			if s := stageOf[n.Name]; s != "" {
 				group = prefix + "stage_" + mermaidID(s)
 			}
+			// Every target is a single node coloured by role; the spells it drives
+			// live in the project's separate Toolchain graph (writeToolchainGraph), not
+			// boxed inside this one.
 			role := "mid"
 			switch {
 			case !incoming[n.Name]:
@@ -351,11 +561,11 @@ func targetGraphIR(out types.TargetGraphOutput) RenderGraph {
 			case len(n.Dependencies) == 0:
 				role = "leaf"
 			}
-			g.Nodes = append(g.Nodes, RenderNode{
+			g.Nodes = append(g.Nodes, renderNode{
 				ID:      prefix + mermaidID(n.Name),
 				DOTID:   p.Path + ":" + n.Name,
 				Label:   n.Name,
-				Shape:   ShapeRounded,
+				Shape:   shapeRounded,
 				Classes: []string{role},
 				Group:   group,
 			})
@@ -363,16 +573,27 @@ func targetGraphIR(out types.TargetGraphOutput) RenderGraph {
 		for _, n := range p.Nodes {
 			from := prefix + mermaidID(n.Name)
 			for _, d := range n.Dependencies {
-				g.Edges = append(g.Edges, RenderEdge{From: from, To: prefix + mermaidID(d)})
+				g.Edges = append(g.Edges, renderEdge{From: from, To: prefix + mermaidID(d)})
 			}
 		}
 	}
 
-	g.Classes = []RenderClass{
-		{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},
-		{Name: "mid", Style: "fill:#e2e8f0,color:#0f172a,stroke:#94a3b8"},
-		{Name: "leaf", Style: "fill:#dcfce7,color:#14532d,stroke:#86efac"},
+	// Cross-project edges: a project box points at each project it depends on, so
+	// the combined graph carries the workspace's project → project arrows alongside
+	// the per-project target wiring. Endpoints are the wrapper-subgraph ids; an edge
+	// to a project that contributed no nodes (dropped) is skipped.
+	if multi {
+		for _, p := range projects {
+			from := projGroupOf[p.Path]
+			for _, dep := range p.DependsOn {
+				if to, ok := projGroupOf[dep]; ok {
+					g.Edges = append(g.Edges, renderEdge{From: from, To: to})
+				}
+			}
+		}
 	}
+
+	g.Classes = slices.Clone(targetRoleClasses)
 	return g
 }
 

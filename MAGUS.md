@@ -14,18 +14,140 @@ magus run <target>:<charm>    # change HOW it runs (e.g. lint:rw)
 
 Unfamiliar with a term? See the [Glossary](#glossary).
 
-## `magus`
+## Reading the graphs
+
+```mermaid
+graph LR
+  subgraph legend["Legend"]
+    lg_anchor("Invoke directly")
+    lg_mid("Intermediate")
+    lg_leaf("No dependencies")
+    lg_ext[["Other project"]]
+    lg_spell{{"Spell"}}
+  end
+  %% no dependency edges
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef mid fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  classDef leaf fill:#dcfce7,color:#14532d,stroke:#86efac
+  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
+  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
+  class lg_anchor anchor
+  class lg_mid mid
+  class lg_leaf leaf
+  class lg_ext external
+  class lg_spell spell
+```
+
+- Node color is graph position only: **blue** = nothing depends on it (you invoke it directly); **green** = it has no dependencies of its own; **gray** = in between.
+- A dotted arrow marks a **cross-project dependency**.
+- Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
+
+## Project: magus
 
 <details>
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
 
 ```text
-sources  **/*.MD, **/*.buzz, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfile.tl, magusfiles/**/*.buzz, magusfiles/**/*.tl
-outputs  internal/std/gen/lua/*.go, internal/std/gen/buzz/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
+sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
+outputs  internal/std/gen/buzz/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
 spells   magusfile, go, buzz, md (claims: **/*.md, **/*.mdx)
 ```
 
 </details>
+
+**Dependency graph**
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 80
+---
+graph LR
+  subgraph stage_build["build"]
+    go_build("go-build")
+    image_build("image-build")
+  end
+  subgraph stage_generate["generate"]
+    man_generate("man-generate")
+    bindings_generate("bindings-generate")
+    spells_generate("spells-generate")
+    config_generate("config-generate")
+    docs_generate("docs-generate")
+    md_generate("md-generate")
+  end
+  subgraph entry_cluster[" "]
+    image_scan("image-scan")
+    release("release")
+    watch("watch")
+    coverage("coverage")
+    buzz_check("buzz-check")
+    buzz_run("buzz-run")
+    ci("ci")
+    ci_shard("ci-shard")
+  end
+  generate("generate")
+  preflight("preflight")
+  build("build")
+  test("test")
+  lint("lint")
+  format("format")
+  xt_gopherbuzz_build[["gopherbuzz:build"]]
+  image_scan --> stage_build
+  generate --> preflight
+  generate --> stage_generate
+  build --> format
+  build --> stage_build
+  test --> format
+  lint --> format
+  format --> generate
+  ci --> lint
+  ci --> build
+  ci --> test
+  stage_build -.->|"needs"| xt_gopherbuzz_build
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef mid fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  classDef leaf fill:#dcfce7,color:#14532d,stroke:#86efac
+  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
+  class buzz_check,buzz_run,ci,ci_shard,coverage,image_scan,release,watch anchor
+  class build,format,generate,lint,test mid
+  class bindings_generate,config_generate,docs_generate,go_build,image_build,man_generate,md_generate,preflight,spells_generate leaf
+  class xt_gopherbuzz_build external
+  style entry_cluster fill:transparent,stroke:transparent
+```
+
+**Toolchain**
+
+Which spell each target drives; edge labels are the tool-native operations.
+
+```mermaid
+graph TB
+  t_go_build("go-build")
+  sp_go{{"go"}}
+  t_image_build("image-build")
+  sp_docker{{"docker"}}
+  t_release("release")
+  t_buzz_check("buzz-check")
+  sp_buzz{{"buzz"}}
+  t_buzz_run("buzz-run")
+  t_test("test")
+  t_lint("lint")
+  sp_md{{"md"}}
+  t_format("format")
+  t_go_build -->|"go-build"| sp_go
+  t_image_build -->|"docker-build"| sp_docker
+  t_release -->|"go-build"| sp_go
+  t_buzz_check -->|"buzz-check"| sp_buzz
+  t_buzz_run -->|"magus-buzz"| sp_buzz
+  t_test -->|"go-test"| sp_go
+  t_lint -->|"golangci-lint, go-vet, govulncheck"| sp_go
+  t_lint -->|"markdownlint"| sp_md
+  t_format -->|"go-fmt, go-mod-tidy"| sp_go
+  t_format -->|"prettier"| sp_md
+  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
+  class sp_buzz,sp_docker,sp_go,sp_md spell
+```
 
 ### `image-scan`
 
@@ -291,7 +413,7 @@ magus run man-generate .  # from the workspace root
 
 ### `bindings-generate`
 
-Regenerates the Go host bindings (internal/std -> gen/{lua,buzz}) from the std.Module declarations.
+Regenerates the Go host bindings (internal/std -> gen/buzz) from the std.Module declarations.
 
 **Defaults**
 
@@ -355,18 +477,233 @@ magus run preflight    # from the project directory
 magus run preflight .  # from the workspace root
 ```
 
-## `magus/site`
+## Project: magus/gopherbuzz
+
+<details>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/gopherbuzz</code></summary>
+
+```text
+sources  gopherbuzz/**/*.go, gopherbuzz/go.mod, gopherbuzz/go.sum, gopherbuzz/go.work, gopherbuzz/go.work.sum, gopherbuzz/magusfile.buzz, gopherbuzz/magusfiles/**/*.buzz, magusfile.buzz, magusfiles/**/*.buzz
+spells   go
+```
+
+</details>
+
+**Dependency graph**
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 80
+---
+graph LR
+  subgraph entry_cluster[" "]
+    ci("ci")
+    pgo_generate("pgo-generate")
+  end
+  preflight("preflight")
+  generate("generate")
+  format("format")
+  lint("lint")
+  build("build")
+  test("test")
+  generate --> preflight
+  format --> generate
+  lint --> format
+  build --> format
+  test --> format
+  ci --> lint
+  ci --> build
+  ci --> test
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef mid fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  classDef leaf fill:#dcfce7,color:#14532d,stroke:#86efac
+  class ci,pgo_generate anchor
+  class build,format,generate,lint,test mid
+  class preflight leaf
+  style entry_cluster fill:transparent,stroke:transparent
+```
+
+**Toolchain**
+
+Which spell each target drives; edge labels are the tool-native operations.
+
+```mermaid
+graph TB
+  t_format("format")
+  sp_go{{"go"}}
+  t_lint("lint")
+  t_build("build")
+  t_test("test")
+  t_format -->|"go-fmt, go-mod-tidy"| sp_go
+  t_lint -->|"go-vet"| sp_go
+  t_build -->|"go-build"| sp_go
+  t_test -->|"go-test"| sp_go
+  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
+  class sp_go spell
+```
+
+### `generate`
+
+**Defaults**
+
+```sh
+magus run generate             # from the project directory
+magus run generate gopherbuzz  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+### `format`
+
+**Defaults**
+
+```sh
+magus run format             # from the project directory
+magus run format gopherbuzz  # from the workspace root
+```
+
+**Depends on:**
+
+- [`generate`](#generate)
+
+### `lint`
+
+**Defaults**
+
+```sh
+magus run lint             # from the project directory
+magus run lint gopherbuzz  # from the workspace root
+```
+
+**Depends on:**
+
+- [`format`](#format)
+
+### `build`
+
+**Defaults**
+
+```sh
+magus run build             # from the project directory
+magus run build gopherbuzz  # from the workspace root
+```
+
+**Depends on:**
+
+- [`format`](#format)
+
+### `test`
+
+**Defaults**
+
+```sh
+magus run test             # from the project directory
+magus run test gopherbuzz  # from the workspace root
+```
+
+**Depends on:**
+
+- [`format`](#format)
+
+### `ci`
+
+'ci' is the conventional anchor `magus affected ci` keys off; it fans out lint/build/test in parallel, each waiting on format.
+
+**Defaults**
+
+```sh
+magus run ci             # from the project directory
+magus run ci gopherbuzz  # from the workspace root
+```
+
+**Depends on:**
+
+- [`lint`](#lint)
+- [`build`](#build)
+- [`test`](#test)
+
+### `pgo-generate`
+
+Regenerate default.pgo — the profile-guided optimization profile for the Buzz VM.
+
+**Defaults**
+
+```sh
+magus run pgo-generate             # from the project directory
+magus run pgo-generate gopherbuzz  # from the workspace root
+```
+
+**Details:** uncached (always runs)
+
+### `preflight`
+
+**Defaults**
+
+```sh
+magus run preflight             # from the project directory
+magus run preflight gopherbuzz  # from the workspace root
+```
+
+## Project: magus/site
 
 <details>
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/site</code></summary>
 
 ```text
-sources  magusfile.buzz, magusfile.tl, magusfiles/**/*.buzz, magusfiles/**/*.tl, site/magusfile.buzz, site/magusfile.tl, site/magusfiles/**/*.buzz, site/magusfiles/**/*.tl
+sources  magusfile.buzz, magusfiles/**/*.buzz, site/magusfile.buzz, site/magusfiles/**/*.buzz
 outputs  site/gen/**
 spells   magusfile
 ```
 
 </details>
+
+**Dependency graph**
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 80
+---
+graph LR
+  subgraph entry_cluster[" "]
+    ci("ci")
+    build_playground("build-playground")
+    serve("serve")
+  end
+  preflight("preflight")
+  generate("generate")
+  format("format")
+  lint("lint")
+  build("build")
+  test("test")
+  xt_gopherbuzz_build[["gopherbuzz:build"]]
+  generate --> preflight
+  format --> generate
+  lint --> format
+  build --> generate
+  test --> format
+  ci --> lint
+  ci --> build
+  ci --> test
+  build_playground --> preflight
+  build_playground -.->|"needs"| xt_gopherbuzz_build
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef mid fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  classDef leaf fill:#dcfce7,color:#14532d,stroke:#86efac
+  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
+  class build_playground,ci,serve anchor
+  class build,format,generate,lint,test mid
+  class preflight leaf
+  class xt_gopherbuzz_build external
+  style entry_cluster fill:transparent,stroke:transparent
+```
 
 ### `generate`
 
@@ -460,6 +797,23 @@ magus run ci site  # from the workspace root
 - [`build`](#build)
 - [`test`](#test)
 
+### `build-playground`
+
+build-playground rebuilds the WebAssembly interpreter the playground page loads: TinyGo compiles ../cmd/buzz-playground to site/playground/buzz.wasm and the matching wasm_exec.js glue is copied beside it.
+
+**Defaults**
+
+```sh
+magus run build-playground       # from the project directory
+magus run build-playground site  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+**Details:** uncached (always runs)
+
 ### `serve`
 
 serve watches ../docs and re-renders gen/ on change — handy for local docs work.
@@ -486,78 +840,9 @@ magus run preflight site  # from the workspace root
 
 - **Workspace**: the magus root directory that owns a set of projects and shared config; the unit magus operates over.
 - **Project**: a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.
-- **Magusfile**: the `magusfile.buzz` / `magusfile.tl` that declares a project's targets (as `export fun`s) and binds its spells.
+- **Magusfile**: the `magusfile.buzz` that declares a project's targets (as `export fun`s) and binds its spells.
 - **Target**: a named operation (`build`, `test`, …) you invoke with `magus run <target>`; it may compose a spell's tool-native operations and depend on other targets.
 - **Spell**: a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands.
 - **Charm**: an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it.
 - **Module**: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.
-- **Buzz**: one of the magusfile languages magus supports (the `.buzz` engine); Teal (`.tl`) is the other.
-
-## Dependency graph
-
-```mermaid
-graph TD
-    subgraph p0["."]
-        subgraph p0_stage_build["build"]
-            p0_go_build("go-build")
-            p0_image_build("image-build")
-        end
-        subgraph p0_stage_generate["generate"]
-            p0_man_generate("man-generate")
-            p0_bindings_generate("bindings-generate")
-            p0_spells_generate("spells-generate")
-            p0_config_generate("config-generate")
-            p0_docs_generate("docs-generate")
-            p0_md_generate("md-generate")
-        end
-        p0_image_scan("image-scan")
-        p0_generate("generate")
-        p0_release("release")
-        p0_watch("watch")
-        p0_coverage("coverage")
-        p0_buzz_check("buzz-check")
-        p0_buzz_run("buzz-run")
-        p0_preflight("preflight")
-        p0_build("build")
-        p0_test("test")
-        p0_lint("lint")
-        p0_format("format")
-        p0_ci("ci")
-        p0_ci_shard("ci-shard")
-        p0_image_scan --> p0_stage_build
-        p0_generate --> p0_preflight
-        p0_generate --> p0_stage_generate
-        p0_build --> p0_format
-        p0_build --> p0_stage_build
-        p0_test --> p0_format
-        p0_lint --> p0_format
-        p0_format --> p0_generate
-        p0_ci --> p0_lint
-        p0_ci --> p0_build
-        p0_ci --> p0_test
-    end
-    subgraph p1["site"]
-        p1_preflight("preflight")
-        p1_generate("generate")
-        p1_format("format")
-        p1_lint("lint")
-        p1_build("build")
-        p1_test("test")
-        p1_ci("ci")
-        p1_serve("serve")
-        p1_generate --> p1_preflight
-        p1_format --> p1_generate
-        p1_lint --> p1_format
-        p1_build --> p1_generate
-        p1_test --> p1_format
-        p1_ci --> p1_lint
-        p1_ci --> p1_build
-        p1_ci --> p1_test
-    end
-    classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-    classDef mid fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-    classDef leaf fill:#dcfce7,color:#14532d,stroke:#86efac
-    class p0_buzz_check,p0_buzz_run,p0_ci,p0_ci_shard,p0_coverage,p0_image_scan,p0_release,p0_watch,p1_ci,p1_serve anchor
-    class p0_build,p0_format,p0_generate,p0_lint,p0_test,p1_build,p1_format,p1_generate,p1_lint,p1_test mid
-    class p0_bindings_generate,p0_config_generate,p0_docs_generate,p0_go_build,p0_image_build,p0_man_generate,p0_md_generate,p0_preflight,p0_spells_generate,p1_preflight leaf
-```
+- **Buzz**: the language magusfiles are written in (the `.buzz` engine).

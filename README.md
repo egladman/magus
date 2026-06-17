@@ -193,18 +193,25 @@ charms. See [docs/charms.md](docs/charms.md).
 
 ## CI Pipeline
 
-Magus keeps one conventional target as the anchor that the affected set keys off: `ci`. It is an **ordinary magusfile target** — magus does not hardcode its steps. Your magusfile exports a `ci` function and composes the pipeline with `magus.depends_on`; magus runs it read-only. Everything else is optional.
+Magus keeps one conventional target as the anchor that the affected set keys off: `ci`. It is an **ordinary magusfile target** — magus does not hardcode its steps. Your magusfile exports a `ci` function and composes the pipeline with `magus.needs`; magus runs it read-only. Everything else is optional.
 
 ```buzz
 export fun ci(_args: [str]) > void {
     // declare the edges you want; independent steps run in parallel
-    magus.depends_on(["preflight", "generate", "format", "lint", "build", "test"]);
+    magus.needs(
+        magus.target.literal("preflight"),
+        magus.target.literal("generate"),
+        magus.target.literal("format"),
+        magus.target.literal("lint"),
+        magus.target.literal("build"),
+        magus.target.literal("test"),
+    );
 }
 ```
 
 ### Recommended order
 
-We document this order; we don't enforce it. Chain steps with `magus.depends_on` where order matters (e.g. `test` depends on `build`).
+We document this order; we don't enforce it. Chain steps with `magus.needs` where order matters (e.g. `test` depends on `build`).
 
 ```mermaid
 flowchart TD
@@ -417,7 +424,7 @@ Magusfiles see three distinct namespaces:
 | Tier                | Examples                                                                                                                | What it is                                                                              |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | **Language stdlib** | `std`, `os`, `fs`, `math` (`import "std"`, …)                                                                            | Buzz built-ins — untouched                                                              |
-| **`magus.*`**       | `magus.target.expand_globs`, `magus.project.register`, `magus.depends_on`, `magus.dispatch`, `magus.spell`, `magus.cmd` | Build DSL — the primary authoring surface; targets are declared as exported functions   |
+| **`magus.*`**       | `magus.project.register`, `magus.needs`, `magus.target.literal/glob/regex/external`, `magus.spell`, `magus.cmd` | Build DSL — the primary authoring surface; targets are declared as exported functions   |
 | **Std modules**     | `extra.os`, `extra.fs`, … (`import "magus/extra"`)                                                                       | Runtime utility library, reached off the `extra` aggregate import                       |
 
 The magus host utilities are one aggregate import: `import "magus/extra"` binds `extra`, and modules hang off it — `extra.os.exec`, `extra.fs.glob`, `extra.vcs`. Methods are camelCase (Buzz's convention). Keeping the bare names `os`/`fs`/`crypto` free for Buzz's own stdlib (`import "std"`, `import "os"`) means the two never collide.
@@ -722,19 +729,22 @@ Paths can be repo-relative (`"api"`) or relative to the declaring project (`"../
 
 Declared dependencies affect `magus affected`: when `api` changes, `apps/ui` is included in the affected set and rebuilt downstream. They also appear in `magus describe` output and graph views.
 
-> **One concept, two granularities.** `depends_on` declares dependency _edges_, and magus resolves them into the build graph — independent dependencies run in **parallel**, and a node runs once all of its dependencies have completed. (magus never sequences tasks just because you listed them in a certain order; the graph decides what can overlap.) The only thing that changes between the two call sites is the namespace you draw from: `magus.project.register` names **projects** (a cross-project edge that also feeds the affected set and cache key), while `magus.depends_on` inside a target function names **targets** in the same file:
+> **One concept, two granularities.** A dependency declares an _edge_ that magus resolves into the build graph — independent dependencies run in **parallel**, and a node runs once all of its dependencies have completed. (magus never sequences tasks just because you listed them in a certain order; the graph decides what can overlap.) What changes is granularity: `magus.project.register`'s `depends_on` names **projects** (a coarse cross-project edge that also feeds the affected set and cache key), while `magus.needs` inside a target names **targets** via typed handles — `magus.target.literal/glob/regex` for same-project targets, and a **project import** (`import "project/<path>" as <alias>`, then `<alias>.<target>`) for a specific target in another project:
 >
 > ```buzz
+> import "project/../api" as api;   // bind ../api's targets as cross-project handles
+>
 > // project-level: this project depends on ../api
 > magus.project.register(fun(p, cb) > bool { cb({ "depends_on": ["../api"] }); return true; });
 >
-> // target-level: this target depends on every *-build target
+> // target-level: this target depends on every *-build target in this project,
+> // and on api's compile target across the project boundary
 > export fun build(_args: [str]) > void {
->     magus.depends_on(magus.target.expand_globs("*-build"));
+>     magus.needs(magus.target.glob("*-build"), api.compile);
 > }
 > ```
 >
-> This mirrors Bazel, where a target's `deps` lists other targets: the function you call fixes whether you're naming projects or targets, so the same word stays unambiguous.
+> This mirrors Bazel, where a target's `deps` lists other targets: the call you use — `project.register`'s `depends_on` for projects, `magus.needs` for targets — fixes which you're naming.
 
 ---
 

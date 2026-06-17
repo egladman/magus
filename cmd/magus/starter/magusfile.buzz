@@ -36,17 +36,17 @@ magus.project.register(fun(p, cb) > bool { cb({
 // (build below). Leave a stage as a no-op until you wire it.
 
 export fun preflight(_args: [str]) > void {}
-export fun generate(_args: [str]) > void { magus.depends_on(["preflight"]); }
-export fun format(_args: [str]) > void { magus.depends_on(["generate"]); }
-export fun lint(_args: [str]) > void { magus.depends_on(["format"]); }
-export fun build(_args: [str]) > void { magus.depends_on(["format"]); os.exec("echo", ["Hello from magus"]); }
-export fun test(_args: [str]) > void { magus.depends_on(["format"]); }
+export fun generate(_args: [str]) > void { magus.needs(magus.target.literal("preflight")); }
+export fun format(_args: [str]) > void { magus.needs(magus.target.literal("generate")); }
+export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
+export fun build(_args: [str]) > void { magus.needs(magus.target.literal("format")); os.exec("echo", ["Hello from magus"]); }
+export fun test(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
-// not hardcode its steps — compose them here with magus.depends_on. magus runs
+// not hardcode its steps — compose them here with magus.needs. magus runs
 // ci read-only. Each stage declares its own prerequisites so the DAG is expressed
 // as edges: ci fans out lint/build/test in parallel; they each wait for format,
 // which waits for generate, which waits for preflight. Shared deps run once.
 export fun ci(_args: [str]) > void {
-    magus.depends_on(["lint", "build", "test"]);
+    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }

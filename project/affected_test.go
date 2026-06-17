@@ -175,8 +175,8 @@ func mustGraph(t *testing.T, ws *types.Workspace) *types.Graph {
 func renderGraph(t *testing.T, g *types.Graph, opts ...render.RenderOption) string {
 	t.Helper()
 	var b strings.Builder
-	if err := render.Render(g, &b, opts...); err != nil {
-		t.Fatalf("render.Render(): %v", err)
+	if err := render.WriteTree(&b, g, opts...); err != nil {
+		t.Fatalf("render.WriteTree(): %v", err)
 	}
 	return b.String()
 }
