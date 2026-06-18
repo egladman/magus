@@ -52,6 +52,7 @@ func main() {
 type opts struct {
 	eval     string   // -e <code>
 	check    bool     // -c / --check
+	embedded  bool     // --embedded
 	test     bool     // -t / --test
 	dumpAST  bool     // --ast
 	showVer  bool     // -v / --version
@@ -79,9 +80,14 @@ func run(argv []string) error {
 		return err
 	}
 
-	// --ast needs only the parser; it neither imports nor runs.
+	// --ast needs only the parser; it neither imports nor runs. Default strict (like
+	// upstream); --embedded relaxes for embedding-style scripts.
 	if o.dumpAST {
-		prog, err := buzz.Parse(code)
+		parse := buzz.Parse
+		if o.embedded {
+			parse = buzz.ParseEmbedded
+		}
+		prog, err := parse(code)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
@@ -94,7 +100,13 @@ func run(argv []string) error {
 	}
 
 	ctx := context.Background()
-	sess := buzz.NewSession(ctx)
+	// Strict by default, matching upstream Buzz (which has no embedded mode); the
+	// embedding hosts opt into leniency, and so can this CLI via --embedded.
+	var sessOpts []buzz.Option
+	if o.embedded {
+		sessOpts = append(sessOpts, buzz.WithEmbedded())
+	}
+	sess := buzz.NewSession(ctx, sessOpts...)
 	defer func() { _ = sess.Close() }()
 	buzzstd.Register(sess)
 	if dirs := libDirs(o); len(dirs) > 0 {
@@ -184,6 +196,8 @@ func parseArgs(argv []string) (opts, error) {
 			o.showVer = true
 		case "-c", "--check":
 			o.check = true
+		case "--embedded":
+			o.embedded = true
 		case "-t", "--test":
 			o.test = true
 		case "--ast":
@@ -298,6 +312,8 @@ Usage:
 Options:
   -e, --eval <code>          run <code> instead of a file
   -c, --check                type-check the script without running it
+  --embedded                  relax upstream script rules (allow top-level control
+                             flow + unlabeled args) for embedding-style scripts
   -t, --test                 run the script's test "..." { } blocks
       --ast                  dump the parsed AST as JSON and exit
   -L, --library-path <dir>   add an import search path (repeatable)

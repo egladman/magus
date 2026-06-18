@@ -9,25 +9,21 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func mkfile(t *testing.T, root, rel string) {
 	t.Helper()
 	abs := filepath.Join(root, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(abs, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+	require.NoError(t, os.WriteFile(abs, nil, 0o644))
 }
 
 func ignorePatternFn(t *testing.T, root string, typ watch.PatternType, pattern string) func(string) bool {
 	t.Helper()
 	p := watch.IgnorePattern{Type: typ, Pattern: pattern}
-	if err := watch.ValidatePattern(p); err != nil {
-		t.Fatalf("invalid pattern: %v", err)
-	}
+	require.NoError(t, watch.ValidatePattern(p), "invalid pattern")
 	return watch.IgnorePatterns(root, []watch.IgnorePattern{p})
 }
 
@@ -38,19 +34,13 @@ func TestSearchFilesBasic(t *testing.T) {
 	mkfile(t, root, "c/foo.txt")
 
 	got, err := SearchFiles(context.Background(), root, []string{"foo"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 results, got %d: %v", len(got), got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got, 2)
 	for _, f := range got {
-		if f.Path != "a/b/foo.go" && f.Path != "c/foo.txt" {
-			t.Errorf("unexpected path: %s", f.Path)
-		}
+		assert.Contains(t, []string{"a/b/foo.go", "c/foo.txt"}, f.Path)
 	}
-	if got[0].Score <= got[1].Score && got[0].Path > got[1].Path {
-		t.Errorf("sort order wrong: %v", got)
+	if got[0].Score <= got[1].Score {
+		assert.LessOrEqual(t, got[0].Path, got[1].Path, "sort order wrong: %v", got)
 	}
 }
 
@@ -61,20 +51,13 @@ func TestSearchFilesIgnoreDirs(t *testing.T) {
 	mkfile(t, root, "src/real.go")
 
 	got, err := SearchFiles(context.Background(), root, []string{"foo"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Errorf("expected no results (ignore dirs should be pruned), got: %v", got)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, got, "ignore dirs should be pruned")
 
 	got2, err := SearchFiles(context.Background(), root, []string{"real"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got2) != 1 || got2[0].Path != "src/real.go" {
-		t.Errorf("want src/real.go, got: %v", got2)
-	}
+	require.NoError(t, err)
+	require.Len(t, got2, 1)
+	assert.Equal(t, "src/real.go", got2[0].Path)
 }
 
 func TestSearchFilesIgnoreDirsRootNotPruned(t *testing.T) {
@@ -84,12 +67,9 @@ func TestSearchFilesIgnoreDirsRootNotPruned(t *testing.T) {
 	mkfile(t, root, "pkg/foo.go")
 
 	got, err := SearchFiles(context.Background(), root, []string{"foo"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Path != "pkg/foo.go" {
-		t.Errorf("want pkg/foo.go, got: %v", got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "pkg/foo.go", got[0].Path)
 }
 
 func TestSearchFilesAndFilters(t *testing.T) {
@@ -98,12 +78,9 @@ func TestSearchFilesAndFilters(t *testing.T) {
 	mkfile(t, root, "web/users.go")
 
 	got, err := SearchFiles(context.Background(), root, []string{"api", "users"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Path != "api/users.go" {
-		t.Errorf("want only api/users.go, got: %v", got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "api/users.go", got[0].Path)
 }
 
 func TestSearchFilesEmptyFilters(t *testing.T) {
@@ -111,20 +88,12 @@ func TestSearchFilesEmptyFilters(t *testing.T) {
 	mkfile(t, root, "a/b.go")
 
 	got, err := SearchFiles(context.Background(), root, []string{}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != nil {
-		t.Errorf("want nil on empty filters and nil matchFn, got: %v", got)
-	}
+	require.NoError(t, err)
+	assert.Nil(t, got, "want nil on empty filters and nil matchFn")
 
 	got2, err := SearchFiles(context.Background(), root, []string{"  ", ""}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got2 != nil {
-		t.Errorf("want nil on whitespace-only filters, got: %v", got2)
-	}
+	require.NoError(t, err)
+	assert.Nil(t, got2, "want nil on whitespace-only filters")
 }
 
 func TestSearchFilesEmptyResult(t *testing.T) {
@@ -133,35 +102,23 @@ func TestSearchFilesEmptyResult(t *testing.T) {
 
 	// Asked for something, found nothing — returns empty slice, not nil.
 	got, err := SearchFiles(context.Background(), root, []string{"zzznomatch"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got == nil {
-		t.Error("want empty slice (not nil) when asked but found nothing")
-	}
-	if len(got) != 0 {
-		t.Errorf("want 0 results, got: %v", got)
-	}
+	require.NoError(t, err)
+	assert.NotNil(t, got, "want empty slice (not nil) when asked but found nothing")
+	assert.Empty(t, got)
 }
 
 func TestSearchFilesSymlinkSkipped(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(t.TempDir(), "external.go")
-	if err := os.WriteFile(target, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(target, nil, 0o644))
 	link := filepath.Join(root, "external.go")
 	if err := os.Symlink(target, link); err != nil {
 		t.Skip("symlinks not supported:", err)
 	}
 
 	got, err := SearchFiles(context.Background(), root, []string{"external"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Errorf("expected symlinked file to be skipped, got: %v", got)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, got, "expected symlinked file to be skipped")
 }
 
 func TestSearchFilesPatternGlob(t *testing.T) {
@@ -175,26 +132,16 @@ func TestSearchFilesPatternGlob(t *testing.T) {
 
 	// With filter token: only .go files under api.
 	got, err := SearchFiles(context.Background(), root, []string{"api"}, matchFn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 .go files under api, got %d: %v", len(got), got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got, 2)
 	for _, f := range got {
-		if f.Path != "api/users.go" && f.Path != "api/users_test.go" {
-			t.Errorf("unexpected path: %s", f.Path)
-		}
+		assert.Contains(t, []string{"api/users.go", "api/users_test.go"}, f.Path)
 	}
 
 	// Without filter token: all .go files in workspace.
 	got2, err := SearchFiles(context.Background(), root, []string{}, matchFn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got2) != 3 {
-		t.Fatalf("want 3 .go files total, got %d: %v", len(got2), got2)
-	}
+	require.NoError(t, err)
+	assert.Len(t, got2, 3)
 }
 
 func TestSearchFilesPatternRegex(t *testing.T) {
@@ -205,16 +152,10 @@ func TestSearchFilesPatternRegex(t *testing.T) {
 
 	matchFn := ignorePatternFn(t, root, watch.PatternRegex, `_test\.go$`)
 	got, err := SearchFiles(context.Background(), root, []string{}, matchFn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 test files, got %d: %v", len(got), got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got, 2)
 	for _, f := range got {
-		if !strings.HasSuffix(f.Path, "_test.go") {
-			t.Errorf("unexpected path: %s", f.Path)
-		}
+		assert.True(t, strings.HasSuffix(f.Path, "_test.go"), "unexpected path: %s", f.Path)
 	}
 }
 
@@ -226,16 +167,10 @@ func TestSearchFilesPatternLiteral(t *testing.T) {
 
 	matchFn := ignorePatternFn(t, root, watch.PatternLiteral, "Dockerfile")
 	got, err := SearchFiles(context.Background(), root, []string{}, matchFn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 Dockerfiles, got %d: %v", len(got), got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got, 2)
 	for _, f := range got {
-		if !strings.HasSuffix(f.Path, "Dockerfile") {
-			t.Errorf("unexpected path: %s", f.Path)
-		}
+		assert.True(t, strings.HasSuffix(f.Path, "Dockerfile"), "unexpected path: %s", f.Path)
 	}
 }
 
@@ -248,7 +183,5 @@ func TestSearchFilesCancelledContext(t *testing.T) {
 	cancel() // cancel immediately
 
 	_, err := SearchFiles(ctx, root, []string{"main"}, nil)
-	if err == nil {
-		t.Error("want error on cancelled context, got nil")
-	}
+	assert.Error(t, err, "want error on cancelled context")
 }

@@ -4,33 +4,28 @@ import (
 	"testing"
 
 	"github.com/egladman/gopherbuzz/vm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewEnvNotNil(t *testing.T) {
 	e := vm.NewEnv()
-	if e == nil {
-		t.Fatal("NewEnv() returned nil")
-	}
+	require.NotNil(t, e, "NewEnv() returned nil")
 }
 
 func TestEnvDefineGetRoundTrip(t *testing.T) {
 	e := vm.NewEnv()
 	e.Define("x", vm.IntValue(42))
 	v, ok := e.Get("x")
-	if !ok {
-		t.Fatal("Get('x') ok = false, want true")
-	}
-	if !v.IsInt() || v.AsInt() != 42 {
-		t.Errorf("Get('x') = %v, want IntValue(42)", v)
-	}
+	require.True(t, ok, "Get('x') ok = false, want true")
+	assert.True(t, v.IsInt(), "Get('x') IsInt()")
+	assert.Equal(t, int64(42), v.AsInt(), "Get('x')")
 }
 
 func TestEnvGetMissingReturnsFalse(t *testing.T) {
 	e := vm.NewEnv()
 	_, ok := e.Get("notdefined")
-	if ok {
-		t.Error("Get on undefined name returned ok=true, want false")
-	}
+	assert.False(t, ok, "Get on undefined name returned ok=true, want false")
 }
 
 func TestEnvMultipleDefinesAccumulateInNames(t *testing.T) {
@@ -40,29 +35,20 @@ func TestEnvMultipleDefinesAccumulateInNames(t *testing.T) {
 	e.Define("c", vm.BoolValue(true))
 
 	names := e.Names()
-	if len(names) != 3 {
-		t.Errorf("Names() len = %d, want 3", len(names))
-	}
+	assert.Len(t, names, 3, "Names() len")
 	for _, name := range []string{"a", "b", "c"} {
-		if _, ok := names[name]; !ok {
-			t.Errorf("Names() missing key %q", name)
-		}
+		_, ok := names[name]
+		assert.Truef(t, ok, "Names() missing key %q", name)
 	}
 }
 
 func TestEnvSlotsGrowWithDefine(t *testing.T) {
 	e := vm.NewEnv()
-	if len(e.Slots()) != 0 {
-		t.Errorf("Slots() initial len = %d, want 0", len(e.Slots()))
-	}
+	assert.Empty(t, e.Slots(), "Slots() initial len")
 	e.Define("x", vm.IntValue(1))
-	if len(e.Slots()) != 1 {
-		t.Errorf("Slots() after 1 define len = %d, want 1", len(e.Slots()))
-	}
+	assert.Len(t, e.Slots(), 1, "Slots() after 1 define")
 	e.Define("y", vm.IntValue(2))
-	if len(e.Slots()) != 2 {
-		t.Errorf("Slots() after 2 defines len = %d, want 2", len(e.Slots()))
-	}
+	assert.Len(t, e.Slots(), 2, "Slots() after 2 defines")
 }
 
 func TestEnvRedefineUpdatesSlot(t *testing.T) {
@@ -71,14 +57,8 @@ func TestEnvRedefineUpdatesSlot(t *testing.T) {
 	e.Define("v", vm.IntValue(99))
 
 	// Re-defining should update the existing slot, not add a new one.
-	if len(e.Slots()) != 1 {
-		t.Errorf("Slots() after redefine len = %d, want 1", len(e.Slots()))
-	}
+	assert.Len(t, e.Slots(), 1, "Slots() after redefine")
 	v, ok := e.Get("v")
-	if !ok {
-		t.Fatal("Get('v') ok = false after redefine")
-	}
-	if v.AsInt() != 99 {
-		t.Errorf("Get('v') = %d, want 99", v.AsInt())
-	}
+	require.True(t, ok, "Get('v') ok = false after redefine")
+	assert.Equal(t, int64(99), v.AsInt(), "Get('v')")
 }

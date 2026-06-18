@@ -131,7 +131,7 @@ magus run generate:rw  # mutate in place instead of checking
 - [`preflight`](#preflight)
 - [`md-generate`](#md-generate)
 
-**Details:** uncached (always runs) · isolated (runs alone, no concurrent targets)
+**Details:** uncached (always runs) · exclusive (runs alone, no concurrent targets)
 
 ### `format`
 

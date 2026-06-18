@@ -4,39 +4,35 @@ import (
 	"context"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSubOpZeroValue(t *testing.T) {
 	var o SubOp
-	if got := o.Load(); got != "" {
-		t.Fatalf("zero value Load() = %q, want %q", got, "")
-	}
+	assert.Empty(t, o.Load())
 }
 
 func TestSubOpSetLoad(t *testing.T) {
 	o := &SubOp{}
 	o.Set("archive.uncompress foo.tar.zst [4×]")
-	if got := o.Load(); got != "archive.uncompress foo.tar.zst [4×]" {
-		t.Fatalf("Load() = %q, want label", got)
-	}
+	assert.Equal(t, "archive.uncompress foo.tar.zst [4×]", o.Load())
 }
 
 func TestSubOpSetEmptyClears(t *testing.T) {
 	o := &SubOp{}
 	o.Set("something")
 	o.Set("")
-	if got := o.Load(); got != "" {
-		t.Fatalf("Load() after Set(%q) = %q, want %q", "", got, "")
-	}
+	assert.Empty(t, o.Load())
 }
 
 func TestSubOpNilSafe(t *testing.T) {
 	var o *SubOp
 	// Neither call should panic.
-	o.Set("label")
-	if got := o.Load(); got != "" {
-		t.Fatalf("nil Load() = %q, want %q", got, "")
-	}
+	assert.NotPanics(t, func() {
+		o.Set("label")
+		assert.Empty(t, o.Load())
+	})
 }
 
 func TestSubOpConcurrent(t *testing.T) {
@@ -71,29 +67,21 @@ func TestSubOpConcurrent(t *testing.T) {
 func TestWithSubOpRoundTrip(t *testing.T) {
 	o := &SubOp{}
 	ctx := WithSubOp(context.Background(), o)
-	got := SubOpFromContext(ctx)
-	if got != o {
-		t.Fatalf("SubOpFromContext returned different pointer")
-	}
+	assert.Same(t, o, SubOpFromContext(ctx))
 }
 
 func TestSubOpFromContextMissing(t *testing.T) {
 	got := SubOpFromContext(context.Background())
-	if got != nil {
-		t.Fatalf("SubOpFromContext on empty ctx = %v, want nil", got)
-	}
+	assert.Nil(t, got)
 	// nil result must be safe to use directly.
-	got.Set("label")
-	if s := got.Load(); s != "" {
-		t.Fatalf("nil Load() = %q, want %q", s, "")
-	}
+	assert.NotPanics(t, func() {
+		got.Set("label")
+		assert.Empty(t, got.Load())
+	})
 }
 
 func TestSubOpFromContextWrongType(t *testing.T) {
 	type otherKey struct{}
 	ctx := context.WithValue(context.Background(), otherKey{}, "not a SubOp")
-	got := SubOpFromContext(ctx)
-	if got != nil {
-		t.Fatalf("SubOpFromContext with wrong-type value = %v, want nil", got)
-	}
+	assert.Nil(t, SubOpFromContext(ctx))
 }

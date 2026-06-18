@@ -4,26 +4,24 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func openMutableCache(t *testing.T) *Cache {
 	t.Helper()
 	c, err := Open(t.TempDir(), WithMutable(true))
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err)
 	return c
 }
 
 func TestPrune_EmptyCacheIsNoop(t *testing.T) {
 	c := openMutableCache(t)
 	n, freed, err := c.Prune(context.Background(), time.Now(), false)
-	if err != nil {
-		t.Fatalf("Prune: %v", err)
-	}
-	if n != 0 || freed != 0 {
-		t.Errorf("Prune on empty cache: n=%d freed=%d, want 0 0", n, freed)
-	}
+	require.NoError(t, err)
+	assert.Zero(t, n, "Prune on empty cache: n should be 0")
+	assert.Zero(t, freed, "Prune on empty cache: freed should be 0")
 }
 
 func TestPrune_DryRun_NothingDeleted(t *testing.T) {
@@ -36,25 +34,15 @@ func TestPrune_DryRun_NothingDeleted(t *testing.T) {
 		Target:        "build",
 	}
 	_, err := c.Run(context.Background(), spec, func(ctx context.Context) error { return nil })
-	if err != nil {
-		t.Fatalf("cache.Run: %v", err)
-	}
+	require.NoError(t, err)
 
 	n, freed, err := c.Prune(context.Background(), time.Now().Add(time.Hour), true)
-	if err != nil {
-		t.Fatalf("dry-run Prune: %v", err)
-	}
-	if n == 0 {
-		t.Error("dry-run Prune: expected to count at least one entry")
-	}
+	require.NoError(t, err)
+	assert.NotZero(t, n, "dry-run Prune: expected to count at least one entry")
 	_ = freed // non-zero because at least manifest exists
 
 	// Real prune after dry-run: should also remove entries.
 	n2, _, err := c.Prune(context.Background(), time.Now().Add(time.Hour), false)
-	if err != nil {
-		t.Fatalf("real Prune: %v", err)
-	}
-	if n2 == 0 {
-		t.Error("real Prune: expected to remove at least one entry")
-	}
+	require.NoError(t, err)
+	assert.NotZero(t, n2, "real Prune: expected to remove at least one entry")
 }

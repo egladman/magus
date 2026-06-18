@@ -12,76 +12,56 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewSession(t *testing.T) {
-	s := buzz.NewSession(context.Background())
-	if s == nil {
-		t.Fatal("NewSession returned nil")
-	}
-	if s.Targets() == nil {
-		t.Error("Targets() should return a non-nil map")
-	}
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	require.NotNil(t, s, "NewSession returned nil")
+	assert.NotNil(t, s.Targets(), "Targets() should return a non-nil map")
 }
 
 func TestSession_ExecSimpleAssignment(t *testing.T) {
-	s := buzz.NewSession(context.Background())
-	if err := s.Exec(context.Background(), `var x: int = 42;`); err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	require.NoError(t, s.Exec(context.Background(), `var x: int = 42;`), "Exec")
 	globals := s.Globals()
 	v, ok := globals["x"]
-	if !ok {
-		t.Fatal("global 'x' not found after exec")
-	}
-	if !v.IsInt() {
-		t.Fatalf("x.IsInt() = false, got Kind() = %q", v.Kind())
-	}
-	if v.AsInt() != 42 {
-		t.Errorf("x.AsInt() = %d, want 42", v.AsInt())
-	}
+	require.True(t, ok, "global 'x' not found after exec")
+	require.True(t, v.IsInt(), "x.IsInt() = false, got Kind() = %q", v.Kind())
+	assert.Equal(t, int64(42), v.AsInt(), "x.AsInt()")
 }
 
 func TestSession_EvalExpression(t *testing.T) {
-	s := buzz.NewSession(context.Background())
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	// Use a function that returns a value to test Eval's return path.
-	if err := s.Exec(context.Background(), `fun sum() > int { return 1 + 2; }`); err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
+	require.NoError(t, s.Exec(context.Background(), `fun sum() > int { return 1 + 2; }`), "Exec")
 	v, err := s.Eval(context.Background(), `return sum()`)
-	if err != nil {
-		t.Fatalf("Eval(return sum()): %v", err)
-	}
-	if !v.IsInt() || v.AsInt() != 3 {
-		t.Errorf("Eval(return sum()) = %v, want 3", v)
-	}
+	require.NoError(t, err, "Eval(return sum())")
+	require.True(t, v.IsInt(), "Eval(return sum()) = %v, want 3", v)
+	assert.Equal(t, int64(3), v.AsInt(), "Eval(return sum()) = %v, want 3", v)
 }
 
 func TestSession_SyntheticModule(t *testing.T) {
-	s := buzz.NewSession(context.Background())
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	mod := buzz.NewMap()
 	mod.MapSet("answer", buzz.IntValue(42))
 	// Host registers the module under an import path; it resolves with no file
 	// on disk and no include dirs configured.
 	s.SetSyntheticModule("example/demo", mod)
 
-	if err := s.Exec(context.Background(), `
+	require.NoError(t, s.Exec(context.Background(), `
 import "example/demo";
 var x = demo.answer;
-`); err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
+`), "Exec")
 	v, ok := s.Globals()["x"]
-	if !ok {
-		t.Fatal("global 'x' not bound; synthetic import did not resolve")
-	}
-	if !v.IsInt() || v.AsInt() != 42 {
-		t.Errorf("x = %v, want 42", v)
-	}
+	require.True(t, ok, "global 'x' not bound; synthetic import did not resolve")
+	require.True(t, v.IsInt(), "x = %v, want 42", v)
+	assert.Equal(t, int64(42), v.AsInt(), "x = %v, want 42", v)
 }
 
 func TestSession_ModuleResolver(t *testing.T) {
-	s := buzz.NewSession(context.Background())
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	mod := buzz.NewMap()
 	mod.MapSet("answer", buzz.IntValue(7))
 	// The resolver gets first refusal on a path-style import that is neither
@@ -96,40 +76,25 @@ func TestSession_ModuleResolver(t *testing.T) {
 		return buzz.Null, false
 	})
 
-	if err := s.Exec(context.Background(), `
+	require.NoError(t, s.Exec(context.Background(), `
 import "spells/widget";
 var x = widget.answer;
-`); err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
-	if gotPath != "spells/widget" {
-		t.Errorf("resolver called with %q, want \"spells/widget\"", gotPath)
-	}
+`), "Exec")
+	assert.Equal(t, "spells/widget", gotPath, "resolver called with %q", gotPath)
 	v, ok := s.Globals()["x"]
-	if !ok {
-		t.Fatal("global 'x' not bound; resolver import did not resolve")
-	}
-	if !v.IsInt() || v.AsInt() != 7 {
-		t.Errorf("x = %v, want 7", v)
-	}
+	require.True(t, ok, "global 'x' not bound; resolver import did not resolve")
+	require.True(t, v.IsInt(), "x = %v, want 7", v)
+	assert.Equal(t, int64(7), v.AsInt(), "x = %v, want 7", v)
 }
 
 func TestSession_Compile_And_ExecChunk(t *testing.T) {
-	s := buzz.NewSession(context.Background())
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	chunk, err := s.Compile(`var y: str = "hello";`)
-	if err != nil {
-		t.Fatalf("Compile: %v", err)
-	}
-	if err := s.ExecChunk(context.Background(), chunk); err != nil {
-		t.Fatalf("ExecChunk: %v", err)
-	}
+	require.NoError(t, err, "Compile")
+	require.NoError(t, s.ExecChunk(context.Background(), chunk), "ExecChunk")
 	v, ok := s.Globals()["y"]
-	if !ok {
-		t.Fatal("global 'y' not set after ExecChunk")
-	}
-	if v.AsString() != "hello" {
-		t.Errorf("y = %q, want %q", v.AsString(), "hello")
-	}
+	require.True(t, ok, "global 'y' not set after ExecChunk")
+	assert.Equal(t, "hello", v.AsString(), "y")
 }
 
 // TestConformance runs all .buzz files in testdata/.
@@ -140,20 +105,14 @@ func TestSession_Compile_And_ExecChunk(t *testing.T) {
 //	// @skip: <reason>   — skip this test case
 func TestConformance(t *testing.T) {
 	files, err := filepath.Glob("testdata/*.buzz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(files) == 0 {
-		t.Fatal("no conformance test files found in testdata/")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, files, "no conformance test files found in testdata/")
 	for _, path := range files {
 		path := path
 		name := strings.TrimSuffix(filepath.Base(path), ".buzz")
 		t.Run(name, func(t *testing.T) {
 			src, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read %s: %v", path, err)
-			}
+			require.NoErrorf(t, err, "read %s", path)
 			meta := parseConformanceMeta(string(src))
 			if meta.skip != "" {
 				t.Skipf("skip: %s", meta.skip)
@@ -192,30 +151,22 @@ func parseConformanceMeta(src string) conformanceMeta {
 
 func runConformanceCase(t *testing.T, name, src string, meta conformanceMeta) {
 	t.Helper()
-	sess := buzz.NewSession(context.Background())
+	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
 	buzzstd.Register(sess)
 	err := sess.Exec(context.Background(), src)
 
 	if meta.errStr != "" {
-		if err == nil {
-			t.Fatalf("%s: expected error containing %q, got none", name, meta.errStr)
-		}
-		if !strings.Contains(err.Error(), meta.errStr) {
-			t.Fatalf("%s: error %q does not contain %q", name, err.Error(), meta.errStr)
-		}
+		require.Errorf(t, err, "%s: expected error containing %q, got none", name, meta.errStr)
+		require.Containsf(t, err.Error(), meta.errStr, "%s: error %q does not contain %q", name, err.Error(), meta.errStr)
 		return
 	}
 
-	if err != nil {
-		t.Fatalf("%s: unexpected error: %v", name, err)
-	}
+	require.NoErrorf(t, err, "%s: unexpected error", name)
 
 	if meta.expect != "" {
 		got := sess.GetGlobal("__r")
-		if got.String() != meta.expect {
-			t.Errorf("%s: __r = %q, want %q", name, got.String(), meta.expect)
-		}
+		assert.Equalf(t, meta.expect, got.String(), "%s: __r", name)
 	}
 }
 
@@ -259,34 +210,27 @@ func buildCLib(t *testing.T) string {
 
 	dir := t.TempDir()
 	src := filepath.Join(dir, "lib.c")
-	if err := os.WriteFile(src, []byte(cLibSource), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(src, []byte(cLibSource), 0o644))
 	ext := "so"
 	if runtime.GOOS == "darwin" {
 		ext = "dylib"
 	}
 	out := filepath.Join(dir, "libffitest."+ext)
 	cmd := exec.Command(cc, "-shared", "-fPIC", "-o", out, src)
-	if msg, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("compiling C lib: %v\n%s", err, msg)
-	}
+	msg, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "compiling C lib:\n%s", msg)
 	return out
 }
 
 // runBuzz executes src in a fresh std-enabled session and returns __r as a string.
 func runBuzz(t *testing.T, src string) string {
 	t.Helper()
-	sess := buzz.NewSession(context.Background())
+	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
 	buzzstd.Register(sess)
-	if err := sess.Exec(context.Background(), src); err != nil {
-		t.Fatalf("Exec: %v\nsrc:\n%s", err, src)
-	}
+	require.NoErrorf(t, sess.Exec(context.Background(), src), "Exec\nsrc:\n%s", src)
 	r, ok := sess.Globals()["__r"]
-	if !ok {
-		t.Fatalf("__r not set by script:\n%s", src)
-	}
+	require.Truef(t, ok, "__r not set by script:\n%s", src)
 	return r.String()
 }
 
@@ -296,9 +240,7 @@ func TestFFIScalarCall(t *testing.T) {
 final lib = zdef("`+lib+`", "int add(int a, int b);");
 final __r = lib.add(40, 2);
 `)
-	if got != "42" {
-		t.Errorf("add(40,2) = %q, want 42", got)
-	}
+	assert.Equal(t, "42", got, "add(40,2)")
 }
 
 func TestFFIFloatCall(t *testing.T) {
@@ -307,9 +249,7 @@ func TestFFIFloatCall(t *testing.T) {
 final lib = zdef("`+lib+`", "double scale(double x);");
 final __r = lib.scale(4.0);
 `)
-	if got != "10" && got != "10.0" {
-		t.Errorf("scale(4.0) = %q, want 10", got)
-	}
+	assert.Contains(t, []string{"10", "10.0"}, got, "scale(4.0) = %q, want 10", got)
 }
 
 func TestFFIPointerOutParam(t *testing.T) {
@@ -322,9 +262,7 @@ lib.fill(p);
 final __r = ffi.read(p, 0, "int");
 ffi.free(p);
 `)
-	if got != "99" {
-		t.Errorf("fill out-param = %q, want 99", got)
-	}
+	assert.Equal(t, "99", got, "fill out-param")
 }
 
 func TestFFIStructByReference(t *testing.T) {
@@ -342,9 +280,7 @@ final viaC = lib.rec_id(r);
 ffi.free(r);
 final __r = "{id}/{score}/{viaC}";
 `)
-	if got != "7/9.5/7" {
-		t.Errorf("struct-by-ref = %q, want 7/9.5/7", got)
-	}
+	assert.Equal(t, "7/9.5/7", got, "struct-by-ref")
 }
 
 func TestFFICallback(t *testing.T) {
@@ -356,9 +292,7 @@ fun triple(n: int) > int { return n * 3; }
 final cb = ffi.callback(triple, "int", ["int"]);
 final __r = lib.apply(cb, 14);
 `)
-	if got != "42" {
-		t.Errorf("apply(triple, 14) = %q, want 42", got)
-	}
+	assert.Equal(t, "42", got, "apply(triple, 14)")
 }
 
 // TestFFILibmStillWorks guards the pre-existing libm path against regressions
@@ -375,9 +309,7 @@ import "std";
 final lib = zdef("libm", "double sqrt(double x);");
 final __r = std.toInt(lib.sqrt(9.0));
 `)
-	if !strings.HasPrefix(got, "3") {
-		t.Errorf("sqrt(9.0) = %q, want 3", got)
-	}
+	assert.Truef(t, strings.HasPrefix(got, "3"), "sqrt(9.0) = %q, want 3", got)
 }
 
 // importModuleSrc is a flat-importable module: an exported function that reads a
@@ -386,14 +318,14 @@ final __r = std.toInt(lib.sqrt(9.0));
 // module's own code still reads `secret` live at runtime.
 const importModuleSrc = `
 var secret = 42;
-export fun pub() int { return secret; }
-fun privHelper() int { return 7; }
+export fun pub() > int { return secret; }
+fun privHelper() > int { return 7; }
 `
 
 func newImporter(t *testing.T) *buzz.Session {
 	t.Helper()
 	ctx := context.Background()
-	s := buzz.NewSession(ctx)
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	s.SetPromoteTopLevel(true) // magusfile execution mode
 	s.SetSourceModule("mymod", importModuleSrc)
 	return s
@@ -405,12 +337,9 @@ func newImporter(t *testing.T) *buzz.Session {
 func TestImportVisibility_ExportedCrosses(t *testing.T) {
 	s := newImporter(t)
 	v, err := s.Eval(context.Background(), `import "mymod"; return pub();`)
-	if err != nil {
-		t.Fatalf("calling exported pub() across import failed: %v", err)
-	}
-	if !v.IsInt() || v.AsInt() != 42 {
-		t.Errorf("pub() = %v, want 42 (exported fn must read its module's live secret)", v)
-	}
+	require.NoError(t, err, "calling exported pub() across import failed")
+	require.True(t, v.IsInt(), "pub() = %v, want 42 (exported fn must read its module's live secret)", v)
+	assert.Equal(t, int64(42), v.AsInt(), "pub() = %v, want 42 (exported fn must read its module's live secret)", v)
 }
 
 // TestImportVisibility_NonExportedVarHidden verifies a module's non-exported var
@@ -418,12 +347,8 @@ func TestImportVisibility_ExportedCrosses(t *testing.T) {
 func TestImportVisibility_NonExportedVarHidden(t *testing.T) {
 	s := newImporter(t)
 	_, err := s.Eval(context.Background(), `import "mymod"; return secret;`)
-	if err == nil {
-		t.Fatal("referencing a module's non-exported var should fail under exports-only imports")
-	}
-	if !strings.Contains(err.Error(), "export") {
-		t.Errorf("error should point at the missing export, got: %v", err)
-	}
+	require.Error(t, err, "referencing a module's non-exported var should fail under exports-only imports")
+	assert.Contains(t, err.Error(), "export", "error should point at the missing export")
 }
 
 // TestImportVisibility_NonExportedFuncHidden verifies a module's non-exported
@@ -431,12 +356,8 @@ func TestImportVisibility_NonExportedVarHidden(t *testing.T) {
 func TestImportVisibility_NonExportedFuncHidden(t *testing.T) {
 	s := newImporter(t)
 	_, err := s.Eval(context.Background(), `import "mymod"; return privHelper();`)
-	if err == nil {
-		t.Fatal("calling a module's non-exported function should fail under exports-only imports")
-	}
-	if !strings.Contains(err.Error(), "export") {
-		t.Errorf("error should point at the missing export, got: %v", err)
-	}
+	require.Error(t, err, "calling a module's non-exported function should fail under exports-only imports")
+	assert.Contains(t, err.Error(), "export", "error should point at the missing export")
 }
 
 // TestImportVisibility_ImporterMayShadow verifies the boundary hides only the
@@ -445,12 +366,9 @@ func TestImportVisibility_NonExportedFuncHidden(t *testing.T) {
 func TestImportVisibility_ImporterMayShadow(t *testing.T) {
 	s := newImporter(t)
 	v, err := s.Eval(context.Background(), `import "mymod"; var secret = 99; return secret;`)
-	if err != nil {
-		t.Fatalf("importer declaring its own 'secret' should be fine: %v", err)
-	}
-	if !v.IsInt() || v.AsInt() != 99 {
-		t.Errorf("importer's own secret = %v, want 99", v)
-	}
+	require.NoError(t, err, "importer declaring its own 'secret' should be fine")
+	require.True(t, v.IsInt(), "importer's own secret = %v, want 99", v)
+	assert.Equal(t, int64(99), v.AsInt(), "importer's own secret = %v, want 99", v)
 }
 
 // magusfileSrc mirrors the shape of a real magusfile: a top-level config var read
@@ -458,7 +376,7 @@ func TestImportVisibility_ImporterMayShadow(t *testing.T) {
 // chunk-private scratch loop (promotable to a slot under PromoteTopLevel).
 const magusfileSrc = `
 var config = 42;
-export fun getConfig() int { return config; }
+export fun getConfig() > int { return config; }
 var scratch = 0;
 var i = 0;
 while (i < 100) { scratch = scratch + i; i = i + 1; }
@@ -470,34 +388,25 @@ while (i < 100) { scratch = scratch + i; i = i + 1; }
 // scratch var simply drops out of the global namespace.
 func TestPromoteSession_MagusfileShape(t *testing.T) {
 	ctx := context.Background()
-	s := buzz.NewSession(ctx)
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	s.SetPromoteTopLevel(true)
-	if err := s.Exec(ctx, magusfileSrc); err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
+	require.NoError(t, s.Exec(ctx, magusfileSrc), "Exec")
 
 	// The exported target still resolves the captured top-level config (live Env).
 	exports := s.Exports()
 	getConfig, ok := exports["getConfig"]
-	if !ok {
-		t.Fatal("exported target getConfig missing")
-	}
+	require.True(t, ok, "exported target getConfig missing")
 	v, err := s.CallValue(ctx, getConfig, nil)
-	if err != nil {
-		t.Fatalf("CallValue(getConfig): %v", err)
-	}
-	if !v.IsInt() || v.AsInt() != 42 {
-		t.Errorf("getConfig() = %v, want 42", v)
-	}
+	require.NoError(t, err, "CallValue(getConfig)")
+	require.True(t, v.IsInt(), "getConfig() = %v, want 42", v)
+	assert.Equal(t, int64(42), v.AsInt(), "getConfig() = %v, want 42", v)
 
 	// config is captured by getConfig, so it stays an Env binding (visible).
-	if _, ok := s.Globals()["config"]; !ok {
-		t.Error("captured top-level 'config' should remain a visible Env global")
-	}
+	_, ok = s.Globals()["config"]
+	assert.True(t, ok, "captured top-level 'config' should remain a visible Env global")
 	// scratch is chunk-private and promoted to a slot, so it is no longer a global.
-	if _, ok := s.Globals()["scratch"]; ok {
-		t.Error("chunk-private 'scratch' should be slot-promoted out of the global namespace")
-	}
+	_, ok = s.Globals()["scratch"]
+	assert.False(t, ok, "chunk-private 'scratch' should be slot-promoted out of the global namespace")
 }
 
 // TestPromoteSession_DefaultOffKeepsGlobals confirms the REPL/default path is
@@ -505,15 +414,10 @@ func TestPromoteSession_MagusfileShape(t *testing.T) {
 // so a later Exec (a subsequent prompt line) can still see it.
 func TestPromoteSession_DefaultOffKeepsGlobals(t *testing.T) {
 	ctx := context.Background()
-	s := buzz.NewSession(ctx)
-	if err := s.Exec(ctx, magusfileSrc); err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
-	if _, ok := s.Globals()["scratch"]; !ok {
-		t.Error("without promotion, 'scratch' must remain a visible Env global for later chunks")
-	}
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	require.NoError(t, s.Exec(ctx, magusfileSrc), "Exec")
+	_, ok := s.Globals()["scratch"]
+	assert.True(t, ok, "without promotion, 'scratch' must remain a visible Env global for later chunks")
 	// A later chunk referencing the earlier scratch var compiles and runs.
-	if err := s.Exec(ctx, `scratch = scratch + 1;`); err != nil {
-		t.Errorf("later chunk referencing earlier top-level var failed: %v", err)
-	}
+	assert.NoError(t, s.Exec(ctx, `scratch = scratch + 1;`), "later chunk referencing earlier top-level var failed")
 }

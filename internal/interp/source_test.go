@@ -2,43 +2,31 @@ package interp
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFindMagusBzz(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("import \"magus\";\nexport fun build(args: [str]) > void {}\n"), 0o644))
 
 	src, err := Find(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if src == nil {
-		t.Fatal("expected source, got nil")
-	}
-	if src.Dir != dir {
-		t.Errorf("Dir = %q, want %q", src.Dir, dir)
-	}
-	if len(src.Files) != 1 {
-		t.Errorf("Files = %v, want 1 entry", src.Files)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, src, "expected source, got nil")
+	assert.Equal(t, dir, src.Dir)
+	assert.Len(t, src.Files, 1)
 }
 
 func TestFindNothing(t *testing.T) {
 	t.Parallel()
 	src, err := Find(t.TempDir())
-	if !errors.Is(err, ErrNoMagusfile) {
-		t.Errorf("Find error = %v, want ErrNoMagusfile", err)
-	}
-	if src != nil {
-		t.Errorf("Find src = %+v, want nil", src)
-	}
+	assert.ErrorIs(t, err, ErrNoMagusfile)
+	assert.Nil(t, src)
 }
 
 func TestParseTargetsPath(t *testing.T) {
@@ -46,35 +34,25 @@ func TestParseTargetsPath(t *testing.T) {
 	dir := t.TempDir()
 	source := `
 import "magus";
-export fun build(_args: [str]) > void {}
-export fun test(_args: [str]) > void {}
-export fun go_vet(_args: [str]) > void {}
+export fun build(args: [str]) > void {}
+export fun test(args: [str]) > void {}
+export fun go_vet(args: [str]) > void {}
 `
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(source), 0o644))
 
 	src := &Source{Dir: dir, Files: []string{path}}
 	targets, err := Parse(context.Background(), src)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	got := map[string]Target{}
 	for _, tgt := range targets {
 		got[tgt.Key] = tgt
 	}
 
-	if _, ok := got["build"]; !ok {
-		t.Error("missing target 'build'")
-	}
-	if _, ok := got["test"]; !ok {
-		t.Error("missing target 'test'")
-	}
-	if _, ok := got["go-vet"]; !ok {
-		t.Error("missing target 'go-vet'")
-	}
+	assert.Contains(t, got, "build", "missing target 'build'")
+	assert.Contains(t, got, "test", "missing target 'test'")
+	assert.Contains(t, got, "go-vet", "missing target 'go-vet'")
 }
 
 func TestRunAndParse(t *testing.T) {
@@ -82,33 +60,23 @@ func TestRunAndParse(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	content := `
 import "magus";
-export fun build(_args: [str]) > void {}
-export fun test(_args: [str]) > void {}
+export fun build(args: [str]) > void {}
+export fun test(args: [str]) > void {}
 `
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	src := &Source{Dir: dir, Files: []string{path}}
 
-	if err := Run(context.Background(), src, "build", nil, dir); err != nil {
-		t.Fatalf("Run build: %v", err)
-	}
+	require.NoError(t, Run(context.Background(), src, "build", nil, dir))
 
 	targets, err := Parse(context.Background(), src)
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if len(targets) != 2 {
-		t.Fatalf("Parse: expected 2 targets, got %d", len(targets))
-	}
+	require.NoError(t, err)
+	require.Len(t, targets, 2)
 }
 
 func writeBzz(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return path
 }
 
@@ -119,7 +87,7 @@ func TestOsExecShExitCode(t *testing.T) {
 import "magus";
 import "os";
 
-export fun check(_args: [str]) > void {
+export fun check(args: [str]) > void {
     var rc = os.execSh("true", "", {"allow_failure": true}).code;
     if (rc != 0) {
         throw "os.execSh('true').code = {rc}";
@@ -131,9 +99,7 @@ export fun check(_args: [str]) > void {
 }
 `)
 	src := &Source{Dir: dir, Files: []string{path}}
-	if err := Run(context.Background(), src, "check", nil, ""); err != nil {
-		t.Fatalf("os.execSh: %v", err)
-	}
+	require.NoError(t, Run(context.Background(), src, "check", nil, ""))
 }
 
 func TestOsWithEnvShellCapture(t *testing.T) {
@@ -143,7 +109,7 @@ func TestOsWithEnvShellCapture(t *testing.T) {
 import "magus";
 import "os";
 
-export fun check(_args: [str]) > void {
+export fun check(args: [str]) > void {
     os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void {
         var captured = os.execSh("echo $MY_BUZZ_VAR").stdout;
         if (captured != "hello") {
@@ -153,9 +119,7 @@ export fun check(_args: [str]) > void {
 }
 `)
 	src := &Source{Dir: dir, Files: []string{path}}
-	if err := Run(context.Background(), src, "check", nil, ""); err != nil {
-		t.Fatalf("os.withEnv: %v", err)
-	}
+	require.NoError(t, Run(context.Background(), src, "check", nil, ""))
 }
 
 func TestFsJoinBinding(t *testing.T) {
@@ -165,7 +129,7 @@ func TestFsJoinBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(_args: [str]) > void {
+export fun check(args: [str]) > void {
     var p = fs.join("a", "b", "c");
     if (p == "") {
         throw "fs.join returned empty string";
@@ -173,27 +137,21 @@ export fun check(_args: [str]) > void {
 }
 `)
 	src := &Source{Dir: dir, Files: []string{path}}
-	if err := Run(context.Background(), src, "check", nil, ""); err != nil {
-		t.Fatalf("fs.join: %v", err)
-	}
+	require.NoError(t, Run(context.Background(), src, "check", nil, ""))
 }
 
 func TestFsListDirBinding(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	subdir := filepath.Join(dir, "subdir")
-	if err := os.MkdirAll(subdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(subdir, "a.txt"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subdir, "a.txt"), []byte("x"), 0o644))
 
 	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "fs";
 
-export fun check(_args: [str]) > void {
+export fun check(args: [str]) > void {
     var entries = fs.listDir("subdir");
     if (entries.len() == 0) {
         throw "expected at least one entry in subdir";
@@ -201,34 +159,27 @@ export fun check(_args: [str]) > void {
 }
 `)
 	src := &Source{Dir: dir, Files: []string{path}}
-	if err := Run(context.Background(), src, "check", nil, dir); err != nil {
-		t.Fatalf("fs.listDir: %v", err)
-	}
+	require.NoError(t, Run(context.Background(), src, "check", nil, dir))
 }
 
 func TestFsRemoveAllBinding(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	target := filepath.Join(dir, "todelete")
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(target, 0o755))
 
 	path := writeBzz(t, dir, "magusfile.buzz", `
 import "magus";
 import "fs";
 
-export fun check(_args: [str]) > void {
+export fun check(args: [str]) > void {
     fs.removeAll("todelete");
 }
 `)
 	src := &Source{Dir: dir, Files: []string{path}}
-	if err := Run(context.Background(), src, "check", nil, dir); err != nil {
-		t.Fatalf("fs.removeAll: %v", err)
-	}
-	if _, err := os.Stat(target); !os.IsNotExist(err) {
-		t.Error("expected todelete to be removed")
-	}
+	require.NoError(t, Run(context.Background(), src, "check", nil, dir))
+	_, err := os.Stat(target)
+	assert.True(t, os.IsNotExist(err), "expected todelete to be removed")
 }
 
 func TestVcsBindings(t *testing.T) {
@@ -238,7 +189,7 @@ func TestVcsBindings(t *testing.T) {
 import "magus";
 import "vcs";
 
-export fun check(_args: [str]) > void {
+export fun check(args: [str]) > void {
     // All may be empty or false outside a repo; just confirm they don't crash.
     var h     = vcs.shortHash();
     var b     = vcs.branch();
@@ -249,7 +200,5 @@ export fun check(_args: [str]) > void {
 }
 `)
 	src := &Source{Dir: dir, Files: []string{path}}
-	if err := Run(context.Background(), src, "check", nil, ""); err != nil {
-		t.Fatalf("vcs bindings: %v", err)
-	}
+	require.NoError(t, Run(context.Background(), src, "check", nil, ""))
 }

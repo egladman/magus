@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriteFileAtomic_CreatesFile(t *testing.T) {
@@ -11,32 +14,20 @@ func TestWriteFileAtomic_CreatesFile(t *testing.T) {
 	path := filepath.Join(dir, "output.txt")
 	data := []byte("hello atomic")
 
-	if err := WriteFileAtomic(path, data, 0o644); err != nil {
-		t.Fatalf("WriteFileAtomic: %v", err)
-	}
+	require.NoError(t, WriteFileAtomic(path, data, 0o644))
 
 	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if string(got) != string(data) {
-		t.Errorf("content = %q, want %q", got, data)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, string(data), string(got))
 }
 
 func TestWriteFileAtomic_OverwritesExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "output.txt")
 
-	if err := WriteFileAtomic(path, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := WriteFileAtomic(path, []byte("new"), 0o644); err != nil {
-		t.Fatalf("WriteFileAtomic overwrite: %v", err)
-	}
+	require.NoError(t, WriteFileAtomic(path, []byte("old"), 0o644))
+	require.NoError(t, WriteFileAtomic(path, []byte("new"), 0o644))
 
 	got, _ := os.ReadFile(path)
-	if string(got) != "new" {
-		t.Errorf("after overwrite = %q, want %q", got, "new")
-	}
+	assert.Equal(t, "new", string(got))
 }

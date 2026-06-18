@@ -1,12 +1,14 @@
 package gen
 
 import (
-	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConfigFlagsNotDrifted re-runs the flag generator into a temp file and
@@ -21,9 +23,7 @@ func TestConfigFlagsNotDrifted(t *testing.T) {
 	}
 
 	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
+	require.True(t, ok, "runtime.Caller failed")
 	genDir := filepath.Dir(thisFile)
 
 	tmp := t.TempDir()
@@ -36,28 +36,11 @@ func TestConfigFlagsNotDrifted(t *testing.T) {
 	)
 	cmd.Dir = genDir
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("config/flag generator failed: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "config/flag generator failed:\n%s", out)
 
-	checks := []struct {
-		name      string
-		committed string
-		generated string
-	}{
-		{"config_flags.go", filepath.Join(genDir, "config_flags.go"), flagsGen},
-	}
-	for _, c := range checks {
-		want, err := os.ReadFile(c.committed)
-		if err != nil {
-			t.Fatalf("read committed %s: %v", c.name, err)
-		}
-		got, err := os.ReadFile(c.generated)
-		if err != nil {
-			t.Fatalf("read generated %s: %v", c.name, err)
-		}
-		if !bytes.Equal(want, got) {
-			t.Errorf("%s is out of date — run: go generate ./cmd/magus/...", c.name)
-		}
-	}
+	want, err := os.ReadFile(filepath.Join(genDir, "config_flags.go"))
+	require.NoError(t, err, "read committed config_flags.go")
+	got, err := os.ReadFile(flagsGen)
+	require.NoError(t, err, "read generated config_flags.go")
+	assert.Equal(t, string(want), string(got), "config_flags.go is out of date — run: go generate ./cmd/magus/...")
 }

@@ -12,7 +12,7 @@ import (
 )
 
 // whereCmd fuzzy-matches a project and prints its absolute path. On ambiguity, lists candidates and exits 2.
-func whereCmd(root string, args []string) error {
+func whereCmd(ctx context.Context, root string, args []string) error {
 	var printAll bool
 	var filterPat, glob, regex, literal string
 	filters, err := cmdParse("where", args, func(fs *flag.FlagSet) {
@@ -62,7 +62,6 @@ func whereCmd(root string, args []string) error {
 		return fmt.Errorf("magus where: conflicting pattern flags — use only one of --filter, --glob, --regex, --literal")
 	}
 
-	ctx := context.Background()
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return err

@@ -87,7 +87,9 @@ func (e *SpellErrors) Unwrap() []error {
 // Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection.
 
 // DiagnosticDocBase is the base URL for sandbox diagnostic documentation.
-// Forks may override this variable before any DiagnosticCode.URL() call.
+// Forks may override it, but only during init() before any concurrent
+// DiagnosticCode.URL() call: it is an unsynchronized package var, so mutating it
+// after URL() may be running concurrently is a data race.
 var DiagnosticDocBase = "https://github.com/egladman/tack/blob/main/magus/docs/codes/sandbox/"
 var diagnosticRaceBase = "https://github.com/egladman/tack/blob/main/magus/docs/codes/race/"
 var diagnosticMagusfileBase = "https://github.com/egladman/tack/blob/main/magus/docs/codes/magusfile/"

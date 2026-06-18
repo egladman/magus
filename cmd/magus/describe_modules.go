@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strings"
 
+	"github.com/egladman/magus/hostbuzz"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/std"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -42,7 +42,7 @@ func describeModules(args []string) error {
 	if len(rest) > 0 {
 		name = rest[0]
 	}
-	out := buildModulesOutput(name)
+	out := hostbuzz.ModulesOutput(name)
 	if name != "" && len(out.Modules) == 0 {
 		mods := std.All()
 		names := make([]string, len(mods)) // module names, sorted for a stable suggestion
@@ -114,39 +114,5 @@ func describeModules(args []string) error {
 	return nil
 }
 
-// buildModulesOutput assembles the describe-modules result. With name == "" it
-// lists every module (summary only); with a name it returns just that module with
-// its fields and methods populated (or an empty Modules slice if unknown).
-func buildModulesOutput(name string) types.ModulesOutput {
-	mods := std.All()
-	slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
-
-	out := types.ModulesOutput{Definition: types.ModuleDefinition}
-	for _, m := range mods {
-		if name != "" && m.Name != name {
-			continue
-		}
-		entry := types.ModuleEntry{Name: m.Name, Doc: m.Doc}
-		if name != "" {
-			for _, f := range m.Fields {
-				entry.Fields = append(entry.Fields, types.ModuleFieldEntry{
-					Name: f.Name, Type: f.Type.GoType(), Doc: f.Doc,
-				})
-			}
-			for _, meth := range m.Methods {
-				me := types.ModuleMethodEntry{
-					Name: meth.Name,
-					Doc:  meth.Doc,
-					Buzz: std.BuzzSignature(m, meth),
-				}
-				if equiv, dup := std.NativeBuzzEquiv(m.Name, meth.Name); dup {
-					me.NativeBuzz = equiv
-				}
-				entry.Methods = append(entry.Methods, me)
-			}
-		}
-		out.Modules = append(out.Modules, entry)
-	}
-	out.Count = len(out.Modules)
-	return out
-}
+// buildModulesOutput moved to hostbuzz.ModulesOutput — the single core shared by
+// this CLI command and the native magus.modules()/magus.module() host methods.

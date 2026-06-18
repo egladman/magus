@@ -17,10 +17,16 @@ import (
 type Session struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
-	env           *Env
+	env           *vmpackage.Env
 	targets       map[string]Callable
 	tests         []TestEntry
 	exportedNames map[string]bool
+	// embedded relaxes the script-conformance rules upstream Buzz enforces (no
+	// top-level control flow, labeled args). Default false (strict, like upstream);
+	// the embedding hosts — REPL, magus eval, magusfile loading, the eval test
+	// harness — set it via WithEmbedded because top-level statements are their whole
+	// purpose. It is the explicit, named deviation from upstream.
+	embedded bool
 	// curVM is the VM currently executing a chunk in this session, or nil between
 	// runs. The debugger (debug.go) reads it for stack introspection, and the run
 	// helpers set/restore it (save-and-restore so a pry() eval doesn't clobber the
@@ -130,6 +136,11 @@ func (s *Session) SetModuleResolver(fn func(importPath string) (Value, bool)) {
 	s.moduleResolver = fn
 }
 
+// newSession is the raw embedding primitive: it defaults to embedded parsing
+// because its internal users — the session pool, child/sub sessions, the REPL,
+// and the test harness — are all embedding contexts where top-level statements
+// are expected. The public NewSession resets to strict (upstream parity) and
+// re-enables leniency only via WithEmbedded.
 func newSession(ctx context.Context) *Session {
 	ctx2, cancel := context.WithCancel(ctx)
 	env := vmpackage.NewEnv()
@@ -138,6 +149,7 @@ func newSession(ctx context.Context) *Session {
 		ctx:           ctx2,
 		cancel:        cancel,
 		env:           env,
+		embedded:       true,
 		targets:       make(map[string]Callable),
 		exportedNames: make(map[string]bool),
 		loadedPaths:   make(map[string]bool),
@@ -317,6 +329,14 @@ func WithSearchPaths(paths ...string) Option {
 	}
 }
 
+// WithEmbedded relaxes the upstream-Buzz script-conformance rules (top-level
+// statements and labeled args) for this session. Embedding hosts (REPL, magus
+// eval, magusfile loading) must set it; without it a session parses strictly,
+// matching upstream.
+func WithEmbedded() Option {
+	return func(s *Session) { s.embedded = true }
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -326,6 +346,10 @@ func WithSearchPaths(paths ...string) Option {
 // templates; the host may override it with SetIncludeDirs.
 func NewSession(ctx context.Context, opts ...Option) *Session {
 	s := newSession(ctx)
+	// Public API default is strict (upstream Buzz parity); embedding hosts opt back
+	// into leniency with WithEmbedded. (The raw newSession defaults embedded for its
+	// internal embedding users.)
+	s.embedded = false
 	s.searchPaths = DefaultSearchPaths
 	if v := os.Getenv("BUZZ_INCLUDE_PATH"); v != "" {
 		s.includeDirs = filepath.SplitList(v)
@@ -343,6 +367,7 @@ func NewSession(ctx context.Context, opts ...Option) *Session {
 // upstream buzz, whose runFile executes the file in its own scope, not the caller's.
 func (s *Session) NewChild() *Session {
 	c := newSession(s.ctx)
+	c.embedded = s.embedded // inherit the parent session's parse mode
 	c.searchPaths = s.searchPaths
 	c.includeDirs = s.includeDirs
 	c.syntheticModules = s.syntheticModules
@@ -490,7 +515,7 @@ func (s *Session) DoString(code string) error { return s.Exec(s.ctx, code) }
 // declarations are Env bindings (SharedGlobals), not per-Run slots. Predefined
 // globals are passed to the checker so they aren't flagged as undefined.
 func (s *Session) compileShared(code string) (*Chunk, error) {
-	prog, err := Parse(code)
+	prog, err := parseModed(code, !s.embedded)
 	if err != nil {
 		return nil, err
 	}
@@ -655,7 +680,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 // typed namespace object for the import instead of using `any`). Parse errors
 // are ignored: the subsequent Exec re-parses the same source authoritatively.
 func (s *Session) collectImportedModule(boundName, src string) {
-	prog, err := Parse(src)
+	prog, err := parseModed(src, !s.embedded)
 	if err != nil {
 		return
 	}
@@ -704,6 +729,7 @@ func (s *Session) bindNamespaceObject(name string, exports []string) {
 // host globals, then binds the sub-session's new globals as a map under alias.
 func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	sub := newSession(s.ctx)
+	sub.embedded = s.embedded // inherit the parent session's parse mode
 	sub.searchPaths = s.searchPaths
 	sub.SetIncludeDirs(s.includeDirs)
 	sub.loadedPaths = s.loadedPaths

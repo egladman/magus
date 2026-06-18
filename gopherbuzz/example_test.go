@@ -7,6 +7,8 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // homepageExample is the canonical program from https://buzz-lang.dev/0.5.0/,
@@ -46,16 +48,12 @@ main(["10"]);
 // program must compile and run, printing the first ten Fibonacci numbers.
 func TestHomepageExample(t *testing.T) {
 	var out bytes.Buffer
-	sess := buzz.NewSession(context.Background())
+	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
 	buzzstd.RegisterWithOutput(sess, &out)
 
-	if err := sess.Exec(context.Background(), homepageExample); err != nil {
-		t.Fatalf("homepage example failed to run: %v", err)
-	}
+	require.NoError(t, sess.Exec(context.Background(), homepageExample), "homepage example failed to run")
 
 	const want = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n"
-	if got := out.String(); got != want {
-		t.Errorf("fibonacci output:\ngot  %q\nwant %q", got, want)
-	}
+	assert.Equal(t, want, out.String(), "fibonacci output")
 }

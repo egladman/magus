@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSnapshotAtomicBlob verifies that if the blob copy fails (because the
@@ -21,9 +24,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 	// Write a source file and a large-ish output file.
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	if err := os.WriteFile(out, make([]byte, 4<<10 /* 4 KiB */), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(out, make([]byte, 4<<10 /* 4 KiB */), 0o644))
 
 	spec := Spec{
 		ProjectPath:   "test/pkg",
@@ -35,16 +36,13 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 	// Open a second write-mode cache that shares the same cache directory.
 	// We will interpose a failing fn to trigger snapshotOne against the CAS.
 	c2, err := Open(cdir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// First run: populate the cache normally.
-	if _, err := c2.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c2.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(out, make([]byte, 4<<10), 0o644)
-	}); err != nil {
-		t.Fatalf("prime run: %v", err)
-	}
+	})
+	require.NoError(t, err, "prime run")
 
 	// Locate the CAS directory and make it read-only to block new blob writes.
 	casDir := filepath.Join(cdir, "cas")
@@ -71,21 +69,15 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 	for i := range newContent {
 		newContent[i] = 0xFF
 	}
-	if err := os.WriteFile(out, newContent, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(out, newContent, 0o644))
 	writeMain(t, root, "package main // v2")
 
 	// Make CAS read-only so any write to it fails.
-	if err := os.Chmod(casDir, 0o555); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chmod(casDir, 0o555))
 	t.Cleanup(func() { _ = os.Chmod(casDir, 0o755) })
 
 	c3, err := Open(cdir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	_, runErr := c3.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(out, newContent, 0o644)
 	})
@@ -100,7 +92,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 
 	// Walk the CAS and verify that no temp files leaked and that every blob
 	// present is a complete, named blob (not a .tmp.* partial).
-	if err := filepath.WalkDir(casDir, func(p string, d os.DirEntry, err error) error {
+	err = filepath.WalkDir(casDir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -111,9 +103,8 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 			t.Errorf("leaked temp file in CAS: %s", p)
 		}
 		return nil
-	}); err != nil {
-		t.Fatalf("WalkDir: %v", err)
-	}
+	})
+	require.NoError(t, err, "WalkDir")
 }
 
 // TestExportFDsBounded verifies that Export does not accumulate open file
@@ -132,17 +123,13 @@ func TestExportFDsBounded(t *testing.T) {
 
 	// Create 100 distinct output files so the cache has 100 blobs.
 	outDir := filepath.Join(root, "test", "pkg")
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(outDir, 0o755))
 	var outputs []string
 	for i := 0; i < nFiles; i++ {
 		name := filepath.Join(outDir, filepath.FromSlash("out_"+string(rune('a'+i%26))+string(rune('0'+i/26))+".txt"))
 		content := make([]byte, 256)
 		content[0] = byte(i) // unique content per file
-		if err := os.WriteFile(name, content, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(name, content, 0o644))
 		rel, _ := filepath.Rel(root, name)
 		outputs = append(outputs, filepath.ToSlash(rel))
 	}
@@ -154,28 +141,24 @@ func TestExportFDsBounded(t *testing.T) {
 		Outputs:       outputs,
 	}
 
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error { return nil }); err != nil {
-		t.Fatalf("prime: %v", err)
-	}
+	_, err := c.Run(context.Background(), spec, func(_ context.Context) error { return nil })
+	require.NoError(t, err, "prime")
 
 	// Count open FDs before Export.
 	fdsBefore := countFDs(t)
 
 	var buf []byte
 	w := &bytesWriter{&buf}
-	if err := c.Export(context.Background(), w); err != nil {
-		t.Fatalf("Export: %v", err)
-	}
+	require.NoError(t, c.Export(context.Background(), w), "Export")
 
 	fdsAfter := countFDs(t)
 
 	// Allow a small slack for internal buffers (gzip, tar, etc.) but reject
 	// accumulation proportional to nFiles.
 	const slack = 20
-	if fdsAfter-fdsBefore > slack {
-		t.Errorf("Export leaked FDs: before=%d after=%d (delta=%d > slack=%d)",
-			fdsBefore, fdsAfter, fdsAfter-fdsBefore, slack)
-	}
+	assert.LessOrEqualf(t, fdsAfter-fdsBefore, slack,
+		"Export leaked FDs: before=%d after=%d (delta=%d > slack=%d)",
+		fdsBefore, fdsAfter, fdsAfter-fdsBefore, slack)
 }
 
 // countFDs counts the number of open file descriptors for the current process
@@ -209,16 +192,13 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	spec.Outputs = []string{"test/pkg/out.txt"}
 
 	c, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err, "cache.Open")
 
 	// Populate the cache.
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
-	}); err != nil {
-		t.Fatalf("initial run: %v", err)
-	}
+	})
+	require.NoError(t, err, "initial run")
 
 	// Corrupt the manifest by truncating it.
 	manifestDir := filepath.Join(cdir, "manifests")
@@ -231,26 +211,18 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("corrupt manifest: %v", err)
-	}
+	require.NoError(t, err, "corrupt manifest")
 
 	// Re-open in read mode; truncated manifest should cause a rebuild (miss),
 	// not a panic or an error that surfaces to the caller.
 	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c2, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("cache.Open(second): %v", err)
-	}
+	require.NoError(t, err, "cache.Open(second)")
 	r, err := c2.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("rebuilt"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("run after corruption: %v", err)
-	}
-	if r.Hit {
-		t.Error("corrupted manifest must not produce a hit")
-	}
+	require.NoError(t, err, "run after corruption")
+	assert.False(t, r.Hit, "corrupted manifest must not produce a hit")
 }
 
 // TestPermDeniedCacheDirReturnsError verifies that a cache directory
@@ -262,9 +234,7 @@ func TestPermDeniedCacheDirReturnsError(t *testing.T) {
 	}
 	parent := t.TempDir()
 	cdir := filepath.Join(parent, "no-write")
-	if err := os.MkdirAll(cdir, 0o555); err != nil { // read-only
-		t.Fatalf("MkdirAll: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(cdir, 0o555), "MkdirAll") // read-only
 	t.Cleanup(func() { _ = os.Chmod(cdir, 0o755) })
 
 	// Open itself may succeed (it doesn't necessarily create files),
@@ -296,38 +266,27 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	spec.Outputs = []string{"test/pkg/out.txt"}
 
 	c, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err, "cache.Open")
 
 	// Populate the cache successfully.
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("first"), 0o644)
-	}); err != nil {
-		t.Fatalf("initial run: %v", err)
-	}
+	})
+	require.NoError(t, err, "initial run")
 
 	// Delete all CAS blobs to simulate a partially-deleted snapshot.
 	casDir := filepath.Join(cdir, "cas")
-	if err := os.RemoveAll(casDir); err != nil {
-		t.Fatalf("RemoveAll cas: %v", err)
-	}
+	require.NoError(t, os.RemoveAll(casDir), "RemoveAll cas")
 
 	// A read-mode cache must not claim a hit when the blobs are gone.
 	t.Setenv("MAGUS_CACHE_MODE", "read")
 	c2, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("cache.Open(read): %v", err)
-	}
+	require.NoError(t, err, "cache.Open(read)")
 	calls := 0
 	r, err := c2.Run(context.Background(), spec, func(_ context.Context) error {
 		calls++
 		return os.WriteFile(out, []byte("second"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("run after partial snapshot: %v", err)
-	}
-	if r.Hit {
-		t.Error("run with missing CAS blobs must not produce a hit")
-	}
+	require.NoError(t, err, "run after partial snapshot")
+	assert.False(t, r.Hit, "run with missing CAS blobs must not produce a hit")
 }

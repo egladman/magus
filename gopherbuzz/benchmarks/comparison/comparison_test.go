@@ -123,7 +123,7 @@ for i := 0; i < 1000000; i++ { sum += i }`,
 	{
 		name:    "Fib",
 		session: true,
-		bzSetup: `fun fib(n) int { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); }`,
+		bzSetup: `fun fib(n: int) > int { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); }`,
 		bzHot:   `fib(30);`,
 		lua: `local function fib(n) if n <= 1 then return n end return fib(n-1) + fib(n-2) end
 return fib(30)`,
@@ -135,7 +135,7 @@ out := fib(30)`,
 	{
 		name:    "Call",
 		session: true,
-		bzSetup: `fun add(a, b) int { return a + b; }`,
+		bzSetup: `fun add(a: int, b: int) > int { return a + b; }`,
 		bzHot:   `var sum = 0; var i = 0; while (i < 1000000) { sum = sum + add(i, 1); i = i + 1; } return sum;`,
 		lua: `local function add(a, b) return a + b end
 local sum = 0; for i = 0, 999999 do sum = sum + add(i, 1) end
@@ -346,8 +346,8 @@ trace;`,
 	{
 		name:    "BinaryTrees", // allocate/walk/discard ~1M tree nodes: GC- and alloc-heavy
 		session: true,
-		bzSetup: `fun make(d) { if (d <= 0) { return null; } return [make(d - 1), make(d - 1)]; }
-fun check(n) { if (n == null) { return 1; } return 1 + check(n[0]) + check(n[1]); }`,
+		bzSetup: `fun make(d: int) > any { if (d <= 0) { return null; } return [make(d - 1), make(d - 1)]; }
+fun check(n: any) > int { if (n == null) { return 1; } return 1 + check(n[0]) + check(n[1]); }`,
 		bzHot: `var total = 0; var i = 0; while (i < 30) { total = total + check(make(13)); i = i + 1; } return total;`,
 		lua: `local function make(d) if d <= 0 then return nil end return {make(d-1), make(d-1)} end
 local function check(n) if n == nil then return 1 end return 1 + check(n[1]) + check(n[2]) end
@@ -532,7 +532,7 @@ func BenchmarkComparison(b *testing.B) {
 // slot-mode path (JIT-eligible). The chunk is compiled once; warm reuses one VM,
 // fresh builds a new VM per iteration.
 func benchBuzzSlot(b *testing.B, jit bool, m mode, program string) {
-	prog, err := buzz.Parse(program)
+	prog, err := buzz.ParseEmbedded(program)
 	if err != nil {
 		b.Fatalf("parse: %v", err)
 	}
@@ -579,7 +579,7 @@ func benchBuzzSession(b *testing.B, jit bool, m mode, useStd bool, setup, hot st
 	b.ReportAllocs()
 
 	newSess := func() *buzz.Session {
-		sess := buzz.NewSession(ctx)
+		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 		if useStd {
 			buzzstd.Register(sess) // enable `import "math"`, etc.
 		}

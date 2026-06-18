@@ -8,6 +8,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNew_DisabledIsNoOp verifies that constructing a Provider with
@@ -16,22 +18,14 @@ import (
 func TestNew_DisabledIsNoOp(t *testing.T) {
 	t.Parallel()
 	p, err := New(context.Background(), Config{Enabled: false})
-	if err != nil {
-		t.Fatalf("New(disabled) returned error: %v", err)
-	}
-	if p == nil {
-		t.Fatal("New(disabled) returned nil Provider")
-	}
-	if p.Enabled() {
-		t.Error("disabled Provider reports Enabled() == true")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, p, "New(disabled) returned nil Provider")
+	assert.False(t, p.Enabled(), "disabled Provider reports Enabled() == true")
 	p.RecordCacheHit(context.Background())
 	p.RecordCacheMiss(context.Background())
 	p.RecordCacheError(context.Background())
 	p.RecordCacheDuration(context.Background(), 1.5)
-	if err := p.Shutdown(context.Background()); err != nil {
-		t.Errorf("Shutdown returned error: %v", err)
-	}
+	assert.NoError(t, p.Shutdown(context.Background()))
 }
 
 // TestCacheRunOptions_NilProviderReturnsNil ensures callers can pass a
@@ -39,9 +33,7 @@ func TestNew_DisabledIsNoOp(t *testing.T) {
 // init failed earlier in the boot path.
 func TestCacheRunOptions_NilProviderReturnsNil(t *testing.T) {
 	t.Parallel()
-	if got := CacheRunOptions(context.Background(), nil); got != nil {
-		t.Errorf("CacheRunOptions(nil) = %v, want nil", got)
-	}
+	assert.Nil(t, CacheRunOptions(context.Background(), nil))
 }
 
 // TestConfigFromTelemetry_AppliesFallbacks verifies that an empty
@@ -50,27 +42,17 @@ func TestCacheRunOptions_NilProviderReturnsNil(t *testing.T) {
 func TestConfigFromTelemetry_AppliesFallbacks(t *testing.T) {
 	t.Parallel()
 	got := ConfigFromTelemetry(config.Telemetry{}, "v1.2.3", "")
-	if got.Protocol != "grpc" {
-		t.Errorf("Protocol = %q, want grpc", got.Protocol)
-	}
-	if got.ServiceName != "magus" {
-		t.Errorf("ServiceName = %q, want magus", got.ServiceName)
-	}
-	if got.SampleRatio != 1.0 {
-		t.Errorf("SampleRatio = %v, want 1.0", got.SampleRatio)
-	}
-	if got.ServiceVersion != "v1.2.3" {
-		t.Errorf("ServiceVersion = %q, want v1.2.3", got.ServiceVersion)
-	}
+	assert.Equal(t, "grpc", got.Protocol)
+	assert.Equal(t, "magus", got.ServiceName)
+	assert.Equal(t, 1.0, got.SampleRatio)
+	assert.Equal(t, "v1.2.3", got.ServiceVersion)
 }
 
 // TestNew_EnabledRequiresEndpoint exercises the validation path.
 func TestNew_EnabledRequiresEndpoint(t *testing.T) {
 	t.Parallel()
 	_, err := New(context.Background(), Config{Enabled: true})
-	if err == nil {
-		t.Fatal("New(enabled, no endpoint) should error, got nil")
-	}
+	assert.Error(t, err, "New(enabled, no endpoint) should error")
 }
 
 // recorder implements observability.Provider and captures every call so
@@ -139,9 +121,7 @@ func newCache(t *testing.T) (root string, c *cache.Cache) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	t.Setenv("MAGUS_CACHE_MODE", "auto")
 	c, err := cache.Open(cdir)
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err, "cache.Open")
 	return root, c
 }
 
@@ -153,12 +133,8 @@ func newCache(t *testing.T) (root string, c *cache.Cache) {
 func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	root, c := newCache(t)
 	srcDir := filepath.Join(root, "p")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Spec{
 		ProjectPath:   "p",
@@ -169,50 +145,29 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 
 	rec := &recorder{}
 	opts := CacheRunOptions(context.Background(), rec)
-	if len(opts) != 3 {
-		t.Fatalf("CacheRunOptions returned %d options, want 3", len(opts))
-	}
+	require.Len(t, opts, 3, "CacheRunOptions returned wrong number of options")
 
 	// Miss: fn runs, OnMiss + RecordCacheDuration fire.
 	r1, err := c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(outPath, []byte("ok"), 0o644)
 	}, opts...)
-	if err != nil {
-		t.Fatalf("Run(miss): %v", err)
-	}
-	if r1.Hit {
-		t.Fatal("first Run should miss")
-	}
-	if len(rec.misses) != 1 {
-		t.Errorf("after miss: misses=%d, want 1", len(rec.misses))
-	}
-	if len(rec.durs) != 1 {
-		t.Errorf("after miss: durs=%d, want 1", len(rec.durs))
-	}
-	if got := rec.misses[0].attrs[0].Key; got != "outcome" {
-		t.Errorf("miss attrs[0].Key = %q, want %q", got, "outcome")
-	}
-	if got := rec.misses[0].attrs[0].Value; got != "miss" {
-		t.Errorf("miss attrs[0].Value = %q, want %q", got, "miss")
-	}
+	require.NoError(t, err, "Run(miss)")
+	assert.False(t, r1.Hit, "first Run should miss")
+	assert.Len(t, rec.misses, 1, "after miss")
+	assert.Len(t, rec.durs, 1, "after miss")
+	require.NotEmpty(t, rec.misses[0].attrs)
+	assert.Equal(t, "outcome", rec.misses[0].attrs[0].Key)
+	assert.Equal(t, "miss", rec.misses[0].attrs[0].Value)
 
 	// Hit: identical Run, fn not called, OnHit + duration fire.
 	r2, err := c.Run(context.Background(), spec, func(_ context.Context) error {
 		t.Error("fn should not run on a hit")
 		return nil
 	}, opts...)
-	if err != nil {
-		t.Fatalf("Run(hit): %v", err)
-	}
-	if !r2.Hit {
-		t.Fatalf("second Run should hit; r2 = %+v", r2)
-	}
-	if len(rec.hits) != 1 {
-		t.Errorf("after hit: hits=%d, want 1", len(rec.hits))
-	}
-	if len(rec.durs) != 2 {
-		t.Errorf("after hit: durs=%d, want 2", len(rec.durs))
-	}
+	require.NoError(t, err, "Run(hit)")
+	require.True(t, r2.Hit, "second Run should hit; r2 = %+v", r2)
+	assert.Len(t, rec.hits, 1, "after hit")
+	assert.Len(t, rec.durs, 2, "after hit")
 }
 
 // TestMetricRecordNoProjectAttr ensures CacheRunOptions never stamps a
@@ -221,12 +176,8 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 func TestMetricRecordNoProjectAttr(t *testing.T) {
 	root, c := newCache(t)
 	srcDir := filepath.Join(root, "p")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Spec{
 		ProjectPath:   "p",
@@ -239,30 +190,24 @@ func TestMetricRecordNoProjectAttr(t *testing.T) {
 	opts := CacheRunOptions(context.Background(), rec)
 
 	// Miss
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err := c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(outPath, []byte("ok"), 0o644)
-	}, opts...); err != nil {
-		t.Fatalf("Run(miss): %v", err)
-	}
+	}, opts...)
+	require.NoError(t, err, "Run(miss)")
 	// Hit
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
 		return nil
-	}, opts...); err != nil {
-		t.Fatalf("Run(hit): %v", err)
-	}
+	}, opts...)
+	require.NoError(t, err, "Run(hit)")
 
 	for _, call := range rec.hits {
 		for _, attr := range call.attrs {
-			if attr.Key == "project" {
-				t.Errorf("hit metric attrs contain project=%q; per-project cardinality must be removed", attr.Value)
-			}
+			assert.NotEqual(t, "project", attr.Key, "hit metric attrs must not contain per-project cardinality")
 		}
 	}
 	for _, call := range rec.misses {
 		for _, attr := range call.attrs {
-			if attr.Key == "project" {
-				t.Errorf("miss metric attrs contain project=%q; per-project cardinality must be removed", attr.Value)
-			}
+			assert.NotEqual(t, "project", attr.Key, "miss metric attrs must not contain per-project cardinality")
 		}
 	}
 }
@@ -275,21 +220,13 @@ func TestMetricRecordNoProjectAttr(t *testing.T) {
 // every disabled-provider record method through a hit path.
 func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 	p, err := New(context.Background(), Config{Enabled: false})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Enabled() {
-		t.Error("disabled provider reports Enabled() == true")
-	}
+	require.NoError(t, err)
+	assert.False(t, p.Enabled(), "disabled provider reports Enabled() == true")
 
 	root, c := newCache(t)
 	srcDir := filepath.Join(root, "p")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Spec{
 		ProjectPath:   "p",
@@ -303,20 +240,16 @@ func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 	// paths fire on the disabled provider. No assertion on counters
 	// (it is inert) — the test is that nothing panics and Run
 	// completes.
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(outPath, []byte("ok"), 0o644)
-	}, opts...); err != nil {
-		t.Fatalf("Run(miss): %v", err)
-	}
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	}, opts...)
+	require.NoError(t, err, "Run(miss)")
+	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
 		t.Error("fn must not run on a hit")
 		return nil
-	}, opts...); err != nil {
-		t.Fatalf("Run(hit): %v", err)
-	}
-	if err := p.Shutdown(context.Background()); err != nil {
-		t.Errorf("disabled.Shutdown: %v", err)
-	}
+	}, opts...)
+	require.NoError(t, err, "Run(hit)")
+	assert.NoError(t, p.Shutdown(context.Background()), "disabled.Shutdown")
 }
 
 // recordingTargetProvider extends recorder to capture
@@ -349,12 +282,8 @@ func attrVal(attrs []Attr, key string) string {
 func TestTargetRunOptions(t *testing.T) {
 	root, c := newCache(t)
 	srcDir := filepath.Join(root, "p")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := cache.Spec{
 		ProjectPath:   "p",
@@ -369,45 +298,27 @@ func TestTargetRunOptions(t *testing.T) {
 	opts := TargetRunOptions(context.Background(), rec, spellsOf)
 
 	// Miss: outcome=success, cache.hit=false.
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err := c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(outPath, []byte("ok"), 0o644)
-	}, opts...); err != nil {
-		t.Fatalf("Run(miss): %v", err)
-	}
-	if len(rec.targetRuns) != 1 {
-		t.Fatalf("after miss: targetRuns=%d, want 1", len(rec.targetRuns))
-	}
+	}, opts...)
+	require.NoError(t, err, "Run(miss)")
+	require.Len(t, rec.targetRuns, 1, "after miss")
 	r0 := rec.targetRuns[0]
-	if got := attrVal(r0.attrs, "outcome"); got != "success" {
-		t.Errorf("miss outcome=%q, want success", got)
-	}
-	if got := attrVal(r0.attrs, "cache.hit"); got != "false" {
-		t.Errorf("miss cache.hit=%q, want false", got)
-	}
-	if got := attrVal(r0.attrs, "magus.target"); got != "test" {
-		t.Errorf("miss target=%q, want test", got)
-	}
-	if got := attrVal(r0.attrs, "magus.spell"); got != "go" {
-		t.Errorf("miss spell=%q, want go", got)
-	}
+	assert.Equal(t, "success", attrVal(r0.attrs, "outcome"), "miss outcome")
+	assert.Equal(t, "false", attrVal(r0.attrs, "cache.hit"), "miss cache.hit")
+	assert.Equal(t, "test", attrVal(r0.attrs, "magus.target"), "miss target")
+	assert.Equal(t, "go", attrVal(r0.attrs, "magus.spell"), "miss spell")
 
 	// Hit: outcome=success, cache.hit=true.
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
 		t.Error("fn must not run on hit")
 		return nil
-	}, opts...); err != nil {
-		t.Fatalf("Run(hit): %v", err)
-	}
-	if len(rec.targetRuns) != 2 {
-		t.Fatalf("after hit: targetRuns=%d, want 2", len(rec.targetRuns))
-	}
+	}, opts...)
+	require.NoError(t, err, "Run(hit)")
+	require.Len(t, rec.targetRuns, 2, "after hit")
 	r1 := rec.targetRuns[1]
-	if got := attrVal(r1.attrs, "cache.hit"); got != "true" {
-		t.Errorf("hit cache.hit=%q, want true", got)
-	}
-	if got := attrVal(r1.attrs, "outcome"); got != "success" {
-		t.Errorf("hit outcome=%q, want success", got)
-	}
+	assert.Equal(t, "true", attrVal(r1.attrs, "cache.hit"), "hit cache.hit")
+	assert.Equal(t, "success", attrVal(r1.attrs, "outcome"), "hit outcome")
 
 	// Multi-spell: two spells → two rows per run.
 	multiSpellsOf := func(string) []string { return []string{"go", "typescript"} }
@@ -419,12 +330,9 @@ func TestTargetRunOptions(t *testing.T) {
 		Target:        "build",
 	}
 	before := len(rec.targetRuns)
-	if _, err := c.Run(context.Background(), multiSpec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), multiSpec, func(_ context.Context) error {
 		return nil
-	}, multiOpts...); err != nil {
-		t.Fatalf("Run(multi-spell): %v", err)
-	}
-	if got := len(rec.targetRuns) - before; got != 2 {
-		t.Errorf("multi-spell emitted %d rows, want 2", got)
-	}
+	}, multiOpts...)
+	require.NoError(t, err, "Run(multi-spell)")
+	assert.Equal(t, 2, len(rec.targetRuns)-before, "multi-spell should emit 2 rows")
 }

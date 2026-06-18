@@ -37,7 +37,7 @@ type Spell struct {
 	claims              []string
 	outputs             []string
 	targets             []string
-	foreignProcess      bool
+	opaque              bool
 	targetSources       map[string][]string
 	targetCharms        map[string][]string // target name → charm names it declares (for discovery)
 	targetDocs          map[string]string   // target name → handler doc comment (for describe/doctor)
@@ -73,7 +73,7 @@ func (s *Spell) Sources() []string                  { return s.sources }
 func (s *Spell) Claims() []string                   { return s.claims }
 func (s *Spell) Outputs() []string                  { return s.outputs }
 func (s *Spell) Targets() []string                  { return s.targets }
-func (s *Spell) ForeignProcess() bool               { return s.foreignProcess }
+func (s *Spell) Opaque() bool                       { return s.opaque }
 func (s *Spell) TargetSources() map[string][]string { return s.targetSources }
 func (s *Spell) Charms(target string) []string      { return s.targetCharms[target] }
 
@@ -139,9 +139,11 @@ func WithTargets(targets ...string) SpellOption {
 	return func(s *Spell) { s.targets = append(s.targets, targets...) }
 }
 
-// WithForeignProcess marks the spell as delegating to a foreign process. Informational only.
-func WithForeignProcess() SpellOption {
-	return func(s *Spell) { s.foreignProcess = true }
+// WithOpaque marks the spell as opaque: it delegates to a foreign process that
+// manages its own dependency graph, so magus treats the project as a black box
+// rather than tracking per-file inputs. Informational only.
+func WithOpaque() SpellOption {
+	return func(s *Spell) { s.opaque = true }
 }
 
 // WithInvoker sets the function that runs a target; a spell with none is a no-op.

@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestHistorySchemaLock asserts that the JSON representation of a fully
@@ -46,14 +49,10 @@ func TestHistorySchemaLock(t *testing.T) {
 	}
 
 	b, err := json.Marshal(h)
-	if err != nil {
-		t.Fatalf("marshal History: %v", err)
-	}
+	require.NoError(t, err, "marshal History")
 
 	var top map[string]json.RawMessage
-	if err := json.Unmarshal(b, &top); err != nil {
-		t.Fatalf("unmarshal to map: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(b, &top), "unmarshal to map")
 
 	// Approved top-level keys. Extend only with fields that contain
 	// integer timings, project paths, or subdir tag names — never
@@ -68,16 +67,12 @@ func TestHistorySchemaLock(t *testing.T) {
 		"workspace_fallback_ms": true, // int64 workspace-wide p75
 	}
 	for k := range top {
-		if !allowed[k] {
-			t.Errorf("unexpected History JSON key %q — add to allowed map with a safety justification, or remove the field", k)
-		}
+		assert.Truef(t, allowed[k], "unexpected History JSON key %q — add to allowed map with a safety justification, or remove the field", k)
 	}
 
 	// Also lock the Stats sub-schema.
 	var projects map[string]map[string]map[string]json.RawMessage
-	if err := json.Unmarshal(top["projects"], &projects); err != nil {
-		t.Fatalf("unmarshal projects: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(top["projects"], &projects), "unmarshal projects")
 	allowedStats := map[string]bool{
 		"p75_ms":          true, // int64 — rolling p75 of recent durations
 		"samples":         true, // int   — total number of ingested miss samples
@@ -95,9 +90,7 @@ func TestHistorySchemaLock(t *testing.T) {
 	for path, targets := range projects {
 		for target, stats := range targets {
 			for k := range stats {
-				if !allowedStats[k] {
-					t.Errorf("unexpected Stats JSON key %q (project=%q target=%q) — add to allowedStats with a safety justification", k, path, target)
-				}
+				assert.Truef(t, allowedStats[k], "unexpected Stats JSON key %q (project=%q target=%q) — add to allowedStats with a safety justification", k, path, target)
 			}
 		}
 	}
@@ -118,14 +111,10 @@ func TestHistorySchemaLock(t *testing.T) {
 				continue
 			}
 			var outcomes []outcomeMap
-			if err := json.Unmarshal(rawOutcomes, &outcomes); err != nil {
-				t.Fatalf("unmarshal recent_outcomes (project=%q target=%q): %v", path, target, err)
-			}
+			require.NoErrorf(t, json.Unmarshal(rawOutcomes, &outcomes), "unmarshal recent_outcomes (project=%q target=%q)", path, target)
 			for _, o := range outcomes {
 				for k := range o {
-					if !allowedOutcome[k] {
-						t.Errorf("unexpected Outcome JSON key %q (project=%q target=%q) — add to allowedOutcome with a safety justification", k, path, target)
-					}
+					assert.Truef(t, allowedOutcome[k], "unexpected Outcome JSON key %q (project=%q target=%q) — add to allowedOutcome with a safety justification", k, path, target)
 				}
 			}
 		}
@@ -151,21 +140,15 @@ func TestHistoryV1LoadsIntoV2(t *testing.T) {
 	}`
 
 	var h History
-	if err := json.Unmarshal([]byte(v1JSON), &h); err != nil {
-		t.Fatalf("unmarshal v1 history: %v", err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(v1JSON), &h), "unmarshal v1 history")
 
 	// Should fall through to project-wide p75 (no buckets, no hit data → cold start).
 	got := h.PredictDuration("services/api", "ci", []string{"direct", "direct.src"})
-	if got != 12*time.Second {
-		t.Errorf("PredictDuration = %v, want 12s (project p75)", got)
-	}
+	assert.Equal(t, 12*time.Second, got, "project p75")
 
 	// Transitive tag also falls through cleanly.
 	got = h.PredictDuration("services/api", "ci", []string{"transitive"})
-	if got != 12*time.Second {
-		t.Errorf("PredictDuration (transitive, no buckets) = %v, want 12s", got)
-	}
+	assert.Equal(t, 12*time.Second, got, "transitive, no buckets")
 }
 
 // TestHistoryV2LoadsIntoV3 verifies that a v2-era history file (no hit count
@@ -194,15 +177,11 @@ func TestHistoryV2LoadsIntoV3(t *testing.T) {
 	}`
 
 	var h History
-	if err := json.Unmarshal([]byte(v2JSON), &h); err != nil {
-		t.Fatalf("unmarshal v2 history: %v", err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(v2JSON), &h), "unmarshal v2 history")
 
 	// hit_count and miss_count default to zero → cold start → raw p75 returned.
 	got := h.PredictDuration("apps/web", "ci", nil)
-	if got != 20*time.Second {
-		t.Errorf("v2→v3: PredictDuration = %v, want 20s (raw p75, cold start)", got)
-	}
+	assert.Equal(t, 20*time.Second, got, "raw p75, cold start")
 }
 
 // TestHistory_PredictDuration_hitRateDiscount verifies that a Stats entry
@@ -228,22 +207,14 @@ func TestHistory_PredictDuration_hitRateDiscount(t *testing.T) {
 	}
 
 	st := h.Projects["svc"]["ci"]
-	if st.HitCount+st.MissCount < 5 {
-		t.Fatalf("need ≥5 combined observations for discount, got %d", st.HitCount+st.MissCount)
-	}
-	if st.HitRate <= 0 {
-		t.Fatalf("expected positive hit rate, got %v", st.HitRate)
-	}
+	require.GreaterOrEqual(t, st.HitCount+st.MissCount, 5, "need ≥5 combined observations for discount")
+	require.Positive(t, st.HitRate, "expected positive hit rate")
 
 	got := h.PredictDuration("svc", "ci", nil)
 	// Expected: p75 * (1 - hit_rate). p75 = 60s, hit_rate ≈ 0.9 → ~6s.
 	// Allow ±20% tolerance for integer arithmetic in the rolling window.
-	if got >= 60*time.Second {
-		t.Errorf("hit-rate discount not applied: PredictDuration = %v, want < 60s", got)
-	}
-	if got < time.Millisecond {
-		t.Errorf("stability floor violated: PredictDuration = %v, want ≥ 1ms", got)
-	}
+	assert.Less(t, got, 60*time.Second, "hit-rate discount should be applied")
+	assert.GreaterOrEqual(t, got, time.Millisecond, "stability floor")
 }
 
 // TestHistory_PredictDuration_coldStart verifies that a Stats entry with
@@ -268,14 +239,10 @@ func TestHistory_PredictDuration_coldStart(t *testing.T) {
 
 	st := h.Projects["svc"]["ci"]
 	total := st.HitCount + st.MissCount
-	if total >= 5 {
-		t.Fatalf("test setup: need total < 5, got %d", total)
-	}
+	require.Less(t, total, 5, "test setup: need total < 5")
 
 	got := h.PredictDuration("svc", "ci", nil)
-	if got != 60*time.Second {
-		t.Errorf("cold start: PredictDuration = %v, want 60s (raw p75)", got)
-	}
+	assert.Equal(t, 60*time.Second, got, "raw p75")
 }
 
 // TestHistoryV3LoadsIntoV4 verifies that a v3 history file (no flake fields)
@@ -301,23 +268,16 @@ func TestHistoryV3LoadsIntoV4(t *testing.T) {
 	}`
 
 	var h History
-	if err := json.Unmarshal([]byte(v3JSON), &h); err != nil {
-		t.Fatalf("unmarshal v3 history: %v", err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(v3JSON), &h), "unmarshal v3 history")
 
 	st := h.Projects["services/api"]["ci"]
-	if st.PassCount != 0 || st.FailCount != 0 || st.FlakeCount != 0 {
-		t.Errorf("v3→v4: expected zero flake counts, got pass=%d fail=%d flake=%d",
-			st.PassCount, st.FailCount, st.FlakeCount)
-	}
-	if len(st.RecentOutcomes) != 0 {
-		t.Errorf("v3→v4: expected empty RecentOutcomes, got %d entries", len(st.RecentOutcomes))
-	}
+	assert.Zero(t, st.PassCount, "v3→v4: expected zero pass count")
+	assert.Zero(t, st.FailCount, "v3→v4: expected zero fail count")
+	assert.Zero(t, st.FlakeCount, "v3→v4: expected zero flake count")
+	assert.Empty(t, st.RecentOutcomes, "v3→v4: expected empty RecentOutcomes")
 	// Duration prediction should still work correctly.
 	got := h.PredictDuration("services/api", "ci", nil)
-	if got <= 0 {
-		t.Errorf("v3→v4: PredictDuration = %v, want > 0", got)
-	}
+	assert.Positive(t, got, "v3→v4: PredictDuration")
 }
 
 // TestHistory_Update_hitRateProperty verifies that after any sequence of
@@ -346,10 +306,7 @@ func TestHistory_Update_hitRateProperty(t *testing.T) {
 			continue
 		}
 		wantRate := float64(st.HitCount) / float64(total)
-		if st.HitRate != wantRate {
-			t.Errorf("after observation: HitRate = %v, want %v (HitCount=%d MissCount=%d)",
-				st.HitRate, wantRate, st.HitCount, st.MissCount)
-		}
+		assert.Equalf(t, wantRate, st.HitRate, "HitCount=%d MissCount=%d", st.HitCount, st.MissCount)
 	}
 }
 
@@ -382,14 +339,8 @@ func TestHistoryMerge(t *testing.T) {
 	merged.Merge(&shard0)
 	merged.Merge(&shard1)
 
-	cases := map[string]int64{"a": 150, "b": 200, "c": 300} // a: fresher shard1 wins
-	for project, want := range cases {
-		got := merged.Projects[project]["test"].P75Ms
-		if got != want {
-			t.Errorf("project %q: P75Ms = %d, want %d", project, got, want)
-		}
-	}
-	if len(merged.Projects) != 3 {
-		t.Errorf("merged projects = %d, want 3 (a,b,c)", len(merged.Projects))
-	}
+	assert.Equal(t, int64(150), merged.Projects["a"]["test"].P75Ms, "a: fresher shard1 wins")
+	assert.Equal(t, int64(200), merged.Projects["b"]["test"].P75Ms)
+	assert.Equal(t, int64(300), merged.Projects["c"]["test"].P75Ms)
+	assert.Len(t, merged.Projects, 3, "merged projects (a,b,c)")
 }

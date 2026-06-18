@@ -12,13 +12,6 @@ import (
 	buzzstd "github.com/egladman/gopherbuzz/std"
 )
 
-// This file is the playground's REPL: the evaluation primitives (EvalBuzz /
-// EvalInContext) and the terminal Shell that drives them. It is pure Go — no js,
-// no DOM — so the wasm main is a thin glue layer and every path is unit-testable
-// on the host.
-
-// ── evaluation ────────────────────────────────────────────────────────────────
-
 // Diag is a structured evaluation error: the message plus a 1-based source
 // position when one could be recovered from it (0 when not).
 type Diag struct {
@@ -41,7 +34,7 @@ type EvalResult struct {
 // magus host, no magusfile semantics.
 func EvalBuzz(ctx context.Context, src string) EvalResult {
 	var out bytes.Buffer
-	sess := buzz.NewSession(ctx)
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
 
 	v, err := sess.Eval(ctx, src)
@@ -60,7 +53,7 @@ func EvalBuzz(ctx context.Context, src string) EvalResult {
 // the undefined name.
 func EvalInContext(ctx context.Context, magusfileSrc, expr string) EvalResult {
 	rec := newRecorder()
-	sess := buzz.NewSession(ctx)
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	installHost(sess, rec)
 
 	_ = sess.Exec(ctx, magusfileSrc) // best effort: bind whatever compiles
@@ -94,8 +87,6 @@ func toDiag(err error) *Diag {
 	}
 	return d
 }
-
-// ── terminal shell ────────────────────────────────────────────────────────────
 
 // buzzLangVersion is the Buzz language version gopherbuzz implements
 // (https://buzz-lang.dev/0.5.0).
@@ -259,8 +250,6 @@ func (s *Shell) HistNext() (string, bool) {
 	s.hpos = len(s.hist)
 	return "", false
 }
-
-// ── command bodies ────────────────────────────────────────────────────────────
 
 func (s *Shell) help() []Line {
 	return []Line{{HTML: strings.Join([]string{
@@ -439,8 +428,6 @@ func (s *Shell) eval(ctx context.Context, src string) []Line {
 	out = append(out, Line{HTML: esc(diagMsg(r.Diag, "error")) + where, Class: "err"})
 	return out
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func (s *Shell) depsOf(key string) []string {
 	var out []string

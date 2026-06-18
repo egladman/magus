@@ -97,12 +97,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		return m.RunCI(ctx, ciTargets, ciOpts...)
 	}
 	// Expand short aliases.
-	switch targetName {
-	case "fmt":
-		targetName = "format"
-	case "gen":
-		targetName = "generate"
-	}
+	targetName = canonicalTarget(targetName)
 	targets := []types.Target{{Path: chosen.Path, Name: targetName}}
 	var xOpts []magus.RunOption
 	if globalCfg.DryRun {

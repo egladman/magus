@@ -5,27 +5,24 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/project"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // writeFile writes content under dir/rel, creating parent dirs.
 func writeFile(t *testing.T, dir, rel, content string) {
 	t.Helper()
 	path := filepath.Join(dir, rel)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 // parseMagusfile evaluates the magusfile in dir in parse mode, which fires
-// its top-level magus.spell.* / magus.project.register calls.
+// its top-level spell imports / magus.project.register calls.
 func parseMagusfile(t *testing.T, dir string) error {
 	t.Helper()
 	srcs, err := interp.FindAll(dir)
@@ -40,49 +37,10 @@ func parseMagusfile(t *testing.T, dir string) error {
 	return nil
 }
 
-// TestSpellLoadRegistersForkBuzzSpell exercises magus.spell.load dispatching
-// to the Buzz engine for a .buzz workspace-local spell, registered by value when
-// bound via magus.project.register.
-func TestSpellLoadRegistersForkBuzzSpell(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir) // magus.spell.load resolves the path relative to the cwd
-
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "widgetbuzzspell"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.ts", "package.json"]; }
-export fun mgs_listProvidedGlobs() > [str] { return ["dist/**"]; }
-export fun mgs_listTargets() > any {
-    return {"build": {"cmd": "npm", "args": ["run", "build"]}};
-}
-`)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
-final widget = magus.spell.load("spells/widget.buzz");
-magus.project.register(".", fun(p, cb) > bool { cb({"spells": [widget]}); return true; });`)
-
-	if err := parseMagusfile(t, dir); err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-
-	sp, ok := project.DefaultSpellRegistry().Lookup("widgetbuzzspell")
-	if !ok {
-		t.Fatal("widgetbuzzspell not registered after binding via project.register")
-	}
-	if !slices.Contains(sp.Targets(), "build") {
-		t.Errorf("targets = %v, want to contain build", sp.Targets())
-	}
-	if !slices.Contains(sp.Sources(), "**/*.ts") {
-		t.Errorf("sources = %v, want to contain **/*.ts", sp.Sources())
-	}
-
-	// Idempotent: loading the same spell again must not panic or error.
-	if err := parseMagusfile(t, dir); err != nil {
-		t.Fatalf("second parse (idempotency): %v", err)
-	}
-}
-
 // TestBuzzLocalSpellImport verifies a workspace-local Buzz spell is importable by
 // path — `import "spells/widget"` resolves ./spells/widget.buzz, binds the handle
 // under the basename (widget), and binding it via magus.project.register registers
-// the spell by value. The import sugar for magus.spell.load on that path.
+// the spell by value.
 func TestBuzzLocalSpellImport(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir) // the import resolves relative to the cwd
@@ -95,27 +53,17 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-magus.project.register(".", fun(p, cb) > bool { cb({"spells": [widget]}); return true; });`)
+magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [widget]}); return true; });`)
 
-	if err := parseMagusfile(t, dir); err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	require.NoError(t, parseMagusfile(t, dir))
 
 	sp, ok := project.DefaultSpellRegistry().Lookup("widgetimport")
-	if !ok {
-		t.Fatal("widgetimport not registered after import + project.register")
-	}
-	if !slices.Contains(sp.Targets(), "build") {
-		t.Errorf("targets = %v, want to contain build", sp.Targets())
-	}
-	if !slices.Contains(sp.Sources(), "**/*.ts") {
-		t.Errorf("sources = %v, want to contain **/*.ts", sp.Sources())
-	}
+	require.True(t, ok, "widgetimport not registered after import + project.register")
+	assert.Contains(t, sp.Targets(), "build")
+	assert.Contains(t, sp.Sources(), "**/*.ts")
 
 	// Idempotent: re-parsing must not panic or error.
-	if err := parseMagusfile(t, dir); err != nil {
-		t.Fatalf("second parse (idempotency): %v", err)
-	}
+	require.NoError(t, parseMagusfile(t, dir), "second parse (idempotency)")
 }
 
 // TestBuzzSpellImport verifies that a built-in spell is importable via
@@ -127,41 +75,35 @@ func TestBuzzSpellImport(t *testing.T) {
 
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/go";
-import "magus/spell/json";
+import "magus/spell/docker";
 
 export fun check(args: [str]) > void {
     if (go.name != "go") { error("go.name mismatch: " + go.name); }
-    if (json.name != "json") { error("json.name mismatch: " + json.name); }
+    if (docker.name != "docker") { error("docker.name mismatch: " + docker.name); }
 }
 `)
 
 	src, err := interp.Find(dir)
-	if err != nil || src == nil {
-		t.Fatalf("Find: %v (src=%v)", err, src)
-	}
-	if err := interp.Run(context.Background(), src, "check", nil, dir); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, src)
+	require.NoError(t, interp.Run(context.Background(), src, "check", nil, dir))
 }
 
-// TestSpellLoadBuzzNoOps verifies that a Buzz spell with no ops still registers
+// TestBuzzSpellImportNoOps verifies that a Buzz spell with no ops still registers
 // successfully — ops is optional; the spell is registered with an empty target list.
-func TestSpellLoadBuzzNoOps(t *testing.T) {
+func TestBuzzSpellImportNoOps(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
 	writeFile(t, dir, "spells/noops.buzz", `export fun mgs_getName() > str { return "noopsbuzzspell"; }
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-final noops = magus.spell.load("spells/noops.buzz");
-magus.project.register(".", fun(p, cb) > bool { cb({"spells": [noops]}); return true; });`)
+import "spells/noops";
+magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [noops]}); return true; });`)
 
-	if err := parseMagusfile(t, dir); err != nil {
-		t.Fatalf("parse should not fail: %v", err)
-	}
-	if _, ok := project.DefaultSpellRegistry().Lookup("noopsbuzzspell"); !ok {
-		t.Error("noopsbuzzspell should be registered even with no ops")
-	}
+	require.NoError(t, parseMagusfile(t, dir), "parse should not fail")
+	_, ok := project.DefaultSpellRegistry().Lookup("noopsbuzzspell")
+	assert.True(t, ok, "noopsbuzzspell should be registered even with no ops")
 }
 
 // TestBuzzSpellMethodForwardsOpts verifies a Buzz spell handle's per-target method
@@ -180,11 +122,9 @@ export fun mgs_listTargets() > any {
     return {"capture": {"cmd": "sh", "args": ["-c", "printf '%s ' \"$@\" > captured.txt", "sh"]}};
 }
 `)
-	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-final widget = magus.spell.load("spells/widget.buzz");
+import "spells/widget";
 export fun build(args: [str]) > void {
     final names = widget.listTargets();
     if (names[0] != "capture") { error("listTargets mismatch"); }
@@ -192,22 +132,14 @@ export fun build(args: [str]) > void {
 }`)
 
 	srcs, err := interp.FindAll(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := interp.Run(context.Background(), srcs[0], "build", nil, dir); err != nil {
-		t.Fatalf("invoking spell method with opts: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "invoking spell method with opts")
 
 	// The file must land in opts.cwd (sub/), proving cwd was honored, and contain
 	// exactly the appended args, proving opts.args reached the forked command.
 	got, err := os.ReadFile(filepath.Join(dir, "sub", "captured.txt"))
-	if err != nil {
-		t.Fatalf("expected captured.txt under opts.cwd: %v", err)
-	}
-	if want := "alpha beta "; string(got) != want {
-		t.Errorf("forwarded args = %q, want %q", string(got), want)
-	}
+	require.NoError(t, err, "expected captured.txt under opts.cwd")
+	assert.Equal(t, "alpha beta ", string(got))
 }
 
 // TestBuzzSpellMethodEnv verifies the env opt overlays the forked subprocess
@@ -224,26 +156,18 @@ export fun mgs_listTargets() > any {
 }
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-final widget = magus.spell.load("spells/widget.buzz");
+import "spells/widget";
 export fun build(args: [str]) > void {
     widget.capture({"env": {"MYVAR": "overridden"}});
 }`)
 
 	srcs, err := interp.FindAll(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := interp.Run(context.Background(), srcs[0], "build", nil, dir); err != nil {
-		t.Fatalf("invoking spell method with env: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "invoking spell method with env")
 
 	got, err := os.ReadFile(filepath.Join(dir, "out.txt"))
-	if err != nil {
-		t.Fatalf("expected out.txt: %v", err)
-	}
-	if want := "overridden"; string(got) != want {
-		t.Errorf("out.txt = %q, want %q", string(got), want)
-	}
+	require.NoError(t, err, "expected out.txt")
+	assert.Equal(t, "overridden", string(got))
 }
 
 // TestBuzzSpellCaptureReturnsRecord verifies a capture=true target returns the
@@ -259,7 +183,7 @@ export fun mgs_listTargets() > any {
 }
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-final widget = magus.spell.load("spells/widget.buzz");
+import "spells/widget";
 export fun build(args: [str]) > void {
     final r = widget.hash();
     if (r.stdout != "abc123") { error("stdout mismatch: " + r.stdout); }
@@ -268,12 +192,8 @@ export fun build(args: [str]) > void {
 }`)
 
 	srcs, err := interp.FindAll(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := interp.Run(context.Background(), srcs[0], "build", nil, dir); err != nil {
-		t.Fatalf("captured buzz target: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "captured buzz target")
 }
 
 // TestBuzzSpellPipeStdin verifies pipe-style chaining: a captured target's stdout
@@ -291,7 +211,7 @@ export fun mgs_listTargets() > any {
 }
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-final widget = magus.spell.load("spells/widget.buzz");
+import "spells/widget";
 export fun build(args: [str]) > void {
     final a = widget.emit();
     final b = widget.shout({"stdin": a.stdout});
@@ -299,12 +219,8 @@ export fun build(args: [str]) > void {
 }`)
 
 	srcs, err := interp.FindAll(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := interp.Run(context.Background(), srcs[0], "build", nil, dir); err != nil {
-		t.Fatalf("pipe stdin: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "pipe stdin")
 }
 
 // TestVcsCommitFacadeBuzz exercises the vcs.commit() facade end-to-end the way
@@ -325,9 +241,8 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 	} {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v: %s", args, out)
-		}
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%v: %s", args, out)
 	}
 
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
@@ -341,31 +256,27 @@ export fun check(args: [str]) > void {
 }`)
 
 	srcs, err := interp.FindAll(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := interp.Run(context.Background(), srcs[0], "check", nil, dir); err != nil {
-		t.Fatalf("vcs.commit facade: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "vcs.commit facade")
 }
 
-// TestVcsCommitNullOutsideRepo pins the new contract that powers build_date's
-// fallback: outside any repository, vcs.commit() is null (not an empty record).
-func TestVcsCommitNullOutsideRepo(t *testing.T) {
+// TestVcsCommitEmptyOutsideRepo pins the contract that powers build_date's
+// fallback: outside any repository, vcs.commit() returns the zero record (every
+// field empty), not null — callers test a field (c.date == "") for "no commit".
+func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
 	dir := t.TempDir() // a bare temp dir, not under version control
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
 export fun check(args: [str]) > void {
-    if (vcs.commit() != null) { error("expected null outside a repo"); }
+    final c = vcs.commit();
+    if (c == null) { magus.fatal("vcs.commit should be an empty record, not null, outside a repo"); }
+    if (c.date != "") { magus.fatal("vcs.commit().date should be empty outside a repo"); }
+    if (c.id != "") { magus.fatal("vcs.commit().id should be empty outside a repo"); }
 }`)
 	srcs, err := interp.FindAll(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := interp.Run(context.Background(), srcs[0], "check", nil, dir); err != nil {
-		t.Fatalf("vcs.commit null case: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "vcs.commit empty-record case")
 }
 
 // TestEngineSpecParity locks the engine-agnostic mgs_ contract: a Buzz spell
@@ -379,47 +290,32 @@ export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.rb", "Gemfil
 export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**"]; }
 export fun mgs_listClaimedGlobs() > [str] { return [".rubocop.yml", "Gemfile"]; }
 export fun mgs_getVersionCommand() > [str] { return ["ruby", "--version"]; }
-export fun mgs_isForeignProcess() > bool { return false; }
+export fun mgs_isOpaque() > bool { return false; }
 export fun mgs_listTargets() > any {
     return {"rspec": {"cmd": "bundle", "args": ["exec", "rspec"]}};
 }
 `
 
-	loadAndBind := func(t *testing.T, ext, src string) {
+	bindBuzzSpell := func(t *testing.T, src string) {
 		t.Helper()
 		dir := t.TempDir()
 		t.Chdir(dir)
-		name := "spells/parity." + ext
-		writeFile(t, dir, name, src)
+		writeFile(t, dir, "spells/parity.buzz", src)
 		writeFile(t, dir, "magusfile.buzz", `import "magus";
-final sp = magus.spell.load("`+name+`");
-magus.project.register(".", fun(p, cb) > bool { cb({"spells": [sp]}); return true; });`)
-		if err := parseMagusfile(t, dir); err != nil {
-			t.Fatalf("parse (%s): %v", ext, err)
-		}
+import "spells/parity";
+magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [parity]}); return true; });`)
+		require.NoError(t, parseMagusfile(t, dir), "parse")
 	}
 
-	loadAndBind(t, "bzz", buzzSrc)
+	bindBuzzSpell(t, buzzSrc)
 
 	buzzSp, ok := project.DefaultSpellRegistry().Lookup("parity_buzz")
-	if !ok {
-		t.Fatal("parity_buzz not registered")
-	}
+	require.True(t, ok, "parity_buzz not registered")
 
-	if want := []string{"**/*.rb", "Gemfile.lock"}; !slices.Equal(buzzSp.Sources(), want) {
-		t.Errorf("sources = %v, want %v", buzzSp.Sources(), want)
-	}
-	if want := []string{"vendor/bundle/**"}; !slices.Equal(buzzSp.Outputs(), want) {
-		t.Errorf("outputs = %v, want %v", buzzSp.Outputs(), want)
-	}
-	if want := []string{"rspec"}; !slices.Equal(buzzSp.Targets(), want) {
-		t.Errorf("targets = %v, want %v", buzzSp.Targets(), want)
-	}
+	assert.Equal(t, []string{"**/*.rb", "Gemfile.lock"}, buzzSp.Sources())
+	assert.Equal(t, []string{"vendor/bundle/**"}, buzzSp.Outputs())
+	assert.Equal(t, []string{"rspec"}, buzzSp.Targets())
 	// claims is the field the resolver previously dropped — assert it directly.
-	if want := []string{".rubocop.yml", "Gemfile"}; !slices.Equal(buzzSp.Claims(), want) {
-		t.Errorf("claims = %v, want %v (mgs_listClaimedGlobs must be carried)", buzzSp.Claims(), want)
-	}
-	if buzzSp.ForeignProcess() {
-		t.Errorf("foreignProcess = true, want false")
-	}
+	assert.Equal(t, []string{".rubocop.yml", "Gemfile"}, buzzSp.Claims(), "mgs_listClaimedGlobs must be carried")
+	assert.False(t, buzzSp.Opaque(), "opaque should be false")
 }

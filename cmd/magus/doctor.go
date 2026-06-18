@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func doctorCmd(root string, args []string) error {
+func doctorCmd(ctx context.Context, root string, args []string) error {
 	var fix *bool
 	_, err := cmdParse("doctor", args, func(fs *flag.FlagSet) {
 		fix = fs.Bool("fix", false, "Apply fixable remediation in-place")
@@ -38,7 +38,7 @@ func doctorCmd(root string, args []string) error {
 		return err
 	}
 
-	ws, wsErr := inspectWorkspace(context.Background(), root)
+	ws, wsErr := inspectWorkspace(ctx, root)
 
 	mcpAddr := globalCfg.MCP.Address
 	if mcpAddr == "" {
@@ -47,13 +47,13 @@ func doctorCmd(root string, args []string) error {
 	mcpEnabled := globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
 	mcpDaemonUp := false
 	if mcpIsCompiled && mcpEnabled {
-		if _, err := proc.DiscoverSocket(context.Background()); err == nil {
+		if _, err := proc.DiscoverSocket(ctx); err == nil {
 			mcpDaemonUp = true
 		}
 	}
 
 	// Query daemon status for the daemon-related checks. Non-fatal on failure.
-	daemonInfo := buildDaemonInfo(context.Background(), ws)
+	daemonInfo := buildDaemonInfo(ctx, ws)
 
 	out := doctor.Run(
 		root, ws, wsErr,

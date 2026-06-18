@@ -2,9 +2,10 @@ package depgraph
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // build constructs a Graph from a simple spec: each entry is
@@ -20,18 +21,12 @@ func build(t *testing.T, entries [][]string) *Graph {
 		from := bids[e[0]]
 		for _, dep := range e[1:] {
 			to, ok := bids[dep]
-			if !ok {
-				t.Fatalf("dep %q not registered", dep)
-			}
-			if err := b.AddEdge(from, to); err != nil {
-				t.Fatalf("AddEdge(%s→%s): %v", e[0], dep, err)
-			}
+			require.True(t, ok, "dep %q not registered", dep)
+			require.NoError(t, b.AddEdge(from, to), "AddEdge(%s→%s)", e[0], dep)
 		}
 	}
 	g, err := b.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
+	require.NoError(t, err, "Build")
 	return g
 }
 
@@ -39,9 +34,7 @@ func build(t *testing.T, entries [][]string) *Graph {
 func pid(t *testing.T, g *Graph, path string) ID {
 	t.Helper()
 	id, ok := g.ID(path)
-	if !ok {
-		t.Fatalf("pid: %q not in graph", path)
-	}
+	require.True(t, ok, "pid: %q not in graph", path)
 	return id
 }
 
@@ -49,9 +42,7 @@ func pid(t *testing.T, g *Graph, path string) ID {
 func pathOf(t *testing.T, g *Graph, id ID) string {
 	t.Helper()
 	p, ok := g.Path(id)
-	if !ok {
-		t.Fatalf("pathOf: id %d out of range", id)
-	}
+	require.True(t, ok, "pathOf: id %d out of range", id)
 	return p
 }
 
@@ -63,8 +54,6 @@ func chainPaths(g *Graph, ids []ID) []string {
 	return out
 }
 
-// ── Build ─────────────────────────────────────────────────────────────
-
 func TestBuildCycleDetected(t *testing.T) {
 	t.Parallel()
 	b := New()
@@ -73,21 +62,15 @@ func TestBuildCycleDetected(t *testing.T) {
 	_ = b.AddEdge(a, c)
 	_ = b.AddEdge(c, a)
 	_, err := b.Build()
-	if err == nil {
-		t.Fatal("Build: expected ErrCycle, got nil")
-	}
-	if !errors.Is(err, ErrCycle) {
-		t.Errorf("err=%v, want errors.Is(err, ErrCycle)", err)
-	}
+	require.Error(t, err, "Build: expected ErrCycle")
+	assert.ErrorIs(t, err, ErrCycle)
 }
 
 func TestBuildSelfLoop(t *testing.T) {
 	t.Parallel()
 	b := New()
 	x := b.AddNode("x")
-	if err := b.AddEdge(x, x); err == nil {
-		t.Fatal("AddEdge self-loop: expected error, got nil")
-	}
+	assert.Error(t, b.AddEdge(x, x), "AddEdge self-loop: expected error")
 }
 
 func TestBuildDupEdgeOK(t *testing.T) {
@@ -96,16 +79,10 @@ func TestBuildDupEdgeOK(t *testing.T) {
 	a := b.AddNode("a")
 	c := b.AddNode("c")
 	_ = b.AddEdge(a, c)
-	if err := b.AddEdge(a, c); err != nil {
-		t.Fatalf("duplicate edge must be a no-op, got: %v", err)
-	}
+	require.NoError(t, b.AddEdge(a, c), "duplicate edge must be a no-op")
 	g, err := b.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if g.Len() != 2 {
-		t.Errorf("Len=%d, want 2", g.Len())
-	}
+	require.NoError(t, err, "Build")
+	assert.Equal(t, 2, g.Len())
 }
 
 // TestObserverOnErrorFiresOnCycle verifies Build calls obs.OnError with
@@ -121,25 +98,22 @@ func TestObserverOnErrorFiresOnCycle(t *testing.T) {
 	_ = b.AddEdge(a, c)
 	_ = b.AddEdge(c, a)
 	_, err := b.Build(WithObserver(obs))
-	if err == nil {
-		t.Fatal("Build: expected ErrCycle, got nil")
-	}
-	if len(seen) != 1 || !errors.Is(seen[0], ErrCycle) {
-		t.Errorf("OnError: got %v, want [ErrCycle]", seen)
-	}
+	require.Error(t, err, "Build: expected ErrCycle")
+	require.Len(t, seen, 1)
+	assert.ErrorIs(t, seen[0], ErrCycle)
 }
-
-// ── Path / ID / TopoOrder ─────────────────────────────────────────────
 
 func TestPathOutOfRange(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"a"}})
-	if p, ok := g.Path(NoID); ok || p != "" {
-		t.Errorf("Path(NoID): got (%q,%v), want (\"\",false)", p, ok)
-	}
-	if p, ok := g.Path(ID(999)); ok || p != "" {
-		t.Errorf("Path(999): got (%q,%v), want (\"\",false)", p, ok)
-	}
+
+	p, ok := g.Path(NoID)
+	assert.False(t, ok)
+	assert.Empty(t, p)
+
+	p, ok = g.Path(ID(999))
+	assert.False(t, ok)
+	assert.Empty(t, p)
 }
 
 // TestTopoOrderIsCloned verifies callers cannot corrupt internal state
@@ -152,23 +126,15 @@ func TestTopoOrderIsCloned(t *testing.T) {
 		first[i] = -42
 	}
 	second := g.TopoOrder()
-	for _, id := range second {
-		if id == -42 {
-			t.Fatal("TopoOrder returned mutated cache; expected defensive copy")
-		}
-	}
+	assert.NotContains(t, second, ID(-42), "TopoOrder returned mutated cache; expected defensive copy")
 }
-
-// ── ReverseClosure ────────────────────────────────────────────────────
 
 func TestReverseClosureLinear(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"a", "b"}, {"b", "c"}, {"c"}})
 	c := pid(t, g, "c")
 	got := g.ReverseClosure(nil, []ID{c})
-	if len(got) != 3 {
-		t.Errorf("got %v (len=%d), want 3 nodes", got, len(got))
-	}
+	assert.Len(t, got, 3)
 }
 
 func TestReverseClosureIncludesSeeds(t *testing.T) {
@@ -176,9 +142,8 @@ func TestReverseClosureIncludesSeeds(t *testing.T) {
 	g := build(t, [][]string{{"solo"}})
 	id := pid(t, g, "solo")
 	got := g.ReverseClosure(nil, []ID{id})
-	if len(got) != 1 || pathOf(t, g, got[0]) != "solo" {
-		t.Errorf("seed alone: got %v", got)
-	}
+	require.Len(t, got, 1)
+	assert.Equal(t, "solo", pathOf(t, g, got[0]))
 }
 
 // TestReverseClosureRejectsBadSeed proves an out-of-range seed does not
@@ -189,24 +154,16 @@ func TestReverseClosureRejectsBadSeed(t *testing.T) {
 	a := pid(t, g, "a")
 	// One valid + one bogus: result includes only a.
 	got := g.ReverseClosure(nil, []ID{ID(999), a, NoID})
-	if len(got) != 1 || got[0] != a {
-		t.Errorf("got %v, want [%d]", got, a)
-	}
+	assert.Equal(t, []ID{a}, got)
 }
-
-// ── BlastRadius ───────────────────────────────────────────────────────
 
 func TestBlastRadiusLinear(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"a", "b"}, {"b", "c"}, {"c"}})
 	br := g.BlastRadius()
-	cases := map[string]int32{"a": 1, "b": 2, "c": 3}
-	for path, want := range cases {
-		id := pid(t, g, path)
-		if br[id] != want {
-			t.Errorf("BlastRadius[%s]=%d, want %d", path, br[id], want)
-		}
-	}
+	assert.Equal(t, int32(1), br[pid(t, g, "a")])
+	assert.Equal(t, int32(2), br[pid(t, g, "b")])
+	assert.Equal(t, int32(3), br[pid(t, g, "c")])
 }
 
 func TestBlastRadiusDiamond(t *testing.T) {
@@ -217,32 +174,21 @@ func TestBlastRadiusDiamond(t *testing.T) {
 		{"shared"},
 	})
 	br := g.BlastRadius()
-	cases := map[string]int32{"shared": 3, "left": 2, "root": 1}
-	for path, want := range cases {
-		id := pid(t, g, path)
-		if br[id] != want {
-			t.Errorf("BlastRadius[%s]=%d, want %d", path, br[id], want)
-		}
-	}
+	assert.Equal(t, int32(3), br[pid(t, g, "shared")])
+	assert.Equal(t, int32(2), br[pid(t, g, "left")])
+	assert.Equal(t, int32(1), br[pid(t, g, "root")])
 }
-
-// ── NCCD ─────────────────────────────────────────────────────────────
 
 func TestNCCDSingleNode(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"solo"}})
-	v := g.NCCD()
-	if v < 0.99 || v > 1.01 {
-		t.Errorf("NCCD=%f, want ~1.0 for single node", v)
-	}
+	assert.InDelta(t, 1.0, g.NCCD(), 0.01, "want ~1.0 for single node")
 }
 
 func TestNCCDEmpty(t *testing.T) {
 	t.Parallel()
 	g := build(t, nil)
-	if v := g.NCCD(); v != 0 {
-		t.Errorf("NCCD=%f, want 0 for empty graph", v)
-	}
+	assert.Zero(t, g.NCCD(), "want 0 for empty graph")
 }
 
 // TestNCCDEmptyEmitsEvent verifies the empty-graph short-circuit still
@@ -254,9 +200,7 @@ func TestNCCDEmptyEmitsEvent(t *testing.T) {
 
 	b := New()
 	g, err := b.Build(WithObserver(obs))
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
+	require.NoError(t, err, "Build")
 	_ = g.NCCD()
 
 	var ok bool
@@ -266,9 +210,7 @@ func TestNCCDEmptyEmitsEvent(t *testing.T) {
 			break
 		}
 	}
-	if !ok {
-		t.Errorf("NCCD on empty graph did not emit observer event; got %v", seen)
-	}
+	assert.True(t, ok, "NCCD on empty graph did not emit observer event; got %v", seen)
 }
 
 func TestNCCDStarTopology(t *testing.T) {
@@ -280,21 +222,17 @@ func TestNCCDStarTopology(t *testing.T) {
 		{"leaf3", "center"},
 		{"leaf4", "center"},
 	})
-	if v := g.NCCD(); v >= 1.0 {
-		t.Errorf("NCCD=%f, want < 1.0 for star topology", v)
-	}
+	assert.Less(t, g.NCCD(), 1.0, "want < 1.0 for star topology")
 }
-
-// ── PathsFromSeeds ────────────────────────────────────────────────────
 
 func TestPathsFromSeedsDirect(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"api"}})
 	id := pid(t, g, "api")
 	paths := g.PathsFromSeeds(id, []ID{id}, nil)
-	if len(paths) != 1 || paths[0].Seed != id || len(paths[0].Chain) != 1 {
-		t.Errorf("direct: got %v", paths)
-	}
+	require.Len(t, paths, 1)
+	assert.Equal(t, id, paths[0].Seed)
+	assert.Len(t, paths[0].Chain, 1)
 }
 
 func TestPathsFromSeedsTransitive(t *testing.T) {
@@ -303,13 +241,11 @@ func TestPathsFromSeedsTransitive(t *testing.T) {
 	a := pid(t, g, "a")
 	c := pid(t, g, "c")
 	paths := g.PathsFromSeeds(a, []ID{c}, nil)
-	if len(paths) != 1 {
-		t.Fatalf("got %d paths, want 1", len(paths))
-	}
+	require.Len(t, paths, 1)
 	chain := paths[0].Chain
-	if len(chain) != 3 || pathOf(t, g, chain[0]) != "c" || pathOf(t, g, chain[2]) != "a" {
-		t.Errorf("chain: %v", chainPaths(g, chain))
-	}
+	require.Len(t, chain, 3)
+	assert.Equal(t, "c", pathOf(t, g, chain[0]))
+	assert.Equal(t, "a", pathOf(t, g, chain[2]))
 }
 
 func TestPathsFromSeedsUnreachable(t *testing.T) {
@@ -318,9 +254,7 @@ func TestPathsFromSeedsUnreachable(t *testing.T) {
 	api := pid(t, g, "api")
 	web := pid(t, g, "web")
 	paths := g.PathsFromSeeds(api, []ID{web}, nil)
-	if len(paths) != 0 {
-		t.Errorf("got %v, want empty", paths)
-	}
+	assert.Empty(t, paths)
 }
 
 func TestPathsFromSeedsMultiple(t *testing.T) {
@@ -331,17 +265,10 @@ func TestPathsFromSeedsMultiple(t *testing.T) {
 		{"seed-b"},
 	})
 	target := pid(t, g, "target")
-	sa := pid(t, g, "seed-a")
-	sb := pid(t, g, "seed-b")
-	paths := g.PathsFromSeeds(target, []ID{sa, sb}, nil)
-	if len(paths) != 2 {
-		t.Fatalf("got %d paths, want 2", len(paths))
-	}
-	if pathOf(t, g, paths[0].Seed) != "seed-a" || pathOf(t, g, paths[1].Seed) != "seed-b" {
-		got0, _ := g.Path(paths[0].Seed)
-		got1, _ := g.Path(paths[1].Seed)
-		t.Errorf("seed order: %v %v", got0, got1)
-	}
+	paths := g.PathsFromSeeds(target, []ID{pid(t, g, "seed-a"), pid(t, g, "seed-b")}, nil)
+	require.Len(t, paths, 2)
+	assert.Equal(t, "seed-a", pathOf(t, g, paths[0].Seed))
+	assert.Equal(t, "seed-b", pathOf(t, g, paths[1].Seed))
 }
 
 // TestPathsFromSeedsRejectsBadTarget proves an out-of-range target does
@@ -350,22 +277,14 @@ func TestPathsFromSeedsRejectsBadTarget(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"a"}})
 	a := pid(t, g, "a")
-	if got := g.PathsFromSeeds(NoID, []ID{a}, nil); len(got) != 0 {
-		t.Errorf("NoID target: got %v, want empty", got)
-	}
-	if got := g.PathsFromSeeds(ID(999), []ID{a}, nil); len(got) != 0 {
-		t.Errorf("OOB target: got %v, want empty", got)
-	}
+	assert.Empty(t, g.PathsFromSeeds(NoID, []ID{a}, nil), "NoID target")
+	assert.Empty(t, g.PathsFromSeeds(ID(999), []ID{a}, nil), "OOB target")
 }
-
-// ── NearCycles ────────────────────────────────────────────────────────
 
 func TestNearCyclesDisabled(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"a", "b"}, {"b"}})
-	if ncs := g.NearCycles(context.Background(), 0); ncs != nil {
-		t.Errorf("depth=0: got %v, want nil", ncs)
-	}
+	assert.Nil(t, g.NearCycles(context.Background(), 0), "depth=0")
 }
 
 func TestNearCyclesLinearChain(t *testing.T) {
@@ -373,33 +292,26 @@ func TestNearCyclesLinearChain(t *testing.T) {
 	g := build(t, [][]string{{"a", "b"}, {"b", "c"}, {"c", "d"}, {"d"}})
 	ncs := g.NearCycles(context.Background(), 3)
 	// Expected pairs: (b,a), (c,b), (c,a), (d,c), (d,b) = 5
-	if len(ncs) != 5 {
-		t.Errorf("got %d near-cycles, want 5: %v", len(ncs), ncs)
-	}
+	assert.Len(t, ncs, 5)
 }
 
 func TestNearCyclesIsolated(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"standalone"}})
-	if ncs := g.NearCycles(context.Background(), 3); len(ncs) != 0 {
-		t.Errorf("isolated: got %v, want empty", ncs)
-	}
+	assert.Empty(t, g.NearCycles(context.Background(), 3))
 }
 
 func TestNearCyclesBackPath(t *testing.T) {
 	t.Parallel()
 	g := build(t, [][]string{{"a", "b"}, {"b"}})
 	ncs := g.NearCycles(context.Background(), 3)
-	if len(ncs) != 1 {
-		t.Fatalf("got %d near-cycles, want 1", len(ncs))
-	}
+	require.Len(t, ncs, 1)
 	nc := ncs[0]
-	if pathOf(t, g, nc.From) != "b" || pathOf(t, g, nc.To) != "a" {
-		t.Errorf("From=%s To=%s, want From=b To=a", pathOf(t, g, nc.From), pathOf(t, g, nc.To))
-	}
-	if len(nc.BackPath) != 2 || pathOf(t, g, nc.BackPath[0]) != "a" || pathOf(t, g, nc.BackPath[1]) != "b" {
-		t.Errorf("BackPath=%v, want [a b]", chainPaths(g, nc.BackPath))
-	}
+	assert.Equal(t, "b", pathOf(t, g, nc.From))
+	assert.Equal(t, "a", pathOf(t, g, nc.To))
+	require.Len(t, nc.BackPath, 2)
+	assert.Equal(t, "a", pathOf(t, g, nc.BackPath[0]))
+	assert.Equal(t, "b", pathOf(t, g, nc.BackPath[1]))
 }
 
 func TestNearCyclesCancellable(t *testing.T) {
@@ -418,15 +330,13 @@ func TestNearCyclesCancellable(t *testing.T) {
 	cancel()
 	// Should short-circuit immediately on cancellation; no panic, returns
 	// whatever it's seen so far (possibly empty).
-	_ = g.NearCycles(ctx, 5)
+	assert.NotPanics(t, func() { _ = g.NearCycles(ctx, 5) })
 }
 
 func iota3(i int) string {
 	// trivial 3-digit string
 	return string(rune('a'+i/100)) + string(rune('a'+(i/10)%10)) + string(rune('a'+i%10))
 }
-
-// ── FanOut aliasing regression ────────────────────────────────────────
 
 func TestFanOutDoesNotMutateCallerSlice(t *testing.T) {
 	t.Parallel()
@@ -435,12 +345,8 @@ func TestFanOutDoesNotMutateCallerSlice(t *testing.T) {
 	caller := []Observer{a, nil, b}
 	_ = FanOut(caller...)
 	// Caller's slice must be unchanged after FanOut filters the nil.
-	if len(caller) != 3 || caller[0] != a || caller[1] != nil || caller[2] != b {
-		t.Errorf("FanOut mutated caller slice: %v", caller)
-	}
+	assert.Equal(t, []Observer{a, nil, b}, caller, "FanOut mutated caller slice")
 }
-
-// ── helpers ───────────────────────────────────────────────────────────
 
 type captureObserver struct {
 	onBuild func(BuildStats)
@@ -465,6 +371,3 @@ func (c *captureObserver) OnError(err error) {
 		c.onErr(err)
 	}
 }
-
-// (kept to silence unused-import warnings if Render comes back later)
-var _ = strings.Builder{}

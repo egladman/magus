@@ -1,14 +1,8 @@
-// Cross-engine microbenchmarks. Each workload is expressed once per source
-// dialect (Buzz) and run through every registered engine via the common
-// engine.Session interface — exactly how magus drives an engine in production.
-//
-// Because it goes through engine.Session, the Buzz numbers reflect the
-// shared-globals (Env) execution path magus uses for magusfiles, NOT the
-// standalone slot-mode fast path; that one is measured in the buzz package's
-// own bench suite (magus/gopherbuzz).
-//
 // External test package so it can blank-import the engine backends (which
-// themselves import engine) without an import cycle.
+// themselves import engine) without an import cycle. Each workload runs through
+// every registered engine via the common engine.Session interface — the
+// shared-globals (Env) path magus uses for magusfiles, not the standalone
+// slot-mode fast path (measured in the buzz package's own bench suite).
 package engine_test
 
 import (
@@ -129,7 +123,7 @@ func benchSource(b *testing.B, eng engine.Engine, prog src) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := sess.Call(engine.CallParams{Fn: fn, NRet: 0}); err != nil {
+		if err := sess.Call(engine.CallParams{Fn: fn}); err != nil {
 			b.Fatalf("call: %v", err)
 		}
 	}

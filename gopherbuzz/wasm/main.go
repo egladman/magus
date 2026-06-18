@@ -44,7 +44,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	s := buzz.NewSession(ctx)
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	v, err := s.Eval(ctx, string(src))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "buzz-wasm:", err)

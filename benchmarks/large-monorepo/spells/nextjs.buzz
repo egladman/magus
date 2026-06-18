@@ -1,0 +1,27 @@
+// Next.js app spell for the large-monorepo benchmark.
+// Non-opaque, so app sources are hashed into the cache key; .next/** is declared
+// as output (excluded from inputs, snapshotted for replay). Loaded by the
+// per-app magusfile.buzz via magus.spell.load.
+import "magus/target";
+
+export fun mgs_getName() > str { return "nextjs"; }
+
+export fun mgs_listRequiredGlobs(_dir: str) > [str] {
+    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json",
+            "package.json",
+            "next.config.js", "next.config.mjs", "next.config.ts",
+            "package-lock.json"];
+}
+
+export fun mgs_listProvidedGlobs() > [str] { return [".next/**"]; }
+
+export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
+
+fun nextBuild(_t: Target, cb: fun(any)) > bool {
+    cb({"cmd": "npm", "args": ["run", "build"]});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"next-build": nextBuild};
+}

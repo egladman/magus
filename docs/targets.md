@@ -179,6 +179,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 
 ## See also
 
+- [operations.md](operations.md): the formal Operation definition and the work hierarchy (Spell → Operation → Target).
 - [spells.md](spells.md): the operations a target composes, and [Spells vs Targets](spells.md#spells-vs-targets).
 - [charms.md](charms.md): the execution modifiers attached after `:`.
 - [engines.md](engines.md): the Buzz engine a magusfile runs on.

@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func makeProjects(paths ...string) []*types.Project {
@@ -17,28 +20,20 @@ func makeProjects(paths ...string) []*types.Project {
 	return out
 }
 
-// ── ScoreProjects ──────────────────────────────────────────────────────────────
-
 func TestScoreProjectsNoFilter(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("api/users", "api/orders", "web/app")
 	got := ScoreProjects(all, nil)
-	if len(got) != 3 {
-		t.Fatalf("len = %d, want 3", len(got))
-	}
+	assert.Len(t, got, 3)
 }
 
 func TestScoreProjectsFilterMatchesSubset(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("api/users", "api/orders", "web/app")
 	got := ScoreProjects(all, []string{"api"})
-	if len(got) != 2 {
-		t.Fatalf("len = %d, want 2", len(got))
-	}
+	require.Len(t, got, 2)
 	for _, sp := range got {
-		if sp.P.Path == "web/app" {
-			t.Error("web/app should not match filter 'api'")
-		}
+		assert.NotEqual(t, "web/app", sp.P.Path, "web/app should not match filter 'api'")
 	}
 }
 
@@ -47,9 +42,7 @@ func TestScoreProjectsMultipleFilters(t *testing.T) {
 	all := makeProjects("api/users", "api/orders", "web/app", "api/users/v2")
 	got := ScoreProjects(all, []string{"api", "users"})
 	for _, sp := range got {
-		if sp.P.Path == "api/orders" || sp.P.Path == "web/app" {
-			t.Errorf("unexpected project %q matched all filters", sp.P.Path)
-		}
+		assert.NotContains(t, []string{"api/orders", "web/app"}, sp.P.Path, "unexpected project matched all filters")
 	}
 }
 
@@ -57,9 +50,7 @@ func TestScoreProjectsEmptyFilterTokensIgnored(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("api/users")
 	got := ScoreProjects(all, []string{"", "   "})
-	if len(got) != 1 {
-		t.Fatalf("blank filters should not filter anything, got %d", len(got))
-	}
+	assert.Len(t, got, 1, "blank filters should not filter anything")
 }
 
 func TestScoreProjectsLeafRanking(t *testing.T) {
@@ -68,116 +59,77 @@ func TestScoreProjectsLeafRanking(t *testing.T) {
 	// should rank higher.
 	all := makeProjects("api/users", "services/users-svc")
 	got := ScoreProjects(all, []string{"users"})
-	if len(got) < 2 {
-		t.Fatal("expected both projects to match")
-	}
-	if got[0].P.Path != "api/users" {
-		t.Errorf("expected api/users ranked first, got %q", got[0].P.Path)
-	}
+	require.GreaterOrEqual(t, len(got), 2, "expected both projects to match")
+	assert.Equal(t, "api/users", got[0].P.Path, "expected api/users ranked first")
 }
 
 func TestScoreProjectsCaseInsensitive(t *testing.T) {
 	t.Parallel()
 	all := makeProjects("API/Users")
 	got := ScoreProjects(all, []string{"api"})
-	if len(got) != 1 {
-		t.Error("filter should be case-insensitive")
-	}
+	assert.Len(t, got, 1, "filter should be case-insensitive")
 }
 
-// ── State persistence ──────────────────────────────────────────────────────────
+// StateSuite groups tests that share the XDG_STATE_HOME setup: each needs a
+// fresh temp dir pointed at by the env var before the State helpers run.
+type StateSuite struct {
+	suite.Suite
+	dir string
+}
 
-func TestSaveAndLoadState(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
+func (s *StateSuite) SetupTest() {
+	s.dir = s.T().TempDir()
+	s.T().Setenv("XDG_STATE_HOME", s.dir)
+}
 
-	s := State{
+func TestStateSuite(t *testing.T) {
+	suite.Run(t, new(StateSuite))
+}
+
+func (s *StateSuite) TestSaveAndLoadState() {
+	want := State{
 		LastTarget:     map[string]string{"/path/to/proj": "build"},
 		LastInvocation: []string{"magus", "build"},
 	}
-	if err := SaveState(s); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(s.T(), SaveState(want))
 
 	got, err := LoadState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.LastTarget["/path/to/proj"] != "build" {
-		t.Errorf("LastTarget = %v, want build", got.LastTarget)
-	}
-	if len(got.LastInvocation) != 2 || got.LastInvocation[0] != "magus" {
-		t.Errorf("LastInvocation = %v", got.LastInvocation)
-	}
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), want, got)
 }
 
-func TestLoadStateMissingFile(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
-
-	// No file written — should not error.
+func (s *StateSuite) TestLoadStateMissingFile() {
+	// No file written — a missing file is documented as not an error.
 	_, err := LoadState()
-	if err == nil {
-		return // ideal: not an error
-	}
-	// os.ReadFile returns an error for missing file; that's acceptable too
-	// as long as the caller can distinguish it from a corrupt file.
+	assert.NoError(s.T(), err)
 }
 
-func TestSaveStateIsAtomic(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
-
+func (s *StateSuite) TestSaveStateIsAtomic() {
 	// Confirm no .tmp file is left behind after a successful save.
-	if err := SaveState(State{}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(s.T(), SaveState(State{}))
 	path, err := StatePath()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(s.T(), err)
 	tmp := path + ".tmp"
-	if _, err := os.Stat(tmp); err == nil {
-		t.Errorf("temp file %s still exists after SaveState", tmp)
-	}
+	_, err = os.Stat(tmp)
+	assert.Error(s.T(), err, "temp file %s still exists after SaveState", tmp)
 }
 
-func TestSaveStateValidJSON(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
-
-	s := State{LastTarget: map[string]string{"proj": "test"}}
-	if err := SaveState(s); err != nil {
-		t.Fatal(err)
-	}
+func (s *StateSuite) TestSaveStateValidJSON() {
+	require.NoError(s.T(), SaveState(State{LastTarget: map[string]string{"proj": "test"}}))
 	path, err := StatePath()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(s.T(), err)
 	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(s.T(), err)
 	var check State
-	if err := json.Unmarshal(b, &check); err != nil {
-		t.Fatalf("saved file is not valid JSON: %v", err)
-	}
+	assert.NoError(s.T(), json.Unmarshal(b, &check), "saved file is not valid JSON")
 }
 
-func TestStatePathUsesXDGStateHome(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", dir)
-
+func (s *StateSuite) TestStatePathUsesXDGStateHome() {
 	p, err := StatePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !filepath.IsAbs(p) {
-		t.Errorf("StatePath returned relative path %q", p)
-	}
+	require.NoError(s.T(), err)
+	assert.True(s.T(), filepath.IsAbs(p), "StatePath returned relative path %q", p)
 	// Must be under our custom dir.
-	rel, err := filepath.Rel(dir, p)
-	if err != nil || rel == "" {
-		t.Errorf("path %q is not under XDG_STATE_HOME %q", p, dir)
-	}
+	rel, err := filepath.Rel(s.dir, p)
+	require.NoError(s.T(), err)
+	assert.NotEmpty(s.T(), rel, "path %q is not under XDG_STATE_HOME %q", p, s.dir)
 }

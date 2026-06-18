@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp/engine"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newReplSession(t *testing.T) *session {
@@ -14,9 +16,7 @@ func newReplSession(t *testing.T) *session {
 		t.Skip("buzz engine not registered")
 	}
 	s, err := eng.NewSession(context.Background())
-	if err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 	return s.(*session)
 }
@@ -24,12 +24,8 @@ func newReplSession(t *testing.T) *session {
 func driver(t *testing.T, s *session) engine.ReplDriver {
 	t.Helper()
 	drivers := s.Drivers()
-	if len(drivers) != 1 {
-		t.Fatalf("Drivers() = %d, want 1", len(drivers))
-	}
-	if drivers[0].Language() != "buzz" {
-		t.Fatalf("Language() = %q, want buzz", drivers[0].Language())
-	}
+	require.Len(t, drivers, 1)
+	require.Equal(t, "buzz", drivers[0].Language())
 	return drivers[0]
 }
 
@@ -37,15 +33,11 @@ func driver(t *testing.T, s *session) engine.ReplDriver {
 func TestDriverEvalExpression(t *testing.T) {
 	d := driver(t, newReplSession(t))
 	vals, err := d.EvalLine("6 * 7")
-	if err != nil {
-		t.Fatalf("EvalLine: %v", err)
-	}
-	if len(vals) != 1 {
-		t.Fatalf("got %d values, want 1", len(vals))
-	}
-	if n, ok := vals[0].AsNumber(); !ok || n != 42 {
-		t.Fatalf("got %v, want 42", vals[0])
-	}
+	require.NoError(t, err)
+	require.Len(t, vals, 1)
+	n, ok := vals[0].AsNumber()
+	assert.True(t, ok)
+	assert.Equal(t, float64(42), n)
 }
 
 // TestDriverEvalStatement verifies a statement runs with no printable value and
@@ -53,19 +45,14 @@ func TestDriverEvalExpression(t *testing.T) {
 func TestDriverEvalStatement(t *testing.T) {
 	d := driver(t, newReplSession(t))
 	vals, err := d.EvalLine("final n = 5")
-	if err != nil {
-		t.Fatalf("EvalLine decl: %v", err)
-	}
-	if len(vals) != 0 {
-		t.Fatalf("decl produced %d values, want 0", len(vals))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, vals, "decl should produce no values")
+
 	vals, err = d.EvalLine("n + 1")
-	if err != nil {
-		t.Fatalf("EvalLine expr: %v", err)
-	}
-	if n, _ := vals[0].AsNumber(); n != 6 {
-		t.Fatalf("got %v, want 6", vals[0])
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, vals)
+	n, _ := vals[0].AsNumber()
+	assert.Equal(t, float64(6), n)
 }
 
 // TestDriverUserGlobalsFiltersHost verifies host bindings (magus) are omitted
@@ -74,16 +61,11 @@ func TestDriverUserGlobalsFiltersHost(t *testing.T) {
 	s := newReplSession(t)
 	s.core.SetGlobal("magus", s.core.GetGlobal("magus")) // ensure a host-named global exists
 	d := driver(t, s)
-	if _, err := d.EvalLine("final mine = 99"); err != nil {
-		t.Fatalf("EvalLine: %v", err)
-	}
+	_, err := d.EvalLine("final mine = 99")
+	require.NoError(t, err)
 	g := d.UserGlobals()
-	if _, ok := g["magus"]; ok {
-		t.Fatal("UserGlobals leaked host binding 'magus'")
-	}
-	if g["mine"] == nil {
-		t.Fatal("UserGlobals missing user global 'mine'")
-	}
+	assert.NotContains(t, g, "magus", "UserGlobals leaked host binding 'magus'")
+	assert.NotNil(t, g["mine"], "UserGlobals missing user global 'mine'")
 }
 
 // TestEvalLineNoDoubleSideEffect verifies an expression with a side effect runs
@@ -92,51 +74,37 @@ func TestDriverUserGlobalsFiltersHost(t *testing.T) {
 func TestEvalLineNoDoubleSideEffect(t *testing.T) {
 	s := newReplSession(t)
 	d := driver(t, s)
-	if _, err := d.EvalLine("var count = 0"); err != nil {
-		t.Fatalf("init: %v", err)
-	}
-	if _, err := d.EvalLine("fun bump() int { count = count + 1\nreturn count }"); err != nil {
-		t.Fatalf("def: %v", err)
-	}
-	if _, err := d.EvalLine("bump()"); err != nil {
-		t.Fatalf("call: %v", err)
-	}
+	_, err := d.EvalLine("var count = 0")
+	require.NoError(t, err, "init")
+	_, err = d.EvalLine("fun bump() > int { count = count + 1\nreturn count }")
+	require.NoError(t, err, "def")
+	_, err = d.EvalLine("bump()")
+	require.NoError(t, err, "call")
 	vals, err := d.EvalLine("count")
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if n, _ := vals[0].AsNumber(); n != 1 {
-		t.Fatalf("count = %v after one bump(), want 1 (double execution?)", vals[0])
-	}
+	require.NoError(t, err, "read")
+	require.NotEmpty(t, vals)
+	n, _ := vals[0].AsNumber()
+	assert.Equal(t, float64(1), n, "count after one bump(), want 1 (double execution?)")
 }
 
 // TestLineDelta verifies brace counting drives multi-line continuation.
 func TestLineDelta(t *testing.T) {
 	d := driver(t, newReplSession(t))
-	if got := d.LineDelta("fun f() int {"); got != 1 {
-		t.Fatalf("open brace delta = %d, want 1", got)
-	}
-	if got := d.LineDelta("}"); got != -1 {
-		t.Fatalf("close brace delta = %d, want -1", got)
-	}
-	if got := d.LineDelta(`final s = "a {b} c"`); got != 0 {
-		t.Fatalf("string-literal braces delta = %d, want 0", got)
-	}
+	assert.Equal(t, 1, d.LineDelta("fun f() int {"), "open brace delta")
+	assert.Equal(t, -1, d.LineDelta("}"), "close brace delta")
+	assert.Equal(t, 0, d.LineDelta(`final s = "a {b} c"`), "string-literal braces delta")
 }
 
 // TestDebugReaderInterface verifies the adapter implements the optional REPL
 // interfaces the shared Pry loop type-asserts.
 func TestDebugReaderInterface(t *testing.T) {
 	s := newReplSession(t)
-	if _, ok := engine.Session(s).(engine.DebugReader); !ok {
-		t.Fatal("session does not implement engine.DebugReader")
-	}
-	if _, ok := engine.Session(s).(engine.Stepper); !ok {
-		t.Fatal("session does not implement engine.Stepper")
-	}
-	if _, ok := engine.Session(s).(engine.DriversProvider); !ok {
-		t.Fatal("session does not implement engine.DriversProvider")
-	}
+	_, ok := engine.Session(s).(engine.DebugReader)
+	assert.True(t, ok, "session does not implement engine.DebugReader")
+	_, ok = engine.Session(s).(engine.Stepper)
+	assert.True(t, ok, "session does not implement engine.Stepper")
+	_, ok = engine.Session(s).(engine.DriversProvider)
+	assert.True(t, ok, "session does not implement engine.DriversProvider")
 }
 
 // TestStepperFramesThroughEngine drives the engine-level Stepper + DebugReader
@@ -146,10 +114,10 @@ func TestStepperFramesThroughEngine(t *testing.T) {
 	stepper := engine.Session(s).(engine.Stepper)
 	dbg := engine.Session(s).(engine.DebugReader)
 
-	src := "fun inner(n: int) int {\n" +
+	src := "fun inner(n: int) > int {\n" +
 		"  return n + 1\n" +
 		"}\n" +
-		"final out = inner(7)\n"
+		"final res = inner(7)\n"
 
 	var depthAtInner int
 	var nameAtInner string
@@ -161,15 +129,9 @@ func TestStepperFramesThroughEngine(t *testing.T) {
 			}
 		}
 	})
-	if err := s.DoString(src); err != nil {
-		t.Fatalf("DoString: %v", err)
-	}
+	require.NoError(t, s.DoString(src))
 	stepper.ClearStepHook()
 
-	if nameAtInner != "inner" {
-		t.Fatalf("innermost frame at pause = %q, want inner", nameAtInner)
-	}
-	if depthAtInner < 2 {
-		t.Fatalf("call depth inside inner = %d, want >= 2", depthAtInner)
-	}
+	assert.Equal(t, "inner", nameAtInner, "innermost frame at pause")
+	assert.GreaterOrEqual(t, depthAtInner, 2, "call depth inside inner")
 }

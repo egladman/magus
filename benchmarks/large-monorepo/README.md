@@ -5,69 +5,78 @@ A realistic head-to-head built on [vsavkin/large-monorepo](https://github.com/vs
 tree. This removes the fixture-maintenance burden and the `TS2307` linking
 failures that made `fixtures/ts` S4–S7 unrunnable (see `../README.md`).
 
-Status: **Phases 1–2 complete** (turbo/nx/lage baseline + magus). moon (phase 3)
-and bazel (phase 4) are not wired yet.
+Status: turbo/nx/lage baseline + magus. moon and bazel are not wired yet.
 
 ## Layout
 
 ```
 large-monorepo/
-  setup.sh        clone upstream @ pinned SHA into gen/repo, write magus config, npm install
-  bench.sh        run the scenarios, emit results/, write BENCHMARKS-large-monorepo.md
-  spells/nextjs.tl  workspace-local Next.js spell (build = next build), copied into gen/repo
-  versions.lock   pinned upstream SHA + tool versions
-  gen/repo/       the checkout + generated magusfile.tl + node_modules (gitignored)
-  results/        hyperfine JSON (gitignored, created by bench.sh)
+  setup.sh          clone upstream @ pinned SHA into gen/repo, write magus config, npm install
+  bench.sh          run the scenarios, emit results/, write BENCHMARKS-large-monorepo.md
+  spells/nextjs.buzz  Next.js app spell (next-build = next build, caches .next/**)
+  spells/tslib.buzz   feature-library spell (non-opaque, no-op build); see below
+  versions.lock     pinned upstream SHA + tool versions
+  gen/repo/         the checkout + generated magusfiles + node_modules (gitignored)
+  results/          hyperfine JSON (gitignored, created by bench.sh)
 ```
 
 Everything generated lives under `gen/`. That name is on magus's discovery
 ignore-list (same as the synthetic fixtures' `gen/` dirs), so the cloned repo's
-own `magusfile.tl` is **not** picked up by the surrounding magus workspace when
-you run magus from the tack repo root.
+generated magusfiles are **not** picked up by the surrounding magus workspace
+when you run magus from the tack repo root.
 
 ## Why no fork and no patch
 
 We never fork upstream and we patch nothing in its tree. magus support is purely
-additive — a generated `magusfile.tl` plus the `nextjs` spell — and turbo, nx,
-and lage build the clean checkout as-is (their configs already live at the repo
-root). `setup.sh` checks out a pinned SHA and lays the magus config on top. When
-upstream moves, bump `upstream_sha` in `versions.lock`.
+additive (a `magus.yaml` root marker, one generated `magusfile.buzz` per
+project, and the two workspace-local spells), and turbo, nx, and lage build the
+clean checkout as-is (their configs already live at the repo root). `setup.sh`
+checks out a pinned SHA and lays the magus config on top. When upstream moves,
+bump `upstream_sha` in `versions.lock`.
 
 ## How magus is wired
 
-magus does not infer a JS/Next.js build graph, so the generated
-`gen/repo/magusfile.tl` declares it:
+magus does not infer a JS/Next.js build graph and has no bare-marker
+auto-detection, so `setup.sh` generates the graph explicitly and makes it
+match, node-for-node and edge-for-edge, what turbo/nx/lage derive from
+`package.json`:
 
-1. `magus.spell.load("spells/nextjs.tl")` registers a **workspace-local** spell
-   whose `build` target runs `npm run build` (i.e. `next build`) and caches
-   `.next/**`. It is loaded straight from Teal source at runtime — no
-   `spells-generate`, no compiled Lua, nothing added to the magus binary's
-   built-in spell set.
-2. Each app is registered with `spell = {name = "nextjs"}` and `depends_on`
-   set to the 20 `packages/<app>/important-feature-*` libraries its
-   `package.json` lists. The feature/shared packages are plain auto-detected
-   `ts`/`js` projects with no build target, so `magus run build` builds only the
-   5 apps and treats the packages as inputs — exactly what
-   `next-transpile-modules` does.
-
-`magus.spell.load` / `magus.spell.new` / `magus.spell.import` are host bindings
-(see `../../internal/interp/bindings/spell.go`); a magus built before they exist
-cannot run this benchmark.
+1. `spells/nextjs.buzz` is a **non-opaque** app spell whose `next-build` target
+   runs `npm run build` (i.e. `next build`) and declares `.next/**` as provided
+   outputs. Non-opaque means magus hashes the app's sources into its cache key;
+   declaring the outputs excludes them from that hash, so the build's own output
+   never invalidates its key. It is a workspace-local spell, imported by path
+   (`import "spells/nextjs"`, resolved at the workspace root); nothing is added
+   to the binary's built-in spell set.
+2. Each **app** (`apps/<app>`) gets a `magusfile.buzz` bound to `nextjs`. It
+   declares the 20 `packages/<app>/important-feature-*` edges its `package.json`
+   lists **twice**: `depends_on` (project-level, drives the affected set, S3) and
+   `magus.needs(libN.build)` (target-level handle, drives ordering and cache-key
+   propagation, S6/S7).
+3. Each **feature lib** and **shared package** gets a leaf `magusfile.buzz` bound
+   to `spells/tslib.buzz`: non-opaque (its TS sources are hashed) with a no-op
+   `build` (`true`). The libs have no real build of their own (Next transpiles
+   them into the app), but magus only propagates a cache key through a target
+   handle, so each lib exposes a near-instant `build` for the app to
+   `magus.needs`. The 5 real `next build`s dominate the wall-clock, exactly as
+   they do for turbo/nx/lage, which also build only the apps.
 
 ### Verified behaviour
 
-- cold `next build` runs and caches `.next` (227 MB for `crew`);
-- a warm run is an all-hit cache **replay** (magus excludes the declared
-  `.next/**` outputs from the input hash, so the build's own output never
-  invalidates its key);
+- cold `next build` runs and caches `.next`;
+- a warm run is an all-hit cache **replay** (the declared `.next/**` outputs are
+  excluded from the input hash, so the build's own output never busts its key);
 - editing an app page busts only that app (S6);
-- editing a feature lib busts that lib **and** its app via transitive
+- editing a feature lib busts that lib **and** its app via the `magus.needs`
   cache-key propagation (S7), while sibling apps stay cached.
+
+(The graph/affected/lib-cache wiring is verified against the real checkout; the
+full timed `next build` sweep needs a dedicated host; see Cost / tuning.)
 
 ## Prerequisites
 
 - Node + npm (see `versions.lock`), `hyperfine` (`sudo apt install hyperfine`).
-- A magus binary with the `magus.spell.*` bindings:
+- A magus binary:
 
   ```sh
   go build -tags mcp,selfmanage -o ~/.local/bin/magus ./magus/cmd/magus

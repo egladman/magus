@@ -4,32 +4,31 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOptimalShardCount(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name                     string
-		workMs, setupMs, alphaMs Millis
-		maxN                     int
-		want                     int
-	}{
-		{"trivial PR triggers circuit breaker", 30_000, 30_000, 5_000, 8, 1},
-		{"zero work", 0, 30_000, 5_000, 8, 1},
-		{"alpha=0 means fan out fully", 1_000_000, 30_000, 0, 8, 8},
-		{"sqrt picks middle when both substantial", 500_000, 30_000, 5_000, 16, 10},
-		{"big work clamps to maxN", 100_000_000, 30_000, 1_000, 8, 8},
-		{"maxN floor of 1", 60_000, 30_000, 5_000, 0, 1},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := optimalShardCount(tt.workMs, tt.setupMs, tt.alphaMs, tt.maxN)
-			if got != tt.want {
-				t.Errorf("optimalShardCount(W=%d, setup=%d, α=%d, maxN=%d) = %d, want %d",
-					tt.workMs, tt.setupMs, tt.alphaMs, tt.maxN, got, tt.want)
-			}
-		})
-	}
+
+	t.Run("trivial PR triggers circuit breaker", func(t *testing.T) {
+		assert.Equal(t, 1, optimalShardCount(30_000, 30_000, 5_000, 8))
+	})
+	t.Run("zero work", func(t *testing.T) {
+		assert.Equal(t, 1, optimalShardCount(0, 30_000, 5_000, 8))
+	})
+	t.Run("alpha=0 means fan out fully", func(t *testing.T) {
+		assert.Equal(t, 8, optimalShardCount(1_000_000, 30_000, 0, 8))
+	})
+	t.Run("sqrt picks middle when both substantial", func(t *testing.T) {
+		assert.Equal(t, 10, optimalShardCount(500_000, 30_000, 5_000, 16))
+	})
+	t.Run("big work clamps to maxN", func(t *testing.T) {
+		assert.Equal(t, 8, optimalShardCount(100_000_000, 30_000, 1_000, 8))
+	})
+	t.Run("maxN floor of 1", func(t *testing.T) {
+		assert.Equal(t, 1, optimalShardCount(60_000, 30_000, 5_000, 0))
+	})
 }
 
 func testProjects(paths ...string) []*types.Project {
@@ -46,9 +45,7 @@ func TestLPT_balancesByDuration(t *testing.T) {
 	durs := []int64{60_000, 60_000, 60_000, 1_000, 1_000, 1_000}
 
 	shards := lpt(ps, durs, 3)
-	if len(shards) != 3 {
-		t.Fatalf("want 3 shards, got %d", len(shards))
-	}
+	require.Len(t, shards, 3)
 	for i, s := range shards {
 		slow := 0
 		for _, p := range s {
@@ -56,22 +53,16 @@ func TestLPT_balancesByDuration(t *testing.T) {
 				slow++
 			}
 		}
-		if slow != 1 {
-			t.Errorf("shard %d has %d slow projects, want exactly 1", i, slow)
-		}
+		assert.Equalf(t, 1, slow, "shard %d should have exactly 1 slow project", i)
 	}
 }
 
 func TestLPT_emptyAndDegenerate(t *testing.T) {
 	t.Parallel()
 
-	if got := lpt(nil, nil, 4); got != nil {
-		t.Errorf("lpt(nil) = %v, want nil", got)
-	}
+	assert.Nil(t, lpt(nil, nil, 4))
 
 	ps := testProjects("a")
 	got := lpt(ps, []int64{1_000}, 8)
-	if len(got) != 1 {
-		t.Fatalf("lpt(1 project, 8 shards) returned %d shards, want 1 (empty shards pruned)", len(got))
-	}
+	assert.Len(t, got, 1, "1 project, 8 shards → 1 shard (empty shards pruned)")
 }

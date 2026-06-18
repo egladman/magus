@@ -3,27 +3,23 @@ package types
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCharmsStack(t *testing.T) {
 	ctx := context.Background()
-	if HasCharm(ctx, "write") {
-		t.Fatal("empty context should carry no charms")
-	}
+	assert.False(t, HasCharm(ctx, "write"), "empty context should carry no charms")
 
 	// Multiple charms coexist (stacking) and order is insignificant.
 	ctx = WithCharms(ctx, []string{"write", "debug"})
-	if !HasCharm(ctx, "write") || !HasCharm(ctx, "debug") {
-		t.Fatalf("both charms should be present, got %v", CharmsFromContext(ctx))
-	}
-	if HasCharm(ctx, "verbose") {
-		t.Fatal("a charm that was not set must be absent")
-	}
+	assert.True(t, HasCharm(ctx, "write"))
+	assert.True(t, HasCharm(ctx, "debug"))
+	assert.False(t, HasCharm(ctx, "verbose"), "a charm that was not set must be absent")
 
 	// An empty set is a no-op and must not clobber existing charms.
-	if got := WithCharms(ctx, nil); !HasCharm(got, "write") {
-		t.Fatal("WithCharms(nil) must preserve existing charms")
-	}
+	assert.True(t, HasCharm(WithCharms(ctx, nil), "write"), "WithCharms(nil) must preserve existing charms")
 }
 
 // TestHasCharmNormalizes documents that charm matching is case- and
@@ -32,14 +28,11 @@ func TestCharmsStack(t *testing.T) {
 func TestHasCharmNormalizes(t *testing.T) {
 	// Active charm declared with odd casing/separator; queried canonically.
 	ctx := WithCharms(context.Background(), []string{"No_Cache"})
-	if !HasCharm(ctx, "no-cache") {
-		t.Errorf("no-cache query must match active No_Cache, got charms %v", CharmsFromContext(ctx))
-	}
+	assert.True(t, HasCharm(ctx, "no-cache"), "no-cache query must match active No_Cache")
+
 	// And the reverse: canonical active, odd-cased query.
 	ctx = WithCharms(context.Background(), []string{"write"})
-	if !HasCharm(ctx, "WRITE") {
-		t.Error("WRITE query must match active write charm")
-	}
+	assert.True(t, HasCharm(ctx, "WRITE"), "WRITE query must match active write charm")
 }
 
 // TestReservedCharms locks in the built-in charm set the typo guard exempts and
@@ -47,23 +40,14 @@ func TestHasCharmNormalizes(t *testing.T) {
 // and ReservedCharms hands back an independent copy callers cannot mutate.
 func TestReservedCharms(t *testing.T) {
 	for _, name := range []string{"rw", "cd", "gha", "RW", "CD", "GHA"} {
-		if !IsReservedCharm(name) {
-			t.Errorf("IsReservedCharm(%q) = false, want true", name)
-		}
+		assert.Truef(t, IsReservedCharm(name), "IsReservedCharm(%q)", name)
 	}
-	if IsReservedCharm("container") {
-		t.Error("IsReservedCharm(container) = true, want false")
-	}
+	assert.False(t, IsReservedCharm("container"))
 
 	got := ReservedCharms()
-	want := []string{"rw", "cd", "gha"}
-	if len(got) != len(want) {
-		t.Fatalf("ReservedCharms() = %v, want %v", got, want)
-	}
+	require.Equal(t, []string{"rw", "cd", "gha"}, got)
 	got[0] = "mutated"
-	if ReservedCharms()[0] != want[0] {
-		t.Error("ReservedCharms() must return an independent copy")
-	}
+	assert.Equal(t, "rw", ReservedCharms()[0], "ReservedCharms() must return an independent copy")
 }
 
 // TestParseTargetNormalizesCharms locks in that the "target:charm" suffix is
@@ -71,16 +55,6 @@ func TestReservedCharms(t *testing.T) {
 // strip, typo guard) sees one spelling.
 func TestParseTargetNormalizesCharms(t *testing.T) {
 	got, err := ParseTarget("format:Write,No_Cache")
-	if err != nil {
-		t.Fatalf("ParseTarget: %v", err)
-	}
-	want := []string{"write", "no-cache"}
-	if len(got.Charms) != len(want) {
-		t.Fatalf("charms = %v, want %v", got.Charms, want)
-	}
-	for i, c := range want {
-		if got.Charms[i] != c {
-			t.Errorf("charm[%d] = %q, want %q", i, got.Charms[i], c)
-		}
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"write", "no-cache"}, got.Charms)
 }

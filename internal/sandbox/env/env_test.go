@@ -1,34 +1,36 @@
 package env
 
 import (
-	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestValidateGlobs_RejectsBareWildcard ensures a bare "*" is rejected: it has
 // an empty prefix and would otherwise match every variable name, passing the
 // entire environment (secrets included) through Scrub.
 func TestValidateGlobs_RejectsBareWildcard(t *testing.T) {
-	cases := []struct {
-		name      string
-		globs     []string
-		wantFirst string // first offending pattern, "" if all valid
-	}{
-		{"bare wildcard", []string{"*"}, "*"},
-		{"bare wildcard among valid", []string{"MISE_*", "*"}, "*"},
-		{"valid prefix glob", []string{"MISE_*"}, ""},
-		{"valid single-char prefix", []string{"M*"}, ""},
-		{"interior wildcard", []string{"A*B*"}, "A*B*"},
-		{"no wildcard", []string{"PATH"}, "PATH"},
-		{"empty", nil, ""},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := ValidateGlobs(tc.globs); got != tc.wantFirst {
-				t.Errorf("ValidateGlobs(%v) = %q, want %q", tc.globs, got, tc.wantFirst)
-			}
-		})
-	}
+	t.Run("bare wildcard", func(t *testing.T) {
+		assert.Equal(t, "*", ValidateGlobs([]string{"*"}))
+	})
+	t.Run("bare wildcard among valid", func(t *testing.T) {
+		assert.Equal(t, "*", ValidateGlobs([]string{"MISE_*", "*"}))
+	})
+	t.Run("valid prefix glob", func(t *testing.T) {
+		assert.Empty(t, ValidateGlobs([]string{"MISE_*"}))
+	})
+	t.Run("valid single-char prefix", func(t *testing.T) {
+		assert.Empty(t, ValidateGlobs([]string{"M*"}))
+	})
+	t.Run("interior wildcard", func(t *testing.T) {
+		assert.Equal(t, "A*B*", ValidateGlobs([]string{"A*B*"}))
+	})
+	t.Run("no wildcard", func(t *testing.T) {
+		assert.Equal(t, "PATH", ValidateGlobs([]string{"PATH"}))
+	})
+	t.Run("empty", func(t *testing.T) {
+		assert.Empty(t, ValidateGlobs(nil))
+	})
 }
 
 // TestScrub_BareWildcardDoesNotLeakEnv is the defence-in-depth check: even if a
@@ -43,17 +45,11 @@ func TestScrub_BareWildcardDoesNotLeakEnv(t *testing.T) {
 	}
 	kept, dropped := a.Scrub(env)
 
-	if !slices.Contains(kept, "PATH=/usr/bin") {
-		t.Errorf("PATH should be kept (exact allow); kept=%v", kept)
-	}
-	for _, kv := range kept {
-		if kv == "AWS_SECRET_ACCESS_KEY=topsecret" || kv == "GITHUB_TOKEN=ghp_xxx" {
-			t.Errorf("bare-wildcard glob leaked secret %q through Scrub", kv)
-		}
-	}
-	if !slices.Contains(dropped, "AWS_SECRET_ACCESS_KEY") || !slices.Contains(dropped, "GITHUB_TOKEN") {
-		t.Errorf("secrets should be dropped; dropped=%v", dropped)
-	}
+	assert.Contains(t, kept, "PATH=/usr/bin", "PATH should be kept (exact allow)")
+	assert.NotContains(t, kept, "AWS_SECRET_ACCESS_KEY=topsecret", "bare-wildcard glob leaked secret through Scrub")
+	assert.NotContains(t, kept, "GITHUB_TOKEN=ghp_xxx", "bare-wildcard glob leaked secret through Scrub")
+	assert.Contains(t, dropped, "AWS_SECRET_ACCESS_KEY", "secrets should be dropped")
+	assert.Contains(t, dropped, "GITHUB_TOKEN", "secrets should be dropped")
 }
 
 // TestScrub_ValidGlobStillMatches confirms the fix does not break legitimate
@@ -61,10 +57,6 @@ func TestScrub_BareWildcardDoesNotLeakEnv(t *testing.T) {
 func TestScrub_ValidGlobStillMatches(t *testing.T) {
 	a := Allowlist{Globs: []string{"MISE_*"}}
 	kept, _ := a.Scrub([]string{"MISE_DATA_DIR=/x", "AWS_SECRET=y"})
-	if !slices.Contains(kept, "MISE_DATA_DIR=/x") {
-		t.Errorf("MISE_* glob should keep MISE_DATA_DIR; kept=%v", kept)
-	}
-	if slices.Contains(kept, "AWS_SECRET=y") {
-		t.Errorf("MISE_* glob should not keep AWS_SECRET; kept=%v", kept)
-	}
+	assert.Contains(t, kept, "MISE_DATA_DIR=/x", "MISE_* glob should keep MISE_DATA_DIR")
+	assert.NotContains(t, kept, "AWS_SECRET=y", "MISE_* glob should not keep AWS_SECRET")
 }

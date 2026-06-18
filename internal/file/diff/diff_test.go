@@ -4,15 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTakeAndChanged(t *testing.T) {
 	dir := t.TempDir()
 	writeFile := func(name, content string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
 	}
 
 	writeFile("a.txt", "hello")
@@ -32,31 +33,21 @@ func TestTakeAndChanged(t *testing.T) {
 		changedSet[filepath.Base(p)] = true
 	}
 
-	if !changedSet["a.txt"] {
-		t.Error("expected a.txt in changed")
-	}
-	if !changedSet["c.txt"] {
-		t.Error("expected c.txt in changed")
-	}
-	if changedSet["b.txt"] {
-		t.Error("b.txt was not modified; should not appear in changed")
-	}
+	assert.True(t, changedSet["a.txt"], "expected a.txt in changed")
+	assert.True(t, changedSet["c.txt"], "expected c.txt in changed")
+	assert.False(t, changedSet["b.txt"], "b.txt was not modified; should not appear in changed")
 }
 
 func TestTakeMissingDir(t *testing.T) {
 	snap := Take([]string{"/nonexistent/path/that/does/not/exist"})
-	if len(snap) != 0 {
-		t.Errorf("expected empty snap for missing dir, got %d entries", len(snap))
-	}
+	assert.Empty(t, snap, "expected empty snap for missing dir")
 }
 
 func TestHashContent_DetectsChange(t *testing.T) {
 	dir := t.TempDir()
 	writeFile := func(name, content string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
 	}
 
 	writeFile("a.txt", "hello")
@@ -65,49 +56,29 @@ func TestHashContent_DetectsChange(t *testing.T) {
 
 	// Same content → no diff.
 	post := HashContent([]string{dir})
-	if diffs := DiffContent(pre, post); len(diffs) != 0 {
-		t.Errorf("expected no diffs for unchanged content, got %v", diffs)
-	}
+	assert.Empty(t, DiffContent(pre, post), "expected no diffs for unchanged content")
 
 	// Change content → diff.
 	writeFile("a.txt", "HELLO")
 	post2 := HashContent([]string{dir})
-	diffs := DiffContent(pre, post2)
-	if len(diffs) != 1 {
-		t.Errorf("expected 1 diff, got %d: %v", len(diffs), diffs)
-	}
+	assert.Len(t, DiffContent(pre, post2), 1, "expected 1 diff")
 
 	// Remove a file → diff.
-	if err := os.Remove(filepath.Join(dir, "b.txt")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Remove(filepath.Join(dir, "b.txt")))
 	post3 := HashContent([]string{dir})
-	diffs = DiffContent(pre, post3)
-	if len(diffs) != 2 {
-		t.Errorf("expected 2 diffs (modified+removed), got %d: %v", len(diffs), diffs)
-	}
+	assert.Len(t, DiffContent(pre, post3), 2, "expected 2 diffs (modified+removed)")
 }
 
 func TestGlobBaseDirs(t *testing.T) {
-	tests := []struct {
-		glob string
-		want string // expected base dir suffix (relative to root)
-	}{
-		{"dist/**", "dist"},
-		{"**/*.gen.go", "."},
-		{"types/gen.go", "types"},
-		{"a/b/c/**/*.go", "a/b/c"},
-	}
 	root := "/workspace/api"
-	for _, tc := range tests {
-		dirs := GlobBaseDirs(root, []string{tc.glob})
-		if len(dirs) == 0 {
-			t.Errorf("GlobBaseDirs(%q, %q): got no dirs", root, tc.glob)
-			continue
-		}
-		want := filepath.Join(root, tc.want)
-		if dirs[0] != want {
-			t.Errorf("GlobBaseDirs(%q, %q): got %q, want %q", root, tc.glob, dirs[0], want)
-		}
+	check := func(t *testing.T, glob, wantSuffix string) {
+		dirs := GlobBaseDirs(root, []string{glob})
+		require.NotEmpty(t, dirs, "GlobBaseDirs(%q, %q): got no dirs", root, glob)
+		assert.Equal(t, filepath.Join(root, wantSuffix), dirs[0])
 	}
+
+	t.Run("doublestar dir", func(t *testing.T) { check(t, "dist/**", "dist") })
+	t.Run("leading doublestar", func(t *testing.T) { check(t, "**/*.gen.go", ".") })
+	t.Run("explicit file", func(t *testing.T) { check(t, "types/gen.go", "types") })
+	t.Run("deep dir", func(t *testing.T) { check(t, "a/b/c/**/*.go", "a/b/c") })
 }

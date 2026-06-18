@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriteTargetGraphMarkdown(t *testing.T) {
@@ -18,9 +20,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
 	for _, want := range []string{
 		"# Targets",
@@ -42,9 +42,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		"```mermaid",
 		"fmt --> build", // run order: the dependency points at the target that needs it
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("markdown output missing %q\n---\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "markdown output missing %q", want)
 	}
 }
 
@@ -63,20 +61,15 @@ func TestWriteTargetGraphMarkdownHeadingAndOrder(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
-	if !strings.Contains(got, "## Project: magus") {
-		t.Errorf("heading should use the repo-relative path:\n%s", got)
-	}
+	assert.Contains(t, got, "## Project: magus", "heading should use the repo-relative path")
 	// The invocation example still addresses the project by its workspace path.
-	if !strings.Contains(got, "magus run build .") {
-		t.Errorf("invocation example should keep the workspace-relative path:\n%s", got)
-	}
-	if i, j := strings.Index(got, "### `build`"), strings.Index(got, "### `worker`"); i < 0 || j < 0 || i > j {
-		t.Errorf("primary target should precede the worker:\n%s", got)
-	}
+	assert.Contains(t, got, "magus run build .", "invocation example should keep the workspace-relative path")
+	i, j := strings.Index(got, "### `build`"), strings.Index(got, "### `worker`")
+	require.GreaterOrEqual(t, i, 0, "primary target should precede the worker:\n%s", got)
+	require.GreaterOrEqual(t, j, 0, "primary target should precede the worker:\n%s", got)
+	assert.Less(t, i, j, "primary target should precede the worker")
 }
 
 // TestWriteTargetGraphMarkdownInlineGraphs pins the graph layout: there is no
@@ -90,26 +83,17 @@ func TestWriteTargetGraphMarkdownInlineGraphs(t *testing.T) {
 		{Path: "web", Engine: "buzz", DependsOn: []string{"api"}, Nodes: []types.TargetGraphNode{{Name: "build"}}},
 	}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
-	if strings.Contains(got, "## Workspace overview") {
-		t.Errorf("the workspace-overview graph should be gone:\n%s", got)
-	}
-	if n := strings.Count(got, "**Run order**"); n != 2 {
-		t.Errorf("want one inline graph per project (2), got %d:\n%s", n, got)
-	}
+	assert.NotContains(t, got, "## Workspace overview", "the workspace-overview graph should be gone")
+	assert.Equal(t, 2, strings.Count(got, "**Run order**"), "want one inline graph per project (2)")
 	// Per-project graphs stay flat — no multi-project `p0_`-style prefixes.
-	if strings.Contains(got, "subgraph p0") || strings.Contains(got, "p0_build") {
-		t.Errorf("per-project graphs should render flat, without multi-project prefixes:\n%s", got)
-	}
+	assert.NotContains(t, got, "subgraph p0", "per-project graphs should render flat, without multi-project prefixes")
+	assert.NotContains(t, got, "p0_build", "per-project graphs should render flat, without multi-project prefixes")
 	// A project-level depends_on (web -> api, no target-level external) is no longer
 	// drawn: there is no coarse project box or project→project arrow anywhere.
 	for _, bad := range []string{"xproj_self", "xdep_", `-.->|"depends on"|`} {
-		if strings.Contains(got, bad) {
-			t.Errorf("project-level depends_on should not render a coarse cross-project edge (found %q):\n%s", bad, got)
-		}
+		assert.NotContains(t, got, bad, "project-level depends_on should not render a coarse cross-project edge")
 	}
 }
 
@@ -134,13 +118,11 @@ func TestWriteTargetGraphMarkdownDispatch(t *testing.T) {
 		},
 		".\x00gen": {
 			Project: ".", Target: "gen",
-			Policy: &types.TargetPolicy{NoCache: true, Isolated: true},
+			Policy: &types.Target{SkipCache: true, Exclusive: true},
 		},
 	}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, eval); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, eval))
 	got := b.String()
 	for _, want := range []string{
 		"<summary><b>Shared defaults</b>", // collapsed shared block
@@ -150,11 +132,9 @@ func TestWriteTargetGraphMarkdownDispatch(t *testing.T) {
 		"**Executes**",           // per-target rendered command, in a code block
 		"go build",               // the command itself (no inline backticks)
 		"uncached (always runs)", // non-default behavior on gen
-		"isolated (runs alone, no concurrent targets)",
+		"exclusive (runs alone, no concurrent targets)",
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("markdown output missing %q\n---\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "markdown output missing %q", want)
 	}
 }
 
@@ -172,14 +152,10 @@ func TestProjectDefaultsDeterministic(t *testing.T) {
 		".\x00lint":  {Project: ".", Target: "lint"},
 	}
 	first, ok := projectDefaults(".", eval)
-	if !ok {
-		t.Fatal("expected a default entry for the project")
-	}
+	require.True(t, ok, "expected a default entry for the project")
 	for i := 0; i < 100; i++ {
 		got, _ := projectDefaults(".", eval)
-		if got.Target != first.Target {
-			t.Fatalf("projectDefaults is nondeterministic: returned %q then %q", first.Target, got.Target)
-		}
+		require.Equal(t, first.Target, got.Target, "projectDefaults is nondeterministic")
 	}
 }
 
@@ -193,9 +169,7 @@ func TestWriteTargetGraphMarkdownLegend(t *testing.T) {
 		Nodes:  []types.TargetGraphNode{{Name: "build"}},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
 	for _, want := range []string{
 		"## Reading the graphs",
@@ -207,9 +181,7 @@ func TestWriteTargetGraphMarkdownLegend(t *testing.T) {
 		"**Toolchain** graph",
 		"**cross-project dependency**",
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("legend missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "legend missing %q", want)
 	}
 }
 
@@ -227,23 +199,17 @@ func TestWriteTargetGraphMarkdownCrossTargetDependencies(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
 	for _, want := range []string{
 		`xt_api_compile[["api:compile"]]`, // external target node
 		`xt_api_compile -.-> build`,       // granular dotted edge: external runs first, into the target
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("granular cross-target dep missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "granular cross-target dep missing %q", want)
 	}
 	// api is covered at target granularity, so the coarse project arrow is gone.
 	for _, bad := range []string{"xdep_api", `subgraph xproj_self`, `-.->|"depends on"|`} {
-		if strings.Contains(got, bad) {
-			t.Errorf("coarse project arrow should be suppressed when covered granularly (found %q):\n%s", bad, got)
-		}
+		assert.NotContains(t, got, bad, "coarse project arrow should be suppressed when covered granularly")
 	}
 }
 
@@ -256,18 +222,12 @@ func TestWriteTargetGraphMarkdownDirection(t *testing.T) {
 		Nodes:  []types.TargetGraphNode{{Name: "ci", Dependencies: []string{"build"}}, {Name: "build"}},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
-	if !strings.Contains(got, "graph LR") {
-		t.Errorf("per-project graph should read left-to-right (graph LR):\n%s", got)
-	}
+	assert.Contains(t, got, "graph LR", "per-project graph should read left-to-right (graph LR)")
 	// Layout spacing rides in the Mermaid frontmatter config (no ELK on GitHub).
 	for _, want := range []string{"config:", "nodeSpacing:", "rankSpacing:"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("per-project graph should carry layout spacing config; missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "per-project graph should carry layout spacing config; missing %q", want)
 	}
 }
 
@@ -281,19 +241,13 @@ func TestWriteTargetGraphMermaidSingleProject(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMermaid(&b, out))
 	got := b.String()
 	// A single project with no shared-suffix targets renders flat — no project
 	// wrapper, no stage box, no id prefix.
-	if strings.Contains(got, "subgraph") {
-		t.Errorf("single project with no stages should not emit a subgraph:\n%s", got)
-	}
+	assert.NotContains(t, got, "subgraph", "single project with no stages should not emit a subgraph")
 	for _, want := range []string{`build("build")`, `fmt("fmt")`, "fmt --> build"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "output missing %q", want)
 	}
 }
 
@@ -313,20 +267,14 @@ func TestWriteTargetGraphMermaidNoSpellBoxes(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMermaid(&b, out))
 	got := b.String()
 	// Targets are plain nodes; no per-target spell subgraph or spell box survives.
 	for _, want := range []string{`lint("lint")`, `noop("noop")`} {
-		if !strings.Contains(got, want) {
-			t.Errorf("target should be a plain node; missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "target should be a plain node; missing %q", want)
 	}
 	for _, bad := range []string{`subgraph lint`, "lint_s0", "go: golangci-lint"} {
-		if strings.Contains(got, bad) {
-			t.Errorf("dependency graph should not box spells (found %q):\n%s", bad, got)
-		}
+		assert.NotContains(t, got, bad, "dependency graph should not box spells")
 	}
 }
 
@@ -346,9 +294,7 @@ func TestWriteTargetGraphMarkdownToolchain(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMarkdown(&b, out, nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
 	for _, want := range []string{
 		"**Toolchain**",
@@ -360,14 +306,10 @@ func TestWriteTargetGraphMarkdownToolchain(t *testing.T) {
 		`t_lint -->|"markdownlint"| sp_md`,
 		`t_test -->|"go-test"| sp_go`, // the go spell node is shared, not duplicated
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("toolchain graph missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "toolchain graph missing %q", want)
 	}
 	// One shared go spell node, declared once.
-	if n := strings.Count(got, `sp_go{{"go"}}`); n != 1 {
-		t.Errorf("go spell node should be declared once, got %d:\n%s", n, got)
-	}
+	assert.Equal(t, 1, strings.Count(got, `sp_go{{"go"}}`), "go spell node should be declared once")
 }
 
 // TestWriteTargetGraphMermaidStages pins the pipeline-stage grouping: targets that
@@ -384,17 +326,11 @@ func TestWriteTargetGraphMermaidStages(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMermaid(&b, out))
 	got := b.String()
-	if !strings.Contains(got, `subgraph stage_generate["generate"]`) {
-		t.Errorf("expected a 'generate' stage subgraph:\n%s", got)
-	}
+	assert.Contains(t, got, `subgraph stage_generate["generate"]`, "expected a 'generate' stage subgraph")
 	// `release` has a unique suffix, so it must not be boxed.
-	if strings.Contains(got, `stage_release`) {
-		t.Errorf("singleton 'release' should stay loose:\n%s", got)
-	}
+	assert.NotContains(t, got, `stage_release`, "singleton 'release' should stay loose")
 	// `generate` and the lone `release` are top-level (nothing depends on them); the
 	// `*-generate` workers are plain targets pulled in as dependencies.
 	for _, want := range []string{
@@ -402,9 +338,7 @@ func TestWriteTargetGraphMermaidStages(t *testing.T) {
 		"class generate,release anchor",
 		"class docs_generate,man_generate target",
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "output missing %q", want)
 	}
 }
 
@@ -423,22 +357,14 @@ func TestWriteTargetGraphMermaidStageExcludesNonDependency(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMermaid(&b, out))
 	got := b.String()
-	if strings.Contains(got, "subgraph stage_generate") {
-		t.Errorf("a single real worker should not form a stage box:\n%s", got)
-	}
+	assert.NotContains(t, got, "subgraph stage_generate", "a single real worker should not form a stage box")
 	// pgo-generate is not a dependency of generate, so it stays a loose node, not a
 	// stage member, and draws no edge into generate.
-	if strings.Contains(got, "pgo_generate --> generate") {
-		t.Errorf("pgo-generate must not edge into generate:\n%s", got)
-	}
+	assert.NotContains(t, got, "pgo_generate --> generate", "pgo-generate must not edge into generate")
 	for _, want := range []string{`pgo_generate("pgo-generate")`, "md_generate --> generate"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "output missing %q", want)
 	}
 }
 
@@ -449,19 +375,13 @@ func TestWriteTargetGraphMermaidMultiProject(t *testing.T) {
 		{Path: "legacy", Engine: "lua"}, // no nodes: dropped
 	}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphMermaid(&b, out))
 	got := b.String()
 	// Two projects each have a `build`; the prefix keeps them distinct.
 	for _, want := range []string{`subgraph p0["api"]`, `subgraph p1["web"]`, "p0_fmt --> p0_build"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output missing %q:\n%s", want, got)
-		}
+		assert.Contains(t, got, want, "output missing %q", want)
 	}
-	if strings.Contains(got, "legacy") {
-		t.Errorf("empty (lua) project should be dropped:\n%s", got)
-	}
+	assert.NotContains(t, got, "legacy", "empty (lua) project should be dropped")
 }
 
 // TestWriteTargetGraphDOTCrossProject pins that DOT — which is flat and has no
@@ -473,19 +393,13 @@ func TestWriteTargetGraphDOTCrossProject(t *testing.T) {
 		{Path: "web", Engine: "buzz", DependsOn: []string{"api"}, Nodes: []types.TargetGraphNode{{Name: "build", Dependencies: []string{"fmt"}}, {Name: "fmt"}}},
 	}}
 	var b bytes.Buffer
-	if err := WriteTargetGraphDOT(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteTargetGraphDOT(&b, out))
 	got := b.String()
 	// Real intra-project edges survive, keyed by DOTID (path:target); run order, so
 	// the dependency points at the target that needs it.
-	if want := `"web:fmt" -> "web:build"`; !strings.Contains(got, want) {
-		t.Errorf("DOT missing intra-project edge %q:\n%s", want, got)
-	}
+	assert.Contains(t, got, `"web:fmt" -> "web:build"`, "DOT missing intra-project edge")
 	// No edge references a subgraph id — that would be a phantom node in flat DOT.
 	for _, bad := range []string{`"p0"`, `"p1"`, "-> \"p0\"", "\"p1\" ->"} {
-		if strings.Contains(got, bad) {
-			t.Errorf("DOT should not reference subgraph id %q (phantom node):\n%s", bad, got)
-		}
+		assert.NotContains(t, got, bad, "DOT should not reference subgraph id (phantom node)")
 	}
 }

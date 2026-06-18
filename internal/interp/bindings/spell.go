@@ -27,15 +27,15 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			types.WithSources(spec.Needs...),
 			types.WithClaims(spec.Claims...),
 			types.WithSpellOutputs(spec.Provides...),
-			types.WithTargets(spec.TargetNames()...),
-			types.WithInvoker(newSpellInvoker(spec.Targets)),
-			types.WithCommandRenderer(newCommandRenderer(spec.Targets)),
+			types.WithTargets(spec.OpNames()...),
+			types.WithInvoker(newSpellInvoker(spec.Ops)),
+			types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			types.WithTargetSources(spec.TargetNeeds),
-			types.WithTargetCharms(charmNamesByTarget(spec.Targets)),
-			types.WithTargetDocs(docsByTarget(spec.Targets)),
+			types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
+			types.WithTargetDocs(docsByTarget(spec.Ops)),
 		}
 		if spec.Opaque {
-			opts = append(opts, types.WithForeignProcess())
+			opts = append(opts, types.WithOpaque())
 		}
 		if len(spec.VersionCmd) > 0 {
 			opts = append(opts, types.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
@@ -46,7 +46,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 
 // charmNamesByTarget extracts the sorted charm names each target declares, for
 // discovery surfaces like `magus describe`.
-func charmNamesByTarget(targets map[string]ispell.Target) map[string][]string {
+func charmNamesByTarget(targets map[string]ispell.Op) map[string][]string {
 	out := make(map[string][]string, len(targets))
 	for name, t := range targets {
 		if len(t.Charms) == 0 {
@@ -64,7 +64,7 @@ func charmNamesByTarget(targets map[string]ispell.Target) map[string][]string {
 
 // docsByTarget extracts each target handler's doc comment, for discovery surfaces
 // like `magus describe`. Targets with no comment are omitted.
-func docsByTarget(targets map[string]ispell.Target) map[string]string {
+func docsByTarget(targets map[string]ispell.Op) map[string]string {
 	out := make(map[string]string, len(targets))
 	for name, t := range targets {
 		if t.Doc != "" {
@@ -92,7 +92,7 @@ func newVersionProbe(argv []string) func(context.Context, string) (string, error
 // (the same resolveCharmArgs the runtime uses), executing nothing. A function-op
 // target (Func set) or a no-op (empty Cmd) returns ok=false — there is no static
 // command to show.
-func newCommandRenderer(targets map[string]ispell.Target) func(string, []string) (string, []string, bool) {
+func newCommandRenderer(targets map[string]ispell.Op) func(string, []string) (string, []string, bool) {
 	return func(target string, charms []string) (string, []string, bool) {
 		tgt, ok := targets[target]
 		if !ok || tgt.Func != "" || tgt.Cmd == "" {
@@ -106,23 +106,43 @@ func newCommandRenderer(targets map[string]ispell.Target) func(string, []string)
 	}
 }
 
-// newSpellInvoker returns an invoker closure for a built-in spell. Every built-in
-// operation is fork (data: cmd/args/charms), so dispatch forks the tool without
-// any script VM; an undeclared or function-op target is a graceful no-op (built-ins
-// have no script body to run a function-op against).
-func newSpellInvoker(targets map[string]ispell.Target) func(context.Context, types.InvokeRequest) (any, error) {
-	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
-		tgt, ok := targets[req.Target]
-		if !ok || tgt.Func != "" {
-			return nil, nil // function-op (no built-in body to dispatch); graceful no-op
+// dispatchOp is the single op-dispatch bridge between the magus host and the Buzz
+// interpreter. The priority is fixed and the same everywhere: prefer an op's
+// NATIVE in-VM function (Func) when a script body exists to run it, otherwise fall
+// back to FORKING its command (Cmd). runFn runs a named function-op against the
+// spell's script body and is nil for built-in spells — they have no body, so their
+// function-ops are a graceful no-op. An unknown target is also a no-op, matching
+// the fan-out-and-skip dispatch model.
+func dispatchOp(ctx context.Context, ops map[string]ispell.Op, req types.InvokeRequest,
+	runFn func(ctx context.Context, fn string, req types.InvokeRequest) (any, error),
+) (any, error) {
+	tgt, ok := ops[req.Target]
+	if !ok {
+		//nolint:nilnil // invoker no-op: an unknown target produces no Data and no error (fan-out-and-skip)
+		return nil, nil
+	}
+	if tgt.Func != "" {
+		if runFn == nil {
+			//nolint:nilnil // invoker no-op: built-in has no script body for a function-op
+			return nil, nil
 		}
-		_, err := runForkTarget(ctx, tgt, forkOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
-		return nil, err
+		return runFn(ctx, tgt.Func, req)
+	}
+	_, err := runForkTarget(ctx, tgt, forkOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
+	return nil, err
+}
+
+// newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
+// are fork-only (cmd/args/charms data, no script body), so it dispatches through
+// the shared bridge with a nil function-op runner.
+func newSpellInvoker(targets map[string]ispell.Op) func(context.Context, types.InvokeRequest) (any, error) {
+	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
+		return dispatchOp(ctx, targets, req, nil)
 	}
 }
 
 // forkTargetNames returns the spell's fork (forkable) target names, sorted.
-func forkTargetNames(targets map[string]ispell.Target) []string {
+func forkTargetNames(targets map[string]ispell.Op) []string {
 	names := make([]string, 0, len(targets))
 	for name, tgt := range targets {
 		if tgt.Func == "" {
@@ -140,7 +160,7 @@ func loadLocalSpell(ctx context.Context, path string) (ispell.Spec, bool) {
 	if !filepath.IsAbs(path) {
 		cwd, err := os.Getwd()
 		if err != nil {
-			slog.Error("magus.spell.load: getwd", "err", err)
+			slog.Error("load local spell: getwd", "err", err)
 			return ispell.Spec{}, false
 		}
 		path = filepath.Join(cwd, path)
@@ -151,7 +171,7 @@ func loadLocalSpell(ctx context.Context, path string) (ispell.Spec, bool) {
 // hasFunctionOp reports whether any of m's targets is an in-VM function-op (Func
 // set) rather than a fork command.
 func hasFunctionOp(m ispell.Spec) bool {
-	for _, t := range m.Targets {
+	for _, t := range m.Ops {
 		if t.Func != "" {
 			return true
 		}
@@ -189,7 +209,7 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Spec, bool) {
 	// it already registered and binds it by name.
 	m, _, err := loadBuzzSpell(ctx, path)
 	if err != nil {
-		slog.Error("magus.spell.load: buzz", "path", path, "err", err)
+		slog.Error("load local spell: buzz", "path", path, "err", err)
 		return ispell.Spec{}, false
 	}
 	return m, true
@@ -203,14 +223,14 @@ func localSpellBaseOptions(m ispell.Spec) []types.SpellOption {
 		types.WithSources(m.Needs...),
 		types.WithClaims(m.Claims...),
 		types.WithSpellOutputs(m.Provides...),
-		types.WithTargets(m.TargetNames()...),
-		types.WithCommandRenderer(newCommandRenderer(m.Targets)),
-		types.WithTargetCharms(charmNamesByTarget(m.Targets)),
-		types.WithTargetDocs(docsByTarget(m.Targets)),
-		types.WithDocRequiredTargets(m.DocTargets...),
+		types.WithTargets(m.OpNames()...),
+		types.WithCommandRenderer(newCommandRenderer(m.Ops)),
+		types.WithTargetCharms(charmNamesByTarget(m.Ops)),
+		types.WithTargetDocs(docsByTarget(m.Ops)),
+		types.WithDocRequiredTargets(m.DocOps...),
 	}
 	if m.Opaque {
-		opts = append(opts, types.WithForeignProcess())
+		opts = append(opts, types.WithOpaque())
 	}
 	if len(m.VersionCmd) > 0 {
 		opts = append(opts, types.WithVersionProbe(newVersionProbe(m.VersionCmd)))
@@ -219,11 +239,11 @@ func localSpellBaseOptions(m ispell.Spec) []types.SpellOption {
 }
 
 // registerLocalSpell registers a decoded fork-only workspace-local spell into the
-// default registry. The shared ispell.Decode produces m for the Buzz spell.load
-// by-value path, so this is the single deferred registration point (called at
+// default registry. The shared ispell.Decode produces m for the imported Buzz
+// spell by-value path, so this is the single deferred registration point (called at
 // magus.project.register bind time). A function-op spell instead registers eagerly
 // at load via loadBuzzSpell.
 func registerLocalSpell(m ispell.Spec) {
-	opts := append(localSpellBaseOptions(m), types.WithInvoker(newSpellInvoker(m.Targets)))
+	opts := append(localSpellBaseOptions(m), types.WithInvoker(newSpellInvoker(m.Ops)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(types.NewSpell(m.Name, opts...))
 }

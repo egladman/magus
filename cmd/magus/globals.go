@@ -42,7 +42,7 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)
 	fs.StringVar(&global.output, "o", global.output, "Short for --output")
 	fs.StringVar(&global.tee, "tee", global.tee, "Also write structured output (-o json|yaml|jsonl|template) to this file (append-create mode)")
-	fs.Var(&global.verbose, "v", "increase log verbosity; repeat for more detail (-v, -vv, -vvv)")
+	fs.Var(&global.verbose, "v", "increase log verbosity (-v/-vv: debug; -vvv: trace)")
 	fs.BoolVar(&global.quiet, "quiet", global.quiet, "suppress progress output; only print errors and dump failing project output to stderr")
 	fs.BoolVar(&global.quiet, "q", global.quiet, "short for --quiet")
 }

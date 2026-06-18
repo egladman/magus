@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUnregisteredDepError_Error(t *testing.T) {
@@ -14,22 +16,14 @@ func TestUnregisteredDepError_Error(t *testing.T) {
 		},
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "2 unresolved") {
-		t.Errorf("Error() = %q, want '2 unresolved'", msg)
-	}
-	if !strings.Contains(msg, "did you mean: common/") {
-		t.Errorf("Error() missing did-you-mean hint, got: %q", msg)
-	}
-	if !strings.Contains(msg, "gateway/") {
-		t.Errorf("Error() missing second dep, got: %q", msg)
-	}
+	assert.Contains(t, msg, "2 unresolved")
+	assert.Contains(t, msg, "did you mean: common/")
+	assert.Contains(t, msg, "gateway/")
 }
 
 func TestUnregisteredDepError_Is(t *testing.T) {
 	err := &UnregisteredDepError{}
-	if !errors.Is(err, ErrUnregisteredDep) {
-		t.Error("errors.Is(UnregisteredDepError, ErrUnregisteredDep) = false, want true")
-	}
+	assert.ErrorIs(t, err, ErrUnregisteredDep)
 }
 
 func TestSpellErrors_Error(t *testing.T) {
@@ -41,15 +35,9 @@ func TestSpellErrors_Error(t *testing.T) {
 		},
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "build") {
-		t.Errorf("SpellErrors.Error() missing target, got: %q", msg)
-	}
-	if !strings.Contains(msg, "go") {
-		t.Errorf("SpellErrors.Error() missing spell name, got: %q", msg)
-	}
-	if !strings.Contains(msg, "exit 1") {
-		t.Errorf("SpellErrors.Error() missing underlying error, got: %q", msg)
-	}
+	assert.Contains(t, msg, "build", "missing target")
+	assert.Contains(t, msg, "go", "missing spell name")
+	assert.Contains(t, msg, "exit 1", "missing underlying error")
 }
 
 func TestSpellErrors_Unwrap(t *testing.T) {
@@ -57,57 +45,35 @@ func TestSpellErrors_Unwrap(t *testing.T) {
 	err := &SpellErrors{
 		Failed: []SpellError{{Spell: "go", Err: inner}},
 	}
-	if !errors.Is(err, inner) {
-		t.Error("errors.Is via Unwrap failed")
-	}
+	assert.ErrorIs(t, err, inner)
 }
 
 func TestDiagnosticCode_URL(t *testing.T) {
-	cases := []struct {
-		code    DiagnosticCode
-		wantSub string
-	}{
-		{PathReadDenied, "MGS2001"},
-		{RaceDetected, "MGS4001"},
-		{NoCITarget, "MGS1001"},
-	}
-	for _, tc := range cases {
-		url := tc.code.URL()
-		if !strings.Contains(url, tc.wantSub) {
-			t.Errorf("URL() = %q, want to contain %q", url, tc.wantSub)
-		}
-		if !strings.HasSuffix(url, ".md") {
-			t.Errorf("URL() = %q, want .md suffix", url)
-		}
+	assert.Contains(t, PathReadDenied.URL(), "MGS2001")
+	assert.Contains(t, RaceDetected.URL(), "MGS4001")
+	assert.Contains(t, NoCITarget.URL(), "MGS1001")
+
+	for _, code := range []DiagnosticCode{PathReadDenied, RaceDetected, NoCITarget} {
+		assert.Truef(t, strings.HasSuffix(code.URL(), ".md"), "URL() = %q, want .md suffix", code.URL())
 	}
 	// MGS1xxx routes to the magusfile docs dir, not the sandbox/race bases.
-	if url := NoCITarget.URL(); !strings.Contains(url, "/docs/codes/magusfile/") {
-		t.Errorf("NoCITarget.URL() = %q, want to route to /docs/codes/magusfile/", url)
-	}
+	assert.Contains(t, NoCITarget.URL(), "/docs/codes/magusfile/")
 }
 
 func TestDiagnosticError_Is(t *testing.T) {
 	err := DiagnosticErrorf(PathReadDenied, "test")
-	if !errors.Is(err, ErrDiag) {
-		t.Error("DiagnosticError should match ErrDiag")
-	}
+	assert.ErrorIs(t, err, ErrDiag, "DiagnosticError should match ErrDiag")
+
 	same := DiagnosticErrorf(PathReadDenied, "other")
-	if !errors.Is(err, same) {
-		t.Error("DiagnosticError should match same-code DiagnosticError")
-	}
+	assert.ErrorIs(t, err, same, "DiagnosticError should match same-code DiagnosticError")
+
 	other := DiagnosticErrorf(PathWriteDenied, "test")
-	if errors.Is(err, other) {
-		t.Error("DiagnosticError should not match different-code DiagnosticError")
-	}
+	assert.NotErrorIs(t, err, other, "DiagnosticError should not match different-code DiagnosticError")
 }
 
 func TestDiagnosticErrorf(t *testing.T) {
 	err := DiagnosticErrorf(EnvStripped, "var %s was stripped", "HOME")
 	msg := err.Error()
-	if !strings.Contains(msg, "MGS2003") {
-		t.Errorf("Error() = %q, want MGS2003", msg)
-	}
-	if !strings.Contains(msg, "HOME") {
-		t.Errorf("Error() = %q, want 'HOME'", msg)
-	}
+	assert.Contains(t, msg, "MGS2003")
+	assert.Contains(t, msg, "HOME")
 }

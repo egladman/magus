@@ -8,6 +8,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // depSpec builds a minimal spec for project path p depending on deps. Sources
@@ -55,9 +58,7 @@ func openCache(t *testing.T) (root string, c *Cache) {
 	root = t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	c, err := Open(cdir, WithMutable(true))
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err, "cache.Open")
 	return root, c
 }
 
@@ -70,9 +71,7 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 	root, c := openCache(t)
 
 	srcA := filepath.Join(root, "a.txt")
-	if err := os.WriteFile(srcA, []byte("v1"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(srcA, []byte("v1"), 0o644))
 
 	// A hashes a real source file; B depends on A but declares no sources, so
 	// its key can only change via upstream-key propagation.
@@ -86,35 +85,25 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 		results, err := c.RunAll(context.Background(), mkSpecs(),
 			func(_ context.Context, _ Spec) error { return nil },
 			WithConcurrency(4))
-		if err != nil {
-			t.Fatalf("RunAll: %v", err)
-		}
+		require.NoError(t, err, "RunAll")
 		return results[0].Hash, results[1].Hash
 	}
 
 	a1, b1 := run()
-	if a1 == "" || b1 == "" {
-		t.Fatalf("empty keys: a=%q b=%q", a1, b1)
-	}
+	require.NotEmpty(t, a1, "empty key A")
+	require.NotEmpty(t, b1, "empty key B")
 
 	// Re-running with no input change must leave both keys stable.
 	a2, b2 := run()
-	if a1 != a2 || b1 != b2 {
-		t.Fatalf("keys changed without any input change: a %q→%q b %q→%q", a1, a2, b1, b2)
-	}
+	assert.Equal(t, a1, a2, "A key changed without any input change")
+	assert.Equal(t, b1, b2, "B key changed without any input change")
 
 	// Edit A's source (different length defeats the mtime/size fast-path). A's
 	// key must change, and B must inherit the change.
-	if err := os.WriteFile(srcA, []byte("v2-different-length"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(srcA, []byte("v2-different-length"), 0o644))
 	a3, b3 := run()
-	if a3 == a1 {
-		t.Errorf("A key unchanged after editing its source: %q", a3)
-	}
-	if b3 == b1 {
-		t.Errorf("B key unchanged after upstream A changed: upstream-key propagation is missing (b=%q)", b3)
-	}
+	assert.NotEqual(t, a1, a3, "A key unchanged after editing its source")
+	assert.NotEqual(t, b1, b3, "B key unchanged after upstream A changed: upstream-key propagation is missing")
 }
 
 // TestRunAllAfterCrossTargetOrdering verifies the After edge: P:test must wait
@@ -130,19 +119,15 @@ func TestRunAllAfterCrossTargetOrdering(t *testing.T) {
 	}
 	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		id := s.ProjectPath + ":" + s.Target
-		if s.Target == "test" && !rec.doneBefore("P:build") {
-			t.Errorf("P:test started before P:build finished")
+		if s.Target == "test" {
+			assert.True(t, rec.doneBefore("P:build"), "P:test started before P:build finished")
 		}
 		rec.start(id)
 		rec.finish(id)
 		return nil
 	}, WithConcurrency(8))
-	if err != nil {
-		t.Fatalf("RunAll: %v", err)
-	}
-	if len(rec.started) != 2 {
-		t.Fatalf("expected both P:build and P:test to run, got %v", rec.started)
-	}
+	require.NoError(t, err, "RunAll")
+	assert.Len(t, rec.started, 2, "expected both P:build and P:test to run")
 }
 
 // TestRunAllAfterCycleRejected verifies a cross-target cycle (P:test after
@@ -156,9 +141,7 @@ func TestRunAllAfterCycleRejected(t *testing.T) {
 	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, _ Spec) error {
 		return nil
 	}, WithConcurrency(8))
-	if err == nil {
-		t.Fatal("expected cycle error, got nil")
-	}
+	assert.Error(t, err, "expected cycle error")
 }
 
 // TestRunAllDependencyOrdering verifies that an A→B→C chain (C depends on B,
@@ -178,25 +161,17 @@ func TestRunAllDependencyOrdering(t *testing.T) {
 		// Upstream must already be finished when this fn runs.
 		switch s.ProjectPath {
 		case "B":
-			if !rec.doneBefore("A") {
-				t.Errorf("B started before A finished")
-			}
+			assert.True(t, rec.doneBefore("A"), "B started before A finished")
 		case "C":
-			if !rec.doneBefore("B") {
-				t.Errorf("C started before B finished")
-			}
+			assert.True(t, rec.doneBefore("B"), "C started before B finished")
 		}
 		rec.start(s.ProjectPath)
 		rec.finish(s.ProjectPath)
 		return nil
 	}, WithConcurrency(8))
-	if err != nil {
-		t.Fatalf("RunAll: %v", err)
-	}
+	require.NoError(t, err, "RunAll")
 
-	if len(rec.started) != 3 {
-		t.Fatalf("expected 3 projects to run, got %v", rec.started)
-	}
+	assert.Len(t, rec.started, 3, "expected 3 projects to run")
 }
 
 // TestRunAllDependencyDiamond verifies a diamond graph: D depends on B and C,
@@ -215,21 +190,15 @@ func TestRunAllDependencyDiamond(t *testing.T) {
 	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		switch s.ProjectPath {
 		case "B", "C":
-			if !rec.doneBefore("A") {
-				t.Errorf("%s started before A finished", s.ProjectPath)
-			}
+			assert.Truef(t, rec.doneBefore("A"), "%s started before A finished", s.ProjectPath)
 		case "D":
-			if !rec.doneBefore("B") || !rec.doneBefore("C") {
-				t.Errorf("D started before both B and C finished")
-			}
+			assert.True(t, rec.doneBefore("B") && rec.doneBefore("C"), "D started before both B and C finished")
 		}
 		rec.start(s.ProjectPath)
 		rec.finish(s.ProjectPath)
 		return nil
 	}, WithConcurrency(8))
-	if err != nil {
-		t.Fatalf("RunAll: %v", err)
-	}
+	require.NoError(t, err, "RunAll")
 }
 
 // TestRunAllDependencyOutOfScope verifies that a dependency on a project not
@@ -246,12 +215,8 @@ func TestRunAllDependencyOutOfScope(t *testing.T) {
 		ran = true
 		return nil
 	}, WithConcurrency(4))
-	if err != nil {
-		t.Fatalf("RunAll: %v", err)
-	}
-	if !ran {
-		t.Fatal("X did not run despite its only dependency being out of scope")
-	}
+	require.NoError(t, err, "RunAll")
+	assert.True(t, ran, "X did not run despite its only dependency being out of scope")
 }
 
 // TestRunAllSelfDependencyDoesNotDeadlock verifies that a spec listing itself
@@ -269,12 +234,8 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 		ran = true
 		return nil
 	}, WithConcurrency(4))
-	if err != nil {
-		t.Fatalf("RunAll: %v", err)
-	}
-	if !ran {
-		t.Fatal("self-dependent spec deadlocked instead of running")
-	}
+	require.NoError(t, err, "RunAll")
+	assert.True(t, ran, "self-dependent spec deadlocked instead of running")
 }
 
 // TestRunAllIsolatedRunsAlone verifies the Spec.Isolated contract: an isolated
@@ -325,15 +286,9 @@ func TestRunAllIsolatedRunsAlone(t *testing.T) {
 		leave(s)
 		return nil
 	}, WithConcurrency(8))
-	if err != nil {
-		t.Fatalf("RunAll: %v", err)
-	}
-	if len(violations) > 0 {
-		t.Fatalf("isolated spec overlapped with others: %v", violations)
-	}
-	if peak < 2 {
-		t.Fatalf("non-isolated specs never overlapped (peak=%d); the read lock is over-serializing", peak)
-	}
+	require.NoError(t, err, "RunAll")
+	assert.Empty(t, violations, "isolated spec overlapped with others")
+	assert.GreaterOrEqual(t, peak, 2, "non-isolated specs never overlapped; the read lock is over-serializing")
 }
 
 // TestRunAllDependencyFailureCancelsDependents verifies that when an upstream
@@ -360,14 +315,10 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 		mu.Unlock()
 		return nil
 	}, WithConcurrency(8))
-	if err == nil {
-		t.Fatal("expected RunAll to return the upstream error, got nil")
-	}
+	assert.Error(t, err, "expected RunAll to return the upstream error")
 	mu.Lock()
 	defer mu.Unlock()
-	if bRan {
-		t.Error("B's fn ran even though its dependency A failed")
-	}
+	assert.False(t, bRan, "B's fn ran even though its dependency A failed")
 }
 
 // TestRunAllDependencyCycleRejected verifies that a true cycle (A→B→A) is
@@ -386,12 +337,8 @@ func TestRunAllDependencyCycleRejected(t *testing.T) {
 		ran = true
 		return nil
 	}, WithConcurrency(4))
-	if err == nil {
-		t.Fatal("expected RunAll to reject the cyclic batch, got nil error")
-	}
-	if ran {
-		t.Error("fn ran despite the batch being cyclic; nothing should execute")
-	}
+	assert.Error(t, err, "expected RunAll to reject the cyclic batch")
+	assert.False(t, ran, "fn ran despite the batch being cyclic; nothing should execute")
 }
 
 // TestRunAllDependencyCycleThreeNode verifies a longer cycle A→B→C→A is also
@@ -408,9 +355,7 @@ func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
 		return nil
 	}, WithConcurrency(4))
-	if err == nil {
-		t.Fatal("expected RunAll to reject the 3-node cycle, got nil error")
-	}
+	assert.Error(t, err, "expected RunAll to reject the 3-node cycle")
 }
 
 // TestRunAllNoDependencies is a regression guard: specs with no DependsOn run
@@ -433,18 +378,10 @@ func TestRunAllNoDependencies(t *testing.T) {
 		mu.Unlock()
 		return nil
 	}, WithConcurrency(4))
-	if err != nil {
-		t.Fatalf("RunAll: %v", err)
-	}
-	if count != 3 {
-		t.Errorf("expected 3 fn invocations, got %d", count)
-	}
-	if len(results) != 3 {
-		t.Fatalf("expected 3 results, got %d", len(results))
-	}
+	require.NoError(t, err, "RunAll")
+	assert.Equal(t, 3, count, "expected 3 fn invocations")
+	require.Len(t, results, 3, "expected 3 results")
 	for i, r := range results {
-		if r.ProjectPath != specs[i].ProjectPath {
-			t.Errorf("results[%d].ProjectPath = %q, want %q", i, r.ProjectPath, specs[i].ProjectPath)
-		}
+		assert.Equalf(t, specs[i].ProjectPath, r.ProjectPath, "results[%d].ProjectPath", i)
 	}
 }

@@ -13,6 +13,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // captureStdout redirects os.Stdout to a pipe and returns a function that
@@ -23,9 +26,7 @@ func captureStdout(t *testing.T) func() []byte {
 	t.Helper()
 	orig := os.Stdout
 	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	os.Stdout = w
 	t.Cleanup(func() { os.Stdout = orig })
 	return func() []byte {
@@ -42,9 +43,7 @@ func captureStderr(t *testing.T) func() []byte {
 	t.Helper()
 	orig := os.Stderr
 	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	os.Stderr = w
 	t.Cleanup(func() { os.Stderr = orig })
 	return func() []byte {
@@ -62,17 +61,11 @@ func TestIntegrationWorkdirRespected(t *testing.T) {
 	}
 	dir := t.TempDir()
 	resolved, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	read := captureStdout(t)
-	if err := Run(context.Background(), dir, "pwd"); err != nil {
-		t.Fatalf("Run('pwd') = %v, want nil", err)
-	}
+	require.NoError(t, Run(context.Background(), dir, "pwd"))
 	got := strings.TrimRight(string(read()), "\n")
-	if got != resolved {
-		t.Errorf("working dir = %q, want %q", got, resolved)
-	}
+	assert.Equal(t, resolved, got, "working dir")
 }
 
 func TestIntegrationStdoutPassthrough(t *testing.T) {
@@ -80,12 +73,8 @@ func TestIntegrationStdoutPassthrough(t *testing.T) {
 		t.Skip("'echo' not available")
 	}
 	read := captureStdout(t)
-	if err := Run(context.Background(), t.TempDir(), "echo", "hello"); err != nil {
-		t.Fatalf("Run = %v, want nil", err)
-	}
-	if got := string(read()); got != "hello\n" {
-		t.Errorf("stdout = %q, want %q", got, "hello\n")
-	}
+	require.NoError(t, Run(context.Background(), t.TempDir(), "echo", "hello"))
+	assert.Equal(t, "hello\n", string(read()))
 }
 
 func TestIntegrationStderrPassthrough(t *testing.T) {
@@ -93,12 +82,8 @@ func TestIntegrationStderrPassthrough(t *testing.T) {
 		t.Skip("'sh' not available")
 	}
 	read := captureStderr(t)
-	if err := Run(context.Background(), t.TempDir(), "sh", "-c", "echo err 1>&2"); err != nil {
-		t.Fatalf("Run = %v, want nil", err)
-	}
-	if got := string(read()); got != "err\n" {
-		t.Errorf("stderr = %q, want %q", got, "err\n")
-	}
+	require.NoError(t, Run(context.Background(), t.TempDir(), "sh", "-c", "echo err 1>&2"))
+	assert.Equal(t, "err\n", string(read()))
 }
 
 func TestIntegrationNonZeroExit(t *testing.T) {
@@ -108,20 +93,14 @@ func TestIntegrationNonZeroExit(t *testing.T) {
 	}
 	err := Run(context.Background(), t.TempDir(), "sh", "-c", "exit 7")
 	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("want *exec.ExitError, got %T: %v", err, err)
-	}
-	if exitErr.ExitCode() != 7 {
-		t.Errorf("exit code = %d, want 7", exitErr.ExitCode())
-	}
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 7, exitErr.ExitCode())
 }
 
 func TestIntegrationMissingBinary(t *testing.T) {
 	t.Parallel()
 	err := Run(context.Background(), t.TempDir(), "magus-no-such-binary-xyzzy")
-	if err == nil {
-		t.Fatal("want error for missing binary, got nil")
-	}
+	require.Error(t, err, "want error for missing binary")
 	if !errors.Is(err, exec.ErrNotFound) &&
 		!strings.Contains(err.Error(), "executable file not found") &&
 		!strings.Contains(err.Error(), "no such file") {
@@ -141,12 +120,8 @@ func TestIntegrationContextCancelMidRun(t *testing.T) {
 	}()
 	start := time.Now()
 	err := Run(ctx, t.TempDir(), "sleep", "30")
-	if err == nil {
-		t.Error("want non-nil error after context cancel, got nil")
-	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("Run took %v after cancel, want < 2s", elapsed)
-	}
+	assert.Error(t, err, "want non-nil error after context cancel")
+	assert.LessOrEqual(t, time.Since(start), 2*time.Second, "Run should exit < 2s after cancel")
 }
 
 func TestIntegrationContextDeadline(t *testing.T) {
@@ -158,12 +133,8 @@ func TestIntegrationContextDeadline(t *testing.T) {
 	defer cancel()
 	start := time.Now()
 	err := Run(ctx, t.TempDir(), "sleep", "30")
-	if err == nil {
-		t.Error("want non-nil error after deadline, got nil")
-	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("Run took %v after deadline, want < 2s", elapsed)
-	}
+	assert.Error(t, err, "want non-nil error after deadline")
+	assert.LessOrEqual(t, time.Since(start), 2*time.Second, "Run should exit < 2s after deadline")
 }
 
 func TestIntegrationArgsVerbatim(t *testing.T) {
@@ -171,10 +142,6 @@ func TestIntegrationArgsVerbatim(t *testing.T) {
 		t.Skip("'printf' not available")
 	}
 	read := captureStdout(t)
-	if err := Run(context.Background(), t.TempDir(), "printf", "%s\n", "*"); err != nil {
-		t.Fatalf("Run = %v, want nil", err)
-	}
-	if got := string(read()); got != "*\n" {
-		t.Errorf("output = %q, want %q (args may have been shell-expanded)", got, "*\n")
-	}
+	require.NoError(t, Run(context.Background(), t.TempDir(), "printf", "%s\n", "*"))
+	assert.Equal(t, "*\n", string(read()), "args may have been shell-expanded")
 }

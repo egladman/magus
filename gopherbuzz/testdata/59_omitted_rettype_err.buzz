@@ -1,0 +1,4 @@
+// @error: return type must be preceded by
+// Strict parity with upstream Buzz: a return type must be introduced by '>'.
+fun f() int { return 1; }
+final __r = f();

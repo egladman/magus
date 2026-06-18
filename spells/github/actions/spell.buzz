@@ -40,8 +40,6 @@ import "magus/target"
 import "serialize"
 import "os"
 
-// --- spell contract -------------------------------------------------------
-
 export fun mgs_getName() > str { return "actions"; }
 
 export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
@@ -66,8 +64,6 @@ fun getenv(name: str) > str {
     if (v == null) { return ""; }
     return "" + v;
 }
-
-// --- implementation -------------------------------------------------------
 
 // Version salt mixed into every entry's `version` field; bump to invalidate all
 // artifacts at once. Independent of the cache *service* version (v2).

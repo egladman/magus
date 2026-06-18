@@ -341,7 +341,7 @@ export fun lint(args: [str]) &gt; void {
     extra.os.exec(&quot;golangci-lint&quot;, if (fix) [&quot;run&quot;, &quot;--fix&quot;, &quot;./...&quot;] else [&quot;run&quot;, &quot;./...&quot;]);
 }
 </code></pre>
-<p><strong>Workspace spell</strong>: define a spell (<code>magus.spell.define</code> / <code>magus.spell.load</code>) with an <code>ops</code> entry and wire per-project charms there. The spell owns the <em>command</em>; charms tune its <em>args</em>.</p>
+<p><strong>Workspace spell</strong>: author a <code>spells/&lt;name&gt;.buzz</code> spell (imported by path) with an <code>ops</code> entry and wire per-project charms there. The spell owns the <em>command</em>; charms tune its <em>args</em>.</p>
 <p><strong><code>::</code> hatch</strong>: <code>magus run go::go-vet api</code> reaches a single spell op directly. It is an escape hatch, not the everyday surface.</p>
 <h2 id="dynamic-values-no-interpolation-use-the-language">Dynamic values: no interpolation, use the language</h2>
 <p>Charm args are <strong>literal</strong> — there is no <code>${VAR}</code> interpolation, by design. The host language is the interpolation engine:</p>
@@ -454,15 +454,16 @@ type Charm struct {
 </table>
 <h2 id="see-also">See also</h2>
 <ul>
+<li><a href="operations.html">operations.md</a>: the Operation whose argv a charm patches, and where charms sit in the hierarchy.</li>
 <li><a href="targets.html">targets.md</a>: what a Target is, and the CLI grammar charms attach to.</li>
 <li><a href="spells.html">spells.md</a>: what a Spell is, and <a href="spells.html#spells-vs-targets">Spells vs Targets</a>.</li>
 <li><a href="modules/charm.html">modules/charm.md</a>: the generated <code>charm</code> module API reference.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/charms.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/charms.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-17 03:13:17 UTC from commit <a href="https://github.com/egladman/tack/commit/bce6725ff9fc6c16078d6e7de23bfb7df20fe68b"><code>bce6725f</code></a></small>
+    <small>Generated 2026-06-18 01:25:54 UTC from commit <a href="https://github.com/egladman/tack/commit/ef0246dafb58152a2a36d7feb35d63c8dc8c9578"><code>ef0246d</code></a></small>
   </footer>
 </body>
 </html>

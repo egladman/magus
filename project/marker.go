@@ -12,8 +12,7 @@ var IgnoreDirs = []string{
 	"vendor",       // Go vendored deps
 	"node_modules", // pnpm/npm
 	"target",       // Rust build artifacts
-	"gen",          // common generated-source convention
-	"starter",      // scaffolding template shipped for `magus self install`, not a real project
+	"gen",          // common generated-source convention: machine-written code, never a discoverable project
 }
 
 // IsIgnoreDir reports whether name is a well-known ignore dir.

@@ -45,7 +45,6 @@ func probe(dir string) bool {
 // clonefile itself requires a non-existent destination and will return
 // EEXIST otherwise.
 func clone(src, dst string) error {
-	// ── Path 1: clonefile (APFS CoW) ──────────────────────────────────
 	cloneErr := unix.Clonefile(src, dst, 0)
 	if cloneErr == nil {
 		return nil
@@ -56,7 +55,6 @@ func clone(src, dst string) error {
 		return cloneErr
 	}
 
-	// ── Path 2: io.Copy ───────────────────────────────────────────────
 	return copyIO(src, dst)
 }
 

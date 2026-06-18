@@ -5,17 +5,18 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/types"
@@ -25,26 +26,11 @@ import (
 // affected --stdin streaming flow.
 func TestContainsAll(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name  string
-		paths []string
-		want  bool
-	}{
-		{"empty slice", nil, false},
-		{"only sentinel", []string{StreamAllSentinel}, true},
-		{"sentinel mid", []string{"a", StreamAllSentinel, "b"}, true},
-		{"no sentinel", []string{"a", "b"}, false},
-		{"sentinel-like prefix", []string{"--all-things"}, false},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := slices.Contains(tc.paths, StreamAllSentinel); got != tc.want {
-				t.Errorf("slices.Contains(%v, StreamAllSentinel) = %v, want %v", tc.paths, got, tc.want)
-			}
-		})
-	}
+	assert.False(t, slices.Contains([]string(nil), StreamAllSentinel), "empty slice")
+	assert.True(t, slices.Contains([]string{StreamAllSentinel}, StreamAllSentinel), "only sentinel")
+	assert.True(t, slices.Contains([]string{"a", StreamAllSentinel, "b"}, StreamAllSentinel), "sentinel mid")
+	assert.False(t, slices.Contains([]string{"a", "b"}, StreamAllSentinel), "no sentinel")
+	assert.False(t, slices.Contains([]string{"--all-things"}, StreamAllSentinel), "sentinel-like prefix")
 }
 
 // TestMakeHandlerConventionalTargets asserts that makeHandler returns a
@@ -56,20 +42,15 @@ func TestMakeHandlerConventionalTargets(t *testing.T) {
 	ctx := context.Background()
 	for _, name := range []string{"preflight", "build", "test", "lint", "format", "clean", "generate"} {
 		h := m.makeHandler(name)
-		if h == nil {
-			t.Errorf("makeHandler(%q) = nil; expected non-nil handler", name)
+		if !assert.NotNilf(t, h, "makeHandler(%q) = nil; expected non-nil handler", name) {
 			continue
 		}
-		if err := h(ctx, p); err != nil {
-			t.Errorf("makeHandler(%q)(ctx, emptyProject) = %v; want nil", name, err)
-		}
+		assert.NoErrorf(t, h(ctx, p), "makeHandler(%q)(ctx, emptyProject)", name)
 	}
 	// Arbitrary non-conventional names also get a handler.
 	h := m.makeHandler("go-build")
-	if h == nil {
-		t.Errorf("makeHandler(%q) = nil; any target name should produce a handler", "go-build")
-	} else if err := h(ctx, p); err != nil {
-		t.Errorf("makeHandler(%q)(ctx, emptyProject) = %v; want nil", "go-build", err)
+	if assert.NotNil(t, h, "makeHandler(\"go-build\") = nil; any target name should produce a handler") {
+		assert.NoError(t, h(ctx, p), "makeHandler(\"go-build\")(ctx, emptyProject)")
 	}
 }
 
@@ -83,20 +64,10 @@ func TestSpellTargetSources(t *testing.T) {
 	}
 	s := types.NewSpell("testpack", types.WithTargetSources(vs))
 
-	cases := []struct {
-		target string
-		want   []string
-	}{
-		{"lint", []string{".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json"}},
-		{"build", nil},
-		{"", nil},
-	}
-	for _, tc := range cases {
-		got := s.TargetSources()[tc.target]
-		if !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("TargetSources(%q) = %v, want %v", tc.target, got, tc.want)
-		}
-	}
+	assert.Equal(t, []string{".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json"},
+		s.TargetSources()["lint"], "TargetSources(lint)")
+	assert.Nil(t, s.TargetSources()["build"], "TargetSources(build)")
+	assert.Nil(t, s.TargetSources()[""], "TargetSources(\"\")")
 }
 
 // TestSpellTargetSources_nilMap asserts that TargetSources is nil-safe on a
@@ -104,39 +75,29 @@ func TestSpellTargetSources(t *testing.T) {
 func TestSpellTargetSources_nilMap(t *testing.T) {
 	t.Parallel()
 	s := types.NewSpell("bare")
-	if got := s.TargetSources()["lint"]; got != nil {
-		t.Errorf("TargetSources on nil-map spell = %v, want nil", got)
-	}
+	assert.Nil(t, s.TargetSources()["lint"], "TargetSources on nil-map spell")
 }
 
 // TestMergePaths verifies dedup + lex ordering, the contract callers
 // rely on for deterministic stream-driven affected output.
 func TestMergePaths(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name string
-		a, b []string
-		want []string
-	}{
-		{"both empty", nil, nil, []string{}},
-		{"a empty", nil, []string{"x", "a"}, []string{"a", "x"}},
-		{"b empty", []string{"x", "a"}, nil, []string{"a", "x"}},
-		{"dedup across", []string{"a", "b"}, []string{"b", "c"}, []string{"a", "b", "c"}},
-		{"all dupes", []string{"a", "a"}, []string{"a"}, []string{"a"}},
+
+	// merge normalizes a nil result to an empty slice so the comparison is
+	// against a non-nil expected value (assert.Equal distinguishes nil/empty).
+	merge := func(a, b []string) []string {
+		got := mergePaths(a, b)
+		if got == nil {
+			got = []string{}
+		}
+		return got
 	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := mergePaths(tc.a, tc.b)
-			if got == nil {
-				got = []string{}
-			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("mergePaths(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
-			}
-		})
-	}
+
+	assert.Equal(t, []string{}, merge(nil, nil), "both empty")
+	assert.Equal(t, []string{"a", "x"}, merge(nil, []string{"x", "a"}), "a empty")
+	assert.Equal(t, []string{"a", "x"}, merge([]string{"x", "a"}, nil), "b empty")
+	assert.Equal(t, []string{"a", "b", "c"}, merge([]string{"a", "b"}, []string{"b", "c"}), "dedup across")
+	assert.Equal(t, []string{"a"}, merge([]string{"a", "a"}, []string{"a"}), "all dupes")
 }
 
 // TestForEachSpell_BudgetHonored verifies that when the context carries a
@@ -154,9 +115,7 @@ func TestForEachSpell_BudgetHonored(t *testing.T) {
 	// marked the context accordingly, exactly as cache.RunAll does at
 	// cache.go:447-456.
 	ctx := context.Background()
-	if err := lim.Acquire(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, lim.Acquire(ctx))
 	defer lim.Release()
 	ctx = cache.ContextWithLimiter(ctx, lim)
 	ctx = cache.WithSlotHeld(ctx)
@@ -192,20 +151,15 @@ func TestForEachSpell_BudgetHonored(t *testing.T) {
 		},
 	}
 
-	if err := forEachSpell(ctx, p, "build", func(ctx context.Context, s *types.Spell) error {
+	require.NoError(t, forEachSpell(ctx, p, "build", func(ctx context.Context, s *types.Spell) error {
 		_, err := s.Invoke(ctx, types.InvokeRequest{Target: "build"})
 		return err
-	}); err != nil {
-		t.Fatalf("forEachSpell: %v", err)
-	}
+	}), "forEachSpell")
 
-	if peak == 0 {
-		t.Fatal("no spells ran")
-	}
-	if peak > cap {
-		t.Errorf("peak concurrent spells = %d; want ≤ %d (limiter cap = %d): spell fan-out escapes the concurrency budget",
-			peak, cap, cap)
-	}
+	require.NotZero(t, peak, "no spells ran")
+	assert.LessOrEqualf(t, peak, cap,
+		"peak concurrent spells = %d; want ≤ %d (limiter cap = %d): spell fan-out escapes the concurrency budget",
+		peak, cap, cap)
 }
 
 // TestForEachSpell_NoBudgetUnchanged verifies that when no limiter is in the
@@ -234,16 +188,12 @@ func TestForEachSpell_NoBudgetUnchanged(t *testing.T) {
 		},
 	}
 
-	if err := forEachSpell(context.Background(), p, "build", func(ctx context.Context, s *types.Spell) error {
+	require.NoError(t, forEachSpell(context.Background(), p, "build", func(ctx context.Context, s *types.Spell) error {
 		_, err := s.Invoke(ctx, types.InvokeRequest{Target: "build"})
 		return err
-	}); err != nil {
-		t.Fatalf("forEachSpell: %v", err)
-	}
+	}), "forEachSpell")
 
-	if len(ran) != 3 {
-		t.Errorf("ran %d spells, want 3", len(ran))
-	}
+	assert.Len(t, ran, 3)
 }
 
 // TestRunTarget_InjectsEffectiveClaims verifies that runTarget injects
@@ -269,12 +219,8 @@ func TestRunTarget_InjectsEffectiveClaims(t *testing.T) {
 		ResolvedSpells: []*types.Spell{spell},
 	}
 
-	if err := runTarget(context.Background(), p, "ci"); err != nil {
-		t.Fatal(err)
-	}
-	if len(gotClaims) == 0 {
-		t.Error("runTarget did not inject effective claims into the spell context")
-	}
+	require.NoError(t, runTarget(context.Background(), p, "ci"))
+	assert.NotEmpty(t, gotClaims, "runTarget did not inject effective claims into the spell context")
 }
 
 // TestCacheOps_InspectReturnErrNoCache asserts the cache-operation methods
@@ -284,130 +230,86 @@ func TestCacheOps_InspectReturnErrNoCache(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := m.PruneCache(context.Background(), time.Now(), true); !errors.Is(err, ErrNoCache) {
-		t.Errorf("PruneCache on Inspect = %v, want ErrNoCache", err)
-	}
-	if err := m.ExportCache(context.Background(), io.Discard); !errors.Is(err, ErrNoCache) {
-		t.Errorf("ExportCache on Inspect = %v, want ErrNoCache", err)
-	}
-	if err := m.ImportCache(context.Background(), strings.NewReader("")); !errors.Is(err, ErrNoCache) {
-		t.Errorf("ImportCache on Inspect = %v, want ErrNoCache", err)
-	}
-	if _, err := m.TailLog("anything", ""); !errors.Is(err, ErrNoCache) {
-		t.Errorf("TailLog on Inspect = %v, want ErrNoCache", err)
-	}
+	require.NoError(t, err)
+	_, _, err = m.PruneCache(context.Background(), time.Now(), true)
+	assert.ErrorIs(t, err, ErrNoCache, "PruneCache on Inspect")
+	assert.ErrorIs(t, m.ExportCache(context.Background(), io.Discard), ErrNoCache, "ExportCache on Inspect")
+	assert.ErrorIs(t, m.ImportCache(context.Background(), strings.NewReader("")), ErrNoCache, "ImportCache on Inspect")
+	_, err = m.TailLog("anything", "")
+	assert.ErrorIs(t, err, ErrNoCache, "TailLog on Inspect")
 }
 
 func TestLimiter_IdempotentNonNil(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
 	l1 := m.limiter()
-	if l1 == nil {
-		t.Fatal("limiter() = nil, want non-nil")
-	}
-	if l2 := m.limiter(); l1 != l2 {
-		t.Error("limiter() not idempotent: second call returned different pointer")
-	}
+	require.NotNil(t, l1, "limiter() = nil, want non-nil")
+	assert.Same(t, l1, m.limiter(), "limiter() not idempotent: second call returned different pointer")
 }
 
 func TestPoolRegistry_IdempotentNonNil(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
 	r1 := m.buzzPoolRegistry()
-	if r1 == nil {
-		t.Fatal("buzzPoolRegistry() = nil, want non-nil")
-	}
-	if r2 := m.buzzPoolRegistry(); r1 != r2 {
-		t.Error("buzzPoolRegistry() not idempotent: second call returned different pointer")
-	}
+	require.NotNil(t, r1, "buzzPoolRegistry() = nil, want non-nil")
+	assert.Same(t, r1, m.buzzPoolRegistry(), "buzzPoolRegistry() not idempotent: second call returned different pointer")
 }
 
 func TestClose_Idempotent(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
-	if err := m.Close(); err != nil {
-		t.Errorf("Close on fresh Magus: %v", err)
-	}
+	assert.NoError(t, m.Close(), "Close on fresh Magus")
 	// Trigger lazy init of poolReg, then Close again.
 	_ = m.buzzPoolRegistry()
-	if err := m.Close(); err != nil {
-		t.Errorf("Close after PoolRegistry: %v", err)
-	}
-	if err := m.Close(); err != nil {
-		t.Errorf("second Close: %v", err)
-	}
+	assert.NoError(t, m.Close(), "Close after PoolRegistry")
+	assert.NoError(t, m.Close(), "second Close")
 }
 
 func TestSetGraphObserver_Invoked(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var builds int
 	m.SetGraphObserver(&countingObserver{onBuild: func() { builds++ }})
-	if _, err := m.Graph(); err != nil {
-		t.Fatal(err)
-	}
-	if builds == 0 {
-		t.Error("SetGraphObserver: OnBuild never called after Graph()")
-	}
+	_, err = m.Graph()
+	require.NoError(t, err)
+	assert.NotZero(t, builds, "SetGraphObserver: OnBuild never called after Graph()")
 
 	// Clear the observer; subsequent Graph() must not increment.
 	before := builds
 	m.SetGraphObserver(nil)
-	if _, err := m.Graph(); err != nil {
-		t.Fatal(err)
-	}
-	if builds != before {
-		t.Errorf("SetGraphObserver(nil): OnBuild called %d extra time(s) after clearing observer", builds-before)
-	}
+	_, err = m.Graph()
+	require.NoError(t, err)
+	assert.Equal(t, before, builds, "SetGraphObserver(nil): OnBuild called after clearing observer")
 }
 
 func TestSpecFor_RootProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
 		Sources: []string{"**/*.go"},
 		Outputs: []string{"bin/app"},
 	}
 	spec := m.baseSpec(p)
-	if spec.ProjectPath != "." {
-		t.Errorf("ProjectPath = %q, want %q", spec.ProjectPath, ".")
-	}
+	assert.Equal(t, ".", spec.ProjectPath, "ProjectPath")
 	// Root project: declared glob passes through unchanged; magusfile globs are
 	// also appended (see magusfileGlobs). Use Contains rather than exact-count.
-	if !slices.Contains(spec.Sources, "**/*.go") {
-		t.Errorf("Sources = %v, must contain \"**/*.go\"", spec.Sources)
-	}
-	if !slices.Contains(spec.Sources, "magusfile.buzz") {
-		t.Errorf("Sources = %v, must contain root magusfile glob \"magusfile.buzz\"", spec.Sources)
-	}
-	if len(spec.Outputs) != 1 || spec.Outputs[0] != "bin/app" {
-		t.Errorf("Outputs = %v, want [\"bin/app\"]", spec.Outputs)
-	}
-	if spec.WorkspaceRoot != m.Root() {
-		t.Errorf("WorkspaceRoot = %q, want %q", spec.WorkspaceRoot, m.Root())
-	}
+	assert.Contains(t, spec.Sources, "**/*.go", "Sources must contain declared glob")
+	assert.Contains(t, spec.Sources, "magusfile.buzz", "Sources must contain root magusfile glob")
+	assert.Equal(t, []string{"bin/app"}, spec.Outputs, "Outputs")
+	assert.Equal(t, m.Root(), spec.WorkspaceRoot, "WorkspaceRoot")
 }
 
 func TestSpecFor_NestedProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "api/magusfile.buzz")
 	m, err := inspect(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	p := &types.Project{
 		Path:    "api",
 		Sources: []string{"**/*.go"},
@@ -415,20 +317,12 @@ func TestSpecFor_NestedProject(t *testing.T) {
 	}
 	spec := m.baseSpec(p)
 	// Declared glob is prefixed with the project path.
-	if !slices.Contains(spec.Sources, "api/**/*.go") {
-		t.Errorf("Sources = %v, must contain \"api/**/*.go\"", spec.Sources)
-	}
+	assert.Contains(t, spec.Sources, "api/**/*.go", "Sources must contain project-prefixed glob")
 	// Project-local magusfile glob is included.
-	if !slices.Contains(spec.Sources, "api/magusfile.buzz") {
-		t.Errorf("Sources = %v, must contain \"api/magusfile.buzz\"", spec.Sources)
-	}
+	assert.Contains(t, spec.Sources, "api/magusfile.buzz", "Sources must contain project-local magusfile glob")
 	// Root magusfile glob is always included for non-root projects.
-	if !slices.Contains(spec.Sources, "magusfile.buzz") {
-		t.Errorf("Sources = %v, must contain root \"magusfile.buzz\"", spec.Sources)
-	}
-	if len(spec.Outputs) != 1 || spec.Outputs[0] != "api/bin/server" {
-		t.Errorf("Outputs = %v, want [\"api/bin/server\"]", spec.Outputs)
-	}
+	assert.Contains(t, spec.Sources, "magusfile.buzz", "Sources must contain root magusfile glob")
+	assert.Equal(t, []string{"api/bin/server"}, spec.Outputs, "Outputs")
 }
 
 // countingObserver is a types.Observer stub that counts OnBuild calls.
@@ -449,38 +343,28 @@ func TestMagusfileGlobs(t *testing.T) {
 
 	t.Run("root project", func(t *testing.T) {
 		t.Parallel()
-		got := magusfileGlobs(".")
 		want := []string{
 			"magusfile.buzz",
 			"magusfiles/**/*.buzz",
 		}
-		if !slices.Equal(got, want) {
-			t.Errorf("magusfileGlobs(\".\") =\n  %v\nwant\n  %v", got, want)
-		}
+		assert.Equal(t, want, magusfileGlobs("."))
 	})
 
 	t.Run("non-root project", func(t *testing.T) {
 		t.Parallel()
-		got := magusfileGlobs("extensions/drape")
 		want := []string{
 			"extensions/drape/magusfile.buzz",
 			"extensions/drape/magusfiles/**/*.buzz",
 		}
-		if !slices.Equal(got, want) {
-			t.Errorf("magusfileGlobs(\"extensions/drape\") =\n  %v\nwant\n  %v", got, want)
-		}
+		assert.Equal(t, want, magusfileGlobs("extensions/drape"))
 	})
 
 	t.Run("single-segment path", func(t *testing.T) {
 		t.Parallel()
 		got := magusfileGlobs("api")
-		if len(got) == 0 {
-			t.Fatal("expected non-empty globs for single-segment path")
-		}
+		require.NotEmpty(t, got, "expected non-empty globs for single-segment path")
 		for _, g := range got {
-			if len(g) < 4 || g[:4] != "api/" {
-				t.Errorf("glob %q should start with \"api/\"", g)
-			}
+			assert.Truef(t, strings.HasPrefix(g, "api/"), "glob %q should start with \"api/\"", g)
 		}
 	})
 }
@@ -552,6 +436,22 @@ func ExampleOpen() {
 	}
 }
 
+// TestExpandAffectedFallbackDistinguishable verifies that when the VCS can't
+// compute a definitive set (here: disabled), ExpandAffected selects all projects
+// AND reports fellBack=true — a typed signal callers can distinguish from a
+// deliberate full run, rather than parsing the free-text source string.
+func TestExpandAffectedFallbackDistinguishable(t *testing.T) {
+	// Not parallel: t.Setenv.
+	t.Setenv("MAGUS_VCS_ENABLED", "false")
+	ws := newWorkspaceCustom(t)
+
+	targets, source, fellBack, err := ws.ExpandAffected(context.Background(), "ci", "")
+	require.NoError(t, err, "ExpandAffected")
+	assert.True(t, fellBack, "fellBack should be true when VCS is disabled")
+	assert.NotEmpty(t, targets, "fallback should select all projects")
+	assert.NotEmpty(t, source, "source should carry the fallback reason")
+}
+
 // ExampleMagus_ExpandAffected shows how to compute the VCS-diff
 // affected project set, with automatic fallback to all projects when
 // the VCS command is unavailable (shallow clone, missing binary, etc.).
@@ -561,7 +461,7 @@ func ExampleMagus_ExpandAffected() {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
-	targets, source, err := m.ExpandAffected(context.Background(), "test", "")
+	targets, source, _, err := m.ExpandAffected(context.Background(), "test", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
@@ -606,22 +506,16 @@ func TestExpand_AllNoPath(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 	targets, err := ws.ExpandPath(types.Target{Name: "build"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got := make([]string, len(targets))
 	for i, tgt := range targets {
 		got[i] = tgt.Path
 	}
 	slices.Sort(got)
 	want := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("Paths = %v, want %v", got, want)
-	}
+	require.Equal(t, want, got, "Paths")
 	for _, tgt := range targets {
-		if tgt.Name != "build" {
-			t.Fatalf("Target = %q, want %q", tgt.Name, "build")
-		}
+		assert.Equal(t, "build", tgt.Name, "Target")
 	}
 }
 
@@ -630,15 +524,10 @@ func TestExpand_ExplicitPath(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 	targets, err := ws.ExpandPath(types.Target{Path: "api", Name: "test"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(targets) != 1 {
-		t.Fatalf("len = %d, want 1", len(targets))
-	}
-	if targets[0].Path != "api" || targets[0].Name != "test" {
-		t.Fatalf("target = %+v, want {api test}", targets[0])
-	}
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "api", targets[0].Path)
+	assert.Equal(t, "test", targets[0].Name)
 }
 
 // TestExpand_SlashAlias verifies "/" is treated as all-projects.
@@ -646,18 +535,14 @@ func TestExpand_SlashAlias(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 	targets, err := ws.ExpandPath(types.Target{Path: "/", Name: "build"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got := make([]string, len(targets))
 	for i, tgt := range targets {
 		got[i] = tgt.Path
 	}
 	slices.Sort(got)
 	want := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("Paths = %v, want %v", got, want)
-	}
+	assert.Equal(t, want, got, "Paths")
 }
 
 // TestExpand_WsPrefixRejected verifies "ws:foo" paths are rejected.
@@ -665,9 +550,7 @@ func TestExpand_WsPrefixRejected(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 	_, err := ws.ExpandPath(types.Target{Path: "ws:api", Name: "build"})
-	if err == nil {
-		t.Fatal("expected error for ws:-prefixed path")
-	}
+	assert.Error(t, err, "expected error for ws:-prefixed path")
 }
 
 // TestExpand_UnknownPath returns ErrUnknownProject for unknown paths.
@@ -675,67 +558,43 @@ func TestExpand_UnknownPath(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 	_, err := ws.ExpandPath(types.Target{Path: "does/not/exist", Name: "build"})
-	if err == nil {
-		t.Fatal("expected error for unknown project path")
-	}
-	if !errors.Is(err, ErrUnknownProject) {
-		t.Fatalf("error %q is not ErrUnknownProject", err)
-	}
+	assert.ErrorIs(t, err, ErrUnknownProject, "expected ErrUnknownProject for unknown project path")
 }
 
 // TestParseTarget covers the canonical "target[:charm,...]" parsing cases.
 func TestParseTarget(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		input      string
-		wantName   string
-		wantCharms []string
-		wantErr    bool
-	}{
-		{input: "build", wantName: "build"}, // bare target
-		{input: "lint:read", wantName: "lint", wantCharms: []string{"read"}},
-		{input: "format:write", wantName: "format", wantCharms: []string{"write"}},
-		{input: "", wantErr: true},
-		{input: "lint:", wantErr: true},           // empty charm
-		{input: "web/studio:test", wantErr: true}, // '/' not allowed in target
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.input, func(t *testing.T) {
+
+	parseOK := func(input, wantName string, wantCharms []string) {
+		t.Run(input, func(t *testing.T) {
 			t.Parallel()
-			got, err := types.ParseTarget(tc.input)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("ParseTarget(%q): want error, got %+v", tc.input, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParseTarget(%q): unexpected error: %v", tc.input, err)
-			}
-			if got.Name != tc.wantName || !slices.Equal(got.Charms, tc.wantCharms) {
-				t.Fatalf("ParseTarget(%q) = {Name:%q Charms:%v}, want {Name:%q Charms:%v}",
-					tc.input, got.Name, got.Charms, tc.wantName, tc.wantCharms)
-			}
+			got, err := types.ParseTarget(input)
+			require.NoErrorf(t, err, "ParseTarget(%q)", input)
+			assert.Equalf(t, wantName, got.Name, "ParseTarget(%q).Name", input)
+			assert.Equalf(t, wantCharms, got.Charms, "ParseTarget(%q).Charms", input)
 		})
 	}
+	parseErr := func(name, input string) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := types.ParseTarget(input)
+			assert.Errorf(t, err, "ParseTarget(%q): want error", input)
+		})
+	}
+
+	parseOK("build", "build", nil) // bare target
+	parseOK("lint:read", "lint", []string{"read"})
+	parseOK("format:write", "format", []string{"write"})
+	parseErr("empty", "")
+	parseErr("empty charm", "lint:")               // empty charm
+	parseErr("slash in target", "web/studio:test") // '/' not allowed in target
 }
 
 // TestTargetString verifies the canonical "path:target" form.
 func TestTargetString(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		t    types.Target
-		want string
-	}{
-		{types.Target{Path: "api", Name: "build"}, "api:build"},
-		{types.Target{Name: "test"}, ":test"},
-	}
-	for _, tc := range cases {
-		if got := tc.t.String(); got != tc.want {
-			t.Errorf("Target%+v.String() = %q, want %q", tc.t, got, tc.want)
-		}
-	}
+	assert.Equal(t, "api:build", types.Target{Path: "api", Name: "build"}.String())
+	assert.Equal(t, ":test", types.Target{Name: "test"}.String())
 }
 
 // TestMagus_proxies asserts that the methods *Magus exposes
@@ -746,28 +605,22 @@ func TestMagus_proxies(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 
-	if ws.Root() == "" {
-		t.Fatal("Root: empty")
-	}
+	require.NotEmpty(t, ws.Root(), "Root: empty")
 
 	all := ws.All()
-	if len(all) == 0 {
-		t.Fatal("All: empty")
-	}
+	require.NotEmpty(t, all, "All: empty")
 
 	for _, p := range all {
-		if got := ws.Get(p.Path); got == nil || got.Path != p.Path {
-			t.Errorf("Get(%q): got %v, want project at %q", p.Path, got, p.Path)
+		got := ws.Get(p.Path)
+		if assert.NotNilf(t, got, "Get(%q): got nil, want project", p.Path) {
+			assert.Equalf(t, p.Path, got.Path, "Get(%q): wrong project", p.Path)
 		}
 	}
 
-	if got := ws.Get("does/not/exist"); got != nil {
-		t.Errorf("Get(unknown): got %v, want nil", got)
-	}
+	assert.Nil(t, ws.Get("does/not/exist"), "Get(unknown): want nil")
 
-	if _, err := ws.Graph(); err != nil {
-		t.Fatalf("Graph: %v", err)
-	}
+	_, err := ws.Graph()
+	require.NoError(t, err, "Graph")
 
 	// Where: pick the first non-root project. The root project
 	// ("." marker) is deliberately not matched at the workspace root by
@@ -779,13 +632,11 @@ func TestMagus_proxies(t *testing.T) {
 			break
 		}
 	}
-	if nonRoot == "" {
-		t.Fatal("setup: no non-root project to test Where")
-	}
+	require.NotEmpty(t, nonRoot, "setup: no non-root project to test Where")
 	abs := filepath.Join(ws.Root(), nonRoot)
-	if p, ok := ws.Where(abs); !ok || p.Path != nonRoot {
-		t.Errorf("Where(%q): got (%v, %v), want project at %q", abs, p, ok, nonRoot)
-	}
+	p, ok := ws.Where(abs)
+	require.Truef(t, ok, "Where(%q): not found, want project at %q", abs, nonRoot)
+	assert.Equalf(t, nonRoot, p.Path, "Where(%q): wrong project", abs)
 
 	// VCSOptions is a value-type accessor; it must be safe to call
 	// without panicking on a freshly-opened workspace.
@@ -796,44 +647,32 @@ func TestMagus_proxies(t *testing.T) {
 	// shells out to git, which is not always available in test
 	// environments.
 	r, err := ws.AffectedFromPaths(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("AffectedFromPaths(nil): %v", err)
-	}
-	if len(r.Affected) != 0 {
-		t.Errorf("AffectedFromPaths(nil).Affected: got %v, want empty", r.Affected)
-	}
+	require.NoError(t, err, "AffectedFromPaths(nil)")
+	assert.Empty(t, r.Affected, "AffectedFromPaths(nil).Affected: want empty")
 }
 
 func b64Pub(t *testing.T) (pub string, seed string) {
 	t.Helper()
 	pk, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
+	require.NoError(t, err, "generate key")
 	return base64.StdEncoding.EncodeToString(pk), base64.StdEncoding.EncodeToString(priv.Seed())
 }
 
 // TestRemoteCacheRequiresTrustSet is the paranoid root: a wired remote backend
 // with no declared trust set must be a hard error, not a silent unverified cache.
 func TestRemoteCacheRequiresTrustSet(t *testing.T) {
-	if _, err := remoteCacheSigningOpts(nil, false); err == nil {
-		t.Fatal("empty trust set was accepted; a remote cache must require trusted_keys")
-	}
-	if _, err := remoteCacheSigningOpts([]string{}, false); err == nil {
-		t.Fatal("empty trust-set slice was accepted")
-	}
+	_, err := remoteCacheSigningOpts(nil, false)
+	assert.Error(t, err, "empty trust set was accepted; a remote cache must require trusted_keys")
+	_, err = remoteCacheSigningOpts([]string{}, false)
+	assert.Error(t, err, "empty trust-set slice was accepted")
 }
 
 // TestRemoteCacheInsecureSkipsTrustSet: the explicit opt-out accepts a wired
 // backend with no trust set and no signing key, yielding the insecure option.
 func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
 	opts, err := remoteCacheSigningOpts(nil, true)
-	if err != nil {
-		t.Fatalf("insecure mode rejected empty trust set: %v", err)
-	}
-	if len(opts) != 1 {
-		t.Fatalf("insecure: got %d opts, want 1 (WithInsecureRemote)", len(opts))
-	}
+	require.NoError(t, err, "insecure mode rejected empty trust set")
+	assert.Len(t, opts, 1, "insecure: want 1 opt (WithInsecureRemote)")
 }
 
 // TestRemoteCacheTrustSetDecodes: a valid trust set yields verification options;
@@ -842,32 +681,22 @@ func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 	pub, seed := b64Pub(t)
 
 	opts, err := remoteCacheSigningOpts([]string{pub}, false)
-	if err != nil {
-		t.Fatalf("valid trust set rejected: %v", err)
-	}
-	if len(opts) != 1 {
-		t.Fatalf("verify-only: got %d opts, want 1 (trusted keys only)", len(opts))
-	}
+	require.NoError(t, err, "valid trust set rejected")
+	assert.Len(t, opts, 1, "verify-only: want 1 opt (trusted keys only)")
 
 	t.Setenv(signingKeyEnv, seed)
 	opts, err = remoteCacheSigningOpts([]string{pub}, false)
-	if err != nil {
-		t.Fatalf("valid trust set + signing key rejected: %v", err)
-	}
-	if len(opts) != 2 {
-		t.Fatalf("signing: got %d opts, want 2 (trusted keys + signing key)", len(opts))
-	}
+	require.NoError(t, err, "valid trust set + signing key rejected")
+	assert.Len(t, opts, 2, "signing: want 2 opts (trusted keys + signing key)")
 }
 
 // TestRemoteCacheRejectsMalformedKeys: bad base64 in either the trust set or the
 // signing-key env var is a clear configuration error, not a silent fallback.
 func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
-	if _, err := remoteCacheSigningOpts([]string{"not!base64!"}, false); err == nil {
-		t.Error("malformed trusted key was accepted")
-	}
+	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false)
+	assert.Error(t, err, "malformed trusted key was accepted")
 	pub, _ := b64Pub(t)
 	t.Setenv(signingKeyEnv, "not!base64!")
-	if _, err := remoteCacheSigningOpts([]string{pub}, false); err == nil {
-		t.Error("malformed signing key was accepted")
-	}
+	_, err = remoteCacheSigningOpts([]string{pub}, false)
+	assert.Error(t, err, "malformed signing key was accepted")
 }

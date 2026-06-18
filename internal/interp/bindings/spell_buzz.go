@@ -6,8 +6,8 @@ import (
 	"os"
 
 	buzzeng "github.com/egladman/gopherbuzz"
+	"github.com/egladman/magus/hostbuzz"
 	ispell "github.com/egladman/magus/internal/spell"
-	buzzgen "github.com/egladman/magus/internal/std/gen/buzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -15,9 +15,9 @@ import (
 // loadBuzzSpell reads, extracts (with host modules registered), and idempotently
 // registers a Buzz spell with function-op support, returning its spec and the
 // registered driver. This is the single place a Buzz spell becomes a registered
-// spell — whether reached by `import "spells/<name>"`, magus.spell.load, or the
-// remote-cache resolver — so every imported Buzz spell carries function-ops
-// uniformly, not only those wired through the cache.
+// spell — whether reached by `import "spells/<name>"` or the remote-cache
+// resolver — so every imported Buzz spell carries function-ops uniformly, not
+// only those wired through the cache.
 //
 // Registering at load time (rather than deferring to project bind) is what lets
 // the function-op invoker capture the spell source; the spec-only handle
@@ -37,14 +37,14 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Spec, *types.Spell,
 		types.WithSources(spec.Needs...),
 		types.WithClaims(spec.Claims...),
 		types.WithSpellOutputs(spec.Provides...),
-		types.WithTargets(spec.TargetNames()...),
+		types.WithTargets(spec.OpNames()...),
 		types.WithInvoker(newBuzzSpellInvoker(spec, src)),
-		types.WithCommandRenderer(newCommandRenderer(spec.Targets)),
-		types.WithTargetCharms(charmNamesByTarget(spec.Targets)),
-		types.WithTargetDocs(docsByTarget(spec.Targets)),
+		types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
+		types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
+		types.WithTargetDocs(docsByTarget(spec.Ops)),
 		// A workspace-local Buzz spell: doctor enforces a doc comment on each
 		// function-handler target (record-style {cmd,args} ops are exempt).
-		types.WithDocRequiredTargets(spec.DocTargets...),
+		types.WithDocRequiredTargets(spec.DocOps...),
 	)
 	// Register-if-absent (not Lookup-then-Register): two imports of the same spell
 	// racing here must not both reach RegisterSpell's duplicate panic. First wins;
@@ -58,7 +58,7 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Spec, *types.Spell,
 // load-time twin of callBuzzSpellFunc's session setup, so a spell that imports
 // host modules at top level loads as well as it runs.
 func extractSpecWithModules(ctx context.Context, src string) (ispell.Spec, error) {
-	sess := buzzeng.NewSession(ctx)
+	sess := buzzeng.NewSession(ctx, buzzeng.WithEmbedded())
 	defer sess.Close()
 	registerHostModules(ctx, sess)
 	if err := sess.Exec(ctx, src); err != nil {
@@ -67,20 +67,16 @@ func extractSpecWithModules(ctx context.Context, src string) (ispell.Spec, error
 	return ispell.Resolve(ctx, sess, ispell.ForkOrFunctionOps(src))
 }
 
-// newBuzzSpellInvoker dispatches a Buzz spell's ops: function-ops (Func set) run
-// in the VM with req.Params and return their result as Data; fork ops fork as
-// usual. Unknown targets are a graceful no-op, matching the built-in invoker.
+// newBuzzSpellInvoker dispatches a Buzz spell's ops through the shared bridge
+// (dispatchOp): a Buzz spell HAS a script body, so it supplies a function-op
+// runner — function-ops (Func set) run in the VM with req.Params and return their
+// result as Data, while fork ops fork. This is the same priority rule the built-in
+// invoker uses; only the function-op branch differs (built-ins pass nil).
 func newBuzzSpellInvoker(spec ispell.Spec, src string) func(context.Context, types.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
-		tgt, ok := spec.Targets[req.Target]
-		if !ok {
-			return nil, nil
-		}
-		if tgt.Func != "" {
-			return callBuzzSpellFunc(ctx, src, tgt.Func, req)
-		}
-		_, err := runForkTarget(ctx, tgt, forkOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
-		return nil, err
+		return dispatchOp(ctx, spec.Ops, req, func(ctx context.Context, fn string, req types.InvokeRequest) (any, error) {
+			return callBuzzSpellFunc(ctx, src, fn, req)
+		})
 	}
 }
 
@@ -96,7 +92,7 @@ func newBuzzSpellInvoker(spec ispell.Spec, src string) func(context.Context, typ
 // module body must be idempotent (no one-time side effects) — the mgs_ functions
 // and op bodies do the work.
 func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequest) (any, error) {
-	sess := buzzeng.NewSession(ctx)
+	sess := buzzeng.NewSession(ctx, buzzeng.WithEmbedded())
 	defer sess.Close()
 	registerHostModules(ctx, sess)
 	if err := sess.Exec(ctx, src); err != nil {
@@ -109,7 +105,8 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 	// cb delivers the op's inputs by copying req.Params into the map the handler
 	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after
 	// cb(io) returns. A handler that needs no inputs simply never calls cb.
-	params := buzzgen.AnyToValue(req.Params)
+	params := hostbuzz.AnyToValue(req.Params)
+	tgt := targetValue(ctx, req)
 	cb := buzzeng.DirectValue("magus.cb", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		if len(args) > 0 && args[0].IsMap() && params.IsMap() {
 			for _, k := range params.MapKeys() {
@@ -119,23 +116,29 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 		}
 		return buzzeng.Null, nil
 	})
-	args := []buzzeng.Value{targetValue(req), cb}
+	args := []buzzeng.Value{tgt, cb}
 	rv, err := sess.CallValue(ctx, f, args)
 	if err != nil {
 		return nil, fmt.Errorf("spell function-op %q: %w", fn, err)
 	}
-	return buzzgen.ValueToAny(rv), nil
+	return hostbuzz.ValueToAny(rv), nil
 }
 
 // targetValue builds the Buzz Target value a spell handler receives as its first
 // argument. A plain map suffices — member access (target.name) reads a map key —
 // and most handlers ignore it; it carries the invocation's identity for those
-// that don't.
-func targetValue(req types.InvokeRequest) buzzeng.Value {
+// that don't. The active charms ride on ctx, so a handler that inspects
+// target.charms sees the run's real charms rather than an always-empty list.
+func targetValue(ctx context.Context, req types.InvokeRequest) buzzeng.Value {
 	t := buzzeng.NewMap()
 	t.MapSet("name", buzzeng.StrValue(req.Target))
 	t.MapSet("projectPath", buzzeng.StrValue(req.Dir))
-	t.MapSet("charms", buzzeng.ListValue(nil))
+	charms := types.CharmsFromContext(ctx)
+	cv := make([]buzzeng.Value, len(charms))
+	for i, c := range charms {
+		cv[i] = buzzeng.StrValue(c)
+	}
+	t.MapSet("charms", buzzeng.ListValue(cv))
 	t.MapSet("files", buzzeng.ListValue(nil))
 	return t
 }

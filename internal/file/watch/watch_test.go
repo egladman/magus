@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWatcherDetectsFileWrite(t *testing.T) {
@@ -14,9 +17,7 @@ func TestWatcherDetectsFileWrite(t *testing.T) {
 
 	// Pre-create the file so the watcher is set up before the write.
 	f, err := os.CreateTemp(dir, "*.go")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	f.Close()
 
 	w, err := New(
@@ -24,28 +25,15 @@ func TestWatcherDetectsFileWrite(t *testing.T) {
 		WithRoot(dir),
 		WithDebounce(50*time.Millisecond),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w.Close()
 
 	// Write to the file to trigger an event.
-	if err := os.WriteFile(f.Name(), []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(f.Name(), []byte("hello"), 0o644))
 
 	select {
 	case batch := <-w.Events():
-		found := false
-		for _, p := range batch.Paths {
-			if p == f.Name() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("batch.Paths = %v, want to contain %s", batch.Paths, f.Name())
-		}
+		assert.Contains(t, batch.Paths, f.Name())
 	case <-time.After(3 * time.Second):
 		t.Fatal("timeout: no event received after file write")
 	}
@@ -55,9 +43,7 @@ func TestWatcherDebounceCoalesces(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	f, err := os.CreateTemp(dir, "*.go")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	f.Close()
 
 	w, err := New(
@@ -65,16 +51,12 @@ func TestWatcherDebounceCoalesces(t *testing.T) {
 		WithRoot(dir),
 		WithDebounce(100*time.Millisecond),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w.Close()
 
 	// Write 10 times in rapid succession.
 	for i := range 10 {
-		if err := os.WriteFile(f.Name(), []byte{byte(i)}, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(f.Name(), []byte{byte(i)}, 0o644))
 	}
 
 	var batches int
@@ -101,13 +83,9 @@ func TestWatcherDebounceCoalesces(t *testing.T) {
 		}
 	}
 done:
-	if batches == 0 {
-		t.Fatal("no batches received")
-	}
+	require.NotZero(t, batches, "no batches received")
 	// Tolerate at most 3 batches (debounce may fire between writes on slow CI).
-	if batches > 3 {
-		t.Errorf("got %d batches for 10 rapid writes; want ≤3 (debounce should coalesce)", batches)
-	}
+	assert.LessOrEqual(t, batches, 3, "debounce should coalesce 10 rapid writes into ≤3 batches")
 }
 
 func TestWatcherIgnoresBuiltinPaths(t *testing.T) {
@@ -116,9 +94,7 @@ func TestWatcherIgnoresBuiltinPaths(t *testing.T) {
 
 	// Create a .git directory and a file inside it.
 	gitDir := filepath.Join(dir, ".git")
-	if err := os.Mkdir(gitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(gitDir, 0o755))
 
 	w, err := New(
 		context.Background(),
@@ -126,30 +102,20 @@ func TestWatcherIgnoresBuiltinPaths(t *testing.T) {
 		WithDebounce(50*time.Millisecond),
 		WithIgnore(BuiltinIgnore),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w.Close()
 
 	// Write inside .git — should not produce an event.
 	gitFile := filepath.Join(gitDir, "HEAD")
-	if err := os.WriteFile(gitFile, []byte("ref: refs/heads/main"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(gitFile, []byte("ref: refs/heads/main"), 0o644))
 
 	// Write a legitimate file — should produce an event.
 	legit := filepath.Join(dir, "main.go")
-	if err := os.WriteFile(legit, []byte("package main"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(legit, []byte("package main"), 0o644))
 
 	select {
 	case batch := <-w.Events():
-		for _, p := range batch.Paths {
-			if p == gitFile {
-				t.Errorf("received event for .git file %s; should have been ignored", gitFile)
-			}
-		}
+		assert.NotContains(t, batch.Paths, gitFile, "received event for .git file; should have been ignored")
 	case <-time.After(3 * time.Second):
 		t.Fatal("timeout waiting for legitimate event")
 	}
@@ -164,15 +130,11 @@ func TestWatcherDetectsNewSubdir(t *testing.T) {
 		WithRoot(dir),
 		WithDebounce(50*time.Millisecond),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w.Close()
 
 	sub := filepath.Join(dir, "newpkg")
-	if err := os.Mkdir(sub, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(sub, 0o755))
 	newFile := filepath.Join(sub, "foo.go")
 
 	// Re-write loop instead of a Sleep: keep recreating the target
@@ -186,9 +148,7 @@ func TestWatcherDetectsNewSubdir(t *testing.T) {
 	retick := time.NewTicker(50 * time.Millisecond)
 	defer retick.Stop()
 	write := func() {
-		if err := os.WriteFile(newFile, []byte("package newpkg"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(newFile, []byte("package newpkg"), 0o644))
 	}
 	write()
 	for {
@@ -218,9 +178,7 @@ func TestWatcherContextCancellation(t *testing.T) {
 		WithRoot(dir),
 		WithDebounce(50*time.Millisecond),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	cancel()
 
@@ -260,10 +218,7 @@ func TestOutputsIgnoreDoublestar(t *testing.T) {
 		{"/other/repo/dist/x.js", false},
 	}
 	for _, tc := range cases {
-		got := ignore(tc.path)
-		if got != tc.ignored {
-			t.Errorf("OutputsIgnore(%q) = %v, want %v", tc.path, got, tc.ignored)
-		}
+		assert.Equal(t, tc.ignored, ignore(tc.path), "OutputsIgnore(%q)", tc.path)
 	}
 }
 
@@ -280,13 +235,9 @@ func TestWatcherCloseNoGoroutineLeak(t *testing.T) {
 		WithRoot(dir),
 		WithDebounce(50*time.Millisecond),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close() error: %v", err)
-	}
+	require.NoError(t, w.Close(), "Close() error")
 
 	// Events channel must be closed (loop exited) promptly after Close.
 	select {
@@ -321,9 +272,6 @@ func TestBuiltinIgnore(t *testing.T) {
 		{"/repo/web/app.ts", false},
 	}
 	for _, tc := range cases {
-		got := BuiltinIgnore(tc.path)
-		if got != tc.ignored {
-			t.Errorf("BuiltinIgnore(%q) = %v, want %v", tc.path, got, tc.ignored)
-		}
+		assert.Equal(t, tc.ignored, BuiltinIgnore(tc.path), "BuiltinIgnore(%q)", tc.path)
 	}
 }

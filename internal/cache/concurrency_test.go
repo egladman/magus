@@ -3,6 +3,8 @@ package cache
 import (
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestDefaultConcurrency_GitHubActions verifies that a GitHub-hosted
@@ -14,9 +16,7 @@ func TestDefaultConcurrency_GitHubActions(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
 	t.Setenv("GITHUB_ACTIONS", "true")
 	t.Setenv("RUNNER_ENVIRONMENT", "github-hosted")
-	if got := DefaultConcurrency(); got != 4 {
-		t.Errorf("DefaultConcurrency() = %d, want 4 under GitHub-hosted runner", got)
-	}
+	assert.Equal(t, 4, DefaultConcurrency(), "DefaultConcurrency should cap at 4 under GitHub-hosted runner")
 }
 
 // TestDefaultConcurrency_SelfHostedRunner verifies that a self-hosted
@@ -33,9 +33,7 @@ func TestDefaultConcurrency_SelfHostedRunner(t *testing.T) {
 	if want < 1 {
 		want = 1
 	}
-	if got := DefaultConcurrency(); got != want {
-		t.Errorf("DefaultConcurrency() = %d, want %d (self-hosted should not clamp)", got, want)
-	}
+	assert.Equal(t, want, DefaultConcurrency(), "self-hosted should not clamp")
 }
 
 // TestDefaultConcurrency_EnvOverridesGitHubActions verifies that an
@@ -43,9 +41,7 @@ func TestDefaultConcurrency_SelfHostedRunner(t *testing.T) {
 func TestDefaultConcurrency_EnvOverridesGitHubActions(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "12")
 	t.Setenv("GITHUB_ACTIONS", "true")
-	if got := DefaultConcurrency(); got != 12 {
-		t.Errorf("DefaultConcurrency() = %d, want 12 (env should override)", got)
-	}
+	assert.Equal(t, 12, DefaultConcurrency(), "env should override")
 }
 
 // TestDefaultConcurrency_LocalDefault verifies the no-CI fallback.
@@ -59,7 +55,5 @@ func TestDefaultConcurrency_LocalDefault(t *testing.T) {
 	if want < 1 {
 		want = 1
 	}
-	if got := DefaultConcurrency(); got != want {
-		t.Errorf("DefaultConcurrency() = %d, want %d", got, want)
-	}
+	assert.Equal(t, want, DefaultConcurrency())
 }

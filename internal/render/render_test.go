@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func diamondOutput() types.GraphOutput {
@@ -45,87 +47,51 @@ func emptyOutput() types.GraphOutput {
 func TestWriteGraphDOT_Single(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := WriteGraphDOT(&b, singleOutput()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphDOT(&b, singleOutput()))
 	got := b.String()
-	if !strings.Contains(got, `"api";`) {
-		t.Errorf("expected node declaration; got:\n%s", got)
-	}
-	if !strings.HasPrefix(got, "digraph magus {") {
-		t.Errorf("expected digraph header; got:\n%s", got)
-	}
+	assert.Contains(t, got, `"api";`, "expected node declaration")
+	assert.True(t, strings.HasPrefix(got, "digraph magus {"), "expected digraph header; got:\n%s", got)
 }
 
 func TestWriteGraphDOT_Linear(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := WriteGraphDOT(&b, linearOutput()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphDOT(&b, linearOutput()))
 	got := b.String()
-	if !strings.Contains(got, `"api" -> "internal/db";`) {
-		t.Errorf("missing edge api->internal/db; got:\n%s", got)
-	}
-	if !strings.Contains(got, `"internal/db" -> "internal/util";`) {
-		t.Errorf("missing edge internal/db->internal/util; got:\n%s", got)
-	}
+	assert.Contains(t, got, `"api" -> "internal/db";`, "missing edge api->internal/db")
+	assert.Contains(t, got, `"internal/db" -> "internal/util";`, "missing edge internal/db->internal/util")
 }
 
 func TestWriteGraphDOT_Diamond(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := WriteGraphDOT(&b, diamondOutput()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphDOT(&b, diamondOutput()))
 	got := b.String()
-	if !strings.Contains(got, `"lib/auth" -> "lib/crypto";`) {
-		t.Errorf("missing auth->crypto edge; got:\n%s", got)
-	}
-	if !strings.Contains(got, `"lib/http" -> "lib/crypto";`) {
-		t.Errorf("missing http->crypto edge; got:\n%s", got)
-	}
+	assert.Contains(t, got, `"lib/auth" -> "lib/crypto";`, "missing auth->crypto edge")
+	assert.Contains(t, got, `"lib/http" -> "lib/crypto";`, "missing http->crypto edge")
 }
 
 func TestWriteGraphDOT_Empty(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := WriteGraphDOT(&b, emptyOutput()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphDOT(&b, emptyOutput()))
 	got := b.String()
-	if !strings.HasPrefix(got, "digraph magus {") {
-		t.Errorf("expected digraph header on empty graph; got:\n%s", got)
-	}
-	if strings.Contains(got, "->") {
-		t.Errorf("unexpected edge in empty graph; got:\n%s", got)
-	}
+	assert.True(t, strings.HasPrefix(got, "digraph magus {"), "expected digraph header on empty graph; got:\n%s", got)
+	assert.NotContains(t, got, "->", "unexpected edge in empty graph")
 }
 
 func TestWriteGraphMermaid_Linear(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, linearOutput()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, linearOutput()))
 	got := b.String()
-	if !strings.Contains(got, "---\ntitle:") {
-		t.Errorf("missing frontmatter; got:\n%s", got)
-	}
-	if !strings.Contains(got, "graph TD") {
-		t.Errorf("missing 'graph TD' header; got:\n%s", got)
-	}
-	if !strings.Contains(got, "subgraph spell_") {
-		t.Errorf("missing subgraph; got:\n%s", got)
-	}
+	assert.Contains(t, got, "---\ntitle:", "missing frontmatter")
+	assert.Contains(t, got, "graph TD", "missing 'graph TD' header")
+	assert.Contains(t, got, "subgraph spell_", "missing subgraph")
 	for _, label := range []string{`"api"`, `"internal/db"`, `"internal/util"`} {
-		if !strings.Contains(got, label) {
-			t.Errorf("missing label %s; got:\n%s", label, got)
-		}
+		assert.Contains(t, got, label, "missing label %s", label)
 	}
-	if !strings.Contains(got, "-->") {
-		t.Errorf("missing edges; got:\n%s", got)
-	}
+	assert.Contains(t, got, "-->", "missing edges")
 }
 
 func TestWriteGraphMermaid_PathEscaping(t *testing.T) {
@@ -138,16 +104,11 @@ func TestWriteGraphMermaid_PathEscaping(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
-	if strings.Contains(got, "foo/bar[") || strings.Contains(got, "baz-qux[") {
-		t.Errorf("unsafe characters in Mermaid IDs; got:\n%s", got)
-	}
-	if !strings.Contains(got, `"foo/bar"`) {
-		t.Errorf("label should preserve original path; got:\n%s", got)
-	}
+	assert.NotContains(t, got, "foo/bar[", "unsafe characters in Mermaid IDs")
+	assert.NotContains(t, got, "baz-qux[", "unsafe characters in Mermaid IDs")
+	assert.Contains(t, got, `"foo/bar"`, "label should preserve original path")
 }
 
 func TestWriteGraphMermaid_IDCollision(t *testing.T) {
@@ -160,14 +121,11 @@ func TestWriteGraphMermaid_IDCollision(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
 	// Both nodes should appear with distinct IDs (one will be foo_bar, the other foo_bar_1).
-	if strings.Count(got, `"foo/bar"`) < 1 || strings.Count(got, `"foo_bar"`) < 1 {
-		t.Errorf("expected both node labels; got:\n%s", got)
-	}
+	assert.Contains(t, got, `"foo/bar"`, "expected both node labels")
+	assert.Contains(t, got, `"foo_bar"`, "expected both node labels")
 }
 
 func TestWriteGraphMermaid_Subgraphs(t *testing.T) {
@@ -181,14 +139,10 @@ func TestWriteGraphMermaid_Subgraphs(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
 	for _, sg := range []string{"subgraph spell_go", "subgraph spell_rust", "subgraph spell_typescript"} {
-		if !strings.Contains(got, sg) {
-			t.Errorf("missing %q; got:\n%s", sg, got)
-		}
+		assert.Contains(t, got, sg)
 	}
 }
 
@@ -203,17 +157,11 @@ func TestWriteGraphMermaid_CrossSpellEdgeLabel(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
-	if !strings.Contains(got, `|"rust"|`) {
-		t.Errorf("expected cross-spell edge label |\"rust\"|; got:\n%s", got)
-	}
+	assert.Contains(t, got, `|"rust"|`, `expected cross-spell edge label |"rust"|`)
 	// Same-spell edge (api→util) must be a plain -->, not labeled.
-	if strings.Count(got, " --> ") < 1 {
-		t.Errorf("expected at least one unlabeled edge; got:\n%s", got)
-	}
+	assert.GreaterOrEqual(t, strings.Count(got, " --> "), 1, "expected at least one unlabeled edge")
 }
 
 func TestWriteGraphMermaid_RootHighlight(t *testing.T) {
@@ -227,16 +175,11 @@ func TestWriteGraphMermaid_RootHighlight(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
-	if !strings.Contains(got, "classDef root") {
-		t.Errorf("expected 'classDef root'; got:\n%s", got)
-	}
-	if !strings.Contains(got, "root") || !strings.Contains(got, "api") {
-		t.Errorf("expected root class assignment for api; got:\n%s", got)
-	}
+	assert.Contains(t, got, "classDef root", "expected 'classDef root'")
+	assert.Contains(t, got, "root", "expected root class assignment for api")
+	assert.Contains(t, got, "api", "expected root class assignment for api")
 }
 
 func TestWriteGraphMermaid_Exclusive(t *testing.T) {
@@ -249,18 +192,12 @@ func TestWriteGraphMermaid_Exclusive(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
 	// Exclusive node uses hexagon syntax {{...}}
-	if !strings.Contains(got, `{{"api"}}`) {
-		t.Errorf("expected hexagon shape for exclusive node; got:\n%s", got)
-	}
+	assert.Contains(t, got, `{{"api"}}`, "expected hexagon shape for exclusive node")
 	// Non-exclusive node uses rectangle [...]
-	if !strings.Contains(got, `["util"]`) {
-		t.Errorf("expected rectangle shape for non-exclusive node; got:\n%s", got)
-	}
+	assert.Contains(t, got, `["util"]`, "expected rectangle shape for non-exclusive node")
 }
 
 func TestWriteGraphMermaid_ClickHandler(t *testing.T) {
@@ -272,16 +209,10 @@ func TestWriteGraphMermaid_ClickHandler(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
-	if !strings.Contains(got, "click ") {
-		t.Errorf("expected click handler; got:\n%s", got)
-	}
-	if !strings.Contains(got, `"file:///abs/path/api"`) {
-		t.Errorf("expected file:// URL; got:\n%s", got)
-	}
+	assert.Contains(t, got, "click ", "expected click handler")
+	assert.Contains(t, got, `"file:///abs/path/api"`, "expected file:// URL")
 }
 
 func TestWriteGraphMermaid_BlastRadius(t *testing.T) {
@@ -294,16 +225,10 @@ func TestWriteGraphMermaid_BlastRadius(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
-	if !strings.Contains(got, "BR=12") {
-		t.Errorf("expected BR=12 in label; got:\n%s", got)
-	}
-	if strings.Contains(got, "BR=0") {
-		t.Errorf("unexpected BR=0 label; got:\n%s", got)
-	}
+	assert.Contains(t, got, "BR=12", "expected BR=12 in label")
+	assert.NotContains(t, got, "BR=0", "unexpected BR=0 label")
 }
 
 func TestWriteGraphMermaid_Duration(t *testing.T) {
@@ -318,67 +243,40 @@ func TestWriteGraphMermaid_Duration(t *testing.T) {
 		},
 	}
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, out); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, out))
 	got := b.String()
 	for _, want := range []string{"~450ms", "~2.3s", "~1m20s"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected %q in output; got:\n%s", want, got)
-		}
+		assert.Contains(t, got, want)
 	}
 	// The "none" node must not get any duration label.
-	if strings.Contains(got, `"none<br/>`) {
-		t.Errorf("unexpected duration label for DurationMs=0; got:\n%s", got)
-	}
+	assert.NotContains(t, got, `"none<br/>`, "unexpected duration label for DurationMs=0")
 }
 
 func TestFormatDuration(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		d    time.Duration
-		want string
-	}{
-		{0, "0ms"},
-		{450 * time.Millisecond, "450ms"},
-		{999 * time.Millisecond, "999ms"},
-		{1000 * time.Millisecond, "1s"},
-		{2300 * time.Millisecond, "2.3s"},
-		{59999 * time.Millisecond, "60s"},
-		{60000 * time.Millisecond, "1m"},
-		{80000 * time.Millisecond, "1m20s"},
-	}
-	for _, tc := range cases {
-		got := FormatDuration(tc.d)
-		if got != tc.want {
-			t.Errorf("FormatDuration(%v) = %q; want %q", tc.d, got, tc.want)
-		}
-	}
+	assert.Equal(t, "0ms", FormatDuration(0))
+	assert.Equal(t, "450ms", FormatDuration(450*time.Millisecond))
+	assert.Equal(t, "999ms", FormatDuration(999*time.Millisecond))
+	assert.Equal(t, "1s", FormatDuration(1000*time.Millisecond))
+	assert.Equal(t, "2.3s", FormatDuration(2300*time.Millisecond))
+	assert.Equal(t, "60s", FormatDuration(59999*time.Millisecond))
+	assert.Equal(t, "1m", FormatDuration(60000*time.Millisecond))
+	assert.Equal(t, "1m20s", FormatDuration(80000*time.Millisecond))
 }
 
 func TestWriteGraphMermaid_Empty(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	if err := WriteGraphMermaid(&b, emptyOutput()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, WriteGraphMermaid(&b, emptyOutput()))
 	got := b.String()
-	if !strings.Contains(got, "graph TD") {
-		t.Errorf("expected 'graph TD' even for empty graph; got:\n%s", got)
-	}
+	assert.Contains(t, got, "graph TD", "expected 'graph TD' even for empty graph")
 }
 
 func TestWriteGraphMermaid_Determinism(t *testing.T) {
 	t.Parallel()
 	out := diamondOutput()
 	var b1, b2 strings.Builder
-	if err := WriteGraphMermaid(&b1, out); err != nil {
-		t.Fatal(err)
-	}
-	if err := WriteGraphMermaid(&b2, out); err != nil {
-		t.Fatal(err)
-	}
-	if b1.String() != b2.String() {
-		t.Errorf("WriteGraphMermaid is not deterministic:\nfirst:\n%s\nsecond:\n%s", b1.String(), b2.String())
-	}
+	require.NoError(t, WriteGraphMermaid(&b1, out))
+	require.NoError(t, WriteGraphMermaid(&b2, out))
+	assert.Equal(t, b1.String(), b2.String(), "WriteGraphMermaid is not deterministic")
 }

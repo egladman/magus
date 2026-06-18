@@ -52,8 +52,6 @@ import "crypto"
 import "std"
 import "os"
 
-// --- spell contract -------------------------------------------------------
-
 export fun mgs_getName() > str { return "s3-cache"; }
 
 export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
@@ -72,8 +70,6 @@ final CACHE_VERSION = "magus-remote-v1";
 // Go reference layout for an S3 LastModified ("2026-06-07T12:00:00.000Z"). The
 // RFC-3339 form parses the millisecond fraction without an explicit field.
 final S3_TIME_LAYOUT = "2006-01-02T15:04:05Z07:00";
-
-// --- configuration --------------------------------------------------------
 
 // getenv reads one environment variable, returning "" when unset.
 fun getenv(name: str) > str {
@@ -122,8 +118,6 @@ fun cache_key(hash: str) > str { return "magus-" + hash + "-" + CACHE_VERSION; }
 fun amzTimestamp() > str {
     return time.format("20060102T150405Z", os.time());
 }
-
-// --- AWS Signature Version 4 ---------------------------------------------
 
 // sign builds the signed request headers for an S3 path-style request. path is
 // the canonical URI ("/bucket/key"); query is the canonical query string (keys
@@ -182,8 +176,6 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     return headers;
 }
 
-// --- cache backend --------------------------------------------------------
-
 // enabled gates the backend on having credentials and a bucket. The cache probes
 // this once and skips fetch/push entirely when false — no remote calls.
 export fun enabled(target: Target, cb: fun(any)) > bool {
@@ -214,8 +206,6 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     final res = http.upload_chunked("PUT", endpoint() + path, src, 0, headers);
     return res[0] == 200;
 }
-
-// --- prune ----------------------------------------------------------------
 
 // listPage fetches one page of the bucket listing (S3 ListObjects v1, path-style)
 // for objects under the magus- prefix, starting after marker (""=from the start).

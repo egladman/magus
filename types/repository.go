@@ -41,7 +41,7 @@ type TargetExpander interface {
 	// reports "not inside a project". found is a deliberate signal distinct from
 	// len(targets) — callers (e.g. magus tail) key their error message on it.
 	ExpandCwd(t Target) (targets []Target, found bool, err error)
-	ExpandAffected(ctx context.Context, target, baseRef string) ([]Target, string, error)
+	ExpandAffected(ctx context.Context, target, baseRef string) (targets []Target, source string, fellBack bool, err error)
 }
 
 // AffectedComputer computes the VCS-impacted project set.

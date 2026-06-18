@@ -27,8 +27,6 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// ── Workspace & project checks ────────────────────────────────────────────────
-
 func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 	var noLang []string
 	for _, p := range projects {
@@ -322,8 +320,6 @@ func (*runner) checkVariadicMageTargets(_ []*types.Project) Check {
 	return Check{Name: "variadic mage targets", Status: StatusOK, Message: "Buzz targets receive args as a list — no variadic conflicts"}
 }
 
-// ── Binary & runtime checks ───────────────────────────────────────────────────
-
 func (r *runner) checkWatchBackend() Check {
 	if watch.ProbeBackend(r.ws.Root()) == watch.FsnotifyBackend {
 		return Check{Name: "watch backend", Status: StatusOK, Message: "OS-level events available (fsnotify)"}
@@ -399,8 +395,6 @@ func (r *runner) checkReflinkSupport() Check {
 		Message: "cache replay falls back to hardlink/copy; btrfs, xfs (reflink=1), or APFS give O(1) replays",
 	}
 }
-
-// ── Config & VCS checks ───────────────────────────────────────────────────────
 
 func (r *runner) checkConfigFile() Check {
 	paths := configFilePaths(r.root)
@@ -553,8 +547,6 @@ func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
 
 	return Check{Name: "vcs base ref", Status: StatusOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
 }
-
-// ── Graph analysis checks ─────────────────────────────────────────────────────
 
 // Hardcoded thresholds for the graph health checks. These are tuned to be
 // sensible across most monorepos; use health.exempt to suppress individual
@@ -727,8 +719,6 @@ func (r *runner) checkDependencyTangle(g *types.Graph) Check {
 	return Check{Name: "dependency tangle (NCCD)", Status: StatusOK, Message: msg}
 }
 
-// ── Environment checks ────────────────────────────────────────────────────────
-
 func (*runner) checkEnvVars() Check {
 	var unknown []string
 	for _, kv := range os.Environ() {
@@ -768,8 +758,6 @@ func (*runner) checkEnvVars() Check {
 		Details: unknown,
 	}
 }
-
-// ── Target-name convention check ──────────────────────────────────────────────
 
 // checkTargetNameConventions warns when a workspace declares target functions
 // using more than one naming convention (snake_case, camelCase, PascalCase).
@@ -852,7 +840,7 @@ func declaredTargetNames(path string) []string {
 	if err != nil {
 		return nil
 	}
-	prog, err := buzz.Parse(string(data))
+	prog, err := buzz.ParseEmbedded(string(data))
 	if err != nil || prog == nil {
 		return nil
 	}
@@ -865,7 +853,60 @@ func declaredTargetNames(path string) []string {
 	return names
 }
 
-// ── Charm/target name-collision check ─────────────────────────────────────────
+// checkMagusfileSyntax parses every magusfile in the workspace with the
+// gopherbuzz checker and reports all syntax / strict-parity errors at once.
+// Magusfiles are parsed in embedded mode (ParseEmbedded) because they
+// legitimately use embedding-only constructs — top-level statements and
+// unlabeled host calls — that upstream-strict parsing rejects; the check still
+// catches the unconditional strict-parity errors (untyped params, reserved-word
+// bindings, omitted return arrows, non-optional fiber yields) and plain syntax
+// errors.
+//
+// Every magusfile is parsed before the check returns, so a single run yields a
+// comprehensive report of everything wrong rather than stopping at the first
+// failure. This is what makes it useful in the CI preflight target: one `magus
+// doctor` surfaces all magusfile problems in one pass.
+func (r *runner) checkMagusfileSyntax(projects []*types.Project) Check {
+	const name = "magusfile syntax"
+	var problems []string
+	var checked int
+	for _, p := range projects {
+		for _, f := range magusfileSourcesInDir(p.Dir) {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", r.relPath(f), err))
+				continue
+			}
+			checked++
+			if _, err := buzz.ParseEmbedded(string(data)); err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", r.relPath(f), err))
+			}
+		}
+	}
+	if len(problems) == 0 {
+		return Check{
+			Name:    name,
+			Status:  StatusOK,
+			Message: fmt.Sprintf("%d magusfile(s) parse cleanly", checked),
+		}
+	}
+	slices.Sort(problems)
+	return Check{
+		Name:    name,
+		Status:  StatusFail,
+		Message: fmt.Sprintf("%d magusfile(s) have syntax errors", len(problems)),
+		Details: problems,
+	}
+}
+
+// relPath renders path relative to the workspace root for display, falling back
+// to the original path when it can't be made relative.
+func (r *runner) relPath(path string) string {
+	if rel, err := filepath.Rel(r.root, path); err == nil {
+		return filepath.ToSlash(rel)
+	}
+	return path
+}
 
 // checkCharmTargetCollision warns when a charm name also names a target. Charms
 // attach to a target with a ":" suffix (magus run lint:rw), so a charm that
@@ -940,8 +981,6 @@ func declaredCharmNames(path string) []string {
 	return names
 }
 
-// ── Merge-driver check ────────────────────────────────────────────────────────
-
 // checkMergeDriver warns when one or more projects declare Outputs but the
 // VCS merge driver is not installed. This check is informational (warn, not
 // fail): conflicts in generated outputs are annoying but resolvable manually.
@@ -995,8 +1034,6 @@ func (r *runner) checkMergeDriver() Check {
 	}
 }
 
-// ── MCP server check ──────────────────────────────────────────────────────────
-
 func (r *runner) checkMCPServer() Check {
 	s := r.opts.mcpStatus
 	if s == nil || !s.Compiled {
@@ -1034,8 +1071,6 @@ func (r *runner) checkMCPServer() Check {
 		Message: "daemon is running; MCP available at http://" + addr + "/mcp",
 	}
 }
-
-// ── Daemon health checks ──────────────────────────────────────────────────────
 
 // checkDaemonReachability dials the configured daemon socket and reports
 // whether it's alive. Warns if the socket is configured but unreachable, or
@@ -1232,8 +1267,6 @@ func isSocketAlive(path string) bool {
 	_ = conn.Close()
 	return true
 }
-
-// ── Auto-remediation ──────────────────────────────────────────────────────────
 
 // applyFixes attempts to auto-remediate fixable checks.
 func (*runner) applyFixes(_ []*types.Project) []FixResult {

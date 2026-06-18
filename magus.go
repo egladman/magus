@@ -562,25 +562,29 @@ func (m *Magus) ExpandCwd(t types.Target) (targets []types.Target, found bool, e
 	return []types.Target{{Path: p.Path, Name: t.Name}}, true, nil
 }
 
-// ExpandAffected resolves targets for VCS-affected projects; falls back to all projects on VCS failure.
-func (m *Magus) ExpandAffected(ctx context.Context, target string, baseRef string) ([]types.Target, string, error) {
+// ExpandAffected resolves targets for VCS-affected projects; falls back to all
+// projects on VCS failure. fellBack is true precisely when the VCS couldn't compute
+// a definitive set and every project was selected as a safety net — a typed signal
+// callers can act on (e.g. annotate the plan) rather than parsing the free-text
+// source string, which on the fallback path carries the underlying error message.
+func (m *Magus) ExpandAffected(ctx context.Context, target string, baseRef string) (targets []types.Target, source string, fellBack bool, err error) {
 	r, err := m.Affected(ctx, baseRef)
 	if errors.Is(err, types.ErrAffectedFallback) {
 		all, allErr := m.ExpandPath(types.Target{Name: target})
 		if allErr != nil {
-			return nil, "", allErr
+			return nil, "", false, allErr
 		}
-		return all, err.Error(), nil
+		return all, err.Error(), true, nil
 	}
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 
 	res, err := vcs.Resolve(ctx, m.ws.Root, r.Base, m.ws.VCSOptions)
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
-	source := res.Name + " diff vs " + r.Base
+	source = res.Name + " diff vs " + r.Base
 	if res.Source == types.VCSSourceDisabled {
 		source = "vcs disabled vs " + r.Base
 	}
@@ -593,7 +597,7 @@ func (m *Magus) ExpandAffected(ctx context.Context, target string, baseRef strin
 			Files: r.FilesBySeed[path],
 		}
 	}
-	return out, source, nil
+	return out, source, false, nil
 }
 
 // TargetLabel returns a one-line summary of a target slice suitable for log headers.

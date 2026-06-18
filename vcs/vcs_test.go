@@ -2,7 +2,6 @@ package vcs
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,96 +9,59 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveAutodetect(t *testing.T) {
-	cases := []struct {
-		claim string
-		want  string
-	}{
-		{".git", "git"},
-		{".hg", "hg"},
-		{".jj", "jj"},
+	assertAutodetect := func(t *testing.T, claim, want string) {
+		t.Helper()
+		t.Setenv("MAGUS_VCS_NAME", "")
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, claim), 0o755))
+		res, err := Resolve(context.Background(), root, "origin/main", types.VCSOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, want, res.Name)
+		assert.Equal(t, types.VCSSourceAuto, res.Source)
+		assert.NotNil(t, res.VCS, "VCS is nil, want non-nil")
 	}
-	for _, c := range cases {
-		t.Run(c.claim, func(t *testing.T) {
-			t.Setenv("MAGUS_VCS_NAME", "")
-			root := t.TempDir()
-			if err := os.MkdirAll(filepath.Join(root, c.claim), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			res, err := Resolve(context.Background(), root, "origin/main", types.VCSOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if res.Name != c.want {
-				t.Errorf("Name = %q, want %q", res.Name, c.want)
-			}
-			if res.Source != types.VCSSourceAuto {
-				t.Errorf("Source = %q, want %q", res.Source, types.VCSSourceAuto)
-			}
-			if res.VCS == nil {
-				t.Error("VCS is nil, want non-nil")
-			}
-		})
-	}
+
+	t.Run(".git", func(t *testing.T) { assertAutodetect(t, ".git", "git") })
+	t.Run(".hg", func(t *testing.T) { assertAutodetect(t, ".hg", "hg") })
+	t.Run(".jj", func(t *testing.T) { assertAutodetect(t, ".jj", "jj") })
 }
 
 func TestResolveExplicitOverridesAutodetect(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "jj")
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
 	res, err := Resolve(context.Background(), root, "origin/main", types.VCSOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Name != "jj" {
-		t.Errorf("Name = %q, want jj", res.Name)
-	}
-	if res.Source != types.VCSSourceExplicit {
-		t.Errorf("Source = %q, want explicit", res.Source)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "jj", res.Name)
+	assert.Equal(t, types.VCSSourceExplicit, res.Source)
 }
 
 func TestResolveExplicitUnknown(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "fossil")
 	_, err := Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})
-	if err == nil {
-		t.Fatal("expected error for unknown VCS name, got nil")
-	}
-	if !errors.Is(err, types.ErrVCSUnknown) {
-		t.Errorf("error = %v, want ErrUnknownVCS", err)
-	}
+	require.Error(t, err, "expected error for unknown VCS name, got nil")
+	assert.ErrorIs(t, err, types.ErrVCSUnknown)
 }
 
 func TestResolveDefaultWhenNoMarker(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "")
 	res, err := Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Name != "git" {
-		t.Errorf("Name = %q, want git", res.Name)
-	}
-	if res.Source != types.VCSSourceDefault {
-		t.Errorf("Source = %q, want default", res.Source)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "git", res.Name)
+	assert.Equal(t, types.VCSSourceDefault, res.Source)
 }
 
 func TestResolveDisabled(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 	res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Source != types.VCSSourceDisabled {
-		t.Errorf("Source = %q, want disabled", res.Source)
-	}
-	if res.VCS != nil {
-		t.Errorf("VCS = %v, want nil", res.VCS)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, types.VCSSourceDisabled, res.Source)
+	assert.Nil(t, res.VCS, "VCS, want nil")
 }
 
 func TestResolvePerVCSBaseRef(t *testing.T) {
@@ -108,66 +70,39 @@ func TestResolvePerVCSBaseRef(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "jj")
 	t.Setenv("MAGUS_VCS_JJ_BASE_REF", "main@origin")
 	res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Base != "main@origin" {
-		t.Errorf("Base = %q, want main@origin", res.Base)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "main@origin", res.Base)
 }
 
 func TestResolveBuiltinBaseRefs(t *testing.T) {
-	cases := []struct {
-		name, want string
-	}{
-		{"git", "origin/main"},
-		{"hg", "tip"},
-		{"jj", "trunk()"},
+	assertBuiltinBase := func(t *testing.T, name, want string) {
+		t.Helper()
+		t.Setenv("MAGUS_VCS_ENABLED", "")
+		t.Setenv("MAGUS_VCS_BASE_REF", "")
+		t.Setenv("MAGUS_VCS_NAME", name)
+		t.Setenv(perVCSEnv(name, "BASE_REF"), "")
+		res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, want, res.Base)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Setenv("MAGUS_VCS_ENABLED", "")
-			t.Setenv("MAGUS_VCS_BASE_REF", "")
-			t.Setenv("MAGUS_VCS_NAME", c.name)
-			t.Setenv(perVCSEnv(c.name, "BASE_REF"), "")
-			res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if res.Base != c.want {
-				t.Errorf("Base = %q, want %q", res.Base, c.want)
-			}
-		})
-	}
+
+	t.Run("git", func(t *testing.T) { assertBuiltinBase(t, "git", "origin/main") })
+	t.Run("hg", func(t *testing.T) { assertBuiltinBase(t, "hg", "tip") })
+	t.Run("jj", func(t *testing.T) { assertBuiltinBase(t, "jj", "trunk()") })
 }
 
 func TestVCSClaims(t *testing.T) {
-	cases := []struct {
-		name   string
-		claims []string
-	}{
-		{"git", []string{".git"}},
-		{"hg", []string{".hg"}},
-		{"jj", []string{".jj"}},
+	assertClaims := func(t *testing.T, name string, want []string) {
+		t.Helper()
+		t.Setenv("MAGUS_VCS_NAME", name)
+		res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
+		require.NoErrorf(t, err, "Resolve(%q)", name)
+		assert.Equal(t, want, res.VCS.Claims())
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Setenv("MAGUS_VCS_NAME", c.name)
-			res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
-			if err != nil {
-				t.Fatalf("Resolve(%q): %v", c.name, err)
-			}
-			got := res.VCS.Claims()
-			if len(got) != len(c.claims) {
-				t.Fatalf("Claims() = %v, want %v", got, c.claims)
-			}
-			for i := range got {
-				if got[i] != c.claims[i] {
-					t.Errorf("Claims()[%d] = %q, want %q", i, got[i], c.claims[i])
-				}
-			}
-		})
-	}
+
+	t.Run("git", func(t *testing.T) { assertClaims(t, "git", []string{".git"}) })
+	t.Run("hg", func(t *testing.T) { assertClaims(t, "hg", []string{".hg"}) })
+	t.Run("jj", func(t *testing.T) { assertClaims(t, "jj", []string{".jj"}) })
 }
 
 func TestDiffCommandsGit(t *testing.T) {
@@ -180,9 +115,8 @@ func TestDiffCommandsGit(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v: %s", args, out)
-		}
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "%v: %s", args, out)
 	}
 	mustRun("git", "init")
 	mustRun("git", "config", "user.email", "test@example.com")
@@ -192,30 +126,18 @@ func TestDiffCommandsGit(t *testing.T) {
 
 	// Capture the SHA we just created.
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	wantSHA := strings.TrimSpace(string(out))
 
 	t.Setenv("MAGUS_VCS_NAME", "git")
 	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{})
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
+	require.NoError(t, err, "Resolve")
 
 	hints, err := res.VCS.DiffCommands(t.Context(), dir, "origin/main")
-	if err != nil {
-		t.Fatalf("DiffCommands: %v", err)
-	}
+	require.NoError(t, err, "DiffCommands")
 
-	wantCLI := "git diff origin/main..." + wantSHA
-	wantGUI := "git difftool origin/main..." + wantSHA
-	if hints.CLI != wantCLI {
-		t.Errorf("CLI = %q, want %q", hints.CLI, wantCLI)
-	}
-	if hints.GUI != wantGUI {
-		t.Errorf("GUI = %q, want %q", hints.GUI, wantGUI)
-	}
+	assert.Equal(t, "git diff origin/main..."+wantSHA, hints.CLI)
+	assert.Equal(t, "git difftool origin/main..."+wantSHA, hints.GUI)
 }
 
 func TestFindCommitAndHistoryGit(t *testing.T) {
@@ -228,9 +150,8 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v: %s", args, out)
-		}
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "%v: %s", args, out)
 	}
 	mustRun("git", "init")
 	mustRun("git", "config", "user.email", "alice@example.com")
@@ -240,64 +161,93 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 	mustRun("git", "commit", "--allow-empty", "-m", "second line\n\nbody text")
 
 	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{Name: "git"})
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
+	require.NoError(t, err, "Resolve")
 
 	c, err := res.VCS.FindCommit(context.Background(), dir, "")
-	if err != nil {
-		t.Fatalf("FindCommit: %v", err)
-	}
-	if c.Subject != "second line" {
-		t.Errorf("Subject = %q, want %q", c.Subject, "second line")
-	}
-	if c.Body != "body text" {
-		t.Errorf("Body = %q, want %q", c.Body, "body text")
-	}
-	if c.Author.Name != "Alice" || c.Author.Email != "alice@example.com" {
-		t.Errorf("Author = %+v, want Alice <alice@example.com>", c.Author)
-	}
-	if c.Date.IsZero() {
-		t.Error("Date is zero; expected a parsed RFC3339 record date")
-	}
-	if c.ID == "" || c.Short == "" || !strings.HasPrefix(c.ID, c.Short) {
-		t.Errorf("ID/Short inconsistent: %q / %q", c.ID, c.Short)
-	}
+	require.NoError(t, err, "FindCommit")
+	assert.Equal(t, "second line", c.Subject)
+	assert.Equal(t, "body text", c.Body)
+	assert.Equal(t, "Alice", c.Author.Name)
+	assert.Equal(t, "alice@example.com", c.Author.Email)
+	assert.False(t, c.Date.IsZero(), "Date is zero; expected a parsed RFC3339 record date")
+	assert.NotEmpty(t, c.ID)
+	assert.NotEmpty(t, c.Short)
+	assert.Truef(t, strings.HasPrefix(c.ID, c.Short), "ID/Short inconsistent: %q / %q", c.ID, c.Short)
 
 	hist, err := res.VCS.History(context.Background(), dir, 10)
-	if err != nil {
-		t.Fatalf("History: %v", err)
-	}
-	if len(hist) != 2 {
-		t.Fatalf("History len = %d, want 2", len(hist))
-	}
-	if hist[0].Subject != "second line" || hist[1].Subject != "first" {
-		t.Errorf("History order wrong: %q, %q (want newest first)", hist[0].Subject, hist[1].Subject)
-	}
+	require.NoError(t, err, "History")
+	require.Len(t, hist, 2)
+	assert.Equal(t, "second line", hist[0].Subject, "History order wrong (want newest first)")
+	assert.Equal(t, "first", hist[1].Subject, "History order wrong (want newest first)")
 }
 
 func TestInstallableAndInstaller(t *testing.T) {
 	names := InstallableVCSes()
 	// git and hg implement MergeDriverInstaller; jj does not.
 	want := map[string]bool{"git": true, "hg": true}
-	if len(names) != len(want) {
-		t.Fatalf("Installable() = %v, want keys %v", names, want)
-	}
+	require.Lenf(t, names, len(want), "Installable() = %v, want keys %v", names, want)
 	for _, n := range names {
-		if !want[n] {
-			t.Errorf("Installable() returned unexpected %q", n)
-		}
-		if _, ok := Installer(n); !ok {
-			t.Errorf("Installer(%q): got !ok, want an installer", n)
-		}
+		assert.Truef(t, want[n], "Installable() returned unexpected %q", n)
+		_, ok := Installer(n)
+		assert.Truef(t, ok, "Installer(%q): got !ok, want an installer", n)
 	}
 
 	// jj is a known VCS but exposes no merge-driver installer.
-	if _, ok := Installer("jj"); ok {
-		t.Error("Installer(\"jj\"): got ok, want false (no installer)")
-	}
+	_, ok := Installer("jj")
+	assert.False(t, ok, "Installer(\"jj\"): got ok, want false (no installer)")
 	// Unknown VCS name yields no installer.
-	if _, ok := Installer("svn"); ok {
-		t.Error("Installer(\"svn\"): got ok, want false (unknown VCS)")
+	_, ok = Installer("svn")
+	assert.False(t, ok, "Installer(\"svn\"): got ok, want false (unknown VCS)")
+}
+
+func TestDiffRejectsFlagLikeBase(t *testing.T) {
+	drivers := []types.VCSDriver{gitVCS{}, hgVCS{}, jjVCS{}}
+	for _, v := range drivers {
+		_, err := v.Diff(context.Background(), t.TempDir(), "-rf")
+		require.Errorf(t, err, "%s.Diff with flag-like base should error", v.Name())
+		assert.Containsf(t, err.Error(), "looks like a flag", "%s.Diff error", v.Name())
 	}
+}
+
+func TestDescribeGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not in PATH")
+	}
+
+	dir := t.TempDir()
+	mustRun := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "%v: %s", args, out)
+	}
+	mustRun("git", "init")
+	mustRun("git", "config", "user.email", "alice@example.com")
+	mustRun("git", "config", "user.name", "Alice")
+	mustRun("git", "config", "commit.gpgsign", "false")
+	mustRun("git", "commit", "--allow-empty", "-m", "first")
+
+	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{Name: "git"})
+	require.NoError(t, err, "Resolve")
+	ctx := context.Background()
+
+	// No tag yet: --always falls back to the short hash on a clean tree.
+	d, err := res.VCS.Describe(ctx, dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, d, "describe should fall back to a short hash when untagged")
+	assert.NotContains(t, d, "-dirty", "clean tree must not be marked dirty")
+
+	// Tagged: describe reports the tag.
+	mustRun("git", "tag", "v1.2.3")
+	d, err = res.VCS.Describe(ctx, dir)
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", d)
+
+	// Dirty tree: -dirty suffix.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x"), 0o644))
+	mustRun("git", "add", "f.txt")
+	d, err = res.VCS.Describe(ctx, dir)
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3-dirty", d)
 }

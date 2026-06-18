@@ -9,7 +9,7 @@ import (
 )
 
 // envelope is the wire-format wrapper; drain goroutine marshals body and splices
-// "schema" and "type" fields so every line starts with `{"schema":2,"type":"...",`.
+// "schema" and "type" fields so every line starts with `{"schema":3,"type":"...",`.
 type envelope struct {
 	Type string
 	Body any

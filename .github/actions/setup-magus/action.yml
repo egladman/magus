@@ -1,64 +1,45 @@
 name: Setup magus
 description: >
-  Install the magus binary into the runner tool cache ($RUNNER_TOOL_CACHE) and put
-  it on PATH, so every job step that follows can run `magus`. With `version` set it
-  downloads that release; otherwise it builds from source. The source is sparse-
-  checked-out from THIS action's own repository — not the caller's workspace — so
-  the action works when another repo references it (dogfooding). Stopgap until
-  magus ships a packaged release; then only the install path stays, the source
-  build drops.
+  Install the magus binary into the runner tool cache ($RUNNER_TOOL_CACHE) and
+  restore Go module, Go build, and mise tool caches. Until magus ships a packaged
+  release, the binary is compiled from the checked-out source (a prebuilt release
+  is installed instead when `version` is set) — either way it lands in the tool
+  cache and on PATH, so every job step that follows can run `magus`.
 
 inputs:
   version:
     description: >
       Release tag to install (e.g. v0.5.0). Empty string always builds from
-      source at the ref this action was referenced at.
+      source using the checked-out code.
     required: false
     default: ''
 
 runs:
   using: composite
   steps:
-    # Sparse-check out the magus source from this action's own repo at the ref it
-    # was referenced at, so a from-source build does not depend on the caller's
-    # checkout containing magus. Same-repo (a local `./` reference) falls back to
-    # the caller repo + commit. Cone mode also pulls the root files (go.mod, go.sum,
-    # go.work, go.work.sum); the listed dirs are everything `./cmd/magus` imports.
-    - name: Check out magus source
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      with:
-        repository: ${{ github.action_repository || github.repository }}
-        ref: ${{ github.action_ref || github.sha }}
-        path: ${{ runner.temp }}/magus-src
-        sparse-checkout: |
-          cmd
-          internal
-          project
-          schema
-          types
-          vcs
-          gopherbuzz
-
-    # The resolved commit keys the binary cache exactly (a moving branch ref still
-    # rebuilds when its tip changes; a tag/sha reuses).
-    - name: Resolve magus source commit
-      id: src
-      shell: bash
-      run: echo "sha=$(git -C "$RUNNER_TEMP/magus-src" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
     - name: Setup Go
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
       with:
-        go-version-file: ${{ runner.temp }}/magus-src/go.mod
-        cache: true
-        cache-dependency-path: ${{ runner.temp }}/magus-src/go.sum
+        go-version-file: go.mod
+        cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
+
+    - name: Restore mise tool cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: |
+          ~/.local/share/mise
+          ~/.cache/mise
+        # Exact-match only: no restore-keys fallback. A fallback across
+        # branches lets a same-repo PR write a poisoned entry under the
+        # runner.os-mise- prefix that another branch's job later restores.
+        key: ${{ runner.os }}-mise-${{ hashFiles('.mise.toml') }}
 
     - name: Restore magus binary cache
       id: magus-cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ runner.tool_cache }}/magus/bin
-        key: ${{ runner.os }}-magus-${{ inputs.version }}-${{ steps.src.outputs.sha }}
+        key: ${{ runner.os }}-magus-${{ inputs.version }}-${{ hashFiles('magus/cmd/magus/**', 'magus/**', 'go.sum') }}
 
     - name: Install magus from release
       id: prebuilt
@@ -70,7 +51,7 @@ runs:
         VERSION="${{ inputs.version }}"
         OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
         ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-        BASE="https://github.com/egladman/magus/releases/download/${VERSION}"
+        BASE="https://github.com/egladman/tack/releases/download/${VERSION}"
         ASSET="magus_${VERSION}_${OS}_${ARCH}.tar.gz"
         TMP="$(mktemp -d)"
         trap 'rm -rf "${TMP}"' EXIT
@@ -92,7 +73,7 @@ runs:
       shell: bash
       run: |
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
-        ( cd "$RUNNER_TEMP/magus-src" && go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus )
+        go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./magus/cmd/magus
         echo "magus: built from source" >&2
 
     - name: Add magus to PATH

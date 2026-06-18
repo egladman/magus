@@ -9,26 +9,6 @@ type Binding struct {
 	RemovedClaims []string
 }
 
-// TargetPolicy declares behavioural hooks for a named target.
-type TargetPolicy struct {
-	// CheckClean fails the run if the working tree is dirty after the target runs (write=false).
-	CheckClean bool
-	// TrackFlake routes the target through flake detection and auto-retry.
-	TrackFlake bool
-	// NoCache opts the target out of the cache: magus always runs it and never
-	// replays or snapshots it. Set for long-running targets (e.g. a blocking
-	// fs.watch loop) where a cached "success" would make a re-run a no-op.
-	NoCache bool
-	// Isolated serializes the target against the whole RunAll batch: while an
-	// isolated target runs, no other scheduled target runs concurrently. Set for
-	// targets whose correctness depends on an undisturbed working tree (e.g. a
-	// drift gate that inspects `git status`).
-	Isolated bool
-}
-
-// IsZero reports whether p carries no policy.
-func (p TargetPolicy) IsZero() bool { return p == TargetPolicy{} }
-
 // Project is the record magus maintains for every directory with a marker file.
 type Project struct {
 	Path           string // repo-relative directory, forward slashes (e.g. "api", ".")
@@ -41,8 +21,8 @@ type Project struct {
 	DependsOn      []string
 	Exclusive      bool
 	WatchIgnores   []IgnorePattern
-	TargetPolicies map[string]TargetPolicy
-	ResolvedSpells []*Spell // set at the end of magus.Open; immutable thereafter
+	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
+	ResolvedSpells []*Spell          // set at the end of magus.Open; immutable thereafter
 }
 
 // AttachSpell associates spell with p without applying registration overrides.

@@ -148,8 +148,6 @@ func showIntroOnce(doc js.Value) {
 	}))
 }
 
-// ── event handlers ────────────────────────────────────────────────────────────
-
 func (u *ui) onTerminalKey(_ js.Value, args []js.Value) any {
 	e := args[0]
 	switch e.Get("key").String() {
@@ -253,8 +251,6 @@ func (u *ui) syncScroll() {
 	u.gutter.Get("style").Set("transform", "translateY(-"+top+"px)")
 }
 
-// ── rendering ─────────────────────────────────────────────────────────────────
-
 func (u *ui) setSource(src string) {
 	ok, status := u.shell.SetSource(context.Background(), src)
 	u.badge.Set("textContent", status)
@@ -276,8 +272,6 @@ func (u *ui) render(lines []playground.Line) {
 	}
 	u.out.Set("scrollTop", u.out.Get("scrollHeight"))
 }
-
-// ── console data API ──────────────────────────────────────────────────────────
 
 // exposeDataAPI installs globalThis.buzz with the raw evaluation functions, so
 // the interpreter is scriptable from the browser console independent of the UI.

@@ -1,4 +1,3 @@
-// The immutable DAG (CSR adjacency, lazy bitset closure) underlying depgraph's project queries.
 package depgraph
 
 import (

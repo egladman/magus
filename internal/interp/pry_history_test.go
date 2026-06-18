@@ -3,6 +3,9 @@ package interp
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAppendAndLines(t *testing.T) {
@@ -10,9 +13,7 @@ func TestAppendAndLines(t *testing.T) {
 	path := filepath.Join(dir, "hist")
 
 	h, err := Open(path, 5)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err)
 
 	h.Append("one")
 	h.Append("two")
@@ -20,33 +21,21 @@ func TestAppendAndLines(t *testing.T) {
 	h.Append("three")
 
 	lines := h.Lines()
-	if got, want := len(lines), 3; got != want {
-		t.Fatalf("len(lines)=%d, want %d (%v)", got, want, lines)
-	}
-	if lines[0] != "one" || lines[1] != "two" || lines[2] != "three" {
-		t.Errorf("lines = %v", lines)
-	}
+	require.Len(t, lines, 3)
+	assert.Equal(t, []string{"one", "two", "three"}, lines)
 }
 
 func TestRecall(t *testing.T) {
 	dir := t.TempDir()
 	h, err := Open(filepath.Join(dir, "hist"), 0)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err)
 	h.Append("first")
 	h.Append("second")
 	h.Append("third")
 
-	if got := h.Recall(1); got != "third" {
-		t.Errorf("Recall(1)=%q, want %q", got, "third")
-	}
-	if got := h.Recall(3); got != "first" {
-		t.Errorf("Recall(3)=%q, want %q", got, "first")
-	}
-	if got := h.Recall(99); got != "" {
-		t.Errorf("Recall(99)=%q, want empty", got)
-	}
+	assert.Equal(t, "third", h.Recall(1))
+	assert.Equal(t, "first", h.Recall(3))
+	assert.Empty(t, h.Recall(99))
 }
 
 func TestPersistence(t *testing.T) {
@@ -59,12 +48,8 @@ func TestPersistence(t *testing.T) {
 
 	// New History opened against the same file should pick the lines back up.
 	h2, err := Open(path, 0)
-	if err != nil {
-		t.Fatalf("Open second time: %v", err)
-	}
-	if got := h2.Lines(); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
-		t.Errorf("reopened lines = %v", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alpha", "beta"}, h2.Lines())
 }
 
 func TestCapOverflowTrims(t *testing.T) {
@@ -73,11 +58,5 @@ func TestCapOverflowTrims(t *testing.T) {
 	for _, s := range []string{"a", "b", "c", "d", "e"} {
 		h.Append(s)
 	}
-	got := h.Lines()
-	if len(got) != 3 {
-		t.Fatalf("len=%d, want 3 (%v)", len(got), got)
-	}
-	if got[0] != "c" || got[1] != "d" || got[2] != "e" {
-		t.Errorf("lines = %v, want [c d e]", got)
-	}
+	assert.Equal(t, []string{"c", "d", "e"}, h.Lines())
 }

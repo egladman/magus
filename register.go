@@ -56,7 +56,7 @@ type ProjectOption = workspace.ProjectOption
 // BindingOption mutates a spell Binding at registration time.
 type BindingOption = workspace.BindingOption
 
-// TargetOption mutates a types.TargetPolicy at registration time.
+// TargetOption sets a per-target execution-policy field at registration time.
 type TargetOption = workspace.TargetOption
 
 // WithDependsOn adds upstream project paths as dependencies (repo-relative or project-relative).
@@ -82,14 +82,14 @@ func IgnoreRegex(pattern string) types.IgnorePattern { return workspace.IgnoreRe
 // IgnoreLiteral constructs a literal ignore pattern matching any path segment at any depth.
 func IgnoreLiteral(pattern string) types.IgnorePattern { return workspace.IgnoreLiteral(pattern) }
 
-// CheckClean enables the check-clean-after policy: fail if the working tree is dirty after the target.
-func CheckClean() TargetOption { return workspace.CheckClean() }
+// FailOnDrift enables the drift gate: fail if the working tree is dirty after the target.
+func FailOnDrift() TargetOption { return workspace.FailOnDrift() }
 
-// Isolated serializes the target against the whole batch: nothing else runs concurrently while it runs.
-func Isolated() TargetOption { return workspace.Isolated() }
+// Exclusive runs the target alone — no other target runs concurrently while it does.
+func Exclusive() TargetOption { return workspace.Exclusive() }
 
-// TrackFlake enables flake detection and auto-retry for this target.
-func TrackFlake() TargetOption { return workspace.TrackFlake() }
+// RetryOnFlake enables flake detection and auto-retry for this target.
+func RetryOnFlake() TargetOption { return workspace.RetryOnFlake() }
 
 // WithTarget attaches a behavioural policy to the named target; multiple calls are merged.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {

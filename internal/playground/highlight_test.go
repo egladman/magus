@@ -3,6 +3,8 @@ package playground
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestHighlight_lossless is the load-bearing property: the spans must reproduce
@@ -21,9 +23,7 @@ func TestHighlight_lossless(t *testing.T) {
 		for _, sp := range Highlight(src) {
 			b.WriteString(sp.Text)
 		}
-		if b.String() != src {
-			t.Errorf("not lossless:\n in:  %q\n out: %q", src, b.String())
-		}
+		assert.Equal(t, src, b.String(), "not lossless")
 	}
 }
 
@@ -35,18 +35,10 @@ func TestHighlight_classes(t *testing.T) {
 			got[sp.Class] = sp.Text
 		}
 	}
-	if got["kw"] != "final" {
-		t.Errorf("keyword: got %q", got["kw"])
-	}
-	if got["num"] != "42" {
-		t.Errorf("number: got %q", got["num"])
-	}
-	if !strings.HasPrefix(got["com"], "// note") {
-		t.Errorf("comment: got %q", got["com"])
-	}
-	if got["str"] != `"hi"` {
-		t.Errorf("string: got %q", got["str"])
-	}
+	assert.Equal(t, "final", got["kw"], "keyword")
+	assert.Equal(t, "42", got["num"], "number")
+	assert.True(t, strings.HasPrefix(got["com"], "// note"), "comment: got %q", got["com"])
+	assert.Equal(t, `"hi"`, got["str"], "string")
 }
 
 func TestHighlight_rangeNotFloat(t *testing.T) {
@@ -57,7 +49,5 @@ func TestHighlight_rangeNotFloat(t *testing.T) {
 			nums = append(nums, sp.Text)
 		}
 	}
-	if len(nums) != 2 || nums[0] != "0" || nums[1] != "5" {
-		t.Errorf("range scan: got nums %v, want [0 5]", nums)
-	}
+	assert.Equal(t, []string{"0", "5"}, nums, "range scan")
 }

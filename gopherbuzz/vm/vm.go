@@ -1270,16 +1270,19 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 
 		case OpYield:
 			val := vm.pop()
-			// Push Null: the yield expression evaluates to null at the resume point
-			// (the value that will be read by the instruction after OpYield on next Exec).
-			vm.push(Null)
+			// The yield expression evaluates to the yielded value itself, matching
+			// upstream Buzz: `final a = yield 7;` binds a == 7 after the fiber is
+			// resumed. (Upstream resume passes no separate value back in; the
+			// expression result is the value that was yielded.) Push it as the result
+			// that the instruction after OpYield reads on the next Exec.
+			vm.push(val)
 			if vm.isFiber {
-				// Fiber context: suspend. Frames+stack (including the Null just pushed)
-				// are preserved; the next Exec() continues past this instruction.
+				// Fiber context: suspend. Frames+stack (including the value just
+				// pushed) are preserved; the next Exec() continues past this instruction.
 				return Null, &yieldSignal{value: val}
 			}
-			// Non-fiber context: yield is dismissed per upstream semantics — Null is
-			// already on the stack as the expression result, execution continues.
+			// Non-fiber context: yield is dismissed per upstream semantics — the value
+			// is already on the stack as the expression result, execution continues.
 
 		case OpFiber:
 			// stack: fn arg0…argN → suspended fib

@@ -32,6 +32,9 @@ func (gitVCS) Root(ctx context.Context, dir string) (string, error) {
 }
 
 func (gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+	if err := checkBaseRef(base); err != nil {
+		return nil, err
+	}
 	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", base+"...HEAD")
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -179,6 +182,12 @@ func (gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 		CommitDate: commitDate,
 		IsDirty:    dirtyOut != "",
 	}, nil
+}
+
+// Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
+// short hash when no tag is reachable), with a -dirty suffix for a modified tree.
+func (gitVCS) Describe(ctx context.Context, dir string) (string, error) {
+	return vcsOutput(ctx, dir, "git", "describe", "--tags", "--always", "--dirty")
 }
 
 // gitCommitFormat emits the NUL-delimited fields parseCommit expects: id, short,

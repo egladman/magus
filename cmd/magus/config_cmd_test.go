@@ -12,28 +12,25 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/egladman/magus/internal/config"
 )
 
 func TestRunConfigView_Text(t *testing.T) {
 	cfg := config.Defaults()
-	if err := runConfigView(cfg, nil); err != nil {
-		t.Fatalf("runConfigView text: %v", err)
-	}
+	require.NoError(t, runConfigView(cfg, nil))
 }
 
 func TestRunConfigView_JSON(t *testing.T) {
 	cfg := config.Defaults()
-	if err := runConfigView(cfg, []string{"-o", "json"}); err != nil {
-		t.Fatalf("runConfigView json: %v", err)
-	}
+	require.NoError(t, runConfigView(cfg, []string{"-o", "json"}))
 }
 
 func TestRunConfigView_YAML(t *testing.T) {
 	cfg := config.Defaults()
-	if err := runConfigView(cfg, []string{"-o", "yaml"}); err != nil {
-		t.Fatalf("runConfigView yaml: %v", err)
-	}
+	require.NoError(t, runConfigView(cfg, []string{"-o", "yaml"}))
 }
 
 func TestRunConfigView_Name(t *testing.T) {
@@ -43,56 +40,38 @@ func TestRunConfigView_Name(t *testing.T) {
 	// verify no error and that KnownKeys() is populated.
 	_ = cfg
 	keys := config.KnownKeys()
-	if len(keys) == 0 {
-		t.Error("KnownKeys is empty")
-	}
-	if err := runConfigView(cfg, []string{"-o", "name"}); err != nil {
-		t.Fatalf("runConfigView name: %v", err)
-	}
+	assert.NotEmpty(t, keys)
+	require.NoError(t, runConfigView(cfg, []string{"-o", "name"}))
 }
 
 func TestRunConfigSet_Local(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := runConfigSet([]string{"key=cache.dir,value=/tmp/mycache"}); err != nil {
-		t.Fatalf("runConfigSet local: %v", err)
-	}
+	require.NoError(t, runConfigSet([]string{"key=cache.dir,value=/tmp/mycache"}))
 
 	path := filepath.Join(dir, config.Filename)
-	if _, err := os.Stat(path); err != nil {
-		t.Errorf("expected %s to exist: %v", path, err)
-	}
+	_, err := os.Stat(path)
+	assert.NoError(t, err, "expected %s to exist", path)
 
 	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Cache.Dir != "/tmp/mycache" {
-		t.Errorf("Cache.Dir = %q, want %q", cfg.Cache.Dir, "/tmp/mycache")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/mycache", cfg.Cache.Dir)
 }
 
 func TestRunConfigSet_Global(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	if err := runConfigSet([]string{"--global", "key=log.format,value=json"}); err != nil {
-		t.Fatalf("runConfigSet global: %v", err)
-	}
+	require.NoError(t, runConfigSet([]string{"--global", "key=log.format,value=json"}))
 
 	path := filepath.Join(dir, "magus", config.Filename)
-	if _, err := os.Stat(path); err != nil {
-		t.Errorf("expected %s to exist: %v", path, err)
-	}
+	_, err := os.Stat(path)
+	assert.NoError(t, err, "expected %s to exist", path)
 
 	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Log.Format != "json" {
-		t.Errorf("Log.Format = %q, want %q", cfg.Log.Format, "json")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "json", cfg.Log.Format)
 }
 
 func TestRunConfigSet_UnknownKey(t *testing.T) {
@@ -100,9 +79,7 @@ func TestRunConfigSet_UnknownKey(t *testing.T) {
 	t.Chdir(dir)
 
 	err := runConfigSet([]string{"key=not.a.real.key,value=v"})
-	if err == nil {
-		t.Error("expected error for unknown key, got nil")
-	}
+	assert.Error(t, err, "expected error for unknown key")
 }
 
 func TestRunConfigSet_BadInt(t *testing.T) {
@@ -110,27 +87,19 @@ func TestRunConfigSet_BadInt(t *testing.T) {
 	t.Chdir(dir)
 
 	err := runConfigSet([]string{"key=parallel,value=notanumber"})
-	if err == nil {
-		t.Error("expected error for bad int, got nil")
-	}
+	assert.Error(t, err, "expected error for bad int")
 }
 
 func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
 	cfg := config.Defaults()
 	err := configCmd(context.Background(), "", cfg, []string{"frobnicate"})
-	if err == nil {
-		t.Error("expected error for unknown subcommand, got nil")
-	}
-	if !strings.Contains(err.Error(), "frobnicate") {
-		t.Errorf("error should mention subcommand name, got: %v", err)
-	}
+	require.Error(t, err, "expected error for unknown subcommand")
+	assert.Contains(t, err.Error(), "frobnicate", "error should mention subcommand name")
 }
 
 func TestRunConfigCmd_NoArgs(t *testing.T) {
 	cfg := config.Defaults()
-	if err := configCmd(context.Background(), "", cfg, nil); err != nil {
-		t.Errorf("no args should print usage, not error: %v", err)
-	}
+	assert.NoError(t, configCmd(context.Background(), "", cfg, nil), "no args should print usage, not error")
 }
 
 // runOnlyFlags lists flags that intentionally exist on `magus run` but not
@@ -162,9 +131,7 @@ var affectedOnlyFlags = map[string]string{
 //	go test ./cmd/magus/ -run TestRunAffectedFlagParity -v
 func TestRunAffectedFlagParity(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
+	require.True(t, ok, "runtime.Caller failed")
 	dir := filepath.Dir(thisFile)
 
 	runFlags := collectFlagNames(t, filepath.Join(dir, "run.go"), "runTarget")
@@ -173,32 +140,28 @@ func TestRunAffectedFlagParity(t *testing.T) {
 	// Stale exception check: every entry in an exception map must correspond
 	// to a flag that actually exists in the owning file.
 	for name := range runOnlyFlags {
-		if _, ok := runFlags[name]; !ok {
-			t.Errorf("runOnlyFlags entry %q no longer exists in run.go — remove it from the exception map", name)
-		}
+		assert.Contains(t, runFlags, name,
+			"runOnlyFlags entry %q no longer exists in run.go — remove it from the exception map", name)
 	}
 	for name := range affectedOnlyFlags {
-		if _, ok := affectedFlags[name]; !ok {
-			t.Errorf("affectedOnlyFlags entry %q no longer exists in affected.go — remove it from the exception map", name)
-		}
+		assert.Contains(t, affectedFlags, name,
+			"affectedOnlyFlags entry %q no longer exists in affected.go — remove it from the exception map", name)
 	}
 
 	runShared := subtract(runFlags, runOnlyFlags)
 	affectedShared := subtract(affectedFlags, affectedOnlyFlags)
 
 	for name := range runShared {
-		if _, ok := affectedShared[name]; !ok {
-			t.Errorf("flag --%s exists in `magus run` (run.go) but not `magus affected` (affected.go)\n"+
+		assert.Contains(t, affectedShared, name,
+			"flag --%s exists in `magus run` (run.go) but not `magus affected` (affected.go)\n"+
 				"\tAdd it to affected.go, or add an entry to affectedOnlyFlags in %s",
-				name, filepath.Base(thisFile))
-		}
+			name, filepath.Base(thisFile))
 	}
 	for name := range affectedShared {
-		if _, ok := runShared[name]; !ok {
-			t.Errorf("flag --%s exists in `magus affected` (affected.go) but not `magus run` (run.go)\n"+
+		assert.Contains(t, runShared, name,
+			"flag --%s exists in `magus affected` (affected.go) but not `magus run` (run.go)\n"+
 				"\tAdd it to run.go, or add an entry to runOnlyFlags in %s",
-				name, filepath.Base(thisFile))
-		}
+			name, filepath.Base(thisFile))
 	}
 }
 
@@ -212,9 +175,7 @@ func collectFlagNames(t *testing.T, file, funcName string) map[string]struct{} {
 	t.Helper()
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, file, nil, 0)
-	if err != nil {
-		t.Fatalf("parse %s: %v", file, err)
-	}
+	require.NoError(t, err, "parse %s", file)
 
 	var body *ast.BlockStmt
 	for _, decl := range f.Decls {
@@ -224,9 +185,7 @@ func collectFlagNames(t *testing.T, file, funcName string) map[string]struct{} {
 			break
 		}
 	}
-	if body == nil {
-		t.Fatalf("function %q not found in %s", funcName, file)
-	}
+	require.NotNil(t, body, "function %q not found in %s", funcName, file)
 
 	flagMethods := map[string]bool{
 		"Bool": true, "BoolVar": true,

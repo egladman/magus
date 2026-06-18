@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -11,18 +13,14 @@ func TestApplyEnv_FlakeEnabledTrue(t *testing.T) {
 	t.Setenv("MAGUS_FLAKE_ENABLED", "true")
 	cfg := config.Defaults()
 	ApplyEnv(&cfg, os.Getenv)
-	if !cfg.Flake.Enabled {
-		t.Error("MAGUS_FLAKE_ENABLED=true: Flake.Enabled = false, want true")
-	}
+	assert.True(t, cfg.Flake.Enabled, "MAGUS_FLAKE_ENABLED=true: Flake.Enabled should be true")
 }
 
 func TestApplyEnv_FlakeEnabledFalse(t *testing.T) {
 	t.Setenv("MAGUS_FLAKE_ENABLED", "false")
 	cfg := config.Defaults()
 	ApplyEnv(&cfg, os.Getenv)
-	if cfg.Flake.Enabled {
-		t.Error("MAGUS_FLAKE_ENABLED=false: Flake.Enabled = true, want false")
-	}
+	assert.False(t, cfg.Flake.Enabled, "MAGUS_FLAKE_ENABLED=false: Flake.Enabled should be false")
 }
 
 func TestApplyEnvToConfig(t *testing.T) {
@@ -33,22 +31,14 @@ func TestApplyEnvToConfig(t *testing.T) {
 	cfg := config.Defaults()
 	ApplyEnv(&cfg, os.Getenv)
 
-	if !cfg.Cache.Immutable {
-		t.Errorf("Cache.Immutable = %v, want true", cfg.Cache.Immutable)
-	}
-	if cfg.Concurrency != 6 {
-		t.Errorf("Concurrency = %d, want 6", cfg.Concurrency)
-	}
-	if !cfg.DryRun {
-		t.Error("DryRun should be true")
-	}
+	assert.True(t, cfg.Cache.Immutable)
+	assert.Equal(t, 6, cfg.Concurrency)
+	assert.True(t, cfg.DryRun, "DryRun should be true")
 }
 
 func TestApplyEnv_SandboxEnabled(t *testing.T) {
 	t.Setenv("MAGUS_SANDBOX_ENABLED", "true")
 	cfg := config.Defaults()
 	ApplyEnv(&cfg, os.Getenv)
-	if !cfg.Sandbox.Enabled {
-		t.Error("MAGUS_SANDBOX_ENABLED=true: Sandbox.Enabled = false, want true")
-	}
+	assert.True(t, cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED=true: Sandbox.Enabled should be true")
 }

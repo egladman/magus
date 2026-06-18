@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// ── Graph shape constructors ──────────────────────────────────────────
-
 // linear builds a chain: 0→1→2→…→n-1 where each node depends on the next.
 func linear(b *testing.B, n int) *Graph {
 	b.Helper()
@@ -103,8 +101,6 @@ func layered(b *testing.B, layers, width int) *Graph {
 	return g
 }
 
-// ── Build benchmarks ─────────────────────────────────────────────────
-
 func BenchmarkBuild_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000, 10_000} {
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
@@ -136,8 +132,6 @@ func BenchmarkBuild_layered(b *testing.B) {
 	}
 }
 
-// ── TopoOrder ─────────────────────────────────────────────────────────
-
 func BenchmarkTopoOrder_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000, 10_000} {
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
@@ -149,8 +143,6 @@ func BenchmarkTopoOrder_linear(b *testing.B) {
 		})
 	}
 }
-
-// ── ReverseClosure ────────────────────────────────────────────────────
 
 func BenchmarkReverseClosure_seed1_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000, 10_000} {
@@ -198,8 +190,6 @@ func BenchmarkReverseClosure_seed1_diamond(b *testing.B) {
 	}
 }
 
-// ── BlastRadius ───────────────────────────────────────────────────────
-
 func BenchmarkBlastRadius_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000, 10_000} {
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
@@ -223,8 +213,6 @@ func BenchmarkBlastRadius_diamond(b *testing.B) {
 		})
 	}
 }
-
-// ── NCCD ─────────────────────────────────────────────────────────────
 
 func BenchmarkNCCD_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000, 10_000} {
@@ -251,8 +239,6 @@ func BenchmarkNCCD_layered(b *testing.B) {
 	}
 }
 
-// ── PathsFromSeeds ────────────────────────────────────────────────────
-
 func BenchmarkPathsFromSeeds_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000, 10_000} {
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
@@ -267,8 +253,6 @@ func BenchmarkPathsFromSeeds_linear(b *testing.B) {
 		})
 	}
 }
-
-// ── NearCycles ────────────────────────────────────────────────────────
 
 func BenchmarkNearCycles_depth3_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000} {
@@ -293,8 +277,6 @@ func BenchmarkNearCycles_depth3_binTree(b *testing.B) {
 		})
 	}
 }
-
-// ── ClosureBuild (isolate bitset construction cost) ───────────────────
 
 func BenchmarkClosureBuild_linear(b *testing.B) {
 	for _, n := range []int{100, 1_000, 10_000} {

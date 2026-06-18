@@ -36,14 +36,14 @@ sudo apt install -y build-essential pkg-config hyperfine inotify-tools
 ### Run a benchmark
 
 ```sh
-# Go fixture (both magus engines vs make), 50 projects
+# Go fixture (magus vs make), 50 projects
 ./bench.sh go 50
 
 # TypeScript fixture (all tools), 100 packages
 ./bench.sh ts 100
 
-# TypeScript, specific tools only (engine axis is explicit)
-./bench.sh ts 25 magus-luajit magus-gopherlua turbo nx
+# TypeScript, specific tools only
+./bench.sh ts 25 magus turbo nx
 
 # Polyglot fixture
 ./bench.sh polyglot
@@ -52,10 +52,8 @@ sudo apt install -y build-essential pkg-config hyperfine inotify-tools
 BENCH_DRY_RUN=1 ./bench.sh go 8
 ```
 
-The magus tool labels are `magus-luajit` and `magus-gopherlua`; both drive the
-same `CGO_ENABLED=1` binary via `MAGUS_INTERPRETER_LUA_ENGINE`, so the only difference
-between those rows is the Lua engine. A bare `magus` label still works and uses
-the binary's default engine.
+magus appears as a single `magus` tool (measured daemon-off and daemon-on);
+Buzz is the only magusfile language, so there is no Lua-engine axis to vary.
 
 Results are written to `results/` (gitignored) and `BENCHMARKS.md` is
 regenerated in-place.
@@ -104,24 +102,24 @@ This harness works, but several caveats matter when reading the numbers.
 They're documented here so the next person doesn't rediscover them — and they
 motivate the planned move off the procedural fixtures.
 
-### S4–S7 measure the compiler, not the Lua engine
+### S4-S7 measure the compiler, not magus
 
 Cold/incremental builds are dominated by the real compiler (`go build`,
-`tsc`), so the LuaJIT-vs-gopher-lua choice is mostly noise there. The honest
-engine signal lives in **S1–S3** (startup, discovery, affected planning) plus
-the in-process micro-benchmarks (`internal/interp`, the `cmd/magus`
-`BenchmarkStartup*` set, and `hack/bench_startup.sh`). Don't read an
-engine verdict off S4–S7.
+`tsc`), so S4-S7 mostly measure the toolchain, with magus's planning/cache
+overhead layered on top. magus's own overhead shows up cleanest in **S1-S3**
+(startup, discovery, affected planning) and the in-process micro-benchmarks
+(`magus/internal/...` `Benchmark*` and the `cmd/magus` `BenchmarkStartup*` set).
 
-### Dual-engine binary + the engine axis
+### Apples-to-apples: same graph, same edges
 
-`magus` now carries **both** engines in one `CGO_ENABLED=1` build; select with
-`MAGUS_INTERPRETER_LUA_ENGINE=luajit|gopherlua` (or `interpreter.lua.engine` in `magus.yaml`).
-`bench.sh` exposes this as the tool labels `magus-luajit` / `magus-gopherlua`
-against a single binary, so the only variable between those rows is the engine.
-A `CGO_ENABLED=0` build has gopher-lua only. `magus version --verbose` prints
-the active engine. Bundling gopher-lua into the cgo binary adds a small amount
-of pure-Go binary size to the default release binary (not yet quantified).
+magus needs an explicit magusfile per project; it does not infer a build graph
+from `package.json`/`go.work` the way turbo/nx derive theirs. The fixture
+generators emit one `magusfile.buzz` per project whose edges mirror exactly what
+the other tools traverse: a project-level `depends_on` (drives the **affected**
+set, S3) plus a target-level `magus.needs(lib.build)` handle (drives build
+**ordering** and **cache-key propagation**, S5-S7). Same nodes, same edges, so
+S3's affected set and the incremental blast radius are comparable, not magus
+seeing a coarser (or finer) graph than its peers.
 
 ### The `ts` fixture is not end-to-end runnable (S4–S7)
 
@@ -131,10 +129,9 @@ but `pnpm install` in the generated tree does not reliably symlink
 `TS2307: Cannot find module '@bench/lib-N'`. This blocks S4–S7 for **all**
 tools on the `ts` fixture, not just magus.
 
-Build _ordering_ is no longer the problem: magus's `RunAll` now honours
-`depends_on`, so every lib finishes before any app starts (verified — all 20
-libs complete before the first app build begins). The remaining blocker is the
-fixture's package linking, not scheduling. Consequently:
+Build _ordering_ is not the blocker: magus honours the magusfile's
+`magus.needs` edges, so every lib finishes before its app starts. The remaining
+blocker is the fixture's package linking. Consequently:
 
 - Only **S1–S3** are trustworthy on the `ts` fixture today.
 - `bench.sh` marks magus S4–S7 on `ts` as `n/a` and runs hyperfine with
@@ -142,8 +139,11 @@ fixture's package linking, not scheduling. Consequently:
 
 ### What is reliable
 
-- The **`go` fixture** runs end-to-end (`magus` vs `make`).
-- **S1–S3** across all fixtures (the engine-relevant, magus-correct scenarios).
+- The **`go` fixture** runs end-to-end (`magus` vs `make`); the committed
+  `BENCHMARKS.md` is this fixture, run in the CI sandbox.
+- **S1-S3** across all fixtures.
+- The multi-tool `ts`/`polyglot` rows and the `large-monorepo/` suite need the
+  JS toolchains installed and a dedicated host; they are not run in CI.
 
 ### Tooling brittleness
 

@@ -13,9 +13,9 @@ import (
 // A spell is a module that exposes its exported mgs_-prefixed
 // functions (mirroring Buzz's bz_-prefixed API): a required mgs_getName plus
 // optional mgs_listRequiredGlobs/mgs_listProvidedGlobs/mgs_listClaimedGlobs/
-// mgs_getVersionCommand/mgs_isForeignProcess/mgs_listTargets.
+// mgs_getVersionCommand/mgs_isOpaque/mgs_listTargets.
 func Extract(ctx context.Context, src string) (ispell.Spec, error) {
-	sess := buzz.NewSession(ctx)
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 
 	// A fork spell may `import "magus/target"` for the Target type in its handler

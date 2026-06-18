@@ -93,7 +93,7 @@ during a run. Bind <strong>one</strong> backend. A non-empty <code>cache.remote.
 the next section). Generate a key with <code>magus config cache key generate</code>.</p>
 <h3 id="github-actions-cache">GitHub Actions Cache</h3>
 <p>The <code>actions</code> spell (<a href="../spells/github/actions/spell.buzz"><code>spells/github/actions</code></a>)
-stores artifacts in the GitHub Actions Cache, over its v1 API.</p>
+stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.</p>
 <pre><code class="language-buzz">import &quot;spells/github/actions&quot; as github;
 magus.cache.remote(github);
 </code></pre>
@@ -114,9 +114,9 @@ automatically inside a GitHub Actions job:</p>
 <td>gates the backend (<code>&quot;true&quot;</code> only in a job)</td>
 </tr>
 <tr>
-<td><code>ACTIONS_CACHE_URL</code></td>
+<td><code>ACTIONS_RESULTS_URL</code></td>
 <td>the runner</td>
-<td>cache service base URL</td>
+<td>cache service (v2) base URL</td>
 </tr>
 <tr>
 <td><code>ACTIONS_RUNTIME_TOKEN</code></td>
@@ -206,6 +206,16 @@ so a shared cache can never come up unverified. <em>Upgrading an existing remote
 cache:</em> add <code>cache.remote.trusted_keys</code> to <code>magus.yaml</code> and set <code>MAGUS_CACHE_SIGNING_KEY</code>
 on trusted pushes, or the run fails at load with a message telling you exactly
 that.</p>
+<h3 id="insecure-mode-no-signing">Insecure mode (no signing)</h3>
+<p><code>cache.remote.insecure: true</code> (env <code>MAGUS_CACHE_REMOTE_INSECURE</code>) is the explicit
+opt-out: the backend runs with <strong>no trust set and no signing key</strong>, importing and
+producing <strong>unsigned</strong> artifacts. This removes the supply-chain protection above —
+any writer the store trusts can inject files into a consumer's build — so it is
+only appropriate for a <strong>trusted single-repo CI</strong> (no fork PRs writing the store)
+or for <strong>validating a backend before minting keys</strong>. It is off by default and must
+be set deliberately; prefer a signed trust set for anything shared. Setting it is
+mutually exclusive with <code>trusted_keys</code> in effect — when <code>insecure</code> is true,
+verification is skipped regardless of any keys.</p>
 <h3 id="generating-and-trusting-a-key">Generating and trusting a key</h3>
 <pre><code class="language-sh">magus config cache key generate    # mint a keypair; prints the seed, pubkey, keyid
 </code></pre>
@@ -260,10 +270,10 @@ magus's core, not in the spell.</strong> A backend never sees, produces, or chec
 cache-artifact signature — it cannot weaken or bypass the trust model, and it gets
 signing for free. Just move the opaque bytes.</p>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/remote-cache.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/remote-cache.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-16 17:28:31 UTC from commit <a href="https://github.com/egladman/tack/commit/a8396fbfd2b64e596d5481cd614ba047c98ebd85"><code>a8396fbf</code></a></small>
+    <small>Generated 2026-06-17 18:16:56 UTC from commit <a href="https://github.com/egladman/tack/commit/ded05d1246d459b4fa47ec0e5b80fdd1c099f0e3"><code>ded05d1</code></a></small>
   </footer>
 </body>
 </html>

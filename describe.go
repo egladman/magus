@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
@@ -29,23 +30,17 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 			}
 		}
 		entries = append(entries, types.SpellEntry{
-			Name:           p.Name(),
-			Sources:        p.Sources(),
-			Outputs:        p.Outputs(),
-			Claims:         p.Claims(),
-			Targets:        p.Targets(),
-			ForeignProcess: p.ForeignProcess(),
-			TargetDocs:     docs,
+			Name:       p.Name(),
+			Sources:    p.Sources(),
+			Outputs:    p.Outputs(),
+			Claims:     p.Claims(),
+			Targets:    p.Targets(),
+			Opaque:     p.Opaque(),
+			TargetDocs: docs,
 		})
 	}
 	slices.SortFunc(entries, func(a, b types.SpellEntry) int {
-		switch {
-		case a.Name < b.Name:
-			return -1
-		case a.Name > b.Name:
-			return 1
-		}
-		return 0
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return types.SpellsOutput{
 		Definition: types.SpellDefinition,
@@ -112,13 +107,7 @@ func (m *Magus) DescribeTargets() types.TargetsOutput {
 		if b.Kind == "canonical" && a.Kind != "canonical" {
 			return 1
 		}
-		switch {
-		case a.Name < b.Name:
-			return -1
-		case a.Name > b.Name:
-			return 1
-		}
-		return 0
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return types.TargetsOutput{
 		Definition: types.TargetDefinition,
@@ -127,12 +116,12 @@ func (m *Magus) DescribeTargets() types.TargetsOutput {
 	}
 }
 
-// vcsRoot returns the nearest ancestor of dir (inclusive) holding a `.git` entry,
+// gitRoot returns the nearest ancestor of dir (inclusive) holding a `.git` entry,
 // or "" if none. A lightweight walk rather than a `git` exec: DescribeGraph has no
 // context to run a command under, and all it needs is the directory to render a
 // project's path relative to. The `.git` entry is a directory in a normal clone
 // and a file in a worktree or submodule, so a bare existence check covers both.
-func vcsRoot(dir string) string {
+func gitRoot(dir string) string {
 	for {
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			return dir
@@ -203,7 +192,7 @@ func concatSource(src *interp.Source) string {
 // with no nodes until that extractor lands.
 func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 	out := types.TargetGraphOutput{Definition: types.TargetGraphDefinition}
-	repoRoot := vcsRoot(m.ws.Root) // "" outside a repo; drives the repo-relative MAGUS.md heading
+	repoRoot := gitRoot(m.ws.Root) // "" outside a repo; drives the repo-relative MAGUS.md heading
 	for _, p := range m.ws.All() {
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {

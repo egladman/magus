@@ -1,13 +1,14 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSave_AllValueTypes exercises config set across every value kind: a *bool,
@@ -23,46 +24,32 @@ func TestSave_AllValueTypes(t *testing.T) {
 		{"sandbox.allow.homebin.path", "/home/user/.local/bin"}, // slice-of-struct (by name)
 		{"sandbox.allow.homebin.mode", "ro"},
 	} {
-		if err := Save(path, c.key, c.value); err != nil {
-			t.Fatalf("Save(%s=%s): %v", c.key, c.value, err)
-		}
+		require.NoError(t, Save(path, c.key, c.value), "Save(%s=%s)", c.key, c.value)
 	}
 
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Hints.Enabled == nil || *cfg.Hints.Enabled {
-		t.Errorf("hints.enabled = %v, want false", cfg.Hints.Enabled)
-	}
-	if cfg.Flake.Threshold != 0.25 {
-		t.Errorf("flake.threshold = %v, want 0.25", cfg.Flake.Threshold)
-	}
-	if cfg.Daemon.IdleTTL != 30*time.Minute {
-		t.Errorf("daemon.idle_ttl = %v, want 30m", cfg.Daemon.IdleTTL)
-	}
-	if cfg.Telemetry.Headers["Authorization"] != "Bearer xyz" {
-		t.Errorf("telemetry.headers = %v, want Authorization=Bearer xyz", cfg.Telemetry.Headers)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Hints.Enabled)
+	assert.False(t, *cfg.Hints.Enabled, "hints.enabled should be false")
+	assert.Equal(t, 0.25, cfg.Flake.Threshold)
+	assert.Equal(t, 30*time.Minute, cfg.Daemon.IdleTTL)
+	assert.Equal(t, "Bearer xyz", cfg.Telemetry.Headers["Authorization"])
+
 	var got *SandboxAllowPath
 	for i := range cfg.Sandbox.Allow {
 		if cfg.Sandbox.Allow[i].Name == "homebin" {
 			got = &cfg.Sandbox.Allow[i]
 		}
 	}
-	if got == nil || got.Path != "/home/user/.local/bin" || got.Mode != "ro" {
-		t.Errorf("sandbox.allow homebin = %+v, want {path:/home/user/.local/bin mode:ro}", got)
-	}
+	require.NotNil(t, got, "sandbox.allow homebin entry not found")
+	assert.Equal(t, "/home/user/.local/bin", got.Path)
+	assert.Equal(t, "ro", got.Mode)
 }
 
 func TestKnownKeys(t *testing.T) {
 	keys := KnownKeys()
-	if len(keys) == 0 {
-		t.Fatal("KnownKeys returned empty list")
-	}
-	if !slices.IsSorted(keys) {
-		t.Errorf("KnownKeys not sorted: %v", keys)
-	}
+	require.NotEmpty(t, keys, "KnownKeys returned empty list")
+	assert.True(t, slices.IsSorted(keys), "KnownKeys not sorted: %v", keys)
 	want := map[string]bool{
 		"cache.dir": true, "cache.size_mb": true, "cache.immutable": true, "cache.remote.trusted_keys": true, "cache.remote.insecure": true,
 		"ci.max_shards": true, "ci.runner_pool_budget": true,
@@ -86,73 +73,45 @@ func TestKnownKeys(t *testing.T) {
 		"sandbox.env.passthrough": true,
 	}
 	for _, k := range keys {
-		if !want[k] {
-			t.Errorf("unexpected key %q", k)
-		}
+		assert.True(t, want[k], "unexpected key %q", k)
 		delete(want, k)
 	}
-	for k := range want {
-		t.Errorf("missing expected key %q", k)
-	}
+	assert.Empty(t, want, "missing expected keys: %v", want)
 }
 
 func TestSave_CreatesMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	if err := Save(path, "cache.dir", "/tmp/mydir"); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	require.NoError(t, Save(path, "cache.dir", "/tmp/mydir"))
 
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Cache.Dir != "/tmp/mydir" {
-		t.Errorf("got Cache.Dir=%q, want %q", cfg.Cache.Dir, "/tmp/mydir")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/mydir", cfg.Cache.Dir)
 }
 
 func TestSave_MutatesOnlyTouchedKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	if err := os.WriteFile(path, []byte("concurrency: 4\nlog:\n  format: plain\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Save(path, "cache.dir", "/data/cache"); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("concurrency: 4\nlog:\n  format: plain\n"), 0o644))
+	require.NoError(t, Save(path, "cache.dir", "/data/cache"))
 
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Cache.Dir != "/data/cache" {
-		t.Errorf("Cache.Dir = %q, want %q", cfg.Cache.Dir, "/data/cache")
-	}
-	if cfg.Concurrency != 4 {
-		t.Errorf("Concurrency = %d, want 4", cfg.Concurrency)
-	}
-	if cfg.Log.Format != "plain" {
-		t.Errorf("Log.Format = %q, want %q", cfg.Log.Format, "plain")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/data/cache", cfg.Cache.Dir)
+	assert.Equal(t, 4, cfg.Concurrency)
+	assert.Equal(t, "plain", cfg.Log.Format)
 }
 
 func TestSave_IntValidation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	if err := Save(path, "concurrency", "banana"); err == nil {
-		t.Error("expected error for non-int value, got nil")
-	}
-	if err := Save(path, "concurrency", "8"); err != nil {
-		t.Fatalf("Save int: %v", err)
-	}
+	assert.Error(t, Save(path, "concurrency", "banana"), "expected error for non-int value")
+	require.NoError(t, Save(path, "concurrency", "8"))
 	cfg, _ := Load(path)
-	if cfg.Concurrency != 8 {
-		t.Errorf("Concurrency = %d, want 8", cfg.Concurrency)
-	}
+	assert.Equal(t, 8, cfg.Concurrency)
 }
 
 func TestSave_BoolValidation(t *testing.T) {
@@ -160,33 +119,22 @@ func TestSave_BoolValidation(t *testing.T) {
 	path := filepath.Join(dir, "magus.yaml")
 
 	for _, bad := range []string{"maybe", "y", "nope"} {
-		if err := Save(path, "dry_run", bad); err == nil {
-			t.Errorf("expected error for %q, got nil", bad)
-		}
+		assert.Error(t, Save(path, "dry_run", bad), "expected error for %q", bad)
 	}
 
 	for _, good := range []string{"true", "1", "false", "0"} {
-		if err := Save(path, "dry_run", good); err != nil {
-			t.Errorf("Save bool %q: %v", good, err)
-		}
+		assert.NoError(t, Save(path, "dry_run", good), "Save bool %q", good)
 	}
 
-	if err := Save(path, "dry_run", "true"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, Save(path, "dry_run", "true"))
 	cfg, _ := Load(path)
-	if !cfg.DryRun {
-		t.Error("DryRun = false, want true")
-	}
+	assert.True(t, cfg.DryRun, "DryRun should be true")
 }
 
 func TestSave_UnknownKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
-	err := Save(path, "nonexistent.key", "value")
-	if err == nil {
-		t.Error("expected error for unknown key, got nil")
-	}
+	assert.Error(t, Save(path, "nonexistent.key", "value"), "expected error for unknown key")
 }
 
 // TestInit_WritesBuiltinDefaults verifies that Init writes a valid config
@@ -195,25 +143,15 @@ func TestInit_WritesBuiltinDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	if err := Init(path, false); err != nil {
-		t.Fatalf("Init: %v", err)
-	}
+	require.NoError(t, Init(path, false))
 
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	require.NoError(t, err)
 	// Cache defaults to mutable (immutable = false).
-	if cfg.Cache.Immutable {
-		t.Error("Init: Cache.Immutable = true, want false (default)")
-	}
+	assert.False(t, cfg.Cache.Immutable, "Init: Cache.Immutable should be false (default)")
 
-	if err := Init(path, false); err == nil {
-		t.Error("expected refusal to overwrite, got nil")
-	}
-	if err := Init(path, true); err != nil {
-		t.Errorf("Init --force: %v", err)
-	}
+	assert.Error(t, Init(path, false), "expected refusal to overwrite")
+	assert.NoError(t, Init(path, true), "Init --force")
 }
 
 // TestSave_RejectsInvalidScalar verifies that validation fires
@@ -222,24 +160,16 @@ func TestSave_RejectsInvalidScalar(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	if err := os.WriteFile(path, []byte("log:\n  format: json\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("log:\n  format: json\n"), 0o644))
 	original, _ := os.ReadFile(path)
 
 	err := Save(path, "log.format", "bogus")
-	if err == nil {
-		t.Fatal("Save accepted invalid log value, want validation error")
-	}
+	require.Error(t, err, "Save accepted invalid log value, want validation error")
 	var ve *ValidationError
-	if !errors.As(err, &ve) {
-		t.Errorf("err = %T, want *ValidationError", err)
-	}
+	assert.ErrorAs(t, err, &ve)
 
 	now, _ := os.ReadFile(path)
-	if string(original) != string(now) {
-		t.Errorf("file mutated despite validation failure")
-	}
+	assert.Equal(t, string(original), string(now), "file mutated despite validation failure")
 }
 
 // TestLoad_RejectsInvalidShardCount verifies the shard_count custom
@@ -248,53 +178,47 @@ func TestLoad_RejectsInvalidShardCount(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	if err := os.WriteFile(path, []byte("ci:\n  max_shards: 999\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("ci:\n  max_shards: 999\n"), 0o644))
 	_, err := Load(path)
-	if err == nil {
-		t.Fatal("Load accepted max_shards=999, want validation error")
-	}
-	if !strings.Contains(err.Error(), "ci.max_shards") {
-		t.Errorf("err %q does not mention ci.max_shards", err)
-	}
+	require.Error(t, err, "Load accepted max_shards=999, want validation error")
+	assert.Contains(t, err.Error(), "ci.max_shards")
 }
 
 func TestLoad_DaemonAddressValidation(t *testing.T) {
-	cases := []struct {
-		yaml    string
-		wantErr bool
-	}{
-		{"daemon:\n  address: unix:///tmp/magus.sock\n", false},
-		{"daemon:\n  address: \"\"\n", false},
-		{"daemon:\n  address: /tmp/magus.sock\n", true},
-		{"daemon:\n  address: tcp://localhost:9000\n", true},
-		{"daemon:\n  address: unix://\n", true},
-	}
-	for _, tc := range cases {
+	check := func(t *testing.T, yamlContent string, wantErr bool) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "magus.yaml")
-		if err := os.WriteFile(path, []byte(tc.yaml), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, []byte(yamlContent), 0o644))
 		_, err := Load(path)
-		if tc.wantErr && err == nil {
-			t.Errorf("yaml %q: expected error, got nil", tc.yaml)
-		}
-		if !tc.wantErr && err != nil {
-			t.Errorf("yaml %q: unexpected error: %v", tc.yaml, err)
+		if wantErr {
+			assert.Error(t, err)
+		} else {
+			assert.NoError(t, err)
 		}
 	}
+
+	t.Run("unix valid", func(t *testing.T) {
+		check(t, "daemon:\n  address: unix:///tmp/magus.sock\n", false)
+	})
+	t.Run("empty address", func(t *testing.T) {
+		check(t, "daemon:\n  address: \"\"\n", false)
+	})
+	t.Run("bare path rejected", func(t *testing.T) {
+		check(t, "daemon:\n  address: /tmp/magus.sock\n", true)
+	})
+	t.Run("tcp scheme rejected", func(t *testing.T) {
+		check(t, "daemon:\n  address: tcp://localhost:9000\n", true)
+	})
+	t.Run("unix empty path rejected", func(t *testing.T) {
+		check(t, "daemon:\n  address: unix://\n", true)
+	})
 }
 
 func TestSave_CreatesParentDirectory(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "subdir", "magus.yaml")
 
-	if err := Save(path, "log.format", "json"); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Errorf("file not created: %v", err)
-	}
+	require.NoError(t, Save(path, "log.format", "json"))
+	_, err := os.Stat(path)
+	assert.NoError(t, err, "file not created")
 }

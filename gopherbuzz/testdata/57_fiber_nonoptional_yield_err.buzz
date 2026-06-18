@@ -1,0 +1,8 @@
+// @error: expected optional type or void
+// Strict parity with upstream Buzz: a fiber's yield type must be optional (T?)
+// or void. A non-optional yield type is rejected at parse time.
+fun work() > void *> int {
+    _ = yield 1;
+}
+final f = &work();
+final __r = resume f;

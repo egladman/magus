@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/flake"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
@@ -173,16 +173,12 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	return m.runResolved(ctx, targets, o)
 }
 
-// ciDeclRe matches a top-level ci target declaration in a Buzz magusfile:
-// `export fun ci`. Case-insensitive (CI/Ci normalize to the same target) and
-// \b-anchored so `cipher` doesn't match.
-var ciDeclRe = regexp.MustCompile(`(?im)^\s*export\s+fun\s+ci\b`)
-
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
-// ci lives in the magusfile (composed via magus.needs), never in a spell, so
-// it scans the magusfile sources (no VM parse needed — just locate and read them)
-// and short-circuits on the first ci found. The returned error is non-nil if a
-// source couldn't be located/read, so a (false, err) result means "couldn't
+// ci lives in the magusfile (composed via magus.needs), never in a spell, so it
+// extracts each project's declared target nodes statically (the same AST extractor
+// DescribeGraph uses — never a raw text scan, so `ci` in a comment or string can't
+// false-positive) and short-circuits on the first ci found. The returned error is
+// non-nil if a source couldn't be located, so a (false, err) result means "couldn't
 // determine" rather than "definitely no ci" — the caller must not block on it.
 func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 	var scanErr error
@@ -193,13 +189,13 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 			continue
 		}
 		for _, src := range srcs {
-			for _, f := range src.Files {
-				data, err := os.ReadFile(f)
-				if err != nil {
-					scanErr = err
-					continue
-				}
-				if ciDeclRe.Match(data) {
+			if src.Engine != "buzz" {
+				continue
+			}
+			for _, n := range describe.Extract(concatSource(src)) {
+				// Node names are already normalized by the extractor, so this
+				// matches the run path's target-name resolution.
+				if n.Name == types.TargetCI {
 					return true, nil
 				}
 			}
@@ -211,7 +207,7 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 // RunAffected computes the VCS-diff target set and runs target on it.
 func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOption) error {
 	o := applyRunOpts(opts)
-	targets, _, err := m.ExpandAffected(ctx, target, o.BaseRef)
+	targets, _, _, err := m.ExpandAffected(ctx, target, o.BaseRef)
 	if err != nil {
 		return err
 	}
@@ -266,19 +262,19 @@ func (m *Magus) buildSpec(p *types.Project, target string) cache.Spec {
 	}
 	spec.DependsOn = p.DependsOn
 	pol := p.TargetPolicies[target]
-	spec.NoCache = pol.NoCache
-	spec.Isolated = pol.Isolated
+	spec.NoCache = pol.SkipCache
+	spec.Isolated = pol.Exclusive
 	return spec
 }
 
 // firstTargetPolicy returns the policy for target from the first project that declares one.
-func firstTargetPolicy(projects []*types.Project, target string) types.TargetPolicy {
+func firstTargetPolicy(projects []*types.Project, target string) types.Target {
 	for _, p := range projects {
-		if pol := p.TargetPolicies[target]; !pol.IsZero() {
+		if pol, ok := p.TargetPolicies[target]; ok {
 			return pol
 		}
 	}
-	return types.TargetPolicy{}
+	return types.Target{}
 }
 
 // toolVersionMode resolves the cache tool-version policy from MAGUS_CACHE_TOOL_VERSION.
@@ -377,7 +373,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	trackFlake := false
 	for _, st := range stages {
 		handlerOf[st.target] = st.handler
-		if firstTargetPolicy(st.projects, st.target).TrackFlake {
+		if firstTargetPolicy(st.projects, st.target).RetryOnFlake {
 			trackFlake = true
 		}
 		for _, p := range st.projects {
@@ -803,7 +799,7 @@ func (m *Magus) makeHandler(name string) func(context.Context, *types.Project) e
 		return func(ctx context.Context, p *types.Project) error {
 			run := func() error { return runTarget(ctx, p, name) }
 			pol := p.TargetPolicies[name]
-			if pol.CheckClean && !types.HasCharm(ctx, types.CharmReadWrite) {
+			if pol.FailOnDrift && !types.HasCharm(ctx, types.CharmReadWrite) {
 				return checkCleanAfter(ctx, p.Dir, name, run)
 			}
 			return run()

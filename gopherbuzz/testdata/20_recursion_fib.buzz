@@ -1,8 +1,8 @@
 // @expect: 55
-fun fib(n: int) int {
+fun fibo(n: int) > int {
     if (n <= 1) {
         return n;
     }
-    return fib(n - 1) + fib(n - 2);
+    return fibo(n - 1) + fibo(n - 2);
 }
-final __r = fib(10);
+final __r = fibo(10);

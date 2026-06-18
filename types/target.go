@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/samber/lo"
 )
 
 // TargetNameNormalizer converts raw identifier strings (e.g. from exported
@@ -17,7 +15,34 @@ type TargetNameNormalizer interface {
 
 type kebabTargetNormalizer struct{}
 
-func (kebabTargetNormalizer) NormalizeTargetName(s string) string { return lo.KebabCase(s) }
+func (kebabTargetNormalizer) NormalizeTargetName(s string) string { return kebabCase(s) }
+
+// kebabCaseSplitWord / kebabCaseSplitNumberLetter mirror the word-boundary
+// regexes that samber/lo's KebabCase uses, so kebabCase produces identical
+// output for identifier-like inputs (FooBar->foo-bar, HTTPServer->http-server,
+// build2->build-2) without the lo dependency.
+var (
+	kebabCaseSplitWord         = regexp.MustCompile(`([a-z])([A-Z0-9])|([a-zA-Z])([0-9])|([0-9])([a-zA-Z])|([A-Z])([A-Z])([a-z])`)
+	kebabCaseSplitNumberLetter = regexp.MustCompile(`([0-9])([a-zA-Z])`)
+)
+
+// kebabCase lowercases s and inserts '-' at camelCase and letter/digit
+// boundaries, collapsing every non-alphanumeric run to a single '-' and
+// trimming leading/trailing '-'.
+func kebabCase(s string) string {
+	s = kebabCaseSplitWord.ReplaceAllString(s, `$1$3$5$7 $2$4$6$8$9`)
+	s = kebabCaseSplitNumberLetter.ReplaceAllString(s, "$1 $2")
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune(' ')
+		}
+	}
+	return strings.ToLower(strings.Join(strings.Fields(b.String()), "-"))
+}
 
 // DefaultTargetNameNormalizer normalizes identifiers to kebab-case so that
 // go_build, goBuild, and go-build all resolve to the same target "go-build".
@@ -67,10 +92,19 @@ func NormalizeCharmName(name string) string {
 // Target identifies one unit of work (project × target name).
 // An empty Path means all projects.
 type Target struct {
-	Path   string   // workspace-relative project path; empty = all projects
+	Path   string   `buzz:"projectPath"` // workspace-relative project path; empty = all projects
 	Name   string   // e.g. "build", "test"
 	Charms []string // execution charms parsed from the "target:charm,..." suffix
 	Files  []string // changed files within project; populated by affected expansion
+
+	// Per-target execution policy (formerly the TargetPolicy struct, inlined here).
+	// SkipCache and Exclusive are author-facing — serialized into the Buzz object
+	// Target. FailOnDrift and RetryOnFlake are CI-only hooks set via the Go
+	// registration API, excluded from the Buzz object (buzz:"-").
+	SkipCache    bool `json:"skipCache,omitempty"`             // opt out of the cache: always run, never replay/snapshot
+	Exclusive    bool `json:"exclusive,omitempty"`             // run alone — no other target runs concurrently while this one does
+	FailOnDrift  bool `json:"failOnDrift,omitempty" buzz:"-"`  // fail the run if the working tree is dirty after this target (drift gate)
+	RetryOnFlake bool `json:"retryOnFlake,omitempty" buzz:"-"` // route through flake detection + auto-retry
 }
 
 // String returns the canonical "path:target" form.
@@ -103,4 +137,58 @@ func ParseTarget(s string) (Target, error) {
 		return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 	}
 	return Target{Name: target, Charms: charms}, nil
+}
+
+// Target-query modes. A literal query that also names a Project is a cross-project
+// (external) edge; see TargetQuery.IsExternal.
+const (
+	QueryLiteral = "literal"
+	QueryGlob    = "glob"
+	QueryRegex   = "regex"
+)
+
+// TargetQuery is an unresolved dependency edge: a query that, resolved against a
+// project's registered targets, produces zero or more Targets. It is what
+// magus.target.literal/glob/regex return and what magus.needs consumes — the recipe
+// (a match Mode plus a Pattern), as distinct from Target, which is one resolved
+// work-unit. A literal query is the degenerate 1→1 case; glob/regex are 1→N.
+//
+// The canonical Buzz `object TargetQuery` mirror is generated from this struct by
+// cmd/magus-types-gen (go:generate) and shipped in the magus/target module, so the
+// Go and Buzz shapes can never drift. Keep them in lockstep through the generator,
+// never by hand.
+type TargetQuery struct {
+	Mode    string // QueryLiteral | QueryGlob | QueryRegex
+	Pattern string // exact name for literal; the glob/regex pattern otherwise
+	Project string // cross-project (external) reference; empty = same project
+}
+
+// IsExternal reports whether q is a cross-project edge: a literal query carrying
+// the path of another project. Glob/regex queries are same-project only.
+func (q TargetQuery) IsExternal() bool { return q.Mode == QueryLiteral && q.Project != "" }
+
+// ExecResult is the serializable {stdout, stderr, code, ok} shape every magus exec
+// surface returns (os.exec, magus.cmd, a captured spell op); ok is code == 0. It is
+// the boundary mirror of the richer internal run.ExecResult.
+//
+// The Buzz `object ExecResult` mirror is generated from this struct by
+// cmd/magus-types-gen (go:generate); keep them in lockstep through the generator.
+type ExecResult struct {
+	Stdout string
+	Stderr string
+	Code   int
+	OK     bool `buzz:"ok"`
+}
+
+// Record is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
+// {stdout, stderr, code, ok}. The exec surfaces space-trim Stdout/Stderr before
+// building the struct (the captured-output convention), so this is a plain field
+// map. The generated trampoline calls it (see hostbuzz.Recorder).
+func (r ExecResult) Record() map[string]any {
+	return map[string]any{
+		"stdout": r.Stdout,
+		"stderr": r.Stderr,
+		"code":   r.Code,
+		"ok":     r.OK,
+	}
 }

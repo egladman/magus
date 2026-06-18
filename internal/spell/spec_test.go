@@ -2,63 +2,62 @@ package spell
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidatePatch(t *testing.T) {
-	cases := []struct {
-		name    string
-		ops     []PatchOp
-		wantErr bool
-	}{
-		{"empty", nil, false},
-		{"add end", []PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, false},
-		{"replace index", []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, false},
-		{"remove index", []PatchOp{{Op: "remove", Path: "/2"}}, false},
-		{"move", []PatchOp{{Op: "move", Path: "/0", From: "/1"}}, false},
-		{"copy", []PatchOp{{Op: "copy", Path: "/0", From: "/1"}}, false},
-		{"test", []PatchOp{{Op: "test", Path: "/0", Value: "go"}}, false},
-		{"unknown op", []PatchOp{{Op: "patch", Path: "/0"}}, true},
-		{"root path rejected", []PatchOp{{Op: "replace", Path: "", Value: "x"}}, true},
-		{"path without slash", []PatchOp{{Op: "add", Path: "0", Value: "x"}}, true},
-		{"move without from", []PatchOp{{Op: "move", Path: "/0"}}, true},
-		{"copy bad from", []PatchOp{{Op: "copy", Path: "/0", From: "1"}}, true},
-	}
-	for _, tc := range cases {
-		err := ValidatePatch(tc.ops)
-		if tc.wantErr && err == nil {
-			t.Errorf("ValidatePatch(%s) = nil, want error", tc.name)
-		}
-		if !tc.wantErr && err != nil {
-			t.Errorf("ValidatePatch(%s) = %v, want nil", tc.name, err)
-		}
-	}
+	t.Run("empty", func(t *testing.T) {
+		assert.NoError(t, ValidatePatch(nil))
+	})
+	t.Run("add end", func(t *testing.T) {
+		assert.NoError(t, ValidatePatch([]PatchOp{{Op: "add", Path: "/-", Value: "-v"}}))
+	})
+	t.Run("replace index", func(t *testing.T) {
+		assert.NoError(t, ValidatePatch([]PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}))
+	})
+	t.Run("remove index", func(t *testing.T) {
+		assert.NoError(t, ValidatePatch([]PatchOp{{Op: "remove", Path: "/2"}}))
+	})
+	t.Run("move", func(t *testing.T) {
+		assert.NoError(t, ValidatePatch([]PatchOp{{Op: "move", Path: "/0", From: "/1"}}))
+	})
+	t.Run("copy", func(t *testing.T) {
+		assert.NoError(t, ValidatePatch([]PatchOp{{Op: "copy", Path: "/0", From: "/1"}}))
+	})
+	t.Run("test", func(t *testing.T) {
+		assert.NoError(t, ValidatePatch([]PatchOp{{Op: "test", Path: "/0", Value: "go"}}))
+	})
+	t.Run("unknown op", func(t *testing.T) {
+		assert.Error(t, ValidatePatch([]PatchOp{{Op: "patch", Path: "/0"}}))
+	})
+	t.Run("root path rejected", func(t *testing.T) {
+		assert.Error(t, ValidatePatch([]PatchOp{{Op: "replace", Path: "", Value: "x"}}))
+	})
+	t.Run("path without slash", func(t *testing.T) {
+		assert.Error(t, ValidatePatch([]PatchOp{{Op: "add", Path: "0", Value: "x"}}))
+	})
+	t.Run("move without from", func(t *testing.T) {
+		assert.Error(t, ValidatePatch([]PatchOp{{Op: "move", Path: "/0"}}))
+	})
+	t.Run("copy bad from", func(t *testing.T) {
+		assert.Error(t, ValidatePatch([]PatchOp{{Op: "copy", Path: "/0", From: "1"}}))
+	})
 }
 
 func TestSpec_TargetNames(t *testing.T) {
 	m := Spec{
 		Name: "test",
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"vet":   {},
 			"build": {},
 			"test":  {},
 		},
 	}
-	got := m.TargetNames()
-	want := []string{"build", "test", "vet"}
-	if len(got) != len(want) {
-		t.Fatalf("TargetNames() = %v, want %v", got, want)
-	}
-	for i, v := range got {
-		if v != want[i] {
-			t.Errorf("TargetNames()[%d] = %q, want %q", i, v, want[i])
-		}
-	}
+	assert.Equal(t, []string{"build", "test", "vet"}, m.OpNames())
 }
 
 func TestSpec_TargetNamesEmpty(t *testing.T) {
 	m := Spec{Name: "empty"}
-	got := m.TargetNames()
-	if len(got) != 0 {
-		t.Errorf("TargetNames() on empty Targets = %v, want []", got)
-	}
+	assert.Empty(t, m.OpNames(), "OpNames() on empty Ops should be empty")
 }

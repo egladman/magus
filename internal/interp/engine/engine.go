@@ -36,7 +36,7 @@ type Session interface {
 	NewTable() Table
 	LoadString(code string) (Value, error)
 	DoString(code string) error
-	Call(p CallParams, args ...Value) error
+	Call(p CallParams) error
 }
 
 // Value is a script-side value handle. Engine implementations choose their
@@ -62,19 +62,11 @@ type Table interface {
 	Len() int
 }
 
-// ContextSetter is implemented by engine sessions that support per-call
-// context propagation. The pool uses it to thread the job's context —
-// including the limiter slot and ancestor chain — into the VM before invoking
-// a target, so the budget is enforced uniformly.
-type ContextSetter interface {
-	SetContext(context.Context)
-}
-
-// CallParams configures a Session.Call invocation.
+// CallParams configures a Session.Call invocation. Fn is the compiled value to
+// run; the buzz engine ignores arguments and return-value counts (callers that
+// need them use the concrete Session.CallValue), so only Fn is carried here.
 type CallParams struct {
-	Fn      Value
-	NRet    int
-	Protect bool
+	Fn Value
 }
 
 // StringValue wraps s as a string Value.

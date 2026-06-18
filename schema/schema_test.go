@@ -6,59 +6,45 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
-)
 
-// ── ParseBool ────────────────────────────────────────────────────────────────
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestParseBool_truthy(t *testing.T) {
 	for _, v := range []string{"true", "True", "TRUE", "1", "yes", "YES"} {
-		if !ParseBool(v, false) {
-			t.Errorf("ParseBool(%q, false) = false, want true", v)
-		}
+		assert.Truef(t, ParseBool(v, false), "ParseBool(%q, false) = false, want true", v)
 	}
 }
 
 func TestParseBool_falsy(t *testing.T) {
 	for _, v := range []string{"false", "False", "FALSE", "0", "no", "NO"} {
-		if ParseBool(v, true) {
-			t.Errorf("ParseBool(%q, true) = true, want false", v)
-		}
+		assert.Falsef(t, ParseBool(v, true), "ParseBool(%q, true) = true, want false", v)
 	}
 }
 
 func TestParseBool_unknown_returnsDefault(t *testing.T) {
-	if !ParseBool("maybe", true) {
-		t.Error("ParseBool(unknown, true) = false, want true (fallback)")
-	}
-	if ParseBool("", false) {
-		t.Error("ParseBool(empty, false) = true, want false (fallback)")
-	}
+	assert.True(t, ParseBool("maybe", true), "ParseBool(unknown, true) = false, want true (fallback)")
+	assert.False(t, ParseBool("", false), "ParseBool(empty, false) = true, want false (fallback)")
 }
 
-// ── Fields population ──────────────────────────────────────────────────────────
-
 func TestFields_nonEmpty(t *testing.T) {
-	if len(Fields) == 0 {
-		t.Fatal("Fields is empty — fields.go was not generated")
-	}
+	require.NotEmpty(t, Fields, "Fields is empty — fields.go was not generated")
 }
 
 func TestFields_allEnvVarsStartWithMAGUS(t *testing.T) {
 	for _, f := range Fields {
-		if len(f.EnvVar) < 7 || f.EnvVar[:6] != "MAGUS_" {
-			t.Errorf("Field %q: EnvVar %q does not start with MAGUS_", f.GoPath, f.EnvVar)
-		}
+		assert.Truef(t, len(f.EnvVar) >= 7 && f.EnvVar[:6] == "MAGUS_",
+			"Field %q: EnvVar %q does not start with MAGUS_", f.GoPath, f.EnvVar)
 	}
 }
 
 func TestFields_noDuplicateEnvVars(t *testing.T) {
 	seen := make(map[string]string, len(Fields))
 	for _, f := range Fields {
-		if prev, ok := seen[f.EnvVar]; ok {
-			t.Errorf("duplicate EnvVar %q: GoPath %q and %q", f.EnvVar, prev, f.GoPath)
-		}
+		prev, ok := seen[f.EnvVar]
+		assert.Falsef(t, ok, "duplicate EnvVar %q: GoPath %q and %q", f.EnvVar, prev, f.GoPath)
 		seen[f.EnvVar] = f.GoPath
 	}
 }
@@ -66,118 +52,73 @@ func TestFields_noDuplicateEnvVars(t *testing.T) {
 func TestFields_noDuplicateGoPaths(t *testing.T) {
 	seen := make(map[string]bool, len(Fields))
 	for _, f := range Fields {
-		if seen[f.GoPath] {
-			t.Errorf("duplicate GoPath %q", f.GoPath)
-		}
+		assert.Falsef(t, seen[f.GoPath], "duplicate GoPath %q", f.GoPath)
 		seen[f.GoPath] = true
 	}
 }
 
 func TestFields_boolPtrHasNoFlagName(t *testing.T) {
 	for _, f := range Fields {
-		if f.Kind == KindBoolPtr && f.Flag.Long != "" {
-			t.Errorf("KindBoolPtr field %q should have empty Flag.Long (env-only), got %q", f.GoPath, f.Flag.Long)
+		if f.Kind == KindBoolPtr {
+			assert.Emptyf(t, f.Flag.Long,
+				"KindBoolPtr field %q should have empty Flag.Long (env-only), got %q", f.GoPath, f.Flag.Long)
 		}
 	}
 }
 
-// ── FieldByEnv ──────────────────────────────────────────────────────────────────
-
 func TestFieldByEnv_found(t *testing.T) {
 	f, ok := FieldByEnv("MAGUS_CACHE_DIR")
-	if !ok {
-		t.Fatal("FieldByEnv(MAGUS_CACHE_DIR) not found")
-	}
-	if f.GoPath != "Cache.Dir" {
-		t.Errorf("GoPath = %q, want Cache.Dir", f.GoPath)
-	}
-	if f.Kind != KindString {
-		t.Errorf("Kind = %v, want KindString", f.Kind)
-	}
+	require.True(t, ok, "FieldByEnv(MAGUS_CACHE_DIR) not found")
+	assert.Equal(t, "Cache.Dir", f.GoPath)
+	assert.Equal(t, KindString, f.Kind)
 }
 
 func TestFieldByEnv_notFound(t *testing.T) {
 	_, ok := FieldByEnv("MAGUS_DOES_NOT_EXIST")
-	if ok {
-		t.Error("FieldByEnv(unknown) should return false")
-	}
+	assert.False(t, ok, "FieldByEnv(unknown) should return false")
 }
-
-// ── FieldByGoPath ───────────────────────────────────────────────────────────────
 
 func TestFieldByGoPath_found(t *testing.T) {
 	f, ok := FieldByGoPath("Cache.Dir")
-	if !ok {
-		t.Fatal("FieldByGoPath(Cache.Dir) not found")
-	}
-	if f.EnvVar != "MAGUS_CACHE_DIR" {
-		t.Errorf("EnvVar = %q, want MAGUS_CACHE_DIR", f.EnvVar)
-	}
+	require.True(t, ok, "FieldByGoPath(Cache.Dir) not found")
+	assert.Equal(t, "MAGUS_CACHE_DIR", f.EnvVar)
 }
 
 func TestFieldByGoPath_notFound(t *testing.T) {
 	_, ok := FieldByGoPath("Nonexistent.Field")
-	if ok {
-		t.Error("FieldByGoPath(unknown) should return false")
-	}
+	assert.False(t, ok, "FieldByGoPath(unknown) should return false")
 }
-
-// ── Field.String ──────────────────────────────────────────────────────────────
 
 // String must be single-line so %v / fmt.Println(field) doesn't smear across
 // the surrounding log output.
 func TestField_String_singleLine(t *testing.T) {
-	cases := []Field{
+	fields := []Field{
 		{EnvVar: "MAGUS_CACHE_DIR", YamlPath: "cache.dir", Flag: FlagNames{Long: "cache-dir"}},
 		{EnvVar: "MAGUS_HINTS_ENABLED", YamlPath: "hints.enabled", Flag: FlagNames{}},
 		{EnvVar: "MAGUS_OUTPUT", YamlPath: "output", Flag: FlagNames{Long: "output", Short: "o"}},
 	}
-	for _, f := range cases {
+	for _, f := range fields {
 		out := f.String()
-		if strings.Contains(out, "\n") {
-			t.Errorf("Field.String() must be single-line for %q, got %q", f.EnvVar, out)
-		}
-		if !strings.Contains(out, f.EnvVar) {
-			t.Errorf("Field.String() missing env var: %q", out)
-		}
-		if !strings.Contains(out, f.YamlPath) {
-			t.Errorf("Field.String() missing yaml path: %q", out)
-		}
+		assert.NotContainsf(t, out, "\n", "Field.String() must be single-line for %q, got %q", f.EnvVar, out)
+		assert.Containsf(t, out, f.EnvVar, "Field.String() missing env var: %q", out)
+		assert.Containsf(t, out, f.YamlPath, "Field.String() missing yaml path: %q", out)
 	}
 }
 
 func TestField_String_flagFormatting(t *testing.T) {
-	tests := []struct {
-		name  string
-		field Field
-		want  string
-	}{
-		{
-			"long flag only",
-			Field{EnvVar: "MAGUS_CACHE_DIR", YamlPath: "cache.dir", Flag: FlagNames{Long: "cache-dir"}},
-			"MAGUS_CACHE_DIR (--cache-dir, cache.dir)",
-		},
-		{
-			"short and long",
-			Field{EnvVar: "MAGUS_OUTPUT", YamlPath: "output", Flag: FlagNames{Long: "output", Short: "o"}},
-			"MAGUS_OUTPUT (-o, --output, output)",
-		},
-		{
-			"env-only",
-			Field{EnvVar: "MAGUS_HINTS_ENABLED", YamlPath: "hints.enabled", Flag: FlagNames{}},
-			"MAGUS_HINTS_ENABLED (env-only, hints.enabled)",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.field.String(); got != tc.want {
-				t.Errorf("Field.String() = %q, want %q", got, tc.want)
-			}
-		})
-	}
+	t.Run("long flag only", func(t *testing.T) {
+		f := Field{EnvVar: "MAGUS_CACHE_DIR", YamlPath: "cache.dir", Flag: FlagNames{Long: "cache-dir"}}
+		assert.Equal(t, "MAGUS_CACHE_DIR (--cache-dir, cache.dir)", f.String())
+	})
+	t.Run("short and long", func(t *testing.T) {
+		f := Field{EnvVar: "MAGUS_OUTPUT", YamlPath: "output", Flag: FlagNames{Long: "output", Short: "o"}}
+		assert.Equal(t, "MAGUS_OUTPUT (-o, --output, output)", f.String())
+	})
+	t.Run("env-only", func(t *testing.T) {
+		f := Field{EnvVar: "MAGUS_HINTS_ENABLED", YamlPath: "hints.enabled", Flag: FlagNames{}}
+		assert.Equal(t, "MAGUS_HINTS_ENABLED (env-only, hints.enabled)", f.String())
+	})
 }
-
-// ── Field.Describe ──────────────────────────────────────────────────────────────
 
 func TestField_Describe_withFlag(t *testing.T) {
 	f := Field{
@@ -189,15 +130,9 @@ func TestField_Describe_withFlag(t *testing.T) {
 		Usage:    "cache directory",
 	}
 	out := f.Describe()
-	if !strings.Contains(out, "MAGUS_CACHE_DIR") {
-		t.Errorf("Describe() missing env var: %q", out)
-	}
-	if !strings.Contains(out, "--cache-dir") {
-		t.Errorf("Describe() missing flag: %q", out)
-	}
-	if !strings.Contains(out, "cache.dir") {
-		t.Errorf("Describe() missing yaml path: %q", out)
-	}
+	assert.Containsf(t, out, "MAGUS_CACHE_DIR", "Describe() missing env var: %q", out)
+	assert.Containsf(t, out, "--cache-dir", "Describe() missing flag: %q", out)
+	assert.Containsf(t, out, "cache.dir", "Describe() missing yaml path: %q", out)
 }
 
 func TestField_Describe_envOnly(t *testing.T) {
@@ -210,9 +145,7 @@ func TestField_Describe_envOnly(t *testing.T) {
 		Usage:    "hints enabled",
 	}
 	out := f.Describe()
-	if !strings.Contains(out, "env-only") {
-		t.Errorf("Describe() of env-only field missing '(env-only)': %q", out)
-	}
+	assert.Containsf(t, out, "env-only", "Describe() of env-only field missing '(env-only)': %q", out)
 }
 
 func TestField_Describe_withShort(t *testing.T) {
@@ -224,34 +157,26 @@ func TestField_Describe_withShort(t *testing.T) {
 		Kind:     KindString,
 	}
 	out := f.Describe()
-	if !strings.Contains(out, "-o") {
-		t.Errorf("Describe() missing short flag: %q", out)
-	}
+	assert.Containsf(t, out, "-o", "Describe() missing short flag: %q", out)
 }
-
-// ── Kind round-trip via Fields ──────────────────────────────────────────────────
 
 func TestKind_hasDurationField(t *testing.T) {
+	found := false
 	for _, f := range Fields {
 		if f.Kind == KindDuration {
-			return
+			found = true
+			break
 		}
 	}
-	t.Error("no KindDuration field found — generator may have lost time.Duration detection")
+	assert.True(t, found, "no KindDuration field found — generator may have lost time.Duration detection")
 }
 
-// ── UseEnv ────────────────────────────────────────────────────────────────────
-
 func TestUseEnv_nonNil(t *testing.T) {
-	if UseEnv() == nil {
-		t.Error("UseEnv() returned nil")
-	}
+	assert.NotNil(t, UseEnv(), "UseEnv() returned nil")
 }
 
 func TestEnvPrefix(t *testing.T) {
-	if EnvPrefix != "MAGUS" {
-		t.Errorf("EnvPrefix = %q, want MAGUS", EnvPrefix)
-	}
+	assert.Equal(t, "MAGUS", EnvPrefix)
 }
 
 // TestSchemaNotDrifted re-runs the schema generator into temp files and
@@ -266,9 +191,7 @@ func TestSchemaNotDrifted(t *testing.T) {
 	}
 
 	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
+	require.True(t, ok, "runtime.Caller failed")
 	schemaDir := filepath.Dir(thisFile)
 	// e.g. magus/schema
 
@@ -288,9 +211,7 @@ func TestSchemaNotDrifted(t *testing.T) {
 		"-apply-env-out", envOut,
 	)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("schema generator failed: %v\n%s", err, out)
-	}
+	require.NoErrorf(t, err, "schema generator failed: %s", out)
 
 	checks := []struct {
 		name      string
@@ -316,15 +237,10 @@ func TestSchemaNotDrifted(t *testing.T) {
 
 	for _, c := range checks {
 		want, err := os.ReadFile(c.committed)
-		if err != nil {
-			t.Fatalf("read committed %s: %v", c.name, err)
-		}
+		require.NoErrorf(t, err, "read committed %s", c.name)
 		got, err := os.ReadFile(c.generated)
-		if err != nil {
-			t.Fatalf("read generated %s: %v", c.name, err)
-		}
-		if !bytes.Equal(want, got) {
-			t.Errorf("%s is out of date — run: go generate ./magus/cmd/magus/...", c.name)
-		}
+		require.NoErrorf(t, err, "read generated %s", c.name)
+		assert.Truef(t, bytes.Equal(want, got),
+			"%s is out of date — run: go generate ./magus/cmd/magus/...", c.name)
 	}
 }

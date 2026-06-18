@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	kzstd "github.com/klauspost/compress/zstd"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ulikunitz/xz"
 )
 
@@ -20,36 +22,23 @@ func testPayload(n int) []byte {
 	return out
 }
 
-// --- zstd ---
-
 func TestZstdRoundTrip(t *testing.T) {
 	want := testPayload(1 << 20) // 1 MiB
 
 	var buf bytes.Buffer
 	w, err := NewZstdWriter(&buf, -1, 0)
-	if err != nil {
-		t.Fatalf("NewZstdWriter: %v", err)
-	}
-	if _, err := w.Write(want); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, err, "NewZstdWriter")
+	_, err = w.Write(want)
+	require.NoError(t, err, "Write")
+	require.NoError(t, w.Close(), "Close")
 
 	r, err := NewZstdReader(bytes.NewReader(buf.Bytes()), 0)
-	if err != nil {
-		t.Fatalf("NewZstdReader: %v", err)
-	}
+	require.NoError(t, err, "NewZstdReader")
 	defer r.Close()
 
 	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("round-trip mismatch: got %d bytes, want %d bytes", len(got), len(want))
-	}
+	require.NoError(t, err, "ReadAll")
+	assert.Equal(t, want, got, "round-trip mismatch")
 }
 
 // TestZstdCrossCompatWrite verifies that the codec writer produces a stream
@@ -59,30 +48,19 @@ func TestZstdCrossCompatWrite(t *testing.T) {
 
 	var buf bytes.Buffer
 	w, err := NewZstdWriter(&buf, 3, 0)
-	if err != nil {
-		t.Fatalf("NewZstdWriter: %v", err)
-	}
-	if _, err := w.Write(want); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, err, "NewZstdWriter")
+	_, err = w.Write(want)
+	require.NoError(t, err, "Write")
+	require.NoError(t, w.Close(), "Close")
 
 	// Decode with klauspost reference decoder.
 	ref, err := kzstd.NewReader(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("kzstd.NewReader: %v", err)
-	}
+	require.NoError(t, err, "kzstd.NewReader")
 	defer ref.Close()
 
 	got, err := io.ReadAll(ref)
-	if err != nil {
-		t.Fatalf("kzstd ReadAll: %v", err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("cross-compat write: got %d bytes, want %d bytes", len(got), len(want))
-	}
+	require.NoError(t, err, "kzstd ReadAll")
+	assert.Equal(t, want, got, "cross-compat write")
 }
 
 // TestZstdCrossCompatRead verifies that streams written by the klauspost
@@ -93,29 +71,18 @@ func TestZstdCrossCompatRead(t *testing.T) {
 	// Compress with klauspost reference encoder.
 	var buf bytes.Buffer
 	enc, err := kzstd.NewWriter(&buf)
-	if err != nil {
-		t.Fatalf("kzstd.NewWriter: %v", err)
-	}
-	if _, err := enc.Write(want); err != nil {
-		t.Fatalf("kzstd Write: %v", err)
-	}
-	if err := enc.Close(); err != nil {
-		t.Fatalf("kzstd Close: %v", err)
-	}
+	require.NoError(t, err, "kzstd.NewWriter")
+	_, err = enc.Write(want)
+	require.NoError(t, err, "kzstd Write")
+	require.NoError(t, enc.Close(), "kzstd Close")
 
 	r, err := NewZstdReader(bytes.NewReader(buf.Bytes()), 0)
-	if err != nil {
-		t.Fatalf("NewZstdReader: %v", err)
-	}
+	require.NoError(t, err, "NewZstdReader")
 	defer r.Close()
 
 	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("cross-compat read: got %d bytes, want %d bytes", len(got), len(want))
-	}
+	require.NoError(t, err, "ReadAll")
+	assert.Equal(t, want, got, "cross-compat read")
 }
 
 func TestZstdMultithreaded(t *testing.T) {
@@ -123,32 +90,19 @@ func TestZstdMultithreaded(t *testing.T) {
 
 	var buf bytes.Buffer
 	w, err := NewZstdWriter(&buf, 3, 4)
-	if err != nil {
-		t.Fatalf("NewZstdWriter: %v", err)
-	}
-	if _, err := w.Write(want); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, err, "NewZstdWriter")
+	_, err = w.Write(want)
+	require.NoError(t, err, "Write")
+	require.NoError(t, w.Close(), "Close")
 
 	r, err := NewZstdReader(bytes.NewReader(buf.Bytes()), 0)
-	if err != nil {
-		t.Fatalf("NewZstdReader: %v", err)
-	}
+	require.NoError(t, err, "NewZstdReader")
 	defer r.Close()
 
 	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("multithreaded round-trip mismatch")
-	}
+	require.NoError(t, err, "ReadAll")
+	assert.Equal(t, want, got, "multithreaded round-trip mismatch")
 }
-
-// --- xz ---
 
 func TestXzDecompress(t *testing.T) {
 	want := testPayload(512 * 1024)
@@ -156,30 +110,19 @@ func TestXzDecompress(t *testing.T) {
 	// Compress with ulikunitz/xz reference encoder.
 	var buf bytes.Buffer
 	xw, err := xz.NewWriter(&buf)
-	if err != nil {
-		t.Fatalf("xz.NewWriter: %v", err)
-	}
-	if _, err := xw.Write(want); err != nil {
-		t.Fatalf("xz Write: %v", err)
-	}
-	if err := xw.Close(); err != nil {
-		t.Fatalf("xz Close: %v", err)
-	}
+	require.NoError(t, err, "xz.NewWriter")
+	_, err = xw.Write(want)
+	require.NoError(t, err, "xz Write")
+	require.NoError(t, xw.Close(), "xz Close")
 
 	// Decompress with the codec.
 	r, err := NewXzReader(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("NewXzReader: %v", err)
-	}
+	require.NoError(t, err, "NewXzReader")
 	defer r.Close()
 
 	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("xz ReadAll: %v", err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("xz decompress mismatch: got %d bytes, want %d bytes", len(got), len(want))
-	}
+	require.NoError(t, err, "xz ReadAll")
+	assert.Equal(t, want, got, "xz decompress mismatch")
 }
 
 // TestXzCrossCompatRead verifies the codec reader output against the ulikunitz
@@ -189,41 +132,26 @@ func TestXzCrossCompatRead(t *testing.T) {
 
 	var buf bytes.Buffer
 	xw, err := xz.NewWriter(&buf)
-	if err != nil {
-		t.Fatalf("xz.NewWriter: %v", err)
-	}
-	if _, err := xw.Write(want); err != nil {
-		t.Fatalf("xz Write: %v", err)
-	}
-	if err := xw.Close(); err != nil {
-		t.Fatalf("xz Close: %v", err)
-	}
+	require.NoError(t, err, "xz.NewWriter")
+	_, err = xw.Write(want)
+	require.NoError(t, err, "xz Write")
+	require.NoError(t, xw.Close(), "xz Close")
 	compressed := buf.Bytes()
 
 	// Decode with codec.
 	r, err := NewXzReader(bytes.NewReader(compressed))
-	if err != nil {
-		t.Fatalf("NewXzReader: %v", err)
-	}
+	require.NoError(t, err, "NewXzReader")
 	codecGot, err := io.ReadAll(r)
 	r.Close()
-	if err != nil {
-		t.Fatalf("codec xz ReadAll: %v", err)
-	}
+	require.NoError(t, err, "codec xz ReadAll")
 
 	// Decode with ulikunitz reference.
 	ref, err := xz.NewReader(bytes.NewReader(compressed))
-	if err != nil {
-		t.Fatalf("xz.NewReader: %v", err)
-	}
+	require.NoError(t, err, "xz.NewReader")
 	refGot, err := io.ReadAll(ref)
-	if err != nil {
-		t.Fatalf("ref xz ReadAll: %v", err)
-	}
+	require.NoError(t, err, "ref xz ReadAll")
 
-	if !bytes.Equal(codecGot, refGot) {
-		t.Fatalf("xz cross-compat: codec and reference output differ")
-	}
+	assert.Equal(t, refGot, codecGot, "xz cross-compat: codec and reference output differ")
 }
 
 func TestXzSmallChunks(t *testing.T) {
@@ -231,21 +159,14 @@ func TestXzSmallChunks(t *testing.T) {
 
 	var buf bytes.Buffer
 	xw, err := xz.NewWriter(&buf)
-	if err != nil {
-		t.Fatalf("xz.NewWriter: %v", err)
-	}
-	if _, err := xw.Write(want); err != nil {
-		t.Fatalf("xz Write: %v", err)
-	}
-	if err := xw.Close(); err != nil {
-		t.Fatalf("xz Close: %v", err)
-	}
+	require.NoError(t, err, "xz.NewWriter")
+	_, err = xw.Write(want)
+	require.NoError(t, err, "xz Write")
+	require.NoError(t, xw.Close(), "xz Close")
 
 	// Read back 1 byte at a time to exercise the buffering logic.
 	r, err := NewXzReader(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("NewXzReader: %v", err)
-	}
+	require.NoError(t, err, "NewXzReader")
 	defer r.Close()
 
 	var got []byte
@@ -258,13 +179,9 @@ func TestXzSmallChunks(t *testing.T) {
 		if err == io.EOF {
 			break
 		}
-		if err != nil {
-			t.Fatalf("Read: %v", err)
-		}
+		require.NoError(t, err, "Read")
 	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("xz small-chunk mismatch: got %d bytes, want %d", len(got), len(want))
-	}
+	assert.Equal(t, want, got, "xz small-chunk mismatch")
 }
 
 // TestZstdSmallChunks exercises the streaming reader when Read is called with
@@ -274,20 +191,13 @@ func TestZstdSmallChunks(t *testing.T) {
 
 	var buf bytes.Buffer
 	w, err := NewZstdWriter(&buf, -1, 0)
-	if err != nil {
-		t.Fatalf("NewZstdWriter: %v", err)
-	}
-	if _, err := w.Write(want); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, err, "NewZstdWriter")
+	_, err = w.Write(want)
+	require.NoError(t, err, "Write")
+	require.NoError(t, w.Close(), "Close")
 
 	r, err := NewZstdReader(bytes.NewReader(buf.Bytes()), 0)
-	if err != nil {
-		t.Fatalf("NewZstdReader: %v", err)
-	}
+	require.NoError(t, err, "NewZstdReader")
 	defer r.Close()
 
 	var got []byte
@@ -300,11 +210,7 @@ func TestZstdSmallChunks(t *testing.T) {
 		if rErr == io.EOF {
 			break
 		}
-		if rErr != nil {
-			t.Fatalf("Read: %v", rErr)
-		}
+		require.NoError(t, rErr, "Read")
 	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("zstd small-chunk mismatch")
-	}
+	assert.Equal(t, want, got, "zstd small-chunk mismatch")
 }

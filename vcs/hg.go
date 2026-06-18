@@ -31,6 +31,9 @@ func (hgVCS) Root(ctx context.Context, dir string) (string, error) {
 }
 
 func (hgVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+	if err := checkBaseRef(base); err != nil {
+		return nil, err
+	}
 	cmd := exec.CommandContext(ctx, "hg", "status",
 		"--no-status", "--added", "--modified", "--removed", "--rev", base)
 	cmd.Dir = dir
@@ -107,6 +110,24 @@ func (hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 		CommitDate: commitDate,
 		IsDirty:    dirtyOut != "",
 	}, nil
+}
+
+// Describe returns the working revision's latest reachable tag (Mercurial's
+// {latesttag}), with a -dirty suffix for a modified tree. A repo with no tags
+// reports "" (Mercurial's "null" sentinel is normalized away), matching the
+// interface's "no describe available" contract.
+func (hgVCS) Describe(ctx context.Context, dir string) (string, error) {
+	tag, err := vcsOutput(ctx, dir, "hg", "log", "-r", ".", "--template", "{latesttag}")
+	if err != nil {
+		return "", err
+	}
+	if tag == "" || tag == "null" {
+		return "", nil
+	}
+	if dirty, _ := vcsOutput(ctx, dir, "hg", "status"); dirty != "" {
+		tag += "-dirty"
+	}
+	return tag, nil
 }
 
 // hgCommitTemplate emits the NUL-delimited fields parseCommit expects: node,

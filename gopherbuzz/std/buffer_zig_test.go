@@ -2,22 +2,21 @@ package std
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // execBuffer runs src against a session with the std library registered and
 // returns its globals. The src exercises the upstream-compatible Buffer Zig API.
 func execBuffer(t *testing.T, src string) map[string]buzz.Value {
 	t.Helper()
-	sess := buzz.NewSession(context.Background())
+	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
 	Register(sess)
-	if err := sess.Exec(context.Background(), src); err != nil {
-		t.Fatalf("Exec: %v\nsrc:\n%s", err, src)
-	}
+	require.NoErrorf(t, sess.Exec(context.Background(), src), "Exec\nsrc:\n%s", src)
 	return sess.Globals()
 }
 
@@ -41,18 +40,18 @@ final u: int = b.readZAt::<int>(0, "u32");
 final s: int = b.readZAt::<int>(1, "i64");
 b.collect();
 `)
-	if x := g["x"]; !x.IsFloat() || x.AsFloat() != 3.5 {
-		t.Errorf("x = %v, want 3.5", x)
-	}
-	if y := g["y"]; !y.IsFloat() || y.AsFloat() != -1.25 {
-		t.Errorf("y = %v, want -1.25", y)
-	}
-	if u := g["u"]; !u.IsInt() || u.AsInt() != 4294967295 {
-		t.Errorf("u = %v, want 4294967295", u)
-	}
-	if s := g["s"]; !s.IsInt() || s.AsInt() != -7 {
-		t.Errorf("s = %v, want -7", s)
-	}
+	x := g["x"]
+	assert.True(t, x.IsFloat(), "x IsFloat")
+	assert.Equal(t, 3.5, x.AsFloat(), "x")
+	y := g["y"]
+	assert.True(t, y.IsFloat(), "y IsFloat")
+	assert.Equal(t, -1.25, y.AsFloat(), "y")
+	u := g["u"]
+	assert.True(t, u.IsInt(), "u IsInt")
+	assert.Equal(t, int64(4294967295), u.AsInt(), "u")
+	s := g["s"]
+	assert.True(t, s.IsInt(), "s IsInt")
+	assert.Equal(t, int64(-7), s.AsInt(), "s")
 }
 
 // TestBufferPtrOutParam verifies ptr() yields a real, stable machine address and
@@ -67,27 +66,18 @@ final at4 = b.ptr(4);
 final delta = at4 - base;
 `)
 	base := g["base"]
-	if !base.IsInt() || base.AsInt() == 0 {
-		t.Fatalf("ptr() = %v, want a non-zero address", base)
-	}
-	if d := g["delta"]; d.AsInt() != 4 {
-		t.Errorf("ptr(4) - ptr() = %d, want 4", d.AsInt())
-	}
+	require.True(t, base.IsInt(), "ptr() = %v, want a non-zero address", base)
+	require.NotEqual(t, int64(0), base.AsInt(), "ptr() = %v, want a non-zero address", base)
+	assert.Equal(t, int64(4), g["delta"].AsInt(), "ptr(4) - ptr()")
 
 	// Simulate the C side filling the out-parameter: write through the address
 	// the script exposed (the same pinned block a zdef pointer arg would receive),
 	// then confirm the bytes are visible at that address.
 	addr := uintptr(base.AsInt())
-	if err := buzz.WriteScalar(addr, 0, "i64", 0x1234, 0, false); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, buzz.WriteScalar(addr, 0, "i64", 0x1234, 0, false))
 	i, _, _, err := buzz.ReadScalar(addr, 0, "i64")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if i != 0x1234 {
-		t.Errorf("foreign write through ptr() = %#x, want %#x", i, 0x1234)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, int64(0x1234), i, "foreign write through ptr()")
 	_ = buzz.FreeFFI(addr)
 }
 
@@ -103,7 +93,7 @@ b.collect();
 b.collect();
 `)
 
-	sess := buzz.NewSession(context.Background())
+	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
 	Register(sess)
 	err := sess.Exec(context.Background(), `
@@ -113,9 +103,8 @@ b.ptr();
 b.collect();
 final v: int = b.readZAt::<int>(0, "i64");
 `)
-	if err == nil || !strings.Contains(err.Error(), "after collect") {
-		t.Errorf("readZAt after collect: err = %v, want a use-after-collect error", err)
-	}
+	require.Error(t, err, "readZAt after collect: want a use-after-collect error")
+	assert.Contains(t, err.Error(), "after collect", "readZAt after collect: want a use-after-collect error")
 }
 
 // TestBufferLenAlign checks len(align) divides the capacity once the pinned block
@@ -129,10 +118,6 @@ final n: int = b.len();
 final n4: int = b.len(4);
 b.collect();
 `)
-	if n := g["n"]; n.AsInt() != 64 {
-		t.Errorf("len() = %d, want 64", n.AsInt())
-	}
-	if n4 := g["n4"]; n4.AsInt() != 16 {
-		t.Errorf("len(4) = %d, want 16", n4.AsInt())
-	}
+	assert.Equal(t, int64(64), g["n"].AsInt(), "len()")
+	assert.Equal(t, int64(16), g["n4"].AsInt(), "len(4)")
 }

@@ -6,6 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestExecInjectsMAGUS pins that Exec exports MAGUS — the running binary's
@@ -18,19 +21,13 @@ func TestExecInjectsMAGUS(t *testing.T) {
 		t.Skip("'sh' not available")
 	}
 	res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS"`}, ExecSpec{Capture: true})
-	if err != nil {
-		t.Fatalf("Exec: %v", err)
-	}
+	require.NoError(t, err)
 	want, err := os.Executable()
-	if err != nil {
-		t.Fatalf("Executable: %v", err)
-	}
+	require.NoError(t, err)
 	if resolved, err := filepath.EvalSymlinks(want); err == nil {
 		want = resolved
 	}
-	if res.Stdout != want {
-		t.Errorf("$MAGUS in subprocess = %q, want %q", res.Stdout, want)
-	}
+	assert.Equal(t, want, res.Stdout, "$MAGUS in subprocess")
 }
 
 // TestExecInjectsMagusLevel pins the GNU Make MAKELEVEL semantics: a subprocess
@@ -44,22 +41,16 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 	level := func(t *testing.T) string {
 		t.Helper()
 		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_LEVEL"`}, ExecSpec{Capture: true})
-		if err != nil {
-			t.Fatalf("Exec: %v", err)
-		}
+		require.NoError(t, err)
 		return res.Stdout
 	}
 
 	// Top level: MAGUS_LEVEL absent (empty ⇒ 0) ⇒ child runs at depth 1.
 	t.Setenv("MAGUS_LEVEL", "")
-	if got := level(t); got != "1" {
-		t.Errorf("MAGUS_LEVEL at top = %q, want \"1\"", got)
-	}
+	assert.Equal(t, "1", level(t), "MAGUS_LEVEL at top")
 	// Nested: depth 2 ⇒ child runs at depth 3.
 	t.Setenv("MAGUS_LEVEL", "2")
-	if got := level(t); got != "3" {
-		t.Errorf("MAGUS_LEVEL when nested = %q, want \"3\"", got)
-	}
+	assert.Equal(t, "3", level(t), "MAGUS_LEVEL when nested")
 }
 
 // TestCurrentLevel pins the contract startup relies on to decide whether to stand
@@ -67,17 +58,11 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 // nested (must not, to keep one socket / one pool). Mutates env; not parallel.
 func TestCurrentLevel(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	if got := CurrentLevel(); got != 0 {
-		t.Errorf("top-level CurrentLevel = %d, want 0", got)
-	}
+	assert.Equal(t, 0, CurrentLevel(), "top-level CurrentLevel")
 	t.Setenv("MAGUS_LEVEL", "2")
-	if got := CurrentLevel(); got != 2 {
-		t.Errorf("nested CurrentLevel = %d, want 2", got)
-	}
+	assert.Equal(t, 2, CurrentLevel(), "nested CurrentLevel")
 	t.Setenv("MAGUS_LEVEL", "not-a-number")
-	if got := CurrentLevel(); got != 0 {
-		t.Errorf("invalid CurrentLevel = %d, want 0", got)
-	}
+	assert.Equal(t, 0, CurrentLevel(), "invalid CurrentLevel")
 }
 
 func TestRunSuccess(t *testing.T) {
@@ -85,9 +70,7 @@ func TestRunSuccess(t *testing.T) {
 	if _, err := exec.LookPath("true"); err != nil {
 		t.Skip("'true' not available")
 	}
-	if err := Run(context.Background(), t.TempDir(), "true"); err != nil {
-		t.Errorf("Run('true') = %v, want nil", err)
-	}
+	assert.NoError(t, Run(context.Background(), t.TempDir(), "true"))
 }
 
 func TestRunFailure(t *testing.T) {
@@ -95,9 +78,7 @@ func TestRunFailure(t *testing.T) {
 	if _, err := exec.LookPath("false"); err != nil {
 		t.Skip("'false' not available")
 	}
-	if err := Run(context.Background(), t.TempDir(), "false"); err == nil {
-		t.Error("Run('false') = nil, want non-nil exit error")
-	}
+	assert.Error(t, Run(context.Background(), t.TempDir(), "false"), "want non-nil exit error")
 }
 
 func TestRunContextCancel(t *testing.T) {
@@ -107,8 +88,5 @@ func TestRunContextCancel(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := Run(ctx, t.TempDir(), "sleep", "60")
-	if err == nil {
-		t.Error("Run with cancelled context should return an error")
-	}
+	assert.Error(t, Run(ctx, t.TempDir(), "sleep", "60"), "Run with cancelled context should return an error")
 }

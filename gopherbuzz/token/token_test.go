@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func tokenStr(t Token) string {
@@ -31,38 +34,23 @@ func tokenStr(t Token) string {
 	}
 }
 
+func tokenize(t *testing.T, src string) []string {
+	t.Helper()
+	toks, err := Tokenize(strings.ReplaceAll(src, `\n`, "\n"))
+	require.NoErrorf(t, err, "tokenize %q", src)
+	var got []string
+	for _, tok := range toks {
+		got = append(got, tokenStr(tok))
+	}
+	return got
+}
+
 func TestLexer_Basic(t *testing.T) {
-	tests := []struct {
-		src  string
-		want []string
-	}{
-		{`"hello"`, []string{`string("hello")`, "EOF"}},
-		{`42`, []string{"int(42)", "EOF"}},
-		{`true false null`, []string{"bool(true)", "bool(false)", "null", "EOF"}},
-		{`magus.project.register`, []string{`ident(magus)`, ".", `ident(project)`, ".", `ident(register)`, "EOF"}},
-		{`// comment\n42`, []string{"int(42)", "EOF"}},
-	}
-	for _, tc := range tests {
-		src := strings.ReplaceAll(tc.src, `\n`, "\n")
-		toks, err := Tokenize(src)
-		if err != nil {
-			t.Errorf("tokenize %q: %v", tc.src, err)
-			continue
-		}
-		var got []string
-		for _, tok := range toks {
-			got = append(got, tokenStr(tok))
-		}
-		if len(got) != len(tc.want) {
-			t.Errorf("tokenize %q: got %v, want %v", tc.src, got, tc.want)
-			continue
-		}
-		for i, w := range tc.want {
-			if got[i] != w {
-				t.Errorf("tokenize %q token[%d]: got %q, want %q", tc.src, i, got[i], w)
-			}
-		}
-	}
+	assert.Equal(t, []string{`string("hello")`, "EOF"}, tokenize(t, `"hello"`))
+	assert.Equal(t, []string{"int(42)", "EOF"}, tokenize(t, `42`))
+	assert.Equal(t, []string{"bool(true)", "bool(false)", "null", "EOF"}, tokenize(t, `true false null`))
+	assert.Equal(t, []string{`ident(magus)`, ".", `ident(project)`, ".", `ident(register)`, "EOF"}, tokenize(t, `magus.project.register`))
+	assert.Equal(t, []string{"int(42)", "EOF"}, tokenize(t, `// comment\n42`))
 }
 
 // firstDoc returns the Doc of the first token whose Val (or keyword) matches
@@ -77,58 +65,29 @@ func docOfIdent(toks []Token, ident string) string {
 }
 
 func TestLexer_DocComments(t *testing.T) {
-	tests := []struct {
-		name  string
-		src   string
-		ident string
-		want  string
-	}{
-		{
-			name:  "single line comment attaches to next token",
-			src:   "// builds the thing\nbuild",
-			ident: "build",
-			want:  "builds the thing",
-		},
-		{
-			name:  "contiguous lines join",
-			src:   "// line one\n// line two\nbuild",
-			ident: "build",
-			want:  "line one\nline two",
-		},
-		{
-			name:  "blank line breaks the block",
-			src:   "// not a doc\n\nbuild",
-			ident: "build",
-			want:  "",
-		},
-		{
-			name:  "only the last contiguous block attaches after a gap",
-			src:   "// stale\n\n// fresh\nbuild",
-			ident: "build",
-			want:  "fresh",
-		},
-		{
-			name:  "block comment attaches",
-			src:   "/* a block doc */\nbuild",
-			ident: "build",
-			want:  "a block doc",
-		},
-		{
-			name:  "trailing comment on a line does not attach to the next token",
-			src:   "x // trailing\nbuild",
-			ident: "build",
-			want:  "",
-		},
+	docFor := func(t *testing.T, src, ident string) string {
+		t.Helper()
+		toks, err := Tokenize(src)
+		require.NoError(t, err, "tokenize")
+		return docOfIdent(toks, ident)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			toks, err := Tokenize(tt.src)
-			if err != nil {
-				t.Fatalf("tokenize: %v", err)
-			}
-			if got := docOfIdent(toks, tt.ident); got != tt.want {
-				t.Errorf("doc of %q = %q, want %q", tt.ident, got, tt.want)
-			}
-		})
-	}
+
+	t.Run("single line comment attaches to next token", func(t *testing.T) {
+		assert.Equal(t, "builds the thing", docFor(t, "// builds the thing\nbuild", "build"))
+	})
+	t.Run("contiguous lines join", func(t *testing.T) {
+		assert.Equal(t, "line one\nline two", docFor(t, "// line one\n// line two\nbuild", "build"))
+	})
+	t.Run("blank line breaks the block", func(t *testing.T) {
+		assert.Equal(t, "", docFor(t, "// not a doc\n\nbuild", "build"))
+	})
+	t.Run("only the last contiguous block attaches after a gap", func(t *testing.T) {
+		assert.Equal(t, "fresh", docFor(t, "// stale\n\n// fresh\nbuild", "build"))
+	})
+	t.Run("block comment attaches", func(t *testing.T) {
+		assert.Equal(t, "a block doc", docFor(t, "/* a block doc */\nbuild", "build"))
+	})
+	t.Run("trailing comment on a line does not attach to the next token", func(t *testing.T) {
+		assert.Equal(t, "", docFor(t, "x // trailing\nbuild", "build"))
+	})
 }

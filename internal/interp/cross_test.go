@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCrossDispatchRunOnce verifies a (dir, target) runs once even when many
@@ -24,15 +26,12 @@ func TestCrossDispatchRunOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := cd.Dispatch(context.Background(), "/ws/gopherbuzz", "build"); !errors.Is(err, wantErr) {
-				t.Errorf("Dispatch err = %v, want %v", err, wantErr)
-			}
+			err := cd.Dispatch(context.Background(), "/ws/gopherbuzz", "build")
+			assert.ErrorIs(t, err, wantErr)
 		}()
 	}
 	wg.Wait()
-	if got := runs.Load(); got != 1 {
-		t.Errorf("target ran %d times, want 1 (run-once)", got)
-	}
+	assert.Equal(t, int32(1), runs.Load(), "target should run once (run-once)")
 }
 
 // TestCrossDispatchCycle verifies a cross-project dependency cycle errors rather
@@ -45,9 +44,7 @@ func TestCrossDispatchCycle(t *testing.T) {
 		return cd.Dispatch(ctx, dir, target)
 	}
 	err := cd.Dispatch(context.Background(), "/ws/a", "build")
-	if err == nil {
-		t.Fatal("expected a cross-project cycle error, got nil")
-	}
+	assert.Error(t, err, "expected a cross-project cycle error")
 }
 
 // TestCrossDispatchDistinct verifies different (dir, target) keys each run.
@@ -58,7 +55,5 @@ func TestCrossDispatchDistinct(t *testing.T) {
 	_ = cd.Dispatch(context.Background(), "/ws/a", "build")
 	_ = cd.Dispatch(context.Background(), "/ws/b", "build")
 	_ = cd.Dispatch(context.Background(), "/ws/a", "test")
-	if got := runs.Load(); got != 3 {
-		t.Errorf("distinct keys ran %d times, want 3", got)
-	}
+	assert.Equal(t, int32(3), runs.Load(), "distinct keys should each run")
 }

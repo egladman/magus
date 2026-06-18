@@ -21,6 +21,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/egladman/magus/internal/selfupdate"
 )
 
@@ -38,9 +41,7 @@ type testFixture struct {
 func newTestFixture(t *testing.T, tag string) *testFixture {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	tarball := makeFakeTarball(t)
 	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", tag, runtime.GOOS, runtime.GOARCH)
@@ -139,31 +140,20 @@ func makeFakeTarball(t *testing.T) []byte {
 		Mode:     0o755,
 		Size:     int64(len(content)),
 	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write(content); err != nil {
-		t.Fatal(err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gw.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, tw.WriteHeader(hdr))
+	_, err := tw.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gw.Close())
 	return buf.Bytes()
 }
-
-// ── self update ───────────────────────────────────────────────────────────────
 
 func TestSelfUpdate_NewerVersion(t *testing.T) {
 	fx := newTestFixture(t, "v0.4.0")
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	if err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"}); err != nil {
-		t.Fatalf("expected success, got: %v", err)
-	}
+	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"}))
 }
 
 func TestSelfUpdate_AlreadyUpToDate(t *testing.T) {
@@ -172,12 +162,8 @@ func TestSelfUpdate_AlreadyUpToDate(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
-	if err == nil {
-		t.Fatal("expected error for same version, got nil")
-	}
-	if !strings.Contains(err.Error(), "already running") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected error for same version")
+	assert.Contains(t, err.Error(), "already running")
 }
 
 func TestSelfUpdate_Downgrade(t *testing.T) {
@@ -186,12 +172,8 @@ func TestSelfUpdate_Downgrade(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
-	if err == nil {
-		t.Fatal("expected error for downgrade, got nil")
-	}
-	if !strings.Contains(err.Error(), "older than current") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected error for downgrade")
+	assert.Contains(t, err.Error(), "older than current")
 }
 
 func TestSelfUpdate_DowngradeForce(t *testing.T) {
@@ -199,9 +181,8 @@ func TestSelfUpdate_DowngradeForce(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	if err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}); err != nil {
-		t.Fatalf("expected forced downgrade to succeed in dry-run, got: %v", err)
-	}
+	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
+		"expected forced downgrade to succeed in dry-run")
 }
 
 func TestSelfUpdate_BadSignature(t *testing.T) {
@@ -213,12 +194,8 @@ func TestSelfUpdate_BadSignature(t *testing.T) {
 	overridePubKey = badPub
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
-	if err == nil {
-		t.Fatal("expected signature verification to fail, got nil")
-	}
-	if !strings.Contains(err.Error(), "signature check failed") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected signature verification to fail")
+	assert.Contains(t, err.Error(), "signature check failed")
 }
 
 func TestSelfUpdate_TamperedTarball(t *testing.T) {
@@ -239,12 +216,8 @@ func TestSelfUpdate_TamperedTarball(t *testing.T) {
 	overrideAPIBase = badSrv.URL
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
-	if err == nil {
-		t.Fatal("expected sha256 mismatch error, got nil")
-	}
-	if !strings.Contains(err.Error(), "SHA-256 mismatch") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected sha256 mismatch error")
+	assert.Contains(t, err.Error(), "SHA-256 mismatch")
 }
 
 func TestSelfUpdate_BinDir(t *testing.T) {
@@ -253,9 +226,8 @@ func TestSelfUpdate_BinDir(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	dir := t.TempDir()
-	if err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", dir}); err != nil {
-		t.Fatalf("expected success with --bin-dir, got: %v", err)
-	}
+	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", dir}),
+		"expected success with --bin-dir")
 }
 
 func TestSelfUpdate_BinDirNotExist(t *testing.T) {
@@ -264,9 +236,7 @@ func TestSelfUpdate_BinDirNotExist(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", "/nonexistent/path/xyz"})
-	if err == nil {
-		t.Fatal("expected error for non-existent --bin-dir, got nil")
-	}
+	assert.Error(t, err, "expected error for non-existent --bin-dir")
 }
 
 func TestSelfUpdate_CheckOnly(t *testing.T) {
@@ -274,9 +244,8 @@ func TestSelfUpdate_CheckOnly(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	if err := selfUpdateCmd(context.Background(), []string{"--check"}); err != nil {
-		t.Fatalf("--check should succeed even without --yes, got: %v", err)
-	}
+	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--check"}),
+		"--check should succeed even without --yes")
 }
 
 func TestSelfUpdate_UnsafeArchivePath(t *testing.T) {
@@ -297,28 +266,20 @@ func TestSelfUpdate_UnsafeArchivePath(t *testing.T) {
 	evilTarball := buf.Bytes()
 
 	_, err := selfupdate.ExtractBinary(evilTarball)
-	if err == nil {
-		t.Fatal("expected error for unsafe archive path, got nil")
-	}
-	if strings.Contains(err.Error(), "SHA-256") {
-		t.Fatalf("wrong error — should be path/not-found, got: %v", err)
-	}
+	require.Error(t, err, "expected error for unsafe archive path")
+	assert.NotContains(t, err.Error(), "SHA-256", "wrong error — should be path/not-found")
 }
 
 func TestCheckParentWritable(t *testing.T) {
 	t.Run("writable dir succeeds", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "magus")
-		if err := selfupdate.CheckParentWritable(path); err != nil {
-			t.Fatalf("checkParentWritable on writable dir: %v", err)
-		}
+		assert.NoError(t, selfupdate.CheckParentWritable(path))
 	})
 
 	t.Run("missing parent errors cleanly", func(t *testing.T) {
 		err := selfupdate.CheckParentWritable("/nonexistent-magus-test-path-xyz/magus")
-		if err == nil {
-			t.Fatal("expected error for missing parent dir, got nil")
-		}
+		assert.Error(t, err, "expected error for missing parent dir")
 	})
 
 	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
@@ -331,12 +292,8 @@ func TestCheckParentWritable(t *testing.T) {
 
 			path := filepath.Join(dir, "magus")
 			err := selfupdate.CheckParentWritable(path)
-			if err == nil {
-				t.Fatal("expected error on readonly dir, got nil")
-			}
-			if !strings.Contains(err.Error(), "is not writable") {
-				t.Fatalf("error %q does not include the user-facing hint", err)
-			}
+			require.Error(t, err, "expected error on readonly dir")
+			assert.Contains(t, err.Error(), "is not writable", "error does not include the user-facing hint")
 		})
 	}
 }
@@ -345,48 +302,37 @@ func TestParseManifest_Valid(t *testing.T) {
 	raw := "version: v1.2.3\n" +
 		"aabbcc" + strings.Repeat("0", 58) + "  magus_v1.2.3_linux_amd64.tar.gz\n"
 	_, err := selfupdate.ParseManifest([]byte(raw))
-	if err != nil {
-		t.Fatalf("valid manifest failed: %v", err)
-	}
+	assert.NoError(t, err, "valid manifest failed")
 }
 
 func TestParseManifest_MissingVersion(t *testing.T) {
 	raw := "abc" + strings.Repeat("0", 61) + "  magus_v1.0.0_linux_amd64.tar.gz\n"
 	_, err := selfupdate.ParseManifest([]byte(raw))
-	if err == nil || !strings.Contains(err.Error(), "version") {
-		t.Fatalf("expected missing-version error, got: %v", err)
-	}
+	require.Error(t, err, "expected missing-version error")
+	assert.Contains(t, err.Error(), "version")
 }
 
 func TestParseManifest_BadVersion(t *testing.T) {
 	raw := "version: not-semver\n" +
 		"aabbcc" + strings.Repeat("0", 58) + "  magus_v1.0.0_linux_amd64.tar.gz\n"
 	_, err := selfupdate.ParseManifest([]byte(raw))
-	if err == nil || !strings.Contains(err.Error(), "semver") {
-		t.Fatalf("expected semver error, got: %v", err)
-	}
+	require.Error(t, err, "expected semver error")
+	assert.Contains(t, err.Error(), "semver")
 }
 
 func TestCompare(t *testing.T) {
-	tests := []struct {
-		a, b string
-		want int
-	}{
-		{"v1.0.0", "v0.9.0", 1},
-		{"v1.0.0", "v1.0.0", 0},
-		{"v0.9.0", "v1.0.0", -1},
-		{"unknown", "v1.0.0", 0},
-		{"v1.0.0", "unknown", 0},
+	assertCompare := func(a, b string, want int) {
+		t.Run(fmt.Sprintf("%s_vs_%s", a, b), func(t *testing.T) {
+			assert.Equal(t, want, selfupdate.Compare(a, b))
+		})
 	}
-	for _, tc := range tests {
-		got := selfupdate.Compare(tc.a, tc.b)
-		if got != tc.want {
-			t.Errorf("selfupdate.Compare(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
-		}
-	}
-}
 
-// ── self install ──────────────────────────────────────────────────────────────
+	assertCompare("v1.0.0", "v0.9.0", 1)
+	assertCompare("v1.0.0", "v1.0.0", 0)
+	assertCompare("v0.9.0", "v1.0.0", -1)
+	assertCompare("unknown", "v1.0.0", 0)
+	assertCompare("v1.0.0", "unknown", 0)
+}
 
 func TestSelfInstall_FreshInstall(t *testing.T) {
 	fx := newTestFixture(t, "v0.4.0")
@@ -401,9 +347,7 @@ func TestSelfInstall_FreshInstall(t *testing.T) {
 		"--bin-dir", binDir,
 		"--man-dir", manDir,
 	})
-	if err != nil {
-		t.Fatalf("expected success, got: %v", err)
-	}
+	assert.NoError(t, err)
 }
 
 func TestSelfInstall_SkipsVersionGate(t *testing.T) {
@@ -418,9 +362,7 @@ func TestSelfInstall_SkipsVersionGate(t *testing.T) {
 		"--dry-run", "--yes",
 		"--bin-dir", binDir,
 	})
-	if err != nil {
-		t.Fatalf("expected success (no version gate), got: %v", err)
-	}
+	assert.NoError(t, err, "expected success (no version gate)")
 }
 
 func TestSelfInstall_BinDirCreated(t *testing.T) {
@@ -435,9 +377,7 @@ func TestSelfInstall_BinDirCreated(t *testing.T) {
 		"--dry-run", "--yes",
 		"--bin-dir", binDir,
 	})
-	if err != nil {
-		t.Fatalf("expected success with non-existent --bin-dir, got: %v", err)
-	}
+	assert.NoError(t, err, "expected success with non-existent --bin-dir")
 }
 
 func TestSelfInstall_ManpagesWritten(t *testing.T) {
@@ -445,33 +385,21 @@ func TestSelfInstall_ManpagesWritten(t *testing.T) {
 		t.Skip("skipping manpage write in short mode")
 	}
 	manDir := t.TempDir()
-	if err := installManpages(manDir); err != nil {
-		t.Fatalf("installManpages: %v", err)
-	}
+	require.NoError(t, installManpages(manDir))
 	entries, err := os.ReadDir(manDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("expected at least one man page to be written")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, entries, "expected at least one man page to be written")
 	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".1") {
-			t.Errorf("unexpected file in man dir: %s", e.Name())
-		}
+		assert.True(t, strings.HasSuffix(e.Name(), ".1"), "unexpected file in man dir: %s", e.Name())
 	}
 }
 
 func TestSelfInstall_DefaultDirs(t *testing.T) {
 	// Smoke-test that the XDG helpers return non-empty paths and don't panic.
 	binDir := selfupdate.DefaultUserBinDir()
-	if binDir == "" {
-		t.Error("DefaultUserBinDir returned empty string")
-	}
+	assert.NotEmpty(t, binDir, "DefaultUserBinDir returned empty string")
 	manDir := selfupdate.DefaultUserManDir()
-	if manDir == "" {
-		t.Error("DefaultUserManDir returned empty string")
-	}
+	assert.NotEmpty(t, manDir, "DefaultUserManDir returned empty string")
 	// They should both land under the same ~/.local prefix by default.
 	t.Logf("DefaultUserBinDir = %s", binDir)
 	t.Logf("DefaultUserManDir = %s", manDir)

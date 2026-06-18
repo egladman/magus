@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	buzzeng "github.com/egladman/gopherbuzz"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSupersetModules verifies that registerHostModules exposes the magus host
@@ -12,19 +14,16 @@ import (
 // old magus/extra aggregate is gone.
 func TestSupersetModules(t *testing.T) {
 	ctx := context.Background()
-	sess := buzzeng.NewSession(ctx)
+	sess := buzzeng.NewSession(ctx, buzzeng.WithEmbedded())
 	defer sess.Close()
 	registerHostModules(ctx, sess)
 
 	hasKey := func(t *testing.T, module, key string) {
 		t.Helper()
 		mod, ok := sess.SyntheticModule(module)
-		if !ok {
-			t.Fatalf("module %q not registered", module)
-		}
-		if _, ok := mod.MapGet(key); !ok {
-			t.Errorf("module %q missing key %q", module, key)
-		}
+		require.True(t, ok, "module %q not registered", module)
+		_, ok = mod.MapGet(key)
+		assert.True(t, ok, "module %q missing key %q", module, key)
 	}
 
 	// os: Buzz stdlib (env, execute) and magus (exec, which) coexist on one module.
@@ -53,8 +52,7 @@ func TestSupersetModules(t *testing.T) {
 
 	// The aggregate import and its byte-level siblings are gone.
 	for _, gone := range []string{"magus/extra", "magus/extra/http", "magus/extra/crypto"} {
-		if _, ok := sess.SyntheticModule(gone); ok {
-			t.Errorf("module %q should no longer be registered", gone)
-		}
+		_, ok := sess.SyntheticModule(gone)
+		assert.False(t, ok, "module %q should no longer be registered", gone)
 	}
 }

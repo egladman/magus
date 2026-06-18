@@ -2,24 +2,23 @@ package watch
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBuiltinIgnore_VCSMeta(t *testing.T) {
-	cases := []struct {
-		path string
-		want bool
-	}{
-		{"/work/.git/COMMIT_EDITMSG", true},
-		{"/work/node_modules/pkg/index.js", true},
-		{"/work/.magus/cache.json", true},
-		{"/work/src/main.go", false},
-		{"/work/README.md", false},
+	for _, path := range []string{
+		"/work/.git/COMMIT_EDITMSG",
+		"/work/node_modules/pkg/index.js",
+		"/work/.magus/cache.json",
+	} {
+		assert.True(t, BuiltinIgnore(path), "BuiltinIgnore(%q) should be true", path)
 	}
-	for _, tc := range cases {
-		got := BuiltinIgnore(tc.path)
-		if got != tc.want {
-			t.Errorf("BuiltinIgnore(%q) = %v, want %v", tc.path, got, tc.want)
-		}
+	for _, path := range []string{
+		"/work/src/main.go",
+		"/work/README.md",
+	} {
+		assert.False(t, BuiltinIgnore(path), "BuiltinIgnore(%q) should be false", path)
 	}
 }
 
@@ -28,20 +27,12 @@ func TestCompose_AnyTrue(t *testing.T) {
 	alwaysFalse := func(string) bool { return false }
 
 	// OR semantics: true if any predicate returns true
-	if !Compose(alwaysTrue, alwaysFalse)("x") {
-		t.Error("Compose(true,false): OR should return true")
-	}
-	if !Compose(alwaysTrue, alwaysTrue)("x") {
-		t.Error("Compose(true,true): OR should return true")
-	}
-	if Compose(alwaysFalse, alwaysFalse)("x") {
-		t.Error("Compose(false,false): OR should return false")
-	}
+	assert.True(t, Compose(alwaysTrue, alwaysFalse)("x"), "Compose(true,false): OR should return true")
+	assert.True(t, Compose(alwaysTrue, alwaysTrue)("x"), "Compose(true,true): OR should return true")
+	assert.False(t, Compose(alwaysFalse, alwaysFalse)("x"), "Compose(false,false): OR should return false")
 }
 
 func TestCompose_Empty(t *testing.T) {
 	none := Compose()
-	if none("anything") {
-		t.Error("Compose() should return false for any input")
-	}
+	assert.False(t, none("anything"), "Compose() should return false for any input")
 }

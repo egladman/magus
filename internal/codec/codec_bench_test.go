@@ -12,8 +12,6 @@ import (
 //   - 1 MiB   ≈ small archive file (zstd benchmarks)
 //   - 512 KiB ≈ moderate xz payload (xz benchmarks)
 
-// --- zstd compress ---
-
 // BenchmarkZstdCompress measures streaming compression throughput.
 // Run CGO_ENABLED=0 first to capture the pure-Go baseline, then
 // CGO_ENABLED=1 for the libzstd path.
@@ -82,8 +80,6 @@ func BenchmarkZstdDecompress(b *testing.B) {
 		})
 	}
 }
-
-// --- xz ---
 
 // BenchmarkXzDecompress measures streaming xz decompression throughput.
 // Compression is done by the ulikunitz/xz reference encoder (since xz

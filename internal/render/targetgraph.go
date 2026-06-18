@@ -469,22 +469,22 @@ func renderedCommands(e types.EvaluatedTargetEntry) []string {
 
 // policyNotes describes the non-default behavioural policy of a target, or nil
 // when the policy is unset or all-default.
-func policyNotes(p *types.TargetPolicy) []string {
+func policyNotes(p *types.Target) []string {
 	if p == nil {
 		return nil
 	}
 	var out []string
-	if p.CheckClean {
-		out = append(out, "check-clean (fails if the tree is dirty afterward)")
+	if p.FailOnDrift {
+		out = append(out, "fail-on-drift (fails if the tree is dirty afterward)")
 	}
-	if p.TrackFlake {
+	if p.RetryOnFlake {
 		out = append(out, "flake-tracked (retries a flaky failure)")
 	}
-	if p.NoCache {
+	if p.SkipCache {
 		out = append(out, "uncached (always runs)")
 	}
-	if p.Isolated {
-		out = append(out, "isolated (runs alone, no concurrent targets)")
+	if p.Exclusive {
+		out = append(out, "exclusive (runs alone, no concurrent targets)")
 	}
 	return out
 }

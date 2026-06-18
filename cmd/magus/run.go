@@ -29,15 +29,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if parseErr != nil {
 		return parseErr
 	}
-	targetName := parsedTarget.Name
-	switch targetName { // expand short aliases at the CLI edge
-	case "fmt":
-		targetName = "format"
-		parsedTarget.Name = targetName
-	case "gen":
-		targetName = "generate"
-		parsedTarget.Name = targetName
-	}
+	targetName := canonicalTarget(parsedTarget.Name) // expand short aliases at the CLI edge
+	parsedTarget.Name = targetName
 
 	startedAt := time.Now()
 

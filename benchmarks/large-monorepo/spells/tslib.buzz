@@ -1,0 +1,20 @@
+// Feature-library spell for the large-monorepo benchmark.
+// Non-opaque so the lib's TS sources are hashed; a no-op build (true) gives the
+// lib a target handle an app can magus.needs, propagating the lib's cache key
+// into the app. The 5 real next builds dominate the wall-clock.
+import "magus/target";
+
+export fun mgs_getName() > str { return "tslib"; }
+
+export fun mgs_listRequiredGlobs(_dir: str) > [str] {
+    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json"];
+}
+
+fun noop(_t: Target, cb: fun(any)) > bool {
+    cb({"cmd": "true", "args": []});
+    return true;
+}
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {"noop": noop};
+}

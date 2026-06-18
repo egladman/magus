@@ -47,7 +47,7 @@ graph LR
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
-outputs  internal/std/gen/buzz/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
+outputs  hostbuzz/gen/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
 spells   magusfile, go, buzz, md (claims: **/*.md, **/*.mdx)
 ```
 
@@ -104,6 +104,7 @@ graph LR
   build --> ci
   test --> ci
   xt_gopherbuzz_build -.-> stage_build
+  xt_gopherbuzz_build -.-> watch
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
   classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
@@ -123,7 +124,9 @@ graph TB
   sp_go{{"go"}}
   t_image_build("image-build")
   sp_docker{{"docker"}}
+  sp_cosign{{"cosign"}}
   t_release("release")
+  t_watch("watch")
   t_coverage("coverage")
   t_buzz_check("buzz-check")
   sp_buzz{{"buzz"}}
@@ -133,8 +136,10 @@ graph TB
   sp_md{{"md"}}
   t_format("format")
   t_go_build -->|"go-build"| sp_go
-  t_image_build -->|"docker-build"| sp_docker
+  t_image_build -->|"docker-buildx"| sp_docker
+  t_image_build -->|"cosign-sign"| sp_cosign
   t_release -->|"go-build"| sp_go
+  t_watch -->|"go-build"| sp_go
   t_coverage -->|"go-test"| sp_go
   t_buzz_check -->|"buzz-check"| sp_buzz
   t_buzz_run -->|"magus-buzz"| sp_buzz
@@ -144,7 +149,7 @@ graph TB
   t_format -->|"go-fmt, go-mod-tidy"| sp_go
   t_format -->|"prettier"| sp_md
   classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
-  class sp_buzz,sp_docker,sp_go,sp_md spell
+  class sp_buzz,sp_cosign,sp_docker,sp_go,sp_md spell
 ```
 
 ### `image-scan`
@@ -195,7 +200,7 @@ magus run generate:rw  # mutate in place instead of checking
 - [`docs-generate`](#docs-generate)
 - [`md-generate`](#md-generate)
 
-**Details:** uncached (always runs) · isolated (runs alone, no concurrent targets)
+**Details:** uncached (always runs) · exclusive (runs alone, no concurrent targets)
 
 ### `release`
 
@@ -383,7 +388,7 @@ go build
 
 ### `image-build`
 
-Builds the Docker image (Dockerfile at the repo root, context = repo).
+image-build: under the `cd` charm, build + push + sign both images — static (Dockerfile.static, pure-Go, linux/amd64+arm64, the primary :<version>/:latest tags) and CGO (Dockerfile, glibc, linux/amd64, :<version>-cgo/:latest-cgo).
 
 **Defaults**
 
@@ -398,6 +403,8 @@ magus run image-build .  # from the workspace root
 magus run image-build:cd  # apply the cd charm
 ```
 
+**Details:** uncached (always runs)
+
 ### `man-generate`
 
 Renders the man pages and mirrors them into the embed dir so the shipped binary carries the current set for `magus self install`.
@@ -411,7 +418,7 @@ magus run man-generate .  # from the workspace root
 
 ### `bindings-generate`
 
-Regenerates the Go host bindings (internal/std -> gen/buzz) from the std.Module declarations.
+Regenerates the Go host bindings (std -> hostbuzz/gen) from the std.Module declarations.
 
 **Defaults**
 
@@ -566,7 +573,7 @@ magus run generate:rw  # mutate in place instead of checking
 - [`preflight`](#preflight)
 - [`md-generate`](#md-generate)
 
-**Details:** uncached (always runs) · isolated (runs alone, no concurrent targets)
+**Details:** uncached (always runs) · exclusive (runs alone, no concurrent targets)
 
 ### `format`
 
@@ -748,7 +755,7 @@ magus run generate:rw  # mutate in place instead of checking
 - [`preflight`](#preflight)
 - [`md-generate`](#md-generate)
 
-**Details:** uncached (always runs) · isolated (runs alone, no concurrent targets)
+**Details:** uncached (always runs) · exclusive (runs alone, no concurrent targets)
 
 ### `format`
 
@@ -879,3 +886,4 @@ magus run md-generate website  # from the workspace root
 - **Charm**: an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it.
 - **Module**: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.
 - **Buzz**: the language magusfiles are written in (the `.buzz` engine).
+

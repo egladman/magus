@@ -10,12 +10,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	// Link the host bindings so magusfile.buzz targets execute.
 	_ "github.com/egladman/magus/internal/interp/bindings"
@@ -27,12 +28,8 @@ import (
 func writeProject(t *testing.T, root, name, body string) string {
 	t.Helper()
 	dir := filepath.Join(root, name)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(body), 0o644))
 	return dir
 }
 
@@ -45,10 +42,10 @@ func TestRunMultipleTargetsRunsAllProjectTargetPairs(t *testing.T) {
 	body := `
 import "magus";
 import "fs";
-export fun alpha(_args: [str]) > void {
+export fun alpha(args: [str]) > void {
     fs.writeFile("ran-alpha", "1");
 }
-export fun beta(_args: [str]) > void {
+export fun beta(args: [str]) > void {
     fs.writeFile("ran-beta", "1");
 }
 `
@@ -58,29 +55,20 @@ export fun beta(_args: [str]) > void {
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
 	alpha, err := m.ExpandPath(types.Target{Name: "alpha"})
-	if err != nil {
-		t.Fatalf("ExpandPath alpha: %v", err)
-	}
+	require.NoError(t, err, "ExpandPath alpha")
 	beta, err := m.ExpandPath(types.Target{Name: "beta"})
-	if err != nil {
-		t.Fatalf("ExpandPath beta: %v", err)
-	}
-	if err := m.Run(ctx, append(alpha, beta...)); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	require.NoError(t, err, "ExpandPath beta")
+	require.NoError(t, m.Run(ctx, append(alpha, beta...)), "Run")
 
 	for _, svc := range []string{"svc-a", "svc-b"} {
 		for _, tgt := range []string{"alpha", "beta"} {
 			p := filepath.Join(root, svc, "ran-"+tgt)
-			if _, err := os.Stat(p); err != nil {
-				t.Errorf("expected %s:%s to have run (missing %s)", svc, tgt, p)
-			}
+			_, err := os.Stat(p)
+			assert.NoErrorf(t, err, "expected %s:%s to have run (missing %s)", svc, tgt, p)
 		}
 	}
 }
@@ -94,13 +82,9 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 
 	root := t.TempDir()
 	projDir := filepath.Join(root, "svc")
-	if err := os.MkdirAll(projDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(projDir, 0o755))
 	versionFile := filepath.Join(projDir, "VERSION")
-	if err := os.WriteFile(versionFile, []byte("v1"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(versionFile, []byte("v1"), 0o644))
 
 	fake := types.NewSpell(
 		"faketool",
@@ -121,53 +105,34 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell("faketool") })
 
 	// Register the project explicitly via a magusfile instead of marker-based auto-detection.
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(
+	require.NoError(t, os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(
 		`import "magus";`+"\n"+
-			`magus.project.register("svc", fun(p, cb) > bool { cb({"spells": [magus.spell.get("faketool")]}); return true; });`+"\n",
-	), 0o644); err != nil {
-		t.Fatal(err)
-	}
+			`import "magus/spell/faketool";`+"\n"+
+			`magus.project.register("svc", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [faketool]}); return true; });`+"\n",
+	), 0o644))
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
 	targets, err := m.ExpandPath(types.Target{Name: "build"})
-	if err != nil {
-		t.Fatalf("ExpandPath: %v", err)
-	}
+	require.NoError(t, err, "ExpandPath")
 	count := func() int { return len(readFile(t, filepath.Join(projDir, "count"))) }
 
 	// Run 1: cache miss → the spell runs once.
-	if err := m.Run(ctx, targets); err != nil {
-		t.Fatalf("run 1: %v", err)
-	}
-	if got := count(); got != 1 {
-		t.Fatalf("after run 1: count=%d, want 1", got)
-	}
+	require.NoError(t, m.Run(ctx, targets), "run 1")
+	require.Equal(t, 1, count(), "after run 1")
 
 	// Run 2: identical inputs → cache hit → the spell is skipped.
-	if err := m.Run(ctx, targets); err != nil {
-		t.Fatalf("run 2: %v", err)
-	}
-	if got := count(); got != 1 {
-		t.Fatalf("after run 2 (expected cache hit): count=%d, want 1", got)
-	}
+	require.NoError(t, m.Run(ctx, targets), "run 2")
+	require.Equal(t, 1, count(), "after run 2 (expected cache hit)")
 
 	// Toolchain upgrade: the probe now returns a new version → key changes →
 	// miss → the spell runs again.
-	if err := os.WriteFile(versionFile, []byte("v2"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.Run(ctx, targets); err != nil {
-		t.Fatalf("run 3: %v", err)
-	}
-	if got := count(); got != 2 {
-		t.Fatalf("after run 3 (toolchain change → expected miss): count=%d, want 2", got)
-	}
+	require.NoError(t, os.WriteFile(versionFile, []byte("v2"), 0o644))
+	require.NoError(t, m.Run(ctx, targets), "run 3")
+	require.Equal(t, 2, count(), "after run 3 (toolchain change → expected miss)")
 }
 
 // TestExplicitRegisterDoesNotDoubleBind guards the idempotence of auto-bind: a
@@ -176,37 +141,26 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 func TestExplicitRegisterDoesNotDoubleBind(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "svc")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 	src := `import "magus";
 import "os";
-magus.project.register("svc", fun(p, cb) > bool { cb({"spells": [magus.spell.get("magusfile")]}); return true; });
-export fun hit(_args: [str]) > void {
+import "magus/spell/magusfile";
+magus.project.register("svc", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [magusfile]}); return true; });
+export fun hit(args: [str]) > void {
     os.execSh("printf x >> count", "");
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
 	targets, err := m.ExpandPath(types.Target{Name: "hit"})
-	if err != nil {
-		t.Fatalf("ExpandPath: %v", err)
-	}
-	if err := m.Run(ctx, targets); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if got := len(readFile(t, filepath.Join(dir, "count"))); got != 1 {
-		t.Errorf("target ran %d times, want 1 (double-bind regression)", got)
-	}
+	require.NoError(t, err, "ExpandPath")
+	require.NoError(t, m.Run(ctx, targets), "Run")
+	assert.Equal(t, 1, len(readFile(t, filepath.Join(dir, "count"))), "target ran more than once (double-bind regression)")
 }
 
 // TestBuiltinSpellVersionProbeIsDataDriven proves the version probe is wired
@@ -215,15 +169,12 @@ export fun hit(_args: [str]) > void {
 // probe (so it never touches the cache key).
 func TestBuiltinSpellVersionProbeIsDataDriven(t *testing.T) {
 	goSpell, ok := project.DefaultSpellRegistry().Lookup("go")
-	if !ok {
-		t.Fatal("go spell not registered")
-	}
-	if !goSpell.HasVersionProbe() {
-		t.Error("go spell has no version probe; meta.version_cmd is not wired")
-	}
+	require.True(t, ok, "go spell not registered")
+	assert.True(t, goSpell.HasVersionProbe(), "go spell has no version probe; meta.version_cmd is not wired")
+
 	jsonSpell, ok := project.DefaultSpellRegistry().Lookup("json")
-	if ok && jsonSpell.HasVersionProbe() {
-		t.Error("json spell unexpectedly has a version probe (it declares no version_cmd)")
+	if ok {
+		assert.False(t, jsonSpell.HasVersionProbe(), "json spell unexpectedly has a version probe (it declares no version_cmd)")
 	}
 }
 
@@ -233,30 +184,20 @@ func TestBuiltinSpellVersionProbeIsDataDriven(t *testing.T) {
 // owns by the time Run returns.
 func TestRunWithReportWriter(t *testing.T) {
 	root := t.TempDir()
-	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(_args: [str]) > void {}\n")
+	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(args: [str]) > void {}\n")
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
 	targets, err := m.ExpandPath(types.Target{Name: "build"})
-	if err != nil {
-		t.Fatalf("ExpandPath: %v", err)
-	}
+	require.NoError(t, err, "ExpandPath")
 	var buf bytes.Buffer
-	if err := m.Run(ctx, targets, magus.WithReportWriter(&buf)); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	require.NoError(t, m.Run(ctx, targets, magus.WithReportWriter(&buf)), "Run")
 	out := buf.String()
-	if out == "" {
-		t.Fatal("WithReportWriter produced no output (writer not wired or not flushed)")
-	}
-	if !strings.Contains(out, "svc") {
-		t.Errorf("report output missing project; got %q", out)
-	}
+	require.NotEmpty(t, out, "WithReportWriter produced no output (writer not wired or not flushed)")
+	assert.Contains(t, out, "svc", "report output missing project")
 }
 
 func readFile(t *testing.T, path string) string {
@@ -281,12 +222,12 @@ import "os";
 fun record(name: str) > void {
     os.execSh("printf '%s\n' " + name + " >> ci-order", "");
 }
-export fun build(_args: [str]) > void { record("build"); }
-export fun test(_args: [str]) > void {
+export fun build(args: [str]) > void { record("build"); }
+export fun test(args: [str]) > void {
     magus.needs(magus.target.literal("build"));
     record("test");
 }
-export fun ci(_args: [str]) > void {
+export fun ci(args: [str]) > void {
     magus.needs(magus.target.literal("test"));
 }
 `
@@ -294,24 +235,14 @@ export fun ci(_args: [str]) > void {
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
 	targets, err := m.ExpandPath(types.Target{Name: "ci"})
-	if err != nil {
-		t.Fatalf("ExpandPath: %v", err)
-	}
-	if err := m.RunCI(ctx, targets); err != nil {
-		t.Fatalf("RunCI: %v", err)
-	}
+	require.NoError(t, err, "ExpandPath")
+	require.NoError(t, m.RunCI(ctx, targets), "RunCI")
 
 	got, err := os.ReadFile(filepath.Join(root, "svc", "ci-order"))
-	if err != nil {
-		t.Fatalf("ci-order log not written: %v", err)
-	}
-	if string(got) != "build\ntest\n" {
-		t.Errorf("CI step order = %q, want %q", got, "build\ntest\n")
-	}
+	require.NoError(t, err, "ci-order log not written")
+	assert.Equal(t, "build\ntest\n", string(got), "CI step order")
 }

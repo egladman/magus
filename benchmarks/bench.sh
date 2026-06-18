@@ -5,7 +5,7 @@
 #
 #   fixture : go | ts | polyglot
 #   size    : integer project count (default 50; ignored for polyglot)
-#   tools   : subset of magus-luajit magus-gopherlua make turbo nx lage moon bazel
+#   tools   : subset of magus make turbo nx lage moon bazel
 #             defaults to all applicable for the fixture
 #
 # Required : hyperfine ≥ 1.18 (https://github.com/sharkdp/hyperfine)
@@ -17,18 +17,12 @@
 #   BENCH_RUNS=10               hyperfine measurement runs (default 10)
 #   BENCH_SKIP_VERSION_CHECK=1  skip versions.lock comparison
 #   BENCH_DRY_RUN=1             print commands without running them
-#   MAGUS_BIN=magus             override the magus binary (must be CGO_ENABLED=1
-#                               build when testing magus-luajit)
-#
-# Lua engine axis:
-#   magus-luajit    runs magus with MAGUS_INTERPRETER_LUA_ENGINE=luajit  (cgo build required)
-#   magus-gopherlua runs magus with MAGUS_INTERPRETER_LUA_ENGINE=gopherlua (pure-Go engine)
-#   The same binary is used for both; only the env var differs.
+#   MAGUS_BIN=magus             override the magus binary
 #
 # Daemon variants tested:
-#   magus-* : "daemonless" (no daemon) and "daemon" (stable daemon running)
-#   nx      : "daemonless" (NX_DAEMON=false) and "daemon" (default, daemon enabled)
-#   other   : "daemonless" only (no daemon concept applies)
+#   magus : "daemonless" (no daemon) and "daemon" (stable daemon running)
+#   nx    : "daemonless" (NX_DAEMON=false) and "daemon" (default, daemon enabled)
+#   other : "daemonless" only (no daemon concept applies)
 
 set -euo pipefail
 
@@ -68,9 +62,9 @@ TOOLS=("${@}")
 
 if [[ "${#TOOLS[@]}" -eq 0 ]]; then
     case "$FIXTURE" in
-        go)       TOOLS=(magus-luajit magus-gopherlua make) ;;
-        ts)       TOOLS=(magus-luajit magus-gopherlua turbo nx lage moon) ;;
-        polyglot) TOOLS=(magus-luajit magus-gopherlua make moon) ;;
+        go)       TOOLS=(magus make) ;;
+        ts)       TOOLS=(magus turbo nx lage moon) ;;
+        polyglot) TOOLS=(magus make moon) ;;
         *) die "unknown fixture '$FIXTURE'. Expected: go | ts | polyglot" ;;
     esac
 fi
@@ -105,7 +99,7 @@ check_tools() {
     for t in "${TOOLS[@]}"; do
         local fam="${t%%-*}"
         case "$fam" in
-            magus) command -v "$MAGUS" >/dev/null 2>&1 || missing+=("magus (build: cd tack && CGO_ENABLED=1 go build -o magus ./magus/cmd/magus)") ;;
+            magus) command -v "$MAGUS" >/dev/null 2>&1 || missing+=("magus (build: cd tack && go build -o magus ./magus/cmd/magus)") ;;
             make)  command -v make >/dev/null 2>&1  || missing+=("make") ;;
             turbo) command -v turbo >/dev/null 2>&1 || missing+=("turbo  (pnpm install -g turbo@latest)") ;;
             nx)    command -v nx    >/dev/null 2>&1 || missing+=("nx     (pnpm install -g nx@latest)") ;;
@@ -179,19 +173,12 @@ stop_magus_daemon() {
 
 # ── per-tool command table ────────────────────────────────────────────────────
 # get_cmd <tool> <scenario> <fixture> <daemon>
-#   tool   : may be "magus-luajit", "magus-gopherlua", or bare names
+#   tool   : magus, make, turbo, nx, lage, moon, bazel
 #   daemon : "daemonless" | "daemon"
 # Returns the command string, or "n/a" when the scenario doesn't apply.
 get_cmd() {
     local tool="$1" scenario="$2" fixture="$3" daemon="$4"
-    local family="${tool%%-*}"  # "magus-luajit" → "magus", "nx" → "nx"
-
-    # Engine env prefix for magus variants.
-    # "magus-luajit" → "MAGUS_INTERPRETER_LUA_ENGINE=luajit ", "magus" → ""
-    local engine_env=""
-    if [[ "$family" == "magus" && "$tool" != "magus" ]]; then
-        engine_env="MAGUS_INTERPRETER_LUA_ENGINE=${tool#magus-} "
-    fi
+    local family="${tool%%-*}"
 
     # nx daemon prefix: disable daemon for "daemonless" runs
     local nx_prefix=""
@@ -199,20 +186,19 @@ get_cmd() {
         nx_prefix="NX_DAEMON=false "
     fi
 
-    # For the TypeScript fixture, magus S1-S3 work fine. S4-S7 require
-    # topological build ordering (libs before apps): cache.RunAll currently
-    # launches all goroutines immediately without honouring depends_on as a
-    # scheduling gate, so apps start before their lib deps finish. This is a
-    # known gap in RunAll — depends_on is intended to drive both affected
-    # detection AND build scheduling, but the scheduler side is not yet wired.
-    # Turbo/nx/lage handle this via their own task graphs (turbo.json, nx.json).
+    # For the TypeScript fixture, magus S1-S3 work fine. S4-S7 are skipped (n/a):
+    # the synthetic tree wires cross-package deps via workspace:*, but pnpm does
+    # not reliably symlink @bench/lib-* into each app's node_modules, so `tsc -b`
+    # fails with TS2307 for EVERY tool, not just magus (see README "known issues").
+    # Build ordering is not the blocker: magus honours the magusfile's magus.needs
+    # edges, so libs finish before apps. The linking gap remains.
     if [[ "$family" == "magus" && "$fixture" == "ts" ]]; then
         case "$scenario" in S4|S5|S6|S7) echo "n/a"; return;; esac
     fi
 
     case "$family:$scenario" in
         # S1 — startup
-        magus:S1)  echo "${engine_env}${MAGUS} version" ;;
+        magus:S1)  echo "${MAGUS} version" ;;
         make:S1)   echo "make --version" ;;
         turbo:S1)  echo "turbo --version" ;;
         nx:S1)     echo "${nx_prefix}nx --version" ;;
@@ -225,7 +211,7 @@ get_cmd() {
         # dispatchAdopted only supports run/affected; ls is run locally).
         magus:S2)
             if [[ "$daemon" == "daemon" ]]; then echo "n/a"
-            else echo "${engine_env}${MAGUS} ls"; fi ;;
+            else echo "${MAGUS} ls"; fi ;;
         make:S2)   echo "n/a" ;;
         turbo:S2)  echo "turbo ls" ;;
         nx:S2)     echo "${nx_prefix}nx show projects" ;;
@@ -233,8 +219,11 @@ get_cmd() {
         moon:S2)   echo "moon project list" ;;
         bazel:S2)  echo "bazel query //..." ;;
 
-        # S3 — affected dry-run
-        magus:S3)  echo "${engine_env}${MAGUS} affected build --dry-run" ;;
+        # S3 affected dry-run. --base HEAD~1: the S3 harness commits a scratch
+        # change, so the comparison ref is the previous commit. Without it magus
+        # defaults to origin/main, which the throwaway bench repo lacks (git exit
+        # 128), silently falling back to "all projects" and inflating S3.
+        magus:S3)  echo "${MAGUS} affected build --dry-run --base HEAD~1" ;;
         make:S3)   echo "n/a" ;;
         turbo:S3)  echo "turbo run build --dry --filter=[HEAD~1]" ;;
         nx:S3)     echo "${nx_prefix}nx affected --target=build --dry-run" ;;
@@ -243,7 +232,7 @@ get_cmd() {
         bazel:S3)  echo "n/a" ;;  # would need file-to-label mapping
 
         # S4 — cold build (prepare handles cache clear)
-        magus:S4)  echo "${engine_env}${MAGUS} run build --concurrency=8" ;;
+        magus:S4)  echo "${MAGUS} run build --concurrency=8" ;;
         make:S4)   echo "make -j8 all" ;;
         turbo:S4)  echo "turbo run build --concurrency=8" ;;
         nx:S4)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
@@ -252,7 +241,7 @@ get_cmd() {
         bazel:S4)  echo "bazel build //..." ;;
 
         # S5 — warm cache (cache persists from prior S4 population)
-        magus:S5)  echo "${engine_env}${MAGUS} run build --concurrency=8" ;;
+        magus:S5)  echo "${MAGUS} run build --concurrency=8" ;;
         make:S5)   echo "make -j8 all" ;;
         turbo:S5)  echo "turbo run build --concurrency=8" ;;
         nx:S5)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
@@ -261,7 +250,7 @@ get_cmd() {
         bazel:S5)  echo "bazel build //..." ;;
 
         # S6 — one leaf file changed
-        magus:S6)  echo "${engine_env}${MAGUS} run build --concurrency=8" ;;
+        magus:S6)  echo "${MAGUS} run build --concurrency=8" ;;
         make:S6)   echo "make -j8 all" ;;
         turbo:S6)  echo "turbo run build --concurrency=8" ;;
         nx:S6)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
@@ -270,7 +259,7 @@ get_cmd() {
         bazel:S6)  echo "bazel build //..." ;;
 
         # S7 — one upstream lib changed
-        magus:S7)  echo "${engine_env}${MAGUS} run build --concurrency=8" ;;
+        magus:S7)  echo "${MAGUS} run build --concurrency=8" ;;
         make:S7)   echo "n/a" ;;  # make has no dependency graph
         turbo:S7)  echo "turbo run build --concurrency=8" ;;
         nx:S7)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
@@ -467,11 +456,9 @@ ts_setup() {
 check_versions
 check_tools
 
-# Print active engine versions for the record.
+# Print the magus version for the record.
 section "Tool versions"
 "$MAGUS" version --verbose 2>/dev/null || "$MAGUS" version
-MAGUS_INTERPRETER_LUA_ENGINE=luajit    "$MAGUS" version --verbose 2>/dev/null | grep "lua engine" | sed 's/^/  luajit:     /' || true
-MAGUS_INTERPRETER_LUA_ENGINE=gopherlua "$MAGUS" version --verbose 2>/dev/null | grep "lua engine" | sed 's/^/  gopherlua:  /' || true
 
 # Kill any running magus daemon before we start — we manage it ourselves below.
 _ensure_no_magus_daemon

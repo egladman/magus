@@ -11,7 +11,7 @@ var _benchCtx = context.Background()
 
 // benchSession creates a session and defines src once; returns a precompiled
 // chunk for the "hot" portion and the session's env so globals are available.
-func benchSetup(b *testing.B, init, hot string) (*Chunk, *Env) {
+func benchSetup(b *testing.B, init, hot string) (*Chunk, *vmpackage.Env) {
 	b.Helper()
 	sess := newSession(_benchCtx)
 	if init != "" {
@@ -19,7 +19,7 @@ func benchSetup(b *testing.B, init, hot string) (*Chunk, *Env) {
 			b.Fatalf("bench setup: %v", err)
 		}
 	}
-	prog, err := Parse(hot)
+	prog, err := ParseEmbedded(hot)
 	if err != nil {
 		b.Fatalf("bench parse: %v", err)
 	}
@@ -34,7 +34,7 @@ func benchSetup(b *testing.B, init, hot string) (*Chunk, *Env) {
 // arithmetic, and conditional branching.
 func BenchmarkFib(b *testing.B) {
 	chunk, env := benchSetup(b,
-		`fun fib(n) int {
+		`fun fib(n: int) > int {
     if (n <= 1) { return n; }
     return fib(n - 1) + fib(n - 2);
 }`,
@@ -100,7 +100,7 @@ while (i < 1000000.0) {
 // the benchmark that exercises the Env load/store hot path.
 func BenchmarkLoopSumShared(b *testing.B) {
 	sess := newSession(_benchCtx)
-	prog, err := Parse(`
+	prog, err := ParseEmbedded(`
 var sum = 0;
 var i = 0;
 while (i < 1000000) {
@@ -132,7 +132,7 @@ while (i < 1000000) {
 // BenchmarkLoopSum rather than the Env-bound BenchmarkLoopSumShared.
 func BenchmarkLoopSumPromoted(b *testing.B) {
 	sess := newSession(_benchCtx)
-	prog, err := Parse(`
+	prog, err := ParseEmbedded(`
 var sum = 0;
 var i = 0;
 while (i < 1000000) {
@@ -239,7 +239,7 @@ while (i < 100) {
 // cost was the top-level Env access path versus the string building itself.
 func BenchmarkStringInterpPromoted(b *testing.B) {
 	sess := newSession(_benchCtx)
-	prog, err := Parse(`
+	prog, err := ParseEmbedded(`
 var s = "";
 var i = 0;
 while (i < 100) {
@@ -268,13 +268,13 @@ while (i < 100) {
 func BenchmarkParse(b *testing.B) {
 	src := `
 import "host";
-fun helper(x: int) int {
+fun helper(x: int) > int {
     return x * x + 1;
 }
 object Config {
     name: str = "default",
     count: int = 0,
-    fun describe() str {
+    fun describe() > str {
         return "Config({this.name}, {this.count})";
     }
 }
@@ -286,7 +286,7 @@ export fun test(_args: [str]) > void {}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := Parse(src); err != nil {
+		if _, err := ParseEmbedded(src); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -296,7 +296,7 @@ export fun test(_args: [str]) > void {}
 func BenchmarkCompile(b *testing.B) {
 	src := `
 import "host";
-fun helper(x: int) int { return x * x + 1; }
+fun helper(x: int) > int { return x * x + 1; }
 object Config {
     name: str = "default",
     count: int = 0,
@@ -308,7 +308,7 @@ export fun build(_args: [str]) > void {}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		prog, err := Parse(src)
+		prog, err := ParseEmbedded(src)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -322,7 +322,7 @@ export fun build(_args: [str]) > void {}
 // repeatedly — frame allocation, parameter binding, and return.
 func BenchmarkCall(b *testing.B) {
 	chunk, env := benchSetup(b,
-		`fun add(a, b) int { return a + b; }`,
+		`fun add(a: int, b: int) > int { return a + b; }`,
 		`final __r = add(1, 2);`,
 	)
 	b.ReportAllocs()
@@ -345,7 +345,7 @@ func BenchmarkMethodCall(b *testing.B) {
 		`object Point {
     x: int = 0,
     y: int = 0,
-    fun dist() int {
+    fun dist() > int {
         return this.x * this.x + this.y * this.y;
     }
 }
@@ -437,7 +437,7 @@ func BenchmarkDirectCall(b *testing.B) {
 	sess.SetGlobal("nat", DirectValue("nat", func(_ context.Context, args []Value) (Value, error) {
 		return IntValue(int64(len(args))), nil
 	}))
-	prog, err := Parse(`var sum = 0;
+	prog, err := ParseEmbedded(`var sum = 0;
 var i = 0;
 while (i < 1000000) {
     sum = sum + nat(i);
@@ -495,7 +495,7 @@ while (i < 1000000) {
 // any per-entry invalidation optimization (REC-19).
 func BenchmarkLoopSumSharedScoped(b *testing.B) {
 	sess := newSession(_benchCtx)
-	prog, err := Parse(`
+	prog, err := ParseEmbedded(`
 var sum = 0;
 var i = 0;
 while (i < 1000000) {

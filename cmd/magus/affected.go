@@ -48,13 +48,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if perr != nil {
 		return perr
 	}
-	target := parsed.Name
-	switch target { // expand short aliases at the CLI edge, mirroring `magus run`
-	case "fmt":
-		target = "format"
-	case "gen":
-		target = "generate"
-	}
+	target := canonicalTarget(parsed.Name) // expand short aliases at the CLI edge, mirroring `magus run`
 
 	// Split on "--" before flag parsing so passthrough args aren't consumed by flag.
 	flagArgs, extraArgs := splitOnDashDash(rest)
@@ -129,7 +123,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		targets, _, err := ws.ExpandAffected(ctx, "list", *base)
+		targets, _, _, err := ws.ExpandAffected(ctx, "list", *base)
 		if err != nil {
 			return err
 		}
@@ -174,7 +168,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		targets, source, err := ws.ExpandAffected(ctx, "list", *base)
+		targets, source, _, err := ws.ExpandAffected(ctx, "list", *base)
 		if err != nil {
 			return err
 		}
@@ -186,7 +180,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	targets, source, err := m.ExpandAffected(ctx, target, *base)
+	targets, source, _, err := m.ExpandAffected(ctx, target, *base)
 	if err != nil {
 		return err
 	}
@@ -345,12 +339,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus affected --plan: a target is required (e.g. `magus affected ci --plan`); " +
 			"run `magus describe targets` to list available targets")
 	}
-	switch target { // expand short aliases at the CLI edge, mirroring `magus run`
-	case "fmt":
-		target = "format"
-	case "gen":
-		target = "generate"
-	}
+	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 
 	var (
 		maxShards        *int

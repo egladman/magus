@@ -65,19 +65,19 @@ func ValidatePatch(ops []PatchOp) error {
 	return nil
 }
 
-// Target is a single dispatchable surface of a spell. A target either forks a
-// declared command — Cmd/Args run via PATH with no script VM, magus passing the
-// command straight through to the tool — or, when Func is set, dispatches that
-// exported spell function in-VM with the invoke request's Params. The two are
-// mutually exclusive: an empty Func means a fork target (Cmd may itself be empty,
-// for a no-op marker op). Charms maps a charm name to a Charm; the patches of the
-// active charms are concatenated in sorted-name order and applied over the base
-// argv (see fork.resolveCharmArgs). Capture makes the
-// target's magusfile method return the {stdout, stderr, code, ok} record (the same
-// shape os.exec returns) instead of void — for ops whose output is the point (a
-// hash, a revision date) rather than a build action whose exit code is all that
-// matters.
-type Target struct {
+// Op is a single dispatchable surface of a spell — one tool-native Operation (see
+// docs/operations.md). An op either forks a declared command — Cmd/Args run via
+// PATH with no script VM, magus passing the command straight through to the tool —
+// or, when Func is set, dispatches that exported spell function in-VM with the
+// invoke request's Params. The two are mutually exclusive: an empty Func means a
+// fork op (Cmd may itself be empty, for a no-op marker op). Charms maps a charm
+// name to a Charm; the patches of the active charms are concatenated in
+// sorted-name order and applied over the base argv (see fork.resolveCharmArgs).
+// Capture makes the op's magusfile method return the {stdout, stderr, code, ok}
+// record (the same shape os.exec returns) instead of void — for ops whose output
+// is the point (a hash, a revision date) rather than a build action whose exit
+// code is all that matters.
+type Op struct {
 	Capture bool     `json:"capture,omitempty"`
 	Cmd     string   `json:"cmd,omitempty"`
 	Args    []string `json:"args,omitempty"`
@@ -104,21 +104,21 @@ type Spec struct {
 	Provides    []string            `json:"provides,omitempty"`
 	Opaque      bool                `json:"opaque,omitempty"`
 	TargetNeeds map[string][]string `json:"target_needs,omitempty"`
-	Targets     map[string]Target   `json:"targets,omitempty"`
+	Ops         map[string]Op       `json:"targets,omitempty"`
 	// VersionCmd argv prints the spell's toolchain version, mixed into the cache key; empty = no probe.
 	VersionCmd []string `json:"version_cmd,omitempty"`
-	// DocTargets names the targets authored as function handlers (sorted) — as
-	// opposed to plain {cmd,args} record ops. `magus doctor` requires a doc comment
-	// on each of these for a workspace-local Buzz spell. Not serialized: it is a
-	// resolution-path fact (which authoring form a target used), not part of the
-	// spell's cache identity, so it stays out of BuiltinsHash.
-	DocTargets []string `json:"-"`
+	// DocOps names the ops authored as function handlers (sorted) — as opposed to
+	// plain {cmd,args} record ops. `magus doctor` requires a doc comment on each of
+	// these for a workspace-local Buzz spell. Not serialized: it is a resolution-path
+	// fact (which authoring form an op used), not part of the spell's cache identity,
+	// so it stays out of BuiltinsHash.
+	DocOps []string `json:"-"`
 }
 
-// TargetNames returns the spell's target names in sorted order.
-func (s Spec) TargetNames() []string {
-	names := make([]string, 0, len(s.Targets))
-	for name := range s.Targets {
+// OpNames returns the spell's op names in sorted order.
+func (s Spec) OpNames() []string {
+	names := make([]string, 0, len(s.Ops))
+	for name := range s.Ops {
 		names = append(names, name)
 	}
 	sort.Strings(names)

@@ -2,23 +2,21 @@ package cache
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLastEntryFor_NoEntries(t *testing.T) {
 	cdir := t.TempDir()
 	c, err := Open(cdir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	_, _, err = c.LastEntry("nonexistent/project")
-	if !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("expected fs.ErrNotExist, got %v", err)
-	}
+	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 func TestLastEntryFor_ReturnsLatest(t *testing.T) {
@@ -27,12 +25,8 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 
 	// Set up a minimal project with one source and one declared output.
 	src := filepath.Join(root, "myservice", "main.go")
-	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(src, []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
+	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main() {}\n"), 0o644))
 	outRel := filepath.Join("myservice", "out.bin")
 	spec := Spec{
 		ProjectPath:   "myservice",
@@ -50,26 +44,15 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 	}
 
 	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Run(context.Background(), spec, fn); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = c.Run(context.Background(), spec, fn)
+	require.NoError(t, err)
 
 	m, logPath, err := c.LastEntry("myservice")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if m.ProjectPath != "myservice" {
-		t.Errorf("manifest.ProjectPath = %q, want %q", m.ProjectPath, "myservice")
-	}
-	if logPath == "" {
-		t.Error("expected non-empty log path")
-	}
-	if m.Target != "build" {
-		t.Errorf("manifest.Target = %q, want %q", m.Target, "build")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "myservice", m.ProjectPath)
+	assert.NotEmpty(t, logPath, "expected non-empty log path")
+	assert.Equal(t, "build", m.Target)
 }
 
 func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
@@ -87,17 +70,11 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 	}
 
 	src := filepath.Join(root, "svc", "main.go")
-	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
+	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644))
 
 	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	buildSpec := Spec{
 		ProjectPath:   "svc",
@@ -114,34 +91,22 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 		Target:        "test",
 	}
 
-	if _, err := c.Run(context.Background(), buildSpec, writeOutput("build.out")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Run(context.Background(), testSpec, writeOutput("test.out")); err != nil {
-		t.Fatal(err)
-	}
+	_, err = c.Run(context.Background(), buildSpec, writeOutput("build.out"))
+	require.NoError(t, err)
+	_, err = c.Run(context.Background(), testSpec, writeOutput("test.out"))
+	require.NoError(t, err)
 
 	// Filtering by "test" should return only the test entry.
 	m, _, err := c.LastEntryForTarget("svc", "test")
-	if err != nil {
-		t.Fatalf("LastEntryForTarget(test): unexpected error: %v", err)
-	}
-	if m.Target != "test" {
-		t.Errorf("LastEntryForTarget(test): Target = %q, want %q", m.Target, "test")
-	}
+	require.NoError(t, err, "LastEntryForTarget(test)")
+	assert.Equal(t, "test", m.Target, "LastEntryForTarget(test)")
 
 	// Filtering by "build" should return only the build entry.
 	m, _, err = c.LastEntryForTarget("svc", "build")
-	if err != nil {
-		t.Fatalf("LastEntryForTarget(build): unexpected error: %v", err)
-	}
-	if m.Target != "build" {
-		t.Errorf("LastEntryForTarget(build): Target = %q, want %q", m.Target, "build")
-	}
+	require.NoError(t, err, "LastEntryForTarget(build)")
+	assert.Equal(t, "build", m.Target, "LastEntryForTarget(build)")
 
 	// Filtering by an unknown target returns ErrNotExist.
 	_, _, err = c.LastEntryForTarget("svc", "format")
-	if !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("LastEntryForTarget(format): expected fs.ErrNotExist, got %v", err)
-	}
+	assert.ErrorIs(t, err, fs.ErrNotExist, "LastEntryForTarget(format): expected fs.ErrNotExist")
 }

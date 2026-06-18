@@ -261,7 +261,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	// Confine imports to the magusfiles layout (see magusSearchPaths); WithSearchPaths
 	// replaces gopherbuzz's upstream default so a magusfile resolves siblings the same
 	// way regardless of the process cwd, and cannot escape via BUZZ_INCLUDE_PATH.
-	buzzSess := buzz.NewSession(ctx, buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
 	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
 	// stays limited to the magusfiles search paths above.
 	buzzSess.SetIncludeDirs(nil)
@@ -337,7 +337,7 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 // definitions are available at the prompt.
 // The returned engine.Session also satisfies the optional REPL/debug interfaces.
 func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session, error) {
-	buzzSess := buzz.NewSession(ctx, buzz.WithSearchPaths(magusSearchPaths(ctx, autoloadDir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(magusSearchPaths(ctx, autoloadDir)...))
 	buzzSess.SetIncludeDirs(nil)
 	if buzzHostBindingsFn != nil {
 		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), false)

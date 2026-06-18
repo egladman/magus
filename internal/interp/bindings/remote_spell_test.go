@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,6 +26,8 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestImportedBuzzSpellHasFunctionOps is the generalization check: a Buzz spell
@@ -40,30 +41,19 @@ export fun mgs_listTargets() > any { return {"echo": {"fn": "echo"}}; }
 export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "yo " + p["x"]; }
 `
 	path := filepath.Join(t.TempDir(), "echo-import.buzz")
-	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
 	metadata, ok := loadLocalBuzzSpell(context.Background(), path)
-	if !ok || metadata.Name != "echo-import" {
-		t.Fatalf("loadLocalBuzzSpell ok=%v name=%q", ok, metadata.Name)
-	}
+	require.True(t, ok)
+	require.Equal(t, "echo-import", metadata.Name)
 	drv, found := project.DefaultSpellRegistry().Lookup("echo-import")
-	if !found {
-		t.Fatal("import path did not register the spell")
-	}
+	require.True(t, found, "import path did not register the spell")
 	resp, err := drv.Invoke(context.Background(), types.InvokeRequest{
 		Target: "echo",
 		Params: map[string]any{"x": "there"},
 	})
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if resp.Data != "yo there" {
-		t.Fatalf("function-op via import path: Data = %v, want %q", resp.Data, "yo there")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "yo there", resp.Data, "function-op via import path")
 }
-
-// --- generic spell-backed RemoteBackend round trip ---------------------------
 
 // blobStore stands in for a remote cache provider: PUT /blob/<hash> stores a
 // body, GET /blob/<hash> serves it (404 on miss).
@@ -124,9 +114,7 @@ export fun put_artifact(target: any, cb: fun(any)) > bool {
 }
 `, name, srvURL)
 	path := filepath.Join(t.TempDir(), name+".buzz")
-	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
 	return path
 }
 
@@ -136,57 +124,40 @@ func TestSpellRemoteBackendRoundTrip(t *testing.T) {
 	defer srv.Close()
 
 	drv, err := resolveBackendSpell(context.Background(), writeSpell(t, "test-cache-rt", srv.URL))
-	if err != nil {
-		t.Fatalf("resolveBackendSpell: %v", err)
-	}
+	require.NoError(t, err)
 	rs := &spellRemoteBackend{drv: drv}
 	ctx := context.Background()
 	// Non-UTF-8 bytes prove the path moves bytes, not text.
 	entry := []byte{0x1f, 0x8b, 0x00, 0xff, 'g', 'z', 0x00, 0x7f, 0x80}
 
 	rc, err := rs.GetArtifact(ctx, "pkg/a", "deadbeef")
-	if err != nil {
-		t.Fatalf("GetArtifact(miss): %v", err)
-	}
+	require.NoError(t, err, "GetArtifact(miss)")
 	if rc != nil {
 		_ = rc.Close()
 		t.Fatal("GetArtifact(miss): expected nil reader")
 	}
 
-	if err := rs.PutArtifact(ctx, "pkg/a", "deadbeef", bytes.NewReader(entry)); err != nil {
-		t.Fatalf("PutArtifact: %v", err)
-	}
+	require.NoError(t, rs.PutArtifact(ctx, "pkg/a", "deadbeef", bytes.NewReader(entry)), "PutArtifact")
 	store.mu.Lock()
 	stored, ok := store.items["deadbeef"]
 	store.mu.Unlock()
-	if !ok || !bytes.Equal(stored, entry) {
-		t.Fatalf("server stored %v, want %v", stored, entry)
-	}
+	require.True(t, ok, "server did not store the artifact")
+	assert.Equal(t, entry, stored)
 
 	rc, err = rs.GetArtifact(ctx, "pkg/a", "deadbeef")
-	if err != nil {
-		t.Fatalf("GetArtifact(hit): %v", err)
-	}
-	if rc == nil {
-		t.Fatal("GetArtifact(hit): expected reader, got nil")
-	}
+	require.NoError(t, err, "GetArtifact(hit)")
+	require.NotNil(t, rc, "GetArtifact(hit): expected reader, got nil")
 	got, _ := io.ReadAll(rc)
 	tmpPath := rc.(*removeOnClose).path
-	if err := rc.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-	if !bytes.Equal(got, entry) {
-		t.Fatalf("restored %v, want %v", got, entry)
-	}
-	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
-		t.Fatalf("temp file %s not removed on Close (stat err %v)", tmpPath, err)
-	}
+	require.NoError(t, rc.Close(), "close")
+	assert.Equal(t, entry, got)
+	_, err = os.Stat(tmpPath)
+	assert.True(t, os.IsNotExist(err), "temp file %s not removed on Close (stat err %v)", tmpPath, err)
 }
 
 func TestResolveBackendSpellMissingName(t *testing.T) {
-	if _, err := resolveBackendSpell(context.Background(), "no-such-spell-xyz"); err == nil {
-		t.Fatal("expected error for unregistered spell name")
-	}
+	_, err := resolveBackendSpell(context.Background(), "no-such-spell-xyz")
+	assert.Error(t, err, "expected error for unregistered spell name")
 }
 
 // TestLoadSpellFileFunctionOp checks the function-op machinery directly: a loaded
@@ -198,33 +169,21 @@ export fun mgs_listTargets() > any { return {"echo": {"fn": "echo"}}; }
 export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "hi " + p["who"]; }
 `
 	path := filepath.Join(t.TempDir(), "echo-spell.buzz")
-	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
 	sp, err := loadSpellFile(context.Background(), path)
-	if err != nil {
-		t.Fatalf("loadSpellFile: %v", err)
-	}
+	require.NoError(t, err, "loadSpellFile")
 	resp, err := sp.Invoke(context.Background(), types.InvokeRequest{
 		Target: "echo",
 		Params: map[string]any{"who": "magus"},
 	})
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if resp.Data != "hi magus" {
-		t.Fatalf("Data = %v, want %q", resp.Data, "hi magus")
-	}
+	require.NoError(t, err, "Invoke")
+	assert.Equal(t, "hi magus", resp.Data)
 }
-
-// --- real the github spell against an emulated GitHub Actions Cache API -------
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir
@@ -244,12 +203,8 @@ func ghaBackend(t *testing.T) *spellRemoteBackend {
 		t.Skipf("github spell not found at %s: %v", path, err)
 	}
 	drv, err := resolveBackendSpell(context.Background(), path)
-	if err != nil {
-		t.Fatalf("load github spell: %v", err)
-	}
-	if drv.Name() != "actions" {
-		t.Fatalf("spell name = %q, want actions", drv.Name())
-	}
+	require.NoError(t, err, "load github spell")
+	require.Equal(t, "actions", drv.Name(), "spell name")
 	return &spellRemoteBackend{drv: drv}
 }
 
@@ -392,36 +347,24 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
 
 	store := ghaBackend(t)
-	if !store.Active(context.Background()) {
-		t.Fatal("Active() = false under GITHUB_ACTIONS=true, want true")
-	}
+	require.True(t, store.Active(context.Background()), "Active() = false under GITHUB_ACTIONS=true, want true")
 	ctx := context.Background()
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff}, 10)
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
-	if err != nil {
-		t.Fatalf("GetArtifact(miss): %v", err)
-	}
+	require.NoError(t, err, "GetArtifact(miss)")
 	if rc != nil {
 		_ = rc.Close()
 		t.Fatal("expected miss, got reader")
 	}
 
-	if err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader(entry)); err != nil {
-		t.Fatalf("PutArtifact: %v", err)
-	}
+	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader(entry)), "PutArtifact")
 	rc, err = store.GetArtifact(ctx, "pkg/a", "abc123")
-	if err != nil {
-		t.Fatalf("GetArtifact(hit): %v", err)
-	}
-	if rc == nil {
-		t.Fatal("expected hit after put, got miss")
-	}
+	require.NoError(t, err, "GetArtifact(hit)")
+	require.NotNil(t, rc, "expected hit after put, got miss")
 	got, _ := io.ReadAll(rc)
 	_ = rc.Close()
-	if !bytes.Equal(got, entry) {
-		t.Fatalf("restored %v, want %v", got, entry)
-	}
+	assert.Equal(t, entry, got)
 }
 
 // Outside GitHub Actions the spell's enabled() op returns false, so the backend
@@ -429,13 +372,9 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 func TestGHACacheBackendInactiveOutsideGHA(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "")
 	store := ghaBackend(t)
-	if store.Active(context.Background()) {
-		t.Fatal("Active() = true outside GitHub Actions, want false")
-	}
+	require.False(t, store.Active(context.Background()), "Active() = true outside GitHub Actions, want false")
 	rc, err := store.GetArtifact(context.Background(), "pkg/a", "abc123")
-	if err != nil {
-		t.Fatalf("GetArtifact: %v", err)
-	}
+	require.NoError(t, err, "GetArtifact")
 	if rc != nil {
 		_ = rc.Close()
 		t.Fatal("expected miss when not running under GitHub Actions")
@@ -447,7 +386,7 @@ func TestGHACacheBackendInactiveOutsideGHA(t *testing.T) {
 // types resolve in both annotations and (nested) literals.
 func TestCanonicalTargetModule(t *testing.T) {
 	ctx := context.Background()
-	sess := buzzeng.NewSession(ctx)
+	sess := buzzeng.NewSession(ctx, buzzeng.WithEmbedded())
 	defer sess.Close()
 	registerHostModules(ctx, sess)
 
@@ -456,27 +395,27 @@ import "magus/target";
 fun build() > Target {
     return Target{
         name = "test",
-        charms = [Charm{ name = "fast", enabled = true }],
+        charms = ["fast"],
         files = ["a.go"],
     };
 }
 export final tname = build().name;
-export final cname = build().charms[0].name;
+export final cname = build().charms[0];
 `
-	if err := sess.Exec(ctx, src); err != nil {
-		t.Fatalf("import \"magus/target\": %v", err)
-	}
+	require.NoError(t, sess.Exec(ctx, src), "import \"magus/target\"")
 	exp := sess.Exports()
-	if v, ok := exp["tname"]; !ok || !v.IsStr() || v.AsString() != "test" {
-		t.Errorf("tname = %v, want \"test\"", v.String())
-	}
-	if v, ok := exp["cname"]; !ok || !v.IsStr() || v.AsString() != "fast" {
-		t.Errorf("cname = %v, want \"fast\"", v.String())
-	}
+	tname, ok := exp["tname"]
+	require.True(t, ok, "tname not exported")
+	require.True(t, tname.IsStr(), "tname not a string: %v", tname.String())
+	assert.Equal(t, "test", tname.AsString())
+	cname, ok := exp["cname"]
+	require.True(t, ok, "cname not exported")
+	require.True(t, cname.IsStr(), "cname not a string: %v", cname.String())
+	assert.Equal(t, "fast", cname.AsString())
 }
 
 func TestNewCommandRenderer(t *testing.T) {
-	targets := map[string]ispell.Target{
+	targets := map[string]ispell.Op{
 		"lint": {Cmd: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]ispell.Charm{
 			"write": {Ops: []ispell.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
 			"debug": {Ops: []ispell.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
@@ -487,30 +426,42 @@ func TestNewCommandRenderer(t *testing.T) {
 	}
 	render := newCommandRenderer(targets)
 
-	cases := []struct {
-		name     string
-		target   string
-		charms   []string
-		wantCmd  string
-		wantArgs []string
-		wantOK   bool
-	}{
-		{"base, no charms", "lint", nil, "go", []string{"tool", "golangci-lint", "run", "./..."}, true},
-		{"charms applied", "lint", []string{"write", "debug"}, "go", []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}, true},
-		{"charmless target", "build", []string{"write"}, "go", []string{"build"}, true},
-		{"function-op → no command", "fn", nil, "", nil, false},
-		{"no-op (empty cmd) → none", "noop", nil, "", nil, false},
-		{"unknown target → none", "missing", nil, "", nil, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cmd, args, ok := render(tc.target, tc.charms)
-			if ok != tc.wantOK || cmd != tc.wantCmd || !reflect.DeepEqual(args, tc.wantArgs) {
-				t.Errorf("render(%q, %v) = (%q, %v, %v), want (%q, %v, %v)",
-					tc.target, tc.charms, cmd, args, ok, tc.wantCmd, tc.wantArgs, tc.wantOK)
-			}
-		})
-	}
+	t.Run("base, no charms", func(t *testing.T) {
+		cmd, args, ok := render("lint", nil)
+		assert.True(t, ok)
+		assert.Equal(t, "go", cmd)
+		assert.Equal(t, []string{"tool", "golangci-lint", "run", "./..."}, args)
+	})
+	t.Run("charms applied", func(t *testing.T) {
+		cmd, args, ok := render("lint", []string{"write", "debug"})
+		assert.True(t, ok)
+		assert.Equal(t, "go", cmd)
+		assert.Equal(t, []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}, args)
+	})
+	t.Run("charmless target", func(t *testing.T) {
+		cmd, args, ok := render("build", []string{"write"})
+		assert.True(t, ok)
+		assert.Equal(t, "go", cmd)
+		assert.Equal(t, []string{"build"}, args)
+	})
+	t.Run("function-op → no command", func(t *testing.T) {
+		cmd, args, ok := render("fn", nil)
+		assert.False(t, ok)
+		assert.Empty(t, cmd)
+		assert.Nil(t, args)
+	})
+	t.Run("no-op (empty cmd) → none", func(t *testing.T) {
+		cmd, args, ok := render("noop", nil)
+		assert.False(t, ok)
+		assert.Empty(t, cmd)
+		assert.Nil(t, args)
+	})
+	t.Run("unknown target → none", func(t *testing.T) {
+		cmd, args, ok := render("missing", nil)
+		assert.False(t, ok)
+		assert.Empty(t, cmd)
+		assert.Nil(t, args)
+	})
 }
 
 func TestResolveCharmArgs(t *testing.T) {
@@ -525,71 +476,58 @@ func TestResolveCharmArgs(t *testing.T) {
 		return types.WithCharms(context.Background(), names)
 	}
 
-	cases := []struct {
-		name string
-		ctx  context.Context
-		want []string
-	}{
-		{"none active", context.Background(), []string{"run", "./..."}},
-		{"append one", with("debug"), []string{"run", "./...", "-v"}},
-		{"insert one", with("write"), []string{"run", "--fix", "./..."}},
-		{"insert + append compose", with("write", "debug"), []string{"run", "--fix", "./...", "-v"}},
-		{"appends sorted, order-independent", with("trace", "debug"), []string{"run", "./...", "-v", "--trace"}},
-		{"duplicate active charm applied once", with("debug", "debug"), []string{"run", "./...", "-v"}},
-		{"unknown charm ignored", with("nope"), []string{"run", "./..."}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := resolveCharmArgs(tc.ctx, base, charmArgs)
-			if err != nil {
-				t.Fatalf("resolveCharmArgs: %v", err)
-			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("resolveCharmArgs = %v, want %v", got, tc.want)
-			}
-		})
+	resolve := func(t *testing.T, ctx context.Context, want []string) {
+		t.Helper()
+		got, err := resolveCharmArgs(ctx, base, charmArgs)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	}
 
+	t.Run("none active", func(t *testing.T) {
+		resolve(t, context.Background(), []string{"run", "./..."})
+	})
+	t.Run("append one", func(t *testing.T) {
+		resolve(t, with("debug"), []string{"run", "./...", "-v"})
+	})
+	t.Run("insert one", func(t *testing.T) {
+		resolve(t, with("write"), []string{"run", "--fix", "./..."})
+	})
+	t.Run("insert + append compose", func(t *testing.T) {
+		resolve(t, with("write", "debug"), []string{"run", "--fix", "./...", "-v"})
+	})
+	t.Run("appends sorted, order-independent", func(t *testing.T) {
+		resolve(t, with("trace", "debug"), []string{"run", "./...", "-v", "--trace"})
+	})
+	t.Run("duplicate active charm applied once", func(t *testing.T) {
+		resolve(t, with("debug", "debug"), []string{"run", "./...", "-v"})
+	})
+	t.Run("unknown charm ignored", func(t *testing.T) {
+		resolve(t, with("nope"), []string{"run", "./..."})
+	})
+
 	// The base slice must never be mutated.
-	if !reflect.DeepEqual(base, []string{"run", "./..."}) {
-		t.Errorf("base mutated: %v", base)
-	}
+	assert.Equal(t, []string{"run", "./..."}, base, "base mutated")
 	// nil charmArgs is a no-op.
-	if got, err := resolveCharmArgs(with("write"), base, nil); err != nil || !reflect.DeepEqual(got, base) {
-		t.Errorf("nil charmArgs: got %v, err %v, want %v", got, err, base)
-	}
+	got, err := resolveCharmArgs(with("write"), base, nil)
+	require.NoError(t, err)
+	assert.Equal(t, base, got, "nil charmArgs")
 }
 
 func TestDedupStrings(t *testing.T) {
-	cases := []struct {
-		in, want []string
-	}{
-		{nil, nil},
-		{[]string{"a"}, []string{"a"}},
-		{[]string{"a", "b", "a"}, []string{"a", "b"}}, // manual + glob overlap
-		{[]string{"go-build", "image-build", "go-build"}, []string{"go-build", "image-build"}},
-		{[]string{"a", "a", "a"}, []string{"a"}},
-		{[]string{"a", "b", "c"}, []string{"a", "b", "c"}}, // no dups: unchanged
-	}
-	for _, tc := range cases {
-		got := dedupStrings(tc.in)
-		if len(got) != len(tc.want) {
-			t.Errorf("dedupStrings(%v) = %v, want %v", tc.in, got, tc.want)
-			continue
-		}
-		for i := range got {
-			if got[i] != tc.want[i] {
-				t.Errorf("dedupStrings(%v) = %v, want %v", tc.in, got, tc.want)
-				break
-			}
-		}
-	}
+	assert.Equal(t, []string(nil), dedupStrings(nil))
+	assert.Equal(t, []string{"a"}, dedupStrings([]string{"a"}))
+	// manual + glob overlap
+	assert.Equal(t, []string{"a", "b"}, dedupStrings([]string{"a", "b", "a"}))
+	assert.Equal(t, []string{"go-build", "image-build"}, dedupStrings([]string{"go-build", "image-build", "go-build"}))
+	assert.Equal(t, []string{"a"}, dedupStrings([]string{"a", "a", "a"}))
+	// no dups: unchanged
+	assert.Equal(t, []string{"a", "b", "c"}, dedupStrings([]string{"a", "b", "c"}))
 }
 
 // These tests exercise the real spells/aws/s3-cache/spell.buzz against an emulator that
 // independently recomputes the AWS SigV4 signature for every request and rejects
 // a mismatch — the same check S3 performs. The signing-key chain is already
-// verified against AWS's published vector in internal/std/extra/crypto; here we
+// verified against AWS's published vector in std (extra_crypto_test.go); here we
 // validate the spell's canonical-request and string-to-sign construction by
 // cross-checking it with a second, independent (Go) implementation.
 
@@ -600,12 +538,8 @@ func s3Backend(t *testing.T) *spellRemoteBackend {
 		t.Skipf("s3 spell not found at %s: %v", path, err)
 	}
 	drv, err := resolveBackendSpell(context.Background(), path)
-	if err != nil {
-		t.Fatalf("load s3 spell: %v", err)
-	}
-	if drv.Name() != "s3-cache" {
-		t.Fatalf("spell name = %q, want s3-cache", drv.Name())
-	}
+	require.NoError(t, err, "load s3 spell")
+	require.Equal(t, "s3-cache", drv.Name(), "spell name")
 	return &spellRemoteBackend{drv: drv}
 }
 
@@ -878,38 +812,24 @@ func TestS3Prune(t *testing.T) {
 	t.Run("age", func(t *testing.T) {
 		store, emu := newStore(t)
 		// Older than 7 days → aaa(30d), bbb(20d), ccc(10d) evicted.
-		if err := store.PruneArtifacts(context.Background(), cache.RetentionPolicy{OlderThan: 7 * 24 * time.Hour}); err != nil {
-			t.Fatalf("PruneArtifacts(age): %v", err)
-		}
-		got := remaining(emu)
+		require.NoError(t, store.PruneArtifacts(context.Background(), cache.RetentionPolicy{OlderThan: 7 * 24 * time.Hour}), "PruneArtifacts(age)")
 		want := []string{"magus-ddd-magus-remote-v1", "magus-eee-magus-remote-v1", "other-key"}
-		if !slices.Equal(got, want) {
-			t.Fatalf("after age prune, remaining = %v, want %v", got, want)
-		}
+		assert.Equal(t, want, remaining(emu), "after age prune")
 	})
 
 	t.Run("count", func(t *testing.T) {
 		store, emu := newStore(t)
 		// Keep newest 2 → eee(1h), ddd(2d) kept; ccc, bbb, aaa evicted.
-		if err := store.PruneArtifacts(context.Background(), cache.RetentionPolicy{KeepLast: 2}); err != nil {
-			t.Fatalf("PruneArtifacts(count): %v", err)
-		}
-		got := remaining(emu)
+		require.NoError(t, store.PruneArtifacts(context.Background(), cache.RetentionPolicy{KeepLast: 2}), "PruneArtifacts(count)")
 		want := []string{"magus-ddd-magus-remote-v1", "magus-eee-magus-remote-v1", "other-key"}
-		if !slices.Equal(got, want) {
-			t.Fatalf("after count prune, remaining = %v, want %v", got, want)
-		}
+		assert.Equal(t, want, remaining(emu), "after count prune")
 	})
 
 	t.Run("dry-run deletes nothing", func(t *testing.T) {
 		store, emu := newStore(t)
 		before := remaining(emu)
-		if err := store.PruneArtifacts(context.Background(), cache.RetentionPolicy{OlderThan: time.Hour, DryRun: true}); err != nil {
-			t.Fatalf("PruneArtifacts(dry-run): %v", err)
-		}
-		if got := remaining(emu); !slices.Equal(got, before) {
-			t.Fatalf("dry run mutated the bucket: %v != %v", got, before)
-		}
+		require.NoError(t, store.PruneArtifacts(context.Background(), cache.RetentionPolicy{OlderThan: time.Hour, DryRun: true}), "PruneArtifacts(dry-run)")
+		assert.Equal(t, before, remaining(emu), "dry run mutated the bucket")
 	})
 }
 
@@ -925,36 +845,24 @@ func TestS3CacheBackendRoundTrip(t *testing.T) {
 	t.Setenv("MAGUS_S3_ENDPOINT", srv.URL)
 
 	store := s3Backend(t)
-	if !store.Active(context.Background()) {
-		t.Fatal("Active() = false with credentials + bucket set, want true")
-	}
+	require.True(t, store.Active(context.Background()), "Active() = false with credentials + bucket set, want true")
 	ctx := context.Background()
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff, 'g', 'z'}, 8) // non-UTF-8 proves byte-exact transfer
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
-	if err != nil {
-		t.Fatalf("GetArtifact(miss): %v", err)
-	}
+	require.NoError(t, err, "GetArtifact(miss)")
 	if rc != nil {
 		_ = rc.Close()
 		t.Fatal("expected miss, got reader")
 	}
 
-	if err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader(entry)); err != nil {
-		t.Fatalf("PutArtifact: %v", err)
-	}
+	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader(entry)), "PutArtifact")
 	rc, err = store.GetArtifact(ctx, "pkg/a", "abc123")
-	if err != nil {
-		t.Fatalf("GetArtifact(hit): %v", err)
-	}
-	if rc == nil {
-		t.Fatal("expected hit after put, got miss")
-	}
+	require.NoError(t, err, "GetArtifact(hit)")
+	require.NotNil(t, rc, "expected hit after put, got miss")
 	got, _ := io.ReadAll(rc)
 	_ = rc.Close()
-	if !bytes.Equal(got, entry) {
-		t.Fatalf("restored %v, want %v", got, entry)
-	}
+	assert.Equal(t, entry, got)
 }
 
 func TestS3CacheBackendInactiveWithoutCreds(t *testing.T) {
@@ -962,13 +870,9 @@ func TestS3CacheBackendInactiveWithoutCreds(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
 	t.Setenv("MAGUS_S3_BUCKET", "")
 	store := s3Backend(t)
-	if store.Active(context.Background()) {
-		t.Fatal("Active() = true without credentials, want false")
-	}
+	require.False(t, store.Active(context.Background()), "Active() = true without credentials, want false")
 	rc, err := store.GetArtifact(context.Background(), "pkg/a", "abc123")
-	if err != nil {
-		t.Fatalf("GetArtifact: %v", err)
-	}
+	require.NoError(t, err, "GetArtifact")
 	if rc != nil {
 		_ = rc.Close()
 		t.Fatal("expected miss when not configured")

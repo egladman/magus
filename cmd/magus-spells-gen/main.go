@@ -65,7 +65,7 @@ func run() error {
 		if !ok {
 			continue
 		}
-		sess := buzz.NewSession(ctx)
+		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 		chunk, err := sess.Compile(combined)
 		if err != nil {
 			_ = sess.Close()

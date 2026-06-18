@@ -1,90 +1,66 @@
 package forecast
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTags(t *testing.T) {
-	tests := []struct {
-		name           string
-		projectPath    string
-		filesInProject []string
-		want           []string
-	}{
-		{
-			name:           "transitive: no files changed inside project",
-			projectPath:    "services/api",
-			filesInProject: nil,
-			want:           []string{"transitive"},
-		},
-		{
-			name:           "transitive: empty slice",
-			projectPath:    "services/api",
-			filesInProject: []string{},
-			want:           []string{"transitive"},
-		},
-		{
-			name:        "direct: file at project root (no subdir)",
-			projectPath: "services/api",
-			filesInProject: []string{
-				"services/api/magusfile",
-			},
-			want: []string{"direct"},
-		},
-		{
-			name:        "direct with single subdir",
-			projectPath: "services/api",
-			filesInProject: []string{
-				"services/api/src/handler.go",
-				"services/api/src/handler_test.go",
-			},
-			want: []string{"direct", "direct.src"},
-		},
-		{
-			name:        "direct with multiple subdirs, sorted",
-			projectPath: "services/api",
-			filesInProject: []string{
-				"services/api/src/handler.go",
-				"services/api/tests/handler_test.go",
-				"services/api/docs/openapi.yaml",
-			},
-			want: []string{"direct", "direct.docs", "direct.src", "direct.tests"},
-		},
-		{
-			name:        "deep nested paths: only first subdir component used",
-			projectPath: "libs/shared",
-			filesInProject: []string{
-				"libs/shared/src/utils/string.go",
-				"libs/shared/src/utils/deep/nest.go",
-			},
-			want: []string{"direct", "direct.src"},
-		},
-		{
-			name:        "project path with trailing slash normalised",
-			projectPath: "libs/shared/",
-			filesInProject: []string{
-				"libs/shared/src/foo.go",
-			},
-			want: []string{"direct", "direct.src"},
-		},
-		{
-			name:        "mix of root files and subdir files",
-			projectPath: "cmd/tool",
-			filesInProject: []string{
-				"cmd/tool/main.go",
-				"cmd/tool/internal/runner.go",
-			},
-			want: []string{"direct", "direct.internal"},
-		},
-	}
+	t.Run("transitive: no files changed inside project", func(t *testing.T) {
+		got := Tags("services/api", nil)
+		assert.Equal(t, []string{"transitive"}, got)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := Tags(tt.projectPath, tt.filesInProject)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Tags(%q, %v) = %v, want %v", tt.projectPath, tt.filesInProject, got, tt.want)
-			}
+	t.Run("transitive: empty slice", func(t *testing.T) {
+		got := Tags("services/api", []string{})
+		assert.Equal(t, []string{"transitive"}, got)
+	})
+
+	t.Run("direct: file at project root (no subdir)", func(t *testing.T) {
+		got := Tags("services/api", []string{
+			"services/api/magusfile",
 		})
-	}
+		assert.Equal(t, []string{"direct"}, got)
+	})
+
+	t.Run("direct with single subdir", func(t *testing.T) {
+		got := Tags("services/api", []string{
+			"services/api/src/handler.go",
+			"services/api/src/handler_test.go",
+		})
+		assert.Equal(t, []string{"direct", "direct.src"}, got)
+	})
+
+	t.Run("direct with multiple subdirs, sorted", func(t *testing.T) {
+		got := Tags("services/api", []string{
+			"services/api/src/handler.go",
+			"services/api/tests/handler_test.go",
+			"services/api/docs/openapi.yaml",
+		})
+		assert.Equal(t, []string{"direct", "direct.docs", "direct.src", "direct.tests"}, got)
+	})
+
+	t.Run("deep nested paths: only first subdir component used", func(t *testing.T) {
+		got := Tags("libs/shared", []string{
+			"libs/shared/src/utils/string.go",
+			"libs/shared/src/utils/deep/nest.go",
+		})
+		assert.Equal(t, []string{"direct", "direct.src"}, got)
+	})
+
+	t.Run("project path with trailing slash normalised", func(t *testing.T) {
+		got := Tags("libs/shared/", []string{
+			"libs/shared/src/foo.go",
+		})
+		assert.Equal(t, []string{"direct", "direct.src"}, got)
+	})
+
+	t.Run("mix of root files and subdir files", func(t *testing.T) {
+		got := Tags("cmd/tool", []string{
+			"cmd/tool/main.go",
+			"cmd/tool/internal/runner.go",
+		})
+		assert.Equal(t, []string{"direct", "direct.internal"}, got)
+	})
 }

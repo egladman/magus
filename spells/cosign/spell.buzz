@@ -1,11 +1,7 @@
-// cosign — sign, verify, and attest container images and artifacts with Sigstore
-// cosign.
-//
-// Authored source for the built-in "cosign" spell; compiled to bytecode and
-// embedded at build time (see cmd/magus-spells-gen). Each op forks `cosign` on
-// PATH — no shell. sign/attest pass --yes so they run unattended: keyless OIDC in
-// CI (with id-token permission) or a configured key locally. The caller appends
-// the image reference (by digest) and any flags via the op's args.
+// Each op forks `cosign` on PATH — no shell. sign/attest pass --yes so they run
+// unattended: keyless OIDC in CI (with id-token permission) or a configured key
+// locally. The caller appends the image reference (by digest) and any flags via
+// the op's args.
 //
 // Use it from a magusfile to sign right after a push — locally or in CI — instead
 // of wiring a cosign-specific CI action:

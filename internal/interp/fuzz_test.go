@@ -11,12 +11,12 @@ import (
 // The invariant: any bytes written as a .buzz file must produce either
 // (targets, nil) or (nil, error) — never a panic.
 func FuzzParse(f *testing.F) {
-	f.Add([]byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\n"))
-	f.Add([]byte("import \"magus\";\nexport fun build(_args: [str]) > void {}\nexport fun test(_args: [str]) > void {}\n"))
+	f.Add([]byte("import \"magus\";\nexport fun build(args: [str]) > void {}\n"))
+	f.Add([]byte("import \"magus\";\nexport fun build(args: [str]) > void {}\nexport fun test(args: [str]) > void {}\n"))
 	f.Add([]byte("var x: str = {"))
 	f.Add([]byte(""))
 	f.Add([]byte("\x00\x01\x02\x03"))
-	f.Add([]byte("import \"magus\";\nexport fun noop(_args: [str]) > void {}\n"))
+	f.Add([]byte("import \"magus\";\nexport fun noop(args: [str]) > void {}\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := t.TempDir()

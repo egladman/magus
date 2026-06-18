@@ -9,21 +9,21 @@ import (
 
 var largeMagefile = `
 import "magus";
-export fun go_build(_args: [str]) > void {}
-export fun go_test(_args: [str]) > void {}
-export fun go_lint(_args: [str]) > void {}
-export fun go_vet(_args: [str]) > void {}
-export fun docker_build(_args: [str]) > void {}
-export fun docker_push(_args: [str]) > void {}
-export fun release_tag(_args: [str]) > void {}
-export fun release_sign(_args: [str]) > void {}
-export fun ci_lint(_args: [str]) > void {}
-export fun ci_test(_args: [str]) > void {}
-export fun db_migrate(_args: [str]) > void {}
-export fun db_seed(_args: [str]) > void {}
-export fun build(_args: [str]) > void {}
-export fun test(_args: [str]) > void {}
-export fun clean(_args: [str]) > void {}
+export fun go_build(args: [str]) > void {}
+export fun go_test(args: [str]) > void {}
+export fun go_lint(args: [str]) > void {}
+export fun go_vet(args: [str]) > void {}
+export fun docker_build(args: [str]) > void {}
+export fun docker_push(args: [str]) > void {}
+export fun release_tag(args: [str]) > void {}
+export fun release_sign(args: [str]) > void {}
+export fun ci_lint(args: [str]) > void {}
+export fun ci_test(args: [str]) > void {}
+export fun db_migrate(args: [str]) > void {}
+export fun db_seed(args: [str]) > void {}
+export fun build(args: [str]) > void {}
+export fun test(args: [str]) > void {}
+export fun clean(args: [str]) > void {}
 `
 
 func BenchmarkParse(b *testing.B) {
@@ -46,7 +46,7 @@ func BenchmarkParse(b *testing.B) {
 func BenchmarkFind(b *testing.B) {
 	dir := b.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte("import \"magus\";\nexport fun noop(_args: [str]) > void {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("import \"magus\";\nexport fun noop(args: [str]) > void {}\n"), 0o644); err != nil {
 		b.Fatal(err)
 	}
 

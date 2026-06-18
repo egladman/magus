@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // makeProjects builds a []*types.Project from paths for use in Build calls.
@@ -26,26 +28,16 @@ func shardSizes(shards []Shard) []int {
 func TestBuild_empty(t *testing.T) {
 	t.Parallel()
 	plan, err := Build(nil, "test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(plan.Shards) != 0 {
-		t.Fatalf("want 0 shards, got %d", len(plan.Shards))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, plan.Shards)
 }
 
 func TestBuild_oneProject(t *testing.T) {
 	t.Parallel()
 	plan, err := Build(makeProjects("a"), "test", WithMaxShards(8))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(plan.Shards) != 1 {
-		t.Fatalf("want 1 shard, got %d", len(plan.Shards))
-	}
-	if plan.Shards[0].ID != "0" {
-		t.Fatalf("want ID '0', got %q", plan.Shards[0].ID)
-	}
+	require.NoError(t, err)
+	require.Len(t, plan.Shards, 1)
+	assert.Equal(t, "0", plan.Shards[0].ID)
 }
 
 func TestBuild_exactlyCap(t *testing.T) {
@@ -55,16 +47,10 @@ func TestBuild_exactlyCap(t *testing.T) {
 		paths[i] = string(rune('a' + i))
 	}
 	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(plan.Shards) != 8 {
-		t.Fatalf("want 8 shards, got %d", len(plan.Shards))
-	}
+	require.NoError(t, err)
+	require.Len(t, plan.Shards, 8)
 	for _, s := range plan.Shards {
-		if len(s.Projects) != 1 {
-			t.Fatalf("want 1 project per shard, got %d in shard %s", len(s.Projects), s.ID)
-		}
+		assert.Lenf(t, s.Projects, 1, "want 1 project per shard in shard %s", s.ID)
 	}
 }
 
@@ -76,19 +62,9 @@ func TestBuild_oneOverCap(t *testing.T) {
 		paths[i] = string(rune('a' + i))
 	}
 	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(plan.Shards) != 8 {
-		t.Fatalf("want 8 shards, got %d", len(plan.Shards))
-	}
-	sizes := shardSizes(plan.Shards)
-	want := []int{2, 1, 1, 1, 1, 1, 1, 1}
-	for i, s := range sizes {
-		if s != want[i] {
-			t.Fatalf("shard %d: want size %d, got %d", i, want[i], s)
-		}
-	}
+	require.NoError(t, err)
+	require.Len(t, plan.Shards, 8)
+	assert.Equal(t, []int{2, 1, 1, 1, 1, 1, 1, 1}, shardSizes(plan.Shards))
 }
 
 func TestBuild_100projects(t *testing.T) {
@@ -98,36 +74,22 @@ func TestBuild_100projects(t *testing.T) {
 		paths[i] = string(rune(i + 1)) // non-zero rune
 	}
 	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(plan.Shards) != 8 {
-		t.Fatalf("want 8 shards, got %d", len(plan.Shards))
-	}
-	sizes := shardSizes(plan.Shards)
-	want := []int{13, 13, 13, 13, 12, 12, 12, 12}
-	for i, s := range sizes {
-		if s != want[i] {
-			t.Fatalf("shard %d: want size %d, got %d", i, want[i], s)
-		}
-	}
+	require.NoError(t, err)
+	require.Len(t, plan.Shards, 8)
+	assert.Equal(t, []int{13, 13, 13, 13, 12, 12, 12, 12}, shardSizes(plan.Shards))
 }
 
 func TestBuild_invalidMaxShards_zero(t *testing.T) {
 	t.Parallel()
 	_, err := Build(makeProjects("a"), "test", WithMaxShards(0))
-	if err == nil {
-		t.Fatal("expected error for WithMaxShards(0), got nil")
-	}
+	assert.Error(t, err)
 }
 
 func TestBuild_invalidMaxShards_negativeTwoOrLess(t *testing.T) {
 	t.Parallel()
 	for _, n := range []int{-2, -3, -100} {
 		_, err := Build(makeProjects("a"), "test", WithMaxShards(n))
-		if err == nil {
-			t.Fatalf("expected error for WithMaxShards(%d), got nil", n)
-		}
+		assert.Errorf(t, err, "expected error for WithMaxShards(%d)", n)
 	}
 }
 
@@ -136,52 +98,49 @@ func TestBuild_unlimited(t *testing.T) {
 	// -1 = unlimited: 5 projects → 5 shards
 	paths := []string{"a", "b", "c", "d", "e"}
 	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(-1))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(plan.Shards) != 5 {
-		t.Fatalf("want 5 shards (unlimited), got %d", len(plan.Shards))
-	}
+	require.NoError(t, err)
+	assert.Len(t, plan.Shards, 5)
 }
 
 func TestBuild_clampAboveHardCeiling(t *testing.T) {
 	t.Parallel()
 	// 500 > hardCeiling(256): should clamp to 256, not error.
 	plan, err := Build(makeProjects("a"), "test", WithMaxShards(500))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(plan.Shards) != 1 {
-		t.Fatalf("want 1 shard (only 1 project), got %d", len(plan.Shards))
-	}
+	require.NoError(t, err)
+	assert.Len(t, plan.Shards, 1)
 }
 
 func TestBuild_IDWidth(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		maxShards int
-		wantWidth int
-	}{
-		{8, 1},   // IDs "0".."7"   — last=7, 1 digit
-		{10, 1},  // IDs "0".."9"   — last=9, 1 digit
-		{100, 2}, // IDs "00".."99" — last=99, 2 digits
-		{256, 3}, // IDs "000".."255" — last=255, 3 digits
+
+	// IDs "0".."7" — last=7, 1 digit
+	t.Run("maxShards=8 width=1", func(t *testing.T) {
+		assertIDWidth(t, 8, 1)
+	})
+	// IDs "0".."9" — last=9, 1 digit
+	t.Run("maxShards=10 width=1", func(t *testing.T) {
+		assertIDWidth(t, 10, 1)
+	})
+	// IDs "00".."99" — last=99, 2 digits
+	t.Run("maxShards=100 width=2", func(t *testing.T) {
+		assertIDWidth(t, 100, 2)
+	})
+	// IDs "000".."255" — last=255, 3 digits
+	t.Run("maxShards=256 width=3", func(t *testing.T) {
+		assertIDWidth(t, 256, 3)
+	})
+}
+
+func assertIDWidth(t *testing.T, maxShards, wantWidth int) {
+	t.Helper()
+	paths := make([]string, maxShards)
+	for i := range paths {
+		paths[i] = string(rune(i + 1))
 	}
-	for _, tt := range tests {
-		paths := make([]string, tt.maxShards)
-		for i := range paths {
-			paths[i] = string(rune(i + 1))
-		}
-		plan, err := Build(makeProjects(paths...), "test", WithMaxShards(tt.maxShards))
-		if err != nil {
-			t.Fatalf("maxShards=%d: unexpected error: %v", tt.maxShards, err)
-		}
-		for _, s := range plan.Shards {
-			if len(s.ID) != tt.wantWidth {
-				t.Fatalf("maxShards=%d: want ID width %d, got %q (len %d)",
-					tt.maxShards, tt.wantWidth, s.ID, len(s.ID))
-			}
-		}
+	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(maxShards))
+	require.NoError(t, err)
+	for _, s := range plan.Shards {
+		assert.Lenf(t, s.ID, wantWidth, "maxShards=%d: ID %q", maxShards, s.ID)
 	}
 }
 
@@ -207,18 +166,10 @@ func TestBuild_withForecaster_replacesCeilDivision(t *testing.T) {
 	f := &stubForecaster{override: [][]*types.Project{projects}}
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if f.calls != 1 {
-		t.Fatalf("forecaster.Plan called %d times, want 1", f.calls)
-	}
-	if len(plan.Shards) != 1 {
-		t.Fatalf("want 1 shard from forecaster, got %d", len(plan.Shards))
-	}
-	if len(plan.Shards[0].Projects) != 4 {
-		t.Fatalf("want all 4 projects in single shard, got %d", len(plan.Shards[0].Projects))
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, f.calls)
+	require.Len(t, plan.Shards, 1)
+	assert.Len(t, plan.Shards[0].Projects, 4)
 }
 
 func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
@@ -228,22 +179,14 @@ func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
 	f := &stubForecaster{override: nil}
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
+	require.NoError(t, err)
 	// Defensive fallback to ceil-division: 2 projects, max 8 shards → 2 shards.
-	if len(plan.Shards) != 2 {
-		t.Fatalf("want 2 shards (ceil-division fallback), got %d", len(plan.Shards))
-	}
+	assert.Len(t, plan.Shards, 2)
 }
 
 func TestBuild_sourcePassthrough(t *testing.T) {
 	t.Parallel()
 	plan, err := Build(makeProjects("a"), "git diff vs origin/main")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if plan.Source != "git diff vs origin/main" {
-		t.Fatalf("want source 'git diff vs origin/main', got %q", plan.Source)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "git diff vs origin/main", plan.Source)
 }

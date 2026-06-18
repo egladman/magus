@@ -2,8 +2,10 @@ package spell
 
 import (
 	"sort"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mapObj is a test-only implementation of ispell.Obj backed by map[string]any.
@@ -92,27 +94,17 @@ func (m mapObj) CallStrs(key string, args ...string) ([]string, error) {
 // TestDecode_NoName ensures a missing name field returns an error.
 func TestDecode_NoName(t *testing.T) {
 	_, err := Decode(mapObj{})
-	if err == nil {
-		t.Fatal("Decode with no name: want error, got nil")
-	}
-	if !strings.Contains(err.Error(), "name is required") {
-		t.Errorf("Decode with no name: error %q does not contain \"name is required\"", err.Error())
-	}
+	require.Error(t, err, "Decode with no name: want error, got nil")
+	assert.Contains(t, err.Error(), "name is required")
 }
 
 // TestDecode_NameOnly checks that a spell with only a name and no ops is decoded correctly.
 func TestDecode_NameOnly(t *testing.T) {
 	src := mapObj{"name": "myspell"}
 	m, err := Decode(src)
-	if err != nil {
-		t.Fatalf("Decode with name only: unexpected error: %v", err)
-	}
-	if m.Name != "myspell" {
-		t.Errorf("Spec.Name = %q, want %q", m.Name, "myspell")
-	}
-	if m.Targets != nil {
-		t.Errorf("Spec.Targets = %v, want nil", m.Targets)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "myspell", m.Name)
+	assert.Nil(t, m.Ops)
 }
 
 // TestDecode_ForkOp verifies a fork op (cmd and args, no fn) populates the Target correctly.
@@ -127,22 +119,12 @@ func TestDecode_ForkOp(t *testing.T) {
 		},
 	}
 	m, err := Decode(src)
-	if err != nil {
-		t.Fatalf("Decode fork op: unexpected error: %v", err)
-	}
-	tgt, ok := m.Targets["build"]
-	if !ok {
-		t.Fatal("Targets[\"build\"] missing")
-	}
-	if tgt.Cmd != "go" {
-		t.Errorf("Target.Cmd = %q, want \"go\"", tgt.Cmd)
-	}
-	if len(tgt.Args) != 2 || tgt.Args[0] != "build" || tgt.Args[1] != "./..." {
-		t.Errorf("Target.Args = %v, want [build ./...]", tgt.Args)
-	}
-	if tgt.Func != "" {
-		t.Errorf("Target.Func = %q, want empty (fork target)", tgt.Func)
-	}
+	require.NoError(t, err)
+	tgt, ok := m.Ops["build"]
+	require.True(t, ok, `Targets["build"] missing`)
+	assert.Equal(t, "go", tgt.Cmd)
+	assert.Equal(t, []string{"build", "./..."}, tgt.Args)
+	assert.Empty(t, tgt.Func, "fork target should have empty Func")
 }
 
 // TestDecode_CharmReplaceOp checks that a charm carrying a replace patch op is
@@ -165,21 +147,12 @@ func TestDecode_CharmReplaceOp(t *testing.T) {
 		},
 	}
 	m, err := Decode(src)
-	if err != nil {
-		t.Fatalf("Decode charm replace: unexpected error: %v", err)
-	}
-	tgt, ok := m.Targets["fmt"]
-	if !ok {
-		t.Fatal("Targets[\"fmt\"] missing")
-	}
+	require.NoError(t, err)
+	tgt, ok := m.Ops["fmt"]
+	require.True(t, ok, `Targets["fmt"] missing`)
 	charm, ok := tgt.Charms["write"]
-	if !ok {
-		t.Fatal("Charms[\"write\"] missing")
-	}
-	want := PatchOp{Op: "replace", Path: "/0", Value: "-w"}
-	if len(charm.Ops) != 1 || charm.Ops[0] != want {
-		t.Errorf("Charm.Ops = %v, want [%v]", charm.Ops, want)
-	}
+	require.True(t, ok, `Charms["write"] missing`)
+	assert.Equal(t, []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, charm.Ops)
 }
 
 // TestDecode_CharmAddOp checks that a charm carrying an append patch op (add /-)
@@ -202,17 +175,10 @@ func TestDecode_CharmAddOp(t *testing.T) {
 		},
 	}
 	m, err := Decode(src)
-	if err != nil {
-		t.Fatalf("Decode charm add: unexpected error: %v", err)
-	}
-	charm, ok := m.Targets["test"].Charms["debug"]
-	if !ok {
-		t.Fatal("Charms[\"debug\"] missing")
-	}
-	want := PatchOp{Op: "add", Path: "/-", Value: "-v"}
-	if len(charm.Ops) != 1 || charm.Ops[0] != want {
-		t.Errorf("Charm.Ops = %v, want [%v]", charm.Ops, want)
-	}
+	require.NoError(t, err)
+	charm, ok := m.Ops["test"].Charms["debug"]
+	require.True(t, ok, `Charms["debug"] missing`)
+	assert.Equal(t, []PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, charm.Ops)
 }
 
 // TestDecode_CharmRootRejected checks that a root-path op (whole-argv replace)
@@ -233,9 +199,8 @@ func TestDecode_CharmRootRejected(t *testing.T) {
 			},
 		},
 	}
-	if _, err := Decode(src); err == nil {
-		t.Fatal("Decode with root-path charm op: want error, got nil")
-	}
+	_, err := Decode(src)
+	assert.Error(t, err, "Decode with root-path charm op: want error, got nil")
 }
 
 // TestDecode_InvalidTargetName ensures ops with invalid names (e.g. containing spaces) are rejected.
@@ -249,9 +214,7 @@ func TestDecode_InvalidTargetName(t *testing.T) {
 		},
 	}
 	_, err := Decode(src)
-	if err == nil {
-		t.Fatal("Decode with invalid target name: want error, got nil")
-	}
+	assert.Error(t, err, "Decode with invalid target name: want error, got nil")
 }
 
 // TestDecode_NeedsResolved verifies that CallStrs("needs") is called and stored.
@@ -261,10 +224,6 @@ func TestDecode_NeedsResolved(t *testing.T) {
 		"needs": []string{"**/*.go", "go.mod"},
 	}
 	m, err := Decode(src)
-	if err != nil {
-		t.Fatalf("Decode needs: unexpected error: %v", err)
-	}
-	if len(m.Needs) != 2 {
-		t.Errorf("Spec.Needs = %v, want [**/*.go go.mod]", m.Needs)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"**/*.go", "go.mod"}, m.Needs)
 }

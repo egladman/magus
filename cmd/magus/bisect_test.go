@@ -7,60 +7,44 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestParseBisectCulprit verifies the culprit-extraction logic against
 // synthetic git-bisect-log output.
 func TestParseBisectCulprit(t *testing.T) {
-	cases := []struct {
-		name    string
-		log     string
-		want    string
-		wantErr bool
-	}{
-		{
-			name: "standard culprit line",
-			log: `git bisect start
+	t.Run("standard culprit line", func(t *testing.T) {
+		// Write synthetic bisect log to a temp git repo.
+		dir := t.TempDir()
+		if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
+			t.Skipf("git init failed: %v\n%s", err, out)
+		}
+
+		log := `git bisect start
 # good: [abc123] fix typo
 git bisect good abc123
 # bad: [def456] introduce regression
 git bisect bad def456
 # first bad commit: [def456] introduce regression
-`,
-			want: "def456",
-		},
-		{
-			name:    "no culprit",
-			log:     "git bisect start\n# good: [abc123] blah\n",
-			wantErr: true,
-		},
-	}
+`
+		// We can't easily fake `git bisect log`, so test the parser directly
+		// by parsing the raw bytes.
+		got, err := parseBisectLog([]byte(log))
+		require.NoError(t, err)
+		assert.Equal(t, "def456", got)
+	})
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Write synthetic bisect log to a temp git repo.
-			dir := t.TempDir()
-			if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
-				t.Skipf("git init failed: %v\n%s", err, out)
-			}
+	t.Run("no culprit", func(t *testing.T) {
+		dir := t.TempDir()
+		if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
+			t.Skipf("git init failed: %v\n%s", err, out)
+		}
 
-			// We can't easily fake `git bisect log`, so test the parser directly
-			// by parsing the raw bytes.
-			got, err := parseBisectLog([]byte(tc.log))
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got sha=%q", got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
-			}
-		})
-	}
+		_, err := parseBisectLog([]byte("git bisect start\n# good: [abc123] blah\n"))
+		assert.Error(t, err)
+	})
 }
 
 // parseBisectLog is the inner logic of parseBisectCulprit, extracted for

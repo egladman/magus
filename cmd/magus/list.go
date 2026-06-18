@@ -25,7 +25,7 @@ type listOutput struct {
 	Projects  []listProject `json:"projects"  yaml:"projects"`
 }
 
-func ls(root string, args []string) error {
+func ls(ctx context.Context, root string, args []string) error {
 	_, err := cmdParse("ls", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls [flags]")
@@ -45,7 +45,7 @@ func ls(root string, args []string) error {
 		return err
 	}
 
-	ws, err := inspectWorkspace(context.Background(), root)
+	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return err
 	}

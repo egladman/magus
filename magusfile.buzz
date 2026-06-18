@@ -1,9 +1,3 @@
-// magusfile.buzz — build orchestration for the magus repo (dogfooded in Buzz).
-//
-// Every exported function is a runnable target; underscores map to hyphens
-// (`image_build` -> `magus run image-build`). Targets run with this file's
-// directory (magus/) as cwd; the image targets are the exception (dir "..").
-
 import "magus";
 
 // Host utility modules are imported under bare names. magus layers its host
@@ -27,7 +21,13 @@ import "serialize";
 import "io";
 // std for parseInt in the coverage target (color thresholds off the percentage).
 import "std";
+// magus/target carries the value-type mirrors (ExecResult, Commit, …) so an
+// os.exec / vcs.commit result can be annotated for compile-checked field access.
+import "magus/target";
 
+// The magusfile spell tracks this project's own magusfile.buzz as a source, so
+// editing it marks the project affected; bound below alongside the toolchains.
+import "magus/spell/magusfile";
 import "magus/spell/go";
 import "magus/spell/docker";
 // cosign signs the published images (image-build under the cd charm).
@@ -64,10 +64,10 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 // The go spell claims **/*.go, so editing Go sources marks this project affected
 // for `magus affected ci`. outputs are the regenerable artifacts the cache
 // snapshots after generate/release.
-magus.project.register(fun(p, cb) > bool { cb({
-    "spells": [magus.spell.get("magusfile"), go, buzz, md],
+magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
+    "spells": [magusfile, go, buzz, md],
     "outputs": [
-        "internal/std/gen/buzz/*.go",
+        "hostbuzz/gen/*.go",
         "docs/modules/*.md",
         "docs/manpage/gen/*.md",
         "manpage/gen/*.1",
@@ -80,24 +80,23 @@ magus.project.register(fun(p, cb) > bool { cb({
     // *-generate workers stay cachable, so a hit still restores outputs fast and
     // the gate compares those against what's committed.
     "targets": {
-        "watch": {"cachable": false},
-        // isolated: the drift gate inspects `git status`, so it must run alone —
-        // no sibling target (or a second project's generate) may touch the tree
-        // while it checks. cachable: false keeps the gate running every time.
-        "generate": {"cachable": false, "isolated": true},
+        "watch": {"skipCache": true},
+        // exclusive: true (exclusive): the drift gate inspects `git status`, so it
+        // must run alone — no sibling target (or a second project's generate) may
+        // touch the tree while it checks. skipCache: true keeps the gate running
+        // every time.
+        "generate": {"skipCache": true, "exclusive": true},
         // ci-shard recomputes the affected set and writes $GITHUB_OUTPUT every
         // time; a cache hit would skip the write and leave the matrix job blank.
-        "ci-shard": {"cachable": false},
+        "ci-shard": {"skipCache": true},
         // image-build pushes and signs under the cd charm; a cache hit must never
         // skip those side effects.
-        "image-build": {"cachable": false},
+        "image-build": {"skipCache": true},
     },
 }); return true; });
 
-// ── build metadata ───────────────────────────────────────────────────────────
-
 fun version() > str {
-    final v = os.exec("git", ["describe", "--tags", "--always", "--dirty"]).stdout;
+    final v = vcs.describe();
     if (v == "") { return "unknown"; }
     return v;
 }
@@ -109,10 +108,11 @@ fun commit() > str {
 }
 
 // The commit's record date (RFC3339), not wall-clock, so the same source tree
-// builds reproducibly. nil when built outside a repo (e.g. from a tarball).
+// builds reproducibly. vcs.commit returns the zero record (empty date) when built
+// outside a repo (e.g. from a tarball), so an empty date is the "unknown" signal.
 fun build_date() > str {
-    final c = vcs.commit();
-    if (c == null) { return "unknown"; }
+    final c: Commit = vcs.commit();
+    if (c.date == "") { return "unknown"; }
     return c.date;
 }
 
@@ -122,8 +122,6 @@ fun ld_flags() > str {
         + " -X main.commit=" + commit()
         + " -X main.buildDate=" + build_date();
 }
-
-// ── granular go targets ──────────────────────────────────────────────────────
 
 // Compiles the version-stamped magus binary. The raw flags append to `go build`,
 // with the linker flags passed as ordinary args; mcp compiles in the server,
@@ -144,7 +142,6 @@ export fun go_build(args: [str]) > void {
     });
 }
 
-// ── image targets ────────────────────────────────────────────────────────────
 // Built from this directory (the magus source: go.mod, cmd/magus, gopherbuzz) with
 // the magus Dockerfiles. The `cd` charm publishes: build every variant for its
 // platforms, push to GHCR, and cosign-sign each pushed digest. Without it,
@@ -216,8 +213,6 @@ export fun image_scan(args: [str]) > void {
     }
 }
 
-// ── generate ─────────────────────────────────────────────────────────────────
-
 // Renders the man pages and mirrors them into the embed dir so the shipped binary
 // carries the current set for `magus self install`.
 export fun man_generate(args: [str]) > void {
@@ -234,10 +229,10 @@ export fun man_generate(args: [str]) > void {
 // magus project boundaries, and isolates failures: a stale directive in one area
 // fails only its own target instead of masking every generator after it.
 
-// Regenerates the Go host bindings (internal/std -> gen/buzz) from the
+// Regenerates the Go host bindings (std -> hostbuzz/gen) from the
 // std.Module declarations.
 export fun bindings_generate(args: [str]) > void {
-    os.exec("go", ["generate", "./internal/std/..."]);
+    os.exec("go", ["generate", "./std/..."]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spell/gen).
@@ -276,9 +271,10 @@ export fun md_generate(args: [str]) > void {
 // nothing to maintain in lockstep, and an unrelated change elsewhere in the
 // monorepo can't trip the gate. Build artifacts (the magus binary, *.test,
 // .magus/) are gitignored, so a clean checkout only goes dirty when a generated
-// file actually drifted. The check runs here in the body (not via a check_clean
+// file actually drifted. The check runs here in the body (not via a fail-on-drift
 // policy) so it also fires when generate runs nested inside `ci`; the target is
-// marked isolated (see register) so no sibling mutates the tree mid-check. Run the
+// marked exclusive (exclusive: true, see register) so no sibling mutates the tree
+// mid-check. Run the
 // `rw` charm (`generate:rw`) to keep the result instead of gating.
 export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
@@ -292,7 +288,6 @@ export fun generate(args: [str]) > void {
     }
 }
 
-// ── release ──────────────────────────────────────────────────────────────────
 // Cross-compiles a static binary per platform into dist/ and archives each one.
 export fun release(args: [str]) > void {
     final release_platforms = [
@@ -335,7 +330,6 @@ export fun release(args: [str]) > void {
     fs.writeFile(fs.join("dist", "SHA256SUMS"), sums);
 }
 
-// ── dev watch ─────────────────────────────────────────────────────────────────
 // Rebuilds on every debounced change until interrupted (Ctrl-C). fs.watch
 // BLOCKS; try/catch keeps a failing build from ending the watch.
 export fun watch(args: [str]) > void {
@@ -351,7 +345,6 @@ export fun watch(args: [str]) > void {
     });
 }
 
-// ── coverage ─────────────────────────────────────────────────────────────────
 // Renders a Go coverage badge locally — no third-party service (Coveralls/Codecov)
 // and no network. The logic lives here; ./cmd/coverage-badge is a logic-free
 // shim over github.com/narqo/go-badge (a library with no CLI). Regenerate and commit
@@ -396,7 +389,6 @@ export fun coverage(args: [str]) > void {
     fs.writeFile("coverage.svg", svg);
 }
 
-// ── buzz dogfood ───────────────────────────────────────────────────────────────
 // Type-checks the repo's standalone Buzz with the upstream `buzz` toolchain. magus
 // is configured and extended in Buzz, so it carries a built-in `buzz` spell and runs
 // it against itself. The spell exposes ops over two interpreters and this
@@ -429,7 +421,6 @@ export fun buzz_run(args: [str]) > void {
     buzz["magus-buzz"]({"cwd": "cmd/magus/starter/spells"});
 }
 
-// ── top-level targets ─────────────────────────────────────────────────────────
 // build compiles ONE artifact, toggled by the `container` charm (see below). lint
 // also runs `go vet` (both static analysis); format also runs `go mod tidy` (both
 // honor the write charm). ci is the anchor `magus affected ci` keys off, composed

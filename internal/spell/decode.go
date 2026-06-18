@@ -65,8 +65,8 @@ func Decode(src Obj) (Spec, error) {
 	m.Provides = provides
 
 	if ops, ok := src.Obj("ops"); ok {
-		targets := map[string]Target{}
-		var docTargets []string
+		opMap := map[string]Op{}
+		var docOps []string
 		for _, op := range ops.Keys() {
 			spec, ok := ops.Obj(op)
 			if !ok {
@@ -75,17 +75,17 @@ func Decode(src Obj) (Spec, error) {
 			if err := types.ValidateTargetName(op); err != nil {
 				return Spec{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
 			}
-			t := Target{Capture: spec.Bool("capture"), Args: spec.Strs("args")}
+			t := Op{Capture: spec.Bool("capture"), Args: spec.Strs("args")}
 			if doc, ok := spec.Str("doc"); ok {
 				t.Doc = doc
 			}
-			// A function-authored target (vs a plain {cmd,args} record op) is a
-			// candidate for the doctor doc-comment check; see Spec.DocTargets.
+			// A function-authored op (vs a plain {cmd,args} record op) is a candidate
+			// for the doctor doc-comment check; see Spec.DocOps.
 			if spec.Bool("handler") {
-				docTargets = append(docTargets, op)
+				docOps = append(docOps, op)
 			}
 			// An op declared with "fn" is a function-op dispatched in-VM; otherwise
-			// it is a fork target running the declared command. Mutually exclusive.
+			// it is a fork op running the declared command. Mutually exclusive.
 			if fn, ok := spec.Str("fn"); ok && fn != "" {
 				t.Func = fn
 			} else if cmd, ok := spec.Str("cmd"); ok {
@@ -123,14 +123,14 @@ func Decode(src Obj) (Spec, error) {
 					t.Charms = cm
 				}
 			}
-			targets[op] = t
+			opMap[op] = t
 		}
-		if len(targets) > 0 {
-			m.Targets = targets
+		if len(opMap) > 0 {
+			m.Ops = opMap
 		}
-		if len(docTargets) > 0 {
-			slices.Sort(docTargets)
-			m.DocTargets = docTargets
+		if len(docOps) > 0 {
+			slices.Sort(docOps)
+			m.DocOps = docOps
 		}
 	}
 	return m, nil

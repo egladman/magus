@@ -133,7 +133,19 @@ func listTargets(scope string, targets []types.Target, source string) {
 
 type errSilent struct{ exitCode int }
 
-func (errSilent) Error() string { return "" }
+func (errSilent) Error() string { return "silent exit" }
+
+// canonicalTarget expands short target aliases at the CLI edge.
+func canonicalTarget(name string) string {
+	switch name {
+	case "fmt":
+		return "format"
+	case "gen":
+		return "generate"
+	default:
+		return name
+	}
+}
 
 func splitOnDashDash(args []string) (before, after []string) {
 	for i, a := range args {

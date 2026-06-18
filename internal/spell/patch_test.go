@@ -2,96 +2,109 @@ package spell
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestApplyPatch(t *testing.T) {
-	cases := []struct {
-		name    string
-		argv    []string
-		ops     []PatchOp
-		want    []string
-		wantErr bool
-	}{
-		{"no ops", []string{"a", "b"}, nil, []string{"a", "b"}, false},
-		{"append end", []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "./...", "-v"}, false},
-		{"prepend", []string{"build"}, []PatchOp{{Op: "add", Path: "/0", Value: "-x"}}, []string{"-x", "build"}, false},
-		{"insert middle", []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}, []string{"run", "--fix", "./..."}, false},
-		{"replace element", []string{"-l", "."}, []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, []string{"-w", "."}, false},
-		{"remove element", []string{"mod", "tidy", "--diff"}, []PatchOp{{Op: "remove", Path: "/2"}}, []string{"mod", "tidy"}, false},
-		{"two removes (rust fmt)", []string{"fmt", "--", "--check"}, []PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}, []string{"fmt"}, false},
-		{"compose: insert then append", []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "--fix", "./...", "-v"}, false},
-		{"move", []string{"a", "b", "c"}, []PatchOp{{Op: "move", Path: "/0", From: "/2"}}, []string{"c", "a", "b"}, false},
-		{"copy", []string{"a", "b"}, []PatchOp{{Op: "copy", Path: "/-", From: "/0"}}, []string{"a", "b", "a"}, false},
-		{"test pass", []string{"go", "test"}, []PatchOp{{Op: "test", Path: "/0", Value: "go"}}, []string{"go", "test"}, false},
-		{"test fail", []string{"go", "test"}, []PatchOp{{Op: "test", Path: "/0", Value: "rustc"}}, nil, true},
-		{"index out of range", []string{"a"}, []PatchOp{{Op: "remove", Path: "/3"}}, nil, true},
-		{"replace past end", []string{"a"}, []PatchOp{{Op: "replace", Path: "/1", Value: "x"}}, nil, true},
-		{"add past end", []string{"a"}, []PatchOp{{Op: "add", Path: "/5", Value: "x"}}, nil, true},
-		{"dash on remove invalid", []string{"a"}, []PatchOp{{Op: "remove", Path: "/-"}}, nil, true},
-		{"leading zero invalid", []string{"a", "b"}, []PatchOp{{Op: "remove", Path: "/01"}}, nil, true},
+	// applies asserts a patch produces the expected argv.
+	applies := func(t *testing.T, argv []string, ops []PatchOp, want []string) {
+		t.Helper()
+		got, err := ApplyPatch(argv, ops)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := ApplyPatch(tc.argv, tc.ops)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("ApplyPatch = %v, want error", got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ApplyPatch: unexpected error: %v", err)
-			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("ApplyPatch = %v, want %v", got, tc.want)
-			}
-		})
+	// fails asserts a patch is rejected.
+	fails := func(t *testing.T, argv []string, ops []PatchOp) {
+		t.Helper()
+		_, err := ApplyPatch(argv, ops)
+		assert.Error(t, err)
 	}
+
+	t.Run("no ops", func(t *testing.T) {
+		applies(t, []string{"a", "b"}, nil, []string{"a", "b"})
+	})
+	t.Run("append end", func(t *testing.T) {
+		applies(t, []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "./...", "-v"})
+	})
+	t.Run("prepend", func(t *testing.T) {
+		applies(t, []string{"build"}, []PatchOp{{Op: "add", Path: "/0", Value: "-x"}}, []string{"-x", "build"})
+	})
+	t.Run("insert middle", func(t *testing.T) {
+		applies(t, []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}, []string{"run", "--fix", "./..."})
+	})
+	t.Run("replace element", func(t *testing.T) {
+		applies(t, []string{"-l", "."}, []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, []string{"-w", "."})
+	})
+	t.Run("remove element", func(t *testing.T) {
+		applies(t, []string{"mod", "tidy", "--diff"}, []PatchOp{{Op: "remove", Path: "/2"}}, []string{"mod", "tidy"})
+	})
+	t.Run("two removes (rust fmt)", func(t *testing.T) {
+		applies(t, []string{"fmt", "--", "--check"}, []PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}, []string{"fmt"})
+	})
+	t.Run("compose: insert then append", func(t *testing.T) {
+		applies(t, []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "--fix", "./...", "-v"})
+	})
+	t.Run("move", func(t *testing.T) {
+		applies(t, []string{"a", "b", "c"}, []PatchOp{{Op: "move", Path: "/0", From: "/2"}}, []string{"c", "a", "b"})
+	})
+	t.Run("copy", func(t *testing.T) {
+		applies(t, []string{"a", "b"}, []PatchOp{{Op: "copy", Path: "/-", From: "/0"}}, []string{"a", "b", "a"})
+	})
+	t.Run("test pass", func(t *testing.T) {
+		applies(t, []string{"go", "test"}, []PatchOp{{Op: "test", Path: "/0", Value: "go"}}, []string{"go", "test"})
+	})
+	t.Run("test fail", func(t *testing.T) {
+		fails(t, []string{"go", "test"}, []PatchOp{{Op: "test", Path: "/0", Value: "rustc"}})
+	})
+	t.Run("index out of range", func(t *testing.T) {
+		fails(t, []string{"a"}, []PatchOp{{Op: "remove", Path: "/3"}})
+	})
+	t.Run("replace past end", func(t *testing.T) {
+		fails(t, []string{"a"}, []PatchOp{{Op: "replace", Path: "/1", Value: "x"}})
+	})
+	t.Run("add past end", func(t *testing.T) {
+		fails(t, []string{"a"}, []PatchOp{{Op: "add", Path: "/5", Value: "x"}})
+	})
+	t.Run("dash on remove invalid", func(t *testing.T) {
+		fails(t, []string{"a"}, []PatchOp{{Op: "remove", Path: "/-"}})
+	})
+	t.Run("leading zero invalid", func(t *testing.T) {
+		fails(t, []string{"a", "b"}, []PatchOp{{Op: "remove", Path: "/01"}})
+	})
 
 	// Input must never be mutated.
 	base := []string{"a", "b"}
-	if _, err := ApplyPatch(base, []PatchOp{{Op: "add", Path: "/-", Value: "c"}}); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(base, []string{"a", "b"}) {
-		t.Errorf("base mutated: %v", base)
-	}
+	_, err := ApplyPatch(base, []PatchOp{{Op: "add", Path: "/-", Value: "c"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, base, "base mutated")
 }
 
 // TestApplyPatchConformance proves our flat-array applier agrees with the
 // canonical RFC 6902 implementation (evanphx/json-patch) on the argv subset we
 // use, so "follow the RFC" is verified, not just asserted.
 func TestApplyPatchConformance(t *testing.T) {
-	cases := []struct {
-		argv []string
-		ops  []PatchOp
-	}{
-		{[]string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		{[]string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
-		{[]string{"-l", "."}, []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
-		{[]string{"mod", "tidy", "--diff"}, []PatchOp{{Op: "remove", Path: "/2"}}},
-		{[]string{"fmt", "--", "--check"}, []PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
-		{[]string{"a", "b", "c"}, []PatchOp{{Op: "move", Path: "/0", From: "/2"}}},
-		{[]string{"a", "b"}, []PatchOp{{Op: "copy", Path: "/-", From: "/0"}}},
-		{[]string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}}},
+	// agrees asserts our flat-array applier matches the reference impl.
+	agrees := func(t *testing.T, argv []string, ops []PatchOp) {
+		t.Helper()
+		got, err := ApplyPatch(argv, ops)
+		require.NoError(t, err)
+		ref, err := applyWithEvanphx(argv, ops)
+		require.NoError(t, err)
+		assert.Equal(t, ref, got)
 	}
-	for i, tc := range cases {
-		got, err := ApplyPatch(tc.argv, tc.ops)
-		if err != nil {
-			t.Fatalf("case %d: ApplyPatch: %v", i, err)
-		}
-		ref, err := applyWithEvanphx(tc.argv, tc.ops)
-		if err != nil {
-			t.Fatalf("case %d: evanphx: %v", i, err)
-		}
-		if !reflect.DeepEqual(got, ref) {
-			t.Errorf("case %d: ApplyPatch = %v, evanphx = %v", i, got, ref)
-		}
-	}
+
+	agrees(t, []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/-", Value: "-v"}})
+	agrees(t, []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}})
+	agrees(t, []string{"-l", "."}, []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}})
+	agrees(t, []string{"mod", "tidy", "--diff"}, []PatchOp{{Op: "remove", Path: "/2"}})
+	agrees(t, []string{"fmt", "--", "--check"}, []PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}})
+	agrees(t, []string{"a", "b", "c"}, []PatchOp{{Op: "move", Path: "/0", From: "/2"}})
+	agrees(t, []string{"a", "b"}, []PatchOp{{Op: "copy", Path: "/-", From: "/0"}})
+	agrees(t, []string{"run", "./..."}, []PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}})
 }
 
 // applyWithEvanphx runs ops over argv via the reference RFC 6902 library by
@@ -130,7 +143,7 @@ var goldenBuiltins = map[string]Spec{
 	"bash": {
 		Name:  "bash",
 		Needs: []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"shellcheck": {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}},
 		},
 	},
@@ -139,7 +152,7 @@ var goldenBuiltins = map[string]Spec{
 		Needs:      []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
 		Provides:   []string{"gen/**"},
 		VersionCmd: []string{"buf", "--version"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"buf-build":    {Cmd: "buf", Args: []string{"build"}},
 			"buf-generate": {Cmd: "buf", Args: []string{"generate"}},
 			"buf-lint": {Cmd: "buf", Args: []string{"lint"}, Charms: map[string]Charm{
@@ -153,45 +166,26 @@ var goldenBuiltins = map[string]Spec{
 	"buzz": {
 		Name:  "buzz",
 		Needs: []string{"**/*.buzz"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"buzz-check": {Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}},
 			"buzz-test":  {Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}},
 			"magus-buzz": {Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}},
 		},
 	},
-	"compose": {
-		Name:  "compose",
-		Needs: []string{"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml", ".dockerignore", "Dockerfile", "**/Dockerfile"},
-		Targets: map[string]Target{
-			"docker-compose-build":  {Cmd: "docker", Args: []string{"compose", "build"}},
-			"docker-compose-config": {Cmd: "docker", Args: []string{"compose", "config", "--quiet"}},
-		},
-	},
 	"cosign": {
 		Name:       "cosign",
 		VersionCmd: []string{"cosign", "version"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"cosign-sign":   {Cmd: "cosign", Args: []string{"sign", "--yes"}},
 			"cosign-verify": {Cmd: "cosign", Args: []string{"verify"}},
 			"cosign-attest": {Cmd: "cosign", Args: []string{"attest", "--yes"}},
-		},
-	},
-	"css": {
-		Name:   "css",
-		Needs:  []string{"**/*.css", "**/*.scss", "**/*.sass", "**/*.less", ".stylelintrc", ".stylelintrc.json", ".stylelintrc.yaml"},
-		Claims: []string{"**/*.css", "**/*.scss", "**/*.sass", "**/*.less"},
-		Targets: map[string]Target{
-			"prettier": {Cmd: "prettier", Args: []string{"--check", "**/*.css", "**/*.scss", "**/*.sass", "**/*.less"}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
-			}},
-			"stylelint": {Cmd: "stylelint", Args: []string{"**/*.css", "**/*.scss", "**/*.sass", "**/*.less"}},
 		},
 	},
 	"docker": {
 		Name:       "docker",
 		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
 		VersionCmd: []string{"docker", "--version"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"docker-build":       {Cmd: "docker", Args: []string{"build"}},
 			"docker-buildx":      {Cmd: "docker", Args: []string{"buildx", "build"}},
 			"docker-build-check": {Cmd: "docker", Args: []string{"build", "--check"}},
@@ -202,7 +196,7 @@ var goldenBuiltins = map[string]Spec{
 		Name:       "go",
 		Needs:      []string{"**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"go-build":    {Cmd: "go", Args: []string{"build"}},
 			"go-clean":    {Cmd: "go", Args: []string{"clean", "./..."}},
 			"go-generate": {Cmd: "go", Args: []string{"generate", "./..."}},
@@ -229,64 +223,11 @@ var goldenBuiltins = map[string]Spec{
 			"govulncheck": {Cmd: "go", Args: []string{"tool", "govulncheck", "./..."}},
 		},
 	},
-	"html": {
-		Name:   "html",
-		Needs:  []string{"**/*.html", "**/*.htm", ".htmlhintrc"},
-		Claims: []string{"**/*.html", "**/*.htm"},
-		Targets: map[string]Target{
-			"htmlhint": {Cmd: "htmlhint", Args: []string{"**/*.html", "**/*.htm"}},
-			"prettier": {Cmd: "prettier", Args: []string{"--check", "**/*.html", "**/*.htm"}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
-			}},
-		},
-	},
-	"javascript": {
-		Name:       "js",
-		Needs:      []string{"**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json"},
-		Claims:     []string{"**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
-		Opaque:     true,
-		VersionCmd: []string{"node", "--version"},
-		Targets: map[string]Target{
-			"eslint":    {Cmd: "pnpm", Args: []string{"exec", "eslint", "."}},
-			"preflight": {},
-			"prettier": {Cmd: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
-			}},
-			"vitest": {Cmd: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]Charm{
-				"gha": {Ops: []PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
-			}},
-		},
-	},
-	"json": {
-		Name:   "json",
-		Needs:  []string{"**/*.json", "**/*.jsonc", "biome.json", ".prettierrc.json"},
-		Claims: []string{"**/*.json", "**/*.jsonc"},
-		Targets: map[string]Target{
-			"prettier": {Cmd: "prettier", Args: []string{"--check", "**/*.json", "**/*.jsonc"}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
-			}},
-		},
-	},
-	"kind": {
-		Name:  "kind",
-		Needs: []string{"kind-cluster.yaml"},
-		Targets: map[string]Target{
-			"kind-create-cluster": {Cmd: "sh", Args: []string{"-c", "kind create cluster --name \"$(basename \"$PWD\")\" --config kind-cluster.yaml"}},
-			"kind-delete-cluster": {Cmd: "sh", Args: []string{"-c", "kind delete cluster --name \"$(basename \"$PWD\")\""}},
-		},
-	},
-	"kustomize": {
-		Name:  "kustomize",
-		Needs: []string{"kustomization.yaml", "kustomization.yml", "Kustomization", "**/*.yaml", "**/*.yml"},
-		Targets: map[string]Target{
-			"kustomize-build": {Cmd: "kustomize", Args: []string{"build", "."}},
-		},
-	},
 	"markdown": {
 		Name:   "md",
 		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"},
 		Claims: []string{"**/*.md", "**/*.mdx"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"markdownlint": {Cmd: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}},
 			"prettier": {Cmd: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]Charm{
 				"rw": {Ops: []PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
@@ -297,7 +238,7 @@ var goldenBuiltins = map[string]Spec{
 		Name:       "py",
 		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		VersionCmd: []string{"python3", "--version"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"uv-build": {Cmd: "uv", Args: []string{"build"}},
 			"uv-clean": {Cmd: "uv", Args: []string{"clean"}},
 			"pytest": {Cmd: "uv", Args: []string{"run", "pytest"}, Charms: map[string]Charm{
@@ -317,7 +258,7 @@ var goldenBuiltins = map[string]Spec{
 		Name:       "rs",
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		VersionCmd: []string{"rustc", "--version"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"cargo-build":  {Cmd: "cargo", Args: []string{"build", "--release"}},
 			"cargo-clean":  {Cmd: "cargo", Args: []string{"clean"}},
 			"cargo-clippy": {Cmd: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}},
@@ -327,42 +268,13 @@ var goldenBuiltins = map[string]Spec{
 			"cargo-test": {Cmd: "cargo", Args: []string{"test"}},
 		},
 	},
-	"sql": {
-		Name:  "sql",
-		Needs: []string{"**/*.sql", "**/*.SQL", ".sqlfluff"},
-		Targets: map[string]Target{
-			"sqlfluff": {Cmd: "sqlfluff", Args: []string{"lint", "."}, Charms: map[string]Charm{
-				"rw":  {Ops: []PatchOp{{Op: "replace", Path: "/0", Value: "fix"}}},
-				"gha": {Ops: []PatchOp{{Op: "add", Path: "/1", Value: "--format=github-annotation-native"}}},
-			}},
-		},
-	},
-	"terraform": {
-		Name:       "tf",
-		Needs:      []string{"**/*.tf", "**/*.tfvars", "**/*.tf.json", ".terraform.lock.hcl"},
-		VersionCmd: []string{"terraform", "version"},
-		Targets: map[string]Target{
-			"terraform-fmt": {Cmd: "terraform", Args: []string{"fmt", "-check", "-recursive", "."}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "remove", Path: "/1"}}},
-			}},
-		},
-	},
-	"toml": {
-		Name:  "toml",
-		Needs: []string{"**/*.toml", "taplo.toml", ".taplo.toml"},
-		Targets: map[string]Target{
-			"taplo": {Cmd: "taplo", Args: []string{"check"}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "replace", Path: "/0", Value: "fmt"}}},
-			}},
-		},
-	},
 	"typescript": {
 		Name:       "ts",
 		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json"},
 		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
-		Targets: map[string]Target{
+		Ops: map[string]Op{
 			"eslint":    {Cmd: "pnpm", Args: []string{"exec", "eslint", "."}},
 			"preflight": {},
 			"prettier": {Cmd: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]Charm{
@@ -374,49 +286,20 @@ var goldenBuiltins = map[string]Spec{
 			}},
 		},
 	},
-	"yaml": {
-		Name:   "yaml",
-		Needs:  []string{"**/*.yaml", "**/*.yml", ".yamllint", ".yamllint.yaml"},
-		Claims: []string{"**/*.yaml", "**/*.yml"},
-		Targets: map[string]Target{
-			"yamlfmt": {Cmd: "yamlfmt", Args: []string{"-lint", "."}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "remove", Path: "/0"}}},
-			}},
-			"yamllint": {Cmd: "yamllint", Args: []string{"."}},
-		},
-	},
-	"zig": {
-		Name:       "zig",
-		Needs:      []string{"**/*.zig", "**/*.zon", "build.zig", "build.zig.zon"},
-		VersionCmd: []string{"zig", "version"},
-		Targets: map[string]Target{
-			"zig-build": {Cmd: "zig", Args: []string{"build"}},
-			"clean":     {Cmd: "rm", Args: []string{"-rf", "zig-out", ".zig-cache"}},
-			"zig-fmt": {Cmd: "zig", Args: []string{"fmt", "--check", "."}, Charms: map[string]Charm{
-				"rw": {Ops: []PatchOp{{Op: "remove", Path: "/1"}}},
-			}},
-			"zig-build-test": {Cmd: "zig", Args: []string{"build", "test"}},
-		},
-	},
 }
 
 func TestBuiltinsMatchGolden(t *testing.T) {
 	got := builtinsByDir()
-	if len(got) != len(goldenBuiltins) {
-		t.Fatalf("registry has %d built-ins, golden has %d", len(got), len(goldenBuiltins))
-	}
+	require.Len(t, got, len(goldenBuiltins), "registry/golden size mismatch")
 	for dir, want := range goldenBuiltins {
 		g, ok := got[dir]
-		if !ok {
-			t.Errorf("registry missing built-in %q", dir)
+		if !assert.Truef(t, ok, "registry missing built-in %q", dir) {
 			continue
 		}
 		// DocTargets is resolution-path metadata (which targets are function
 		// handlers), not part of a spell's semantic identity, and is not pinned by
 		// this golden; clear it before comparing the semantic fields.
-		g.DocTargets = nil
-		if !reflect.DeepEqual(g, want) {
-			t.Errorf("built-in %q:\n got: %#v\nwant: %#v", dir, g, want)
-		}
+		g.DocOps = nil
+		assert.Equalf(t, want, g, "built-in %q", dir)
 	}
 }

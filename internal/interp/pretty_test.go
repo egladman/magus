@@ -9,36 +9,29 @@ import (
 	// tests. It registers the backend and host modules before any test runs.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/interp/engine"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPrettyPrint_StringValue(t *testing.T) {
 	var sb strings.Builder
 	interp.PrettyPrint(&sb, engine.StringValue("hello"), interp.PrettyOpts{})
-	if !strings.Contains(sb.String(), "hello") {
-		t.Errorf("PrettyPrint output %q should contain %q", sb.String(), "hello")
-	}
+	assert.Contains(t, sb.String(), "hello")
 }
 
 func TestPrettyPrint_NilValue(t *testing.T) {
 	var sb strings.Builder
 	interp.PrettyPrint(&sb, engine.NilValue, interp.PrettyOpts{})
-	if !strings.Contains(sb.String(), "nil") {
-		t.Errorf("PrettyPrint output %q should contain %q", sb.String(), "nil")
-	}
+	assert.Contains(t, sb.String(), "nil")
 }
 
 func TestPrettyPrint_NumberValue(t *testing.T) {
 	var sb strings.Builder
 	interp.PrettyPrint(&sb, engine.NumberValue(42), interp.PrettyOpts{})
-	if !strings.Contains(sb.String(), "42") {
-		t.Errorf("PrettyPrint output %q should contain %q", sb.String(), "42")
-	}
+	assert.Contains(t, sb.String(), "42")
 }
 
 func TestPrettyPrint_BoolValue(t *testing.T) {
 	var sb strings.Builder
 	interp.PrettyPrint(&sb, engine.BoolValue(true), interp.PrettyOpts{})
-	if !strings.Contains(sb.String(), "true") {
-		t.Errorf("PrettyPrint output %q should contain %q", sb.String(), "true")
-	}
+	assert.Contains(t, sb.String(), "true")
 }

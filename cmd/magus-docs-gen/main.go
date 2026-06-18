@@ -15,10 +15,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/std"
+	"github.com/egladman/magus/hostbuzz"
+	"github.com/egladman/magus/std"
 
 	// Blank imports so all module init() functions run, populating std.All().
-	_ "github.com/egladman/magus/internal/std"
+	_ "github.com/egladman/magus/std"
 )
 
 func main() {
@@ -85,8 +86,8 @@ func renderModule(m std.Module) string {
 			if meth.Doc != "" {
 				fmt.Fprintf(&b, "%s\n\n", meth.Doc)
 			}
-			fmt.Fprintf(&b, "**Signature:** `%s`\n\n", std.BuzzSignature(m, meth))
-			if equiv, dup := std.NativeBuzzEquiv(m.Name, meth.Name); dup {
+			fmt.Fprintf(&b, "**Signature:** `%s`\n\n", hostbuzz.BuzzSignature(m, meth))
+			if equiv, dup := hostbuzz.NativeBuzzEquiv(m.Name, meth.Name); dup {
 				fmt.Fprintf(&b, "**Also in Buzz's stdlib:** `%s` — the magus form is sandbox-aware.\n\n", equiv)
 			}
 			if len(meth.Args) > 0 {

@@ -24,7 +24,7 @@ type PlanOptions struct {
 // set using target as the CI target (typically "ci"). Adaptive sharding is applied
 // when runtime history is available at the resolved HistoryPath.
 func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (types.ShardPlan, error) {
-	targets, source, err := m.ExpandAffected(ctx, target, "")
+	targets, source, _, err := m.ExpandAffected(ctx, target, "")
 	if err != nil {
 		return types.ShardPlan{}, err
 	}

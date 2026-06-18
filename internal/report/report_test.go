@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // failWriter returns an error on every Write. Used to verify that the
@@ -27,33 +28,23 @@ func (failWriter) Write(_ []byte) (int, error) { return 0, fmt.Errorf("disk full
 func TestRecordSurfacesDrainErrorViaStats(t *testing.T) {
 	t.Parallel()
 	w := NewWriter(failWriter{}, WithBlockOnFull())
-	if err := Record(w, CacheHit{Project: "p", Target: "build"}); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
-	if err := Record(w, CacheHit{Project: "p", Target: "test"}); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "build"}))
+	require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "test"}))
 	_ = w.Close()
 	st := w.Stats()
-	if st.LastErr == nil {
-		t.Fatalf("Stats.LastErr = nil; want non-nil after Close on failing writer")
-	}
+	assert.Error(t, st.LastErr, "Stats.LastErr should be non-nil after Close on failing writer")
 }
 
 // TestSchemaFieldOnEveryLine asserts that every emitted JSONL line
-// carries "schema":2 as the first key.
+// carries "schema":3 as the first key.
 func TestSchemaFieldOnEveryLine(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	w := NewWriter(&buf, WithBlockOnFull())
 	for i := 0; i < 5; i++ {
-		if err := Record(w, CacheHit{Project: "p", Target: "build"}); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "build"}))
 	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, w.Close())
 	sc := bufio.NewScanner(&buf)
 	for sc.Scan() {
 		line := sc.Bytes()
@@ -61,15 +52,9 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 			Schema int    `json:"schema"`
 			Type   string `json:"type"`
 		}
-		if err := json.Unmarshal(line, &head); err != nil {
-			t.Fatalf("unmarshal %q: %v", line, err)
-		}
-		if head.Schema != Schema {
-			t.Errorf("schema = %d, want %d on line %q", head.Schema, Schema, line)
-		}
-		if head.Type != TypeCacheHit {
-			t.Errorf("type = %q, want %q", head.Type, TypeCacheHit)
-		}
+		require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
+		assert.Equal(t, Schema, head.Schema, "schema on line %q", line)
+		assert.Equal(t, TypeTargetResult, head.Type)
 	}
 }
 
@@ -79,13 +64,11 @@ func TestRoundTripAllTypes(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	w, err := OpenWriter(path, WithBlockOnFull())
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err)
 	events := []any{
-		CacheHit{Project: "svc-a", Target: "build", DurationMs: 342},
-		CacheMiss{Project: "svc-b", Target: "build", DurationMs: 12},
-		CacheError{Project: "svc-c", Target: "test", DurationMs: 1053, Message: "exit status 1"},
+		TargetResult{Status: "ok", CacheHit: true, Project: "svc-a", Target: "build", DurationMs: 342},
+		TargetResult{Status: "ok", Project: "svc-b", Target: "build", DurationMs: 12},
+		TargetResult{Project: "svc-c", Target: "test", Status: "failed", DurationMs: 1053, Error: "exit status 1"},
 		GraphBuild{Nodes: 120, DurationMs: 8},
 		GraphQuery{Op: "affected", Nodes: 120, Seeds: 3, Strategy: "reverse", ResultCount: 12, DurationMs: 4},
 		GraphError{Op: "build", Message: "cycle"},
@@ -94,43 +77,29 @@ func TestRoundTripAllTypes(t *testing.T) {
 		ShardTotal{Shard: "0", NShards: 4, DurationMs: 78321},
 	}
 	for _, e := range events {
-		if err := recordAny(w, e); err != nil {
-			t.Fatalf("Record %T: %v", e, err)
-		}
+		require.NoError(t, recordAny(w, e), "Record %T", e)
 	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, w.Close())
 
 	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer f.Close()
 
 	wantTypes := []string{
-		TypeCacheHit, TypeCacheMiss, TypeCacheError,
+		TypeTargetResult, TypeTargetResult, TypeTargetResult,
 		TypeGraphBuild, TypeGraphQuery, TypeGraphError,
 		TypeFlake, TypeShardSetup, TypeShardTotal,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
-		if i >= len(wantTypes) {
-			t.Fatalf("got more lines than expected: %d", i+1)
-		}
+		require.Less(t, i, len(wantTypes), "got more lines than expected")
 		var head struct {
 			Schema int    `json:"schema"`
 			Type   string `json:"type"`
 		}
-		if err := json.Unmarshal(sc.Bytes(), &head); err != nil {
-			t.Fatalf("line %d unmarshal: %v -- %q", i, err, sc.Bytes())
-		}
-		if head.Schema != Schema {
-			t.Errorf("line %d schema: got %d, want %d", i, head.Schema, Schema)
-		}
-		if head.Type != wantTypes[i] {
-			t.Errorf("line %d type: got %q, want %q", i, head.Type, wantTypes[i])
-		}
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &head), "line %d unmarshal: %q", i, sc.Bytes())
+		assert.Equal(t, Schema, head.Schema, "line %d schema", i)
+		assert.Equal(t, wantTypes[i], head.Type, "line %d type", i)
 	}
 }
 
@@ -143,29 +112,19 @@ func TestAppend(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	for i := 0; i < 2; i++ {
 		w, err := OpenWriter(path, WithBlockOnFull())
-		if err != nil {
-			t.Fatalf("Open round %d: %v", i, err)
-		}
-		if err := Record(w, CacheHit{Project: "svc-a", Target: "build", DurationMs: 10}); err != nil {
-			t.Fatalf("Record round %d: %v", i, err)
-		}
-		if err := w.Close(); err != nil {
-			t.Fatalf("Close round %d: %v", i, err)
-		}
+		require.NoError(t, err, "Open round %d", i)
+		require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "svc-a", Target: "build", DurationMs: 10}), "Record round %d", i)
+		require.NoError(t, w.Close(), "Close round %d", i)
 	}
 	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer f.Close()
 	var count int
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		count++
 	}
-	if count != 2 {
-		t.Errorf("got %d lines after two opens, want 2", count)
-	}
+	assert.Equal(t, 2, count, "lines after two opens")
 }
 
 // TestConcurrentWrites spawns N goroutines that all Record. With
@@ -176,9 +135,7 @@ func TestConcurrentWrites(t *testing.T) {
 	const perG = 16
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	w, err := OpenWriter(path, WithBlockOnFull())
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err)
 
 	var wg sync.WaitGroup
 	for i := 0; i < goroutines; i++ {
@@ -186,44 +143,30 @@ func TestConcurrentWrites(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < perG; j++ {
-				_ = Record(w, CacheHit{Project: "svc-a", Target: "build", DurationMs: 1})
+				_ = Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "svc-a", Target: "build", DurationMs: 1})
 			}
 		}()
 	}
 	wg.Wait()
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	require.NoError(t, w.Close())
 
 	st := w.Stats()
 	want := uint64(goroutines * perG)
-	if st.Recorded != want {
-		t.Errorf("Recorded = %d, want %d", st.Recorded, want)
-	}
-	if st.Flushed != want {
-		t.Errorf("Flushed = %d, want %d", st.Flushed, want)
-	}
-	if st.Dropped != 0 {
-		t.Errorf("Dropped = %d, want 0 under WithBlockOnFull", st.Dropped)
-	}
+	assert.Equal(t, want, st.Recorded)
+	assert.Equal(t, want, st.Flushed)
+	assert.Zero(t, st.Dropped, "Dropped should be 0 under WithBlockOnFull")
 
 	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer f.Close()
 	var count int
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		var m map[string]any
-		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
-			t.Errorf("corrupt line %d: %v -- %q", count+1, err, sc.Bytes())
-		}
+		assert.NoError(t, json.Unmarshal(sc.Bytes(), &m), "corrupt line %d: %q", count+1, sc.Bytes())
 		count++
 	}
-	if uint64(count) != want {
-		t.Errorf("got %d lines, want %d", count, want)
-	}
+	assert.Equal(t, want, uint64(count))
 }
 
 // TestDropOnFullPolicy verifies the default policy: when the queue is
@@ -236,19 +179,14 @@ func TestDropOnFullPolicy(t *testing.T) {
 	w := NewWriter(bw, WithQueueSize(4))
 	const total = 200
 	for i := 0; i < total; i++ {
-		_ = Record(w, CacheHit{Project: "p", Target: "t"})
+		_ = Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "t"})
 	}
 	// Release the drain goroutine so Close can complete.
 	close(bw.ch)
 	_ = w.Close()
 	st := w.Stats()
-	if st.Recorded+st.Dropped != uint64(total) {
-		t.Errorf("Recorded(%d) + Dropped(%d) = %d, want %d",
-			st.Recorded, st.Dropped, st.Recorded+st.Dropped, total)
-	}
-	if st.Dropped == 0 {
-		t.Errorf("Dropped = 0; want some drops with a 4-slot queue and a stalled writer")
-	}
+	assert.Equal(t, uint64(total), st.Recorded+st.Dropped, "Recorded + Dropped should account for every event")
+	assert.NotZero(t, st.Dropped, "want some drops with a 4-slot queue and a stalled writer")
 }
 
 // blockingWriter blocks every Write until ch is closed.
@@ -269,90 +207,51 @@ func (b *blockingWriter) Write(p []byte) (int, error) {
 // TestFilterIncludeOnly admits only listed types.
 func TestFilterIncludeOnly(t *testing.T) {
 	t.Parallel()
-	f, err := ParseFilter([]string{"+cache.hit"})
-	if err != nil {
-		t.Fatalf("ParseFilter: %v", err)
-	}
+	f, err := ParseFilter([]string{"+target.result"})
+	require.NoError(t, err)
 	var buf bytes.Buffer
 	w := NewWriter(&buf, WithBlockOnFull(), WithFilter(f))
-	if err := Record(w, CacheHit{Project: "p", Target: "t"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Record(w, CacheMiss{Project: "p", Target: "t"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Record(w, GraphBuild{Nodes: 10}); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "t"}))
+	require.NoError(t, Record(w, TargetResult{Status: "ok", Project: "p", Target: "t"}))
+	require.NoError(t, Record(w, GraphBuild{Nodes: 10}))
+	require.NoError(t, w.Close())
 	st := w.Stats()
-	if st.Recorded != 1 {
-		t.Errorf("Recorded = %d, want 1", st.Recorded)
-	}
-	if st.Filtered != 2 {
-		t.Errorf("Filtered = %d, want 2", st.Filtered)
-	}
+	// hit and miss are both target.result now, so the include filter admits both.
+	assert.Equal(t, uint64(2), st.Recorded)
+	assert.Equal(t, uint64(1), st.Filtered)
 }
 
 // TestFilterExcludeOnly drops listed types, admits the rest.
 func TestFilterExcludeOnly(t *testing.T) {
 	t.Parallel()
 	f, err := ParseFilter([]string{"-graph.build", "-graph.query"})
-	if err != nil {
-		t.Fatalf("ParseFilter: %v", err)
-	}
+	require.NoError(t, err)
 	var buf bytes.Buffer
 	w := NewWriter(&buf, WithBlockOnFull(), WithFilter(f))
-	if err := Record(w, CacheHit{Project: "p", Target: "t"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Record(w, GraphBuild{Nodes: 10}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Record(w, GraphQuery{Op: "x"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Record(w, GraphError{Message: "boom"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "t"}))
+	require.NoError(t, Record(w, GraphBuild{Nodes: 10}))
+	require.NoError(t, Record(w, GraphQuery{Op: "x"}))
+	require.NoError(t, Record(w, GraphError{Message: "boom"}))
+	require.NoError(t, w.Close())
 	st := w.Stats()
-	if st.Recorded != 2 {
-		t.Errorf("Recorded = %d, want 2 (cache.hit + graph.error)", st.Recorded)
-	}
-	if st.Filtered != 2 {
-		t.Errorf("Filtered = %d, want 2 (graph.build + graph.query)", st.Filtered)
-	}
+	assert.Equal(t, uint64(2), st.Recorded, "want 2 (cache.hit + graph.error)")
+	assert.Equal(t, uint64(2), st.Filtered, "want 2 (graph.build + graph.query)")
 }
 
 func TestFilterEmptyAdmitsAll(t *testing.T) {
 	t.Parallel()
 	f, err := ParseFilter(nil)
-	if err != nil {
-		t.Fatalf("ParseFilter: %v", err)
-	}
-	if f != nil {
-		t.Errorf("ParseFilter(nil) = %v, want nil filter", f)
-	}
+	require.NoError(t, err)
+	assert.Nil(t, f, "ParseFilter(nil) should return nil filter")
 	f2, err := ParseFilter([]string{"", " ", "\t"})
-	if err != nil {
-		t.Fatalf("ParseFilter(blanks): %v", err)
-	}
-	if f2 != nil {
-		t.Errorf("ParseFilter(blanks) = %v, want nil filter", f2)
-	}
+	require.NoError(t, err)
+	assert.Nil(t, f2, "ParseFilter(blanks) should return nil filter")
 }
 
 func TestFilterMalformedReturnsError(t *testing.T) {
 	t.Parallel()
 	_, err := ParseFilter([]string{"+", "-"})
-	if err == nil {
-		t.Errorf("ParseFilter(only-malformed) = nil error; want error")
-	}
+	assert.Error(t, err, "ParseFilter(only-malformed) should return an error")
 }
 
 func TestRecordUnregisteredType(t *testing.T) {
@@ -360,36 +259,26 @@ func TestRecordUnregisteredType(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewWriter(&buf, WithBlockOnFull())
 	err := Record(w, struct{ X int }{X: 1})
-	if err == nil {
-		t.Errorf("Record on unregistered type = nil error; want error")
-	}
+	assert.Error(t, err, "Record on unregistered type should return an error")
 	_ = w.Close()
 }
 
 func TestRecordNilWriterIsNoop(t *testing.T) {
 	t.Parallel()
-	if err := Record(nil, CacheHit{Project: "p"}); err != nil {
-		t.Errorf("Record on nil Writer = %v; want nil", err)
-	}
+	assert.NoError(t, Record(nil, TargetResult{Status: "ok", CacheHit: true, Project: "p"}), "Record on nil Writer should be a no-op")
 }
 
 func TestCacheRunOptions(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	w, err := OpenWriter(path, WithBlockOnFull())
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err)
 
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	src := filepath.Join(root, "pkg", "main.go")
-	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
+	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644))
 	out := filepath.Join(root, "pkg", "out.bin")
 	spec := cache.Spec{
 		ProjectPath:   "pkg",
@@ -402,74 +291,49 @@ func TestCacheRunOptions(t *testing.T) {
 	opts := RunOptions(w)
 
 	c, err := cache.Open(cdir, cache.WithMutable(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ctx := t.Context()
-	if _, err := c.Run(ctx, spec, func(_ context.Context) error {
+	_, err = c.Run(ctx, spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("bin"), 0o755)
-	}, opts...); err != nil {
-		t.Fatalf("run (miss): %v", err)
-	}
+	}, opts...)
+	require.NoError(t, err, "run (miss)")
 
 	c2, err := cache.Open(cdir, cache.WithMutable(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c2.Run(ctx, spec, func(_ context.Context) error {
+	require.NoError(t, err)
+	_, err = c2.Run(ctx, spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("bin"), 0o755)
-	}, opts...); err != nil {
-		t.Fatalf("run (hit): %v", err)
-	}
+	}, opts...)
+	require.NoError(t, err, "run (hit)")
 
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, w.Close())
 
 	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer f.Close()
 
-	var types []string
+	var results []TargetResult
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		var head struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(sc.Bytes(), &head); err != nil {
-			t.Fatalf("unmarshal: %v", err)
-		}
-		types = append(types, head.Type)
+		var ev TargetResult
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &ev), "unmarshal")
+		results = append(results, ev)
 	}
-	if len(types) != 2 {
-		t.Fatalf("got %d events, want 2: %v", len(types), types)
-	}
-	if types[0] != TypeCacheMiss {
-		t.Errorf("first event type = %q, want %q", types[0], TypeCacheMiss)
-	}
-	if types[1] != TypeCacheHit {
-		t.Errorf("second event type = %q, want %q", types[1], TypeCacheHit)
-	}
+	require.Len(t, results, 2, "want 2 events: %v", results)
+	// Both are target.result; the first run is a miss, the replay a hit.
+	assert.False(t, results[0].CacheHit, "first event cache_hit should be false (miss)")
+	assert.True(t, results[1].CacheHit, "second event cache_hit should be true (hit)")
 }
 
 func TestWriterContextRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	w, err := OpenWriter(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer w.Close()
 	ctx := WithWriter(context.Background(), w)
 	got := WriterFromContext(ctx)
-	if got != w {
-		t.Errorf("FromContext: got %p, want %p", got, w)
-	}
-	if WriterFromContext(context.Background()) != nil {
-		t.Error("FromContext on plain ctx should return nil")
-	}
+	assert.Same(t, w, got, "FromContext should return the stored writer")
+	assert.Nil(t, WriterFromContext(context.Background()), "FromContext on plain ctx should return nil")
 }
 
 // TestCloseIsIdempotent guards against double-close panic on the channel.
@@ -477,12 +341,8 @@ func TestCloseIsIdempotent(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	w := NewWriter(&buf)
-	if err := w.Close(); err != nil {
-		t.Fatalf("first Close: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("second Close: %v", err)
-	}
+	require.NoError(t, w.Close(), "first Close")
+	require.NoError(t, w.Close(), "second Close")
 }
 
 // TestConcurrentRecordAndClose verifies that a concurrent Record and Close
@@ -492,24 +352,23 @@ func TestCloseIsIdempotent(t *testing.T) {
 // on a channel that producers can still send to.
 func TestConcurrentRecordAndClose(t *testing.T) {
 	t.Parallel()
-	for range 50 {
-		var buf bytes.Buffer
-		w := NewWriter(&buf, WithBlockOnFull())
-		var wg sync.WaitGroup
-		for range 8 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for range 32 {
-					_ = Record(w, CacheHit{Project: "p", Target: "t"})
-				}
-			}()
+	assert.NotPanics(t, func() {
+		for range 50 {
+			var buf bytes.Buffer
+			w := NewWriter(&buf, WithBlockOnFull())
+			var wg sync.WaitGroup
+			for range 8 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for range 32 {
+						_ = Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "t"})
+					}
+				}()
+			}
+			// Close races with the goroutines above; must not panic.
+			_ = w.Close()
+			wg.Wait()
 		}
-		// Close races with the goroutines above; must not panic.
-		_ = w.Close()
-		wg.Wait()
-	}
+	})
 }
-
-// ensure errors package is referenced in case we add error-matching tests.
-var _ = errors.Is

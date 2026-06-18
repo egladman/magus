@@ -275,14 +275,15 @@ func readMisses(ctx context.Context, path string) ([]missBuild, error) {
 		if err := codec.Unmarshal(line, &head); err != nil {
 			continue
 		}
-		if head.Type != report.TypeCacheMiss {
+		if head.Type != report.TypeTargetResult {
 			continue
 		}
-		var ev report.CacheMiss
+		var ev report.TargetResult
 		if err := codec.Unmarshal(line, &ev); err != nil {
 			continue
 		}
-		if ev.DurationMs <= 0 {
+		// A "miss" is a fresh, successful run (not a cache replay) with a real duration.
+		if ev.CacheHit || ev.Status != "ok" || ev.DurationMs <= 0 {
 			continue
 		}
 		out = append(out, missBuild{

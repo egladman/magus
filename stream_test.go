@@ -6,6 +6,9 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestReadBatches_NewlineMode verifies that blank-line-delimited batches are
@@ -19,20 +22,7 @@ func TestReadBatches_NewlineMode(t *testing.T) {
 		got = append(got, batch)
 	}
 	want := [][]string{{"a", "b"}, {"c", "d"}}
-	if len(got) != len(want) {
-		t.Fatalf("readBatches (newline): got %d batches, want %d; batches=%v", len(got), len(want), got)
-	}
-	for i, b := range got {
-		if len(b) != len(want[i]) {
-			t.Errorf("batch[%d] = %v, want %v", i, b, want[i])
-			continue
-		}
-		for j, v := range b {
-			if v != want[i][j] {
-				t.Errorf("batch[%d][%d] = %q, want %q", i, j, v, want[i][j])
-			}
-		}
-	}
+	assert.Equal(t, want, got)
 }
 
 // TestReadBatches_TrailingNoBoundary verifies that a trailing batch with no
@@ -45,9 +35,7 @@ func TestReadBatches_TrailingNoBoundary(t *testing.T) {
 	for batch := range ch {
 		got = append(got, batch)
 	}
-	if len(got) != 1 || len(got[0]) != 2 {
-		t.Fatalf("readBatches (trailing): got %v, want [[x y]]", got)
-	}
+	assert.Equal(t, [][]string{{"x", "y"}}, got)
 }
 
 // TestReadBatches_NullMode verifies NUL-separated batches with double-NUL boundaries.
@@ -63,14 +51,7 @@ func TestReadBatches_NullMode(t *testing.T) {
 		got = append(got, batch)
 	}
 	want := [][]string{{"a", "b"}, {"c"}}
-	if len(got) != len(want) {
-		t.Fatalf("readBatches (null): got %d batches %v, want %d %v", len(got), got, len(want), want)
-	}
-	for i, b := range got {
-		if len(b) != len(want[i]) {
-			t.Errorf("null batch[%d] = %v, want %v", i, b, want[i])
-		}
-	}
+	assert.Equal(t, want, got)
 }
 
 // TestReadBatches_ContextCancel verifies that the channel is closed when ctx
@@ -97,9 +78,7 @@ func TestStream_ContextCancellation(t *testing.T) {
 	cancel()
 	pr, pw := io.Pipe()
 	pw.Close()
-	if err := m.Stream(ctx, pr, "build", nil); err != nil {
-		t.Errorf("Stream with cancelled ctx: %v", err)
-	}
+	assert.NoError(t, m.Stream(ctx, pr, "build", nil), "Stream with cancelled ctx")
 }
 
 // TestStream_EmptyBatchSkipped verifies that an input containing only blank
@@ -113,10 +92,6 @@ func TestStream_EmptyBatchSkipped(t *testing.T) {
 		io.WriteString(pw, "\n\n\n")
 		pw.Close()
 	}()
-	if err := m.Stream(context.Background(), pr, "build", func(error) { errCalled = true }); err != nil {
-		t.Errorf("Stream (empty input): %v", err)
-	}
-	if errCalled {
-		t.Error("Stream (empty input): errFn called unexpectedly")
-	}
+	require.NoError(t, m.Stream(context.Background(), pr, "build", func(error) { errCalled = true }), "Stream (empty input)")
+	assert.False(t, errCalled, "Stream (empty input): errFn called unexpectedly")
 }

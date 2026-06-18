@@ -13,13 +13,13 @@ import (
 )
 
 // Schema is the on-disk schema version; bump on field renames or removals.
-const Schema = 2
+// v3 unified the per-target cache.hit/cache.miss/cache.error events into a single
+// target.result event (see TargetResult).
+const Schema = 3
 
 // Type values stamped on every event line; stable across versions.
 const (
-	TypeCacheHit              = "cache.hit"
-	TypeCacheMiss             = "cache.miss"
-	TypeCacheError            = "cache.error"
+	TypeTargetResult          = "target.result"
 	TypeGraphBuild            = "graph.build"
 	TypeGraphQuery            = "graph.query"
 	TypeGraphError            = "graph.error"
@@ -32,28 +32,19 @@ const (
 	TypeMissingDependency     = "race.missing_dependency"
 )
 
-// CacheHit reports that a project's target was replayed from the cache.
-type CacheHit struct {
+// TargetResult reports the outcome of one target run — the single per-target event
+// (replacing the former cache.hit / cache.miss / cache.error). Status is "ok" (ran
+// or replayed successfully) or "failed"; CacheHit distinguishes a cache replay from
+// a fresh run. It is emitted once per target by the dispatcher (cache OnResult), so
+// it fires for cached targets too.
+type TargetResult struct {
 	Project    string `json:"project"`
 	Target     string `json:"target"`
+	Status     string `json:"status"`
+	CacheHit   bool   `json:"cache_hit"`
 	Hash       string `json:"hash,omitempty"`
-	DurationMs int64  `json:"duration_ms"`
-}
-
-// CacheMiss reports that a project's target was executed rather than replayed.
-type CacheMiss struct {
-	Project    string `json:"project"`
-	Target     string `json:"target"`
-	Hash       string `json:"hash,omitempty"`
-	DurationMs int64  `json:"duration_ms"`
-}
-
-// CacheError reports that a project's target failed to execute.
-type CacheError struct {
-	Project    string `json:"project"`
-	Target     string `json:"target"`
 	DurationMs int64  `json:"duration_ms,omitempty"`
-	Message    string `json:"error"`
+	Error      string `json:"error,omitempty"`
 }
 
 // GraphBuild is one graph construction event, emitted once per Build.
@@ -138,9 +129,7 @@ type MissingDependency struct {
 }
 
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
-	reflect.TypeOf(CacheHit{}):              TypeCacheHit,
-	reflect.TypeOf(CacheMiss{}):             TypeCacheMiss,
-	reflect.TypeOf(CacheError{}):            TypeCacheError,
+	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
 	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
 	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
 	reflect.TypeOf(GraphError{}):            TypeGraphError,
@@ -181,14 +170,19 @@ func WriterFromContext(ctx context.Context) *Writer {
 func RunOptions(w *Writer) []cache.RunOption {
 	return []cache.RunOption{
 		cache.OnResult(func(s *cache.Spec, r *cache.Result, err error) {
-			switch {
-			case err != nil:
-				_ = Record(w, CacheError{Project: s.ProjectPath, Target: s.Target, Message: err.Error()})
-			case r.Hit:
-				_ = Record(w, CacheHit{Project: s.ProjectPath, Target: s.Target, Hash: r.Hash, DurationMs: r.Duration.Milliseconds()})
-			default:
-				_ = Record(w, CacheMiss{Project: s.ProjectPath, Target: s.Target, Hash: r.Hash, DurationMs: r.Duration.Milliseconds()})
+			tr := TargetResult{
+				Project:    s.ProjectPath,
+				Target:     s.Target,
+				Status:     "ok",
+				CacheHit:   r.Hit,
+				Hash:       r.Hash,
+				DurationMs: r.Duration.Milliseconds(),
 			}
+			if err != nil {
+				tr.Status = "failed"
+				tr.Error = err.Error()
+			}
+			_ = Record(w, tr)
 		}),
 	}
 }

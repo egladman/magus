@@ -85,11 +85,16 @@ func (w *Workspace) Get(path string) *Project {
 type workspaceKey struct{}
 
 // WithWorkspace returns a context carrying ws for downstream code (e.g. audit).
+// The workspace rides on the context rather than a parameter because it must
+// cross the spell-invocation boundary (types.SpellDriver.Invoke takes only ctx +
+// InvokeRequest), reaching host bindings the run engine cannot thread it to
+// directly. WorkspaceFromContext callers must handle a nil result.
 func WithWorkspace(ctx context.Context, ws WorkspaceRepository) context.Context {
 	return context.WithValue(ctx, workspaceKey{}, ws)
 }
 
-// WorkspaceFromContext returns the WorkspaceRepository from ctx, or nil.
+// WorkspaceFromContext returns the WorkspaceRepository from ctx, or nil when no
+// workspace was installed (e.g. a direct SpellDriver call outside a run).
 func WorkspaceFromContext(ctx context.Context) WorkspaceRepository {
 	w, _ := ctx.Value(workspaceKey{}).(WorkspaceRepository)
 	return w

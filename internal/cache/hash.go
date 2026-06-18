@@ -112,8 +112,6 @@ func (c *Cache) hashSpec(ctx context.Context, s *Spec) (string, error) {
 
 	result := hex.EncodeToString(h.Sum(nil))
 
-	c.mtimes.flush(ctx)
-
 	return result, nil
 }
 
@@ -172,6 +170,9 @@ func (c *Cache) hashFiles(ctx context.Context, files []relAbs) ([]string, []os.F
 		workers = len(files)
 	}
 
+	// Each index is enqueued exactly once and consumed by one worker, so the
+	// concurrent writes to hashes[i] below target disjoint indices and need no
+	// further synchronization (the channel provides the happens-before edge).
 	idxCh := make(chan int, len(files))
 	for i, h := range hashes {
 		if h == "" {

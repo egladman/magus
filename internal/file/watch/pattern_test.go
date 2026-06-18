@@ -3,80 +3,47 @@ package watch
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParsePattern(t *testing.T) {
-	cases := []struct {
-		in      string
-		want    IgnorePattern
-		wantErr bool
-	}{
-		{
-			// Bare values are no longer accepted; explicit type= required.
-			in:      "**/scratch/*",
-			wantErr: true,
-		},
-		{
-			in:      "*.tmp",
-			wantErr: true,
-		},
-		{
-			in:   "type=glob,pattern=**/scratch/*",
-			want: IgnorePattern{Type: PatternGlob, Pattern: "**/scratch/*"},
-		},
-		{
-			in:   `type=regex,pattern=\.tmp$`,
-			want: IgnorePattern{Type: PatternRegex, Pattern: `\.tmp$`},
-		},
-		{
-			in:   "type=literal,pattern=bazel-out/[k8-fastbuild]",
-			want: IgnorePattern{Type: PatternLiteral, Pattern: "bazel-out/[k8-fastbuild]"},
-		},
-		{
-			// Regex with quantifier: comma must be escaped.
-			in:   `type=regex,pattern=\.v\d{2\,4}\.bak$`,
-			want: IgnorePattern{Type: PatternRegex, Pattern: `\.v\d{2,4}\.bak$`},
-		},
-		{
-			// pattern= without type= is now an error.
-			in:      "pattern=**/scratch/*",
-			wantErr: true,
-		},
-		{
-			in:      "type=bogus,pattern=foo",
-			wantErr: true,
-		},
-		{
-			in:      "type=regex,pattern=[unclosed",
-			wantErr: true,
-		},
-		{
-			// Unknown key is always an error.
-			in:      "key=value",
-			wantErr: true,
-		},
-		{
-			in:      "",
-			wantErr: true,
-		},
+	wantOK := func(t *testing.T, in string, want IgnorePattern) {
+		got, err := ParsePattern(in)
+		require.NoError(t, err, "ParsePattern(%q)", in)
+		assert.Equal(t, want, got)
 	}
-	for _, c := range cases {
-		t.Run(c.in, func(t *testing.T) {
-			got, err := ParsePattern(c.in)
-			if c.wantErr {
-				if err == nil {
-					t.Fatalf("ParsePattern(%q) = %+v, want error", c.in, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParsePattern(%q): %v", c.in, err)
-			}
-			if got != c.want {
-				t.Errorf("ParsePattern(%q) = %+v, want %+v", c.in, got, c.want)
-			}
-		})
+	wantErr := func(t *testing.T, in string) {
+		got, err := ParsePattern(in)
+		assert.Error(t, err, "ParsePattern(%q) = %+v, want error", in, got)
 	}
+
+	// Bare values are no longer accepted; explicit type= required.
+	t.Run("bare glob rejected", func(t *testing.T) { wantErr(t, "**/scratch/*") })
+	t.Run("bare ext rejected", func(t *testing.T) { wantErr(t, "*.tmp") })
+
+	t.Run("glob", func(t *testing.T) {
+		wantOK(t, "type=glob,pattern=**/scratch/*", IgnorePattern{Type: PatternGlob, Pattern: "**/scratch/*"})
+	})
+	t.Run("regex", func(t *testing.T) {
+		wantOK(t, `type=regex,pattern=\.tmp$`, IgnorePattern{Type: PatternRegex, Pattern: `\.tmp$`})
+	})
+	t.Run("literal", func(t *testing.T) {
+		wantOK(t, "type=literal,pattern=bazel-out/[k8-fastbuild]", IgnorePattern{Type: PatternLiteral, Pattern: "bazel-out/[k8-fastbuild]"})
+	})
+	t.Run("regex with escaped comma", func(t *testing.T) {
+		// Regex with quantifier: comma must be escaped.
+		wantOK(t, `type=regex,pattern=\.v\d{2\,4}\.bak$`, IgnorePattern{Type: PatternRegex, Pattern: `\.v\d{2,4}\.bak$`})
+	})
+
+	// pattern= without type= is now an error.
+	t.Run("pattern without type rejected", func(t *testing.T) { wantErr(t, "pattern=**/scratch/*") })
+	t.Run("bogus type rejected", func(t *testing.T) { wantErr(t, "type=bogus,pattern=foo") })
+	t.Run("invalid regex rejected", func(t *testing.T) { wantErr(t, "type=regex,pattern=[unclosed") })
+	// Unknown key is always an error.
+	t.Run("unknown key rejected", func(t *testing.T) { wantErr(t, "key=value") })
+	t.Run("empty rejected", func(t *testing.T) { wantErr(t, "") })
 }
 
 func TestIgnorePatterns_Glob(t *testing.T) {
@@ -86,18 +53,10 @@ func TestIgnorePatterns_Glob(t *testing.T) {
 		{Type: PatternGlob, Pattern: "*.tmp"},
 	})
 
-	if !pred(filepath.Join(root, "scratch/a.txt")) {
-		t.Error("expected **/scratch/* to match scratch/a.txt")
-	}
-	if !pred(filepath.Join(root, "deep/nested/scratch/b.txt")) {
-		t.Error("expected **/scratch/* to match deep/nested/scratch/b.txt")
-	}
-	if !pred(filepath.Join(root, "x.tmp")) {
-		t.Error("expected *.tmp to match x.tmp")
-	}
-	if pred(filepath.Join(root, "a.txt")) {
-		t.Error("a.txt should not match")
-	}
+	assert.True(t, pred(filepath.Join(root, "scratch/a.txt")), "**/scratch/* should match scratch/a.txt")
+	assert.True(t, pred(filepath.Join(root, "deep/nested/scratch/b.txt")), "**/scratch/* should match deep/nested/scratch/b.txt")
+	assert.True(t, pred(filepath.Join(root, "x.tmp")), "*.tmp should match x.tmp")
+	assert.False(t, pred(filepath.Join(root, "a.txt")), "a.txt should not match")
 }
 
 func TestIgnorePatterns_Regex(t *testing.T) {
@@ -106,12 +65,8 @@ func TestIgnorePatterns_Regex(t *testing.T) {
 		{Type: PatternRegex, Pattern: `\.generated\.go$`},
 	})
 
-	if !pred(filepath.Join(root, "api/foo.generated.go")) {
-		t.Error("expected regex to match foo.generated.go")
-	}
-	if pred(filepath.Join(root, "api/foo.go")) {
-		t.Error("regex should not match foo.go")
-	}
+	assert.True(t, pred(filepath.Join(root, "api/foo.generated.go")), "regex should match foo.generated.go")
+	assert.False(t, pred(filepath.Join(root, "api/foo.go")), "regex should not match foo.go")
 }
 
 func TestIgnorePatterns_Literal(t *testing.T) {
@@ -124,20 +79,14 @@ func TestIgnorePatterns_Literal(t *testing.T) {
 	// "bazel-out/[k8-fastbuild]" contains a slash, so it would never
 	// match a single segment. Use this case to verify the
 	// segment-only semantic: literal does not match the substring.
-	if pred(filepath.Join(root, "bazel-out/[k8-fastbuild]/a.o")) {
-		t.Error("literal should match path segments, not concatenations with slashes")
-	}
+	assert.False(t, pred(filepath.Join(root, "bazel-out/[k8-fastbuild]/a.o")), "literal should match path segments, not concatenations with slashes")
 
 	// Re-test with a single-segment literal.
 	pred2 := IgnorePatterns(root, []IgnorePattern{
 		{Type: PatternLiteral, Pattern: "[k8-fastbuild]"},
 	})
-	if !pred2(filepath.Join(root, "bazel-out/[k8-fastbuild]/a.o")) {
-		t.Error("expected literal segment match for [k8-fastbuild]")
-	}
-	if pred2(filepath.Join(root, "bazel-out/k8-fastbuild/a.o")) {
-		t.Error("literal should not match without the brackets")
-	}
+	assert.True(t, pred2(filepath.Join(root, "bazel-out/[k8-fastbuild]/a.o")), "expected literal segment match for [k8-fastbuild]")
+	assert.False(t, pred2(filepath.Join(root, "bazel-out/k8-fastbuild/a.o")), "literal should not match without the brackets")
 }
 
 func TestIgnorePatterns_LiteralGitignoreSemantics(t *testing.T) {
@@ -159,16 +108,11 @@ func TestIgnorePatterns_LiteralGitignoreSemantics(t *testing.T) {
 		{"src/foo.js", false},
 	}
 	for _, c := range cases {
-		got := pred(filepath.Join(root, c.path))
-		if got != c.want {
-			t.Errorf("pred(%q) = %v, want %v", c.path, got, c.want)
-		}
+		assert.Equal(t, c.want, pred(filepath.Join(root, c.path)), "pred(%q)", c.path)
 	}
 }
 
 func TestIgnorePatterns_Empty(t *testing.T) {
 	pred := IgnorePatterns(t.TempDir(), nil)
-	if pred("/anything") {
-		t.Error("empty patterns should never match")
-	}
+	assert.False(t, pred("/anything"), "empty patterns should never match")
 }

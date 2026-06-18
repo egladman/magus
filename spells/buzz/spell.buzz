@@ -1,9 +1,6 @@
-// buzz — Buzz language spell: type-check, test, and run Buzz sources.
-//
-// Authored source for the built-in "buzz" spell; compiled to bytecode and embedded
-// at build time (see cmd/magus-spells-gen). magus authors its own config and spells
-// in Buzz, so this spell lets the project dogfood — `magus run buzz::buzz-check`
-// type-checks Buzz the way `go::go-vet` checks Go.
+// magus authors its own config and spells in Buzz, so this spell lets the project
+// dogfood — `magus run buzz::buzz-check` type-checks Buzz the way `go::go-vet`
+// checks Go.
 //
 // It supports two interpreters, and a magusfile picks per op (the names don't
 // collide):

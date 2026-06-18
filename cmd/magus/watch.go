@@ -40,7 +40,7 @@ func (f *ignoreFlag) Set(value string) error {
 }
 
 // watchCmd implements `magus watch`; output format matches `git diff --name-only` for pipe compatibility.
-func watchCmd(root string, rc runConfig, args []string) error {
+func watchCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	debounce := fs.Duration("debounce", 200*time.Millisecond, "quiet window before emitting a batch")
 	initial := fs.Bool("initial", true, "emit an --all batch on startup before watching")
@@ -67,7 +67,7 @@ func watchCmd(root string, rc runConfig, args []string) error {
 		return err
 	}
 
-	ws, err := inspectWorkspace(context.Background(), root)
+	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func watchCmd(root string, rc runConfig, args []string) error {
 	userPatterns = append(userPatterns, projectIgnores...)
 	userPatterns = append(userPatterns, ignores.patterns...)
 
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	w, err := watch.New(

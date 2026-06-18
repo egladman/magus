@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/codec"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // runForProject runs c against a freshly created project at root/<projectPath>/
@@ -18,13 +20,9 @@ import (
 func runForProject(t *testing.T, c *Cache, root, projectPath, outContent string) {
 	t.Helper()
 	abs := filepath.Join(root, projectPath)
-	if err := os.MkdirAll(abs, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", abs, err)
-	}
+	require.NoError(t, os.MkdirAll(abs, 0o755), "mkdir %s", abs)
 	src := filepath.Join(abs, "main.go")
-	if err := os.WriteFile(src, []byte("package "+filepath.Base(projectPath)), 0o644); err != nil {
-		t.Fatalf("write source: %v", err)
-	}
+	require.NoError(t, os.WriteFile(src, []byte("package "+filepath.Base(projectPath)), 0o644), "write source")
 	out := filepath.Join(abs, "out.txt")
 	spec := Spec{
 		ProjectPath:   projectPath,
@@ -32,11 +30,10 @@ func runForProject(t *testing.T, c *Cache, root, projectPath, outContent string)
 		Outputs:       []string{filepath.Join(projectPath, "out.txt")},
 		WorkspaceRoot: root,
 	}
-	if _, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err := c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte(outContent), 0o644)
-	}); err != nil {
-		t.Fatalf("Run %s: %v", projectPath, err)
-	}
+	})
+	require.NoError(t, err, "Run %s", projectPath)
 }
 
 func listManifests(t *testing.T, cdir string) []Manifest {
@@ -48,13 +45,9 @@ func listManifests(t *testing.T, cdir string) []Manifest {
 			return err
 		}
 		data, rerr := os.ReadFile(p)
-		if rerr != nil {
-			t.Fatalf("read %s: %v", p, rerr)
-		}
+		require.NoError(t, rerr, "read %s", p)
 		var m Manifest
-		if jerr := codec.Unmarshal(data, &m); jerr != nil {
-			t.Fatalf("unmarshal %s: %v", p, jerr)
-		}
+		require.NoError(t, codec.Unmarshal(data, &m), "unmarshal %s", p)
 		ms = append(ms, m)
 		return nil
 	})
@@ -87,9 +80,8 @@ func assertReferencedBlobsExist(t *testing.T, cdir string, manifests []Manifest)
 				continue
 			}
 			bp := filepath.Join(casDir, out.Blob[:2], out.Blob)
-			if _, err := os.Stat(bp); err != nil {
-				t.Fatalf("surviving manifest references missing blob %s: %v", out.Blob, err)
-			}
+			_, err := os.Stat(bp)
+			require.NoErrorf(t, err, "surviving manifest references missing blob %s", out.Blob)
 		}
 	}
 }
@@ -102,9 +94,7 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 
 	runForProject(t, c, root, "a", "shared-content")
 	// Distinct CreatedAt: evictLRU sorts by it, and a same-nanosecond
@@ -112,12 +102,8 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 	runForProject(t, c, root, "b", "shared-content")
 
-	if got := countBlobs(t, cdir); got != 1 {
-		t.Fatalf("setup: want 1 shared blob in CAS, got %d", got)
-	}
-	if got := len(listManifests(t, cdir)); got != 2 {
-		t.Fatalf("setup: want 2 manifests, got %d", got)
-	}
+	assert.Equal(t, 1, countBlobs(t, cdir), "setup: want 1 shared blob in CAS")
+	require.Len(t, listManifests(t, cdir), 2, "setup: want 2 manifests")
 
 	// Cap to (total - 1): guarantees one eviction (the loop requires total > limit)
 	// but stops after removing the oldest manifest file because subtracting its
@@ -128,9 +114,7 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	c.evictLRU(context.Background(), total-1)
 
 	surviving := listManifests(t, cdir)
-	if len(surviving) == 0 {
-		t.Fatal("evictLRU removed every manifest; cap was too aggressive for the test")
-	}
+	require.NotEmpty(t, surviving, "evictLRU removed every manifest; cap was too aggressive for the test")
 	assertReferencedBlobsExist(t, cdir, surviving)
 }
 
@@ -141,31 +125,21 @@ func TestPrune_SharedBlobsSurvive(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 
 	runForProject(t, c, root, "a", "shared-content")
 	cutoff := time.Now()
 	time.Sleep(5 * time.Millisecond)
 	runForProject(t, c, root, "b", "shared-content")
 
-	if got := countBlobs(t, cdir); got != 1 {
-		t.Fatalf("setup: want 1 shared blob in CAS, got %d", got)
-	}
+	assert.Equal(t, 1, countBlobs(t, cdir), "setup: want 1 shared blob in CAS")
 
 	n, _, err := c.Prune(context.Background(), cutoff, false)
-	if err != nil {
-		t.Fatalf("Prune: %v", err)
-	}
-	if n != 1 {
-		t.Fatalf("Prune: want 1 entry removed, got %d", n)
-	}
+	require.NoError(t, err, "Prune")
+	assert.Equal(t, 1, n, "Prune: want 1 entry removed")
 
 	surviving := listManifests(t, cdir)
-	if len(surviving) != 1 {
-		t.Fatalf("want 1 surviving manifest, got %d", len(surviving))
-	}
+	require.Len(t, surviving, 1, "want 1 surviving manifest")
 	assertReferencedBlobsExist(t, cdir, surviving)
 }
 
@@ -178,26 +152,18 @@ func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 
 	runForProject(t, c, root, "a", "content-a")
 	time.Sleep(5 * time.Millisecond)
 	runForProject(t, c, root, "b", "content-b")
 
-	if got := countBlobs(t, cdir); got != 2 {
-		t.Fatalf("setup: want 2 distinct blobs, got %d", got)
-	}
+	assert.Equal(t, 2, countBlobs(t, cdir), "setup: want 2 distinct blobs")
 
 	// Cap to a tiny non-zero value: evictLRU will evict every manifest
 	// since the cache is much larger than 1 byte.
 	c.evictLRU(context.Background(), 1)
 
-	if got := len(listManifests(t, cdir)); got != 0 {
-		t.Fatalf("want 0 surviving manifests, got %d", got)
-	}
-	if got := countBlobs(t, cdir); got != 0 {
-		t.Fatalf("want all blobs gc'd, %d still present", got)
-	}
+	assert.Empty(t, listManifests(t, cdir), "want 0 surviving manifests")
+	assert.Equal(t, 0, countBlobs(t, cdir), "want all blobs gc'd")
 }

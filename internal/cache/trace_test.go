@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // recTracer records the names of spans the cache opens, in order.
@@ -28,17 +30,11 @@ func TestRun_PhaseSpans(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	c, err := Open(cdir, WithMutable(true))
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err)
 
 	srcDir := filepath.Join(root, "p")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
 	spec := Spec{
 		ProjectPath:   "p",
@@ -52,18 +48,10 @@ func TestRun_PhaseSpans(t *testing.T) {
 	_, err = c.Run(ContextWithTracer(context.Background(), miss), spec, func(context.Context) error {
 		return os.WriteFile(outPath, []byte("ok"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("Run(miss): %v", err)
-	}
-	if !slices.Contains(miss.names, "magus.cache.hash") {
-		t.Errorf("miss spans %v missing magus.cache.hash", miss.names)
-	}
-	if !slices.Contains(miss.names, "magus.cache.snapshot") {
-		t.Errorf("miss spans %v missing magus.cache.snapshot", miss.names)
-	}
-	if slices.Contains(miss.names, "magus.cache.replay") {
-		t.Errorf("miss spans %v should not include replay", miss.names)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, miss.names, "magus.cache.hash", "miss spans missing magus.cache.hash")
+	assert.Contains(t, miss.names, "magus.cache.snapshot", "miss spans missing magus.cache.snapshot")
+	assert.NotContains(t, miss.names, "magus.cache.replay", "miss spans should not include replay")
 
 	// Hit: hash, then replay (no snapshot).
 	hit := &recTracer{}
@@ -71,19 +59,9 @@ func TestRun_PhaseSpans(t *testing.T) {
 		t.Error("fn should not run on a hit")
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("Run(hit): %v", err)
-	}
-	if !r2.Hit {
-		t.Fatalf("second Run should hit; got %+v", r2)
-	}
-	if !slices.Contains(hit.names, "magus.cache.hash") {
-		t.Errorf("hit spans %v missing magus.cache.hash", hit.names)
-	}
-	if !slices.Contains(hit.names, "magus.cache.replay") {
-		t.Errorf("hit spans %v missing magus.cache.replay", hit.names)
-	}
-	if slices.Contains(hit.names, "magus.cache.snapshot") {
-		t.Errorf("hit spans %v should not include snapshot", hit.names)
-	}
+	require.NoError(t, err)
+	require.Truef(t, r2.Hit, "second Run should hit; got %+v", r2)
+	assert.Contains(t, hit.names, "magus.cache.hash", "hit spans missing magus.cache.hash")
+	assert.Contains(t, hit.names, "magus.cache.replay", "hit spans missing magus.cache.replay")
+	assert.NotContains(t, hit.names, "magus.cache.snapshot", "hit spans should not include snapshot")
 }

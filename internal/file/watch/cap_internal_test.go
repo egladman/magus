@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/stretchr/testify/assert"
 )
 
 // chanNotifier is a notifier whose event stream the test drives directly,
@@ -69,9 +70,7 @@ func TestPendingCapFlushesImmediately(t *testing.T) {
 
 	select {
 	case batch := <-w.Events():
-		if len(batch.Paths) < maxPending {
-			t.Fatalf("cap flush batch has %d paths, want >= %d", len(batch.Paths), maxPending)
-		}
+		assert.GreaterOrEqual(t, len(batch.Paths), maxPending, "cap flush batch too small")
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout: no flush received; pending cap is not flushing on overflow")
 	}

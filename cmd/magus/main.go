@@ -380,7 +380,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, subArgs []string) error {
 	switch sub {
 	case "ls":
-		return ls(root, subArgs)
+		return ls(ctx, root, subArgs)
 	case "describe":
 		return describeCmd(ctx, root, subArgs)
 	case "run":
@@ -388,13 +388,13 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "x":
 		return x(ctx, root, rc, subArgs)
 	case "where":
-		return whereCmd(root, subArgs)
+		return whereCmd(ctx, root, subArgs)
 	case "tail":
 		return tailCmd(ctx, root, subArgs)
 	case "affected":
 		return affected(ctx, root, rc, subArgs)
 	case "watch":
-		return watchCmd(root, rc, subArgs)
+		return watchCmd(ctx, root, rc, subArgs)
 	case "status":
 		return status(ctx, subArgs)
 	case "clean":
@@ -402,7 +402,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "merge-driver":
 		return mergeDriverCmd(ctx, root, subArgs)
 	case "doctor":
-		return doctorCmd(root, subArgs)
+		return doctorCmd(ctx, root, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
 	case "repl":
@@ -468,7 +468,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
 	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   output format (text|json|yaml|name|wide|template=<go-template>)")
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
-	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        increase log verbosity (debug detail)")
+	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        increase log verbosity (-v/-vv: debug; -vvv: trace)")
 	fmt.Fprintln(os.Stderr, "  --concurrency N      max parallel build steps (0 = config / MAGUS_CONCURRENCY / min(NumCPU,8))")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Pre-subcommand flags (must precede the subcommand):")

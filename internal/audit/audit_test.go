@@ -3,16 +3,16 @@ package audit
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeWS is a minimal types.WorkspaceRepository for audit tests. Only
@@ -39,7 +39,7 @@ func (f *fakeWS) ExpandCwd(types.Target) ([]types.Target, bool, error) {
 	panic("not used")
 }
 
-func (f *fakeWS) ExpandAffected(context.Context, string, string) ([]types.Target, string, error) {
+func (f *fakeWS) ExpandAffected(context.Context, string, string) ([]types.Target, string, bool, error) {
 	panic("not used")
 }
 
@@ -70,15 +70,9 @@ func (f *fakeWS) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 // don't race with the filesystem's clock resolution.
 func writeFile(t *testing.T, path, content string, mtime time.Time) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-	if err := os.Chtimes(path, mtime, mtime); err != nil {
-		t.Fatalf("chtimes %s: %v", path, err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755), "mkdir %s", filepath.Dir(path))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644), "write %s", path)
+	require.NoError(t, os.Chtimes(path, mtime, mtime), "chtimes %s", path)
 }
 
 func TestSnapshotAndDiff(t *testing.T) {
@@ -95,22 +89,14 @@ func TestSnapshotAndDiff(t *testing.T) {
 
 	descs := []descendant{{path: "p", dir: dir}}
 	pre, err := take(context.Background(), descs)
-	if err != nil {
-		t.Fatalf("take: %v", err)
-	}
-	if _, ok := pre[filepath.Join(dir, ".git", "HEAD")]; ok {
-		t.Fatalf("snapshot included .git contents")
-	}
-	if len(pre) != 4 {
-		t.Fatalf("expected 4 tracked files, got %d: %v", len(pre), fmt.Sprintf("%v", pre))
-	}
+	require.NoError(t, err, "take")
+	assert.NotContains(t, pre, filepath.Join(dir, ".git", "HEAD"), "snapshot included .git contents")
+	require.Len(t, pre, 4, "expected 4 tracked files")
 
 	// Mutate: one new, one modified, one removed.
 	writeFile(t, filepath.Join(dir, "added.txt"), "e", t2)
 	writeFile(t, filepath.Join(dir, "modify.txt"), "bb", t2)
-	if err := os.Remove(filepath.Join(dir, "remove.txt")); err != nil {
-		t.Fatalf("remove: %v", err)
-	}
+	require.NoError(t, os.Remove(filepath.Join(dir, "remove.txt")), "remove")
 
 	got := diff(context.Background(), pre, descs)
 	want := map[string]changeKind{
@@ -118,39 +104,29 @@ func TestSnapshotAndDiff(t *testing.T) {
 		filepath.Join(dir, "modify.txt"): changeModified,
 		filepath.Join(dir, "remove.txt"): changeRemoved,
 	}
-	if len(got) != len(want) {
-		t.Fatalf("diff length: got %d (%v), want %d", len(got), got, len(want))
-	}
+	// diff returns changes in arbitrary order; compare as a path→kind map.
+	gotMap := make(map[string]changeKind, len(got))
 	for _, c := range got {
-		w, ok := want[c.path]
-		if !ok {
-			t.Errorf("unexpected change: %v", c)
-			continue
-		}
-		if c.kind != w {
-			t.Errorf("path %s: kind got %d want %d", c.path, c.kind, w)
-		}
+		gotMap[c.path] = c.kind
 	}
+	assert.Equal(t, want, gotMap)
 }
 
 func TestBeginSkipsWhenReadOnly(t *testing.T) {
-	if a := Begin(context.Background(), &types.Project{Path: "p"}, false); a != nil {
-		t.Fatalf("Begin with write=false should return nil, got %v", a)
-	}
+	a := Begin(context.Background(), &types.Project{Path: "p"}, false)
+	assert.Nil(t, a, "Begin with write=false should return nil")
 }
 
 func TestBeginSkipsWithoutWorkspace(t *testing.T) {
-	if a := Begin(context.Background(), &types.Project{Path: "p"}, true); a != nil {
-		t.Fatalf("Begin without workspace ctx should return nil")
-	}
+	a := Begin(context.Background(), &types.Project{Path: "p"}, true)
+	assert.Nil(t, a, "Begin without workspace ctx should return nil")
 }
 
 func TestBeginSkipsWithoutDescendants(t *testing.T) {
 	ws := &fakeWS{projects: []*types.Project{{Path: "api", Dir: "/tmp/api"}}}
 	ctx := types.WithWorkspace(context.Background(), ws)
-	if a := Begin(ctx, &types.Project{Path: "api", Dir: "/tmp/api"}, true); a != nil {
-		t.Fatalf("Begin without descendants should return nil")
-	}
+	a := Begin(ctx, &types.Project{Path: "api", Dir: "/tmp/api"}, true)
+	assert.Nil(t, a, "Begin without descendants should return nil")
 }
 
 func TestBeginSkipsActiveDispatchDescendant(t *testing.T) {
@@ -163,18 +139,15 @@ func TestBeginSkipsActiveDispatchDescendant(t *testing.T) {
 		"api":      {},
 		"api/docs": {}, // descendant is also being dispatched — skip it
 	})
-	if a := Begin(ctx, parent, true); a != nil {
-		t.Fatalf("Begin should skip when the only descendant is in active dispatch")
-	}
+	a := Begin(ctx, parent, true)
+	assert.Nil(t, a, "Begin should skip when the only descendant is in active dispatch")
 }
 
 func TestFinishWarnsOnDescendantWrite(t *testing.T) {
 	tmp := t.TempDir()
 	parentDir := filepath.Join(tmp, "api")
 	childDir := filepath.Join(tmp, "api", "docs")
-	if err := os.MkdirAll(childDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(childDir, 0o755), "mkdir")
 	t1 := time.Unix(1_700_000_000, 0)
 	t2 := time.Unix(1_700_000_100, 0)
 	writeFile(t, filepath.Join(childDir, "guide.md"), "# old", t1)
@@ -192,9 +165,7 @@ func TestFinishWarnsOnDescendantWrite(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	a := Begin(ctx, parent, true)
-	if a == nil {
-		t.Fatalf("Begin returned nil; expected an audit")
-	}
+	require.NotNil(t, a, "Begin returned nil; expected an audit")
 
 	// Simulate a spell on parent reformatting a file inside the child.
 	writeFile(t, filepath.Join(childDir, "guide.md"), "# new", t2)
@@ -202,22 +173,18 @@ func TestFinishWarnsOnDescendantWrite(t *testing.T) {
 	a.Finish(ctx, "format")
 
 	out := buf.String()
-	if !strings.Contains(out, "MGS3001") ||
-		!strings.Contains(out, "descendant project boundary crossed") ||
-		!strings.Contains(out, "api/docs") ||
-		!strings.Contains(out, "guide.md") ||
-		!strings.Contains(out, "target=format") {
-		t.Fatalf("expected warning with MGS3001/project/target/descendant/file; got:\n%s", out)
-	}
+	assert.Contains(t, out, "MGS3001", "expected warning with MGS3001")
+	assert.Contains(t, out, "descendant project boundary crossed")
+	assert.Contains(t, out, "api/docs")
+	assert.Contains(t, out, "guide.md")
+	assert.Contains(t, out, "target=format")
 }
 
 func TestFinishSilentOnNoChanges(t *testing.T) {
 	tmp := t.TempDir()
 	parentDir := filepath.Join(tmp, "api")
 	childDir := filepath.Join(tmp, "api", "docs")
-	if err := os.MkdirAll(childDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(childDir, 0o755), "mkdir")
 	t1 := time.Unix(1_700_000_000, 0)
 	writeFile(t, filepath.Join(childDir, "guide.md"), "# untouched", t1)
 
@@ -235,38 +202,31 @@ func TestFinishSilentOnNoChanges(t *testing.T) {
 	a := Begin(ctx, parent, true)
 	a.Finish(ctx, "format")
 
-	if buf.Len() != 0 {
-		t.Fatalf("expected no warnings when descendant tree unchanged; got:\n%s", buf.String())
-	}
+	assert.Empty(t, buf.String(), "expected no warnings when descendant tree unchanged")
 }
 
 func TestFinishNilReceiverNoop(t *testing.T) {
 	var a *Audit
 	// Should not panic and should not emit anything.
-	a.Finish(context.Background(), "format")
+	assert.NotPanics(t, func() { a.Finish(context.Background(), "format") })
 }
 
 func TestRootProjectTreatsAllOthersAsDescendants(t *testing.T) {
 	tmp := t.TempDir()
 	rootDir := tmp
 	childDir := filepath.Join(tmp, "api")
-	if err := os.MkdirAll(childDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(childDir, 0o755), "mkdir")
 	root := &types.Project{Path: ".", Dir: rootDir}
 	child := &types.Project{Path: "api", Dir: childDir}
 	ws := &fakeWS{projects: []*types.Project{root, child}}
 
 	descs := descendantsOf(ws, root, nil)
-	if len(descs) != 1 || descs[0].path != "api" {
-		t.Fatalf("root project should see api as descendant; got %v", descs)
-	}
+	require.Len(t, descs, 1, "root project should see api as descendant; got %v", descs)
+	assert.Equal(t, "api", descs[0].path, "root project should see api as descendant")
 
 	// Sibling-of-root case: child has no descendants.
 	descs = descendantsOf(ws, child, nil)
-	if len(descs) != 0 {
-		t.Fatalf("non-root leaf should have no descendants; got %v", descs)
-	}
+	assert.Empty(t, descs, "non-root leaf should have no descendants")
 }
 
 // TestNestedDescendantAttribution verifies the longest-prefix match in
@@ -277,9 +237,7 @@ func TestNestedDescendantAttribution(t *testing.T) {
 	parentDir := filepath.Join(tmp, "api")
 	innerDir := filepath.Join(tmp, "api", "docs")
 	leafDir := filepath.Join(tmp, "api", "docs", "v2")
-	if err := os.MkdirAll(leafDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(leafDir, 0o755), "mkdir")
 	t1 := time.Unix(1_700_000_000, 0)
 	t2 := time.Unix(1_700_000_100, 0)
 	writeFile(t, filepath.Join(leafDir, "page.md"), "# old", t1)
@@ -297,25 +255,19 @@ func TestNestedDescendantAttribution(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	a := Begin(ctx, parent, true)
-	if a == nil {
-		t.Fatalf("Begin returned nil")
-	}
+	require.NotNil(t, a, "Begin returned nil")
 	// topmostRoots must collapse api/docs/v2 into api/docs — only one
 	// root to walk.
-	if len(a.roots) != 1 || a.roots[0].path != "api/docs" {
-		t.Fatalf("topmost roots should collapse to api/docs; got %v", a.roots)
-	}
+	require.Len(t, a.roots, 1, "topmost roots should collapse to api/docs; got %v", a.roots)
+	assert.Equal(t, "api/docs", a.roots[0].path, "topmost roots should collapse to api/docs")
 
 	writeFile(t, filepath.Join(leafDir, "page.md"), "# new", t2)
 	a.Finish(ctx, "format")
 
 	out := buf.String()
-	if !strings.Contains(out, "descendant=api/docs/v2") {
-		t.Fatalf("expected attribution to innermost descendant api/docs/v2; got:\n%s", out)
-	}
-	if strings.Contains(out, "descendant=api/docs ") || strings.Contains(out, "descendant=api/docs\n") {
-		t.Fatalf("expected NO warning attributed to outer api/docs; got:\n%s", out)
-	}
+	assert.Contains(t, out, "descendant=api/docs/v2", "expected attribution to innermost descendant api/docs/v2")
+	assert.NotContains(t, out, "descendant=api/docs ", "expected NO warning attributed to outer api/docs")
+	assert.NotContains(t, out, "descendant=api/docs\n", "expected NO warning attributed to outer api/docs")
 }
 
 // TestReportCapsLargeFileLists verifies that a misbehaving spell that
@@ -325,9 +277,7 @@ func TestReportCapsLargeFileLists(t *testing.T) {
 	tmp := t.TempDir()
 	parentDir := filepath.Join(tmp, "api")
 	childDir := filepath.Join(tmp, "api", "docs")
-	if err := os.MkdirAll(childDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(childDir, 0o755), "mkdir")
 	t1 := time.Unix(1_700_000_000, 0)
 	const n = reportCap + 10
 	for i := 0; i < n; i++ {
@@ -353,9 +303,7 @@ func TestReportCapsLargeFileLists(t *testing.T) {
 	a.Finish(ctx, "format")
 
 	out := buf.String()
-	if !strings.Contains(out, fmt.Sprintf("modified_total=%d", n)) {
-		t.Fatalf("expected modified_total=%d when over the cap; got:\n%s", n, out)
-	}
+	assert.Contains(t, out, fmt.Sprintf("modified_total=%d", n), "expected modified_total when over the cap")
 }
 
 // TestWalkHonoursContextCancellation verifies that a cancelled ctx
@@ -369,7 +317,5 @@ func TestWalkHonoursContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := take(ctx, []descendant{{path: "p", dir: tmp}})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context.Canceled, got %v", err)
-	}
+	assert.ErrorIs(t, err, context.Canceled)
 }

@@ -13,6 +13,8 @@ import (
 	buzzeng "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/ast"
 	buzzstd "github.com/egladman/gopherbuzz/std"
+	"github.com/egladman/magus/hostbuzz"
+	buzzgen "github.com/egladman/magus/hostbuzz/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
@@ -21,10 +23,6 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/run"
 	ispell "github.com/egladman/magus/internal/spell"
-	"github.com/egladman/magus/internal/std"
-	extracrypto "github.com/egladman/magus/internal/std/extra/crypto"
-	extrahttp "github.com/egladman/magus/internal/std/extra/http"
-	"github.com/egladman/magus/internal/std/gen/buzz"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -36,7 +34,7 @@ func init() {
 
 // registerAllBuzz installs the magus.* host API into a Buzz session.
 //
-// These bindings (and the magus-bindings-gen-emitted ones in gen/buzz) are written
+// These bindings (and the magus-bindings-gen-emitted ones in hostbuzz/gen) are written
 // directly against the concrete magus/gopherbuzz value system — NewMap, DirectValue,
 // StrValue, and friends — rather than behind the generic engine.Value /
 // engine.Session abstraction. That is deliberate, not a layering gap:
@@ -55,11 +53,10 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	magus := buzzeng.NewMap()
 	magus.MapSet("project", buildProjectNS(ctx, sess))
 	magus.MapSet("target", buildTargetNS(targets))
-	magus.MapSet("spell", buildSpellNS(ctx))
 	magus.MapSet("cache", buildCacheNS(ctx))
-	// magus.needs(...): the one dependency primitive. Each argument is a Target handle
+	// magus.needs(...): the one dependency primitive. Each argument is a TargetQuery
 	// from magus.target.literal/glob/regex; the matched targets are awaited via
-	// the Buzz VM pool (cross-project handles dispatch through CrossDispatch).
+	// the Buzz VM pool (cross-project queries dispatch through CrossDispatch).
 	magus.MapSet("needs", buzzeng.DirectValue("magus.needs", buildBuzzNeeds(targets)))
 	// magus.has_charm(name): true when execution charm `name` is active — it lets a
 	// function target branch on any charm carried in context, e.g. build:container
@@ -72,6 +69,35 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	}))
 	magus.MapSet("pry", buzzeng.DirectValue("magus.pry", buildBuzzPry(sess, parseMode)))
 
+	// The host-declarable subset (magus.cmd, magus.bust_cache) is generated from
+	// the std.Magus descriptor like every other module, so the two can't drift and
+	// a declared method can't be silently left unbound. Merged onto the hand-built
+	// magus map above (which carries only the VM-infra members — needs/target/
+	// project/cache/pry/log — that can't share a Go Impl across the boundary).
+	mergeModuleMap(magus, buzzgen.RegisterMagus(ctx, sess))
+
+	// magus.modules() / magus.module(name): typed, native introspection of the host
+	// module registry — the same hostbuzz.ModulesOutput core `magus describe
+	// module[s]` formats, marshalled straight to Buzz records instead of scraping a
+	// subprocess's `-o json` stdout. modules() lists every module {name, doc, fields,
+	// methods}; module(name) returns one with fields + per-method Buzz signatures, and
+	// raises on an unknown name. Hand-written (not declarative) because the core uses
+	// hostbuzz, which std can't import.
+	magus.MapSet("modules", buzzeng.DirectValue("magus.modules", func(_ context.Context, _ []buzzeng.Value) (buzzeng.Value, error) {
+		return hostbuzz.RecordsVal(hostbuzz.ModulesOutput("").Modules), nil
+	}))
+	magus.MapSet("module", buzzeng.DirectValue("magus.module", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
+		name := ""
+		if len(args) > 0 && args[0].IsStr() {
+			name = args[0].AsString()
+		}
+		out := hostbuzz.ModulesOutput(name)
+		if len(out.Modules) == 0 {
+			return buzzeng.Null, fmt.Errorf("magus.module: unknown module %q", name)
+		}
+		return hostbuzz.AnyMapVal(out.Modules[0].Record()), nil
+	}))
+
 	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one
 	// way to log from a magusfile — there is no separate std log module. Each level
 	// writes into the process slog logger via emitMagusLog.
@@ -79,16 +105,6 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	magus.MapSet("debug", buzzeng.DirectValue("magus.debug", buzzLogFn(slog.LevelDebug)))
 	magus.MapSet("warn", buzzeng.DirectValue("magus.warn", buzzLogFn(slog.LevelWarn)))
 	magus.MapSet("error", buzzeng.DirectValue("magus.error", buzzLogFn(slog.LevelError)))
-
-	// magus.cmd runs the magus binary with args; it raises when the invocation
-	// exits non-zero (parity with os.exec).
-	magus.MapSet("cmd", buzzeng.DirectValue("magus.cmd", func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		rec, err := std.MagusCmd(ctx, argStrSlice(args, 0))
-		if err != nil {
-			return buzzeng.Null, err
-		}
-		return execRecordToBuzz(rec), nil
-	}))
 
 	// magus.hint(msg): advisory nudge (see emitMagusHint) — non-fatal, deduped,
 	// honors the hints toggle.
@@ -117,13 +133,26 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	// Built-in spells follow the same import idiom as std modules: each spell is
 	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
 	// its basename. This mirrors require("magus.spell.<name>") in Teal.
-	for _, spec := range ispell.Builtins() {
-		sess.SetSyntheticModule("magus/spell/"+spec.Name, buzzSpellObject(spec.Name))
+	builtins := ispell.Builtins()
+	for name := range builtins {
+		sess.SetSyntheticModule("magus/spell/"+name, buzzSpellObject(name))
+	}
+	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
+	// and any spell a plugin registers at runtime) aren't compiled built-ins, so the
+	// loop above doesn't reach them; expose each under the same import idiom so a
+	// project can bind it via `import "magus/spell/<name>"`. The handle carries only
+	// the name; magus.project.register resolves the spec by name from the host
+	// registry.
+	for _, sp := range project.DefaultSpellRegistry().All() {
+		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
+			continue
+		}
+		sess.SetSyntheticModule("magus/spell/"+sp.Name(), buzzSpellObject(sp.Name()))
 	}
 	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
 	// ./spells/hello.buzz on demand and binds its handle under the basename
-	// (hello). This is the import sugar for magus.spell.load on that path, and the
-	// handle registers by value when bound via magus.project.register.
+	// (hello), and the handle registers by value when bound via
+	// magus.project.register.
 	// Cross-project target imports: `import "project/<path>" as <alias>` binds a
 	// module whose members are the other project's targets as cross-project handles,
 	// so `magus.needs(<alias>.<target>)` declares a target-level dependency across the
@@ -169,7 +198,7 @@ func resolveProjectImport(ctx context.Context, importPath string) (buzzeng.Value
 			if rerr != nil {
 				continue
 			}
-			prog, perr := buzzeng.Parse(string(b))
+			prog, perr := buzzeng.ParseEmbedded(string(b))
 			if perr != nil || prog == nil {
 				continue
 			}
@@ -180,12 +209,11 @@ func resolveProjectImport(ctx context.Context, importPath string) (buzzeng.Value
 				if !ok || !fn.IsExported {
 					continue
 				}
-				h := buzzeng.NewMap()
-				h.MapSet(buzzTargetHandleKey, buzzeng.BoolValue(true))
-				h.MapSet("mode", buzzeng.StrValue("literal"))
-				h.MapSet("pattern", buzzeng.StrValue(norm(fn.Name)))
-				h.MapSet("project", buzzeng.StrValue(raw))
-				m.MapSet(fn.Name, h)
+				m.MapSet(fn.Name, targetQueryToBuzz(types.TargetQuery{
+					Mode:    types.QueryLiteral,
+					Pattern: norm(fn.Name),
+					Project: raw,
+				}))
 			}
 		}
 	}
@@ -194,7 +222,7 @@ func resolveProjectImport(ctx context.Context, importPath string) (buzzeng.Value
 
 // resolveLocalSpellImport resolves a path-style import (e.g. "spells/hello") to a
 // workspace-local spell at <importPath>.buzz, relative to the process cwd (the
-// magusfile's directory at run time, matching magus.spell.load). It returns the
+// magusfile's directory at run time). It returns the
 // spell handle and ok=true when a file exists and parses as a spell; otherwise
 // ok=false, leaving the import to the normal file search.
 func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Value, bool) {
@@ -231,7 +259,7 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Va
 }
 
 // magusModules builds every magus host module (os/platform/fs/vcs/env/crypto/
-// http/archive/charm/semver/yaml/…) via the magus-bindings-gen-emitted buzzgen
+// http/archive/charm/semver/yaml/…) via the magus-bindings-gen-emitted hostbuzz/gen
 // trampolines, keyed by the bare import name each is exposed under. The closures
 // capture sess so host callbacks (e.g. arg.index_func, os.with_env) can call back
 // into the VM.
@@ -242,10 +270,10 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Va
 // sit alongside crypto.sha256Hex and http.get.
 func magusModules(ctx context.Context, sess *buzzeng.Session) map[string]buzzeng.Value {
 	cryptoNS := buzzgen.RegisterCrypto(ctx, sess)
-	mergeModuleMap(cryptoNS, extracrypto.Register(ctx, sess))
+	mergeModuleMap(cryptoNS, registerCryptoBytes())
 
 	httpNS := buzzgen.RegisterHttp(ctx, sess)
-	mergeModuleMap(httpNS, extrahttp.Register(ctx, sess))
+	mergeModuleMap(httpNS, registerHTTPBytes())
 
 	return map[string]buzzeng.Value{
 		"os":       buzzgen.RegisterOs(ctx, sess),
@@ -302,11 +330,32 @@ func registerHostModules(ctx context.Context, sess *buzzeng.Session) {
 			sess.SetSyntheticModule(name, mod)
 		}
 	}
-	// Canonical value types (Target/Charm/Strategy) as a flat-importable source
-	// module, so a spell's mgs_listTargets can be typed {str: fun(Target, fun(any)) bool}
-	// instead of `any`. Single source of truth lives in the spell package; the
-	// built-in generator inlines the same source into each compiled built-in.
-	sess.SetSourceModule(ispell.TargetModulePath, ispell.TargetModuleSource)
+	// Canonical value types (Target/Charm) plus the generated TargetQuery as a
+	// flat-importable source module, so a spell's mgs_listTargets can be typed
+	// {str: fun(Target, fun(any)) bool} instead of `any`, and a magusfile can name or
+	// build a TargetQuery. Single source of truth lives in the spell package. The
+	// built-in generator inlines only TargetModuleSource (Target/Charm) — built-ins
+	// have no use for TargetQuery — so it is appended only here, on the runtime path.
+	sess.SetSourceModule(ispell.TargetModulePath, strings.Join([]string{
+		ispell.TargetModuleSource,
+		ispell.TargetQuerySource,
+		ispell.ExecResultSource,
+		// Boundary mirrors of the host-method record shapes, so a magusfile can
+		// annotate a vcs.commit / fs.stat / http.* / semver.parse / parse_url result
+		// for compile-checked field access. CommitAuthor precedes Commit (Commit's
+		// author field is typed CommitAuthor).
+		ispell.CommitAuthorSource,
+		ispell.CommitSource,
+		ispell.FileInfoSource,
+		ispell.HTTPResponseSource,
+		ispell.SemverVersionSource,
+		ispell.URLSource,
+	}, "\n"))
+	// magus/charm: the pure-Buzz patch constructors, registered as its own source
+	// module so a function-op spell or a magusfile can `import "magus/charm"` and
+	// build charms with charm.after/set/… (the built-in generator inlines it for
+	// self-contained fork spells; see SelfContainedBuiltinSource).
+	sess.SetSourceModule(ispell.CharmModulePath, ispell.CharmModuleSource)
 }
 
 // buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes
@@ -324,7 +373,7 @@ func buzzLogFn(level slog.Level) func(context.Context, []buzzeng.Value) (buzzeng
 // implementation of this same surface, can diff against the source of truth in a
 // guard test — the two host implementations must not silently drift.
 func MagusModuleKeys() (top, target []string) {
-	sess := buzzeng.NewSession(context.Background())
+	sess := buzzeng.NewSession(context.Background(), buzzeng.WithEmbedded())
 	registerAllBuzz(context.Background(), sess, map[string]buzzeng.Callable{}, true)
 	magus := sess.GetGlobal("magus")
 	top = magus.MapKeys()
@@ -495,29 +544,30 @@ func parseBuzzProjectOpts(ctx context.Context, v buzzeng.Value) ([]workspace.Pro
 			opts = append(opts, workspace.WithWatchIgnore(patterns...))
 		}
 	}
-	// targets maps a target name to a per-target policy table: cachable=false opts
-	// the target out of the cache; isolated=true serializes it against the batch.
+	// targets maps a target name to a per-target policy table: skipCache=true opts
+	// the target out of the cache; exclusive=true runs it alone against the batch.
 	if tv, ok := v.MapGet("targets"); ok && tv.IsMap() {
 		for _, name := range tv.MapKeys() {
 			pv, ok := tv.MapGet(name)
 			if !ok || !pv.IsMap() {
 				continue
 			}
-			if cv, ok := pv.MapGet("cachable"); ok && !cv.Bool() {
-				opts = append(opts, workspace.WithTarget(name, workspace.NoCache()))
+			if sv, ok := pv.MapGet("skipCache"); ok && sv.Bool() {
+				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache()))
 			}
-			if sv, ok := pv.MapGet("isolated"); ok && sv.Bool() {
-				opts = append(opts, workspace.WithTarget(name, workspace.Isolated()))
+			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
+				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
 			}
 		}
 	}
 	return opts, nil
 }
 
-// spellHandleFromMeta builds the MagusSpell handle magus.spell.load returns. It
-// marshals the resolved spec back as native data so magus.project.register can
-// decode and register the spell by value at bind time — needed because load
-// evaluates the spell in a throwaway session whose functions are gone by then.
+// spellHandleFromMeta builds the MagusSpell handle a workspace-local spell import
+// returns. It marshals the resolved spec back as native data so
+// magus.project.register can decode and register the spell by value at bind time —
+// needed because the spell is evaluated in a throwaway session whose functions are
+// gone by then.
 func spellHandleFromMeta(m ispell.Spec) buzzeng.Value {
 	h := buzzeng.NewMap()
 	h.MapSet("name", buzzeng.StrValue(m.Name))
@@ -526,8 +576,8 @@ func spellHandleFromMeta(m ispell.Spec) buzzeng.Value {
 	h.MapSet("claims", strSliceToBuzzList(m.Claims))
 	h.MapSet("version_cmd", strSliceToBuzzList(m.VersionCmd))
 	h.MapSet("opaque", buzzeng.BoolValue(m.Opaque))
-	h.MapSet("ops", targetsToBuzzMap(m.Targets))
-	bindBuzzTargetDispatch(h, m.Targets)
+	h.MapSet("ops", targetsToBuzzMap(m.Ops))
+	bindBuzzTargetDispatch(h, m.Ops)
 	return h
 }
 
@@ -541,7 +591,7 @@ func spellHandleFromMeta(m ispell.Spec) buzzeng.Value {
 // the target's base argv and overlays opts.env on the subprocess — so
 // flag-carrying and cross-compile invocations need no os.exec. With no opts.args
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
-func bindBuzzTargetDispatch(h buzzeng.Value, targets map[string]ispell.Target) {
+func bindBuzzTargetDispatch(h buzzeng.Value, targets map[string]ispell.Op) {
 	h.MapSet("listTargets", buzzeng.DirectValue("spell.listTargets", func(_ context.Context, _ []buzzeng.Value) (buzzeng.Value, error) {
 		return strSliceToBuzzList(forkTargetNames(targets)), nil
 	}))
@@ -554,7 +604,7 @@ func bindBuzzTargetDispatch(h buzzeng.Value, targets map[string]ispell.Target) {
 
 // bindBuzzForkTargetMethod attaches tgt as a callable method named target on h,
 // so spell.<target>(opts?) forks the target.
-func bindBuzzForkTargetMethod(h buzzeng.Value, target string, tgt ispell.Target) {
+func bindBuzzForkTargetMethod(h buzzeng.Value, target string, tgt ispell.Op) {
 	h.MapSet(target, buzzeng.DirectValue("spell."+target, func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		opts := spellOptsFromBuzz(args, 0)
 		res, err := runBuzzForkTarget(ctx, tgt, opts)
@@ -569,7 +619,7 @@ func bindBuzzForkTargetMethod(h buzzeng.Value, target string, tgt ispell.Target)
 }
 
 // execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec record to
-// a Buzz map, marshalled the same way os.exec's record is (see gen/buzz.bzAnyVal):
+// a Buzz map, marshalled the same way os.exec's record is (see hostbuzz.AnyVal):
 // string/bool direct, int as a Buzz int.
 func execRecordToBuzz(rec map[string]any) buzzeng.Value {
 	m := buzzeng.NewMap()
@@ -590,7 +640,7 @@ func execRecordToBuzz(rec map[string]any) buzzeng.Value {
 // runForkTarget). With explicit opts.args it uses them; otherwise it forwards the
 // `magus run <t> -- <extra>` args, so a bare go.test() still threads through
 // `magus run test -- -run X`.
-func runBuzzForkTarget(ctx context.Context, tgt ispell.Target, opts forkOpts) (run.ExecResult, error) {
+func runBuzzForkTarget(ctx context.Context, tgt ispell.Op, opts forkOpts) (run.ExecResult, error) {
 	if !opts.hasArgs {
 		opts.args = project.ExtraArgs(ctx)
 	}
@@ -629,7 +679,7 @@ func spellOptsFromBuzz(args []buzzeng.Value, idx int) (opts forkOpts) {
 
 // targetsToBuzzMap marshals resolved targets back to the nested ops map shape
 // ispell.Decode reads (a fork target unless it declares fn).
-func targetsToBuzzMap(targets map[string]ispell.Target) buzzeng.Value {
+func targetsToBuzzMap(targets map[string]ispell.Op) buzzeng.Value {
 	ops := buzzeng.NewMap()
 	for name, t := range targets {
 		op := buzzeng.NewMap()
@@ -683,37 +733,13 @@ func buildTargetNS(targets map[string]buzzeng.Callable) buzzeng.Value {
 		return strSliceToBuzzList(matched), nil
 	}))
 
-	// named/glob/regex return typed Target handles (a tagged map carrying the
-	// matching mode and the literal pattern) consumed by magus.needs. The pattern
-	// must be a string literal so the static extractor (internal/describe) can
-	// recover the edge from source without evaluating the magusfile.
-	ns.MapSet("literal", buzzeng.DirectValue("magus.target.literal", buildBuzzTargetHandle("literal")))
-	ns.MapSet("glob", buzzeng.DirectValue("magus.target.glob", buildBuzzTargetHandle("glob")))
-	ns.MapSet("regex", buzzeng.DirectValue("magus.target.regex", buildBuzzTargetHandle("regex")))
-
-	return ns
-}
-
-func buildSpellNS(ctx context.Context) buzzeng.Value {
-	ns := buzzeng.NewMap()
-
-	// get resolves a spell by name at runtime — use it for spells the import form
-	// can't carry (host-registered spells like "magusfile", plugin names computed
-	// at runtime). For built-ins, prefer `import "magus/spell/<name>"`.
-	ns.MapSet("get", buzzeng.DirectValue("magus.spell.get", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() {
-			return buzzeng.Null, nil
-		}
-		return buzzSpellObject(args[0].AsString()), nil
-	}))
-
-	ns.MapSet("load", buzzeng.DirectValue("magus.spell.load", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		m, ok := loadLocalSpell(ctx, argStr(args, 0))
-		if !ok {
-			return buzzeng.Null, nil
-		}
-		return spellHandleFromMeta(m), nil
-	}))
+	// literal/glob/regex return a TargetQuery (a map mirroring the magus/target
+	// `object TargetQuery` fields — mode + pattern) consumed by magus.needs. The
+	// pattern must be a string literal so the static extractor (internal/describe)
+	// can recover the edge from source without evaluating the magusfile.
+	ns.MapSet("literal", buzzeng.DirectValue("magus.target.literal", buildBuzzTargetHandle(types.QueryLiteral)))
+	ns.MapSet("glob", buzzeng.DirectValue("magus.target.glob", buildBuzzTargetHandle(types.QueryGlob)))
+	ns.MapSet("regex", buzzeng.DirectValue("magus.target.regex", buildBuzzTargetHandle(types.QueryRegex)))
 
 	return ns
 }
@@ -762,7 +788,7 @@ func buzzSpellObject(name string) buzzeng.Value {
 	m.MapSet("provides", strSliceToBuzzList(spec.Provides))
 
 	// listTargets() + a callable per fork target (go.test(), docker.build()).
-	bindBuzzTargetDispatch(m, spec.Targets)
+	bindBuzzTargetDispatch(m, spec.Ops)
 
 	return m
 }
@@ -791,82 +817,57 @@ func buzzValToStringSlice(v buzzeng.Value) []string {
 	return nil
 }
 
-// buzzTargetHandleKey tags the map returned by magus.target.literal/glob/regex so
-// a handle is distinguishable from an ordinary value.
-const buzzTargetHandleKey = "__magus_target"
-
-// handleMode is the kind of target reference a magus.target.* handle carries.
-type handleMode int
-
-const (
-	handleLiteral  handleMode = iota // an exact target name
-	handleGlob                       // a glob over sibling target names
-	handleRegex                      // a regexp over sibling target names
-	handleExternal                   // a specific target in another project
-)
-
-// targetHandle is the decoded form of a magus.target.* handle. The Buzz handle map
-// is read into this once, by decodeTargetHandle, so consumers (needs, resolution,
-// cross-project dispatch) work with typed fields instead of re-parsing string keys.
-type targetHandle struct {
-	mode    handleMode
-	value   string // the target name (literal/external) or the glob/regex pattern
-	project string // cross-project (external) only: the other project's path, as written
-}
-
-// buildBuzzTargetHandle returns the magus.target.<mode> constructor for the pattern
-// forms (glob/regex). The argument is a required string literal (the literal-first-
-// arg discipline: the static extractor recovers the edge from source without running
-// the VM).
+// buildBuzzTargetHandle returns the magus.target.<mode> constructor (mode is one of
+// types.Query{Literal,Glob,Regex}). The argument is a required string literal (the
+// literal-first-arg discipline: the static extractor recovers the edge from source
+// without running the VM). It returns the TargetQuery's Buzz field shape.
 func buildBuzzTargetHandle(mode string) func(context.Context, []buzzeng.Value) (buzzeng.Value, error) {
 	return func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		if len(args) == 0 || !args[0].IsStr() {
 			return buzzeng.Null, fmt.Errorf("magus.target.%s: argument must be a string literal", mode)
 		}
-		h := buzzeng.NewMap()
-		h.MapSet(buzzTargetHandleKey, buzzeng.BoolValue(true))
-		h.MapSet("mode", buzzeng.StrValue(mode))
-		h.MapSet("pattern", buzzeng.StrValue(args[0].AsString()))
-		return h, nil
+		return targetQueryToBuzz(types.TargetQuery{Mode: mode, Pattern: args[0].AsString()}), nil
 	}
 }
 
-// decodeTargetHandle reads a magus.target.* handle map into a typed targetHandle,
-// once. It is the single place that knows the handle's wire keys; ok is false for
-// any value that isn't a tagged handle with a known mode. A literal handle carrying
-// a project is a cross-project (external) reference.
-func decodeTargetHandle(v buzzeng.Value) (targetHandle, bool) {
-	if !v.IsMap() {
-		return targetHandle{}, false
+// targetQueryToBuzz encodes q as the Buzz map magus.needs consumes — the same field
+// shape as the magus/target `object TargetQuery`, so a constructor result and a
+// magusfile-authored TargetQuery decode identically (see decodeTargetQuery).
+func targetQueryToBuzz(q types.TargetQuery) buzzeng.Value {
+	m := buzzeng.NewMap()
+	m.MapSet("mode", buzzeng.StrValue(q.Mode))
+	m.MapSet("pattern", buzzeng.StrValue(q.Pattern))
+	m.MapSet("project", buzzeng.StrValue(q.Project))
+	return m
+}
+
+// decodeTargetQuery reads a magus.target.* value into a types.TargetQuery. It accepts
+// both the map the constructors emit and a TargetQuery object instance a magusfile
+// builds via `import "magus/target"` — MapView yields the field map for either. ok is
+// false for any value without a valid mode, so magus.needs rejects bare strings,
+// lists, and unrelated maps/objects.
+func decodeTargetQuery(v buzzeng.Value) (types.TargetQuery, bool) {
+	mv, ok := v.MapView()
+	if !ok {
+		return types.TargetQuery{}, false
 	}
-	if tag, ok := v.MapGet(buzzTargetHandleKey); !ok || !tag.Bool() {
-		return targetHandle{}, false
+	mode := ""
+	if m, ok := mv.MapGet("mode"); ok && m.IsStr() {
+		mode = m.AsString()
 	}
-	modeStr := ""
-	if m, ok := v.MapGet("mode"); ok && m.IsStr() {
-		modeStr = m.AsString()
-	}
-	var h targetHandle
-	switch modeStr {
-	case "literal":
-		h.mode = handleLiteral
-	case "glob":
-		h.mode = handleGlob
-	case "regex":
-		h.mode = handleRegex
+	switch mode {
+	case types.QueryLiteral, types.QueryGlob, types.QueryRegex:
 	default:
-		return targetHandle{}, false
+		return types.TargetQuery{}, false
 	}
-	if p, ok := v.MapGet("pattern"); ok && p.IsStr() {
-		h.value = p.AsString()
+	q := types.TargetQuery{Mode: mode}
+	if p, ok := mv.MapGet("pattern"); ok && p.IsStr() {
+		q.Pattern = p.AsString()
 	}
-	if h.mode == handleLiteral {
-		if pr, ok := v.MapGet("project"); ok && pr.IsStr() && pr.AsString() != "" {
-			h.mode = handleExternal
-			h.project = pr.AsString()
-		}
+	if pr, ok := mv.MapGet("project"); ok && pr.IsStr() {
+		q.Project = pr.AsString()
 	}
-	return h, true
+	return q, true
 }
 
 // dispatchBuzzExternal runs the cross-project target an external handle names,
@@ -879,7 +880,7 @@ func decodeTargetHandle(v buzzeng.Value) (targetHandle, bool) {
 // It yields the caller's concurrency slot for the duration (the remote run needs
 // slots of its own), mirroring buzzDispatchViaPool. No-op when no coordinator/
 // workspace is in ctx (describe/parse), so the handle stays graph-only.
-func dispatchBuzzExternal(ctx context.Context, h targetHandle) error {
+func dispatchBuzzExternal(ctx context.Context, q types.TargetQuery) error {
 	cd := interp.CrossDispatchFromContext(ctx)
 	src := interp.SourceFromContext(ctx)
 	ws := types.WorkspaceFromContext(ctx)
@@ -890,7 +891,7 @@ func dispatchBuzzExternal(ctx context.Context, h targetHandle) error {
 	if err != nil {
 		return fmt.Errorf("magus: cross-project dependency: %w", err)
 	}
-	depPath, err := file.Resolve(h.project, filepath.ToSlash(callerRel))
+	depPath, err := file.Resolve(q.Project, filepath.ToSlash(callerRel))
 	if err != nil {
 		return err
 	}
@@ -898,27 +899,27 @@ func dispatchBuzzExternal(ctx context.Context, h targetHandle) error {
 	if dep == nil {
 		return fmt.Errorf("magus: cross-project dependency: unknown project %q", depPath)
 	}
-	target := strings.ToLower(h.value)
+	target := strings.ToLower(q.Pattern)
 	lim := cache.LimiterFromContext(ctx)
 	return proc.RunChildSync(ctx, lim, func() error {
 		return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep.Dir, target)
 	})
 }
 
-// resolveTargetHandle expands a decoded same-project handle to matching target
-// names: literal is an exact (lowercased) name, glob matches via matchBuzzTargets,
-// regex matches registered names against the compiled pattern. External handles
-// are dispatched separately and are not valid here.
-func resolveTargetHandle(targets map[string]buzzeng.Callable, h targetHandle) ([]string, error) {
-	switch h.mode {
-	case handleLiteral:
-		return []string{strings.ToLower(h.value)}, nil
-	case handleGlob:
-		return matchBuzzTargets(targets, []string{h.value}), nil
-	case handleRegex:
-		re, err := regexp.Compile(h.value)
+// resolveTargetQuery expands a same-project query to matching target names: literal
+// is an exact (lowercased) name, glob matches via matchBuzzTargets, regex matches
+// registered names against the compiled pattern. External queries are dispatched
+// separately and are not valid here.
+func resolveTargetQuery(targets map[string]buzzeng.Callable, q types.TargetQuery) ([]string, error) {
+	switch q.Mode {
+	case types.QueryLiteral:
+		return []string{strings.ToLower(q.Pattern)}, nil
+	case types.QueryGlob:
+		return matchBuzzTargets(targets, []string{q.Pattern}), nil
+	case types.QueryRegex:
+		re, err := regexp.Compile(q.Pattern)
 		if err != nil {
-			return nil, fmt.Errorf("target.regex %q: %w", h.value, err)
+			return nil, fmt.Errorf("target.regex %q: %w", q.Pattern, err)
 		}
 		var matched []string
 		for name := range targets {
@@ -929,31 +930,31 @@ func resolveTargetHandle(targets map[string]buzzeng.Callable, h targetHandle) ([
 		slices.Sort(matched)
 		return matched, nil
 	default:
-		return nil, fmt.Errorf("target handle: not a same-project handle")
+		return nil, fmt.Errorf("target query: not a same-project query")
 	}
 }
 
 // buildBuzzNeeds returns magus.needs(...), the one dependency primitive. Every
-// argument must be a Target handle from magus.target.literal/glob/regex —
-// bare strings and lists are not accepted, so a dependency is always a typed,
-// statically-recoverable edge. Same-project handles resolve to target names awaited
-// through the VM pool / TargetMemo path (dispatchBuzzDeps); an external handle
-// dispatches cross-project via CrossDispatch.
+// argument must be a TargetQuery from magus.target.literal/glob/regex — bare strings
+// and lists are not accepted, so a dependency is always a typed, statically-
+// recoverable edge. Same-project queries resolve to target names awaited through the
+// VM pool / TargetMemo path (dispatchBuzzDeps); an external query dispatches
+// cross-project via CrossDispatch.
 func buildBuzzNeeds(targets map[string]buzzeng.Callable) func(context.Context, []buzzeng.Value) (buzzeng.Value, error) {
 	return func(callCtx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		var names []string
 		for _, arg := range args {
-			h, ok := decodeTargetHandle(arg)
+			q, ok := decodeTargetQuery(arg)
 			if !ok {
-				return buzzeng.Null, fmt.Errorf("magus.needs: each argument must be a magus.target.* handle (literal/glob/regex)")
+				return buzzeng.Null, fmt.Errorf("magus.needs: each argument must be a magus.target.* query (literal/glob/regex)")
 			}
-			if h.mode == handleExternal {
-				if err := dispatchBuzzExternal(callCtx, h); err != nil {
+			if q.IsExternal() {
+				if err := dispatchBuzzExternal(callCtx, q); err != nil {
 					return buzzeng.Null, fmt.Errorf("magus.needs: %w", err)
 				}
 				continue
 			}
-			resolved, err := resolveTargetHandle(targets, h)
+			resolved, err := resolveTargetQuery(targets, q)
 			if err != nil {
 				return buzzeng.Null, fmt.Errorf("magus.needs: %w", err)
 			}

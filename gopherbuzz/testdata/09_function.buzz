@@ -1,5 +1,5 @@
 // @expect: 120
-fun factorial(n) int {
+fun factorial(n: int) > int {
     if (n <= 1) {
         return 1;
     }

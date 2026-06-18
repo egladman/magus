@@ -53,8 +53,6 @@ func main() {
 	}
 }
 
-// ── roff mode ─────────────────────────────────────────────────────────────────
-
 func genRoff(outDir, date, ver string) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		fatalf("mkdir %s: %v", outDir, err)
@@ -260,8 +258,6 @@ func escapeMulti(s string) string {
 	}
 	return strings.Join(parts, "\n")
 }
-
-// ── md mode ─────────────────────────────────────────────────────────────────
 
 func genMD(outDir string) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -500,8 +496,6 @@ dot-prefixed names are accepted; having both in the same directory is an error.`
 	filesCache = `Content-addressed build cache in the workspace root. Override with
 MAGUS_CACHE_DIR.`
 )
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func writeFile(dir, name string, content []byte) error {
 	return os.WriteFile(filepath.Join(dir, name), content, 0o644)

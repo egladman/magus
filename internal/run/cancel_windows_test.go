@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCancelDeliversCtrlBreak verifies that cancelling a Run context on Windows
@@ -27,11 +29,7 @@ func TestCancelDeliversCtrlBreak(t *testing.T) {
 	err := Run(ctx, t.TempDir(), "ping", "-n", "60", "127.0.0.1")
 	elapsed := time.Since(start)
 
-	if err == nil {
-		t.Error("want non-nil error after context cancel, got nil")
-	}
+	assert.Error(t, err, "want non-nil error after context cancel")
 	// Should exit well inside the 5s WaitDelay; allow 7s for slow CI runners.
-	if elapsed > 7*time.Second {
-		t.Errorf("Run took %v after cancel, want < 7s (WaitDelay is 5s)", elapsed)
-	}
+	assert.LessOrEqual(t, elapsed, 7*time.Second, "Run should exit < 7s after cancel (WaitDelay is 5s)")
 }

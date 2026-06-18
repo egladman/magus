@@ -18,24 +18,19 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-)
 
-// ── ParseManifest ──────────────────────────────────────────────────────────────
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestParseManifestValid(t *testing.T) {
 	t.Parallel()
 	hash := strings.Repeat("a", 64) // 64 hex chars = sha256
 	data := fmt.Sprintf("version: v1.2.3\n%s  magus-linux-amd64.tar.gz\n", hash)
 	m, err := ParseManifest([]byte(data))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.Version != "v1.2.3" {
-		t.Errorf("Version = %q, want v1.2.3", m.Version)
-	}
-	if got := m.Hashes["magus-linux-amd64.tar.gz"]; got != hash {
-		t.Errorf("Hashes[...] = %q, want %q", got, hash)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", m.Version)
+	assert.Equal(t, hash, m.Hashes["magus-linux-amd64.tar.gz"])
 }
 
 func TestParseManifestMissingVersion(t *testing.T) {
@@ -43,9 +38,7 @@ func TestParseManifestMissingVersion(t *testing.T) {
 	hash := strings.Repeat("b", 64)
 	data := fmt.Sprintf("%s  file.tar.gz\n", hash)
 	_, err := ParseManifest([]byte(data))
-	if err == nil {
-		t.Fatal("expected error for missing version, got nil")
-	}
+	assert.Error(t, err, "expected error for missing version")
 }
 
 func TestParseManifestBadSemver(t *testing.T) {
@@ -53,26 +46,20 @@ func TestParseManifestBadSemver(t *testing.T) {
 	hash := strings.Repeat("c", 64)
 	data := fmt.Sprintf("version: not-semver\n%s  file.tar.gz\n", hash)
 	_, err := ParseManifest([]byte(data))
-	if err == nil {
-		t.Fatal("expected error for invalid semver, got nil")
-	}
+	assert.Error(t, err, "expected error for invalid semver")
 }
 
 func TestParseManifestShortHash(t *testing.T) {
 	t.Parallel()
 	data := "version: v1.0.0\ndeadbeef  file.tar.gz\n"
 	_, err := ParseManifest([]byte(data))
-	if err == nil {
-		t.Fatal("expected error for short hash, got nil")
-	}
+	assert.Error(t, err, "expected error for short hash")
 }
 
 func TestParseManifestEmpty(t *testing.T) {
 	t.Parallel()
 	_, err := ParseManifest([]byte(""))
-	if err == nil {
-		t.Fatal("expected error for empty manifest, got nil")
-	}
+	assert.Error(t, err, "expected error for empty manifest")
 }
 
 func TestParseManifestCommentsSkipped(t *testing.T) {
@@ -80,15 +67,9 @@ func TestParseManifestCommentsSkipped(t *testing.T) {
 	hash := strings.Repeat("d", 64)
 	data := fmt.Sprintf("# this is a comment\nversion: v2.0.0\n%s  file.tar.gz\n", hash)
 	m, err := ParseManifest([]byte(data))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.Version != "v2.0.0" {
-		t.Errorf("Version = %q, want v2.0.0", m.Version)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "v2.0.0", m.Version)
 }
-
-// ── FindAssets ─────────────────────────────────────────────────────────────────
 
 func TestFindAssetsAllPresent(t *testing.T) {
 	t.Parallel()
@@ -104,47 +85,28 @@ func TestFindAssetsAllPresent(t *testing.T) {
 		},
 	}
 	assets, err := FindAssets(rel, "magus-linux-amd64.tar.gz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if assets.Tarball == "" || assets.Sums == "" || assets.Sig == "" {
-		t.Errorf("one or more URLs empty: tarball=%q sums=%q sig=%q",
-			assets.Tarball, assets.Sums, assets.Sig)
-	}
+	require.NoError(t, err)
+	assert.NotEmpty(t, assets.Tarball)
+	assert.NotEmpty(t, assets.Sums)
+	assert.NotEmpty(t, assets.Sig)
 }
 
 func TestFindAssetsMissing(t *testing.T) {
 	t.Parallel()
 	rel := &GitHubRelease{TagName: "v1.0.0"}
 	_, err := FindAssets(rel, "magus-linux-amd64.tar.gz")
-	if err == nil {
-		t.Fatal("expected error for missing assets, got nil")
-	}
+	assert.Error(t, err, "expected error for missing assets")
 }
-
-// ── Compare ────────────────────────────────────────────────────────────────────
 
 func TestCompare(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"v1.2.0", "v1.1.0", 1},
-		{"v1.0.0", "v1.0.0", 0},
-		{"v0.9.9", "v1.0.0", -1},
-		{"not-semver", "v1.0.0", 0},
-		{"v1.0.0", "not-semver", 0},
-	}
-	for _, tc := range cases {
-		got := Compare(tc.a, tc.b)
-		if got != tc.want {
-			t.Errorf("Compare(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
-		}
-	}
+	assert.Equal(t, 1, Compare("v1.2.0", "v1.1.0"))
+	assert.Equal(t, 0, Compare("v1.0.0", "v1.0.0"))
+	assert.Equal(t, -1, Compare("v0.9.9", "v1.0.0"))
+	// A version that does not parse compares equal (0), never panicking.
+	assert.Equal(t, 0, Compare("not-semver", "v1.0.0"))
+	assert.Equal(t, 0, Compare("v1.0.0", "not-semver"))
 }
-
-// ── ExtractBinary ──────────────────────────────────────────────────────────────
 
 func makeTarGz(t *testing.T, name, content string) []byte {
 	t.Helper()
@@ -157,12 +119,9 @@ func makeTarGz(t *testing.T, name, content string) []byte {
 		Size:     int64(len(content)),
 		Mode:     0o755,
 	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, tw.WriteHeader(hdr))
+	_, err := tw.Write([]byte(content))
+	require.NoError(t, err)
 	tw.Close()
 	gw.Close()
 	return buf.Bytes()
@@ -176,21 +135,15 @@ func TestExtractBinaryFound(t *testing.T) {
 	}
 	data := makeTarGz(t, binaryName, "fake binary content")
 	r, err := ExtractBinary(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r == nil {
-		t.Fatal("expected non-nil reader")
-	}
+	require.NoError(t, err)
+	assert.NotNil(t, r)
 }
 
 func TestExtractBinaryNotFound(t *testing.T) {
 	t.Parallel()
 	data := makeTarGz(t, "other-file", "content")
 	_, err := ExtractBinary(data)
-	if err == nil {
-		t.Fatal("expected error when binary not in archive")
-	}
+	assert.Error(t, err, "expected error when binary not in archive")
 }
 
 func TestExtractBinaryPathTraversal(t *testing.T) {
@@ -208,12 +161,8 @@ func TestExtractBinaryPathTraversal(t *testing.T) {
 	tw.Close()
 	gw.Close()
 	_, err := ExtractBinary(buf.Bytes())
-	if err == nil {
-		t.Fatal("expected error for path traversal in archive")
-	}
+	assert.Error(t, err, "expected error for path traversal in archive")
 }
-
-// ── FetchRelease ──────────────────────────────────────────────────────────────
 
 func TestFetchReleaseLatest(t *testing.T) {
 	t.Parallel()
@@ -224,12 +173,8 @@ func TestFetchReleaseLatest(t *testing.T) {
 	defer srv.Close()
 
 	got, err := FetchRelease(context.Background(), "", Options{APIBase: srv.URL})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.TagName != "v3.0.0" {
-		t.Errorf("TagName = %q, want v3.0.0", got.TagName)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "v3.0.0", got.TagName)
 }
 
 func TestFetchReleaseHTTPError(t *testing.T) {
@@ -240,19 +185,13 @@ func TestFetchReleaseHTTPError(t *testing.T) {
 	defer srv.Close()
 
 	_, err := FetchRelease(context.Background(), "", Options{APIBase: srv.URL})
-	if err == nil {
-		t.Fatal("expected error for HTTP 404, got nil")
-	}
+	assert.Error(t, err, "expected error for HTTP 404")
 }
-
-// ── FetchAndVerifyManifest ────────────────────────────────────────────────────
 
 func TestFetchAndVerifyManifestValid(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	hash := strings.Repeat("e", 64)
 	manifest := []byte(fmt.Sprintf("version: v1.0.0\n%s  file.tar.gz\n", hash))
@@ -272,20 +211,14 @@ func TestFetchAndVerifyManifestValid(t *testing.T) {
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
 		Options{PubKey: pub},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.Version != "v1.0.0" {
-		t.Errorf("Version = %q, want v1.0.0", m.Version)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "v1.0.0", m.Version)
 }
 
 func TestFetchAndVerifyManifestBadSig(t *testing.T) {
 	t.Parallel()
 	pub, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	hash := strings.Repeat("f", 64)
 	manifest := []byte(fmt.Sprintf("version: v1.0.0\n%s  file.tar.gz\n", hash))
@@ -305,12 +238,8 @@ func TestFetchAndVerifyManifestBadSig(t *testing.T) {
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
 		Options{PubKey: pub},
 	)
-	if err == nil {
-		t.Fatal("expected signature failure, got nil")
-	}
+	assert.Error(t, err, "expected signature failure")
 }
-
-// ── FetchAndVerifyTarball ─────────────────────────────────────────────────────
 
 func TestFetchAndVerifyTarballHashMismatch(t *testing.T) {
 	t.Parallel()
@@ -327,9 +256,7 @@ func TestFetchAndVerifyTarballHashMismatch(t *testing.T) {
 	defer srv.Close()
 
 	_, err := FetchAndVerifyTarball(context.Background(), srv.URL+"/asset", "asset.tar.gz", m, Options{})
-	if err == nil {
-		t.Fatal("expected hash mismatch error, got nil")
-	}
+	assert.Error(t, err, "expected hash mismatch error")
 }
 
 func TestFetchAndVerifyTarballMissingManifestEntry(t *testing.T) {
@@ -339,47 +266,31 @@ func TestFetchAndVerifyTarballMissingManifestEntry(t *testing.T) {
 		Hashes:  map[string]string{},
 	}
 	_, err := FetchAndVerifyTarball(context.Background(), "http://unused", "asset.tar.gz", m, Options{})
-	if err == nil {
-		t.Fatal("expected error for missing manifest entry, got nil")
-	}
+	assert.Error(t, err, "expected error for missing manifest entry")
 }
-
-// ── ResolveTargetPath ─────────────────────────────────────────────────────────
 
 func TestResolveTargetPathWithBinDir(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path, err := ResolveTargetPath(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if filepath.Dir(path) != dir {
-		t.Errorf("Dir(%q) = %q, want %q", path, filepath.Dir(path), dir)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, dir, filepath.Dir(path))
 }
 
 func TestResolveTargetPathBinDirNotDir(t *testing.T) {
 	t.Parallel()
 	f, err := os.CreateTemp(t.TempDir(), "not-a-dir")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	f.Close()
 	_, err = ResolveTargetPath(f.Name())
-	if err == nil {
-		t.Fatal("expected error when --bin-dir points to a file, got nil")
-	}
+	assert.Error(t, err, "expected error when --bin-dir points to a file")
 }
-
-// ── CheckParentWritable ───────────────────────────────────────────────────────
 
 func TestCheckParentWritable(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	err := CheckParentWritable(filepath.Join(dir, "magus"))
-	if err != nil {
-		t.Errorf("CheckParentWritable on writable dir: %v", err)
-	}
+	assert.NoError(t, err)
 }
 
 // TestDownloadVerifyNilPubKeyFallsBack verifies that Options with nil PubKey
@@ -404,7 +315,5 @@ func TestDownloadVerifyNilPubKeyFallsBack(t *testing.T) {
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
 		Options{},
 	)
-	if err == nil {
-		t.Fatal("expected error with nil PubKey, got nil")
-	}
+	assert.Error(t, err, "expected error with nil PubKey")
 }

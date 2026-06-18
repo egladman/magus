@@ -38,7 +38,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req types.InvokeRequest) 
 
 	ws := t.opts.Magus
 
-	targets, source, err := ws.ExpandAffected(ctx, "ci", "")
+	targets, source, _, err := ws.ExpandAffected(ctx, "ci", "")
 	if err != nil {
 		toolLogger(ctx).Warn("mcp: expand affected failed", "error", err)
 		return types.InvokeResponse{}, fmt.Errorf("mcp: expand affected: %w", err)

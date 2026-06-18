@@ -1,88 +1,85 @@
 package types
 
 import (
-	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseTarget(t *testing.T) {
-	tests := []struct {
-		in         string
-		wantName   string
-		wantCharms []string
-		wantErr    bool
-	}{
-		{in: "build", wantName: "build"}, // bare target
-		{in: "lint:read", wantName: "lint", wantCharms: []string{"read"}},
-		{in: "lint:read,strict", wantName: "lint", wantCharms: []string{"read", "strict"}},
-		{in: "format:write", wantName: "format", wantCharms: []string{"write"}},
-		{in: "api:build", wantName: "api", wantCharms: []string{"build"}}, // project is positional now; this is target=api charm=build
-		{in: "lint:", wantErr: true},                                      // empty charm
-		{in: "lint:read,", wantErr: true},                                 // empty charm in list
-		{in: "web/studio:test", wantErr: true},                            // '/' not allowed in target
-		{in: "go::lint", wantErr: true},                                   // '::' not a target char (spell filter stripped earlier)
-		{in: "", wantErr: true},                                           // empty string
+	got, err := ParseTarget("build") // bare target
+	require.NoError(t, err)
+	assert.Equal(t, Target{Name: "build"}, got)
+
+	got, err = ParseTarget("lint:read")
+	require.NoError(t, err)
+	assert.Equal(t, Target{Name: "lint", Charms: []string{"read"}}, got)
+
+	got, err = ParseTarget("lint:read,strict")
+	require.NoError(t, err)
+	assert.Equal(t, Target{Name: "lint", Charms: []string{"read", "strict"}}, got)
+
+	got, err = ParseTarget("format:write")
+	require.NoError(t, err)
+	assert.Equal(t, Target{Name: "format", Charms: []string{"write"}}, got)
+
+	// Project is positional now; this is target=api charm=build.
+	got, err = ParseTarget("api:build")
+	require.NoError(t, err)
+	assert.Equal(t, Target{Name: "api", Charms: []string{"build"}}, got)
+}
+
+func TestParseTarget_Errors(t *testing.T) {
+	invalid := []string{
+		"lint:",           // empty charm
+		"lint:read,",      // empty charm in list
+		"web/studio:test", // '/' not allowed in target
+		"go::lint",        // '::' not a target char (spell filter stripped earlier)
+		"",                // empty string
 	}
-	for _, tc := range tests {
-		t.Run(tc.in, func(t *testing.T) {
-			got, err := ParseTarget(tc.in)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("ParseTarget(%q) = %+v, want error", tc.in, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParseTarget(%q) unexpected error: %v", tc.in, err)
-			}
-			if got.Name != tc.wantName || !slices.Equal(got.Charms, tc.wantCharms) {
-				t.Errorf("ParseTarget(%q) = {Name:%q Charms:%v}, want {Name:%q Charms:%v}",
-					tc.in, got.Name, got.Charms, tc.wantName, tc.wantCharms)
-			}
-		})
+	for _, in := range invalid {
+		_, err := ParseTarget(in)
+		assert.Errorf(t, err, "ParseTarget(%q) should error", in)
 	}
 }
 
 func TestValidateTargetName(t *testing.T) {
-	valid := []string{"build", "test", "lint-fix", "gen_2", "ABC123", "a"}
-	for _, n := range valid {
-		if err := ValidateTargetName(n); err != nil {
-			t.Errorf("ValidateTargetName(%q) = %v, want nil", n, err)
-		}
+	for _, n := range []string{"build", "test", "lint-fix", "gen_2", "ABC123", "a"} {
+		assert.NoErrorf(t, ValidateTargetName(n), "ValidateTargetName(%q)", n)
 	}
-	invalid := []string{"", "lint:read", "go::lint", "foo@bar", "web/studio", "build prod", "test.unit"}
-	for _, n := range invalid {
-		if err := ValidateTargetName(n); err == nil {
-			t.Errorf("ValidateTargetName(%q) = nil, want error", n)
-		}
+	for _, n := range []string{"", "lint:read", "go::lint", "foo@bar", "web/studio", "build prod", "test.unit"} {
+		assert.Errorf(t, ValidateTargetName(n), "ValidateTargetName(%q) should error", n)
 	}
 }
 
 func TestDefaultTargetNameNormalizer(t *testing.T) {
 	norm := DefaultTargetNameNormalizer
+	assert.Equal(t, "go-build", norm.NormalizeTargetName("go_build"))
+	assert.Equal(t, "go-build", norm.NormalizeTargetName("goBuild"))
+	assert.Equal(t, "go-build", norm.NormalizeTargetName("go-build"))
+	assert.Equal(t, "build", norm.NormalizeTargetName("build"))
+	assert.Equal(t, "image-build-static", norm.NormalizeTargetName("image_build_static"))
+}
+
+func TestKebabCase(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"go_build", "go-build"},
-		{"goBuild", "go-build"},
-		{"go-build", "go-build"},
-		{"build", "build"},
-		{"image_build_static", "image-build-static"},
+		{"FooBar", "foo-bar"},
+		{"fooBarBaz", "foo-bar-baz"},
+		{"HTTPServer", "http-server"},
+		{"fmt", "fmt"},
+		{"build2", "build-2"},
 	}
-	for _, tc := range cases {
-		if got := norm.NormalizeTargetName(tc.in); got != tc.want {
-			t.Errorf("NormalizeTargetName(%q) = %q, want %q", tc.in, got, tc.want)
-		}
+	for _, c := range cases {
+		assert.Equalf(t, c.want, kebabCase(c.in), "kebabCase(%q)", c.in)
 	}
 }
 
 func TestValidateCharmName(t *testing.T) {
 	for _, n := range []string{"read", "write", "strict", "ci-only", "x"} {
-		if err := ValidateCharmName(n); err != nil {
-			t.Errorf("ValidateCharmName(%q) = %v, want nil", n, err)
-		}
+		assert.NoErrorf(t, ValidateCharmName(n), "ValidateCharmName(%q)", n)
 	}
 	for _, n := range []string{"", "read:write", "a b", "fast@v2"} {
-		if err := ValidateCharmName(n); err == nil {
-			t.Errorf("ValidateCharmName(%q) = nil, want error", n)
-		}
+		assert.Errorf(t, ValidateCharmName(n), "ValidateCharmName(%q) should error", n)
 	}
 }

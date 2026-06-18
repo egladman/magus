@@ -110,16 +110,21 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 			mu.Unlock()
 			go func(p []string) {
 				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						mu.Lock()
-						running = false
-						mu.Unlock()
-						errFn(fmt.Errorf("magus: stream: panic: %v", r))
-					}
-				}()
-				for {
+				// A panic in one batch is reported but must not kill the worker:
+				// doing so would orphan any batches already merged into pending. The
+				// drain loop below is the single owner of running=false, so recovering
+				// per-batch (not at the goroutine level) keeps the "the active worker
+				// always drains pending" invariant intact across a panicking build.
+				safeRun := func(p []string) {
+					defer func() {
+						if r := recover(); r != nil {
+							errFn(fmt.Errorf("magus: stream: panic: %v", r))
+						}
+					}()
 					runBatch(p)
+				}
+				for {
+					safeRun(p)
 					mu.Lock()
 					next := pending
 					pending = nil
@@ -225,7 +230,7 @@ func readBatches(ctx context.Context, r io.Reader, null bool) <-chan []string {
 }
 
 func mergePaths(a, b []string) []string {
-	s := append(a, b...)
+	s := slices.Concat(a, b)
 	slices.Sort(s)
 	return slices.Compact(s)
 }

@@ -1,65 +1,47 @@
 package file
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolve(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   string
-		anchor  string
-		want    string
-		wantErr string // substring; empty means must succeed
-	}{
-		// Repo-relative inputs (no dot prefix) ignore the anchor.
-		{name: "bare", input: "api", anchor: "extensions/drape", want: "api"},
-		{name: "nested", input: "web/studio", anchor: "extensions/drape", want: "web/studio"},
-		{name: "root project", input: ".", anchor: "extensions/drape", want: "extensions/drape"},
-
-		// Explicit relative markers resolve against the anchor.
-		{name: "sibling sub", input: "./peer", anchor: "extensions/drape", want: "extensions/drape/peer"},
-		{name: "up one", input: "../api", anchor: "extensions/drape", want: "extensions/api"},
-		{name: "up two to root", input: "../../api", anchor: "extensions/drape", want: "api"},
-		{name: "up to repo root", input: "..", anchor: "extensions/drape", want: "extensions"},
-		{name: "deep up", input: "../../../web/studio", anchor: "a/b/c", want: "web/studio"},
-
-		// Errors.
-		{name: "empty", input: "", anchor: "x", wantErr: "empty project path"},
-		{name: "abs unix", input: "/etc", anchor: "x", wantErr: "must be repo-relative"},
-		{name: "drive letter", input: `C:\foo`, anchor: "x", wantErr: "must be repo-relative"},
-		{name: "lowercase drive", input: `c:/foo`, anchor: "x", wantErr: "must be repo-relative"},
-		{name: "escapes anchor at root", input: "../foo", anchor: ".", wantErr: "escapes workspace root"},
-		{name: "escapes deep", input: "../../../foo", anchor: "a/b", wantErr: "escapes workspace root"},
-
-		// Bare (non-dot-prefixed) inputs that clean to an escape must also be
-		// rejected — they bypass the relative-marker branch (CRIT-3).
-		{name: "bare embedded escape", input: "foo/../../bar", anchor: "a/b", wantErr: "escapes workspace root"},
-		{name: "bare escape to parent", input: "foo/../..", anchor: "a/b", wantErr: "escapes workspace root"},
-		{name: "bare internal dotdot ok", input: "foo/../bar", anchor: "a/b", want: "bar"},
+	ok := func(t *testing.T, input, anchor, want string) {
+		got, err := Resolve(input, anchor)
+		require.NoError(t, err, "Resolve(%q, %q)", input, anchor)
+		assert.Equal(t, want, got)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := Resolve(tc.input, tc.anchor)
-			if tc.wantErr != "" {
-				if err == nil {
-					t.Fatalf("Resolve(%q, %q) = %q, nil; want error containing %q",
-						tc.input, tc.anchor, got, tc.wantErr)
-				}
-				if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Resolve(%q, %q): unexpected error: %v",
-					tc.input, tc.anchor, err)
-			}
-			if got != tc.want {
-				t.Fatalf("Resolve(%q, %q) = %q, want %q",
-					tc.input, tc.anchor, got, tc.want)
-			}
-		})
+	fail := func(t *testing.T, input, anchor, wantErr string) {
+		got, err := Resolve(input, anchor)
+		require.Error(t, err, "Resolve(%q, %q) = %q, want error containing %q", input, anchor, got, wantErr)
+		assert.ErrorContains(t, err, wantErr)
 	}
+
+	// Repo-relative inputs (no dot prefix) ignore the anchor.
+	t.Run("bare", func(t *testing.T) { ok(t, "api", "extensions/drape", "api") })
+	t.Run("nested", func(t *testing.T) { ok(t, "web/studio", "extensions/drape", "web/studio") })
+	t.Run("root project", func(t *testing.T) { ok(t, ".", "extensions/drape", "extensions/drape") })
+
+	// Explicit relative markers resolve against the anchor.
+	t.Run("sibling sub", func(t *testing.T) { ok(t, "./peer", "extensions/drape", "extensions/drape/peer") })
+	t.Run("up one", func(t *testing.T) { ok(t, "../api", "extensions/drape", "extensions/api") })
+	t.Run("up two to root", func(t *testing.T) { ok(t, "../../api", "extensions/drape", "api") })
+	t.Run("up to repo root", func(t *testing.T) { ok(t, "..", "extensions/drape", "extensions") })
+	t.Run("deep up", func(t *testing.T) { ok(t, "../../../web/studio", "a/b/c", "web/studio") })
+
+	// Errors.
+	t.Run("empty", func(t *testing.T) { fail(t, "", "x", "empty project path") })
+	t.Run("abs unix", func(t *testing.T) { fail(t, "/etc", "x", "must be repo-relative") })
+	t.Run("drive letter", func(t *testing.T) { fail(t, `C:\foo`, "x", "must be repo-relative") })
+	t.Run("lowercase drive", func(t *testing.T) { fail(t, `c:/foo`, "x", "must be repo-relative") })
+	t.Run("escapes anchor at root", func(t *testing.T) { fail(t, "../foo", ".", "escapes workspace root") })
+	t.Run("escapes deep", func(t *testing.T) { fail(t, "../../../foo", "a/b", "escapes workspace root") })
+
+	// Bare (non-dot-prefixed) inputs that clean to an escape must also be
+	// rejected — they bypass the relative-marker branch (CRIT-3).
+	t.Run("bare embedded escape", func(t *testing.T) { fail(t, "foo/../../bar", "a/b", "escapes workspace root") })
+	t.Run("bare escape to parent", func(t *testing.T) { fail(t, "foo/../..", "a/b", "escapes workspace root") })
+	t.Run("bare internal dotdot ok", func(t *testing.T) { ok(t, "foo/../bar", "a/b", "bar") })
 }

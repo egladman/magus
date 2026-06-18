@@ -40,7 +40,7 @@ func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) 
 // guard test TestMagusSurfaceMatchesBindings enforces that parity, so a new (or
 // removed) real binding can't silently drift from this dry-run host. Members the
 // dry run doesn't meaningfully act on are stubbed; only structure-declaring members
-// (project.register, target.*, needs, spell.get) are modeled into the graph.
+// (project.register, target.*, needs) are modeled into the graph.
 func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 	m := buzz.NewMap()
 
@@ -87,17 +87,6 @@ func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 		return buzz.Null, nil
 	}))
 
-	// magus.spell.get(name) returns a handle carrying the spell name, matching how a
-	// register "spells" list reads it; load is a no-op in the dry run.
-	spell := buzz.NewMap()
-	spell.MapSet("get", fn("magus.spell.get", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
-		h := buzz.NewMap()
-		h.MapSet("name", buzz.StrValue(strArg(args, 0, "")))
-		return h, nil
-	}))
-	spell.MapSet("load", fn("magus.spell.load", retNull))
-	m.MapSet("spell", spell)
-
 	// magus.cache.<...>: a namespace in the real module (cache.remote, …); stub it as
 	// a no-op namespace so cache.remote(github) at magusfile top level doesn't blow up.
 	cache := buzz.NewMap()
@@ -129,10 +118,26 @@ func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 		return res, nil
 	}))
 
-	// Runtime-only members (a debugger, hints, fatal-abort) have no dry-run effect;
-	// stub them as no-ops so a reference resolves. They're here to satisfy the surface
-	// parity guard, not because the dry run acts on them.
-	for _, name := range []string{"hint", "fatal", "pry"} {
+	// magus.modules()/magus.module(name) are pure introspection on the real host
+	// module registry, which the sandbox doesn't wire (pulling hostbuzz/std in would
+	// bloat the playground). Stub them as empty-but-shaped records so a reference and
+	// field access (e.g. magus.module(x).methods) resolve in a dry run.
+	m.MapSet("modules", fn("magus.modules", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+		return buzz.ListValue(nil), nil
+	}))
+	m.MapSet("module", fn("magus.module", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+		res := buzz.NewMap()
+		res.MapSet("name", buzz.StrValue(""))
+		res.MapSet("doc", buzz.StrValue(""))
+		res.MapSet("fields", buzz.ListValue(nil))
+		res.MapSet("methods", buzz.ListValue(nil))
+		return res, nil
+	}))
+
+	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
+	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
+	// satisfy the surface parity guard, not because the dry run acts on them.
+	for _, name := range []string{"hint", "fatal", "pry", "bustCache"} {
 		m.MapSet(name, fn("magus."+name, retNull))
 	}
 
@@ -296,8 +301,6 @@ func buildExtra(rec *Recorder) buzz.Value {
 
 	return extra
 }
-
-// ── value helpers ─────────────────────────────────────────────────────────────
 
 func retBool(b bool) func(context.Context, []buzz.Value) (buzz.Value, error) {
 	return func(context.Context, []buzz.Value) (buzz.Value, error) { return buzz.BoolValue(b), nil }

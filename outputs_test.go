@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/egladman/magus/types"
 )
 
@@ -16,18 +19,12 @@ func openTempWorkspace(t *testing.T, projPath string, outputs []string) (*Magus,
 	root := t.TempDir()
 
 	// An empty magusfile.buzz at the root marks it as the workspace root.
-	if err := os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
 
 	// An empty magusfile.buzz in the project directory makes magus discover it.
 	projDir := filepath.Join(root, filepath.FromSlash(projPath))
-	if err := os.MkdirAll(projDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(projDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644))
 
 	reg := NewWorkspaceRegistry()
 	if len(outputs) > 0 {
@@ -35,9 +32,7 @@ func openTempWorkspace(t *testing.T, projPath string, outputs []string) (*Magus,
 	}
 
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m, root
 }
@@ -49,34 +44,23 @@ func TestCleanOutputsRemovesMatchedFiles(t *testing.T) {
 
 	binDir := filepath.Join(root, "api", "bin")
 	genDir := filepath.Join(root, "api", "gen")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(genDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.MkdirAll(genDir, 0o755))
 
 	// Create files that should be cleaned.
 	binFile := filepath.Join(binDir, "api")
 	genFile := filepath.Join(genDir, "types.pb.go")
 	for _, f := range []string{binFile, genFile} {
-		if err := os.WriteFile(f, []byte("placeholder"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(f, []byte("placeholder"), 0o644))
 	}
 
 	projects := m.All()
 	removed, err := m.CleanOutputs(context.Background(), projects, false)
-	if err != nil {
-		t.Fatalf("CleanOutputs: %v", err)
-	}
-	if len(removed) == 0 {
-		t.Fatal("CleanOutputs: no files removed")
-	}
+	require.NoError(t, err, "CleanOutputs")
+	require.NotEmpty(t, removed, "CleanOutputs: no files removed")
 	for _, path := range removed {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Errorf("file still exists after clean: %s", path)
-		}
+		_, err := os.Stat(path)
+		assert.True(t, os.IsNotExist(err), "file still exists after clean: %s", path)
 	}
 }
 
@@ -86,26 +70,17 @@ func TestCleanOutputsDryRunDoesNotDelete(t *testing.T) {
 	m, root := openTempWorkspace(t, "api", []string{"bin/api"})
 
 	binDir := filepath.Join(root, "api", "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
 	target := filepath.Join(binDir, "api")
-	if err := os.WriteFile(target, []byte("binary"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(target, []byte("binary"), 0o755))
 
 	projects := m.All()
 	removed, err := m.CleanOutputs(context.Background(), projects, true /* dryRun */)
-	if err != nil {
-		t.Fatalf("CleanOutputs (dry-run): %v", err)
-	}
-	if len(removed) == 0 {
-		t.Fatal("dry-run: expected at least one matched path to be returned")
-	}
+	require.NoError(t, err, "CleanOutputs (dry-run)")
+	require.NotEmpty(t, removed, "dry-run: expected at least one matched path to be returned")
 	// File must still exist.
-	if _, err := os.Stat(target); err != nil {
-		t.Errorf("dry-run: file was deleted: %v", err)
-	}
+	_, err = os.Stat(target)
+	assert.NoError(t, err, "dry-run: file was deleted")
 }
 
 // TestCleanOutputsNoMatchIsNoop verifies that CleanOutputs is a no-op when
@@ -114,12 +89,8 @@ func TestCleanOutputsNoMatchIsNoop(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", []string{"bin/api"})
 	projects := m.All()
 	removed, err := m.CleanOutputs(context.Background(), projects, false)
-	if err != nil {
-		t.Fatalf("CleanOutputs (no files): %v", err)
-	}
-	if len(removed) != 0 {
-		t.Errorf("expected no removals, got %d: %v", len(removed), removed)
-	}
+	require.NoError(t, err, "CleanOutputs (no files)")
+	assert.Empty(t, removed, "expected no removals")
 }
 
 // TestFindOutputOwnerMatchesDeclaration verifies that FindOutputOwner returns
@@ -129,27 +100,20 @@ func TestFindOutputOwnerMatchesDeclaration(t *testing.T) {
 	// (not the raw t.TempDir) so they share that canonical base on macOS.
 	m, _ := openTempWorkspace(t, "api", []string{"bin/**", "gen/**"})
 
-	cases := []struct {
-		relPath string
-		want    string // project path, or "" for not found
-	}{
-		{"api/bin/api", "api"},
-		{"api/gen/types.pb.go", "api"},
-		{"api/src/main.go", ""}, // not an output
-		{"other/bin/app", ""},   // different project
-	}
-
-	for _, tc := range cases {
-		abs := filepath.Join(m.Root(), filepath.FromSlash(tc.relPath))
+	check := func(relPath, want string) {
+		abs := filepath.Join(m.Root(), filepath.FromSlash(relPath))
 		p := m.FindOutputOwner(abs)
 		got := ""
 		if p != nil {
 			got = p.Path
 		}
-		if got != tc.want {
-			t.Errorf("FindOutputOwner(%q): got %q, want %q", tc.relPath, got, tc.want)
-		}
+		assert.Equalf(t, want, got, "FindOutputOwner(%q)", relPath)
 	}
+
+	check("api/bin/api", "api")
+	check("api/gen/types.pb.go", "api")
+	check("api/src/main.go", "") // not an output
+	check("other/bin/app", "")   // different project
 }
 
 // TestProjectsResolvesTargets verifies that Projects returns the correct
@@ -159,10 +123,6 @@ func TestProjectsResolvesTargets(t *testing.T) {
 
 	targets := []types.Target{{Path: "api", Name: "build"}}
 	projects := m.ResolveProjects(targets)
-	if len(projects) != 1 {
-		t.Fatalf("Projects: got %d projects, want 1", len(projects))
-	}
-	if projects[0].Path != "api" {
-		t.Errorf("Projects: got path %q, want %q", projects[0].Path, "api")
-	}
+	require.Len(t, projects, 1, "Projects")
+	assert.Equal(t, "api", projects[0].Path)
 }

@@ -14,14 +14,14 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/codec"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func mustKeypair(t *testing.T) (ed25519.PublicKey, []byte) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
+	require.NoError(t, err, "generate key")
 	return pub, priv.Seed()
 }
 
@@ -30,25 +30,15 @@ func mustKeypair(t *testing.T) (ed25519.PublicKey, []byte) {
 func TestSignVerifyRoundTrip(t *testing.T) {
 	pub, seed := mustKeypair(t)
 	s, err := newSigner(seed)
-	if err != nil {
-		t.Fatalf("newSigner: %v", err)
-	}
+	require.NoError(t, err, "newSigner")
 	v, err := newVerifier([][]byte{pub})
-	if err != nil {
-		t.Fatalf("newVerifier: %v", err)
-	}
+	require.NoError(t, err, "newVerifier")
 
 	manifest := []byte(`{"projectPath":"test/pkg","hash":"abc123","outputs":[]}`)
 	sig, err := s.sign(manifest)
-	if err != nil {
-		t.Fatalf("sign: %v", err)
-	}
-	if err := v.verify(sig, manifest); err != nil {
-		t.Fatalf("verify valid signature: %v", err)
-	}
-	if keyID(pub) != s.keyid {
-		t.Fatalf("signer keyid %q != derived %q", s.keyid, keyID(pub))
-	}
+	require.NoError(t, err, "sign")
+	assert.NoError(t, v.verify(sig, manifest), "verify valid signature")
+	assert.Equal(t, s.keyid, keyID(pub), "signer keyid must match derived keyid")
 }
 
 // TestVerifyRejectsUntrustedKey: a signature from a key absent from the trust set
@@ -61,9 +51,7 @@ func TestVerifyRejectsUntrustedKey(t *testing.T) {
 
 	manifest := []byte(`{"hash":"x"}`)
 	sig, _ := s.sign(manifest)
-	if err := v.verify(sig, manifest); err == nil {
-		t.Fatal("verify accepted a signature from an untrusted key")
-	}
+	assert.Error(t, v.verify(sig, manifest), "verify accepted a signature from an untrusted key")
 }
 
 // TestVerifyRejectsTamperedManifest: the bytes presented at verify time must be
@@ -76,9 +64,7 @@ func TestVerifyRejectsTamperedManifest(t *testing.T) {
 	manifest := []byte(`{"hash":"original"}`)
 	sig, _ := s.sign(manifest)
 	tampered := []byte(`{"hash":"poisoned"}`)
-	if err := v.verify(sig, tampered); err == nil {
-		t.Fatal("verify accepted a signature over different manifest bytes")
-	}
+	assert.Error(t, v.verify(sig, tampered), "verify accepted a signature over different manifest bytes")
 }
 
 // TestVerifyRejectsBadAlg: only ed25519 envelopes are accepted.
@@ -86,72 +72,52 @@ func TestVerifyRejectsBadAlg(t *testing.T) {
 	pub, _ := mustKeypair(t)
 	v, _ := newVerifier([][]byte{pub})
 	env, _ := codec.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
-	if err := v.verify(env, []byte("m")); err == nil {
-		t.Fatal("verify accepted a non-ed25519 algorithm")
-	}
+	assert.Error(t, v.verify(env, []byte("m")), "verify accepted a non-ed25519 algorithm")
 }
 
 // TestKeyMaterialValidation: malformed key material is rejected at construction.
 func TestKeyMaterialValidation(t *testing.T) {
-	if _, err := newSigner(make([]byte, 16)); err == nil {
-		t.Error("newSigner accepted a 16-byte seed")
-	}
-	if _, err := newVerifier([][]byte{make([]byte, 16)}); err == nil {
-		t.Error("newVerifier accepted a 16-byte public key")
-	}
-	if _, err := newVerifier(nil); err == nil {
-		t.Error("newVerifier accepted an empty trust set")
-	}
+	_, err := newSigner(make([]byte, 16))
+	assert.Error(t, err, "newSigner accepted a 16-byte seed")
+	_, err = newVerifier([][]byte{make([]byte, 16)})
+	assert.Error(t, err, "newVerifier accepted a 16-byte public key")
+	_, err = newVerifier(nil)
+	assert.Error(t, err, "newVerifier accepted an empty trust set")
 }
 
 // TestKeyToolingConsistency: the CLI helpers agree with each other and with the
 // verifier's keyid derivation, from both a public key and a seed.
 func TestKeyToolingConsistency(t *testing.T) {
 	km, err := GenerateSigningKey()
-	if err != nil {
-		t.Fatalf("GenerateSigningKey: %v", err)
-	}
+	require.NoError(t, err, "GenerateSigningKey")
 
 	fromPub, err := TrustedKeyInfo(km.PubB64)
-	if err != nil {
-		t.Fatalf("TrustedKeyInfo: %v", err)
-	}
-	if fromPub.PubB64 != km.PubB64 || fromPub.KeyID != km.KeyID {
-		t.Fatalf("TrustedKeyInfo = %+v, want pub=%s id=%s", fromPub, km.PubB64, km.KeyID)
-	}
+	require.NoError(t, err, "TrustedKeyInfo")
+	assert.Equal(t, km.PubB64, fromPub.PubB64)
+	assert.Equal(t, km.KeyID, fromPub.KeyID)
 
 	fromSeed, err := SigningKeyInfo(km.SeedB64)
-	if err != nil {
-		t.Fatalf("SigningKeyInfo: %v", err)
-	}
-	if fromSeed.PubB64 != km.PubB64 || fromSeed.KeyID != km.KeyID {
-		t.Fatalf("SigningKeyInfo = %+v, want pub=%s id=%s", fromSeed, km.PubB64, km.KeyID)
-	}
+	require.NoError(t, err, "SigningKeyInfo")
+	assert.Equal(t, km.PubB64, fromSeed.PubB64)
+	assert.Equal(t, km.KeyID, fromSeed.KeyID)
 }
 
 // TestKeyToolingValidation: the helpers reject malformed input clearly.
 func TestKeyToolingValidation(t *testing.T) {
-	if _, err := TrustedKeyInfo("not!base64!"); err == nil {
-		t.Error("TrustedKeyInfo accepted non-base64")
-	}
-	if _, err := TrustedKeyInfo(base64.StdEncoding.EncodeToString(make([]byte, 16))); err == nil {
-		t.Error("TrustedKeyInfo accepted a 16-byte key")
-	}
-	if _, err := SigningKeyInfo(base64.StdEncoding.EncodeToString(make([]byte, 16))); err == nil {
-		t.Error("SigningKeyInfo accepted a 16-byte seed")
-	}
+	_, err := TrustedKeyInfo("not!base64!")
+	assert.Error(t, err, "TrustedKeyInfo accepted non-base64")
+	_, err = TrustedKeyInfo(base64.StdEncoding.EncodeToString(make([]byte, 16)))
+	assert.Error(t, err, "TrustedKeyInfo accepted a 16-byte key")
+	_, err = SigningKeyInfo(base64.StdEncoding.EncodeToString(make([]byte, 16)))
+	assert.Error(t, err, "SigningKeyInfo accepted a 16-byte seed")
 }
 
 // TestKeyIDDerivation: a keyid is a stable, 16-hex-char function of the key.
 func TestKeyIDDerivation(t *testing.T) {
 	pub, _ := mustKeypair(t)
 	id := keyID(pub)
-	if len(id) != keyIDLen {
-		t.Fatalf("keyid length = %d, want %d", len(id), keyIDLen)
-	}
-	if keyID(pub) != id {
-		t.Fatal("keyid is not deterministic")
-	}
+	assert.Len(t, id, keyIDLen)
+	assert.Equal(t, id, keyID(pub), "keyid is not deterministic")
 }
 
 // TestHashSpec_EnvUnsetVsEmpty verifies an allowlisted env var that is unset
@@ -164,17 +130,11 @@ func TestHashSpec_EnvUnsetVsEmpty(t *testing.T) {
 
 	os.Unsetenv(k)
 	hUnset, err := c.hashSpec(context.Background(), s)
-	if err != nil {
-		t.Fatalf("hashSpec(unset): %v", err)
-	}
+	require.NoError(t, err, "hashSpec(unset)")
 	t.Setenv(k, "")
 	hEmpty, err := c.hashSpec(context.Background(), s)
-	if err != nil {
-		t.Fatalf("hashSpec(empty): %v", err)
-	}
-	if hUnset == hEmpty {
-		t.Error("an unset env var must hash differently from one set to \"\"")
-	}
+	require.NoError(t, err, "hashSpec(empty)")
+	assert.NotEqual(t, hEmpty, hUnset, "an unset env var must hash differently from one set to \"\"")
 }
 
 // TestHashSpec_Charms verifies active charms key the cache: a charm-variant run
@@ -186,9 +146,7 @@ func TestHashSpec_Charms(t *testing.T) {
 	base := &Spec{ProjectPath: ".", WorkspaceRoot: root, Target: "lint"}
 	hashOf := func(s *Spec) string {
 		h, err := c.hashSpec(context.Background(), s)
-		if err != nil {
-			t.Fatalf("hashSpec: %v", err)
-		}
+		require.NoError(t, err, "hashSpec")
 		return h
 	}
 
@@ -197,12 +155,10 @@ func TestHashSpec_Charms(t *testing.T) {
 	write := hashOf(&Spec{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{"write"}})
 	debug := hashOf(&Spec{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{"debug"}})
 
-	if none != empty {
-		t.Error("empty Charms must hash identically to no Charms (back-compat)")
-	}
-	if write == none || debug == none || write == debug {
-		t.Errorf("charm-variant runs must differ: none=%s write=%s debug=%s", none[:8], write[:8], debug[:8])
-	}
+	assert.Equal(t, none, empty, "empty Charms must hash identically to no Charms (back-compat)")
+	assert.NotEqual(t, none, write, "charm-variant runs must differ from none")
+	assert.NotEqual(t, none, debug, "charm-variant runs must differ from none")
+	assert.NotEqual(t, write, debug, "distinct charm-variant runs must differ from each other")
 }
 
 // TestHashSpec_SourceExecBit verifies that chmod +x on a source file changes
@@ -211,25 +167,15 @@ func TestHashSpec_SourceExecBit(t *testing.T) {
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
 	script := filepath.Join(root, "run.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\necho hi\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\necho hi\n"), 0o644))
 	s := &Spec{ProjectPath: ".", WorkspaceRoot: root, Sources: []string{"run.sh"}}
 
 	h1, err := c.hashSpec(context.Background(), s)
-	if err != nil {
-		t.Fatalf("hashSpec(0644): %v", err)
-	}
-	if err := os.Chmod(script, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "hashSpec(0644)")
+	require.NoError(t, os.Chmod(script, 0o755))
 	h2, err := c.hashSpec(context.Background(), s)
-	if err != nil {
-		t.Fatalf("hashSpec(0755): %v", err)
-	}
-	if h1 == h2 {
-		t.Error("chmod +x on a source file must change the hash")
-	}
+	require.NoError(t, err, "hashSpec(0755)")
+	assert.NotEqual(t, h1, h2, "chmod +x on a source file must change the hash")
 }
 
 // TestHashSpec_SpellDefVersion verifies that two Specs differing only in
@@ -244,27 +190,15 @@ func TestHashSpec_SpellDefVersion(t *testing.T) {
 	withV2 := &Spec{ProjectPath: ".", WorkspaceRoot: root, SpellDefVersion: "sha256:ddeeff"}
 
 	h0, err := c.hashSpec(context.Background(), base)
-	if err != nil {
-		t.Fatalf("hashSpec(base): %v", err)
-	}
+	require.NoError(t, err, "hashSpec(base)")
 	h1, err := c.hashSpec(context.Background(), withV1)
-	if err != nil {
-		t.Fatalf("hashSpec(v1): %v", err)
-	}
+	require.NoError(t, err, "hashSpec(v1)")
 	h2, err := c.hashSpec(context.Background(), withV2)
-	if err != nil {
-		t.Fatalf("hashSpec(v2): %v", err)
-	}
+	require.NoError(t, err, "hashSpec(v2)")
 
-	if h0 == h1 {
-		t.Error("empty and non-empty SpellDefVersion must hash differently")
-	}
-	if h1 == h2 {
-		t.Error("different SpellDefVersion values must hash differently")
-	}
-	if h0 == h2 {
-		t.Error("empty and second SpellDefVersion must hash differently")
-	}
+	assert.NotEqual(t, h0, h1, "empty and non-empty SpellDefVersion must hash differently")
+	assert.NotEqual(t, h1, h2, "different SpellDefVersion values must hash differently")
+	assert.NotEqual(t, h0, h2, "empty and second SpellDefVersion must hash differently")
 }
 
 // TestHashSpec_KeyVersionIsHashed verifies that keyVersion is mixed into the
@@ -277,26 +211,16 @@ func TestHashSpec_KeyVersionIsHashed(t *testing.T) {
 	s := &Spec{ProjectPath: ".", WorkspaceRoot: root}
 
 	h1, err := c.hashSpec(context.Background(), s)
-	if err != nil {
-		t.Fatalf("first hashSpec: %v", err)
-	}
+	require.NoError(t, err, "first hashSpec")
 	h2, err := c.hashSpec(context.Background(), s)
-	if err != nil {
-		t.Fatalf("second hashSpec: %v", err)
-	}
+	require.NoError(t, err, "second hashSpec")
 
-	if h1 != h2 {
-		t.Errorf("hashSpec not deterministic: %q != %q", h1, h2)
-	}
-	if len(h1) == 0 {
-		t.Error("hashSpec returned empty hash")
-	}
+	assert.Equal(t, h1, h2, "hashSpec not deterministic")
+	assert.NotEmpty(t, h1, "hashSpec returned empty hash")
 	// The current keyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
 	const wantKeyVersion = 3
-	if keyVersion != wantKeyVersion {
-		t.Errorf("keyVersion = %d, want %d; update this test when bumping", keyVersion, wantKeyVersion)
-	}
+	assert.Equal(t, wantKeyVersion, keyVersion, "keyVersion changed; update this test when bumping")
 }
 
 // TestHashSpec_ToolVersionsChangeMisses verifies that two Specs differing only
@@ -316,21 +240,13 @@ func TestHashSpec_ToolVersionsChangeMisses(t *testing.T) {
 
 	hash := func(s *Spec) string {
 		h, err := c.hashSpec(context.Background(), s)
-		if err != nil {
-			t.Fatalf("hashSpec: %v", err)
-		}
+		require.NoError(t, err, "hashSpec")
 		return h
 	}
 
-	if hash(base) == hash(v1) {
-		t.Error("empty and non-empty ToolVersions must hash differently")
-	}
-	if hash(v1) == hash(v2) {
-		t.Error("different ToolVersions must hash differently (R1)")
-	}
-	if hash(orderA) != hash(orderB) {
-		t.Error("ToolVersions order must not affect the hash")
-	}
+	assert.NotEqual(t, hash(base), hash(v1), "empty and non-empty ToolVersions must hash differently")
+	assert.NotEqual(t, hash(v1), hash(v2), "different ToolVersions must hash differently (R1)")
+	assert.Equal(t, hash(orderA), hash(orderB), "ToolVersions order must not affect the hash")
 }
 
 // TestHashKeyByteLayout pins the exact byte layout of the cache key. hashSpec
@@ -352,9 +268,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 	}
 
 	got, err := c.hashSpec(context.Background(), spec)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Reconstruct the expected byte stream independently, in hashSpec's field order.
 	var want bytes.Buffer
@@ -368,8 +282,5 @@ func TestHashKeyByteLayout(t *testing.T) {
 	sum := sha256.Sum256(want.Bytes())
 	expected := hex.EncodeToString(sum[:])
 
-	if got != expected {
-		t.Fatalf("cache key byte layout changed:\n got = %s\n want = %s\n(layout:\n%s)",
-			got, expected, want.String())
-	}
+	assert.Equal(t, expected, got, "cache key byte layout changed (layout:\n%s)", want.String())
 }

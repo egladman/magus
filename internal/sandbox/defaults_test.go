@@ -2,26 +2,21 @@ package sandbox
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildPolicy_NonNil(t *testing.T) {
 	p := BuildPolicy("", nil, nil, nil, nil)
-	if p == nil {
-		t.Fatal("BuildPolicy returned nil")
-	}
+	assert.NotNil(t, p, "BuildPolicy should not return nil")
 }
 
 func TestBuildPolicy_WithWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	p := BuildPolicy(dir, nil, nil, nil, nil)
-	if p == nil {
-		t.Fatal("BuildPolicy returned nil")
-	}
+	require.NotNil(t, p, "BuildPolicy should not return nil")
 	// Workspace is always readable and writable.
-	if err := p.CheckRead(dir); err != nil {
-		t.Errorf("CheckRead workspace: %v", err)
-	}
-	if err := p.CheckWrite(dir); err != nil {
-		t.Errorf("CheckWrite workspace: %v", err)
-	}
+	assert.NoError(t, p.CheckRead(dir), "CheckRead workspace")
+	assert.NoError(t, p.CheckWrite(dir), "CheckWrite workspace")
 }

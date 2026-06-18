@@ -26,6 +26,6 @@ var OptionalContract = []ContractEntry{
 	{Name: "mgs_listProvidedGlobs", Field: "provides"},
 	{Name: "mgs_listClaimedGlobs", Field: "claims"},
 	{Name: "mgs_getVersionCommand", Field: "version_cmd"},
-	{Name: "mgs_isForeignProcess", Field: "opaque"},
+	{Name: "mgs_isOpaque", Field: "opaque"},
 	{Name: "mgs_listTargets", Field: "ops"},
 }

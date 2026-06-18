@@ -13,12 +13,15 @@ var ErrNoMagusfile = errors.New("magusfile: not found")
 var ErrUnknownTarget = errors.New("magusfile: unknown target")
 
 // scriptExts are the magusfile glob patterns, and enginePriority the engine
-// preference order. Both are keyed off the script extension so a future engine
-// only has to add its pattern here and a case to engineForExt.
+// preference order. Buzz is currently the only engine; these slices are the seam
+// a second engine would extend (add its glob here, a branch to engineForExt, and
+// register it under engine.Register).
 var scriptExts = []string{"*.buzz"}
 var enginePriority = []string{"buzz"}
 
-// engineForExt maps a file extension to an engine name.
+// engineForExt maps a file extension to an engine name. Only .buzz is globbed
+// today, so every file routed here is Buzz; the switch is the extension point for
+// a future engine rather than dead generality.
 func engineForExt(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".buzz":
@@ -86,6 +89,9 @@ func Find(dir string) (*Source, error) {
 	srcs, err := FindAll(dir)
 	if err != nil {
 		return nil, err
+	}
+	if len(srcs) == 0 {
+		return nil, ErrNoMagusfile
 	}
 	return srcs[0], nil
 }

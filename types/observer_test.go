@@ -3,6 +3,8 @@ package types
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // countingObserver records how many times each callback fired.
@@ -14,23 +16,21 @@ func (c *countingObserver) OnBuild(BuildStats) { c.builds++ }
 func (c *countingObserver) OnQuery(QueryEvent) { c.queries++ }
 func (c *countingObserver) OnError(error)      { c.errs++ }
 
+// No observers, and all-nil observers, must both yield a no-op that does not
+// panic when invoked.
 func TestFanOutNilCollapsesToNoop(t *testing.T) {
-	// No observers, and all-nil observers, must both yield a no-op that does
-	// not panic when invoked.
-	for _, name := range []string{"empty", "all-nil"} {
-		t.Run(name, func(t *testing.T) {
-			var o Observer
-			if name == "empty" {
-				o = FanOut()
-			} else {
-				o = FanOut(nil, nil)
-			}
-			// Must not panic.
-			o.OnBuild(BuildStats{})
-			o.OnQuery(QueryEvent{})
-			o.OnError(errors.New("x"))
-		})
-	}
+	assert.NotPanics(t, func() {
+		o := FanOut()
+		o.OnBuild(BuildStats{})
+		o.OnQuery(QueryEvent{})
+		o.OnError(errors.New("x"))
+	})
+	assert.NotPanics(t, func() {
+		o := FanOut(nil, nil)
+		o.OnBuild(BuildStats{})
+		o.OnQuery(QueryEvent{})
+		o.OnError(errors.New("x"))
+	})
 }
 
 func TestFanOutForwardsToAllLiveObservers(t *testing.T) {
@@ -43,19 +43,14 @@ func TestFanOutForwardsToAllLiveObservers(t *testing.T) {
 	o.OnQuery(QueryEvent{})
 	o.OnError(errors.New("boom"))
 
-	for _, obs := range []*countingObserver{a, b} {
-		if obs.builds != 1 || obs.queries != 2 || obs.errs != 1 {
-			t.Errorf("observer = {builds:%d queries:%d errs:%d}, want {1 2 1}",
-				obs.builds, obs.queries, obs.errs)
-		}
-	}
+	want := &countingObserver{builds: 1, queries: 2, errs: 1}
+	assert.Equal(t, want, a)
+	assert.Equal(t, want, b)
 }
 
 func TestFanOutSingleObserverPassThrough(t *testing.T) {
 	a := &countingObserver{}
 	o := FanOut(a)
 	o.OnBuild(BuildStats{})
-	if a.builds != 1 {
-		t.Errorf("builds = %d, want 1", a.builds)
-	}
+	assert.Equal(t, 1, a.builds)
 }

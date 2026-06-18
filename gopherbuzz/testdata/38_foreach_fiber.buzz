@@ -2,7 +2,7 @@
 // foreach over &fn() drives the fiber, binding each yielded value until it is over.
 fun squares(n: int) > void *> int? {
     foreach (i in 0..n) {
-        _ = yield i * i;
+        _ = yield (i * i);
     }
 }
 var sum = 0;

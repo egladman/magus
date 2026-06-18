@@ -3,32 +3,22 @@ package gen
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestKindString(t *testing.T) {
-	cases := []struct {
-		k    Kind
-		want string
-	}{
-		{KindString, "KindString"},
-		{KindInt, "KindInt"},
-		{KindBool, "KindBool"},
-		{KindFloat64, "KindFloat64"},
-		{KindBoolPtr, "KindBoolPtr"},
-		{KindDuration, "KindDuration"},
-		{KindStringSlice, "KindStringSlice"},
-	}
-	for _, tc := range cases {
-		if got := tc.k.String(); got != tc.want {
-			t.Errorf("Kind(%d).String() = %q, want %q", tc.k, got, tc.want)
-		}
-	}
+	assert.Equal(t, "KindString", KindString.String())
+	assert.Equal(t, "KindInt", KindInt.String())
+	assert.Equal(t, "KindBool", KindBool.String())
+	assert.Equal(t, "KindFloat64", KindFloat64.String())
+	assert.Equal(t, "KindBoolPtr", KindBoolPtr.String())
+	assert.Equal(t, "KindDuration", KindDuration.String())
+	assert.Equal(t, "KindStringSlice", KindStringSlice.String())
 }
 
 func TestKindString_Unknown(t *testing.T) {
 	var k Kind = 255
 	s := k.String()
-	if !strings.HasPrefix(s, "Kind(") {
-		t.Errorf("unknown Kind.String() = %q, want Kind(<n>)", s)
-	}
+	assert.Truef(t, strings.HasPrefix(s, "Kind("), "unknown Kind.String() = %q, want Kind(<n>)", s)
 }

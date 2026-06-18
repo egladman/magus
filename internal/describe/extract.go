@@ -42,7 +42,7 @@ import (
 // CrossDependencies hold cross-project edges (from project imports). Charms are the
 // has_charm names the body reads, sorted.
 func Extract(source string) []types.TargetGraphNode {
-	prog, err := buzz.Parse(source)
+	prog, err := buzz.ParseEmbedded(source)
 	if err != nil || prog == nil {
 		return nil
 	}
@@ -56,11 +56,13 @@ func Extract(source string) []types.TargetGraphNode {
 	// calls), and the project-import aliases (so an <alias>.<target> reference resolves
 	// to a cross-project edge).
 	var names []string
+	funcs := map[string]*ast.FunDecl{} // every fun decl (exported targets + plain helpers), for helper-following
 	spellHandles := map[string]bool{}
 	projectAliases := map[string]string{} // alias -> project path (as written after "project/")
 	for _, stmt := range prog.Stmts {
 		switch s := stmt.(type) {
 		case *ast.FunDecl:
+			funcs[s.Name] = s
 			if s.IsExported {
 				names = append(names, norm(s.Name))
 			}
@@ -85,54 +87,75 @@ func Extract(source string) []types.TargetGraphNode {
 		}
 		node := types.TargetGraphNode{Name: norm(fn.Name), Doc: docSentence(fn.Doc)}
 		var spellHits []spellHit
-		inspect(fn.Body, func(n ast.Node) bool {
-			switch e := n.(type) {
-			case *ast.CallExpr:
-				// Dependency handles: magus.target.literal/glob/regex("...").
-				if mode, arg, ok := targetHandleCall(e); ok {
-					switch mode {
-					case "literal":
-						node.Dependencies = appendUniq(node.Dependencies, norm(arg))
-					case "glob":
-						node.Dependencies = appendMatching(node.Dependencies, names, node.Name, globRe(arg))
-					case "regex":
-						// An invalid pattern is best-effort skipped (no edges).
-						if re, cerr := regexp.Compile(arg); cerr == nil {
-							node.Dependencies = appendMatching(node.Dependencies, names, node.Name, re)
-						}
-					}
-				}
-				if name, ok := charmCall(e); ok {
-					node.Charms = appendUniq(node.Charms, name)
-				}
-				// Dotted spell op: handle.op(...), where handle is an imported spell.
-				if me, ok := e.Callee.(*ast.MemberExpr); ok {
-					if id, ok := me.Object.(*ast.IdentExpr); ok && spellHandles[id.Name] {
-						spellHits = append(spellHits, spellHit{ast.NodePos(me), id.Name, me.Name})
-					}
-				}
-			case *ast.IndexExpr:
-				// Bracket spell op: handle["op"], where handle is an imported spell.
-				if id, ok := e.Object.(*ast.IdentExpr); ok && spellHandles[id.Name] {
-					if lit, ok := e.Index.(*ast.StringLit); ok {
-						spellHits = append(spellHits, spellHit{ast.NodePos(e), id.Name, lit.Val})
-					}
-				}
-			case *ast.MemberExpr:
-				// Cross-project edge: <alias>.<target>, where <alias> came from an
-				// `import "project/<path>"`. The project path is left as written; the
-				// caller resolves it later.
-				if id, ok := e.Object.(*ast.IdentExpr); ok {
-					if proj, ok := projectAliases[id.Name]; ok {
-						ref := types.CrossTargetRef{Project: proj, Target: norm(e.Name)}
-						if !slices.Contains(node.CrossDependencies, ref) {
-							node.CrossDependencies = append(node.CrossDependencies, ref)
-						}
-					}
-				}
+		// A target attributes the ops/charms/edges of the same-file helper functions
+		// it calls, not only those in its own body. walk follows a bare call into a
+		// local helper (cycle-guarded by visited), so a target that factors its spell
+		// calls into a helper — e.g. image_build → build_variant → docker[...] —
+		// keeps them attributed rather than silently dropping them.
+		visited := map[string]bool{fn.Name: true}
+		var walk func(body *ast.BlockStmt)
+		walk = func(body *ast.BlockStmt) {
+			if body == nil {
+				return
 			}
-			return true
-		})
+			inspect(body, func(n ast.Node) bool {
+				switch e := n.(type) {
+				case *ast.CallExpr:
+					// Dependency handles: magus.target.literal/glob/regex("...").
+					if mode, arg, ok := targetHandleCall(e); ok {
+						switch mode {
+						case "literal":
+							node.Dependencies = appendUniq(node.Dependencies, norm(arg))
+						case "glob":
+							node.Dependencies = appendMatching(node.Dependencies, names, node.Name, globRe(arg))
+						case "regex":
+							// An invalid pattern is best-effort skipped (no edges).
+							if re, cerr := regexp.Compile(arg); cerr == nil {
+								node.Dependencies = appendMatching(node.Dependencies, names, node.Name, re)
+							}
+						}
+					}
+					if name, ok := charmCall(e); ok {
+						node.Charms = appendUniq(node.Charms, name)
+					}
+					// Dotted spell op: handle.op(...), where handle is an imported spell.
+					if me, ok := e.Callee.(*ast.MemberExpr); ok {
+						if id, ok := me.Object.(*ast.IdentExpr); ok && spellHandles[id.Name] {
+							spellHits = append(spellHits, spellHit{ast.NodePos(me), id.Name, me.Name})
+						}
+					}
+					// Bare call into a same-file helper: follow it once so its ops,
+					// charms, and edges attribute to this target.
+					if id, ok := e.Callee.(*ast.IdentExpr); ok {
+						if h := funcs[id.Name]; h != nil && !visited[id.Name] {
+							visited[id.Name] = true
+							walk(h.Body)
+						}
+					}
+				case *ast.IndexExpr:
+					// Bracket spell op: handle["op"], where handle is an imported spell.
+					if id, ok := e.Object.(*ast.IdentExpr); ok && spellHandles[id.Name] {
+						if lit, ok := e.Index.(*ast.StringLit); ok {
+							spellHits = append(spellHits, spellHit{ast.NodePos(e), id.Name, lit.Val})
+						}
+					}
+				case *ast.MemberExpr:
+					// Cross-project edge: <alias>.<target>, where <alias> came from an
+					// `import "project/<path>"`. The project path is left as written; the
+					// caller resolves it later.
+					if id, ok := e.Object.(*ast.IdentExpr); ok {
+						if proj, ok := projectAliases[id.Name]; ok {
+							ref := types.CrossTargetRef{Project: proj, Target: norm(e.Name)}
+							if !slices.Contains(node.CrossDependencies, ref) {
+								node.CrossDependencies = append(node.CrossDependencies, ref)
+							}
+						}
+					}
+				}
+				return true
+			})
+		}
+		walk(fn.Body)
 		slices.Sort(node.Charms)
 		node.Spells = groupSpellOps(spellHits)
 		nodes = append(nodes, node)

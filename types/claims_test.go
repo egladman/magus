@@ -3,45 +3,31 @@ package types
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestEffectiveClaimsRoundTrip(t *testing.T) {
-	cases := []struct {
-		name   string
-		claims []string
-	}{
-		{"nil", nil},
-		{"single", []string{"go"}},
-		{"multiple", []string{"go", "python", "node"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := WithEffectiveClaims(context.Background(), tc.claims)
-			got := EffectiveClaimsFromContext(ctx)
-			if len(got) != len(tc.claims) {
-				t.Fatalf("got %v, want %v", got, tc.claims)
-			}
-			for i, want := range tc.claims {
-				if got[i] != want {
-					t.Errorf("[%d] got %q, want %q", i, got[i], want)
-				}
-			}
-		})
-	}
+func TestEffectiveClaimsRoundTrip_Nil(t *testing.T) {
+	ctx := WithEffectiveClaims(context.Background(), nil)
+	assert.Empty(t, EffectiveClaimsFromContext(ctx))
+}
+
+func TestEffectiveClaimsRoundTrip_Single(t *testing.T) {
+	ctx := WithEffectiveClaims(context.Background(), []string{"go"})
+	assert.Equal(t, []string{"go"}, EffectiveClaimsFromContext(ctx))
+}
+
+func TestEffectiveClaimsRoundTrip_Multiple(t *testing.T) {
+	ctx := WithEffectiveClaims(context.Background(), []string{"go", "python", "node"})
+	assert.Equal(t, []string{"go", "python", "node"}, EffectiveClaimsFromContext(ctx))
 }
 
 func TestEffectiveClaimsFromContext_MissingReturnsNil(t *testing.T) {
-	got := EffectiveClaimsFromContext(context.Background())
-	if got != nil {
-		t.Errorf("got %v, want nil", got)
-	}
+	assert.Nil(t, EffectiveClaimsFromContext(context.Background()))
 }
 
 func TestEffectiveClaimsFromContext_InnerContextWins(t *testing.T) {
 	outer := WithEffectiveClaims(context.Background(), []string{"go"})
 	inner := WithEffectiveClaims(outer, []string{"python"})
-	got := EffectiveClaimsFromContext(inner)
-	if len(got) != 1 || got[0] != "python" {
-		t.Errorf("got %v, want [python]", got)
-	}
+	assert.Equal(t, []string{"python"}, EffectiveClaimsFromContext(inner))
 }

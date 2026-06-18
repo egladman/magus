@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestIoUringHashBatch verifies that iouringHashBatch produces correct
@@ -20,9 +23,7 @@ func TestIoUringHashBatch(t *testing.T) {
 	var files []relAbs
 	for i, c := range contents {
 		path := filepath.Join(dir, "f"+string(rune('a'+i)))
-		if err := os.WriteFile(path, []byte(c), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, []byte(c), 0o644))
 		files = append(files, relAbs{rel: filepath.Base(path), abs: path})
 	}
 
@@ -34,9 +35,7 @@ func TestIoUringHashBatch(t *testing.T) {
 	for i, c := range contents {
 		want := sha256.Sum256([]byte(c))
 		wantHex := hex.EncodeToString(want[:])
-		if hashes[i] != wantHex {
-			t.Errorf("file %d: got %q, want %q", i, hashes[i], wantHex)
-		}
+		assert.Equalf(t, wantHex, hashes[i], "file %d", i)
 	}
 }
 
@@ -47,16 +46,12 @@ func TestIoUringFallbackLargeFile(t *testing.T) {
 	// Write a file that exceeds maxSingleRead.
 	large := make([]byte, maxSingleRead+1)
 	path := filepath.Join(dir, "large")
-	if err := os.WriteFile(path, large, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, large, 0o644))
 	files := []relAbs{{rel: "large", abs: path}}
 	hashes, err := iouringHashBatch(files)
 	if err != nil {
 		t.Skipf("io_uring not available: %v", err)
 	}
 	// Large file must be skipped (empty hash), not errored.
-	if hashes[0] != "" {
-		t.Errorf("large file should have been skipped, got hash %q", hashes[0])
-	}
+	assert.Empty(t, hashes[0], "large file should have been skipped")
 }

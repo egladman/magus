@@ -1,13 +1,14 @@
 package reflink
 
 import (
-	"bytes"
 	"crypto/rand"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClone_RoundTrip(t *testing.T) {
@@ -16,24 +17,15 @@ func TestClone_RoundTrip(t *testing.T) {
 	dst := filepath.Join(dir, "dst")
 
 	want := make([]byte, 1<<16) // 64 KiB
-	if _, err := rand.Read(want); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(src, want, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	_, err := rand.Read(want)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(src, want, 0o644))
 
-	if err := Clone(src, dst); err != nil {
-		t.Fatalf("Clone: %v", err)
-	}
+	require.NoError(t, Clone(src, dst))
 
 	got, err := os.ReadFile(dst)
-	if err != nil {
-		t.Fatalf("ReadFile(dst): %v", err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Errorf("content mismatch: got %d bytes, want %d", len(got), len(want))
-	}
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
 }
 
 func TestClone_EmptyFile(t *testing.T) {
@@ -41,19 +33,11 @@ func TestClone_EmptyFile(t *testing.T) {
 	src := filepath.Join(dir, "src")
 	dst := filepath.Join(dir, "dst")
 
-	if err := os.WriteFile(src, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Clone(src, dst); err != nil {
-		t.Fatalf("Clone empty: %v", err)
-	}
+	require.NoError(t, os.WriteFile(src, nil, 0o644))
+	require.NoError(t, Clone(src, dst))
 	got, err := os.ReadFile(dst)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Errorf("expected empty file, got %d bytes", len(got))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }
 
 func TestClone_LargeFile(t *testing.T) {
@@ -63,22 +47,13 @@ func TestClone_LargeFile(t *testing.T) {
 
 	// 4 MiB — large enough to exercise the copy_file_range / io.Copy path.
 	want := make([]byte, 4<<20)
-	if _, err := rand.Read(want); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(src, want, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Clone(src, dst); err != nil {
-		t.Fatalf("Clone large: %v", err)
-	}
+	_, err := rand.Read(want)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(src, want, 0o644))
+	require.NoError(t, Clone(src, dst))
 	got, err := os.ReadFile(dst)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Error("large file content mismatch")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
 }
 
 func TestClone_IndependentWrites(t *testing.T) {
@@ -90,24 +65,14 @@ func TestClone_IndependentWrites(t *testing.T) {
 	dst := filepath.Join(dir, "dst")
 
 	original := []byte("original content")
-	if err := os.WriteFile(src, original, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Clone(src, dst); err != nil {
-		t.Fatalf("Clone: %v", err)
-	}
+	require.NoError(t, os.WriteFile(src, original, 0o644))
+	require.NoError(t, Clone(src, dst))
 
-	if err := os.WriteFile(dst, []byte("modified"), 0o644); err != nil {
-		t.Fatalf("WriteFile(dst): %v", err)
-	}
+	require.NoError(t, os.WriteFile(dst, []byte("modified"), 0o644))
 
 	got, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, original) {
-		t.Errorf("writing dst corrupted src: got %q, want %q", got, original)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, original, got, "writing dst corrupted src")
 }
 
 // TestClone_DstExists verifies that Clone returns an error (wrapping fs.ErrExist)
@@ -117,29 +82,17 @@ func TestClone_DstExists(t *testing.T) {
 	src := filepath.Join(dir, "src")
 	dst := filepath.Join(dir, "dst")
 
-	if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(dst, []byte("existing"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(src, []byte("hello"), 0o644))
+	require.NoError(t, os.WriteFile(dst, []byte("existing"), 0o644))
 
 	err := Clone(src, dst)
-	if err == nil {
-		t.Fatal("Clone: expected error when dst exists, got nil")
-	}
-	if !errors.Is(err, fs.ErrExist) {
-		t.Errorf("Clone: expected fs.ErrExist, got %v", err)
-	}
+	require.Error(t, err, "expected error when dst exists")
+	assert.ErrorIs(t, err, fs.ErrExist)
 
 	// dst content must be unchanged.
 	got, rerr := os.ReadFile(dst)
-	if rerr != nil {
-		t.Fatal(rerr)
-	}
-	if string(got) != "existing" {
-		t.Errorf("Clone: dst was modified despite error: got %q", got)
-	}
+	require.NoError(t, rerr)
+	assert.Equal(t, "existing", string(got), "dst was modified despite error")
 }
 
 // TestClone_MissingSrc verifies that Clone returns an error when src does not
@@ -150,15 +103,10 @@ func TestClone_MissingSrc(t *testing.T) {
 	dst := filepath.Join(dir, "dst")
 
 	err := Clone(src, dst)
-	if err == nil {
-		t.Fatal("Clone: expected error for missing src, got nil")
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("Clone: expected fs.ErrNotExist, got %v", err)
-	}
+	require.Error(t, err, "expected error for missing src")
+	assert.ErrorIs(t, err, fs.ErrNotExist)
 
 	// dst must not have been created.
-	if _, serr := os.Stat(dst); !errors.Is(serr, fs.ErrNotExist) {
-		t.Errorf("Clone: dst should not exist after missing-src error, but Stat returned: %v", serr)
-	}
+	_, serr := os.Stat(dst)
+	assert.ErrorIs(t, serr, fs.ErrNotExist, "dst should not exist after missing-src error")
 }

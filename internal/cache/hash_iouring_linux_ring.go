@@ -2,10 +2,6 @@
 
 package cache
 
-// Minimal io_uring binding for magus cache-hashing: Ring, SubmitRead,
-// SubmitAndWait, DrainCompletions. io_uring_enter(GETEVENTS) is the
-// release/acquire fence between userspace SQE writes and kernel CQE reads.
-
 import (
 	"errors"
 	"fmt"

@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // staticFilter is a test-only gitFilter substitute.
@@ -35,9 +38,7 @@ func TestDetect_NoFinding_SingleWriter(t *testing.T) {
 	}
 	filter := staticFilter{allowed: map[string]bool{"/ws/api/main.go": true}}
 	findings := detect(s, &filter)
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings for single-writer self-rewrite, got %d", len(findings))
-	}
+	assert.Empty(t, findings, "expected 0 findings for single-writer self-rewrite")
 }
 
 // TestDetect_NoFinding_NoAttribution: a path written during concurrent overlap
@@ -65,9 +66,7 @@ func TestDetect_NoFinding_NoAttribution(t *testing.T) {
 	}
 	filter := staticFilter{allowed: map[string]bool{"/ws/go.work.sum": true}}
 	findings := detect(s, &filter)
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings for unattributed path, got %d", len(findings))
-	}
+	assert.Empty(t, findings, "expected 0 findings for unattributed path")
 }
 
 // TestDetect_OneFinding_TwoConfirmedWriters: two projects both show the same
@@ -94,20 +93,13 @@ func TestDetect_OneFinding_TwoConfirmedWriters(t *testing.T) {
 	}
 	filter := staticFilter{allowed: map[string]bool{sharedPath: true}}
 	findings := detect(s, &filter)
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding for two confirmed writers, got %d", len(findings))
-	}
+	require.Len(t, findings, 1, "expected 1 finding for two confirmed writers")
 	f := findings[0]
-	if f.path != sharedPath {
-		t.Errorf("unexpected path: %s", f.path)
-	}
+	assert.Equal(t, sharedPath, f.path)
 	// Canonical order: alphabetical by project.
-	if f.projectA != "api" || f.projectB != "worker" {
-		t.Errorf("unexpected projects: %s, %s", f.projectA, f.projectB)
-	}
-	if f.target != "build" {
-		t.Errorf("unexpected target: %s", f.target)
-	}
+	assert.Equal(t, "api", f.projectA)
+	assert.Equal(t, "worker", f.projectB)
+	assert.Equal(t, "build", f.target)
 }
 
 // TestDetect_NoFinding_CrossTarget: concurrent projects running different targets
@@ -134,9 +126,7 @@ func TestDetect_NoFinding_CrossTarget(t *testing.T) {
 	}
 	filter := staticFilter{allowed: map[string]bool{sharedPath: true}}
 	findings := detect(s, &filter)
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings for cross-target overlap, got %d", len(findings))
-	}
+	assert.Empty(t, findings, "expected 0 findings for cross-target overlap")
 }
 
 // TestDetect_NoFinding_Sequential: non-overlapping runs cannot produce a race.
@@ -162,9 +152,7 @@ func TestDetect_NoFinding_Sequential(t *testing.T) {
 	}
 	filter := staticFilter{allowed: map[string]bool{sharedPath: true}}
 	findings := detect(s, &filter)
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings for sequential runs, got %d", len(findings))
-	}
+	assert.Empty(t, findings, "expected 0 findings for sequential runs")
 }
 
 // TestDetect_NoFinding_FilteredPath: non-git-tracked files are excluded.
@@ -187,9 +175,7 @@ func TestDetect_NoFinding_FilteredPath(t *testing.T) {
 	}
 	filter := staticFilter{allowed: map[string]bool{}} // nothing allowed
 	findings := detect(s, &filter)
-	if len(findings) != 0 {
-		t.Errorf("expected 0 findings (filtered path), got %d", len(findings))
-	}
+	assert.Empty(t, findings, "expected 0 findings (filtered path)")
 }
 
 // TestDetect_MaxFindings: finding count is capped at maxFindings.
@@ -212,9 +198,7 @@ func TestDetect_MaxFindings(t *testing.T) {
 	s := snapshot{intervals: ivs, events: evs}
 	filter := staticFilter{allowed: allowed}
 	findings := detect(s, &filter)
-	if len(findings) > maxFindings {
-		t.Errorf("findings %d exceeded cap %d", len(findings), maxFindings)
-	}
+	assert.LessOrEqual(t, len(findings), maxFindings, "findings should not exceed cap")
 }
 
 // TestConfirmedWriters_ExactOne: only one project confirms the path → empty result.
@@ -224,9 +208,8 @@ func TestConfirmedWriters_ExactOne(t *testing.T) {
 		{Project: "worker", Target: "build", WrittenPaths: nil},
 	}
 	got := confirmedWriters("/ws/out.js", ivs)
-	if len(got) != 1 || got[0].Project != "api" {
-		t.Errorf("confirmedWriters: got %v, want [api]", got)
-	}
+	require.Len(t, got, 1)
+	assert.Equal(t, "api", got[0].Project)
 }
 
 // TestConfirmedWriters_Both: both projects confirm the path → both returned.
@@ -236,9 +219,7 @@ func TestConfirmedWriters_Both(t *testing.T) {
 		{Project: "worker", Target: "build", WrittenPaths: []string{"/ws/out.js"}},
 	}
 	got := confirmedWriters("/ws/out.js", ivs)
-	if len(got) != 2 {
-		t.Errorf("confirmedWriters: got %d results, want 2", len(got))
-	}
+	assert.Len(t, got, 2)
 }
 
 // TestConfirmedWriters_None: no snapshot data → empty result.
@@ -248,9 +229,7 @@ func TestConfirmedWriters_None(t *testing.T) {
 		{Project: "worker", Target: "build"},
 	}
 	got := confirmedWriters("/ws/go.work.sum", ivs)
-	if len(got) != 0 {
-		t.Errorf("confirmedWriters: expected empty (no snapshot data), got %v", got)
-	}
+	assert.Empty(t, got, "expected empty (no snapshot data)")
 }
 
 func TestWriteReportJSON_Schema3(t *testing.T) {
@@ -276,15 +255,11 @@ func TestWriteReportJSON_Schema3(t *testing.T) {
 		`"project_b":"worker"`,
 		`"target":"build"`,
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("writeReportJSON output missing %q\ngot: %s", want, out)
-		}
+		assert.Contains(t, out, want)
 	}
 	// Ensure removed fields are absent.
 	for _, absent := range []string{`"tier"`, `"flipped"`, `"suppression_snippet"`, `"likely_writer"`} {
-		if strings.Contains(out, absent) {
-			t.Errorf("writeReportJSON output should not contain %q\ngot: %s", absent, out)
-		}
+		assert.NotContains(t, out, absent)
 	}
 }
 
@@ -292,12 +267,8 @@ func TestWriteReportJSON_EmptySchema3(t *testing.T) {
 	var buf strings.Builder
 	writeReportJSON(&buf, nil)
 	out := buf.String()
-	if !strings.Contains(out, `"schema":3`) {
-		t.Errorf("empty findings should still emit schema:3, got: %s", out)
-	}
-	if !strings.Contains(out, `"total":0`) {
-		t.Errorf("empty findings should emit total:0, got: %s", out)
-	}
+	assert.Contains(t, out, `"schema":3`, "empty findings should still emit schema:3")
+	assert.Contains(t, out, `"total":0`, "empty findings should emit total:0")
 }
 
 func TestWrittenPaths_RoundTrip(t *testing.T) {
@@ -308,14 +279,10 @@ func TestWrittenPaths_RoundTrip(t *testing.T) {
 	rt.rec.setWrittenPaths("api", "build", []string{"/tmp/ws/api/dist/x.js"})
 
 	got := rt.WrittenPaths()
-	if len(got) != 1 || len(got["api"]) != 1 || got["api"][0] != "/tmp/ws/api/dist/x.js" {
-		t.Errorf("WrittenPaths: got %v", got)
-	}
+	assert.Equal(t, map[string][]string{"api": {"/tmp/ws/api/dist/x.js"}}, got)
 }
 
 func TestWrittenPaths_NilRuntime(t *testing.T) {
 	var rt *Runtime
-	if got := rt.WrittenPaths(); got != nil {
-		t.Errorf("nil runtime: expected nil, got %v", got)
-	}
+	assert.Nil(t, rt.WrittenPaths(), "nil runtime should return nil")
 }

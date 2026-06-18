@@ -1,24 +1,16 @@
 package types
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVCSErrorSentinels(t *testing.T) {
-	for _, sentinel := range []error{
-		ErrVCSUnsupported,
-		ErrVCSUnknown,
-	} {
-		if sentinel == nil {
-			t.Errorf("%v is nil", sentinel)
-		}
-		if sentinel.Error() == "" {
-			t.Errorf("%v.Error() is empty", sentinel)
-		}
-		if !errors.Is(sentinel, sentinel) {
-			t.Errorf("errors.Is identity check failed for %v", sentinel)
-		}
+	for _, sentinel := range []error{ErrVCSUnsupported, ErrVCSUnknown} {
+		assert.NotNil(t, sentinel)
+		assert.NotEmpty(t, sentinel.Error())
+		assert.ErrorIs(t, sentinel, sentinel)
 	}
 }
 
@@ -31,22 +23,15 @@ func TestVCSSourceConstants(t *testing.T) {
 	}
 	seen := map[VCSSource]bool{}
 	for _, s := range sources {
-		if string(s) == "" {
-			t.Errorf("VCSSource constant is empty")
-		}
-		if seen[s] {
-			t.Errorf("duplicate VCSSource value %q", s)
-		}
+		assert.NotEmpty(t, string(s), "VCSSource constant is empty")
+		assert.Falsef(t, seen[s], "duplicate VCSSource value %q", s)
 		seen[s] = true
 	}
 }
 
 func TestVCSResolution_ZeroValue(t *testing.T) {
 	var r VCSResolution
-	if r.VCS != nil {
-		t.Error("zero VCSResolution should have nil VCS")
-	}
-	if r.Name != "" {
-		t.Errorf("zero VCSResolution.Name = %q, want empty", r.Name)
-	}
+	assert.Equal(t, VCSResolution{}, r)
+	assert.Nil(t, r.VCS)
+	assert.Empty(t, r.Name)
 }

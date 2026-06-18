@@ -42,7 +42,7 @@ type targetInfo struct {
 // inert, so probing a target never cascades into running its dependencies.
 func evalAndProbe(ctx context.Context, src string) (*Recorder, []targetInfo, *Diag) {
 	rec := newRecorder()
-	sess := buzz.NewSession(ctx)
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	installHost(sess, rec)
 
 	if err := sess.Exec(ctx, src); err != nil {

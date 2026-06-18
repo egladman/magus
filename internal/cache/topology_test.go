@@ -3,25 +3,22 @@ package cache
 import (
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestCPUGroupsNonEmpty checks the portable contract: cpuGroups never
 // returns nil and the union of its groups covers at least one CPU.
 func TestCPUGroupsNonEmpty(t *testing.T) {
 	groups := cpuGroups()
-	if len(groups) == 0 {
-		t.Fatal("cpuGroups returned no groups")
-	}
+	require.NotEmpty(t, groups, "cpuGroups returned no groups")
 	total := 0
 	for i, g := range groups {
-		if len(g) == 0 {
-			t.Fatalf("group %d is empty", i)
-		}
+		require.NotEmptyf(t, g, "group %d is empty", i)
 		total += len(g)
 	}
-	if total < 1 {
-		t.Fatalf("total CPUs across groups = %d, want ≥ 1", total)
-	}
+	assert.GreaterOrEqual(t, total, 1, "total CPUs across groups should be ≥ 1")
 	t.Logf("detected %d LLC group(s) across %d CPU(s) (NumCPU=%d)",
 		len(groups), total, runtime.NumCPU())
 }
@@ -39,8 +36,6 @@ func TestPinThreadNoCrash(t *testing.T) {
 	if err != nil {
 		t.Logf("pinThread returned err (acceptable, best-effort): %v", err)
 	}
-	if unpin == nil {
-		t.Fatal("pinThread returned nil unpin function")
-	}
+	require.NotNil(t, unpin, "pinThread returned nil unpin function")
 	unpin()
 }

@@ -2,9 +2,11 @@ package buzz
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDispatchRejectsCycleWithMemo is the regression for the cyclic-magusfile
@@ -29,9 +31,8 @@ func TestDispatchRejectsCycleWithMemo(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "cycle detected") {
-			t.Fatalf("want cycle error, got %v", err)
-		}
+		require.Error(t, err, "want cycle error")
+		assert.Contains(t, err.Error(), "cycle detected", "want cycle error")
 	case <-time.After(2 * time.Second):
 		t.Fatal("Dispatch deadlocked on a cycle instead of erroring")
 	}

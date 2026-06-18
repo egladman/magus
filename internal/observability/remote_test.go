@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeBackend is a minimal cache.RemoteBackend whose get/put behaviour the test
@@ -55,30 +57,18 @@ func TestInstrumentRemoteBackend_GetHit(t *testing.T) {
 	b := InstrumentRemoteBackend(&fakeBackend{data: []byte("hello")}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
-	if err != nil {
-		t.Fatalf("GetArtifact: %v", err)
-	}
+	require.NoError(t, err)
 	// Metrics for a hit close with the reader, so the byte count is the artifact size.
-	if len(rec.remoteOps) != 0 {
-		t.Fatalf("op recorded before reader close: %+v", rec.remoteOps)
-	}
+	assert.Empty(t, rec.remoteOps, "op recorded before reader close")
 	got, _ := io.ReadAll(rc)
-	if err := rc.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	if string(got) != "hello" {
-		t.Errorf("read %q, want hello", got)
-	}
-	if len(rec.remoteOps) != 1 {
-		t.Fatalf("remoteOps=%d, want 1", len(rec.remoteOps))
-	}
+	require.NoError(t, rc.Close())
+	assert.Equal(t, "hello", string(got))
+	require.Len(t, rec.remoteOps, 1)
 	op := rec.remoteOps[0]
-	if op.Op != "get" || op.Outcome != "hit" || op.Bytes != 5 {
-		t.Errorf("op = %+v, want {get hit Bytes:5}", op)
-	}
-	if len(rec.spans) != 1 || rec.spans[0] != "magus.cache.remote.get" {
-		t.Errorf("spans = %v, want [magus.cache.remote.get]", rec.spans)
-	}
+	assert.Equal(t, "get", op.Op)
+	assert.Equal(t, "hit", op.Outcome)
+	assert.Equal(t, int64(5), op.Bytes)
+	assert.Equal(t, []string{"magus.cache.remote.get"}, rec.spans)
 }
 
 func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
@@ -87,15 +77,11 @@ func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 	b := InstrumentRemoteBackend(&fakeBackend{data: nil}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
-	if err != nil {
-		t.Fatalf("GetArtifact: %v", err)
-	}
-	if rc != nil {
-		t.Fatal("expected nil reader on miss")
-	}
-	if len(rec.remoteOps) != 1 || rec.remoteOps[0].Outcome != "miss" || rec.remoteOps[0].Bytes != 0 {
-		t.Errorf("remoteOps = %+v, want one {get miss Bytes:0}", rec.remoteOps)
-	}
+	require.NoError(t, err)
+	assert.Nil(t, rc, "expected nil reader on miss")
+	require.Len(t, rec.remoteOps, 1)
+	assert.Equal(t, "miss", rec.remoteOps[0].Outcome)
+	assert.Equal(t, int64(0), rec.remoteOps[0].Bytes)
 }
 
 func TestInstrumentRemoteBackend_GetError(t *testing.T) {
@@ -103,12 +89,10 @@ func TestInstrumentRemoteBackend_GetError(t *testing.T) {
 	rec := &recorder{}
 	b := InstrumentRemoteBackend(&fakeBackend{getErr: errors.New("boom")}, rec)
 
-	if _, err := b.GetArtifact(context.Background(), "p", "h"); err == nil {
-		t.Fatal("expected error")
-	}
-	if len(rec.remoteOps) != 1 || rec.remoteOps[0].Outcome != "error" {
-		t.Errorf("remoteOps = %+v, want one {get error}", rec.remoteOps)
-	}
+	_, err := b.GetArtifact(context.Background(), "p", "h")
+	assert.Error(t, err)
+	require.Len(t, rec.remoteOps, 1)
+	assert.Equal(t, "error", rec.remoteOps[0].Outcome)
 }
 
 func TestInstrumentRemoteBackend_Put(t *testing.T) {
@@ -117,22 +101,14 @@ func TestInstrumentRemoteBackend_Put(t *testing.T) {
 	fb := &fakeBackend{}
 	b := InstrumentRemoteBackend(fb, rec)
 
-	if err := b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world"))); err != nil {
-		t.Fatalf("PutArtifact: %v", err)
-	}
-	if string(fb.put) != "world" {
-		t.Errorf("backend received %q, want world", fb.put)
-	}
-	if len(rec.remoteOps) != 1 {
-		t.Fatalf("remoteOps=%d, want 1", len(rec.remoteOps))
-	}
+	require.NoError(t, b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world"))))
+	assert.Equal(t, "world", string(fb.put))
+	require.Len(t, rec.remoteOps, 1)
 	op := rec.remoteOps[0]
-	if op.Op != "put" || op.Outcome != "stored" || op.Bytes != 5 {
-		t.Errorf("op = %+v, want {put stored Bytes:5}", op)
-	}
-	if len(rec.spans) != 1 || rec.spans[0] != "magus.cache.remote.put" {
-		t.Errorf("spans = %v, want [magus.cache.remote.put]", rec.spans)
-	}
+	assert.Equal(t, "put", op.Op)
+	assert.Equal(t, "stored", op.Outcome)
+	assert.Equal(t, int64(5), op.Bytes)
+	assert.Equal(t, []string{"magus.cache.remote.put"}, rec.spans)
 }
 
 // TestInstrumentRemoteBackend_DisabledPassthrough verifies that a disabled
@@ -141,13 +117,9 @@ func TestInstrumentRemoteBackend_Put(t *testing.T) {
 func TestInstrumentRemoteBackend_DisabledPassthrough(t *testing.T) {
 	t.Parallel()
 	disabled, err := New(context.Background(), Config{Enabled: false})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	fb := &fakeBackend{}
-	if got := InstrumentRemoteBackend(fb, disabled); got != cache.RemoteBackend(fb) {
-		t.Error("disabled provider should return the backend unwrapped")
-	}
+	assert.Equal(t, cache.RemoteBackend(fb), InstrumentRemoteBackend(fb, disabled), "disabled provider should return the backend unwrapped")
 }
 
 // TestInstrumentRemoteBackend_PrunePreserved verifies the optional RemotePruner
@@ -157,23 +129,13 @@ func TestInstrumentRemoteBackend_PrunePreserved(t *testing.T) {
 	rec := &recorder{}
 
 	plain := InstrumentRemoteBackend(&fakeBackend{}, rec)
-	if _, ok := plain.(cache.RemotePruner); ok {
-		t.Error("plain backend should not gain a prune capability")
-	}
+	assert.NotImplements(t, (*cache.RemotePruner)(nil), plain, "plain backend should not gain a prune capability")
 
 	fp := &fakePruner{fakeBackend: &fakeBackend{}}
 	wrapped := InstrumentRemoteBackend(fp, rec)
 	pr, ok := wrapped.(cache.RemotePruner)
-	if !ok {
-		t.Fatal("prune capability lost after wrapping")
-	}
-	if err := pr.PruneArtifacts(context.Background(), cache.RetentionPolicy{}); err != nil {
-		t.Fatalf("PruneArtifacts: %v", err)
-	}
-	if !fp.pruned {
-		t.Error("underlying prune not invoked")
-	}
-	if len(rec.spans) != 1 || rec.spans[0] != "magus.cache.remote.prune" {
-		t.Errorf("spans = %v, want [magus.cache.remote.prune]", rec.spans)
-	}
+	require.True(t, ok, "prune capability lost after wrapping")
+	require.NoError(t, pr.PruneArtifacts(context.Background(), cache.RetentionPolicy{}))
+	assert.True(t, fp.pruned, "underlying prune not invoked")
+	assert.Equal(t, []string{"magus.cache.remote.prune"}, rec.spans)
 }

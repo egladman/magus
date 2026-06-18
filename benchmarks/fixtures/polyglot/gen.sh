@@ -30,14 +30,44 @@ use (
 )
 GOWORK
 
-# ── magusfile.tl ──────────────────────────────────────────────────────────────
-cat > "$GEN/magusfile.tl" <<'TL'
--- magusfile.tl (polyglot fixture)
-magus.register("go-svc",  { spell = { name = "go" } })
-magus.register("ts-lib",  { spell = { name = "typescript" } })
-magus.register("ts-app",  { spell = { name = "typescript" }, depends_on = {"ts-lib"} })
-magus.register("py-tool", { spell = { name = "python" } })
-TL
+# ── magus config (root marker + per-project magusfiles) ──────────────────────
+# ts-app depends on ts-lib, declared twice (depends_on for affected, magus.needs
+# for ordering/caching). schema/ is not a project: nothing actually imports it,
+# matching the Makefile.
+cat > "$GEN/magus.yaml" <<'YAML'
+telemetry:
+  enabled: false
+YAML
+
+cat > "$GEN/go-svc/magusfile.buzz" <<'MF'
+import "magus";
+import "magus/spell/go";
+magus.project.register(fun(p, cb) > bool { cb({"spells": [go]}); return true; });
+export fun build(args: [str]) > void { go["go-build"](); }
+MF
+
+cat > "$GEN/ts-lib/magusfile.buzz" <<'MF'
+import "magus";
+import "magus/spell/ts";
+magus.project.register(fun(p, cb) > bool { cb({"spells": [ts]}); return true; });
+export fun build(args: [str]) > void { ts["tsc"]({"args": ["-b"]}); }
+MF
+
+cat > "$GEN/ts-app/magusfile.buzz" <<'MF'
+import "magus";
+import "magus/spell/ts";
+import "project/ts-lib" as tslib;
+magus.project.register(fun(p, cb) > bool { cb({"spells": [ts], "depends_on": ["ts-lib"]}); return true; });
+export fun build(args: [str]) > void { magus.needs(tslib.build); ts["tsc"]({"args": ["-b"]}); }
+MF
+
+cat > "$GEN/py-tool/magusfile.buzz" <<'MF'
+import "magus";
+import "magus/spell/py";
+import "os";
+magus.project.register(fun(p, cb) > bool { cb({"spells": [py]}); return true; });
+export fun build(args: [str]) > void { os.exec("python", ["-m", "py_compile", "src/tool.py"]); }
+MF
 
 # ── Makefile ──────────────────────────────────────────────────────────────────
 cat > "$GEN/Makefile" <<'MAKE'

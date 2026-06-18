@@ -3,6 +3,9 @@ package buzz
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // These tests exercise the portable FFI surface — the C-decl parser and the
@@ -11,31 +14,25 @@ import (
 
 func TestParseCDecls(t *testing.T) {
 	sigs, err := ParseCDecls("double sqrt(double x); int abs(int v); void srand(unsigned seed);")
-	if err != nil {
-		t.Fatalf("ParseCDecls: %v", err)
-	}
-	if len(sigs) != 3 {
-		t.Fatalf("got %d sigs, want 3", len(sigs))
-	}
-	if sigs[0].Name != "sqrt" || sigs[0].Ret != CDouble || len(sigs[0].Params) != 1 || sigs[0].Params[0].Type != CDouble {
-		t.Errorf("sqrt sig wrong: %+v", sigs[0])
-	}
-	if sigs[1].Name != "abs" || sigs[1].Ret != CInt || sigs[1].Params[0].Type != CInt {
-		t.Errorf("abs sig wrong: %+v", sigs[1])
-	}
-	if sigs[2].Name != "srand" || sigs[2].Ret != CVoid || sigs[2].Params[0].Type != CUint {
-		t.Errorf("srand sig wrong: %+v", sigs[2])
-	}
+	require.NoError(t, err)
+	require.Len(t, sigs, 3)
+	assert.Equal(t, "sqrt", sigs[0].Name, "sqrt sig wrong: %+v", sigs[0])
+	assert.Equal(t, CDouble, sigs[0].Ret, "sqrt sig wrong: %+v", sigs[0])
+	require.Len(t, sigs[0].Params, 1, "sqrt sig wrong: %+v", sigs[0])
+	assert.Equal(t, CDouble, sigs[0].Params[0].Type, "sqrt sig wrong: %+v", sigs[0])
+	assert.Equal(t, "abs", sigs[1].Name, "abs sig wrong: %+v", sigs[1])
+	assert.Equal(t, CInt, sigs[1].Ret, "abs sig wrong: %+v", sigs[1])
+	assert.Equal(t, CInt, sigs[1].Params[0].Type, "abs sig wrong: %+v", sigs[1])
+	assert.Equal(t, "srand", sigs[2].Name, "srand sig wrong: %+v", sigs[2])
+	assert.Equal(t, CVoid, sigs[2].Ret, "srand sig wrong: %+v", sigs[2])
+	assert.Equal(t, CUint, sigs[2].Params[0].Type, "srand sig wrong: %+v", sigs[2])
 }
 
 func TestParseCDeclsCharPtr(t *testing.T) {
 	sigs, err := ParseCDecls("char* getenv(final char* name);")
-	if err != nil {
-		t.Fatalf("ParseCDecls: %v", err)
-	}
-	if sigs[0].Ret != CCharPtr || sigs[0].Params[0].Type != CCharPtr {
-		t.Errorf("getenv sig wrong: %+v", sigs[0])
-	}
+	require.NoError(t, err)
+	assert.Equal(t, CCharPtr, sigs[0].Ret, "getenv sig wrong: %+v", sigs[0])
+	assert.Equal(t, CCharPtr, sigs[0].Params[0].Type, "getenv sig wrong: %+v", sigs[0])
 }
 
 // fakeFFI is a test FFIProvider: it binds every signature to a Go closure,
@@ -73,15 +70,11 @@ func TestFFIProviderInjection(t *testing.T) {
 final lib = zdef("mylib", "int dbl(int x);");
 final r = lib.dbl(21);
 `
-	if err := sess.Exec(context.Background(), src); err != nil {
-		t.Fatalf("exec: %v", err)
-	}
-	if fake.opened != "mylib" {
-		t.Errorf("provider saw lib %q, want mylib", fake.opened)
-	}
-	if got := sess.GetGlobal("r"); !got.IsInt() || got.AsInt() != 42 {
-		t.Fatalf("r = %s, want 42", got.String())
-	}
+	require.NoError(t, sess.Exec(context.Background(), src), "exec")
+	assert.Equal(t, "mylib", fake.opened, "provider saw lib %q, want mylib", fake.opened)
+	got := sess.GetGlobal("r")
+	require.True(t, got.IsInt(), "r = %s, want 42", got.String())
+	assert.Equal(t, int64(42), got.AsInt(), "r = %s, want 42", got.String())
 }
 
 func TestFFINoProvider(t *testing.T) {
@@ -93,18 +86,14 @@ func TestFFINoProvider(t *testing.T) {
 
 	sess := newSession(context.Background())
 	err := sess.Exec(context.Background(), `final lib = zdef("libm", "double sqrt(double x);");`)
-	if err == nil {
-		t.Fatal("expected an error when no FFI provider is registered")
-	}
+	assert.Error(t, err, "expected an error when no FFI provider is registered")
 }
 
 func TestRegisterFFIProviderIgnoresNil(t *testing.T) {
 	prev := GetFFIProvider()
 	defer func() { SetFFIProvider(prev) }()
 	RegisterFFIProvider(nil) // must not clobber an installed provider
-	if GetFFIProvider() != prev {
-		t.Fatal("RegisterFFIProvider(nil) overwrote the provider")
-	}
+	assert.Equal(t, prev, GetFFIProvider(), "RegisterFFIProvider(nil) overwrote the provider")
 }
 
 func TestParseCDeclsExternVar(t *testing.T) {
@@ -114,49 +103,39 @@ func TestParseCDeclsExternVar(t *testing.T) {
 			"extern int answer;" +
 			"extern struct Callbacks kCallbacks;" +
 			"double sqrt(double x);")
-	if err != nil {
-		t.Fatalf("ParseCDecls: %v", err)
-	}
-	if len(sigs) != 5 {
-		t.Fatalf("got %d sigs, want 5", len(sigs))
-	}
-	if !sigs[0].IsVar || sigs[0].Name != "kBoolTrue" || sigs[0].Ret != CVoidPtr {
-		t.Errorf("kBoolTrue sig wrong: %+v", sigs[0])
-	}
-	if !sigs[1].IsVar || sigs[1].Name != "greeting" || sigs[1].Ret != CCharPtr {
-		t.Errorf("greeting sig wrong: %+v", sigs[1])
-	}
-	if !sigs[2].IsVar || sigs[2].Name != "answer" || sigs[2].Ret != CInt || sigs[2].VarTypeName != "int" {
-		t.Errorf("answer sig wrong: %+v", sigs[2])
-	}
-	if !sigs[3].IsVar || sigs[3].Name != "kCallbacks" || sigs[3].Ret != CAddr {
-		t.Errorf("kCallbacks sig wrong: %+v", sigs[3])
-	}
-	if sigs[4].IsVar || sigs[4].Name != "sqrt" {
-		t.Errorf("sqrt sig wrong: %+v", sigs[4])
-	}
+	require.NoError(t, err)
+	require.Len(t, sigs, 5)
+	assert.True(t, sigs[0].IsVar, "kBoolTrue sig wrong: %+v", sigs[0])
+	assert.Equal(t, "kBoolTrue", sigs[0].Name, "kBoolTrue sig wrong: %+v", sigs[0])
+	assert.Equal(t, CVoidPtr, sigs[0].Ret, "kBoolTrue sig wrong: %+v", sigs[0])
+	assert.True(t, sigs[1].IsVar, "greeting sig wrong: %+v", sigs[1])
+	assert.Equal(t, "greeting", sigs[1].Name, "greeting sig wrong: %+v", sigs[1])
+	assert.Equal(t, CCharPtr, sigs[1].Ret, "greeting sig wrong: %+v", sigs[1])
+	assert.True(t, sigs[2].IsVar, "answer sig wrong: %+v", sigs[2])
+	assert.Equal(t, "answer", sigs[2].Name, "answer sig wrong: %+v", sigs[2])
+	assert.Equal(t, CInt, sigs[2].Ret, "answer sig wrong: %+v", sigs[2])
+	assert.Equal(t, "int", sigs[2].VarTypeName, "answer sig wrong: %+v", sigs[2])
+	assert.True(t, sigs[3].IsVar, "kCallbacks sig wrong: %+v", sigs[3])
+	assert.Equal(t, "kCallbacks", sigs[3].Name, "kCallbacks sig wrong: %+v", sigs[3])
+	assert.Equal(t, CAddr, sigs[3].Ret, "kCallbacks sig wrong: %+v", sigs[3])
+	assert.False(t, sigs[4].IsVar, "sqrt sig wrong: %+v", sigs[4])
+	assert.Equal(t, "sqrt", sigs[4].Name, "sqrt sig wrong: %+v", sigs[4])
 }
 
 func TestParseCDeclsExternVarErrors(t *testing.T) {
-	if _, err := ParseCDecls("extern int;"); err == nil {
-		t.Error("extern without a name should fail")
-	}
-	if _, err := ParseCDecls("int loose;"); err == nil {
-		t.Error("a variable without the extern keyword should fail")
-	}
+	_, err := ParseCDecls("extern int;")
+	assert.Error(t, err, "extern without a name should fail")
+	_, err = ParseCDecls("int loose;")
+	assert.Error(t, err, "a variable without the extern keyword should fail")
 }
 
 func TestParseCDeclsPoint2D(t *testing.T) {
 	sigs, err := ParseCDecls("CGPoint CGEventGetLocation(void *event); NSPoint mouseLocation(void);")
-	if err != nil {
-		t.Fatalf("ParseCDecls: %v", err)
-	}
-	if sigs[0].Ret != CPoint2D || sigs[1].Ret != CPoint2D {
-		t.Errorf("point returns wrong: %+v", sigs)
-	}
-	if _, err := ParseCDecls("void use(CGPoint p);"); err == nil {
-		t.Error("by-value struct parameter should be rejected with advice")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, CPoint2D, sigs[0].Ret, "point returns wrong: %+v", sigs)
+	assert.Equal(t, CPoint2D, sigs[1].Ret, "point returns wrong: %+v", sigs)
+	_, err = ParseCDecls("void use(CGPoint p);")
+	assert.Error(t, err, "by-value struct parameter should be rejected with advice")
 }
 
 func TestParseZigDecls(t *testing.T) {
@@ -168,33 +147,22 @@ func TestParseZigDecls(t *testing.T) {
 			"fn location(event: *anyopaque) CGPoint;" +
 			"var kCFBooleanTrue: *anyopaque;" +
 			"var kCallbacks: anyopaque;")
-	if err != nil {
-		t.Fatalf("ParseZigDecls: %v", err)
-	}
-	if len(sigs) != 7 {
-		t.Fatalf("got %d sigs, want 7", len(sigs))
-	}
-	if sigs[0].Ret != CInt || len(sigs[0].Params) != 2 || sigs[0].Params[0].Type != CInt {
-		t.Errorf("add sig wrong: %+v", sigs[0])
-	}
-	if sigs[1].Ret != CDouble || sigs[1].Params[0].Type != CDouble {
-		t.Errorf("sqrt sig wrong: %+v", sigs[1])
-	}
-	if sigs[2].Ret != CVoid || sigs[2].Params[0].Type != CCharPtr {
-		t.Errorf("hello sig wrong: %+v", sigs[2])
-	}
-	if sigs[3].Params[1].Type != CVoidPtr || sigs[3].Params[2].Type != CVoidPtr {
-		t.Errorf("open pointer params wrong: %+v", sigs[3])
-	}
-	if sigs[4].Ret != CPoint2D {
-		t.Errorf("location sig wrong: %+v", sigs[4])
-	}
-	if !sigs[5].IsVar || sigs[5].Ret != CVoidPtr {
-		t.Errorf("kCFBooleanTrue var wrong: %+v", sigs[5])
-	}
-	if !sigs[6].IsVar || sigs[6].Ret != CAddr {
-		t.Errorf("kCallbacks address-of var wrong: %+v", sigs[6])
-	}
+	require.NoError(t, err)
+	require.Len(t, sigs, 7)
+	assert.Equal(t, CInt, sigs[0].Ret, "add sig wrong: %+v", sigs[0])
+	require.Len(t, sigs[0].Params, 2, "add sig wrong: %+v", sigs[0])
+	assert.Equal(t, CInt, sigs[0].Params[0].Type, "add sig wrong: %+v", sigs[0])
+	assert.Equal(t, CDouble, sigs[1].Ret, "sqrt sig wrong: %+v", sigs[1])
+	assert.Equal(t, CDouble, sigs[1].Params[0].Type, "sqrt sig wrong: %+v", sigs[1])
+	assert.Equal(t, CVoid, sigs[2].Ret, "hello sig wrong: %+v", sigs[2])
+	assert.Equal(t, CCharPtr, sigs[2].Params[0].Type, "hello sig wrong: %+v", sigs[2])
+	assert.Equal(t, CVoidPtr, sigs[3].Params[1].Type, "open pointer params wrong: %+v", sigs[3])
+	assert.Equal(t, CVoidPtr, sigs[3].Params[2].Type, "open pointer params wrong: %+v", sigs[3])
+	assert.Equal(t, CPoint2D, sigs[4].Ret, "location sig wrong: %+v", sigs[4])
+	assert.True(t, sigs[5].IsVar, "kCFBooleanTrue var wrong: %+v", sigs[5])
+	assert.Equal(t, CVoidPtr, sigs[5].Ret, "kCFBooleanTrue var wrong: %+v", sigs[5])
+	assert.True(t, sigs[6].IsVar, "kCallbacks address-of var wrong: %+v", sigs[6])
+	assert.Equal(t, CAddr, sigs[6].Ret, "kCallbacks address-of var wrong: %+v", sigs[6])
 }
 
 func TestZigDeclSniffing(t *testing.T) {
@@ -202,16 +170,14 @@ func TestZigDeclSniffing(t *testing.T) {
 	c := "int add(int a);"
 	cExtern := "extern void *kFoo;"
 	zigVar := "var kFoo: *anyopaque;"
-	for src, sigs := range map[string]bool{zig: true, c: false, cExtern: false, zigVar: true} {
+	for src, isZig := range map[string]bool{zig: true, c: false, cExtern: false, zigVar: true} {
 		// parse through both entries to ensure each dialect accepts its own
-		if sigs {
-			if _, err := ParseZigDecls(src); err != nil {
-				t.Errorf("zig dialect rejected %q: %v", src, err)
-			}
+		if isZig {
+			_, err := ParseZigDecls(src)
+			assert.NoErrorf(t, err, "zig dialect rejected %q", src)
 		} else {
-			if _, err := ParseCDecls(src); err != nil {
-				t.Errorf("c dialect rejected %q: %v", src, err)
-			}
+			_, err := ParseCDecls(src)
+			assert.NoErrorf(t, err, "c dialect rejected %q", src)
 		}
 	}
 }

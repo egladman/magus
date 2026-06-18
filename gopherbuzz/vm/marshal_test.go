@@ -5,41 +5,27 @@ import (
 
 	"github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMarshalRoundTrip(t *testing.T) {
-	prog, err := buzz.Parse(`var x: int = 42;`)
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
+	prog, err := buzz.ParseEmbedded(`var x: int = 42;`)
+	require.NoError(t, err, "Parse")
 	chunk, err := buzz.CompileWith(prog, buzz.CompileOptions{})
-	if err != nil {
-		t.Fatalf("CompileWith: %v", err)
-	}
+	require.NoError(t, err, "CompileWith")
 
 	data, err := chunk.Marshal()
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	if len(data) == 0 {
-		t.Fatal("Marshal produced empty output")
-	}
+	require.NoError(t, err, "Marshal")
+	require.NotEmpty(t, data, "Marshal produced empty output")
 
 	chunk2, err := vm.UnmarshalChunk(data)
-	if err != nil {
-		t.Fatalf("UnmarshalChunk: %v", err)
-	}
-	if chunk2 == nil {
-		t.Fatal("UnmarshalChunk returned nil")
-	}
-	if len(chunk2.Code) == 0 {
-		t.Error("unmarshalled chunk has no instructions")
-	}
+	require.NoError(t, err, "UnmarshalChunk")
+	require.NotNil(t, chunk2, "UnmarshalChunk returned nil")
+	assert.NotEmpty(t, chunk2.Code, "unmarshalled chunk has no instructions")
 }
 
 func TestUnmarshalChunk_InvalidData(t *testing.T) {
 	_, err := vm.UnmarshalChunk([]byte("not bytecode"))
-	if err == nil {
-		t.Error("UnmarshalChunk(garbage): expected error, got nil")
-	}
+	assert.Error(t, err, "UnmarshalChunk(garbage): expected error, got nil")
 }

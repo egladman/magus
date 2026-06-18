@@ -1,8 +1,3 @@
-// docker — image build, build-time checks, and Dockerfile linting.
-//
-// Authored source for the built-in "docker" spell; compiled to bytecode and
-// embedded at build time (see cmd/magus-spells-gen).
-
 import "magus/target";
 
 export fun mgs_getName() > str { return "docker"; }

@@ -7,45 +7,42 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveOutput(t *testing.T) {
-	cases := []struct {
-		input     string
-		wantFmt   Format
-		wantTmpl  string
-		wantError bool
-	}{
-		{"", outputText, "", false},
-		{"json", outputJSON, "", false},
-		{"yaml", outputYAML, "", false},
-		{"jsonl", outputJSONL, "", false},
-		{"name", outputName, "", false},
-		{"wide", outputWide, "", false},
-		{"template={{.Path}}", outputTemplate, "{{.Path}}", false},
-		{
-			`template={{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`, outputTemplate,
-			`{{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`, false,
-		},
-		{"template=", "", "", true},
-		{"unknown", "", "", true},
+	// assertResolve checks a successful resolution's format and template.
+	assertResolve := func(input string, wantFmt Format, wantTmpl string) {
+		t.Run("ok/"+input, func(t *testing.T) {
+			spec, err := ResolveOutput(input)
+			require.NoError(t, err)
+			assert.Equal(t, wantFmt, spec.Format)
+			assert.Equal(t, wantTmpl, spec.Template)
+		})
 	}
-	for _, tc := range cases {
-		spec, err := ResolveOutput(tc.input)
-		if (err != nil) != tc.wantError {
-			t.Errorf("ResolveOutput(%q) error = %v, wantError = %v", tc.input, err, tc.wantError)
-			continue
-		}
-		if tc.wantError {
-			continue
-		}
-		if spec.Format != tc.wantFmt {
-			t.Errorf("ResolveOutput(%q).Format = %q, want %q", tc.input, spec.Format, tc.wantFmt)
-		}
-		if spec.Template != tc.wantTmpl {
-			t.Errorf("ResolveOutput(%q).Template = %q, want %q", tc.input, spec.Template, tc.wantTmpl)
-		}
-	}
+
+	assertResolve("", outputText, "")
+	assertResolve("json", outputJSON, "")
+	assertResolve("yaml", outputYAML, "")
+	assertResolve("jsonl", outputJSONL, "")
+	assertResolve("name", outputName, "")
+	assertResolve("wide", outputWide, "")
+	assertResolve("template={{.Path}}", outputTemplate, "{{.Path}}")
+	assertResolve(
+		`template={{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`, outputTemplate,
+		`{{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`,
+	)
+
+	t.Run("err/empty-template", func(t *testing.T) {
+		_, err := ResolveOutput("template=")
+		assert.Error(t, err)
+	})
+	t.Run("err/unknown", func(t *testing.T) {
+		_, err := ResolveOutput("unknown")
+		assert.Error(t, err)
+	})
 }
 
 func TestWriteTemplate(t *testing.T) {
@@ -67,55 +64,33 @@ func TestWriteTemplate(t *testing.T) {
 		},
 	}
 
-	cases := []struct {
-		name string
-		body string
-		want string
-	}{
-		{
-			"simple field",
-			"{{.Workspace}} ({{.Count}})",
-			"/tmp/ws (2)",
-		},
-		{
-			"range with newline",
-			`{{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`,
-			"api=go\nweb=typescript\n",
-		},
-		{
-			"join helper",
-			`{{range .Projects}}{{.Path}}: {{join .Deps ","}}{{"\n"}}{{end}}`,
-			"api: internal/db\nweb: \n",
-		},
-		{
-			"upper helper",
-			`{{upper .Workspace}}`,
-			"/TMP/WS",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	assertTmpl := func(name, body, want string) {
+		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := writeTemplate(&buf, v, tc.body); err != nil {
-				t.Fatalf("writeTemplate: %v", err)
-			}
-			if got := buf.String(); got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
-			}
+			require.NoError(t, writeTemplate(&buf, v, body))
+			assert.Equal(t, want, buf.String())
 		})
 	}
+
+	assertTmpl("simple field",
+		"{{.Workspace}} ({{.Count}})",
+		"/tmp/ws (2)")
+	assertTmpl("range with newline",
+		`{{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`,
+		"api=go\nweb=typescript\n")
+	assertTmpl("join helper",
+		`{{range .Projects}}{{.Path}}: {{join .Deps ","}}{{"\n"}}{{end}}`,
+		"api: internal/db\nweb: \n")
+	assertTmpl("upper helper",
+		`{{upper .Workspace}}`,
+		"/TMP/WS")
 }
 
 func TestWriteTemplateBadSyntax(t *testing.T) {
 	var buf bytes.Buffer
 	err := writeTemplate(&buf, struct{}{}, "{{.MissingClose")
-	if err == nil {
-		t.Fatal("expected parse error, got nil")
-	}
-	if !strings.Contains(err.Error(), "parse template") {
-		t.Errorf("error = %v, want one wrapping 'parse template'", err)
-	}
+	require.Error(t, err, "expected parse error")
+	assert.Contains(t, err.Error(), "parse template")
 }
 
 func TestWriteTemplateSprigHelpers(t *testing.T) {
@@ -134,75 +109,45 @@ func TestWriteTemplateSprigHelpers(t *testing.T) {
 		Count: 2,
 	}
 
-	cases := []struct {
-		name string
-		body string
-		want string
-	}{
-		{
-			"quote helper",
-			`{{range .Items}}{{quote .Name}} {{end}}`,
-			`"foo-bar" "baz" `,
-		},
-		{
-			"toJson helper",
-			`{{index .Items 0 | toJson}}`,
-			`{"Name":"foo-bar","Tags":["a","b"]}`,
-		},
-		{
-			"default helper",
-			`{{$zero := ""}}{{default "fallback" $zero}}`,
-			"fallback",
-		},
-		{
-			"camelcase helper",
-			`{{camelcase "foo-bar"}}`,
-			"FooBar",
-		},
-		{
-			"kebabcase helper",
-			`{{kebabcase "FooBar"}}`,
-			"foo-bar",
-		},
-		{
-			"base path helper",
-			`{{base "a/b/c"}}`,
-			"c",
-		},
-		{
-			"ternary helper",
-			`{{ternary "yes" "no" (eq .Count 2)}}`,
-			"yes",
-		},
-		{
-			"sortAlpha helper",
-			`{{$s := list "c" "a" "b" | sortAlpha}}{{join $s ","}}`,
-			"a,b,c",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	assertTmpl := func(name, body, want string) {
+		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := writeTemplate(&buf, v, tc.body); err != nil {
-				t.Fatalf("writeTemplate: %v", err)
-			}
-			if got := buf.String(); got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
-			}
+			require.NoError(t, writeTemplate(&buf, v, body))
+			assert.Equal(t, want, buf.String())
 		})
 	}
+
+	assertTmpl("quote helper",
+		`{{range .Items}}{{quote .Name}} {{end}}`,
+		`"foo-bar" "baz" `)
+	assertTmpl("toJson helper",
+		`{{index .Items 0 | toJson}}`,
+		`{"Name":"foo-bar","Tags":["a","b"]}`)
+	assertTmpl("default helper",
+		`{{$zero := ""}}{{default "fallback" $zero}}`,
+		"fallback")
+	assertTmpl("camelcase helper",
+		`{{camelcase "foo-bar"}}`,
+		"FooBar")
+	assertTmpl("kebabcase helper",
+		`{{kebabcase "FooBar"}}`,
+		"foo-bar")
+	assertTmpl("base path helper",
+		`{{base "a/b/c"}}`,
+		"c")
+	assertTmpl("ternary helper",
+		`{{ternary "yes" "no" (eq .Count 2)}}`,
+		"yes")
+	assertTmpl("sortAlpha helper",
+		`{{$s := list "c" "a" "b" | sortAlpha}}{{join $s ","}}`,
+		"a,b,c")
 }
 
 func TestWriteTemplateEnvBlocked(t *testing.T) {
 	var buf bytes.Buffer
 	err := writeTemplate(&buf, struct{}{}, `{{env "PATH"}}`)
-	if err == nil {
-		t.Fatal("expected error for blocked 'env' function, got nil")
-	}
-	if !strings.Contains(err.Error(), "parse template") {
-		t.Errorf("expected parse template error, got: %v", err)
-	}
+	require.Error(t, err, "expected error for blocked 'env' function")
+	assert.Contains(t, err.Error(), "parse template")
 }
 
 func TestWriteJSONL(t *testing.T) {
@@ -225,27 +170,15 @@ func TestWriteJSONL(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := writeJSONL(&buf, v); err != nil {
-		t.Fatalf("writeJSONL: %v", err)
-	}
+	require.NoError(t, writeJSONL(&buf, v))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d: %q", len(lines), buf.String())
-	}
+	require.Len(t, lines, 2)
 	var p0, p1 proj
-	if err := json.Unmarshal([]byte(lines[0]), &p0); err != nil {
-		t.Fatalf("unmarshal line 0: %v", err)
-	}
-	if err := json.Unmarshal([]byte(lines[1]), &p1); err != nil {
-		t.Fatalf("unmarshal line 1: %v", err)
-	}
-	if p0.Path != "api" || p0.Pack != "go" {
-		t.Errorf("line 0: got %+v, want {api go}", p0)
-	}
-	if p1.Path != "web" || p1.Pack != "typescript" {
-		t.Errorf("line 1: got %+v, want {web typescript}", p1)
-	}
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &p0))
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &p1))
+	assert.Equal(t, proj{Path: "api", Pack: "go"}, p0)
+	assert.Equal(t, proj{Path: "web", Pack: "typescript"}, p1)
 }
 
 func TestOutputDstNoTee(t *testing.T) {
@@ -255,22 +188,16 @@ func TestOutputDstNoTee(t *testing.T) {
 	defer func() { global.tee = prev }()
 
 	w, cleanup, err := outputDst()
-	if err != nil {
-		t.Fatalf("outputDst: %v", err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
-	if w != os.Stdout {
-		t.Errorf("expected os.Stdout, got %T", w)
-	}
+	assert.Equal(t, os.Stdout, w)
 }
 
 func TestOutputDstTeeWritesBoth(t *testing.T) {
 	// With --tee set, outputDst returns a MultiWriter that writes to both
 	// stdout and the named file.
 	f, err := os.CreateTemp(t.TempDir(), "tee-*.json")
-	if err != nil {
-		t.Fatalf("create temp: %v", err)
-	}
+	require.NoError(t, err)
 	teeTarget := f.Name()
 	f.Close()
 
@@ -279,24 +206,16 @@ func TestOutputDstTeeWritesBoth(t *testing.T) {
 	defer func() { global.tee = prev }()
 
 	w, cleanup, err := outputDst()
-	if err != nil {
-		t.Fatalf("outputDst: %v", err)
-	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	v := struct{ X int }{X: 42}
-	if err := writeJSON(w, v); err != nil {
-		t.Fatalf("writeJSON: %v", err)
-	}
+	require.NoError(t, writeJSON(w, v))
 	cleanup()
 
 	got, err := os.ReadFile(teeTarget)
-	if err != nil {
-		t.Fatalf("read tee file: %v", err)
-	}
-	if !strings.Contains(string(got), `"X": 42`) {
-		t.Errorf("tee file missing expected content: %q", got)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(got), `"X": 42`)
 }
 
 func TestOutputDstTeeAppends(t *testing.T) {
@@ -309,24 +228,17 @@ func TestOutputDstTeeAppends(t *testing.T) {
 		global.tee = teeTarget
 		w, cleanup, err := outputDst()
 		global.tee = prev
-		if err != nil {
-			t.Fatalf("outputDst call %d: %v", i, err)
-		}
+		require.NoError(t, err, "outputDst call %d", i)
 		v := struct{ N int }{N: i}
-		if err := writeJSON(w, v); err != nil {
-			t.Fatalf("writeJSON call %d: %v", i, err)
-		}
+		require.NoError(t, writeJSON(w, v), "writeJSON call %d", i)
 		cleanup()
 	}
 
 	got, err := os.ReadFile(teeTarget)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
+	require.NoError(t, err)
 	// Both JSON objects should be present.
-	if !strings.Contains(string(got), `"N": 0`) || !strings.Contains(string(got), `"N": 1`) {
-		t.Errorf("tee file missing both writes: %q", got)
-	}
+	assert.Contains(t, string(got), `"N": 0`)
+	assert.Contains(t, string(got), `"N": 1`)
 }
 
 func TestOutputDstTeeBadPath(t *testing.T) {
@@ -335,12 +247,8 @@ func TestOutputDstTeeBadPath(t *testing.T) {
 	defer func() { global.tee = prev }()
 
 	_, _, err := outputDst()
-	if err == nil {
-		t.Fatal("expected error for bad --tee path, got nil")
-	}
-	if !strings.Contains(err.Error(), "--tee") {
-		t.Errorf("error should mention --tee, got: %v", err)
-	}
+	require.Error(t, err, "expected error for bad --tee path")
+	assert.Contains(t, err.Error(), "--tee", "error should mention --tee")
 }
 
 func TestWriteJSONLMultiSliceFallback(t *testing.T) {
@@ -354,24 +262,17 @@ func TestWriteJSONLMultiSliceFallback(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := writeJSONL(&buf, v); err != nil {
-		t.Fatalf("writeJSONL: %v", err)
-	}
+	require.NoError(t, writeJSONL(&buf, v))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected 1 line (fallback), got %d: %q", len(lines), buf.String())
-	}
+	require.Len(t, lines, 1, "expected 1 line (fallback)")
 	var got struct {
 		Roots []string `json:"roots"`
 		Nodes []string `json:"nodes"`
 	}
-	if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(got.Roots) != 1 || len(got.Nodes) != 2 {
-		t.Errorf("unexpected: %+v", got)
-	}
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &got))
+	assert.Len(t, got.Roots, 1)
+	assert.Len(t, got.Nodes, 2)
 }
 
 func TestFlagWasSet(t *testing.T) {
@@ -380,21 +281,13 @@ func TestFlagWasSet(t *testing.T) {
 	fs.String("output", "", "")
 
 	// Before parsing: nothing is set.
-	if flagWasSet(fs, "write") {
-		t.Error("flagWasSet(write) = true before Parse, want false")
-	}
+	assert.False(t, flagWasSet(fs, "write"), "flagWasSet(write) should be false before Parse")
 
 	// Parse with --write explicitly set.
-	if err := fs.Parse([]string{"--write=false"}); err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
+	require.NoError(t, fs.Parse([]string{"--write=false"}))
 
-	if !flagWasSet(fs, "write") {
-		t.Error("flagWasSet(write) = false after explicit --write=false, want true")
-	}
-	if flagWasSet(fs, "output") {
-		t.Error("flagWasSet(output) = true for unset flag, want false")
-	}
+	assert.True(t, flagWasSet(fs, "write"), "flagWasSet(write) should be true after explicit --write=false")
+	assert.False(t, flagWasSet(fs, "output"), "flagWasSet(output) should be false for unset flag")
 }
 
 func TestFlagWasSetDefault(t *testing.T) {
@@ -402,12 +295,8 @@ func TestFlagWasSetDefault(t *testing.T) {
 	// command line must NOT be considered "set".
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
 	fs.Bool("write", true, "")
-	if err := fs.Parse(nil); err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if flagWasSet(fs, "write") {
-		t.Error("flagWasSet(write) = true for default-only flag, want false")
-	}
+	require.NoError(t, fs.Parse(nil))
+	assert.False(t, flagWasSet(fs, "write"), "flagWasSet(write) should be false for default-only flag")
 }
 
 func TestWriteFormattedJSON(t *testing.T) {
@@ -418,43 +307,27 @@ func TestWriteFormattedJSON(t *testing.T) {
 	}{Name: "hello", N: 42}
 
 	spec := outputSpec{Format: outputJSON}
-	if err := writeFormatted(&buf, spec, v); err != nil {
-		t.Fatalf("writeFormatted json: %v", err)
-	}
+	require.NoError(t, writeFormatted(&buf, spec, v))
 
 	var decoded map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
-		t.Fatalf("json.Unmarshal: %v (output was %q)", err, buf.String())
-	}
-	if decoded["name"] != "hello" {
-		t.Errorf("name = %v, want hello", decoded["name"])
-	}
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &decoded), "output was %q", buf.String())
+	assert.Equal(t, "hello", decoded["name"])
 }
 
 func TestWriteFormattedUnknownFormat(t *testing.T) {
 	var buf bytes.Buffer
 	spec := outputSpec{Format: "unsupported-format"}
 	err := writeFormatted(&buf, spec, struct{}{})
-	if err == nil {
-		t.Fatal("expected error for unsupported format, got nil")
-	}
-	if !strings.Contains(err.Error(), "unsupported format") {
-		t.Errorf("error = %q, want to contain 'unsupported format'", err.Error())
-	}
+	require.Error(t, err, "expected error for unsupported format")
+	assert.Contains(t, err.Error(), "unsupported format")
 }
-
-// --- graph-only output format tests (ResolveOutput extras) ---
 
 func TestResolveOutput_GraphFormatExtras(t *testing.T) {
 	t.Parallel()
 	for _, fmt := range []Format{outputDot, outputMermaid, outputTree} {
 		spec, err := ResolveOutput(string(fmt), outputDot, outputMermaid, outputTree)
-		if err != nil {
-			t.Errorf("ResolveOutput(%q, extras): unexpected error: %v", fmt, err)
-		}
-		if spec.Format != fmt {
-			t.Errorf("ResolveOutput(%q, extras): got format %q", fmt, spec.Format)
-		}
+		assert.NoError(t, err, "ResolveOutput(%q, extras)", fmt)
+		assert.Equal(t, fmt, spec.Format)
 	}
 }
 
@@ -462,33 +335,24 @@ func TestResolveOutput_RejectsGraphFormatsWithoutExtras(t *testing.T) {
 	t.Parallel()
 	for _, fmt := range []Format{outputDot, outputMermaid, outputTree} {
 		_, err := ResolveOutput(string(fmt)) // no extra formats
-		if err == nil {
-			t.Errorf("ResolveOutput(%q) should fail for non-graph commands", fmt)
-		}
+		assert.Error(t, err, "ResolveOutput(%q) should fail for non-graph commands", fmt)
 	}
 }
 
-// --- parseTarget tests ---
-
 func TestParseTarget(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		input    string
-		wantPack string
-		wantName string
-	}{
-		{"build", "", "build"},
-		{"lint", "", "lint"},
-		{"typescript::lint", "typescript", "lint"},
-		{"go::test", "go", "test"},
-		{"rust::build", "rust", "build"},
-		{"::lint", "", "lint"}, // empty spell — treated as no filter
+	assertTarget := func(input, wantPack, wantName string) {
+		t.Run(input, func(t *testing.T) {
+			pack, target := parseTarget(input)
+			assert.Equal(t, wantPack, pack)
+			assert.Equal(t, wantName, target)
+		})
 	}
-	for _, tc := range cases {
-		pack, target := parseTarget(tc.input)
-		if pack != tc.wantPack || target != tc.wantName {
-			t.Errorf("parseTarget(%q) = (%q, %q); want (%q, %q)",
-				tc.input, pack, target, tc.wantPack, tc.wantName)
-		}
-	}
+
+	assertTarget("build", "", "build")
+	assertTarget("lint", "", "lint")
+	assertTarget("typescript::lint", "typescript", "lint")
+	assertTarget("go::test", "go", "test")
+	assertTarget("rust::build", "rust", "build")
+	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
 }

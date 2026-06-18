@@ -12,42 +12,35 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLimiterSnapshot(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(3)
-	snap := l.Snapshot()
-	if snap.Capacity != 3 || snap.InUse != 0 || snap.Waiting != 0 {
-		t.Fatalf("initial snapshot: cap=%d inUse=%d waiting=%d", snap.Capacity, snap.InUse, snap.Waiting)
-	}
+	assert.Equal(t, LimiterStats{Capacity: 3, InUse: 0, Waiting: 0}, l.Snapshot(), "initial snapshot")
 
 	_ = l.Acquire(context.Background())
 	_ = l.Acquire(context.Background())
-	snap = l.Snapshot()
-	if snap.Capacity != 3 || snap.InUse != 2 {
-		t.Fatalf("after 2 acquires: cap=%d inUse=%d", snap.Capacity, snap.InUse)
-	}
+	snap := l.Snapshot()
+	assert.Equal(t, 3, snap.Capacity)
+	assert.Equal(t, 2, snap.InUse, "after 2 acquires")
 
 	l.Release()
-	snap = l.Snapshot()
-	if snap.InUse != 1 {
-		t.Fatalf("after release: inUse=%d", snap.InUse)
-	}
+	assert.Equal(t, 1, l.Snapshot().InUse, "after release")
 }
 
 func TestLimiterUnlimited(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(0)
 	for range 100 {
-		if err := l.Acquire(context.Background()); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, l.Acquire(context.Background()))
 	}
 	snap := l.Snapshot()
-	if snap.Capacity != 0 || snap.InUse != 0 {
-		t.Fatalf("unlimited: cap=%d inUse=%d", snap.Capacity, snap.InUse)
-	}
+	assert.Equal(t, 0, snap.Capacity, "unlimited capacity")
+	assert.Equal(t, 0, snap.InUse, "unlimited in-use")
 }
 
 func TestLimiterCancelledAcquire(t *testing.T) {
@@ -57,9 +50,7 @@ func TestLimiterCancelledAcquire(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := l.Acquire(ctx); err == nil {
-		t.Fatal("expected error on cancelled acquire")
-	}
+	assert.Error(t, l.Acquire(ctx), "expected error on cancelled acquire")
 }
 
 func TestLimiterYield(t *testing.T) {
@@ -90,50 +81,30 @@ func TestLimiterYield(t *testing.T) {
 		wg.Wait()
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// After Yield returns we have re-acquired; total in-use should be 2 again.
-	snap := l.Snapshot()
-	if snap.InUse != 2 {
-		t.Fatalf("post-yield inUse=%d, want 2", snap.InUse)
-	}
+	assert.Equal(t, 2, l.Snapshot().InUse, "post-yield inUse")
 	// The goroutine inside fn should have seen inUse==2 (its own + the 1 held
 	// by the other Acquire still outstanding).
-	if maxSeen != 2 {
-		t.Fatalf("maxSeen inside fn=%d, want 2", maxSeen)
-	}
+	assert.Equal(t, 2, maxSeen, "maxSeen inside fn")
 }
 
 func TestLimiterAcquireN(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(4)
 
-	if err := l.AcquireN(context.Background(), 3); err != nil {
-		t.Fatalf("AcquireN(3): %v", err)
-	}
-	snap := l.Snapshot()
-	if snap.InUse != 3 {
-		t.Fatalf("after AcquireN(3): inUse=%d, want 3", snap.InUse)
-	}
+	require.NoError(t, l.AcquireN(context.Background(), 3), "AcquireN(3)")
+	assert.Equal(t, 3, l.Snapshot().InUse, "after AcquireN(3)")
 
 	l.ReleaseN(3)
-	snap = l.Snapshot()
-	if snap.InUse != 0 {
-		t.Fatalf("after ReleaseN(3): inUse=%d, want 0", snap.InUse)
-	}
+	assert.Equal(t, 0, l.Snapshot().InUse, "after ReleaseN(3)")
 }
 
 func TestLimiterAcquireNTooMany(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(4)
-	err := l.AcquireN(context.Background(), 5)
-	if err == nil {
-		t.Fatal("expected error when requesting more slots than capacity")
-	}
-	if snap := l.Snapshot(); snap.InUse != 0 {
-		t.Fatalf("after rejected AcquireN: inUse=%d, want 0", snap.InUse)
-	}
+	assert.Error(t, l.AcquireN(context.Background(), 5), "expected error when requesting more slots than capacity")
+	assert.Equal(t, 0, l.Snapshot().InUse, "after rejected AcquireN")
 }
 
 func TestLimiterAcquireNCancel(t *testing.T) {
@@ -143,12 +114,8 @@ func TestLimiterAcquireNCancel(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := l.AcquireN(ctx, 1); err == nil {
-		t.Fatal("expected error on cancelled context")
-	}
-	if snap := l.Snapshot(); snap.InUse != 2 {
-		t.Fatalf("cancelled AcquireN changed inUse to %d, want 2", snap.InUse)
-	}
+	assert.Error(t, l.AcquireN(ctx, 1), "expected error on cancelled context")
+	assert.Equal(t, 2, l.Snapshot().InUse, "cancelled AcquireN must not change inUse")
 }
 
 // TestLimiterFairQueueing verifies FIFO fairness: a large request at the head
@@ -158,9 +125,7 @@ func TestLimiterFairQueueing(t *testing.T) {
 	l := NewLimiter(4)
 
 	// Hold all 4 slots.
-	if err := l.AcquireN(context.Background(), 4); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, l.AcquireN(context.Background(), 4))
 
 	order := make([]int, 0, 2)
 	var mu sync.Mutex
@@ -208,10 +173,7 @@ func TestLimiterFairQueueing(t *testing.T) {
 		_ = i
 	}
 	// Verify both completed and limiter is clean.
-	snap := l.Snapshot()
-	if snap.InUse != 0 {
-		t.Errorf("post-fairness-test inUse=%d, want 0", snap.InUse)
-	}
+	assert.Equal(t, 0, l.Snapshot().InUse, "post-fairness-test inUse")
 }
 
 // TestLimiterHooks verifies that SetHooks fires onAcquire on every
@@ -242,13 +204,10 @@ func TestLimiterHooks(t *testing.T) {
 	l.Release()
 
 	mu.Lock()
-	defer mu.Unlock()
-	if len(acqNs) != 2 {
-		t.Errorf("onAcquire fired %d times, want 2", len(acqNs))
-	}
-	if len(relN) != 2 {
-		t.Errorf("onRelease fired %d times, want 2", len(relN))
-	}
+	assert.Len(t, acqNs, 2, "onAcquire fired the wrong number of times")
+	assert.Len(t, relN, 2, "onRelease fired the wrong number of times")
+	mu.Unlock()
+
 	// Contended case: second Acquire on a full pool should observe wait > 0.
 	l2 := NewLimiter(1)
 	var waitedNs int64
@@ -269,9 +228,7 @@ func TestLimiterHooks(t *testing.T) {
 	}
 	l2.Release() // unblock the now-blocked goroutine
 	wg.Wait()
-	if waitedNs == 0 {
-		t.Error("contended acquire reported wait == 0ns")
-	}
+	assert.NotZero(t, waitedNs, "contended acquire reported wait == 0ns")
 }
 
 // TestLimiterYieldRestoresSlotOnCancel verifies that Yield always returns with
@@ -292,13 +249,9 @@ func TestLimiterYieldRestoresSlotOnCancel(t *testing.T) {
 		return fnErr
 	})
 
-	if !errors.Is(err, fnErr) {
-		t.Errorf("fn error not returned: got %v", err)
-	}
+	assert.ErrorIs(t, err, fnErr, "fn error not returned")
 	// Slot was restored: the caller still holds exactly its one slot.
-	if snap := l.Snapshot(); snap.InUse != 1 {
-		t.Errorf("post-yield inUse=%d, want 1 (slot restored)", snap.InUse)
-	}
+	assert.Equal(t, 1, l.Snapshot().InUse, "post-yield inUse, want 1 (slot restored)")
 }
 
 // TestLimiterYieldNoOverReleaseOnCancel mimics a RunAll worker: acquire a slot,
@@ -309,20 +262,14 @@ func TestLimiterYieldNoOverReleaseOnCancel(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(2)
 	for range 5 {
-		if err := l.Acquire(context.Background()); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, l.Acquire(context.Background()))
 		ctx, cancel := context.WithCancel(context.Background())
 		_ = l.Yield(ctx, func() error { cancel(); return nil })
 		l.Release() // must not panic; balanced because Yield restored the slot
 	}
-	if snap := l.Snapshot(); snap.InUse != 0 {
-		t.Errorf("inUse=%d after balanced acquire/yield/release cycles, want 0", snap.InUse)
-	}
+	assert.Equal(t, 0, l.Snapshot().InUse, "inUse after balanced acquire/yield/release cycles")
 	// Full capacity must still be acquirable — no permits leaked or lost.
-	if err := l.AcquireN(context.Background(), 2); err != nil {
-		t.Errorf("capacity shrank after yield cycles: %v", err)
-	}
+	assert.NoError(t, l.AcquireN(context.Background(), 2), "capacity shrank after yield cycles")
 }
 
 // makeTar writes a gzip-compressed tar containing one file of size n bytes.
@@ -331,22 +278,15 @@ func makeTar(t *testing.T, name string, size int64) io.Reader {
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gw)
-	if err := tw.WriteHeader(&tar.Header{
+	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Name:     name,
 		Typeflag: tar.TypeReg,
 		Size:     size,
-	}); err != nil {
-		t.Fatalf("tar header: %v", err)
-	}
-	if _, err := io.Copy(tw, io.LimitReader(zeroReader{}, size)); err != nil {
-		t.Fatalf("tar body: %v", err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatalf("tar close: %v", err)
-	}
-	if err := gw.Close(); err != nil {
-		t.Fatalf("gzip close: %v", err)
-	}
+	}), "tar header")
+	_, err := io.Copy(tw, io.LimitReader(zeroReader{}, size))
+	require.NoError(t, err, "tar body")
+	require.NoError(t, tw.Close(), "tar close")
+	require.NoError(t, gw.Close(), "gzip close")
 	return &buf
 }
 
@@ -368,27 +308,19 @@ func TestImportMaxBytesCapsTarBomb(t *testing.T) {
 
 	cdir := t.TempDir()
 	c, err := Open(cdir, WithMaxImportBytes(1024))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 
 	// Create a "bomb": a single entry that would be 1 MiB without the cap.
 	const entrySize = 1 << 20
 	archive := makeTar(t, "manifests/test/entry", entrySize)
 
-	if err := c.Import(context.Background(), archive); err != nil {
-		t.Fatalf("Import: %v", err)
-	}
+	require.NoError(t, c.Import(context.Background(), archive), "Import")
 
 	// The written file must not exceed the cap.
 	dest := filepath.Join(cdir, "manifests", "test", "entry")
 	fi, err := os.Stat(dest)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if fi.Size() > 1024 {
-		t.Errorf("file size = %d, want ≤ 1024 (the cap)", fi.Size())
-	}
+	require.NoError(t, err, "stat")
+	assert.LessOrEqual(t, fi.Size(), int64(1024), "file size must not exceed the cap")
 }
 
 // TestImportDefaultCapApplied ensures Import works normally when no cap
@@ -398,24 +330,16 @@ func TestImportDefaultCapApplied(t *testing.T) {
 
 	cdir := t.TempDir()
 	c, err := Open(cdir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	require.NoError(t, err, "Open")
 
 	// A small legitimate entry — must pass through untruncated.
 	const entrySize = 4096
 	archive := makeTar(t, "manifests/test/small", entrySize)
 
-	if err := c.Import(context.Background(), archive); err != nil {
-		t.Fatalf("Import: %v", err)
-	}
+	require.NoError(t, c.Import(context.Background(), archive), "Import")
 
 	dest := filepath.Join(cdir, "manifests", "test", "small")
 	fi, err := os.Stat(dest)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if fi.Size() != entrySize {
-		t.Errorf("file size = %d, want %d", fi.Size(), entrySize)
-	}
+	require.NoError(t, err, "stat")
+	assert.Equal(t, int64(entrySize), fi.Size())
 }

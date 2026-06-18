@@ -2,34 +2,28 @@ package interp_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func writeMagusfile(t *testing.T, dir, body string) {
 	t.Helper()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 }
 
 func runTarget(t *testing.T, dir, target string, args ...string) error {
 	t.Helper()
 	ctx := context.Background()
 	src, err := interp.Find(dir)
-	if err != nil {
-		t.Fatalf("Find: %v", err)
-	}
-	if src == nil {
-		t.Fatal("Find: no source found")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, src, "Find: no source found")
 	return interp.Run(ctx, src, target, args, dir)
 }
 
@@ -40,20 +34,14 @@ func TestRunTopLevelTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(_args: [str]) > void {
+export fun build(args: [str]) > void {
     fs.writeFile("ran", "build");
 }
 `)
-	if err := runTarget(t, dir, "build"); err != nil {
-		t.Fatalf("run build: %v", err)
-	}
+	require.NoError(t, runTarget(t, dir, "build"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if string(got) != "build" {
-		t.Errorf("sentinel = %q, want %q", got, "build")
-	}
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "build", string(got))
 }
 
 func TestRunPathTarget(t *testing.T) {
@@ -61,20 +49,14 @@ func TestRunPathTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(_args: [str]) > void {
+export fun db_migrate(args: [str]) > void {
     fs.writeFile("ran", "db:migrate");
 }
 `)
-	if err := runTarget(t, dir, "db:migrate"); err != nil {
-		t.Fatalf("run db:migrate: %v", err)
-	}
+	require.NoError(t, runTarget(t, dir, "db:migrate"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if string(got) != "db:migrate" {
-		t.Errorf("sentinel = %q, want %q", got, "db:migrate")
-	}
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "db:migrate", string(got))
 }
 
 // TestRunImportsMagusfilesSibling verifies a magusfile resolves a plain
@@ -83,42 +65,32 @@ export fun db_migrate(_args: [str]) > void {
 // magusfiles/ subdirectory so it is not auto-loaded as a magusfile source.
 func TestRunImportsMagusfilesSibling(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "magusfiles", "lib"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "magusfiles", "lib", "calc.buzz"),
-		[]byte(`export final tag = "calc-ok";`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "magusfiles", "lib"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfiles", "lib", "calc.buzz"),
+		[]byte(`export final tag = "calc-ok";`), 0o644))
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
 import "lib/calc";
-export fun build(_args: [str]) > void {
+export fun build(args: [str]) > void {
     fs.writeFile("ran", tag);
 }
 `)
-	if err := runTarget(t, dir, "build"); err != nil {
-		t.Fatalf("run build: %v", err)
-	}
+	require.NoError(t, runTarget(t, dir, "build"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if string(got) != "calc-ok" {
-		t.Errorf("sentinel = %q, want %q", got, "calc-ok")
-	}
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "calc-ok", string(got))
 }
 
 // TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
-// end-to-end: the magus-bindings-gen-emitted buzzgen trampolines must decode a variadic
+// end-to-end: the magus-bindings-gen-emitted hostbuzz/gen trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
 // charm.append), with camelCase methods (Buzz's convention).
 func TestRunBuzzStdModule(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "fs";
 import "charm";
@@ -128,19 +100,11 @@ export fun verify(_opts: [str]) > void {
     var patch = charm.append(["y", "z"]);
     fs.writeFile("ran", joined + "|" + patch.ops[1].value);
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "verify"); err != nil {
-		t.Fatalf("run verify: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "verify"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if string(got) != "a/b/c|z" {
-		t.Errorf("sentinel = %q, want %q", got, "a/b/c|z")
-	}
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "a/b/c|z", string(got))
 }
 
 // TestRunBuzzMarkdownModule proves the markdown host module is reachable under
@@ -149,7 +113,7 @@ export fun verify(_opts: [str]) > void {
 func TestRunBuzzMarkdownModule(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "fs";
 import "markdown";
@@ -157,19 +121,12 @@ import "markdown";
 export fun verify(_opts: [str]) > void {
     fs.writeFile("ran", markdown.toHtml("# Hi"));
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "verify"); err != nil {
-		t.Fatalf("run verify: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "verify"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if !strings.Contains(string(got), `id="hi"`) || !strings.Contains(string(got), "Hi</h1>") {
-		t.Errorf("markdown.toHtml output = %q, want an <h1 id=\"hi\">Hi</h1>", got)
-	}
+	require.NoError(t, err, "sentinel not created")
+	assert.Contains(t, string(got), `id="hi"`)
+	assert.Contains(t, string(got), "Hi</h1>")
 }
 
 // TestRunBuzzFmtSprintf exercises fmt.sprintf end-to-end. It is the first std
@@ -178,7 +135,7 @@ export fun verify(_opts: [str]) > void {
 func TestRunBuzzFmtSprintf(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "fmt";
 import "fs";
@@ -188,19 +145,11 @@ export fun verify(_opts: [str]) > void {
     var none = fmt.sprintf("literal");
     fs.writeFile("ran", asset + "|" + none);
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "verify"); err != nil {
-		t.Fatalf("run verify: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "verify"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if string(got) != "magus_1.0_linux_amd64.tar.gz|literal" {
-		t.Errorf("sentinel = %q, want %q", got, "magus_1.0_linux_amd64.tar.gz|literal")
-	}
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "magus_1.0_linux_amd64.tar.gz|literal", string(got))
 }
 
 // TestRunBuzzAggregateUtil proves the magus host utilities resolve under bare
@@ -210,7 +159,7 @@ export fun verify(_opts: [str]) > void {
 func TestRunBuzzAggregateUtil(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "fs";
 import "os";
@@ -218,24 +167,16 @@ import "crypto";
 
 export fun verify(_opts: [str]) > void {
     var joined = fs.join("a", "b", "c");
-    var out = os.execSh("printf hello").stdout;
+    var res = os.execSh("printf hello").stdout;
     var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "");
-    fs.writeFile("ran", joined + "|" + out + "|" + digest);
+    fs.writeFile("ran", joined + "|" + res + "|" + digest);
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "verify"); err != nil {
-		t.Fatalf("run verify: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "verify"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
+	require.NoError(t, err, "sentinel not created")
 	want := "a/b/c|hello|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	if string(got) != want {
-		t.Errorf("sentinel = %q, want %q", got, want)
-	}
+	assert.Equal(t, want, string(got))
 }
 
 func TestRunTargetWithArgs(t *testing.T) {
@@ -249,45 +190,33 @@ export fun db_migrate(a: str, b: str, c: str) > void {
     fs.writeFile("ran", a + " " + b + " " + c);
 }
 `)
-	if err := runTarget(t, dir, "db:migrate", "a", "b", "c"); err != nil {
-		t.Fatalf("run db:migrate: %v", err)
-	}
+	require.NoError(t, runTarget(t, dir, "db:migrate", "a", "b", "c"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
-	if string(got) != "a b c" {
-		t.Errorf("sentinel = %q, want %q", got, "a b c")
-	}
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "a b c", string(got))
 }
 
 func TestRunTargetReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-export fun db_migrate(_args: [str]) > void {
+export fun db_migrate(args: [str]) > void {
     throw "boom";
 }
 `)
 	err := runTarget(t, dir, "db:migrate")
-	if err == nil {
-		t.Fatal("expected non-nil error, got nil")
-	}
-	if !strings.Contains(err.Error(), "boom") {
-		t.Errorf("error = %v, want it to contain %q", err, "boom")
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "boom")
 }
 
 func TestRunUnknownTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-export fun db_migrate(_args: [str]) > void {}
+export fun db_migrate(args: [str]) > void {}
 `)
 	err := runTarget(t, dir, "no-such-target")
-	if err == nil {
-		t.Fatal("expected non-nil error for unknown target, got nil")
-	}
+	assert.Error(t, err, "expected non-nil error for unknown target")
 }
 
 // TestParseLocalSpellFromOtherDir verifies a magusfile that require/imports a
@@ -302,28 +231,17 @@ import "spells/hello";
 export fun go(_a: [str]) > void { hello.build(); }`
 
 	proj := filepath.Join(t.TempDir(), "proj")
-	if err := os.MkdirAll(filepath.Join(proj, "spells"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(proj, "spells", "hello.buzz"), []byte(spell), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(proj, "magusfile.buzz"), []byte(magusfile), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(proj, "spells"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(proj, "spells", "hello.buzz"), []byte(spell), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(proj, "magusfile.buzz"), []byte(magusfile), 0o644))
 	// Parse from the test's cwd, NOT from proj — exactly what workspace
 	// preload does when it visits a sub-project's magusfile.
 	srcs, err := interp.FindAll(proj)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(srcs) == 0 {
-		t.Fatal("FindAll: no sources")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, srcs, "FindAll: no sources")
 	for _, src := range srcs {
-		if _, err := interp.Parse(context.Background(), src); err != nil {
-			t.Fatalf("Parse local-spell magusfile from other dir: %v", err)
-		}
+		_, err := interp.Parse(context.Background(), src)
+		require.NoError(t, err, "Parse local-spell magusfile from other dir")
 	}
 }
 
@@ -333,17 +251,13 @@ func TestDependsOnUnknownTargetFails(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-export fun top(_args: [str]) > void {
+export fun top(args: [str]) > void {
     magus.needs(magus.target.literal("does_not_exist"));
 }
 `)
 	err := runTarget(t, dir, "top")
-	if err == nil {
-		t.Fatal("expected an error for depends_on on an unknown target, got nil")
-	}
-	if !strings.Contains(err.Error(), "unknown target") {
-		t.Errorf("error = %v, want it to mention %q", err, "unknown target")
-	}
+	require.Error(t, err, "expected an error for depends_on on an unknown target")
+	assert.Contains(t, err.Error(), "unknown target")
 }
 
 // TestRunBuzzTargetNameCollision is the Buzz counterpart: two exports that
@@ -351,21 +265,16 @@ export fun top(_args: [str]) > void {
 func TestRunBuzzTargetNameCollision(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
 export fun foo_bar(_a: [str]) > void {}
 export fun fooBar(_a: [str]) > void {}
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+`), 0o644))
 	err := runTarget(t, dir, "foo-bar")
-	if err == nil {
-		t.Fatal("expected collision error, got nil")
-	}
-	if !strings.Contains(err.Error(), "foo-bar") || !strings.Contains(err.Error(), "normalize") {
-		t.Errorf("error should name the colliding canonical target and the cause; got: %v", err)
-	}
+	require.Error(t, err, "expected collision error")
+	assert.Contains(t, err.Error(), "foo-bar")
+	assert.Contains(t, err.Error(), "normalize")
 }
 
 // TestOsExitRaisesExitError verifies os.exit(code) aborts the target with a
@@ -374,25 +283,17 @@ export fun fooBar(_a: [str]) > void {}
 func TestOsExitRaisesExitError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
 
 export fun bail(_a: [str]) > void { os.exit(3); }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+`), 0o644))
 	err := runTarget(t, dir, "bail")
-	if err == nil {
-		t.Fatal("expected error from os.exit, got nil")
-	}
+	require.Error(t, err, "expected error from os.exit")
 	var ex types.ExitError
-	if !errors.As(err, &ex) {
-		t.Fatalf("expected types.ExitError, got %T: %v", err, err)
-	}
-	if ex.Code != 3 {
-		t.Errorf("exit code = %d, want 3", ex.Code)
-	}
+	require.ErrorAs(t, err, &ex)
+	assert.Equal(t, 3, ex.Code)
 }
 
 // TestOsSleep exercises os.sleep (milliseconds, matching Buzz) from a Buzz
@@ -401,7 +302,7 @@ export fun bail(_a: [str]) > void { os.exit(3); }
 func TestOsSleep(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
 
@@ -409,12 +310,8 @@ export fun nap(_a: [str]) > void {
     os.sleep(1.5);
     os.sleep(0);
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "nap"); err != nil {
-		t.Fatalf("os.sleep: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "nap"))
 }
 
 // TestOsWhich verifies os.which resolves a real command to a non-empty path and
@@ -422,7 +319,7 @@ export fun nap(_a: [str]) > void {
 func TestOsWhich(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
 
@@ -430,12 +327,8 @@ export fun checkwhich(_a: [str]) > void {
     if (os.which("sh") == "") { os.exit(2); }
     if (os.which("definitely-no-such-cmd-zzz") != "") { os.exit(3); }
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "checkwhich"); err != nil {
-		t.Fatalf("os.which assertions failed: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "checkwhich"))
 }
 
 // TestMagusHint confirms magus.hint is callable (and a repeated message is
@@ -443,19 +336,15 @@ export fun checkwhich(_a: [str]) > void {
 func TestMagusHint(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
 export fun nudge(_a: [str]) > void {
     magus.hint("stale generated code — run: magus run generate -- --write");
     magus.hint("stale generated code — run: magus run generate -- --write");
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "nudge"); err != nil {
-		t.Fatalf("magus.hint: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "nudge"))
 }
 
 // TestMagusFatal verifies magus.fatal aborts with a types.ExitError carrying
@@ -463,24 +352,16 @@ export fun nudge(_a: [str]) > void {
 func TestMagusFatal(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
 export fun boom(_a: [str]) > void { magus.fatal("boom"); }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+`), 0o644))
 	err := runTarget(t, dir, "boom")
-	if err == nil {
-		t.Fatal("expected error from magus.fatal, got nil")
-	}
+	require.Error(t, err, "expected error from magus.fatal")
 	var ex types.ExitError
-	if !errors.As(err, &ex) {
-		t.Fatalf("expected types.ExitError, got %T: %v", err, err)
-	}
-	if ex.Code != 1 {
-		t.Errorf("exit code = %d, want 1", ex.Code)
-	}
+	require.ErrorAs(t, err, &ex)
+	assert.Equal(t, 1, ex.Code)
 }
 
 // TestOsExecShShellOption verifies opts.shell is accepted and the chosen shell
@@ -488,19 +369,15 @@ export fun boom(_a: [str]) > void { magus.fatal("boom"); }
 func TestOsExecShShellOption(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
 
 export fun viash(_a: [str]) > void {
     os.execSh("true", "", {"shell": "sh"});
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "viash"); err != nil {
-		t.Fatalf("os.exec_sh with shell opt: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "viash"))
 }
 
 // TestNeedsDedup verifies magus.needs runs a duplicated target once —
@@ -508,25 +385,17 @@ export fun viash(_a: [str]) > void {
 func TestNeedsDedup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
 
 export fun dep(_a: [str]) > void { os.execSh("printf x >> mark", ""); }
 export fun top(_a: [str]) > void { magus.needs(magus.target.literal("dep"), magus.target.literal("dep")); }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "top"); err != nil {
-		t.Fatalf("run top: %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "top"))
 	got, err := os.ReadFile(filepath.Join(dir, "mark"))
-	if err != nil {
-		t.Fatalf("dep did not run: %v", err)
-	}
-	if string(got) != "x" {
-		t.Errorf("dep ran %d time(s) (mark=%q), want once", len(got), got)
-	}
+	require.NoError(t, err, "dep did not run")
+	assert.Equal(t, "x", string(got), "dep should run once")
 }
 
 // TestMagusLoggingBuzz exercises the logging methods bound onto the magus
@@ -534,7 +403,7 @@ export fun top(_a: [str]) > void { magus.needs(magus.target.literal("dep"), magu
 func TestMagusLoggingBuzz(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
 export fun logit(_a: [str]) > void {
@@ -543,44 +412,30 @@ export fun logit(_a: [str]) > void {
     magus.warn("warn");
     magus.error("err");
 }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTarget(t, dir, "logit"); err != nil {
-		t.Fatalf("magus logging (buzz): %v", err)
-	}
+`), 0o644))
+	require.NoError(t, runTarget(t, dir, "logit"))
 }
 
 func TestParseIncludesPathTargets(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-export fun db_migrate(_args: [str]) > void {}
-export fun build(_args: [str]) > void {}
+export fun db_migrate(args: [str]) > void {}
+export fun build(args: [str]) > void {}
 `)
 	src, err := interp.Find(dir)
-	if err != nil {
-		t.Fatalf("Find: %v", err)
-	}
-	if src == nil {
-		t.Fatal("Find: no source found")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, src, "Find: no source found")
 
 	targets, err := interp.Parse(context.Background(), src)
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
+	require.NoError(t, err)
 
 	keys := make(map[string]bool, len(targets))
 	for _, tgt := range targets {
 		keys[tgt.Key] = true
 	}
-	if !keys["build"] {
-		t.Errorf("Parse missing 'build': targets=%v", targets)
-	}
-	if !keys["db-migrate"] {
-		t.Errorf("Parse missing 'db-migrate': targets=%v", targets)
-	}
+	assert.True(t, keys["build"], "Parse missing 'build'")
+	assert.True(t, keys["db-migrate"], "Parse missing 'db-migrate'")
 }
 
 // TestNeedsGlobHandle covers a magus.target.glob handle feeding a
@@ -603,21 +458,13 @@ export fun build(_a: [str]) > void {
    note("build-body");
 }
 `)
-	if err := runTarget(t, dir, "build"); err != nil {
-		t.Fatalf("run build: %v", err)
-	}
+	require.NoError(t, runTarget(t, dir, "build"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
+	require.NoError(t, err, "sentinel not created")
 	// Deps (sorted) run before the body; go-test does not match "*-build".
 	want := "go-build\nimage-build\nbuild-body\n"
-	if string(got) != want {
-		t.Errorf("run order = %q, want %q", got, want)
-	}
-	if strings.Contains(string(got), "go-test") {
-		t.Errorf("go-test ran but does not match *-build: %q", got)
-	}
+	assert.Equal(t, want, string(got))
+	assert.NotContains(t, string(got), "go-test", "go-test ran but does not match *-build")
 }
 
 // TestExpandGlobsReturnsSortedNames covers the return value of
@@ -637,29 +484,23 @@ export fun probe(_a: [str]) > void {
    fs.writeFile("ran", join(glob, ",") + "|" + join(suffix, ","));
 }
 fun join(xs: [str], sep: str) > str {
-   var out = "";
+   var acc = "";
    var first = true;
    foreach (x in xs) {
-      if (!first) { out = out + sep; }
-      out = out + x;
+      if (!first) { acc = acc + sep; }
+      acc = acc + x;
       first = false;
    }
-   return out;
+   return acc;
 }
 `)
-	if err := runTarget(t, dir, "probe"); err != nil {
-		t.Fatalf("run probe: %v", err)
-	}
+	require.NoError(t, runTarget(t, dir, "probe"))
 	got, err := os.ReadFile(sentinel(dir))
-	if err != nil {
-		t.Fatalf("sentinel not created: %v", err)
-	}
+	require.NoError(t, err, "sentinel not created")
 	// Both the glob ("*-build") and the suffix shorthand ("build") resolve to
 	// the same sorted set; go-test is excluded.
 	want := "go-build,image-build|go-build,image-build"
-	if string(got) != want {
-		t.Errorf("expand_globs = %q, want %q", got, want)
-	}
+	assert.Equal(t, want, string(got))
 }
 
 // TestTargetNewBuzzIsGone verifies that magus.target.new no longer exists in
@@ -667,14 +508,10 @@ fun join(xs: [str], sep: str) > str {
 func TestTargetNewBuzzIsGone(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte(`
+	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
-magus.target.new("build", fun(_args: [str]) void {});
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+magus.target.new("build", fun(args: [str]) void {});
+`), 0o644))
 	err := runTarget(t, dir, "build")
-	if err == nil {
-		t.Fatal("expected an error when using magus.target.new in buzz, got nil")
-	}
+	assert.Error(t, err, "expected an error when using magus.target.new in buzz")
 }

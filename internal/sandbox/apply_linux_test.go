@@ -7,6 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestApplyLinuxEnforcement verifies that on a kernel with landlock support,
@@ -26,24 +29,17 @@ func TestApplyLinuxEnforcement(t *testing.T) {
 	ws := t.TempDir()
 	p := BuildPolicy(ws, nil, nil, nil, nil)
 
-	if err := Apply(p); err != nil {
-		t.Fatalf("Apply: %v", err)
-	}
+	require.NoError(t, Apply(p))
 
 	// Write inside workspace must succeed.
 	allowed := filepath.Join(ws, "hello.txt")
-	if err := os.WriteFile(allowed, []byte("ok"), 0o644); err != nil {
-		t.Errorf("WriteFile inside workspace failed: %v", err)
-	}
+	assert.NoError(t, os.WriteFile(allowed, []byte("ok"), 0o644), "WriteFile inside workspace should succeed")
 
 	// Read of /etc/passwd must be denied.
-	if _, err := os.ReadFile("/etc/passwd"); err == nil {
-		t.Error("ReadFile /etc/passwd should be denied after Apply, but succeeded")
-	}
+	_, err := os.ReadFile("/etc/passwd")
+	assert.Error(t, err, "ReadFile /etc/passwd should be denied after Apply")
 
 	// Child process must also be confined: `cat /etc/passwd` should fail.
 	cmd := exec.Command("cat", "/etc/passwd")
-	if err := cmd.Run(); err == nil {
-		t.Error("child `cat /etc/passwd` should fail under landlock, but succeeded")
-	}
+	assert.Error(t, cmd.Run(), "child `cat /etc/passwd` should fail under landlock")
 }

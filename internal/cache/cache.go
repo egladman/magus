@@ -152,6 +152,15 @@ type runCtx struct {
 	onError     func(error)
 	onSpec      func(*Spec)
 	onResult    func(*Spec, *Result, error)
+	// deferMtimeFlush suppresses the per-Run mtime flush so a RunAll batch can
+	// flush once after all specs complete instead of once per spec.
+	deferMtimeFlush bool
+}
+
+// deferMtimeFlush is an internal RunOption set by RunAll so member Run calls skip
+// the per-call mtime flush; RunAll flushes the shared store once after the batch.
+func deferMtimeFlush() RunOption {
+	return func(rc *runCtx) { rc.deferMtimeFlush = true }
 }
 
 // RunOption configures a single Cache.Run (or RunAll) invocation.
@@ -298,6 +307,13 @@ func (c *Cache) Run(ctx context.Context, s Spec, fn func(context.Context) error,
 	}
 	result.Hash = hash
 
+	// hashSpec records freshly computed file hashes in the mtime memo; persist
+	// them. RunAll defers this to one flush after the whole batch (deferMtimeFlush)
+	// so a cold N-spec build doesn't rewrite shared shards N times.
+	if !rc.deferMtimeFlush {
+		c.mtimes.flush(ctx)
+	}
+
 	// exportMu.RLock ensures Export/Import cannot race with an active Run.
 	c.exportMu.RLock()
 	defer c.exportMu.RUnlock()
@@ -393,6 +409,15 @@ func (c *Cache) Run(ctx context.Context, s Spec, fn func(context.Context) error,
 			rc.onResult(rc.spec, &result, runErr)
 		}
 		return result, runErr
+	}
+
+	// fn may "win the race" and return success even after ctx was cancelled. Do
+	// not snapshot/push such a run: its outputs may be incomplete, and publishing
+	// them would poison the shared remote under a valid key. Surface the
+	// cancellation instead so the entry is neither replayed nor exported.
+	if err := ctx.Err(); err != nil {
+		result.Duration = time.Since(start)
+		return result, err
 	}
 
 	if c.mutable && !s.NoCache {
@@ -491,6 +516,17 @@ func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Contex
 		return isolationMu.RUnlock
 	}
 
+	// ultra-opt: coalesce the mtime-store flush to once per batch instead of once
+	// per spec. A per-spec flush rewrites every shard a completing spec shares with
+	// earlier specs, so a cold N-spec build's shard writes grow super-linearly.
+	//   measured: BenchmarkRunAllColdMtime (24 projects × 64 files) -44.9% sec/op,
+	//   -81.0% B/op, -28.7% allocs/op (benchstat, n=10, p=0.000).
+	//   trade-off: a build killed mid-flight persists the memo once at the end
+	//   (WithoutCancel below) rather than incrementally per spell; equivalent net
+	//   coverage, slightly more re-hashing only if the process is hard-killed.
+	// Member Run calls skip the per-call mtime flush; the batch flushes once below.
+	opts = append(opts, deferMtimeFlush())
+
 	results := make([]Result, len(specs))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, s := range specs {
@@ -549,7 +585,12 @@ func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Contex
 			return err
 		})
 	}
-	return results, g.Wait()
+	err := g.Wait()
+	// Flush the shared mtime memo once for the whole batch. WithoutCancel so a
+	// cancelled run still persists the hashing already done (the per-spec flush it
+	// replaced also persisted completed specs before cancellation).
+	c.mtimes.flush(context.WithoutCancel(ctx))
+	return results, err
 }
 
 // Clean removes cached manifests for the given project paths (all if none given).

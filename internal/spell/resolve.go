@@ -193,8 +193,8 @@ func recordForkSpec(ctx context.Context, sess *buzz.Session, fn buzz.Value) (buz
 }
 
 // DecodeHandle decodes a bind-time spell handle — a map of resolved native data
-// built by magus.spell.load — into a Spec, so a workspace-local Buzz spell
-// can be registered by value at bind time.
+// built by a workspace-local spell import — into a Spec, so a workspace-local
+// Buzz spell can be registered by value at bind time.
 func DecodeHandle(v buzz.Value) (Spec, error) {
 	return Decode(buzzSpellObj{v: v})
 }

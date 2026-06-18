@@ -1,12 +1,3 @@
-// magusfile.buzz — magus workspace definition.
-//
-// Projects are declared explicitly with magus.project.register. A project names
-// the spell(s) that build it and, optionally, its regenerable outputs and any
-// cross-project dependency edges.
-//
-//   magus describe targets   -- show targets in this workspace
-//   magus describe spells    -- show all available spells
-
 import "magus";
 
 // The magus host utilities are imported under bare names — os, fs, vcs, http, … —
@@ -22,31 +13,30 @@ import "os";
 // configure a different project (e.g. one magusfile declaring several):
 //
 //   import "magus/spell/go";
-//   magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
+//   magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({ "spells": [go] }); return true; });
 //
-magus.project.register(fun(p, cb) > bool { cb({
+magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
     // "spells": [go],
     // "outputs": ["bin/*", "dist/**"],
     // "depends_on": ["../api"],
 }); return true; });
 
-// ── targets ──────────────────────────────────────────────────────────────────
 // Each exported function is a runnable target. Compose a stage by calling a bound
 // spell's tool-native op from its body, or run a command with os.exec
 // (build below). Leave a stage as a no-op until you wire it.
 
-export fun preflight(_args: [str]) > void {}
-export fun generate(_args: [str]) > void { magus.needs(magus.target.literal("preflight")); }
-export fun format(_args: [str]) > void { magus.needs(magus.target.literal("generate")); }
-export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
-export fun build(_args: [str]) > void { magus.needs(magus.target.literal("format")); os.exec("echo", ["Hello from magus"]); }
-export fun test(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
+export fun preflight(args: [str]) > void {}
+export fun generate(args: [str]) > void { magus.needs(magus.target.literal("preflight")); }
+export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
+export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); }
+export fun build(args: [str]) > void { magus.needs(magus.target.literal("format")); os.exec("echo", ["Hello from magus"]); }
+export fun test(args: [str]) > void { magus.needs(magus.target.literal("format")); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
 // not hardcode its steps — compose them here with magus.needs. magus runs
 // ci read-only. Each stage declares its own prerequisites so the DAG is expressed
 // as edges: ci fans out lint/build/test in parallel; they each wait for format,
 // which waits for generate, which waits for preflight. Shared deps run once.
-export fun ci(_args: [str]) > void {
+export fun ci(args: [str]) > void {
     magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }

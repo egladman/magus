@@ -9,10 +9,12 @@ import (
 	"github.com/egladman/gopherbuzz/ast"
 )
 
-// This file is the default (fast) representation of a Buzz Value's heap payload.
+// This file is the unsafe-pointer representation of a Buzz Value's heap payload,
+// selected with -tags buzz_unsafe. The DEFAULT build uses neither this nor
+// value_safe.go: it uses the NaN-boxed uint64 representation in value_nanbox.go.
 // The safe counterpart in value_safe.go (built with -tags buzz_safe) uses a
-// plain interface and is behaviourally identical; CI builds and tests both so
-// this unsafe form is always checked against the safe one.
+// plain interface and is behaviourally identical; CI builds and tests all three
+// representations so this unsafe form is always checked against the safe one.
 //
 // ── Why unsafe.Pointer here ──────────────────────────────────────────────────
 //
@@ -121,7 +123,7 @@ func BoolValue(b bool) Value {
 // heapValue callers honest: you can only build a heap Value from a real payload
 // pointer, never from an arbitrary unsafe.Pointer.
 type heapVal interface {
-	*strObj | *listObj | *mapObj | *funObj | *directObj | *objectInst |
+	*strObj | *listObj | *mapObj | *funObj | *directObj | *udObj | *objectInst |
 		*objectDefObj | *enumDefObj | *enumValObj | *iterStateObj | *rangeObj |
 		*fibObj | *patObj | *objDeclPayload
 }

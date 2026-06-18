@@ -48,7 +48,7 @@ func run() error {
 	// zdef takes a literal path; splice in the freshly compiled library.
 	program := strings.ReplaceAll(string(src), "__LIBPATH__", libPath)
 
-	sess := buzz.NewSession(context.Background())
+	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
 	buzzstd.Register(sess)
 	return sess.Exec(context.Background(), program)

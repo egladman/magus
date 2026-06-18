@@ -1,8 +1,4 @@
-// go — Go toolchain spell: build, test, vet, lint, fmt, and module hygiene.
-//
-// Authored source for the built-in "golang" spell. Compiled to bytecode and
-// embedded at build time (see cmd/magus-spells-gen); edit here, not the
-// generated table. Every op is a fork of a tool on PATH — no shell.
+// Every op is a fork of a tool on PATH — no shell.
 //
 // Op naming follows the convention in docs/spells.md: the op key is the literal
 // CLI command (kebab-case) and the handler is that command in lowerCamelCase, so
@@ -16,6 +12,10 @@
 // callback — the same command data as before, now reached through a typed contract.
 
 import "magus/target";
+// charm constructors compute argv patches from anchors, so the charms below
+// reference an arg by value (e.g. "run", "--diff") instead of a hand-counted
+// index that silently breaks when the args change.
+import "magus/charm";
 
 export fun mgs_getName() > str { return "go"; }
 
@@ -30,15 +30,17 @@ fun goClean(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["cl
 fun goGenerate(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["generate", "./..."]}); return true; }
 
 fun goFmt(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "gofmt", "args": ["-l", "."], "charms": {
-        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "-w"}]},
+    final args = ["-l", "."];
+    cb({"cmd": "gofmt", "args": args, "charms": {
+        "rw": set(args, "-l", "-w"),
     }});
     return true;
 }
 fun golangCILint(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "go", "args": ["tool", "golangci-lint", "run", "./..."], "charms": {
-        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
-        "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},
+    final args = ["tool", "golangci-lint", "run", "./..."];
+    cb({"cmd": "go", "args": args, "charms": {
+        "debug": append(["-v"]),
+        "rw": after(args, "run", ["--fix"]),
     }});
     return true;
 }
@@ -47,19 +49,17 @@ fun golangCILint(target: Target, cb: fun(any)) > bool {
 // (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
 fun goTest(target: Target, cb: fun(any)) > bool {
     cb({"cmd": "go", "args": ["test", "./..."], "charms": {
-        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
-        "cd": {"ops": [
-            {"op": "add", "path": "/-", "value": "-covermode=atomic"},
-            {"op": "add", "path": "/-", "value": "-coverprofile=coverage.out"},
-        ]},
+        "debug": append(["-v"]),
+        "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }});
     return true;
 }
 // tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes —
 // safe for CI gating); the write charm applies the changes.
 fun goModTidy(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "go", "args": ["mod", "tidy", "--diff"], "charms": {
-        "rw": {"ops": [{"op": "remove", "path": "/2"}]},
+    final args = ["mod", "tidy", "--diff"];
+    cb({"cmd": "go", "args": args, "charms": {
+        "rw": drop(args, "--diff"),
     }});
     return true;
 }

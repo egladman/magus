@@ -13,49 +13,51 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseEndpoint(t *testing.T) {
-	tests := []struct {
-		input    string
-		wantAddr string
-		wantStr  string
-		wantErr  bool
-	}{
-		// canonical unix:// form
-		{"unix:///var/run/magus.sock", "/var/run/magus.sock", "unix:///var/run/magus.sock", false},
-		{"unix:///tmp/magus-1234-abcd.sock", "/tmp/magus-1234-abcd.sock", "unix:///tmp/magus-1234-abcd.sock", false},
-		// bare path back-compat
-		{"/tmp/magus.sock", "/tmp/magus.sock", "unix:///tmp/magus.sock", false},
-		// errors
-		{"unix://", "", "", true},
-		{"tcp://localhost:9000", "", "", true},
-		{"grpc://foo", "", "", true},
-		{"", "", "", true},
-	}
-
-	for _, tc := range tests {
-		ep, err := ParseEndpoint(tc.input)
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("ParseEndpoint(%q): expected error, got nil", tc.input)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("ParseEndpoint(%q): unexpected error: %v", tc.input, err)
-			continue
-		}
-		if ep.Addr != tc.wantAddr {
-			t.Errorf("ParseEndpoint(%q).Addr = %q, want %q", tc.input, ep.Addr, tc.wantAddr)
-		}
-		if ep.String() != tc.wantStr {
-			t.Errorf("ParseEndpoint(%q).String() = %q, want %q", tc.input, ep.String(), tc.wantStr)
-		}
-		if ep.Network() != "unix" {
-			t.Errorf("ParseEndpoint(%q).Network() = %q, want unix", tc.input, ep.Network())
-		}
-	}
+	// canonical unix:// form
+	t.Run("canonical unix scheme", func(t *testing.T) {
+		ep, err := ParseEndpoint("unix:///var/run/magus.sock")
+		require.NoError(t, err)
+		assert.Equal(t, "/var/run/magus.sock", ep.Addr)
+		assert.Equal(t, "unix:///var/run/magus.sock", ep.String())
+		assert.Equal(t, "unix", ep.Network())
+	})
+	t.Run("canonical unix scheme with temp path", func(t *testing.T) {
+		ep, err := ParseEndpoint("unix:///tmp/magus-1234-abcd.sock")
+		require.NoError(t, err)
+		assert.Equal(t, "/tmp/magus-1234-abcd.sock", ep.Addr)
+		assert.Equal(t, "unix:///tmp/magus-1234-abcd.sock", ep.String())
+		assert.Equal(t, "unix", ep.Network())
+	})
+	// bare path back-compat
+	t.Run("bare path back-compat", func(t *testing.T) {
+		ep, err := ParseEndpoint("/tmp/magus.sock")
+		require.NoError(t, err)
+		assert.Equal(t, "/tmp/magus.sock", ep.Addr)
+		assert.Equal(t, "unix:///tmp/magus.sock", ep.String())
+		assert.Equal(t, "unix", ep.Network())
+	})
+	// errors
+	t.Run("empty unix scheme", func(t *testing.T) {
+		_, err := ParseEndpoint("unix://")
+		assert.Error(t, err)
+	})
+	t.Run("tcp scheme rejected", func(t *testing.T) {
+		_, err := ParseEndpoint("tcp://localhost:9000")
+		assert.Error(t, err)
+	})
+	t.Run("grpc scheme rejected", func(t *testing.T) {
+		_, err := ParseEndpoint("grpc://foo")
+		assert.Error(t, err)
+	})
+	t.Run("empty input rejected", func(t *testing.T) {
+		_, err := ParseEndpoint("")
+		assert.Error(t, err)
+	})
 }
 
 func TestForwardRoundTrip(t *testing.T) {
@@ -69,29 +71,19 @@ func TestForwardRoundTrip(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
 	code, err := Forward(context.Background(), []string{"run", "build", "api"}, "test", "")
-	if err != nil {
-		t.Fatalf("Forward: %v", err)
-	}
-	if code != 0 {
-		t.Errorf("ExitCode = %d, want 0", code)
-	}
-	if !called.Load() {
-		t.Error("handler was not called")
-	}
-	if args, ok := gotArgs.Load().([]string); !ok || len(args) != 3 {
-		t.Errorf("handler args = %v, want [run build api]", gotArgs.Load())
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.True(t, called.Load(), "handler was not called")
+	args, ok := gotArgs.Load().([]string)
+	assert.True(t, ok)
+	assert.Len(t, args, 3)
 }
 
 func TestForwardHandlerError(t *testing.T) {
@@ -100,32 +92,22 @@ func TestForwardHandlerError(t *testing.T) {
 			return errors.New("build failed")
 		},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
 	code, err := Forward(context.Background(), []string{"run", "build", "broken"}, "", "")
-	if err != nil {
-		t.Fatalf("Forward transport error: %v", err)
-	}
-	if code != 1 {
-		t.Errorf("ExitCode = %d, want 1", code)
-	}
+	require.NoError(t, err, "Forward transport error")
+	assert.Equal(t, 1, code)
 }
 
 func TestForwardInvalidSocket(t *testing.T) {
 	t.Setenv("MAGUS_DAEMON_SOCKET", "/nonexistent/path/magus.sock")
 
 	_, err := Forward(context.Background(), []string{"run", "build", "foo"}, "", "")
-	if err == nil {
-		t.Fatal("expected error dialing nonexistent socket, got nil")
-	}
+	assert.Error(t, err, "expected error dialing nonexistent socket")
 }
 
 func TestForwardCycleDetection(t *testing.T) {
@@ -142,14 +124,10 @@ func TestForwardCycleDetection(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
 	defer close(block)
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
@@ -166,12 +144,8 @@ func TestForwardCycleDetection(t *testing.T) {
 
 	// Second call with same args: should get cycle error (exit code 1).
 	code, err := Forward(context.Background(), args, "", "")
-	if err != nil {
-		t.Fatalf("second Forward: %v", err)
-	}
-	if code != 1 {
-		t.Errorf("cycle: ExitCode = %d, want 1", code)
-	}
+	require.NoError(t, err, "second Forward")
+	assert.Equal(t, 1, code, "cycle: expected exit code 1")
 }
 
 func TestQueryStatus(t *testing.T) {
@@ -186,14 +160,10 @@ func TestQueryStatus(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
 	defer close(block)
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
@@ -204,21 +174,12 @@ func TestQueryStatus(t *testing.T) {
 	<-started
 
 	status, err := QueryStatus(context.Background(), srv.Addr())
-	if err != nil {
-		t.Fatalf("QueryStatus: %v", err)
-	}
-	if status.Capacity != 4 {
-		t.Errorf("Capacity=%d, want 4", status.Capacity)
-	}
-	if status.InUse != 1 {
-		t.Errorf("InUse=%d, want 1", status.InUse)
-	}
-	if len(status.Calls) != 1 {
-		t.Fatalf("Calls len=%d, want 1", len(status.Calls))
-	}
-	if len(status.Calls[0].Args) != 3 || status.Calls[0].Args[2] != "widget" {
-		t.Errorf("Calls[0].Args=%v, want [run build widget]", status.Calls[0].Args)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 4, status.Capacity)
+	assert.Equal(t, 1, status.InUse)
+	require.Len(t, status.Calls, 1)
+	require.Len(t, status.Calls[0].Args, 3)
+	assert.Equal(t, "widget", status.Calls[0].Args[2])
 }
 
 func TestRunChildSyncSlotLending(t *testing.T) {
@@ -228,17 +189,11 @@ func TestRunChildSyncSlotLending(t *testing.T) {
 	ctx := cache.WithSlotHeld(context.Background())
 
 	// Acquire both slots so the limiter is saturated.
-	if err := lim.Acquire(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := lim.Acquire(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, lim.Acquire(ctx))
+	require.NoError(t, lim.Acquire(ctx))
 
 	snap := lim.Snapshot()
-	if snap.InUse != 2 {
-		t.Fatalf("before lend: inUse=%d, want 2", snap.InUse)
-	}
+	require.Equal(t, 2, snap.InUse, "before lend")
 
 	// RunChildSync should release one slot (lending), run fn, then re-acquire.
 	var inUseDuringFn int
@@ -246,20 +201,14 @@ func TestRunChildSyncSlotLending(t *testing.T) {
 		inUseDuringFn = lim.Snapshot().InUse
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// During fn, the lent slot was released: only 1 in use.
-	if inUseDuringFn != 1 {
-		t.Errorf("inUse during fn = %d, want 1", inUseDuringFn)
-	}
+	assert.Equal(t, 1, inUseDuringFn, "inUse during fn")
 
 	// After RunChildSync, the slot is re-acquired: back to 2.
 	snap = lim.Snapshot()
-	if snap.InUse != 2 {
-		t.Errorf("after RunChildSync: inUse=%d, want 2", snap.InUse)
-	}
+	assert.Equal(t, 2, snap.InUse, "after RunChildSync")
 }
 
 // TestRunChildSyncNoLendWithoutSlot verifies that a slotless caller (no
@@ -269,24 +218,16 @@ func TestRunChildSyncNoLendWithoutSlot(t *testing.T) {
 	t.Parallel()
 	lim := cache.NewLimiter(2)
 	ctx := context.Background() // no SlotHeld marker
-	if err := lim.Acquire(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, lim.Acquire(ctx))
 	var inUseDuringFn int
 	err := RunChildSync(ctx, lim, func() error {
 		inUseDuringFn = lim.Snapshot().InUse
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// No lending: the one outstanding slot stays held throughout.
-	if inUseDuringFn != 1 {
-		t.Errorf("inUse during fn = %d, want 1 (no lend without slot)", inUseDuringFn)
-	}
-	if snap := lim.Snapshot(); snap.InUse != 1 {
-		t.Errorf("after RunChildSync: inUse=%d, want 1", snap.InUse)
-	}
+	assert.Equal(t, 1, inUseDuringFn, "inUse during fn (no lend without slot)")
+	assert.Equal(t, 1, lim.Snapshot().InUse, "after RunChildSync")
 }
 
 func TestRunChildSyncNilLimiter(t *testing.T) {
@@ -296,9 +237,8 @@ func TestRunChildSyncNilLimiter(t *testing.T) {
 		called = true
 		return nil
 	})
-	if err != nil || !called {
-		t.Errorf("nil limiter: err=%v called=%v", err, called)
-	}
+	require.NoError(t, err)
+	assert.True(t, called)
 }
 
 func TestNewAlreadyAdopted(t *testing.T) {
@@ -307,9 +247,7 @@ func TestNewAlreadyAdopted(t *testing.T) {
 	_, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
-	if !errors.Is(err, ErrAlreadyAdopted) {
-		t.Errorf("New returned %v, want ErrAlreadyAdopted", err)
-	}
+	assert.ErrorIs(t, err, ErrAlreadyAdopted)
 }
 
 // TestRunRequestArgsCapEnforced verifies that an RPC call carrying more than
@@ -319,13 +257,9 @@ func TestRunRequestArgsCapEnforced(t *testing.T) {
 	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
@@ -337,9 +271,7 @@ func TestRunRequestArgsCapEnforced(t *testing.T) {
 
 	// Forward should surface the server-side rejection as a transport error.
 	_, err = Forward(context.Background(), oversized, "", "")
-	if err == nil {
-		t.Fatal("expected an error for oversized Args, got nil")
-	}
+	assert.Error(t, err, "expected an error for oversized Args")
 }
 
 // TestDialRespectsContextCancellation verifies that Dial returns promptly when
@@ -347,9 +279,7 @@ func TestRunRequestArgsCapEnforced(t *testing.T) {
 // timeout fires.
 func TestDialRespectsContextCancellation(t *testing.T) {
 	ep, err := ParseEndpoint("/nonexistent/magus-test-cancel.sock")
-	if err != nil {
-		t.Fatalf("ParseEndpoint: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately before dialling
@@ -358,13 +288,9 @@ func TestDialRespectsContextCancellation(t *testing.T) {
 	_, err = ep.Dial(ctx)
 	elapsed := time.Since(start)
 
-	if err == nil {
-		t.Fatal("expected error from Dial with cancelled ctx, got nil")
-	}
+	assert.Error(t, err, "expected error from Dial with cancelled ctx")
 	// A context-aware dialer should return well under 1 second.
-	if elapsed > time.Second {
-		t.Errorf("Dial took %v with cancelled ctx, expected near-instant return", elapsed)
-	}
+	assert.LessOrEqual(t, elapsed, time.Second, "Dial should return near-instantly with cancelled ctx")
 }
 
 // TestStartCloseGoroutineLeak verifies that repeated Start/Close cycles do not
@@ -380,12 +306,8 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 		srv, err := New(Options{
 			Handler: func(_ context.Context, args []string) error { return nil },
 		})
-		if err != nil {
-			t.Fatalf("cycle %d: New: %v", i, err)
-		}
-		if err := srv.Start(); err != nil {
-			t.Fatalf("cycle %d: Start: %v", i, err)
-		}
+		require.NoError(t, err, "cycle %d: New", i)
+		require.NoError(t, srv.Start(), "cycle %d: Start", i)
 		srv.Close()
 	}
 
@@ -396,10 +318,8 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 	// Allow a small headroom for transient runtime goroutines. Each cycle
 	// should not permanently add goroutines; a delta >= cycles is a clear leak
 	// (one leaked goroutine per cycle would produce delta == cycles).
-	if after-before >= cycles {
-		t.Errorf("goroutine count grew from %d to %d after %d Start/Close cycles — likely leak",
-			before, after, cycles)
-	}
+	assert.Less(t, after-before, cycles,
+		"goroutine count grew from %d to %d after %d Start/Close cycles — likely leak", before, after, cycles)
 }
 
 // TestShutdownRPC verifies that Shutdown dials the server, triggers a graceful
@@ -408,19 +328,13 @@ func TestShutdownRPC(t *testing.T) {
 	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, srv.Start())
 
 	addr := srv.Addr()
 
 	// Shutdown should succeed and trigger srv.Close in a goroutine.
-	if err := Shutdown(context.Background(), addr); err != nil {
-		t.Fatalf("Shutdown: %v", err)
-	}
+	require.NoError(t, Shutdown(context.Background(), addr))
 
 	// Wait for the server to close — QueryStatus should eventually fail.
 	deadline := time.Now().Add(2 * time.Second)
@@ -439,19 +353,14 @@ func TestShutdownIgnoresWrongMagic(t *testing.T) {
 	srv, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	// A QueryStatus with an empty magic is silently ignored by the server.
 	// Re-use QueryStatus as a liveness probe — server should still answer.
-	if _, err := QueryStatus(context.Background(), srv.Addr()); err != nil {
-		t.Fatalf("QueryStatus before shutdown attempt: %v", err)
-	}
+	_, err = QueryStatus(context.Background(), srv.Addr())
+	require.NoError(t, err, "QueryStatus before shutdown attempt")
 }
 
 // TestWireIsJSONL verifies that a raw connection receives exactly one
@@ -460,48 +369,31 @@ func TestWireIsJSONL(t *testing.T) {
 	srv, err := New(Options{
 		Handler: func(_ context.Context, _ []string) error { return nil },
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	ep, err := ParseEndpoint(srv.Addr())
-	if err != nil {
-		t.Fatalf("ParseEndpoint: %v", err)
-	}
+	require.NoError(t, err)
 	conn, err := ep.Dial(context.Background())
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
+	require.NoError(t, err)
 	defer conn.Close()
 
 	// Write a minimal run request using raw JSON so we control the wire bytes.
 	frame := `{"type":"run","args":["run","build","wire-test"],"cwd":"/tmp","protocol":"v2"}` + "\n"
-	if _, err := conn.Write([]byte(frame)); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	_, err = conn.Write([]byte(frame))
+	require.NoError(t, err)
 
 	// Read the reply — should be exactly one line ending with \n.
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
-	if err != nil {
-		t.Fatalf("Read: %v", err)
-	}
+	require.NoError(t, err)
 	reply := buf[:n]
 
-	if !bytes.HasSuffix(reply, []byte("\n")) {
-		t.Errorf("reply does not end with \\n: %q", reply)
-	}
+	assert.True(t, bytes.HasSuffix(reply, []byte("\n")), "reply does not end with \\n: %q", reply)
 	inner := reply[:len(reply)-1]
-	if bytes.Contains(inner, []byte("\n")) {
-		t.Errorf("reply contains embedded newline: %q", reply)
-	}
-	if !json.Valid(inner) {
-		t.Errorf("reply is not valid JSON: %q", inner)
-	}
+	assert.False(t, bytes.Contains(inner, []byte("\n")), "reply contains embedded newline: %q", reply)
+	assert.True(t, json.Valid(inner), "reply is not valid JSON: %q", inner)
 }
 
 // TestProtocolSkewRejectsV1 verifies that sending "protocol":"v1" causes
@@ -510,50 +402,33 @@ func TestProtocolSkewRejectsV1(t *testing.T) {
 	srv, err := New(Options{
 		Handler: func(_ context.Context, _ []string) error { return nil },
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	ep, err := ParseEndpoint(srv.Addr())
-	if err != nil {
-		t.Fatalf("ParseEndpoint: %v", err)
-	}
+	require.NoError(t, err)
 	conn, err := ep.Dial(context.Background())
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
+	require.NoError(t, err)
 	defer conn.Close()
 
 	// Deliberately send the old protocol version.
 	frame := `{"type":"run","args":["run","build","x"],"cwd":"/tmp","protocol":"v1"}` + "\n"
-	if _, err := conn.Write([]byte(frame)); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	_, err = conn.Write([]byte(frame))
+	require.NoError(t, err)
 
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
-	if err != nil {
-		t.Fatalf("Read: %v", err)
-	}
+	require.NoError(t, err)
 	reply := buf[:n]
 
 	var envelope struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	}
-	if err := json.Unmarshal(bytes.TrimRight(reply, "\n"), &envelope); err != nil {
-		t.Fatalf("unmarshal reply: %v", err)
-	}
-	if envelope.Type != "error" {
-		t.Errorf("reply type = %q, want \"error\"", envelope.Type)
-	}
-	if envelope.Message == "" {
-		t.Error("error reply has empty message")
-	}
+	require.NoError(t, json.Unmarshal(bytes.TrimRight(reply, "\n"), &envelope), "unmarshal reply")
+	assert.Equal(t, "error", envelope.Type)
+	assert.NotEmpty(t, envelope.Message, "error reply has empty message")
 }
 
 // TestForwardArgsWithNewline confirms that an embedded newline in an arg is
@@ -567,27 +442,19 @@ func TestForwardArgsWithNewline(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	defer srv.Close()
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 
 	code, err := Forward(context.Background(), []string{"run", "build", "x\ny"}, "", "")
-	if err != nil {
-		t.Fatalf("Forward: %v", err)
-	}
-	if code != 0 {
-		t.Errorf("ExitCode = %d, want 0", code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
 	args, ok := gotArgs.Load().([]string)
-	if !ok || len(args) != 3 || args[2] != "x\ny" {
-		t.Errorf("handler received args %v, want [run build x\\ny]", args)
-	}
+	require.True(t, ok)
+	require.Len(t, args, 3)
+	assert.Equal(t, "x\ny", args[2])
 }
 
 // TestMain clears MAGUS_DAEMON_SOCKET before the suite runs so the package is

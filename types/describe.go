@@ -2,22 +2,20 @@ package types
 
 // Describe-output types and the concept definitions printed by "magus describe".
 
-// ── Spells ────────────────────────────────────────────────────────────────────
-
 // SpellDefinition is the human-readable description of a spell shown by "magus describe spells".
 const SpellDefinition = "A spell is a language/runtime adapter that " +
 	"teaches magus how to build, test, lint, and format projects of a given type. " +
-	"Spells are registered at startup and bound to projects via explicit registration " +
-	"in the magusfile (magus.spell.register or magus.spell.load)."
+	"Spells are registered at startup and bound to projects by importing the spell " +
+	"and passing its handle to magus.project.register in the magusfile."
 
 // SpellEntry is the structured view of a single spell.
 type SpellEntry struct {
-	Name           string   `json:"name"              yaml:"name"`
-	Sources        []string `json:"sources,omitempty" yaml:"sources,omitempty"`
-	Outputs        []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-	Claims         []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
-	Targets        []string `json:"targets,omitempty" yaml:"targets,omitempty"`
-	ForeignProcess bool     `json:"foreign_process,omitempty" yaml:"foreign_process,omitempty"`
+	Name    string   `json:"name"              yaml:"name"`
+	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
+	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	Claims  []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
+	Targets []string `json:"targets,omitempty" yaml:"targets,omitempty"`
+	Opaque  bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
 	// TargetDocs maps a target name to its handler's doc comment, for the targets
 	// that have one. Populated for Buzz spells (built-in docs are not serialized in
 	// bytecode, so only workspace-local Buzz spells carry them here).
@@ -30,8 +28,6 @@ type SpellsOutput struct {
 	Count      int          `json:"count"      yaml:"count"`
 	Spells     []SpellEntry `json:"spells"     yaml:"spells"`
 }
-
-// ── Targets ───────────────────────────────────────────────────────────────────
 
 // TargetDefinition is the human-readable description of a target shown by "magus describe targets".
 const TargetDefinition = "A target is a named operation (e.g. build, test, lint) declared as an " +
@@ -124,8 +120,6 @@ type TargetGraphOutput struct {
 	Projects   []TargetGraphProject `json:"projects"   yaml:"projects"`
 }
 
-// ── Projects ──────────────────────────────────────────────────────────────────
-
 // ProjectDefinition is the human-readable description of a project shown by "magus describe projects".
 const ProjectDefinition = "A project is a directory the workspace recognized as a " +
 	"unit of work, bound to one or more spells. Projects are " +
@@ -152,8 +146,6 @@ type ProjectsOutput struct {
 	Projects   []ProjectEntry `json:"projects"   yaml:"projects"`
 }
 
-// ── Modules ───────────────────────────────────────────────────────────────────
-
 // ModuleDefinition is the human-readable description shown by "magus describe modules".
 const ModuleDefinition = "A module is a magus standard-library namespace a magusfile imports for " +
 	"host capabilities — filesystem, exec, vcs, crypto, http, and more. Import " +
@@ -169,11 +161,21 @@ type ModuleMethodEntry struct {
 	NativeBuzz string `json:"native_buzz,omitempty" yaml:"native_buzz,omitempty"`
 }
 
+// Record is the Buzz boundary map for a method entry (magus.module's methods).
+func (m ModuleMethodEntry) Record() map[string]any {
+	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "nativeBuzz": m.NativeBuzz}
+}
+
 // ModuleFieldEntry is one static, table-level value on a module (e.g. vcs.name).
 type ModuleFieldEntry struct {
 	Name string `json:"name"          yaml:"name"`
 	Type string `json:"type"          yaml:"type"`
 	Doc  string `json:"doc,omitempty" yaml:"doc,omitempty"`
+}
+
+// Record is the Buzz boundary map for a field entry (magus.module's fields).
+func (f ModuleFieldEntry) Record() map[string]any {
+	return map[string]any{"name": f.Name, "type": f.Type, "doc": f.Doc}
 }
 
 // ModuleEntry is a module's summary; Fields/Methods are populated only for the detail view.
@@ -184,14 +186,27 @@ type ModuleEntry struct {
 	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
 }
 
+// Record is the Buzz boundary map magus.modules / magus.module return:
+// {name, doc, fields, methods}. fields/methods are always present (empty in the
+// summary view). The generated/hand-written bindings marshal it via hostbuzz.Recorder.
+func (e ModuleEntry) Record() map[string]any {
+	fields := make([]any, len(e.Fields))
+	for i, f := range e.Fields {
+		fields[i] = f.Record()
+	}
+	methods := make([]any, len(e.Methods))
+	for i, m := range e.Methods {
+		methods[i] = m.Record()
+	}
+	return map[string]any{"name": e.Name, "doc": e.Doc, "fields": fields, "methods": methods}
+}
+
 // ModulesOutput is the top-level result for "describe modules" / "describe module <name>".
 type ModulesOutput struct {
 	Definition string        `json:"definition" yaml:"definition"`
 	Count      int           `json:"count"      yaml:"count"`
 	Modules    []ModuleEntry `json:"modules"    yaml:"modules"`
 }
-
-// ── Evaluated targets ─────────────────────────────────────────────────────────
 
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".
 const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved " +
@@ -223,7 +238,7 @@ type EvaluatedTargetEntry struct {
 	DependsOn []string              `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string              `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpellEntry `json:"spells,omitempty"     yaml:"spells,omitempty"`
-	Policy    *TargetPolicy         `json:"policy,omitempty"    yaml:"policy,omitempty"`
+	Policy    *Target               `json:"policy,omitempty"    yaml:"policy,omitempty"`
 	Exclusive bool                  `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 }
 
@@ -234,18 +249,16 @@ type EvaluatedTargetsOutput struct {
 	Targets    []EvaluatedTargetEntry `json:"targets"    yaml:"targets"`
 }
 
-// ── Evaluated projects ────────────────────────────────────────────────────────
-
 // EvaluatedProjectEntry is the fully-resolved view of a project.
 type EvaluatedProjectEntry struct {
-	Path           string                  `json:"path"                       yaml:"path"`
-	Dir            string                  `json:"dir"                        yaml:"dir"`
-	Sources        []string                `json:"sources,omitempty"          yaml:"sources,omitempty"`
-	Outputs        []string                `json:"outputs,omitempty"          yaml:"outputs,omitempty"`
-	DependsOn      []string                `json:"depends_on,omitempty"       yaml:"depends_on,omitempty"`
-	Spells         []EvaluatedSpellEntry   `json:"spells,omitempty"           yaml:"spells,omitempty"`
-	TargetPolicies map[string]TargetPolicy `json:"target_policies,omitempty"  yaml:"target_policies,omitempty"`
-	Exclusive      bool                    `json:"exclusive,omitempty"        yaml:"exclusive,omitempty"`
+	Path           string                `json:"path"                       yaml:"path"`
+	Dir            string                `json:"dir"                        yaml:"dir"`
+	Sources        []string              `json:"sources,omitempty"          yaml:"sources,omitempty"`
+	Outputs        []string              `json:"outputs,omitempty"          yaml:"outputs,omitempty"`
+	DependsOn      []string              `json:"depends_on,omitempty"       yaml:"depends_on,omitempty"`
+	Spells         []EvaluatedSpellEntry `json:"spells,omitempty"           yaml:"spells,omitempty"`
+	TargetPolicies map[string]Target     `json:"target_policies,omitempty"  yaml:"target_policies,omitempty"`
+	Exclusive      bool                  `json:"exclusive,omitempty"        yaml:"exclusive,omitempty"`
 }
 
 // EvaluatedProjectsOutput is the top-level result for "describe projects --evaluated".
@@ -255,8 +268,6 @@ type EvaluatedProjectsOutput struct {
 	Count      int                     `json:"count"      yaml:"count"`
 	Projects   []EvaluatedProjectEntry `json:"projects"   yaml:"projects"`
 }
-
-// ── Workspaces ────────────────────────────────────────────────────────────────
 
 // WorkspaceDefinition is the human-readable description of a workspace shown by "magus describe workspaces".
 const WorkspaceDefinition = "A workspace is a magus root directory that owns a set " +

@@ -3,8 +3,10 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
 
@@ -18,9 +20,8 @@ func TestWhereUniqueMatch(t *testing.T) {
 		{Path: "web/dashboard", Dir: "/tmp/web/dashboard"},
 	}
 	scored := interactive.ScoreProjects(all, []string{"dash"})
-	if len(scored) != 1 || scored[0].P.Path != "web/dashboard" {
-		t.Fatalf("expected unique match web/dashboard, got %v", scored)
-	}
+	require.Len(t, scored, 1, "expected unique match web/dashboard")
+	assert.Equal(t, "web/dashboard", scored[0].P.Path)
 }
 
 func TestWhereAmbiguous(t *testing.T) {
@@ -29,9 +30,7 @@ func TestWhereAmbiguous(t *testing.T) {
 		{Path: "api/auth", Dir: "/tmp/api/auth"},
 	}
 	scored := interactive.ScoreProjects(all, []string{"api"})
-	if len(scored) < 2 {
-		t.Fatalf("expected ambiguous results, got %d", len(scored))
-	}
+	assert.GreaterOrEqual(t, len(scored), 2, "expected ambiguous results")
 }
 
 func TestWhereNoMatch(t *testing.T) {
@@ -39,67 +38,60 @@ func TestWhereNoMatch(t *testing.T) {
 		{Path: "api/gateway", Dir: "/tmp/api/gateway"},
 	}
 	scored := interactive.ScoreProjects(all, []string{"zzznope"})
-	if len(scored) != 0 {
-		t.Fatalf("expected no match, got %v", scored)
-	}
+	assert.Empty(t, scored)
 }
 
 func TestResolveProjectArg(t *testing.T) {
-	cases := []struct {
-		name    string
-		arg     string
-		anchor  string
-		want    string
-		wantErr string // substring match, empty means success
-	}{
-		{name: "all projects empty sentinel", arg: "", anchor: "web/studio", want: ""},
-		{name: "all projects slash sentinel", arg: "/", anchor: "web/studio", want: "/"},
-		{name: "bare stays workspace-relative", arg: "api", anchor: "web/studio", want: "api"},
-		{name: "dot up resolves against cwd", arg: "../api", anchor: "web/studio", want: "web/api"},
-		{name: "dot sibling resolves against cwd", arg: "./peer", anchor: "extensions/drape", want: "extensions/drape/peer"},
-		{name: "escape rejected", arg: "../../../foo", anchor: "a/b", wantErr: "escapes workspace root"},
-		{name: "absolute rejected", arg: "/etc", anchor: "web/studio", wantErr: "must be repo-relative"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := resolveProjectArg(tc.arg, tc.anchor)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("resolveProjectArg(%q, %q) error = %v; want substring %q", tc.arg, tc.anchor, err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("resolveProjectArg(%q, %q): unexpected error: %v", tc.arg, tc.anchor, err)
-			}
-			if got != tc.want {
-				t.Fatalf("resolveProjectArg(%q, %q) = %q, want %q", tc.arg, tc.anchor, got, tc.want)
-			}
-		})
-	}
+	t.Run("all projects empty sentinel", func(t *testing.T) {
+		got, err := resolveProjectArg("", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "", got)
+	})
+	t.Run("all projects slash sentinel", func(t *testing.T) {
+		got, err := resolveProjectArg("/", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "/", got)
+	})
+	t.Run("bare stays workspace-relative", func(t *testing.T) {
+		got, err := resolveProjectArg("api", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "api", got)
+	})
+	t.Run("dot up resolves against cwd", func(t *testing.T) {
+		got, err := resolveProjectArg("../api", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "web/api", got)
+	})
+	t.Run("dot sibling resolves against cwd", func(t *testing.T) {
+		got, err := resolveProjectArg("./peer", "extensions/drape")
+		require.NoError(t, err)
+		assert.Equal(t, "extensions/drape/peer", got)
+	})
+	t.Run("escape rejected", func(t *testing.T) {
+		_, err := resolveProjectArg("../../../foo", "a/b")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "escapes workspace root")
+	})
+	t.Run("absolute rejected", func(t *testing.T) {
+		_, err := resolveProjectArg("/etc", "web/studio")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be repo-relative")
+	})
 }
 
 func TestCwdAnchor(t *testing.T) {
 	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("eval-symlinks temp dir: %v", err)
-	}
+	require.NoError(t, err, "eval-symlinks temp dir")
 	sub := filepath.Join(root, "web", "studio")
-	if err := os.MkdirAll(sub, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(sub, 0o755), "mkdir")
 
 	t.Run("subdir resolves to slash-relative anchor", func(t *testing.T) {
 		t.Chdir(sub)
-		if got := cwdAnchor(root); got != "web/studio" {
-			t.Fatalf("cwdAnchor = %q, want %q", got, "web/studio")
-		}
+		assert.Equal(t, "web/studio", cwdAnchor(root))
 	})
 
 	t.Run("root resolves to dot", func(t *testing.T) {
 		t.Chdir(root)
-		if got := cwdAnchor(root); got != "." {
-			t.Fatalf("cwdAnchor = %q, want %q", got, ".")
-		}
+		assert.Equal(t, ".", cwdAnchor(root))
 	})
 }

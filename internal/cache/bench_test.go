@@ -160,3 +160,68 @@ func BenchmarkRunAll(b *testing.B) {
 		})
 	}
 }
+
+// writeBenchProjectFiles writes nFiles Go source files for project under root and
+// returns the declared output path. Many files per project spread hashes across
+// many of the 256 mtime shards, so a multi-project cold build shares shards across
+// specs — the case where per-spec mtime flushing rewrites accumulating shards.
+func writeBenchProjectFiles(b *testing.B, root, project string, nFiles int) (outRel string) {
+	b.Helper()
+	dir := filepath.Join(root, project)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		b.Fatal(err)
+	}
+	for i := 0; i < nFiles; i++ {
+		src := filepath.Join(dir, fmt.Sprintf("f%03d.go", i))
+		body := fmt.Sprintf("package p\n\nvar V%d = %d\n", i, i)
+		if err := os.WriteFile(src, []byte(body), 0o644); err != nil {
+			b.Fatal(err)
+		}
+	}
+	return filepath.Join(project, "out.bin")
+}
+
+// BenchmarkRunAllColdMtime measures a cold (cache-empty) fan-out build over a
+// multi-file, multi-project workspace — the path where the mtime store is
+// re-populated and persisted. It is the benchmark behind moving the mtime flush
+// from per-spec (inside hashSpec) to once-per-RunAll: with per-spec flush each
+// completing spec rewrites every shard it shares with earlier specs, so the bytes
+// written to the shard files grow super-linearly in the project count.
+func BenchmarkRunAllColdMtime(b *testing.B) {
+	const (
+		nProjects = 24
+		nFiles    = 64
+	)
+	root := b.TempDir()
+	specs := make([]Spec, nProjects)
+	fns := make([]func(context.Context) error, nProjects)
+	for i := range specs {
+		p := fmt.Sprintf("svc-%02d", i)
+		outRel := writeBenchProjectFiles(b, root, p, nFiles)
+		specs[i] = benchSpec(root, p, outRel)
+		fns[i] = buildFn(root, outRel)
+	}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Fresh cache dir per iteration: every Run is a miss, so all source files
+		// are hashed and the mtime shards are dirtied and flushed.
+		cdir := filepath.Join(b.TempDir(), ".magus")
+		c := openBenchCache(b, cdir, true)
+		if _, err := c.RunAll(ctx, specs, func(ctx context.Context, s Spec) error {
+			return fns[indexOfSpec(specs, s.ProjectPath)](ctx)
+		}, WithConcurrency(8)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func indexOfSpec(specs []Spec, project string) int {
+	for i := range specs {
+		if specs[i].ProjectPath == project {
+			return i
+		}
+	}
+	return 0
+}

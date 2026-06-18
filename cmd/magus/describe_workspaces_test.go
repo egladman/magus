@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -15,13 +18,9 @@ func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 	base := t.TempDir()
 	mkWorkspace := func(name string) string {
 		dir := filepath.Join(base, name)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
 		// An empty magusfile.buzz marks the directory as a workspace root.
-		if err := os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 		return dir
 	}
 	wsA, wsB := mkWorkspace("a"), mkWorkspace("b")
@@ -32,13 +31,8 @@ func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 	globalCfg.Daemon.Workspaces = []string{wsA, wsB}
 
 	out, err := describeWorkspacesOutput(context.Background(), "")
-	if err != nil {
-		t.Fatalf("describeWorkspacesOutput: %v", err)
-	}
-	if out.Count != 2 || len(out.Workspaces) != 2 {
-		t.Fatalf("Count = %d, len(Workspaces) = %d, want 2 each", out.Count, len(out.Workspaces))
-	}
-	if out.Workspaces[0].Root == out.Workspaces[1].Root {
-		t.Errorf("expected two distinct workspace roots, got %q twice", out.Workspaces[0].Root)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 2, out.Count)
+	require.Len(t, out.Workspaces, 2)
+	assert.NotEqual(t, out.Workspaces[1].Root, out.Workspaces[0].Root, "expected two distinct workspace roots")
 }

@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/std"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/std"
 )
 
 // TestModuleDocsUpToDate verifies the checked-in docs/modules/*.md are exactly
@@ -25,28 +28,23 @@ func TestModuleDocsUpToDate(t *testing.T) {
 	for _, m := range modules {
 		expected[m.Name+".md"] = true
 		got, err := os.ReadFile(filepath.Join(docsDir, m.Name+".md"))
-		if err != nil {
-			t.Errorf("read %s.md: %v", m.Name, err)
+		if !assert.NoError(t, err, "read %s.md", m.Name) {
 			continue
 		}
-		if string(got) != renderModule(m) {
-			t.Errorf("%s.md is out of date; re-run:\n  go run ./cmd/magus-docs-gen -out ./docs/modules", m.Name)
-		}
+		assert.Equal(t, renderModule(m), string(got),
+			"%s.md is out of date; re-run:\n  go run ./cmd/magus-docs-gen -out ./docs/modules", m.Name)
 	}
 
-	if got, err := os.ReadFile(filepath.Join(docsDir, "index.md")); err != nil {
-		t.Errorf("read index.md: %v", err)
-	} else if string(got) != renderIndex(modules) {
-		t.Errorf("index.md is out of date; re-run:\n  go run ./cmd/magus-docs-gen -out ./docs/modules")
+	if got, err := os.ReadFile(filepath.Join(docsDir, "index.md")); assert.NoError(t, err, "read index.md") {
+		assert.Equal(t, renderIndex(modules), string(got),
+			"index.md is out of date; re-run:\n  go run ./cmd/magus-docs-gen -out ./docs/modules")
 	}
 
 	committed, err := filepath.Glob(filepath.Join(docsDir, "*.md"))
-	if err != nil {
-		t.Fatalf("glob docs: %v", err)
-	}
+	require.NoError(t, err, "glob docs")
 	for _, p := range committed {
-		if base := filepath.Base(p); !expected[base] {
-			t.Errorf("orphaned doc %s: no module registers it; delete it (re-run magus-docs-gen)", base)
-		}
+		base := filepath.Base(p)
+		assert.True(t, expected[base],
+			"orphaned doc %s: no module registers it; delete it (re-run magus-docs-gen)", base)
 	}
 }

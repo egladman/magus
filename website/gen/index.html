@@ -311,7 +311,7 @@ export fun build_server(_args: [str]) &gt; void {
 </tr>
 <tr>
 <td><strong><code>magus.*</code></strong></td>
-<td><code>magus.project.register</code>, <code>magus.needs</code>, <code>magus.target.literal/glob/regex/external</code>, <code>magus.spell</code>, <code>magus.cmd</code></td>
+<td><code>magus.project.register</code>, <code>magus.needs</code>, <code>magus.target.literal/glob/regex/external</code>, <code>magus.cmd</code></td>
 <td>Build DSL — the primary authoring surface; targets are declared as exported functions</td>
 </tr>
 <tr>
@@ -383,9 +383,8 @@ magus affected go::go-test -- -race            # affected projects, race detecto
 magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); return true; });
 </code></pre>
 <p>Available built-ins:
-<code>go</code>, <code>typescript</code>, <code>javascript</code>, <code>python</code>, <code>rust</code>, <code>zig</code>, <code>bash</code>, <code>buf</code>, <code>buzz</code>,
-<code>docker</code>, <code>compose</code>, <code>kind</code>, <code>terraform</code>, <code>kustomize</code>,
-<code>json</code>, <code>yaml</code>, <code>toml</code>, <code>html</code>, <code>markdown</code>, <code>css</code>, <code>sql</code></p>
+<code>go</code>, <code>typescript</code>, <code>python</code>, <code>rust</code>, <code>bash</code>, <code>buf</code>, <code>buzz</code>,
+<code>docker</code>, <code>cosign</code>, <code>markdown</code></p>
 <hr>
 <h3 id="spells-expose-tool-native-operations">Spells expose tool-native operations</h3>
 <p>Full reference: <a href="spells.html">Anatomy of a Spell</a>, including the <a href="spells.html#spells-vs-targets">Spells vs Targets</a> boundary and when to use each.</p>
@@ -459,31 +458,16 @@ export fun mgs_listTargets() &gt; any {
 }
 </code></pre>
 <h4 id="consuming-a-file-spell-magusfilebuzz">Consuming a file spell (<code>magusfile.buzz</code>)</h4>
-<pre><code class="language-buzz">const rb = magus.spell.load(&quot;spells/ruby.buzz&quot;);
+<p>Import the spell file by path — <code>import &quot;spells/ruby&quot;</code> resolves
+<code>./spells/ruby.buzz</code> and binds its handle under the basename (use <code>as</code> to rename):</p>
+<pre><code class="language-buzz">import &quot;spells/ruby&quot; as rb;
 magus.project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [rb] }); return true; });
 
 export fun test(_args: [str]) &gt; void { rb.rspec({ &quot;cwd&quot;: &quot;gems/&quot; }); }
 export fun lint(_args: [str]) &gt; void { rb.rubocop({ &quot;cwd&quot;: &quot;gems/&quot; }); }
 </code></pre>
-<p><code>magus.spell.load</code> and <code>magus.spell.define</code> are pure: they return a handle and
-register nothing. Binding happens when the handle is passed to
-<code>magus.project.register</code>.</p>
-<h4 id="inline-spell-magusfilebuzz">Inline spell (<code>magusfile.buzz</code>)</h4>
-<p>For a spell used in only one magusfile, define it inline with
-<code>magus.spell.define</code>. The data-map shape (<code>name</code>, <code>needs</code>, <code>provides</code>, <code>ops</code>)
-is distinct from the <code>mgs_</code> function contract of a spell file:</p>
-<pre><code class="language-buzz">const rb = magus.spell.define({
-    &quot;name&quot;: &quot;ruby&quot;,
-    &quot;needs&quot;: fun(_dir: str) &gt; [str] { return [&quot;**/*.rb&quot;, &quot;Gemfile.lock&quot;]; },
-    &quot;provides&quot;: fun() &gt; [str] { return [&quot;vendor/bundle/**/*&quot;]; },
-    &quot;ops&quot;: {
-        &quot;rspec&quot;:   { &quot;cmd&quot;: &quot;bundle&quot;, &quot;args&quot;: [&quot;exec&quot;, &quot;rspec&quot;] },
-        &quot;rubocop&quot;: { &quot;cmd&quot;: &quot;bundle&quot;, &quot;args&quot;: [&quot;exec&quot;, &quot;rubocop&quot;, &quot;--check&quot;],
-                     &quot;charms&quot;: { &quot;rw&quot;: {&quot;ops&quot;: [{&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/2&quot;, &quot;value&quot;: &quot;-A&quot;}]} } },
-    },
-});
-magus.project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [rb] }); return true; });
-</code></pre>
+<p>The imported handle is pure: it registers nothing on its own. Binding happens
+when the handle is passed to <code>magus.project.register</code>.</p>
 <p>For a step that needs a shell or arbitrary logic, skip the spell and write the
 target body directly with <code>extra.*</code> (see <a href="#runtime-api-three-tiers">Runtime API</a>).</p>
 <h4 id="best-practices">Best practices</h4>
@@ -1281,10 +1265,10 @@ magus describe api -o mermaid | gh-mermaid
 <h2 id="license">License</h2>
 <p>magus is licensed under GPL-3.0-or-later. See <a href="./LICENSE">LICENSE</a>.</p>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/README.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/README.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-17 03:13:17 UTC from commit <a href="https://github.com/egladman/tack/commit/bce6725ff9fc6c16078d6e7de23bfb7df20fe68b"><code>bce6725f</code></a></small>
+    <small>Generated 2026-06-18 02:07:00 UTC from commit <a href="https://github.com/egladman/tack/commit/cedea5cf1a4b5c9e05f2c52885801ea7fd459e7d"><code>cedea5c</code></a></small>
   </footer>
 </body>
 </html>

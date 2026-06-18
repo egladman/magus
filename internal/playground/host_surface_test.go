@@ -7,6 +7,8 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMagusSurfaceMatchesBindings is the drift guard between the two host
@@ -18,35 +20,25 @@ import (
 // it here, this test fails instead of the playground silently breaking.
 func TestMagusSurfaceMatchesBindings(t *testing.T) {
 	realTop, realTarget := bindings.MagusModuleKeys()
-	if len(realTop) == 0 {
-		t.Fatal("bindings.MagusModuleKeys returned no top-level members")
-	}
+	require.NotEmpty(t, realTop, "bindings.MagusModuleKeys returned no top-level members")
 
-	m := buildMagus(buzz.NewSession(context.Background()), newRecorder())
+	m := buildMagus(buzz.NewSession(context.Background(), buzz.WithEmbedded()), newRecorder())
 	have := keySet(m)
 	for _, k := range realTop {
-		if !have[k] {
-			t.Errorf("playground magus.* is missing %q (registered by the real bindings); add a stub in buildMagus", k)
-		}
+		assert.True(t, have[k], "playground magus.* is missing %q (registered by the real bindings); add a stub in buildMagus", k)
 	}
 
 	tv, ok := m.MapGet("target")
-	if !ok {
-		t.Fatal("playground magus.target is missing")
-	}
+	require.True(t, ok, "playground magus.target is missing")
 	haveTarget := keySet(tv)
 	for _, k := range realTarget {
-		if !haveTarget[k] {
-			t.Errorf("playground magus.target.* is missing %q (registered by the real bindings)", k)
-		}
+		assert.True(t, haveTarget[k], "playground magus.target.* is missing %q (registered by the real bindings)", k)
 	}
 
 	// And the inverse: the playground must not expose members the real host dropped
 	// (e.g. the removed depends_on/dispatch), which would teach a dead API.
 	for _, k := range m.MapKeys() {
-		if !slices.Contains(realTop, k) {
-			t.Errorf("playground magus.%s has no counterpart in the real bindings; remove it or it teaches a dead API", k)
-		}
+		assert.True(t, slices.Contains(realTop, k), "playground magus.%s has no counterpart in the real bindings; remove it or it teaches a dead API", k)
 	}
 }
 

@@ -1,4 +1,4 @@
-// Command flag generates config_flags.go and env_names.go from the magus config struct.
+// Command magus-config-gen generates config_flags.go and env_names.go from the magus config struct.
 // Invoked by go:generate in cmd/magus/main.go; run via go run ../magus-config-gen; never linked into the binary.
 package main
 

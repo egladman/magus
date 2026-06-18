@@ -26,6 +26,9 @@ func (jjVCS) Root(ctx context.Context, dir string) (string, error) {
 }
 
 func (jjVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+	if err := checkBaseRef(base); err != nil {
+		return nil, err
+	}
 	cmd := exec.CommandContext(ctx, "jj", "diff", "--name-only", "--from", base)
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -88,6 +91,14 @@ func (v jjVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 		return nil, fmt.Errorf("jj log: %w", err)
 	}
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+}
+
+// Describe reports "" — jj has no native tag-describe (tags live in the colocated
+// git backend, with no first-class jj command for the git-describe shape). Per
+// the interface contract a backend without the concept returns "" rather than
+// faking it; a jj user needing tag info reaches for vcs.exe().
+func (jjVCS) Describe(_ context.Context, _ string) (string, error) {
+	return "", nil
 }
 
 func (jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {

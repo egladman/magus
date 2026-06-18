@@ -2,10 +2,11 @@ package spell
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/egladman/gopherbuzz"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // resolve builds a bare session with the magus/target types registered, execs
@@ -15,12 +16,10 @@ import (
 func resolve(t *testing.T, src string, mode ResolveMode) (Spec, error) {
 	t.Helper()
 	ctx := context.Background()
-	sess := buzz.NewSession(ctx)
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	sess.SetSourceModule(TargetModulePath, TargetModuleSource)
-	if err := sess.Exec(ctx, src); err != nil {
-		t.Fatalf("exec: %v", err)
-	}
+	require.NoError(t, sess.Exec(ctx, src), "exec")
 	return Resolve(ctx, sess, mode)
 }
 
@@ -40,15 +39,9 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 }
 `
 	spec, err := resolve(t, src, FunctionOps)
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if got := spec.Targets["enabled"].Func; got != "enabled" {
-		t.Errorf(`Targets["enabled"].Func = %q, want "enabled"`, got)
-	}
-	if got := spec.Targets["deploy"].Func; got != "shipIt" {
-		t.Errorf(`Targets["deploy"].Func = %q, want "shipIt" (handler name, not op key)`, got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "enabled", spec.Ops["enabled"].Func)
+	assert.Equal(t, "shipIt", spec.Ops["deploy"].Func, "Func should be handler name, not op key")
 }
 
 // TestResolve_FunctionOpUnexportedHandler pins that referencing a
@@ -63,9 +56,9 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"build": helper};
 }
 `
-	if _, err := resolve(t, src, FunctionOps); err == nil || !strings.Contains(err.Error(), "not exported") {
-		t.Errorf("Resolve error = %v, want one mentioning 'not exported'", err)
-	}
+	_, err := resolve(t, src, FunctionOps)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not exported")
 }
 
 // TestResolve_ForkRejectsMultipleRun pins that a fork handler calling cb
@@ -83,9 +76,9 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"build": build};
 }
 `
-	if _, err := resolve(t, src, ForkExtract); err == nil || !strings.Contains(err.Error(), "exactly once") {
-		t.Errorf("Resolve error = %v, want one mentioning 'exactly once'", err)
-	}
+	_, err := resolve(t, src, ForkExtract)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "exactly once")
 }
 
 // TestResolve_ForkCapturesHandlerDoc pins that a fork handler's doc comment —
@@ -111,18 +104,10 @@ export fun mgs_listTargets() > {str: fun(Target, any) bool} {
 }
 `
 	spec, err := resolve(t, src, ForkExtract)
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if got := spec.Targets["build"].Doc; got != "build compiles the project." {
-		t.Errorf(`Targets["build"].Doc = %q, want "build compiles the project."`, got)
-	}
-	if got := spec.Targets["test"].Doc; got != "" {
-		t.Errorf(`Targets["test"].Doc = %q, want "" (undocumented)`, got)
-	}
-	if got := spec.Targets["lint"].Doc; got != "" {
-		t.Errorf(`Targets["lint"].Doc = %q, want "" (blank line breaks the doc block)`, got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "build compiles the project.", spec.Ops["build"].Doc)
+	assert.Empty(t, spec.Ops["test"].Doc, "undocumented handler should carry no doc")
+	assert.Empty(t, spec.Ops["lint"].Doc, "blank line breaks the doc block")
 }
 
 // TestResolve_DocTargetsExcludesRecordOps pins that only function-authored
@@ -144,12 +129,8 @@ export fun mgs_listTargets() > any {
 }
 `
 	spec, err := resolve(t, src, ForkExtract)
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if got, want := strings.Join(spec.DocTargets, ","), "build"; got != want {
-		t.Errorf("DocTargets = %v, want [build] (record op 'lint' excluded)", spec.DocTargets)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"build"}, spec.DocOps, "record op 'lint' should be excluded")
 }
 
 // TestResolve_FunctionOpCapturesHandlerDoc pins doc capture for the function-op
@@ -167,12 +148,8 @@ export fun mgs_listTargets() > {str: fun(Target, any) bool} {
 }
 `
 	spec, err := resolve(t, src, FunctionOps)
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if got := spec.Targets["deploy"].Doc; got != "deploy ships the build to production." {
-		t.Errorf(`Targets["deploy"].Doc = %q, want "deploy ships the build to production."`, got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "deploy ships the build to production.", spec.Ops["deploy"].Doc)
 }
 
 // TestResolve_ForkRejectsTargetRead pins that a fork handler that reads
@@ -190,7 +167,6 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
     return {"build": build};
 }
 `
-	if _, err := resolve(t, src, ForkExtract); err == nil {
-		t.Error("Resolve: expected error for a handler reading the Target, got nil")
-	}
+	_, err := resolve(t, src, ForkExtract)
+	assert.Error(t, err, "expected error for a handler reading the Target")
 }

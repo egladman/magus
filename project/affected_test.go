@@ -3,12 +3,14 @@ package project
 import (
 	"bytes"
 	"context"
-	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/depgraph"
 	"github.com/egladman/magus/internal/render"
@@ -26,17 +28,11 @@ func newAffectedWorkspace(t *testing.T) *types.Workspace {
 		"extensions/drape/magusfile.tl",
 	} {
 		abs := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(abs, []byte(""), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
 	}
 	ws, err := Discover(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return ws
 }
 
@@ -49,16 +45,10 @@ func TestAffectedFromPathsHappyPath(t *testing.T) {
 		"api/magusfile.tl",
 		"web/studio/magusfile.tl",
 	})
-	if err != nil {
-		t.Fatalf("AffectedFromPaths: %v", err)
-	}
-	wantSeed := []string{"api", "web/studio"}
-	if !equalSlice(r.Seed, wantSeed) {
-		t.Errorf("Seed = %v, want %v", r.Seed, wantSeed)
-	}
-	if r.FilesBySeed["api"] == nil || r.FilesBySeed["web/studio"] == nil {
-		t.Errorf("FilesBySeed missing entries: %v", r.FilesBySeed)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"api", "web/studio"}, r.Seed)
+	assert.NotNil(t, r.FilesBySeed["api"], "FilesBySeed missing api: %v", r.FilesBySeed)
+	assert.NotNil(t, r.FilesBySeed["web/studio"], "FilesBySeed missing web/studio: %v", r.FilesBySeed)
 }
 
 // TestAffectedDisabledReturnsErrFallback verifies that MAGUS_VCS_ENABLED=false
@@ -68,9 +58,7 @@ func TestAffectedDisabledReturnsErrFallback(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 
 	_, err := Affected(context.Background(), ws, "")
-	if !errors.Is(err, types.ErrAffectedFallback) {
-		t.Fatalf("err = %v, want errors.Is(err, ErrAffectedFallback)", err)
-	}
+	assert.ErrorIs(t, err, types.ErrAffectedFallback)
 }
 
 // TestAffectedFromPathsOutsideWorkspace verifies that absolute paths outside
@@ -82,25 +70,70 @@ func TestAffectedFromPathsOutsideWorkspace(t *testing.T) {
 		"api/magusfile.tl",
 		"/tmp/outside-workspace/file.go",
 	})
-	if err != nil {
-		t.Fatalf("AffectedFromPaths: %v", err)
-	}
-	wantSeed := []string{"api"}
-	if !equalSlice(r.Seed, wantSeed) {
-		t.Errorf("Seed = %v, want %v", r.Seed, wantSeed)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"api"}, r.Seed)
 }
 
-func equalSlice(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+// TestWorkspaceRelative covers the pure prefix-stripping: diff paths come back
+// relative to the VCS root, but project attribution needs them relative to the
+// workspace root.
+func TestWorkspaceRelative(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nested workspace strips prefix and drops outsiders", func(t *testing.T) {
+		t.Parallel()
+		got := workspaceRelative("magus/", []string{
+			"magus/gopherbuzz/parser.go",
+			"magus/internal/doctor/doctor.go",
+			".github/workflows/ci.yaml", // outside the workspace subtree
+			"other/x.go",                // outside the workspace subtree
+		})
+		assert.Equal(t, []string{"gopherbuzz/parser.go", "internal/doctor/doctor.go"}, got)
+	})
+
+	t.Run("empty prefix: workspace is the VCS root, unchanged", func(t *testing.T) {
+		t.Parallel()
+		in := []string{"gopherbuzz/parser.go", "internal/x.go"}
+		assert.Equal(t, in, workspaceRelative("", in))
+	})
+}
+
+// TestVCSRootPrefix verifies the walk-up marker search returns the slash-terminated
+// subdir prefix (no subprocess), and "" when the workspace is the VCS root or no
+// marker is found.
+func TestVCSRootPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("workspace nested below the marker", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+		ws := filepath.Join(root, "magus")
+		require.NoError(t, os.MkdirAll(filepath.Join(ws, "gopherbuzz"), 0o755))
+		assert.Equal(t, "magus/", vcsRootPrefix(ws, []string{".git"}))
+		assert.Equal(t, "magus/gopherbuzz/", vcsRootPrefix(filepath.Join(ws, "gopherbuzz"), []string{".git"}))
+	})
+
+	t.Run("workspace is the marker dir", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+		assert.Equal(t, "", vcsRootPrefix(root, []string{".git"}))
+	})
+
+	t.Run("marker is a file (worktree/submodule)", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /elsewhere"), 0o644))
+		ws := filepath.Join(root, "sub")
+		require.NoError(t, os.Mkdir(ws, 0o755))
+		assert.Equal(t, "sub/", vcsRootPrefix(ws, []string{".git"}))
+	})
+
+	t.Run("no marker found: empty (best-effort)", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "", vcsRootPrefix(t.TempDir(), []string{".magus-no-such-marker"}))
+	})
 }
 
 // countObserver counts the graph events it receives.
@@ -120,25 +153,18 @@ func TestAffectedRequestScopedObserver(t *testing.T) {
 
 	obsA := &countObserver{}
 	obsB := &countObserver{}
-	if _, err := AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsA), ws, []string{"api/x.go"}); err != nil {
-		t.Fatalf("call A: %v", err)
-	}
-	if _, err := AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsB), ws, []string{"api/x.go"}); err != nil {
-		t.Fatalf("call B: %v", err)
-	}
-	if obsA.builds != 1 {
-		t.Errorf("observer A builds = %d, want 1", obsA.builds)
-	}
-	if obsB.builds != 1 {
-		t.Errorf("observer B builds = %d, want 1", obsB.builds)
-	}
+	_, err := AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsA), ws, []string{"api/x.go"})
+	require.NoError(t, err, "call A")
+	_, err = AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsB), ws, []string{"api/x.go"})
+	require.NoError(t, err, "call B")
+	assert.Equal(t, 1, obsA.builds, "observer A builds")
+	assert.Equal(t, 1, obsB.builds, "observer B builds")
 
-	if _, err := AffectedFromPaths(context.Background(), ws, []string{"api/x.go"}); err != nil {
-		t.Fatalf("call C: %v", err)
-	}
-	if obsA.builds != 1 || obsB.builds != 1 {
-		t.Errorf("an observerless call leaked events: A=%d B=%d", obsA.builds, obsB.builds)
-	}
+	_, err = AffectedFromPaths(context.Background(), ws, []string{"api/x.go"})
+	require.NoError(t, err, "call C")
+	// An observerless call must not leak events into either observer.
+	assert.Equal(t, 1, obsA.builds, "an observerless call leaked events into A")
+	assert.Equal(t, 1, obsB.builds, "an observerless call leaked events into B")
 }
 
 // buildWorkspace constructs a minimal Workspace from a list of projects.
@@ -166,18 +192,14 @@ func buildWorkspace(t *testing.T, entries [][]string) *types.Workspace {
 func mustGraph(t *testing.T, ws *types.Workspace) *types.Graph {
 	t.Helper()
 	g, err := depgraph.Build(ws)
-	if err != nil {
-		t.Fatalf("depgraph.Build(): %v", err)
-	}
+	require.NoError(t, err, "depgraph.Build()")
 	return g
 }
 
 func renderGraph(t *testing.T, g *types.Graph, opts ...render.RenderOption) string {
 	t.Helper()
 	var b strings.Builder
-	if err := render.WriteTree(&b, g, opts...); err != nil {
-		t.Fatalf("render.WriteTree(): %v", err)
-	}
+	require.NoError(t, render.WriteTree(&b, g, opts...), "render.WriteTree()")
 	return b.String()
 }
 
@@ -188,11 +210,7 @@ func TestRenderSingleProject(t *testing.T) {
 		{"api", "go"},
 	})
 	g := mustGraph(t, ws)
-	got := renderGraph(t, g)
-	want := "api\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "api\n", renderGraph(t, g))
 }
 
 // TestRenderLinearChain verifies a simple A → B → C chain.
@@ -204,11 +222,7 @@ func TestRenderLinearChain(t *testing.T) {
 		{"internal/util", "go"},
 	})
 	g := mustGraph(t, ws)
-	got := renderGraph(t, g)
-	want := "api\n└── internal/db\n    └── internal/util\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "api\n└── internal/db\n    └── internal/util\n", renderGraph(t, g))
 }
 
 // TestRenderDiamondVisited verifies that a shared dep is not re-expanded.
@@ -227,15 +241,11 @@ func TestRenderDiamondVisited(t *testing.T) {
 		{"shared", "go"},
 	})
 	g := mustGraph(t, ws)
-	got := renderGraph(t, g)
 	// Only "root" has no predecessors (nothing depends on it).
 	// Children are sorted alphabetically: left, shared.
 	// "shared" is first visited under "left"; on the second encounter
 	// under "root" it shows as "(visited)".
-	want := "root\n├── left\n│   └── shared\n└── shared (visited)\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "root\n├── left\n│   └── shared\n└── shared (visited)\n", renderGraph(t, g))
 }
 
 // TestRenderMultipleRoots verifies that multiple top-level roots are
@@ -248,11 +258,7 @@ func TestRenderMultipleRoots(t *testing.T) {
 		{"shared", "go"},
 	})
 	g := mustGraph(t, ws)
-	got := renderGraph(t, g)
-	want := "app-a\n└── shared\napp-b\n└── shared\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "app-a\n└── shared\napp-b\n└── shared\n", renderGraph(t, g))
 }
 
 // TestRenderWithRoots verifies that WithRoots restricts output to
@@ -265,11 +271,7 @@ func TestRenderWithRoots(t *testing.T) {
 		{"shared", "go"},
 	})
 	g := mustGraph(t, ws)
-	got := renderGraph(t, g, render.WithRoots("app-a"))
-	want := "app-a\n└── shared\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "app-a\n└── shared\n", renderGraph(t, g, render.WithRoots("app-a")))
 }
 
 // TestRenderMaxDepth verifies that WithMaxDepth(1) shows only immediate
@@ -282,11 +284,7 @@ func TestRenderMaxDepth(t *testing.T) {
 		{"internal/util", "go"},
 	})
 	g := mustGraph(t, ws)
-	got := renderGraph(t, g, render.WithMaxDepth(1))
-	want := "api\n└── internal/db\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "api\n└── internal/db\n", renderGraph(t, g, render.WithMaxDepth(1)))
 }
 
 // TestRenderUpstream verifies that WithDirection(Upstream) shows
@@ -303,10 +301,7 @@ func TestRenderUpstream(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := renderGraph(t, g, render.WithDirection(types.Upstream), render.WithRoots("internal/util"))
-	want := "internal/util\n└── internal/db\n    └── api\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "internal/util\n└── internal/db\n    └── api\n", got)
 }
 
 // TestRenderLangFilter verifies that WithSpell skips projects of other
@@ -323,11 +318,7 @@ func TestRenderLangFilter(t *testing.T) {
 	// from display. "api" and "internal/db" have no lang-filtered roots
 	// (api's only predecessor is "app" which is TS, so api has no go
 	// predecessors → it is a go root).
-	got := renderGraph(t, g, render.WithSpell("go"))
-	want := "api\n└── internal/db\n"
-	if got != want {
-		t.Errorf("got:\n%s\nwant:\n%s", got, want)
-	}
+	assert.Equal(t, "api\n└── internal/db\n", renderGraph(t, g, render.WithSpell("go")))
 }
 
 // TestRenderEmpty verifies that an empty workspace produces no output.
@@ -335,13 +326,8 @@ func TestRenderEmpty(t *testing.T) {
 	t.Parallel()
 	ws := &types.Workspace{Root: "/fake", Projects: map[string]*types.Project{}}
 	g := mustGraph(t, ws)
-	got := renderGraph(t, g)
-	if got != "" {
-		t.Errorf("empty workspace: got %q, want empty", got)
-	}
+	assert.Empty(t, renderGraph(t, g), "empty workspace should produce no output")
 }
-
-// ── PathsFromSeeds tests ──────────────────────────────────────────────
 
 func pathsFromSeeds(t *testing.T, g *types.Graph, seeds []string, target string) []types.AffectedPath {
 	t.Helper()
@@ -356,15 +342,9 @@ func TestPathsFromSeedsDirect(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := pathsFromSeeds(t, g, []string{"api"}, "api")
-	if len(got) != 1 {
-		t.Fatalf("got %d paths, want 1", len(got))
-	}
-	if got[0].Seed != "api" {
-		t.Errorf("Seed = %q, want api", got[0].Seed)
-	}
-	if len(got[0].Chain) != 1 || got[0].Chain[0] != "api" {
-		t.Errorf("Chain = %v, want [api]", got[0].Chain)
-	}
+	require.Len(t, got, 1)
+	assert.Equal(t, "api", got[0].Seed)
+	assert.Equal(t, []string{"api"}, got[0].Chain)
 }
 
 // TestPathsFromSeedsTransitive: A depends on B depends on C (seed).
@@ -379,13 +359,8 @@ func TestPathsFromSeedsTransitive(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := pathsFromSeeds(t, g, []string{"c"}, "a")
-	if len(got) != 1 {
-		t.Fatalf("got %d paths, want 1", len(got))
-	}
-	want := []string{"c", "b", "a"}
-	if !equalStringSlice(got[0].Chain, want) {
-		t.Errorf("Chain = %v, want %v", got[0].Chain, want)
-	}
+	require.Len(t, got, 1)
+	assert.Equal(t, []string{"c", "b", "a"}, got[0].Chain)
 }
 
 // TestPathsFromSeedsUnreachable: target not reachable from seeds → empty.
@@ -397,9 +372,7 @@ func TestPathsFromSeedsUnreachable(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := pathsFromSeeds(t, g, []string{"web"}, "api")
-	if len(got) != 0 {
-		t.Errorf("got %v, want empty (api and web are unrelated)", got)
-	}
+	assert.Empty(t, got, "api and web are unrelated")
 }
 
 // TestPathsFromSeedsMultipleSeeds: two independent seeds both reach target.
@@ -413,13 +386,10 @@ func TestPathsFromSeedsMultipleSeeds(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := pathsFromSeeds(t, g, []string{"seed-a", "seed-b"}, "target")
-	if len(got) != 2 {
-		t.Fatalf("got %d paths, want 2", len(got))
-	}
+	require.Len(t, got, 2)
 	// Paths are sorted by seed name.
-	if got[0].Seed != "seed-a" || got[1].Seed != "seed-b" {
-		t.Errorf("seeds = %q %q, want seed-a seed-b", got[0].Seed, got[1].Seed)
-	}
+	assert.Equal(t, "seed-a", got[0].Seed)
+	assert.Equal(t, "seed-b", got[1].Seed)
 }
 
 // TestPathsFromSeedsThroughIntermediateSeed verifies BFS continues past intermediate seeds.
@@ -432,18 +402,12 @@ func TestPathsFromSeedsThroughIntermediateSeed(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := pathsFromSeeds(t, g, []string{"a", "c"}, "a")
-	if len(got) != 2 {
-		t.Fatalf("got %d paths, want 2; paths=%v", len(got), got)
-	}
-	if got[0].Seed != "a" || !equalStringSlice(got[0].Chain, []string{"a"}) {
-		t.Errorf("seed a: got seed=%q chain=%v", got[0].Seed, got[0].Chain)
-	}
-	if got[1].Seed != "c" || !equalStringSlice(got[1].Chain, []string{"c", "b", "a"}) {
-		t.Errorf("seed c: got seed=%q chain=%v", got[1].Seed, got[1].Chain)
-	}
+	require.Len(t, got, 2)
+	assert.Equal(t, "a", got[0].Seed)
+	assert.Equal(t, []string{"a"}, got[0].Chain)
+	assert.Equal(t, "c", got[1].Seed)
+	assert.Equal(t, []string{"c", "b", "a"}, got[1].Chain)
 }
-
-// ── NearCycles tests ──────────────────────────────────────────────────
 
 // TestNearCyclesLinearChain: a→b→c→d has no near-cycles because each node
 // only depends "forward" — no predecessor can reach a node through a short path.
@@ -467,9 +431,7 @@ func TestNearCyclesLinearChain(t *testing.T) {
 	// c's preds (depth 1): {b}; depth 2: {a}.
 	// d's preds (depth 1): {c}; depth 2: {b}.
 	// Total: NearCycles(b,a), (c,b), (c,a), (d,c), (d,b) = 5 pairs.
-	if len(ncs) != 5 {
-		t.Errorf("got %d near-cycles, want 5: %v", len(ncs), ncs)
-	}
+	assert.Len(t, ncs, 5)
 }
 
 // TestNearCyclesDisabled: depth=0 returns nil.
@@ -480,10 +442,7 @@ func TestNearCyclesDisabled(t *testing.T) {
 		{"b", "go"},
 	})
 	g := mustGraph(t, ws)
-	ncs := g.NearCycles(context.Background(), 0)
-	if ncs != nil {
-		t.Errorf("depth=0: got %v, want nil", ncs)
-	}
+	assert.Nil(t, g.NearCycles(context.Background(), 0), "depth=0 should return nil")
 }
 
 // TestNearCyclesIsolated: a project with no deps and no dependents has
@@ -494,10 +453,7 @@ func TestNearCyclesIsolated(t *testing.T) {
 		{"standalone", "go"},
 	})
 	g := mustGraph(t, ws)
-	ncs := g.NearCycles(context.Background(), 3)
-	if len(ncs) != 0 {
-		t.Errorf("isolated project: got %v, want empty", ncs)
-	}
+	assert.Empty(t, g.NearCycles(context.Background(), 3), "isolated project should have no near-cycles")
 }
 
 // TestNearCyclesBackPathShape verifies the BackPath content and direction.
@@ -512,19 +468,12 @@ func TestNearCyclesBackPathShape(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	ncs := g.NearCycles(context.Background(), 3)
-	if len(ncs) != 1 {
-		t.Fatalf("got %d near-cycles, want 1: %v", len(ncs), ncs)
-	}
+	require.Len(t, ncs, 1)
 	nc := ncs[0]
-	if nc.From != "b" || nc.To != "a" {
-		t.Errorf("From=%q To=%q, want From=b To=a", nc.From, nc.To)
-	}
-	if !equalStringSlice(nc.BackPath, []string{"a", "b"}) {
-		t.Errorf("BackPath=%v, want [a b]", nc.BackPath)
-	}
+	assert.Equal(t, "b", nc.From)
+	assert.Equal(t, "a", nc.To)
+	assert.Equal(t, []string{"a", "b"}, nc.BackPath)
 }
-
-// ── BlastRadius tests ─────────────────────────────────────────────────
 
 // TestBlastRadiusLinearChain: a→b→c. Changing c affects only c (1).
 // Changing b affects b and a (2). Changing a affects only a (1).
@@ -537,12 +486,9 @@ func TestBlastRadiusLinearChain(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	br := g.BlastRadius()
-	cases := map[string]int{"a": 1, "b": 2, "c": 3}
-	for path, want := range cases {
-		if got := br[path]; got != want {
-			t.Errorf("BlastRadius[%s]=%d, want %d", path, got, want)
-		}
-	}
+	assert.Equal(t, 1, br["a"])
+	assert.Equal(t, 2, br["b"])
+	assert.Equal(t, 3, br["c"])
 }
 
 // TestBlastRadiusDiamond: root→left→shared, root→shared.
@@ -556,18 +502,10 @@ func TestBlastRadiusDiamond(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	br := g.BlastRadius()
-	if got := br["shared"]; got != 3 {
-		t.Errorf("BlastRadius[shared]=%d, want 3", got)
-	}
-	if got := br["left"]; got != 2 {
-		t.Errorf("BlastRadius[left]=%d, want 2", got)
-	}
-	if got := br["root"]; got != 1 {
-		t.Errorf("BlastRadius[root]=%d, want 1", got)
-	}
+	assert.Equal(t, 3, br["shared"])
+	assert.Equal(t, 2, br["left"])
+	assert.Equal(t, 1, br["root"])
 }
-
-// ── NCCD tests ────────────────────────────────────────────────────────
 
 // TestNCCDSingleNode: a single node has CCD=1, BBT=1, NCCD=1.
 func TestNCCDSingleNode(t *testing.T) {
@@ -576,9 +514,7 @@ func TestNCCDSingleNode(t *testing.T) {
 	g := mustGraph(t, ws)
 	nccd := g.NCCD()
 	// N=1: CCD=1, BBT=(2*log2(2))-1=1, NCCD=1.
-	if nccd < 0.99 || nccd > 1.01 {
-		t.Errorf("NCCD=%f, want ~1.0 for single node", nccd)
-	}
+	assert.InDelta(t, 1.0, nccd, 0.01, "NCCD should be ~1.0 for single node")
 }
 
 // TestNCCDStarTopology: one central node depended on by N-1 others.
@@ -595,10 +531,7 @@ func TestNCCDStarTopology(t *testing.T) {
 		{"leaf4", "go", "center"},
 	})
 	g := mustGraph(t, ws)
-	nccd := g.NCCD()
-	if nccd >= 1.0 {
-		t.Errorf("NCCD=%f, want < 1.0 for star topology", nccd)
-	}
+	assert.Less(t, g.NCCD(), 1.0, "NCCD should be < 1.0 for star topology")
 }
 
 // TestNCCDEmpty: empty graph returns 0.
@@ -606,10 +539,7 @@ func TestNCCDEmpty(t *testing.T) {
 	t.Parallel()
 	ws := &types.Workspace{Root: "/fake", Projects: map[string]*types.Project{}}
 	g := mustGraph(t, ws)
-	nccd := g.NCCD()
-	if nccd != 0 {
-		t.Errorf("NCCD=%f, want 0 for empty graph", nccd)
-	}
+	assert.Zero(t, g.NCCD(), "NCCD should be 0 for empty graph")
 }
 
 // captureSlogWarnings installs a text-format slog handler that captures output
@@ -638,12 +568,8 @@ func TestGraphWarnsOnUnresolvedDep(t *testing.T) {
 		{"internal/db", "go"},
 	})
 	g, err := depgraph.Build(ws)
-	if err != nil {
-		t.Fatalf("depgraph.Build() returned error: %v", err)
-	}
-	if g == nil {
-		t.Fatal("depgraph.Build() returned nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, g)
 
 	got := buf.String()
 	for _, want := range []string{
@@ -652,9 +578,7 @@ func TestGraphWarnsOnUnresolvedDep(t *testing.T) {
 		"did_you_mean=internal/db",
 		"magus.project.register",
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("log output missing %q\nfull output: %s", want, got)
-		}
+		assert.Contains(t, got, want, "log output missing %q", want)
 	}
 }
 
@@ -668,27 +592,10 @@ func TestGraphNoWarnWhenDepsResolve(t *testing.T) {
 		{"api", "go", "internal/db"},
 		{"internal/db", "go"},
 	})
-	if _, err := depgraph.Build(ws); err != nil {
-		t.Fatalf("depgraph.Build(): %v", err)
-	}
-	if got := buf.String(); got != "" {
-		t.Errorf("unexpected warning output: %s", got)
-	}
+	_, err := depgraph.Build(ws)
+	require.NoError(t, err)
+	assert.Empty(t, buf.String(), "unexpected warning output")
 }
-
-func equalStringSlice(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// ── Strict mode tests ────────────────────────────────────────────────
 
 // TestGraphWarnsByDefaultOnUnregisteredDep verifies the default (non-
 // strict) behaviour: missing deps are dropped, slog records a warning,
@@ -703,15 +610,9 @@ func TestGraphWarnsByDefaultOnUnregisteredDep(t *testing.T) {
 	})
 	// Strict defaults to false; do not set it.
 	g, err := depgraph.Build(ws)
-	if err != nil {
-		t.Fatalf("depgraph.Build() returned error: %v", err)
-	}
-	if g == nil {
-		t.Fatal("depgraph.Build() returned nil")
-	}
-	if got := buf.String(); !strings.Contains(got, "internal/db-typo") {
-		t.Errorf("warning missing dep: %s", got)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, g)
+	assert.Contains(t, buf.String(), "internal/db-typo", "warning missing dep")
 }
 
 // TestGraphStrictFailsOnUnregisteredDep verifies strict mode returns a
@@ -725,19 +626,13 @@ func TestGraphStrictFailsOnUnregisteredDep(t *testing.T) {
 	ws.Strict = true
 
 	_, err := depgraph.Build(ws)
-	if err == nil {
-		t.Fatal("depgraph.Build(): expected error in strict mode, got nil")
-	}
-	if !errors.Is(err, types.ErrUnregisteredDep) {
-		t.Errorf("err=%v, want errors.Is(err, ErrUnregisteredDep)", err)
-	}
+	require.Error(t, err, "expected error in strict mode")
+	assert.ErrorIs(t, err, types.ErrUnregisteredDep)
 	var ude *types.UnregisteredDepError
-	if !errors.As(err, &ude) {
-		t.Fatalf("err=%v, want errors.As(err, *UnregisteredDepError)", err)
-	}
-	if len(ude.Missing) != 1 || ude.Missing[0].Consumer != "api" || ude.Missing[0].Dep != "internal/db-typo" {
-		t.Errorf("unexpected Missing: %+v", ude.Missing)
-	}
+	require.ErrorAs(t, err, &ude)
+	require.Len(t, ude.Missing, 1)
+	assert.Equal(t, "api", ude.Missing[0].Consumer)
+	assert.Equal(t, "internal/db-typo", ude.Missing[0].Dep)
 }
 
 // TestUnregisteredDepErrorAggregates verifies multiple missing deps
@@ -751,16 +646,10 @@ func TestUnregisteredDepErrorAggregates(t *testing.T) {
 	ws.Strict = true
 
 	_, err := depgraph.Build(ws)
-	if err == nil {
-		t.Fatal("depgraph.Build(): expected aggregated error, got nil")
-	}
+	require.Error(t, err, "expected aggregated error")
 	var ude *types.UnregisteredDepError
-	if !errors.As(err, &ude) {
-		t.Fatalf("err=%v, want *UnregisteredDepError", err)
-	}
-	if len(ude.Missing) != 3 {
-		t.Errorf("got %d missing deps, want 3: %+v", len(ude.Missing), ude.Missing)
-	}
+	require.ErrorAs(t, err, &ude)
+	assert.Len(t, ude.Missing, 3)
 }
 
 // TestUnregisteredDepErrorMessage verifies the user-facing message
@@ -781,8 +670,6 @@ func TestUnregisteredDepErrorMessage(t *testing.T) {
 		"svc-b -> shared/missing",
 		"fix: register the missing project(s)",
 	} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("Error() missing %q\nfull: %s", want, msg)
-		}
+		assert.Contains(t, msg, want, "Error() missing %q", want)
 	}
 }

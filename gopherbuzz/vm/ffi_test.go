@@ -4,11 +4,13 @@ import (
 	"testing"
 
 	"github.com/egladman/gopherbuzz/vm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetFFIProviderNoPanic(t *testing.T) {
 	// GetFFIProvider may return nil on unsupported platforms; it must not panic.
-	_ = vm.GetFFIProvider()
+	assert.NotPanics(t, func() { _ = vm.GetFFIProvider() })
 }
 
 func TestSetGetFFIProviderRoundTrip(t *testing.T) {
@@ -19,10 +21,7 @@ func TestSetGetFFIProviderRoundTrip(t *testing.T) {
 	// Install a mock provider and verify it is returned by GetFFIProvider.
 	mock := &mockFFIProvider{}
 	vm.SetFFIProvider(mock)
-	got := vm.GetFFIProvider()
-	if got != mock {
-		t.Errorf("GetFFIProvider() after SetFFIProvider = %v, want mock", got)
-	}
+	assert.Equal(t, mock, vm.GetFFIProvider(), "GetFFIProvider() after SetFFIProvider")
 }
 
 func TestSetFFIProviderNilClears(t *testing.T) {
@@ -30,9 +29,7 @@ func TestSetFFIProviderNilClears(t *testing.T) {
 	t.Cleanup(func() { vm.SetFFIProvider(original) })
 
 	vm.SetFFIProvider(nil)
-	if got := vm.GetFFIProvider(); got != nil {
-		t.Errorf("GetFFIProvider() after SetFFIProvider(nil) = %v, want nil", got)
-	}
+	assert.Nil(t, vm.GetFFIProvider(), "GetFFIProvider() after SetFFIProvider(nil)")
 }
 
 func TestRegisterFFIProviderIgnoresNil(t *testing.T) {
@@ -44,95 +41,53 @@ func TestRegisterFFIProviderIgnoresNil(t *testing.T) {
 	mock := &mockFFIProvider{}
 	vm.SetFFIProvider(mock)
 	vm.RegisterFFIProvider(nil)
-	if got := vm.GetFFIProvider(); got != mock {
-		t.Errorf("GetFFIProvider() after RegisterFFIProvider(nil) = %v, want mock", got)
-	}
+	assert.Equal(t, mock, vm.GetFFIProvider(), "GetFFIProvider() after RegisterFFIProvider(nil)")
 }
 
 func TestParseCDeclsEmptyInput(t *testing.T) {
 	sigs, err := vm.ParseCDecls("")
-	if err != nil {
-		t.Fatalf("ParseCDecls('') error = %v, want nil", err)
-	}
-	if len(sigs) != 0 {
-		t.Errorf("ParseCDecls('') len = %d, want 0", len(sigs))
-	}
+	require.NoError(t, err, "ParseCDecls('')")
+	assert.Empty(t, sigs, "ParseCDecls('')")
 }
 
 func TestParseCDeclsWhitespaceOnly(t *testing.T) {
 	sigs, err := vm.ParseCDecls("   \n\t  ")
-	if err != nil {
-		t.Fatalf("ParseCDecls(whitespace) error = %v, want nil", err)
-	}
-	if len(sigs) != 0 {
-		t.Errorf("ParseCDecls(whitespace) len = %d, want 0", len(sigs))
-	}
+	require.NoError(t, err, "ParseCDecls(whitespace)")
+	assert.Empty(t, sigs, "ParseCDecls(whitespace)")
 }
 
 func TestParseCDeclsSimpleVoidNoParams(t *testing.T) {
 	sigs, err := vm.ParseCDecls("void foo(void);")
-	if err != nil {
-		t.Fatalf("ParseCDecls error = %v", err)
-	}
-	if len(sigs) != 1 {
-		t.Fatalf("ParseCDecls len = %d, want 1", len(sigs))
-	}
+	require.NoError(t, err, "ParseCDecls")
+	require.Len(t, sigs, 1, "ParseCDecls")
 	sig := sigs[0]
-	if sig.Name != "foo" {
-		t.Errorf("sig.Name = %q, want 'foo'", sig.Name)
-	}
-	if sig.Ret != vm.CVoid {
-		t.Errorf("sig.Ret = %v, want CVoid", sig.Ret)
-	}
-	if len(sig.Params) != 0 {
-		t.Errorf("sig.Params len = %d, want 0", len(sig.Params))
-	}
+	assert.Equal(t, "foo", sig.Name)
+	assert.Equal(t, vm.CVoid, sig.Ret)
+	assert.Empty(t, sig.Params)
 }
 
 func TestParseCDeclsIntParam(t *testing.T) {
 	sigs, err := vm.ParseCDecls("int add(int a, int b);")
-	if err != nil {
-		t.Fatalf("ParseCDecls error = %v", err)
-	}
-	if len(sigs) != 1 {
-		t.Fatalf("ParseCDecls len = %d, want 1", len(sigs))
-	}
+	require.NoError(t, err, "ParseCDecls")
+	require.Len(t, sigs, 1, "ParseCDecls")
 	sig := sigs[0]
-	if sig.Name != "add" {
-		t.Errorf("sig.Name = %q, want 'add'", sig.Name)
-	}
-	if sig.Ret != vm.CInt {
-		t.Errorf("sig.Ret = %v, want CInt", sig.Ret)
-	}
-	if len(sig.Params) != 2 {
-		t.Fatalf("sig.Params len = %d, want 2", len(sig.Params))
-	}
-	if sig.Params[0].Type != vm.CInt {
-		t.Errorf("sig.Params[0].Type = %v, want CInt", sig.Params[0].Type)
-	}
+	assert.Equal(t, "add", sig.Name)
+	assert.Equal(t, vm.CInt, sig.Ret)
+	require.Len(t, sig.Params, 2)
+	assert.Equal(t, vm.CInt, sig.Params[0].Type)
 }
 
 func TestParseCDeclsMultipleDecls(t *testing.T) {
 	sigs, err := vm.ParseCDecls("void foo(void); int bar(int x);")
-	if err != nil {
-		t.Fatalf("ParseCDecls error = %v", err)
-	}
-	if len(sigs) != 2 {
-		t.Errorf("ParseCDecls len = %d, want 2", len(sigs))
-	}
+	require.NoError(t, err, "ParseCDecls")
+	assert.Len(t, sigs, 2, "ParseCDecls")
 }
 
 func TestParseCDeclsDoubleReturn(t *testing.T) {
 	sigs, err := vm.ParseCDecls("double sqrt(double x);")
-	if err != nil {
-		t.Fatalf("ParseCDecls error = %v", err)
-	}
-	if len(sigs) != 1 {
-		t.Fatalf("ParseCDecls len = %d, want 1", len(sigs))
-	}
-	if sigs[0].Ret != vm.CDouble {
-		t.Errorf("sig.Ret = %v, want CDouble", sigs[0].Ret)
-	}
+	require.NoError(t, err, "ParseCDecls")
+	require.Len(t, sigs, 1, "ParseCDecls")
+	assert.Equal(t, vm.CDouble, sigs[0].Ret)
 }
 
 // mockFFIProvider satisfies the FFIProvider interface for testing.

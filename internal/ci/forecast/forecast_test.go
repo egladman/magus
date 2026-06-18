@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func projects(paths ...string) []*types.Project {
@@ -28,9 +30,7 @@ func TestForecaster_Plan_emptyHistory(t *testing.T) {
 	}
 	ps := projects("a", "b", "c", "d", "e")
 	shards := f.Plan(ps, 8)
-	if len(shards) < 1 {
-		t.Fatalf("want at least 1 shard, got 0")
-	}
+	require.NotEmpty(t, shards, "want at least 1 shard")
 	// Sanity: every project assigned exactly once.
 	seen := map[string]int{}
 	for _, s := range shards {
@@ -39,9 +39,7 @@ func TestForecaster_Plan_emptyHistory(t *testing.T) {
 		}
 	}
 	for _, p := range ps {
-		if seen[p.Path] != 1 {
-			t.Errorf("project %q assigned %d times, want 1", p.Path, seen[p.Path])
-		}
+		assert.Equalf(t, 1, seen[p.Path], "project %q assignment count", p.Path)
 	}
 }
 
@@ -63,9 +61,7 @@ func TestForecaster_Plan_circuitBreakerOnTrivialPR(t *testing.T) {
 
 	f := Forecaster{History: h, Target: "ci"}
 	shards := f.Plan(projects("tiny"), 8)
-	if len(shards) != 1 {
-		t.Fatalf("circuit breaker: want 1 shard for trivial PR, got %d", len(shards))
-	}
+	assert.Len(t, shards, 1, "circuit breaker: want 1 shard for trivial PR")
 }
 
 func TestHistory_PredictDuration(t *testing.T) {
@@ -78,21 +74,15 @@ func TestHistory_PredictDuration(t *testing.T) {
 		}, nil)
 	}
 
-	if got := h.PredictDuration("a", "ci", nil); got != 10*time.Second {
-		t.Errorf("project with 5 samples of 10s: got %v, want 10s", got)
-	}
+	assert.Equal(t, 10*time.Second, h.PredictDuration("a", "ci", nil), "project with 5 samples of 10s")
 
 	// Project with no entry falls back to workspace fallback.
-	if got := h.PredictDuration("never-seen", "ci", nil); got != 10*time.Second {
-		t.Errorf("unknown project, workspace fallback should be 10s, got %v", got)
-	}
+	assert.Equal(t, 10*time.Second, h.PredictDuration("never-seen", "ci", nil), "unknown project, workspace fallback")
 
 	// Brand-new history: hard default.
 	empty := History{}
 	want := time.Duration(DefaultDurationMs) * time.Millisecond
-	if got := empty.PredictDuration("x", "ci", nil); got != want {
-		t.Errorf("empty history: got %v, want %v", got, want)
-	}
+	assert.Equal(t, want, empty.PredictDuration("x", "ci", nil), "empty history")
 }
 
 func TestHistory_PredictDuration_lowSampleFloor(t *testing.T) {
@@ -110,9 +100,7 @@ func TestHistory_PredictDuration_lowSampleFloor(t *testing.T) {
 	// alpha has 1 sample (<3) → workspace fallback (p75 of all four
 	// samples, which is dominated by the 100s outlier).
 	got := h.PredictDuration("alpha", "ci", nil)
-	if got == 100*time.Second {
-		t.Errorf("with only 1 sample, alpha should not return its own 100s value, got %v", got)
-	}
+	assert.NotEqual(t, 100*time.Second, got, "with only 1 sample, alpha should not return its own 100s value")
 }
 
 func TestHistory_SaveLoadRoundTrip(t *testing.T) {
@@ -130,35 +118,21 @@ func TestHistory_SaveLoadRoundTrip(t *testing.T) {
 		{SetupMs: 25_000, TotalMs: 100_000, WorkMs: 200_000, NShards: 4},
 	})
 
-	if err := h.Save(context.Background(), path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	require.NoError(t, h.Save(context.Background(), path), "Save")
 
 	var got History
-	if err := got.Load(context.Background(), path); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	require.NoError(t, got.Load(context.Background(), path), "Load")
 
-	if got.Version != HistoryVersion {
-		t.Errorf("Version: got %d, want %d", got.Version, HistoryVersion)
-	}
-	if got.Projects["api"]["ci"].Samples != 3 {
-		t.Errorf("api/ci samples: got %d, want 3", got.Projects["api"]["ci"].Samples)
-	}
-	if got.Constants.SetupP50Ms != 25_000 {
-		t.Errorf("SetupP50Ms: got %d, want 25000", got.Constants.SetupP50Ms)
-	}
+	assert.Equal(t, HistoryVersion, got.Version)
+	assert.Equal(t, 3, got.Projects["api"]["ci"].Samples, "api/ci samples")
+	assert.Equal(t, Millis(25_000), got.Constants.SetupP50Ms)
 }
 
 func TestLoad_missingFile(t *testing.T) {
 	t.Parallel()
 	var got History
-	if err := got.Load(context.Background(), filepath.Join(t.TempDir(), "does-not-exist.json")); err != nil {
-		t.Fatalf("missing file should not error, got %v", err)
-	}
-	if got.Version != HistoryVersion {
-		t.Errorf("missing file: got version %d, want %d", got.Version, HistoryVersion)
-	}
+	require.NoError(t, got.Load(context.Background(), filepath.Join(t.TempDir(), "does-not-exist.json")), "missing file should not error")
+	assert.Equal(t, HistoryVersion, got.Version, "missing file")
 }
 
 func TestHistory_Update_capsAtSampleWindow(t *testing.T) {
@@ -171,12 +145,8 @@ func TestHistory_Update_capsAtSampleWindow(t *testing.T) {
 		}, nil)
 	}
 	st := h.Projects["p"]["ci"]
-	if len(st.Recent) != SampleWindow {
-		t.Errorf("Recent length: got %d, want %d", len(st.Recent), SampleWindow)
-	}
-	if st.Samples != SampleWindow*2 {
-		t.Errorf("Samples counter: got %d, want %d", st.Samples, SampleWindow*2)
-	}
+	assert.Len(t, st.Recent, SampleWindow, "Recent length")
+	assert.Equal(t, SampleWindow*2, st.Samples, "Samples counter")
 }
 
 // TestForecaster_Plan_hitRateReducesShards verifies that a workspace where
@@ -224,10 +194,8 @@ func TestForecaster_Plan_hitRateReducesShards(t *testing.T) {
 	hitAware := Forecaster{History: h, Target: "ci"}
 	hitAwareShards := hitAware.Plan(ps, 8)
 
-	if len(hitAwareShards) >= len(baselineShards) {
-		t.Errorf("hit-aware plan has %d shards, baseline has %d; expected fewer shards with high hit rate",
-			len(hitAwareShards), len(baselineShards))
-	}
+	assert.Lessf(t, len(hitAwareShards), len(baselineShards),
+		"expected fewer shards with high hit rate (hit-aware=%d baseline=%d)", len(hitAwareShards), len(baselineShards))
 
 	// Every project must appear exactly once in both plans.
 	for _, plan := range [][][]*types.Project{baselineShards, hitAwareShards} {
@@ -238,9 +206,7 @@ func TestForecaster_Plan_hitRateReducesShards(t *testing.T) {
 			}
 		}
 		for _, proj := range allProjects {
-			if seen[proj] != 1 {
-				t.Errorf("project %q assigned %d times, want 1", proj, seen[proj])
-			}
+			assert.Equalf(t, 1, seen[proj], "project %q assignment count", proj)
 		}
 	}
 }

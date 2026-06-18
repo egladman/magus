@@ -4,31 +4,26 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const minimalSpellSrc = `export fun mgs_getName() > str { return "testspell"; }`
 
 func TestExtract_Name(t *testing.T) {
 	spec, err := Extract(context.Background(), minimalSpellSrc)
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
-	if spec.Name != "testspell" {
-		t.Errorf("Name = %q, want %q", spec.Name, "testspell")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "testspell", spec.Name)
 }
 
 func TestExtract_MissingGetName(t *testing.T) {
 	_, err := Extract(context.Background(), `var x: int = 1;`)
-	if err == nil {
-		t.Error("Extract: expected error for missing mgs_getName, got nil")
-	}
+	assert.Error(t, err, "expected error for missing mgs_getName")
 }
 
 func TestExtract_WithTargets(t *testing.T) {
@@ -39,15 +34,9 @@ export fun mgs_listTargets() > any {
 }
 `
 	spec, err := Extract(context.Background(), src)
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
-	if spec.Name != "mypkg" {
-		t.Errorf("Name = %q, want %q", spec.Name, "mypkg")
-	}
-	if _, ok := spec.Targets["build"]; !ok {
-		t.Error("Targets[\"build\"] missing")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "mypkg", spec.Name)
+	assert.Contains(t, spec.Ops, "build", "Targets[\"build\"] missing")
 }
 
 // TestExtract_FunctionValueTargets verifies the strictly-typed fork form:
@@ -69,24 +58,17 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 }
 `
 	spec, err := Extract(context.Background(), src)
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
-	if b := spec.Targets["build"]; b.Cmd != "go" || len(b.Args) != 1 || b.Args[0] != "build" {
-		t.Errorf("build = %+v, want cmd=go args=[build]", b)
-	}
-	f := spec.Targets["fmt"]
-	if f.Cmd != "gofmt" {
-		t.Errorf("fmt cmd = %q, want gofmt", f.Cmd)
-	}
+	require.NoError(t, err)
+	b := spec.Ops["build"]
+	assert.Equal(t, "go", b.Cmd)
+	assert.Equal(t, []string{"build"}, b.Args)
+
+	f := spec.Ops["fmt"]
+	assert.Equal(t, "gofmt", f.Cmd)
 	ch, ok := f.Charms["write"]
-	if !ok {
-		t.Fatalf("fmt missing charm \"write\": %+v", f)
-	}
+	require.Truef(t, ok, "fmt missing charm \"write\": %+v", f)
 	want := ispell.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
-	if len(ch.Ops) != 1 || ch.Ops[0] != want {
-		t.Errorf("fmt write charm = %+v, want ops=[%v]", ch, want)
-	}
+	assert.Equal(t, []ispell.PatchOp{want}, ch.Ops)
 }
 
 // TestBuiltinBytecodeParity proves the embedded-bytecode pipeline end to end for
@@ -101,9 +83,7 @@ func TestBuiltinBytecodeParity(t *testing.T) {
 	// spellsDir is relative to this package (magus/internal/interp/engine/buzz/spell).
 	const spellsDir = "../../../../../spells"
 	dirs, err := os.ReadDir(spellsDir)
-	if err != nil {
-		t.Fatalf("read spells dir: %v", err)
-	}
+	require.NoError(t, err)
 	for _, d := range dirs {
 		if !d.IsDir() {
 			continue
@@ -121,37 +101,23 @@ func TestBuiltinBytecodeParity(t *testing.T) {
 			continue
 		}
 		t.Run(dir, func(t *testing.T) {
-			cs := buzz.NewSession(ctx)
+			cs := buzz.NewSession(ctx, buzz.WithEmbedded())
 			defer cs.Close()
 			chunk, err := cs.Compile(combined)
-			if err != nil {
-				t.Fatalf("compile: %v", err)
-			}
+			require.NoError(t, err, "compile")
 			blob, err := chunk.Marshal()
-			if err != nil {
-				t.Fatalf("marshal: %v", err)
-			}
+			require.NoError(t, err, "marshal")
 			// Runtime half: recover from bytecode and resolve the spec.
 			rechunk, err := vm.UnmarshalChunk(blob)
-			if err != nil {
-				t.Fatalf("unmarshal: %v", err)
-			}
-			rs := buzz.NewSession(ctx)
+			require.NoError(t, err, "unmarshal")
+			rs := buzz.NewSession(ctx, buzz.WithEmbedded())
 			defer rs.Close()
-			if err := rs.ExecChunk(ctx, rechunk); err != nil {
-				t.Fatalf("exec chunk: %v", err)
-			}
+			require.NoError(t, rs.ExecChunk(ctx, rechunk), "exec chunk")
 			got, err := ispell.Resolve(ctx, rs, ispell.ForkExtract)
-			if err != nil {
-				t.Fatalf("resolve: %v", err)
-			}
+			require.NoError(t, err, "resolve")
 			w, ok := want[got.Name]
-			if !ok {
-				t.Fatalf("built-in %q (name %q) not in registry", dir, got.Name)
-			}
-			if !reflect.DeepEqual(got, w) {
-				t.Errorf("Spec mismatch for %q:\n got: %#v\nwant: %#v", dir, got, w)
-			}
+			require.Truef(t, ok, "built-in %q (name %q) not in registry", dir, got.Name)
+			assert.Equalf(t, w, got, "Spec mismatch for %q", dir)
 		})
 	}
 }

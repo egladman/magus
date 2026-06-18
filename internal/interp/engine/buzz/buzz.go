@@ -27,11 +27,16 @@ type engineImpl struct{}
 func (engineImpl) ID() string { return "buzz" }
 
 func (engineImpl) NewSession(ctx context.Context) (engine.Session, error) {
-	return &session{core: core.NewSession(ctx)}, nil
+	return &session{core: core.NewSession(ctx, core.WithEmbedded()), ctx: ctx}, nil
 }
 
-// session wraps a *core.Session and satisfies engine.Session.
-type session struct{ core *core.Session }
+// session wraps a *core.Session and satisfies engine.Session. ctx is the
+// session's bound context (from NewSession); Call honors it so the documented
+// cancellation contract holds on the generic engine path.
+type session struct {
+	core *core.Session
+	ctx  context.Context
+}
 
 func (s *session) Close() error { return s.core.Close() }
 
@@ -54,18 +59,17 @@ func (s *session) LoadString(code string) (engine.Value, error) {
 
 func (s *session) DoString(code string) error { return s.core.DoString(code) }
 
-func (s *session) Call(p engine.CallParams, args ...engine.Value) error {
-	if len(args) > 0 {
-		return fmt.Errorf("buzz: Call: args are not supported; use the concrete Session.CallValue")
-	}
+func (s *session) Call(p engine.CallParams) error {
 	v, ok := p.Fn.(codeValue)
 	if !ok {
 		return fmt.Errorf("buzz: Call: value is not a compiled Buzz chunk")
 	}
-	return v.s.core.ExecChunk(context.Background(), v.chunk)
+	ctx := v.s.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return v.s.core.ExecChunk(ctx, v.chunk)
 }
-
-// --- engine.Value ↔ buzz.Value translation ---
 
 func toEngine(v core.Value) engine.Value {
 	switch {
@@ -120,12 +124,12 @@ type codeValue struct {
 	chunk *core.Chunk
 }
 
-func (codeValue) IsNil() bool                      { return false }
-func (codeValue) AsBool() bool                     { return true }
-func (codeValue) String() string                   { return "<buzz:code>" }
-func (codeValue) AsString() (string, bool)         { return "", false }
-func (codeValue) AsNumber() (float64, bool)        { return 0, false }
-func (codeValue) AsTable() (engine.Table, bool)    { return nil, false }
+func (codeValue) IsNil() bool                        { return false }
+func (codeValue) AsBool() bool                       { return true }
+func (codeValue) String() string                     { return "<buzz:code>" }
+func (codeValue) AsString() (string, bool)           { return "", false }
+func (codeValue) AsNumber() (float64, bool)          { return 0, false }
+func (codeValue) AsTable() (engine.Table, bool)      { return nil, false }
 func (c codeValue) AsFunction() (engine.Value, bool) { return c, true }
 
 // value wraps a non-collection core.Value (or a function) as engine.Value.

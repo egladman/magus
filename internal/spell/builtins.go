@@ -79,7 +79,7 @@ func loadBuiltins() map[string]Spec {
 		if err != nil {
 			panic("magus/spell: unmarshal built-in " + name + ": " + err.Error())
 		}
-		sess := buzz.NewSession(ctx)
+		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 		if err := sess.ExecChunk(ctx, chunk); err != nil {
 			_ = sess.Close()
 			panic("magus/spell: exec built-in " + name + ": " + err.Error())

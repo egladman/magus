@@ -56,7 +56,7 @@ func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 func WithTarget(name string, opts ...TargetOption) ProjectOption {
 	return func(p *types.Project) error {
 		if p.TargetPolicies == nil {
-			p.TargetPolicies = make(map[string]types.TargetPolicy)
+			p.TargetPolicies = make(map[string]types.Target)
 		}
 		pol := p.TargetPolicies[name]
 		for _, o := range opts {
@@ -133,24 +133,25 @@ func WithClaimWeight(weight int) BindingOption {
 	}
 }
 
-// CheckClean enables the check-clean-after policy.
-func CheckClean() TargetOption {
-	return func(p *types.TargetPolicy) { p.CheckClean = true }
+// FailOnDrift enables the drift gate: fail the run if the working tree is dirty
+// after the target runs.
+func FailOnDrift() TargetOption {
+	return func(t *types.Target) { t.FailOnDrift = true }
 }
 
-// TrackFlake returns a TargetOption that enables flake detection and auto-retry.
-func TrackFlake() TargetOption {
-	return func(p *types.TargetPolicy) { p.TrackFlake = true }
+// RetryOnFlake returns a TargetOption that enables flake detection and auto-retry.
+func RetryOnFlake() TargetOption {
+	return func(t *types.Target) { t.RetryOnFlake = true }
 }
 
-// NoCache returns a TargetOption that opts the target out of the cache, so magus
+// SkipCache returns a TargetOption that opts the target out of the cache, so magus
 // always runs it and never replays or snapshots it.
-func NoCache() TargetOption {
-	return func(p *types.TargetPolicy) { p.NoCache = true }
+func SkipCache() TargetOption {
+	return func(t *types.Target) { t.SkipCache = true }
 }
 
-// Isolated returns a TargetOption that serializes the target against the whole
-// RunAll batch: nothing else runs concurrently while an isolated target runs.
-func Isolated() TargetOption {
-	return func(p *types.TargetPolicy) { p.Isolated = true }
+// Exclusive returns a TargetOption that runs the target alone — no other target
+// runs concurrently while it does.
+func Exclusive() TargetOption {
+	return func(t *types.Target) { t.Exclusive = true }
 }

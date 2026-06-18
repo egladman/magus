@@ -86,14 +86,12 @@ func clone(src, dst string) (err error) {
 		}
 	}()
 
-	// ── Path 1: FICLONE reflink ────────────────────────────────────────
 	if cloneErr := unix.IoctlFileClone(int(out.Fd()), int(in.Fd())); cloneErr == nil {
 		return nil
 	}
 	// EOPNOTSUPP / EINVAL / EXDEV: filesystem doesn't support reflinks, or
 	// src and dst are on different devices. Fall through.
 
-	// ── Path 2: copy_file_range (in-kernel, zero-copy) ────────────────
 	inStat, err := in.Stat()
 	if err != nil {
 		return err

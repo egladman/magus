@@ -1,0 +1,4 @@
+// @error: reserved word
+// Strict parity with upstream Buzz: reserved keywords cannot be binding names.
+final out = 1;
+final __r = out;

@@ -8,36 +8,19 @@
 package file
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveWindows(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   string
-		anchor  string
-		want    string
-		wantErr string
-	}{
-		{name: "backslash relative", input: `..\api`, anchor: "extensions/drape", want: "extensions/api"},
-		{name: "mixed sep", input: `..\..\web/studio`, anchor: "a/b", want: "web/studio"},
+	ok := func(t *testing.T, input, anchor, want string) {
+		got, err := Resolve(input, anchor)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := Resolve(tc.input, tc.anchor)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error %v does not contain %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("Resolve(%q, %q) = %q, want %q", tc.input, tc.anchor, got, tc.want)
-			}
-		})
-	}
+
+	t.Run("backslash relative", func(t *testing.T) { ok(t, `..\api`, "extensions/drape", "extensions/api") })
+	t.Run("mixed sep", func(t *testing.T) { ok(t, `..\..\web/studio`, "a/b", "web/studio") })
 }

@@ -1,7 +1,7 @@
 // @expect: 15
 fun adder(n: int) {
-    yield n + 5;
-    yield n + 10;
+    yield (n + 5);
+    yield (n + 10);
 }
 final f = &adder(10);
 final __r = resume f;

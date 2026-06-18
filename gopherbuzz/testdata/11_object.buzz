@@ -2,7 +2,7 @@
 object Point {
     x: int = 0,
     y: int = 0,
-    fun sum() int {
+    fun sum() > int {
         return this.x + this.y;
     }
 }

@@ -3,14 +3,18 @@ package depgraph
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNoopObserver(t *testing.T) {
 	var obs NoopObserver
 	// must not panic
-	obs.OnBuild(BuildStats{})
-	obs.OnQuery(QueryEvent{})
-	obs.OnError(errors.New("ignored"))
+	assert.NotPanics(t, func() {
+		obs.OnBuild(BuildStats{})
+		obs.OnQuery(QueryEvent{})
+		obs.OnError(errors.New("ignored"))
+	})
 }
 
 func TestFanOut_Propagates(t *testing.T) {
@@ -25,15 +29,9 @@ func TestFanOut_Propagates(t *testing.T) {
 	obs.OnQuery(QueryEvent{})
 	obs.OnError(errors.New("test"))
 
-	if buildCalls != 2 {
-		t.Errorf("OnBuild calls = %d, want 2", buildCalls)
-	}
-	if queryCalls != 2 {
-		t.Errorf("OnQuery calls = %d, want 2", queryCalls)
-	}
-	if errCalls != 2 {
-		t.Errorf("OnError calls = %d, want 2", errCalls)
-	}
+	assert.Equal(t, 2, buildCalls)
+	assert.Equal(t, 2, queryCalls)
+	assert.Equal(t, 2, errCalls)
 }
 
 type countingObserver struct {

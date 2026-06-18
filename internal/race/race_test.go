@@ -3,26 +3,23 @@ package race
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewRuntime_NonNil(t *testing.T) {
 	rt := NewRuntime(t.TempDir())
-	if rt == nil {
-		t.Fatal("NewRuntime returned nil")
-	}
+	require.NotNil(t, rt)
 }
 
 func TestRuntimeContext_RoundTrip(t *testing.T) {
 	rt := NewRuntime(t.TempDir())
 	ctx := WithRuntime(context.Background(), rt)
 	got := RuntimeFromContext(ctx)
-	if got != rt {
-		t.Error("RuntimeFromContext returned different Runtime than stored")
-	}
+	assert.Same(t, rt, got)
 }
 
 func TestRuntimeFromContext_Empty(t *testing.T) {
-	if RuntimeFromContext(context.Background()) != nil {
-		t.Error("RuntimeFromContext(empty context) should return nil")
-	}
+	assert.Nil(t, RuntimeFromContext(context.Background()))
 }

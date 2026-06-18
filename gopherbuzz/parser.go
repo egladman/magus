@@ -18,19 +18,51 @@ type parser struct {
 	tokens []token.Token
 	pos    int
 	depth  int
+	// strict enables the script-conformance rules upstream Buzz enforces: no
+	// control-flow statements at the program top level, and labeled call
+	// arguments. On by default via Parse (upstream parity); ParseEmbedded clears
+	// it for gopherbuzz's embedded use (REPL/eval/magusfiles), where top-level
+	// statements are the whole point.
+	strict bool
 }
 
 func newParser(tokens []token.Token) *parser {
 	return &parser{tokens: tokens}
 }
 
-// Parse tokenizes src and returns a Program.
+// Parse tokenizes src and returns a Program using upstream Buzz's rules: the
+// program top level may contain only declarations, imports, and expression
+// statements (no control flow), and call arguments after the first must be
+// labeled. This is the default because it matches upstream — leniency is the
+// deviation, not strictness, so it must be opted into explicitly (ParseEmbedded).
 func Parse(src string) (*ast.Program, error) {
 	toks, err := token.Tokenize(src)
 	if err != nil {
 		return nil, err
 	}
+	p := newParser(toks)
+	p.strict = true
+	return p.parseProgram()
+}
+
+// ParseEmbedded relaxes the two script-conformance rules Parse enforces (top-level
+// statements and labeled args) for gopherbuzz's embedded use: the REPL, magus
+// eval, magusfile loading, and interactive snippets, where top-level statements
+// are the whole point. It is the named, deliberate deviation from upstream Buzz.
+func ParseEmbedded(src string) (*ast.Program, error) {
+	toks, err := token.Tokenize(src)
+	if err != nil {
+		return nil, err
+	}
 	return newParser(toks).parseProgram()
+}
+
+// parseModed parses src strict (Parse) or embedded (ParseEmbedded).
+func parseModed(src string, strict bool) (*ast.Program, error) {
+	if strict {
+		return Parse(src)
+	}
+	return ParseEmbedded(src)
 }
 
 func (p *parser) peek() token.Token {
@@ -75,6 +107,38 @@ func (p *parser) eatIdent() (token.Token, error) {
 	return t, nil
 }
 
+// reservedIdents are words upstream Buzz reserves as keywords. gopherbuzz lexes
+// them as identifiers (it does not use all of them as keywords), but for strict
+// parity it must reject them as BINDING names — var/final/fun/param/object/field/
+// enum/case/namespace/loop-var. They remain usable in non-binding positions
+// (member access, map keys, type names) exactly as upstream allows.
+//
+// `test` is the one deliberate omission: it is a contextual soft keyword here (see
+// parseStmt) because every magus target set defines `export fun test(...)`, the
+// canonical test target. Reserving it would break the magus CLI's core target
+// model, so test stays usable as a binding name — the single justified place
+// gopherbuzz is intentionally a superset of upstream.
+var reservedIdents = map[string]bool{
+	"out": true, "from": true, "match": true, "pat": true,
+	"fib": true, "rg": true, "obj": true, "ud": true, "zdef": true,
+	"typeof": true, "type": true, "protocol": true, "static": true,
+	"extern": true, "double": true, "any": true, "Function": true,
+	"int": true, "str": true, "bool": true, "void": true,
+}
+
+// eatBindingIdent consumes an identifier used as a binding name and rejects any
+// upstream-reserved word (strict parity with upstream Buzz).
+func (p *parser) eatBindingIdent() (token.Token, error) {
+	t, err := p.eatIdent()
+	if err != nil {
+		return t, err
+	}
+	if reservedIdents[t.Val] {
+		return t, fmt.Errorf("buzz: line %d:%d: %q is a reserved word and cannot be used as a name", t.Line, t.Col, t.Val)
+	}
+	return t, nil
+}
+
 // optSemicolon consumes a trailing semicolon if present.
 func (p *parser) optSemicolon() {
 	if p.check(token.Semicolon) {
@@ -90,10 +154,53 @@ func (p *parser) parseProgram() (*ast.Program, error) {
 			return nil, err
 		}
 		if s != nil {
+			if p.strict {
+				if err := checkTopLevelStmt(s); err != nil {
+					return nil, err
+				}
+			}
 			prog.Stmts = append(prog.Stmts, s)
 		}
 	}
 	return prog, nil
+}
+
+// checkTopLevelStmt enforces the strict-mode rule that a program's top level
+// holds only declarations, imports, and expression statements — matching upstream
+// Buzz, which requires control flow to live inside a function (run-script invokes
+// main). Returns an error for any control-flow / return / throw / bare-block
+// statement at script scope.
+func checkTopLevelStmt(s ast.Node) error {
+	var kind string
+	switch n := s.(type) {
+	case *ast.IfStmt:
+		kind = "if"
+	case *ast.WhileStmt:
+		kind = "while"
+	case *ast.ForStmt:
+		kind = "for"
+	case *ast.ForEachStmt:
+		kind = "foreach"
+	case *ast.DoStmt:
+		kind = "do/until"
+	case *ast.TryStmt:
+		kind = "try"
+	case *ast.ThrowStmt:
+		kind = "throw"
+	case *ast.ReturnStmt:
+		kind = "return"
+	case *ast.BreakStmt:
+		kind = "break"
+	case *ast.ContinueStmt:
+		kind = "continue"
+	case *ast.BlockStmt:
+		kind = "block"
+	default:
+		_ = n
+		return nil
+	}
+	pos := ast.NodePos(s)
+	return fmt.Errorf("buzz: line %d:%d: %s statement is not allowed at the top level; move it into a function (strict mode)", pos.Line, pos.Col, kind)
 }
 
 func (p *parser) parseStmt() (ast.Node, error) {
@@ -215,7 +322,7 @@ func (p *parser) parseImport() (*ast.ImportStmt, error) {
 
 func (p *parser) parseNamespace() (*ast.NamespaceStmt, error) {
 	t, _ := p.eat(token.Namespace)
-	nameTok, err := p.eatIdent()
+	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +344,7 @@ func (p *parser) parseNamespace() (*ast.NamespaceStmt, error) {
 func (p *parser) parseDecl() (*ast.DeclStmt, error) {
 	t := p.advance() // const/final/var
 	isConst := t.Kind == token.Final
-	nameTok, err := p.eatIdent()
+	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +648,7 @@ func (p *parser) parseTryCatch() (*ast.TryStmt, error) {
 	errName := "_"
 	if p.check(token.LParen) {
 		p.advance()
-		nameTok, err := p.eatIdent()
+		nameTok, err := p.eatBindingIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -669,7 +776,7 @@ func (p *parser) parseForInit() (ast.Node, error) {
 func (p *parser) parseDeclNoSemi() (*ast.DeclStmt, error) {
 	t := p.advance()
 	isConst := t.Kind == token.Final
-	nameTok, err := p.eatIdent()
+	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -716,7 +823,7 @@ func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
 	if _, err := p.eat(token.LParen); err != nil {
 		return nil, err
 	}
-	first, err := p.eatIdent()
+	first, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -729,7 +836,7 @@ func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
 	out := &ast.ForEachStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, ValName: first.Val}
 	if p.check(token.Comma) {
 		p.advance()
-		second, err := p.eatIdent()
+		second, err := p.eatBindingIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -778,7 +885,7 @@ func (p *parser) parseParenCond() (ast.Node, error) {
 
 func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	t, _ := p.eat(token.Fun)
-	nameTok, err := p.eatIdent()
+	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -807,7 +914,7 @@ func (p *parser) parseTestDecl() (*ast.TestDecl, error) {
 
 func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	t, _ := p.eat(token.Object)
-	nameTok, err := p.eatIdent()
+	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -831,7 +938,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			p.optSemicolon()
 			continue
 		}
-		nameTok, err := p.eatIdent()
+		nameTok, err := p.eatBindingIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -865,7 +972,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 
 func (p *parser) parseEnumDecl() (*ast.EnumDecl, error) {
 	t, _ := p.eat(token.Enum)
-	nameTok, err := p.eatIdent()
+	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
 	}
@@ -883,7 +990,7 @@ func (p *parser) parseEnumDecl() (*ast.EnumDecl, error) {
 	}
 	decl := &ast.EnumDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
-		caseTok, err := p.eatIdent()
+		caseTok, err := p.eatBindingIdent()
 		if err != nil {
 			return nil, err
 		}
@@ -1182,7 +1289,17 @@ func (p *parser) parseUnary() (ast.Node, error) {
 		}
 		return &ast.ResolveExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Fiber: operand}, nil
 	}
-	// yield expr — suspends the fiber (or is dismissed outside one)
+	// yield expr — suspends the fiber (or is dismissed outside one).
+	//
+	// KNOWN CONFORMANCE GAP: upstream Buzz parses `yield` as a .Primary-precedence
+	// prefix, so `yield a + b` means `(yield a) + b`; gopherbuzz consumes the full
+	// expression (`yield (a + b)`). The clean fix (parseUnary here) is blocked on a
+	// separate VM bug: resuming a fiber whose `yield` sits mid-expression (pending
+	// stack ops after it) yields null for the resumed sub-expression, so
+	// `(yield a) + b` would error at runtime — which would make gopherbuzz reject a
+	// program upstream accepts, violating the superset invariant. Fix the resume
+	// continuation first, then narrow this to parseUnary. Until then, write
+	// `yield (a + b)` for an unambiguous, cross-runtime-identical result.
 	if p.check(token.Yield) {
 		t := p.advance()
 		operand, err := p.parseExpr()
@@ -1322,6 +1439,19 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		// Strict parity: upstream Buzz requires every argument after the first to be
+		// labeled. A bare identifier counts as an implicit same-name label
+		// (`f(a, b)` == `f(a, b: b)`); any other unlabeled expression (literal,
+		// call, …) past the first arg is rejected. Resolving the implicit label
+		// against the callee's params is left to the checker (and is impossible for
+		// host bindings), so this enforces only the syntactic rule upstream's parser
+		// applies.
+		if p.strict && len(args) > 0 && name == "" {
+			if _, isIdent := arg.(*ast.IdentExpr); !isIdent {
+				pos := ast.NodePos(arg)
+				return nil, nil, fmt.Errorf("buzz: line %d:%d: argument %d must be labeled (name: value) (strict mode)", pos.Line, pos.Col, len(args)+1)
+			}
+		}
 		args = append(args, arg)
 		names = append(names, name)
 		if !p.check(token.Comma) {
@@ -1407,7 +1537,9 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 			expr.Parts = append(expr.Parts, ast.InterpPart{Lit: part.Text})
 			continue
 		}
-		sub, err := Parse(part.Text + ";")
+		// Sub-parse the interpolation expression in the same mode as the enclosing
+		// parser so strictness is consistent across the program.
+		sub, err := parseModed(part.Text+";", p.strict)
 		if err != nil {
 			return nil, fmt.Errorf("buzz: line %d:%d: bad interpolation %q: %w", t.Line, t.Col, part.Text, err)
 		}
@@ -1439,17 +1571,20 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 		return nil, nil, "", "", nil, err
 	}
 	for !p.check(token.RParen) && !p.check(token.EOF) {
-		nameTok, e := p.eatIdent()
+		nameTok, e := p.eatBindingIdent()
 		if e != nil {
 			return nil, nil, "", "", nil, e
 		}
 		params = append(params, nameTok.Val)
+		// Strict parity with upstream Buzz: every parameter must be typed
+		// (`name: type`), including `_` and lambda params.
+		if !p.check(token.Colon) {
+			return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: parameter %q must have a type annotation (name: type)", nameTok.Line, nameTok.Col, nameTok.Val)
+		}
 		var pa string
-		if p.check(token.Colon) {
-			p.advance()
-			if pa, e = p.readType(); e != nil {
-				return nil, nil, "", "", nil, e
-			}
+		p.advance()
+		if pa, e = p.readType(); e != nil {
+			return nil, nil, "", "", nil, e
 		}
 		paramAnnots = append(paramAnnots, pa)
 		if p.check(token.Assign) {
@@ -1479,13 +1614,12 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 		} else if retAnnot, err = p.readType(); err != nil {
 			return nil, nil, "", "", nil, err
 		}
-	} else if p.check(token.Void) {
-		p.advance()
-		retAnnot = "void"
-	} else if p.isTypeStart() {
-		if retAnnot, err = p.readType(); err != nil {
-			return nil, nil, "", "", nil, err
-		}
+	} else if p.check(token.Void) || p.isTypeStart() {
+		// Strict parity with upstream Buzz: a return type must be introduced by '>'.
+		// `fun f() int {}` and `fun f() void {}` are rejected; write `fun f() > int {}`
+		// or, for no return value, `fun f() {}` (implicit void).
+		rt := p.peek()
+		return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: return type must be preceded by '>' (write `> %s ...`)", rt.Line, rt.Col, rt.Val)
 	}
 	// Consume optional !> error-set annotation: fun f() > T !> ErrType { }
 	if p.check(token.ErrArrow) {
@@ -1498,9 +1632,19 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 	}
 	// Consume optional *> yield-type annotation: fun f() > R *> Y { }
 	if p.check(token.YieldArrow) {
-		p.advance()
-		if yieldAnnot, err = p.readType(); err != nil {
+		ya := p.advance()
+		if p.check(token.Void) {
+			p.advance()
+			yieldAnnot = "void"
+		} else if yieldAnnot, err = p.readType(); err != nil {
 			return nil, nil, "", "", nil, err
+		}
+		// Strict parity with upstream Buzz (src/Parser.zig): a fiber's yield type
+		// must be optional or void — resume returns null on completion, so the
+		// yielded type is inherently optional. Reject a non-optional yield type
+		// rather than leniently accepting it.
+		if yieldAnnot != "void" && !strings.HasSuffix(yieldAnnot, "?") {
+			return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, yieldAnnot)
 		}
 	}
 	body, err = p.parseBlock()

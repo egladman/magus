@@ -5,210 +5,111 @@ import (
 	"testing"
 
 	"github.com/egladman/gopherbuzz/vm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValueConstructorsAndPredicates(t *testing.T) {
 	noop := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.NullValue(), nil }
 
-	tests := []struct {
-		name    string
-		v       vm.Value
-		isInt   bool
-		isFloat bool
-		isBool  bool
-		isStr   bool
-		isList  bool
-		isMap   bool
-		isNull  bool
-		isDirect bool
-		kind    string
-	}{
-		{
-			name:   "IntValue",
-			v:      vm.IntValue(42),
-			isInt:  true,
-			kind:   "int",
-		},
-		{
-			name:    "FloatValue",
-			v:       vm.FloatValue(3.14),
-			isFloat: true,
-			kind:    "double",
-		},
-		{
-			name:   "BoolValue true",
-			v:      vm.BoolValue(true),
-			isBool: true,
-			kind:   "bool",
-		},
-		{
-			name:   "BoolValue false",
-			v:      vm.BoolValue(false),
-			isBool: true,
-			kind:   "bool",
-		},
-		{
-			name:  "StrValue",
-			v:     vm.StrValue("hello"),
-			isStr: true,
-			kind:  "str",
-		},
-		{
-			name:   "ListValue",
-			v:      vm.ListValue(nil),
-			isList: true,
-			kind:   "list",
-		},
-		{
-			name:  "NewMap",
-			v:     vm.NewMap(),
-			isMap: true,
-			kind:  "map",
-		},
-		{
-			name:   "NullValue",
-			v:      vm.NullValue(),
-			isNull: true,
-			kind:   "null",
-		},
-		{
-			name:     "DirectValue",
-			v:        vm.DirectValue("myfn", noop),
-			isDirect: true,
-			kind:     "direct",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.v.IsInt(); got != tc.isInt {
-				t.Errorf("IsInt() = %v, want %v", got, tc.isInt)
-			}
-			if got := tc.v.IsFloat(); got != tc.isFloat {
-				t.Errorf("IsFloat() = %v, want %v", got, tc.isFloat)
-			}
-			if got := tc.v.IsBool(); got != tc.isBool {
-				t.Errorf("IsBool() = %v, want %v", got, tc.isBool)
-			}
-			if got := tc.v.IsStr(); got != tc.isStr {
-				t.Errorf("IsStr() = %v, want %v", got, tc.isStr)
-			}
-			if got := tc.v.IsList(); got != tc.isList {
-				t.Errorf("IsList() = %v, want %v", got, tc.isList)
-			}
-			if got := tc.v.IsMap(); got != tc.isMap {
-				t.Errorf("IsMap() = %v, want %v", got, tc.isMap)
-			}
-			if got := tc.v.IsNull(); got != tc.isNull {
-				t.Errorf("IsNull() = %v, want %v", got, tc.isNull)
-			}
-			if got := tc.v.IsDirect(); got != tc.isDirect {
-				t.Errorf("IsDirect() = %v, want %v", got, tc.isDirect)
-			}
-			if got := tc.v.Kind(); got != tc.kind {
-				t.Errorf("Kind() = %q, want %q", got, tc.kind)
-			}
-		})
-	}
+	t.Run("IntValue", func(t *testing.T) {
+		v := vm.IntValue(42)
+		assert.True(t, v.IsInt())
+		assert.Equal(t, "int", v.Kind())
+	})
+	t.Run("FloatValue", func(t *testing.T) {
+		v := vm.FloatValue(3.14)
+		assert.True(t, v.IsFloat())
+		assert.Equal(t, "double", v.Kind())
+	})
+	t.Run("BoolValue true", func(t *testing.T) {
+		v := vm.BoolValue(true)
+		assert.True(t, v.IsBool())
+		assert.Equal(t, "bool", v.Kind())
+	})
+	t.Run("BoolValue false", func(t *testing.T) {
+		v := vm.BoolValue(false)
+		assert.True(t, v.IsBool())
+		assert.Equal(t, "bool", v.Kind())
+	})
+	t.Run("StrValue", func(t *testing.T) {
+		v := vm.StrValue("hello")
+		assert.True(t, v.IsStr())
+		assert.Equal(t, "str", v.Kind())
+	})
+	t.Run("ListValue", func(t *testing.T) {
+		v := vm.ListValue(nil)
+		assert.True(t, v.IsList())
+		assert.Equal(t, "list", v.Kind())
+	})
+	t.Run("NewMap", func(t *testing.T) {
+		v := vm.NewMap()
+		assert.True(t, v.IsMap())
+		assert.Equal(t, "map", v.Kind())
+	})
+	t.Run("NullValue", func(t *testing.T) {
+		v := vm.NullValue()
+		assert.True(t, v.IsNull())
+		assert.Equal(t, "null", v.Kind())
+	})
+	t.Run("DirectValue", func(t *testing.T) {
+		v := vm.DirectValue("myfn", noop)
+		assert.True(t, v.IsDirect())
+		assert.Equal(t, "direct", v.Kind())
+	})
 }
 
 func TestValueAsInt(t *testing.T) {
-	v := vm.IntValue(99)
-	if got := v.AsInt(); got != 99 {
-		t.Errorf("AsInt() = %d, want 99", got)
-	}
+	assert.Equal(t, int64(99), vm.IntValue(99).AsInt())
 }
 
 func TestValueAsIntNegative(t *testing.T) {
-	v := vm.IntValue(-7)
-	if got := v.AsInt(); got != -7 {
-		t.Errorf("AsInt() = %d, want -7", got)
-	}
+	assert.Equal(t, int64(-7), vm.IntValue(-7).AsInt())
 }
 
 func TestValueAsFloat(t *testing.T) {
-	v := vm.FloatValue(2.718)
-	if got := v.AsFloat(); got != 2.718 {
-		t.Errorf("AsFloat() = %v, want 2.718", got)
-	}
+	assert.Equal(t, 2.718, vm.FloatValue(2.718).AsFloat())
 }
 
 func TestValueAsBool(t *testing.T) {
-	if !vm.BoolValue(true).AsBool() {
-		t.Error("BoolValue(true).AsBool() = false, want true")
-	}
-	if vm.BoolValue(false).AsBool() {
-		t.Error("BoolValue(false).AsBool() = true, want false")
-	}
+	assert.True(t, vm.BoolValue(true).AsBool())
+	assert.False(t, vm.BoolValue(false).AsBool())
 }
 
 func TestValueAsString(t *testing.T) {
-	v := vm.StrValue("world")
-	if got := v.AsString(); got != "world" {
-		t.Errorf("AsString() = %q, want %q", got, "world")
-	}
+	assert.Equal(t, "world", vm.StrValue("world").AsString())
 }
 
 func TestValueListItems(t *testing.T) {
 	items := []vm.Value{vm.IntValue(1), vm.IntValue(2), vm.IntValue(3)}
-	v := vm.ListValue(items)
-	got := v.ListItems()
-	if len(got) != 3 {
-		t.Fatalf("ListItems() len = %d, want 3", len(got))
-	}
+	got := vm.ListValue(items).ListItems()
+	require.Len(t, got, 3)
 	for i, item := range got {
-		if item.AsInt() != int64(i+1) {
-			t.Errorf("ListItems()[%d].AsInt() = %d, want %d", i, item.AsInt(), i+1)
-		}
+		assert.Equalf(t, int64(i+1), item.AsInt(), "ListItems()[%d].AsInt()", i)
 	}
 }
 
 func TestValueListItemsNil(t *testing.T) {
-	v := vm.ListValue(nil)
-	if got := v.ListItems(); got != nil {
-		t.Errorf("ListItems() on nil-backed list = %v, want nil", got)
-	}
+	got := vm.ListValue(nil).ListItems()
+	assert.Nil(t, got, "ListItems() on nil-backed list")
 }
 
 func TestValueString(t *testing.T) {
-	tests := []struct {
-		v    vm.Value
-		want string
-	}{
-		{vm.NullValue(), "null"},
-		{vm.BoolValue(true), "true"},
-		{vm.BoolValue(false), "false"},
-		{vm.IntValue(42), "42"},
-		{vm.StrValue("hi"), "hi"},
-		{vm.ListValue([]vm.Value{vm.IntValue(1), vm.IntValue(2)}), "[1, 2]"},
-	}
-	for _, tc := range tests {
-		got := tc.v.String()
-		if got != tc.want {
-			t.Errorf("String() = %q, want %q", got, tc.want)
-		}
-	}
+	assert.Equal(t, "null", vm.NullValue().String())
+	assert.Equal(t, "true", vm.BoolValue(true).String())
+	assert.Equal(t, "false", vm.BoolValue(false).String())
+	assert.Equal(t, "42", vm.IntValue(42).String())
+	assert.Equal(t, "hi", vm.StrValue("hi").String())
+	assert.Equal(t, "[1, 2]", vm.ListValue([]vm.Value{vm.IntValue(1), vm.IntValue(2)}).String())
 }
 
 func TestValueRawEqual(t *testing.T) {
 	// Scalars with same tag and payload must be equal.
-	if !vm.IntValue(5).RawEqual(vm.IntValue(5)) {
-		t.Error("IntValue(5).RawEqual(IntValue(5)) = false, want true")
-	}
-	if vm.IntValue(5).RawEqual(vm.IntValue(6)) {
-		t.Error("IntValue(5).RawEqual(IntValue(6)) = true, want false")
-	}
-	if !vm.NullValue().RawEqual(vm.NullValue()) {
-		t.Error("NullValue().RawEqual(NullValue()) = false, want true")
-	}
-	if !vm.BoolValue(true).RawEqual(vm.BoolValue(true)) {
-		t.Error("BoolValue(true).RawEqual(BoolValue(true)) = false, want true")
-	}
-	if vm.BoolValue(true).RawEqual(vm.BoolValue(false)) {
-		t.Error("BoolValue(true).RawEqual(BoolValue(false)) = true, want false")
-	}
+	assert.True(t, vm.IntValue(5).RawEqual(vm.IntValue(5)))
+	assert.False(t, vm.IntValue(5).RawEqual(vm.IntValue(6)))
+	assert.True(t, vm.NullValue().RawEqual(vm.NullValue()))
+	assert.True(t, vm.BoolValue(true).RawEqual(vm.BoolValue(true)))
+	assert.False(t, vm.BoolValue(true).RawEqual(vm.BoolValue(false)))
 	// Different types are not raw-equal even for the same numeric payload.
-	if vm.IntValue(0).RawEqual(vm.NullValue()) {
-		t.Error("IntValue(0).RawEqual(NullValue()) = true, want false")
-	}
+	assert.False(t, vm.IntValue(0).RawEqual(vm.NullValue()))
 }

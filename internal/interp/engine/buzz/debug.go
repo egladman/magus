@@ -20,8 +20,6 @@ func (s *session) Drivers() []engine.ReplDriver {
 	return []engine.ReplDriver{&buzzReplDriver{core: s.core}}
 }
 
-// --- engine.DebugReader ---
-
 func (s *session) Frames() []engine.Frame {
 	cf := s.core.Frames()
 	if len(cf) == 0 {
@@ -50,8 +48,6 @@ func (s *session) Upvalues(level int) map[string]engine.Value {
 
 func (s *session) CallDepth() int { return s.core.CallDepth() }
 
-// --- engine.Stepper ---
-
 func (s *session) SetStepHook(mask engine.StepMask, cb func(engine.StepEvent, engine.Frame)) {
 	s.core.SetStepHook(fromEngineMask(mask), func(ev core.StepEvent, f core.DebugFrame) {
 		cb(toEngineEvent(ev), engine.Frame{
@@ -65,8 +61,6 @@ func (s *session) SetStepHook(mask engine.StepMask, cb func(engine.StepEvent, en
 }
 
 func (s *session) ClearStepHook() { s.core.ClearStepHook() }
-
-// --- translation helpers ---
 
 func toEngineMap(m map[string]core.Value) map[string]engine.Value {
 	if len(m) == 0 {

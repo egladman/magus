@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	"github.com/egladman/gopherbuzz/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func checkSrc(src string) []typeError {
-	prog, err := Parse(src)
+	prog, err := ParseEmbedded(src)
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
 	}
@@ -21,17 +23,15 @@ func checkSrc(src string) []typeError {
 // checkOK asserts that Check reports no errors for src.
 func checkOK(t *testing.T, src string) {
 	t.Helper()
-	if errs := checkSrc(src); len(errs) != 0 {
-		t.Errorf("expected no errors, got:\n%s", fmtErrors(errs))
-	}
+	errs := checkSrc(src)
+	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 
 // checkErr asserts that Check reports at least one error containing substr.
 func checkErr(t *testing.T, src, substr string) {
 	t.Helper()
 	errs := checkSrc(src)
-	if len(errs) == 0 {
-		t.Errorf("expected error containing %q, got none", substr)
+	if !assert.NotEmptyf(t, errs, "expected error containing %q, got none", substr) {
 		return
 	}
 	for _, e := range errs {
@@ -103,21 +103,21 @@ fun list() > {str: fun({str: str}) bool} { return {"op": op}; }
 
 func TestCheck_FunctionArity(t *testing.T) {
 	checkErr(t, `
-fun add(a, b) int { return a + b; }
+fun add(a: int, b: int) > int { return a + b; }
 final r = add(1);
 `, "wrong argument count: got 1, want 2")
 }
 
 func TestCheck_FunctionArityOK(t *testing.T) {
 	checkOK(t, `
-fun add(a, b) int { return a + b; }
+fun add(a: int, b: int) > int { return a + b; }
 final r = add(1, 2);
 `)
 }
 
 func TestCheck_ReturnTypeMismatch(t *testing.T) {
 	checkErr(t, `
-fun greet() int {
+fun greet() > int {
     return "hello";
 }
 `, "return type mismatch")
@@ -125,7 +125,7 @@ fun greet() int {
 
 func TestCheck_ReturnTypeOK(t *testing.T) {
 	checkOK(t, `
-fun greet() str {
+fun greet() > str {
     return "hello";
 }
 `)
@@ -136,7 +136,7 @@ fun greet() str {
 // Buzz; see splitCommands in examples/bubblegum/config.buzz.
 func TestCheck_TypedEmptyListReturn(t *testing.T) {
 	checkOK(t, `
-fun build() [str] {
+fun build() > [str] {
     var res = [<str>];
     res = res + ["a"];
     return res;
@@ -146,7 +146,7 @@ fun build() [str] {
 
 func TestCheck_TypedEmptyListElemMismatch(t *testing.T) {
 	checkErr(t, `
-fun build() [str] {
+fun build() > [str] {
     var res = [<int>];
     return res;
 }
@@ -181,7 +181,7 @@ func TestCheck_ObjectDecl(t *testing.T) {
 object Point {
     x: int = 0,
     y: int = 0,
-    fun sum() int {
+    fun sum() > int {
         return this.x + this.y;
     }
 }
@@ -213,7 +213,7 @@ func TestCheck_ObjectMemberAccess(t *testing.T) {
 object Point {
     x: int = 0,
     y: int = 0,
-    fun sum() int { return this.x + this.y; }
+    fun sum() > int { return this.x + this.y; }
 }
 final p = Point{ x = 1, y = 2 };
 final s = p.sum();
@@ -247,13 +247,10 @@ func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	// pattern, where the magus host binds `magus`). Such a global is pre-registered
 	// as types.Any via extraGlobals, so member calls on it type-check. checkSrc
 	// registers none, so exercise checkWithGlobals with a neutral injected name.
-	prog, err := Parse(`host.project.register(".");`)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if errs := checkWithGlobals(prog, []string{"host"}, nil, nil, nil); len(errs) != 0 {
-		t.Errorf("expected no errors, got:\n%s", fmtErrors(errs))
-	}
+	prog, err := ParseEmbedded(`host.project.register(".");`)
+	require.NoError(t, err, "parse")
+	errs := checkWithGlobals(prog, []string{"host"}, nil, nil, nil)
+	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 
 func TestCheck_ForEachList(t *testing.T) {
@@ -288,8 +285,8 @@ func TestCheck_NullCoalesce(t *testing.T) {
 
 func TestCheck_Closure(t *testing.T) {
 	checkOK(t, `
-fun makeAdder(n) fun(int)int {
-    return fun(x: int) int { return x + n; };
+fun makeAdder(n: int) > fun(int) > int {
+    return fun(x: int) > int { return x + n; };
 }
 final add5 = makeAdder(5);
 `)
@@ -297,11 +294,11 @@ final add5 = makeAdder(5);
 
 func TestCheck_MutualRecursion(t *testing.T) {
 	checkOK(t, `
-fun even(n) bool {
+fun even(n: int) > bool {
     if (n == 0) { return true; }
     return odd(n - 1);
 }
-fun odd(n) bool {
+fun odd(n: int) > bool {
     if (n == 0) { return false; }
     return even(n - 1);
 }
@@ -327,30 +324,28 @@ final b = m["k"];
 }
 
 func TestCheck_ParseAnnotInt(t *testing.T) {
-	if types.ParseAnnot("int") != types.Int {
-		t.Error("ParseAnnot(int)")
-	}
+	assert.Equal(t, types.Int, types.ParseAnnot("int"), "ParseAnnot(int)")
 }
 
 func TestCheck_ParseAnnotList(t *testing.T) {
 	lt, ok := types.ParseAnnot("[str]").(*types.ListType)
-	if !ok || lt.Elem != types.Str {
-		t.Error("ParseAnnot([str])")
-	}
+	require.True(t, ok, "ParseAnnot([str])")
+	assert.Equal(t, types.Str, lt.Elem, "ParseAnnot([str])")
 }
 
 func TestCheck_ParseAnnotFun(t *testing.T) {
 	ft, ok := types.ParseAnnot("fun(int)str").(*types.FuncType)
-	if !ok || len(ft.Params) != 1 || ft.Params[0] != types.Int || ft.Ret != types.Str {
-		t.Errorf("ParseAnnot(fun(int)str): %T %v", ft, ft)
-	}
+	require.Truef(t, ok, "ParseAnnot(fun(int)str): %T %v", ft, ft)
+	require.Lenf(t, ft.Params, 1, "ParseAnnot(fun(int)str): %T %v", ft, ft)
+	assert.Equalf(t, types.Int, ft.Params[0], "ParseAnnot(fun(int)str): %T %v", ft, ft)
+	assert.Equalf(t, types.Str, ft.Ret, "ParseAnnot(fun(int)str): %T %v", ft, ft)
 }
 
 func TestCheck_ParseAnnotMap(t *testing.T) {
 	mt, ok := types.ParseAnnot("{str:int}").(*types.MapType)
-	if !ok || mt.Key != types.Str || mt.Val != types.Int {
-		t.Errorf("ParseAnnot({str:int}): %T %v", mt, mt)
-	}
+	require.Truef(t, ok, "ParseAnnot({str:int}): %T %v", mt, mt)
+	assert.Equalf(t, types.Str, mt.Key, "ParseAnnot({str:int}): %T %v", mt, mt)
+	assert.Equalf(t, types.Int, mt.Val, "ParseAnnot({str:int}): %T %v", mt, mt)
 }
 
 // TestCheckTypeSoundness verifies that OpCheckType makes typed local slots
@@ -368,27 +363,19 @@ func TestCheckTypeSoundness(t *testing.T) {
 	// The reassignment must now assert the type and error instead.
 	t.Run("laundered str into int errors", func(t *testing.T) {
 		sess := newSession(ctx)
-		err := sess.Exec(ctx, `fun f() int { var i = 0; var a = "hello"; var b: any = a; i = b; return i + 1; }
+		err := sess.Exec(ctx, `fun f() > int { var i = 0; var a = "hello"; var b: any = a; i = b; return i + 1; }
 final __r = f();`)
-		if err == nil {
-			t.Fatalf("expected a type error, got none (__r=%q)", sess.GetGlobal("__r").String())
-		}
-		if !strings.Contains(err.Error(), "expected int, got str") {
-			t.Fatalf("error = %q, want it to mention expected int, got str", err.Error())
-		}
+		require.Errorf(t, err, "expected a type error, got none (__r=%q)", sess.GetGlobal("__r").String())
+		assert.Containsf(t, err.Error(), "expected int, got str", "error = %q, want it to mention expected int, got str", err.Error())
 	})
 
 	// The matching case still works: an `any` that actually holds an int passes
 	// the assertion and the program runs normally.
 	t.Run("matching any into int passes", func(t *testing.T) {
 		sess := newSession(ctx)
-		if err := sess.Exec(ctx, `fun f() int { var i = 0; var a = 41; var b: any = a; i = b; return i + 1; }
-final __r = f();`); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got := sess.GetGlobal("__r").AsInt(); got != 42 {
-			t.Errorf("__r = %d, want 42", got)
-		}
+		require.NoError(t, sess.Exec(ctx, `fun f() > int { var i = 0; var a = 41; var b: any = a; i = b; return i + 1; }
+final __r = f();`))
+		assert.Equal(t, int64(42), sess.GetGlobal("__r").AsInt(), "__r")
 	})
 
 	// An annotated declaration from an any source is checked at the decl in either
@@ -397,9 +384,8 @@ final __r = f();`); err != nil {
 	t.Run("annotated decl from any is checked", func(t *testing.T) {
 		sess := newSession(ctx)
 		err := sess.Exec(ctx, `var a = "x"; var u: any = a; var n: int = u; final __r = n;`)
-		if err == nil || !strings.Contains(err.Error(), "expected int") {
-			t.Fatalf("expected 'expected int' error, got %v", err)
-		}
+		require.Error(t, err, "expected 'expected int' error")
+		assert.Contains(t, err.Error(), "expected int", "expected 'expected int' error")
 	})
 }
 
@@ -407,34 +393,31 @@ final __r = f();`); err != nil {
 // well-typed code — the common path stays untouched and correct.
 func TestCheckTypeNoFalsePositives(t *testing.T) {
 	ctx := context.Background()
-	cases := map[string]struct {
-		src  string
-		want int64
-	}{
-		"int loop":          {`var s = 0; var i = 0; while (i < 5) { s = s + i; i = i + 1; } final __r = s;`, 10},
-		"typed int decl":    {`var x: int = 7; final __r = x + 1;`, 8},
-		"int from typed fn": {`fun id(n: int) int { return n; } var x: int = id(5); final __r = x + 1;`, 6},
-		"reassign int":      {`var x = 1; x = 2; x = x + 3; final __r = x;`, 5},
+	noFalsePositive := func(t *testing.T, src string, want int64) {
+		t.Helper()
+		sess := newSession(ctx)
+		require.NoError(t, sess.Exec(ctx, src), "unexpected error")
+		assert.Equal(t, want, sess.GetGlobal("__r").AsInt(), "__r")
 	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			sess := newSession(ctx)
-			if err := sess.Exec(ctx, tc.src); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got := sess.GetGlobal("__r").AsInt(); got != tc.want {
-				t.Errorf("__r = %d, want %d", got, tc.want)
-			}
-		})
-	}
+
+	t.Run("int loop", func(t *testing.T) {
+		noFalsePositive(t, `var s = 0; var i = 0; while (i < 5) { s = s + i; i = i + 1; } final __r = s;`, 10)
+	})
+	t.Run("typed int decl", func(t *testing.T) {
+		noFalsePositive(t, `var x: int = 7; final __r = x + 1;`, 8)
+	})
+	t.Run("int from typed fn", func(t *testing.T) {
+		noFalsePositive(t, `fun id(n: int) > int { return n; } var x: int = id(5); final __r = x + 1;`, 6)
+	})
+	t.Run("reassign int", func(t *testing.T) {
+		noFalsePositive(t, `var x = 1; x = 2; x = x + 3; final __r = x;`, 5)
+	})
 }
 
 // writeModule drops a .buzz file into dir for an import test.
 func writeModule(t *testing.T, dir, name, src string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(src), 0644))
 }
 
 // TestImport_ExportedObjectType verifies a flat-imported module's exported
@@ -445,7 +428,7 @@ func TestImport_ExportedObjectType(t *testing.T) {
 	writeModule(t, dir, "lib.buzz", `export object Foo { n: int = 0 }`)
 
 	ctx := context.Background()
-	sess := NewSession(ctx)
+	sess := NewSession(ctx, WithEmbedded())
 	defer sess.Close()
 	sess.SetIncludeDirs([]string{dir})
 
@@ -454,16 +437,11 @@ import "lib";
 fun make() > Foo { return Foo{ n = 7 }; }
 export final result = make().n;
 `
-	if err := sess.Exec(ctx, src); err != nil {
-		t.Fatalf("exec with imported object type: %v", err)
-	}
+	require.NoError(t, sess.Exec(ctx, src), "exec with imported object type")
 	v, ok := sess.Exports()["result"]
-	if !ok {
-		t.Fatal("result not exported")
-	}
-	if !v.IsInt() || v.AsInt() != 7 {
-		t.Errorf("result = %v, want 7", v.String())
-	}
+	require.True(t, ok, "result not exported")
+	require.True(t, v.IsInt(), "result = %v, want 7", v.String())
+	assert.Equal(t, int64(7), v.AsInt(), "result = %v, want 7", v.String())
 }
 
 // TestImport_ExportedEnumType verifies a flat-imported module's exported enum
@@ -473,7 +451,7 @@ func TestImport_ExportedEnumType(t *testing.T) {
 	writeModule(t, dir, "palette.buzz", `export enum Color { Red, Green, Blue }`)
 
 	ctx := context.Background()
-	sess := NewSession(ctx)
+	sess := NewSession(ctx, WithEmbedded())
 	defer sess.Close()
 	sess.SetIncludeDirs([]string{dir})
 
@@ -482,9 +460,7 @@ import "palette";
 fun pick() > Color { return Color.Green; }
 final c = pick();
 `
-	if err := sess.Exec(ctx, src); err != nil {
-		t.Fatalf("exec with imported enum type: %v", err)
-	}
+	require.NoError(t, sess.Exec(ctx, src), "exec with imported enum type")
 }
 
 // TestImport_CrossReferencingObjectTypes verifies imported object types that
@@ -497,7 +473,7 @@ export object Outer { inner: Inner = Inner{} }
 `)
 
 	ctx := context.Background()
-	sess := NewSession(ctx)
+	sess := NewSession(ctx, WithEmbedded())
 	defer sess.Close()
 	sess.SetIncludeDirs([]string{dir})
 
@@ -506,16 +482,11 @@ import "shapes";
 fun build() > Outer { return Outer{ inner = Inner{ v = 3 } }; }
 export final got = build().inner.v;
 `
-	if err := sess.Exec(ctx, src); err != nil {
-		t.Fatalf("exec with cross-referencing imported types: %v", err)
-	}
+	require.NoError(t, sess.Exec(ctx, src), "exec with cross-referencing imported types")
 	v, ok := sess.Exports()["got"]
-	if !ok {
-		t.Fatal("got not exported")
-	}
-	if !v.IsInt() || v.AsInt() != 3 {
-		t.Errorf("got = %v, want 3", v.String())
-	}
+	require.True(t, ok, "got not exported")
+	require.True(t, v.IsInt(), "got = %v, want 3", v.String())
+	assert.Equal(t, int64(3), v.AsInt(), "got = %v, want 3", v.String())
 }
 
 // TestSourceModule_ExportsTypes verifies a host-registered source module
@@ -524,7 +495,7 @@ export final got = build().inner.v;
 // the canonical magus/target module relies on.
 func TestSourceModule_ExportsTypes(t *testing.T) {
 	ctx := context.Background()
-	sess := NewSession(ctx)
+	sess := NewSession(ctx, WithEmbedded())
 	defer sess.Close()
 	sess.SetSourceModule("magus/lib", `
 export object Strategy { name: str = "" }
@@ -539,13 +510,11 @@ fun pick() > Target {
 }
 export final tname = pick().name;
 `
-	if err := sess.Exec(ctx, src); err != nil {
-		t.Fatalf("exec with source-module types: %v", err)
-	}
+	require.NoError(t, sess.Exec(ctx, src), "exec with source-module types")
 	v, ok := sess.Exports()["tname"]
-	if !ok || !v.IsStr() || v.AsString() != "build" {
-		t.Errorf("tname = %v, want \"build\"", v.String())
-	}
+	require.True(t, ok, "tname not exported")
+	require.True(t, v.IsStr(), "tname = %v, want \"build\"", v.String())
+	assert.Equal(t, "build", v.AsString(), "tname")
 }
 
 // TestImport_NonExportedObjectType_Errors verifies that only EXPORTED types
@@ -556,17 +525,13 @@ func TestImport_NonExportedObjectType_Errors(t *testing.T) {
 	writeModule(t, dir, "internal.buzz", `object Secret { n: int = 0 }`)
 
 	ctx := context.Background()
-	sess := NewSession(ctx)
+	sess := NewSession(ctx, WithEmbedded())
 	defer sess.Close()
 	sess.SetIncludeDirs([]string{dir})
 
 	err := sess.Exec(ctx, `import "internal"; final s = Secret{ n = 1 };`)
-	if err == nil {
-		t.Fatal("expected error using a non-exported imported type, got nil")
-	}
-	if !strings.Contains(err.Error(), "undefined type") {
-		t.Errorf("error = %q, want it to mention \"undefined type\"", err.Error())
-	}
+	require.Error(t, err, "expected error using a non-exported imported type, got nil")
+	assert.Containsf(t, err.Error(), "undefined type", "error = %q, want it to mention \"undefined type\"", err.Error())
 }
 
 func TestNamedArguments(t *testing.T) {

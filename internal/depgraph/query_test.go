@@ -2,6 +2,8 @@ package depgraph
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGraph_Reachable(t *testing.T) {
@@ -14,15 +16,9 @@ func TestGraph_Reachable(t *testing.T) {
 	b, _ := g.ID("B")
 	c, _ := g.ID("C")
 
-	if !g.Reachable(c, a) {
-		t.Error("C should reach A via C→B→A")
-	}
-	if g.Reachable(a, c) {
-		t.Error("A should not reach C (no such edge)")
-	}
-	if !g.Reachable(b, a) {
-		t.Error("B should reach A via B→A")
-	}
+	assert.True(t, g.Reachable(c, a), "C should reach A via C→B→A")
+	assert.False(t, g.Reachable(a, c), "A should not reach C (no such edge)")
+	assert.True(t, g.Reachable(b, a), "B should reach A via B→A")
 }
 
 func TestGraph_ReverseClosure(t *testing.T) {
@@ -35,9 +31,7 @@ func TestGraph_ReverseClosure(t *testing.T) {
 
 	// Reverse closure of A: which nodes depend on A? → B and C
 	ids := g.ReverseClosure(nil, []ID{a})
-	if len(ids) < 2 {
-		t.Errorf("ReverseClosure: expected ≥2 dependents (B,C), got %d", len(ids))
-	}
+	assert.GreaterOrEqual(t, len(ids), 2, "expected ≥2 dependents (B,C)")
 }
 
 func TestGraph_BlastRadius_NonEmpty(t *testing.T) {
@@ -47,7 +41,5 @@ func TestGraph_BlastRadius_NonEmpty(t *testing.T) {
 		{"C", "B"},
 	})
 	br := g.BlastRadius()
-	if len(br) == 0 {
-		t.Error("BlastRadius: expected non-empty result")
-	}
+	assert.NotEmpty(t, br, "BlastRadius: expected non-empty result")
 }

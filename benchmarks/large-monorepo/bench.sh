@@ -7,7 +7,7 @@
 # BENCHMARKS-large-monorepo.md.
 #
 # Usage: ./bench.sh [tool ...]
-#   tool : subset of  magus-luajit magus-gopherlua turbo nx lage
+#   tool : subset of  magus turbo nx lage
 #          (default: all of them)
 #
 # Scenarios (see README.md for the mapping rationale):
@@ -17,7 +17,7 @@
 #   S7  one lib changed   edit a feature lib, rebuild (its app is affected)
 #
 # Env:
-#   MAGUS_BIN=magus            magus binary (CGO build for magus-luajit)
+#   MAGUS_BIN=magus            magus binary
 #   BENCH_CONCURRENCY=10       per-tool parallelism
 #   BENCH_RUNS=3               hyperfine measured runs for S4/S5
 #   BENCH_INCR_RUNS=1          hyperfine measured runs for S6/S7
@@ -52,7 +52,7 @@ section() { printf '\n\033[1;34m=== %s ===\033[0m\n' "$*"; }
 die()     { red "error: $*" >&2; exit 1; }
 
 TOOLS=("$@")
-[[ "${#TOOLS[@]}" -eq 0 ]] && TOOLS=(magus-luajit magus-gopherlua turbo nx lage)
+[[ "${#TOOLS[@]}" -eq 0 ]] && TOOLS=(magus turbo nx lage)
 
 # ── preflight ───────────────────────────────────────────────────────────────
 [[ -d "$REPO/node_modules" ]] || die "workspace not set up — run ./setup.sh first"
@@ -80,10 +80,9 @@ check_versions() {
 # ── per-tool command + cache reset ──────────────────────────────────────────
 # build_cmd <tool> : the build invocation (run with CWD=work/repo)
 build_cmd() {
-    local tool="$1" fam="${tool%%-*}" eng=""
-    [[ "$fam" == "magus" && "$tool" != "magus" ]] && eng="MAGUS_INTERPRETER_LUA_ENGINE=${tool#magus-} "
+    local tool="$1" fam="${tool%%-*}"
     case "$fam" in
-        magus) echo "${eng}${MAGUS} run build --concurrency=$C" ;;
+        magus) echo "${MAGUS} run build --concurrency=$C" ;;
         turbo) echo "$BIN/turbo run build --concurrency=$C --no-daemon" ;;
         nx)    echo "NX_DAEMON=false $BIN/nx run-many -t build --parallel=$C" ;;
         lage)  echo "$BIN/lage build --concurrency $C" ;;

@@ -1,0 +1,65 @@
+// Pure-Buzz mirror of the core charm constructors (std/charm.go),
+// shipped as the magus/charm source module so a SELF-CONTAINED built-in fork
+// spell — which compiles to bare bytecode with no host bindings — can build
+// charm patches without hand-writing brittle positional JSON Pointers.
+//
+// `import "magus/charm"` brings the constructors into scope as bare names (the
+// flat-import idiom magus/target uses for Target); the runtime registers the
+// module and the built-in generator inlines its source (SelfContainedBuiltinSource).
+// Each returns the same { ops = [...] } RFC 6902 patch record the Go host module
+// produces — charm_parity_test keeps the two in lockstep. A namespace map is not
+// used: the built-in map methods (remove/size/keys/…) would shadow stored keys of
+// the same name, and inlining flattens exports to top level regardless.
+//
+// This is the inlinable CORE (append/prepend/after/before/set/drop) the bundled
+// spells need; the full constructor set (move/copy/test, predicate _func variants)
+// remains on the charm.* host module for magusfiles and function-op spells.
+
+fun _charmAnchorIndex(argv: [str], anchor: str) > int {
+    for (var i = 0; i < argv.len(); i = i + 1) {
+        if (argv[i] == anchor) { return i; }
+    }
+    throw "charm: anchor \"{anchor}\" not found in argv";
+}
+
+fun _charmAddOps(start: int, vals: [str]) > {str: any} {
+    var ops = mut [];
+    for (var k = 0; k < vals.len(); k = k + 1) {
+        ops.append({"op": "add", "path": "/{start + k}", "value": vals[k]});
+    }
+    return {"ops": ops};
+}
+
+// append adds vals to the end of the argv.
+export fun append(vals: [str]) > {str: any} {
+    var ops = mut [];
+    foreach (v in vals) { ops.append({"op": "add", "path": "/-", "value": v}); }
+    return {"ops": ops};
+}
+
+// prepend inserts vals at the front of the argv, in order.
+export fun prepend(vals: [str]) > {str: any} {
+    return _charmAddOps(0, vals);
+}
+
+// after inserts vals immediately after the first argv element equal to anchor.
+export fun after(argv: [str], anchor: str, vals: [str]) > {str: any} {
+    return _charmAddOps(_charmAnchorIndex(argv, anchor) + 1, vals);
+}
+
+// before inserts vals immediately before the first argv element equal to anchor.
+export fun before(argv: [str], anchor: str, vals: [str]) > {str: any} {
+    return _charmAddOps(_charmAnchorIndex(argv, anchor), vals);
+}
+
+// set replaces the first argv element equal to anchor with val.
+export fun set(argv: [str], anchor: str, val: str) > {str: any} {
+    return {"ops": [{"op": "replace", "path": "/{_charmAnchorIndex(argv, anchor)}", "value": val}]};
+}
+
+// drop removes the first argv element equal to anchor. Named drop, not remove,
+// to match the host charm.drop (where "remove" collides with the map method) so
+// the two modules expose one name.
+export fun drop(argv: [str], anchor: str) > {str: any} {
+    return {"ops": [{"op": "remove", "path": "/{_charmAnchorIndex(argv, anchor)}"}]};
+}

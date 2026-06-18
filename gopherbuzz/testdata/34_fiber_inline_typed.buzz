@@ -1,5 +1,5 @@
 // @error: cannot assign str to int
-fun work() > str *> int {
+fun work() > str *> int? {
     yield 1;
     return "done";
 }

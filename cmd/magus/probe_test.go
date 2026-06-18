@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc"
@@ -31,162 +33,66 @@ func makeReply(pid int, roots ...string) *proc.StatusReply {
 }
 
 func TestEvaluateHealth(t *testing.T) {
-	tests := []struct {
-		name    string
-		reply   *proc.StatusReply
-		err     error
-		kind    probeKind
-		root    string
-		wantOK  bool
-		wantSub string // substring expected in reason
-	}{
-		// -- unreachable --
-		{
-			name:  "liveness/unreachable-err",
-			reply: nil, err: errors.New("dial failed"),
-			kind: probeLiveness, wantOK: false, wantSub: "unreachable",
-		},
-		{
-			name:  "liveness/nil-reply-no-err",
-			reply: nil, err: nil,
-			kind: probeLiveness, wantOK: false, wantSub: "unreachable",
-		},
-		{
-			name:  "readiness/unreachable",
-			reply: nil, err: errors.New("no socket"),
-			kind: probeReadiness, wantOK: false, wantSub: "unreachable",
-		},
-		// -- liveness OK --
-		{
-			name:   "liveness/daemon-up-no-workspaces",
-			reply:  makeReply(42),
-			kind:   probeLiveness,
-			wantOK: true, wantSub: "42",
-		},
-		{
-			name:   "liveness/daemon-up-with-workspace",
-			reply:  makeReply(99, "/ws"),
-			kind:   probeLiveness,
-			wantOK: true, wantSub: "99",
-		},
-		// -- readiness without root (any workspace) --
-		{
-			name:    "readiness/no-workspaces-no-root",
-			reply:   makeReply(1),
-			kind:    probeReadiness,
-			wantOK:  false,
-			wantSub: "no workspaces",
-		},
-		{
-			name:   "readiness/one-workspace-no-root",
-			reply:  makeReply(1, "/ws"),
-			kind:   probeReadiness,
-			wantOK: true, wantSub: "1 workspace",
-		},
-		{
-			name:   "readiness/two-workspaces-no-root",
-			reply:  makeReply(1, "/ws", "/ws2"),
-			kind:   probeReadiness,
-			wantOK: true, wantSub: "2 workspace",
-		},
-		// -- readiness with specific root --
-		{
-			name:  "readiness/root-present",
-			reply: makeReply(1, "/repo"),
-			kind:  probeReadiness, root: "/repo",
-			wantOK: true, wantSub: "/repo",
-		},
-		{
-			name:  "readiness/root-missing",
-			reply: makeReply(1, "/other"),
-			kind:  probeReadiness, root: "/repo",
-			wantOK:  false,
-			wantSub: "/repo",
-		},
-		{
-			name:  "readiness/root-given-no-workspaces",
-			reply: makeReply(1),
-			kind:  probeReadiness, root: "/repo",
-			wantOK:  false,
-			wantSub: "/repo",
-		},
-		// -- path normalisation --
-		{
-			name:  "readiness/root-trailing-slash-normalised",
-			reply: makeReply(1, "/repo"),
-			kind:  probeReadiness, root: "/repo/",
-			wantOK: true, wantSub: "/repo",
-		},
-		// -- daemon mode is explicit; proc mode can't report readiness --
-		{
-			name:   "readiness/daemon-mode-with-workspace",
-			reply:  &proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{{Root: "/ws"}}},
-			kind:   probeReadiness,
-			wantOK: true, wantSub: "1 workspace",
-		},
-		{
-			name:    "readiness/proc-mode-rejected",
-			reply:   &proc.StatusReply{ParentPID: 1, Mode: "proc"},
-			kind:    probeReadiness,
-			wantOK:  false,
-			wantSub: "per-process mode",
-		},
-		{
-			name:   "liveness/proc-mode-still-alive",
-			reply:  &proc.StatusReply{ParentPID: 7, Mode: "proc"},
-			kind:   probeLiveness,
-			wantOK: true, wantSub: "7",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ok, reason := evaluateHealth(statusOutputFromReply(tc.reply), tc.err, tc.kind, tc.root)
-			if ok != tc.wantOK {
-				t.Errorf("ok = %v, want %v (reason: %q)", ok, tc.wantOK, reason)
-			}
-			if tc.wantSub != "" && !strings.Contains(reason, tc.wantSub) {
-				t.Errorf("reason %q does not contain %q", reason, tc.wantSub)
+	// assertHealth evaluates one health scenario and checks the ok flag plus a
+	// substring of the reason.
+	assertHealth := func(name string, reply *proc.StatusReply, err error, kind probeKind, root string, wantOK bool, wantSub string) {
+		t.Run(name, func(t *testing.T) {
+			ok, reason := evaluateHealth(statusOutputFromReply(reply), err, kind, root)
+			assert.Equal(t, wantOK, ok, "reason: %q", reason)
+			if wantSub != "" {
+				assert.Contains(t, reason, wantSub)
 			}
 		})
 	}
+
+	assertHealth("liveness/unreachable-err", nil, errors.New("dial failed"), probeLiveness, "", false, "unreachable")
+	assertHealth("liveness/nil-reply-no-err", nil, nil, probeLiveness, "", false, "unreachable")
+	assertHealth("readiness/unreachable", nil, errors.New("no socket"), probeReadiness, "", false, "unreachable")
+	assertHealth("liveness/daemon-up-no-workspaces", makeReply(42), nil, probeLiveness, "", true, "42")
+	assertHealth("liveness/daemon-up-with-workspace", makeReply(99, "/ws"), nil, probeLiveness, "", true, "99")
+	assertHealth("readiness/no-workspaces-no-root", makeReply(1), nil, probeReadiness, "", false, "no workspaces")
+	assertHealth("readiness/one-workspace-no-root", makeReply(1, "/ws"), nil, probeReadiness, "", true, "1 workspace")
+	assertHealth("readiness/two-workspaces-no-root", makeReply(1, "/ws", "/ws2"), nil, probeReadiness, "", true, "2 workspace")
+	assertHealth("readiness/root-present", makeReply(1, "/repo"), nil, probeReadiness, "/repo", true, "/repo")
+	assertHealth("readiness/root-missing", makeReply(1, "/other"), nil, probeReadiness, "/repo", false, "/repo")
+	assertHealth("readiness/root-given-no-workspaces", makeReply(1), nil, probeReadiness, "/repo", false, "/repo")
+	assertHealth("readiness/root-trailing-slash-normalised", makeReply(1, "/repo"), nil, probeReadiness, "/repo/", true, "/repo")
+	assertHealth("readiness/daemon-mode-with-workspace",
+		&proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{{Root: "/ws"}}},
+		nil, probeReadiness, "", true, "1 workspace")
+	assertHealth("readiness/proc-mode-rejected",
+		&proc.StatusReply{ParentPID: 1, Mode: "proc"}, nil, probeReadiness, "", false, "per-process mode")
+	assertHealth("liveness/proc-mode-still-alive",
+		&proc.StatusReply{ParentPID: 7, Mode: "proc"}, nil, probeLiveness, "", true, "7")
 }
 
 func TestHealthHTTPHandler(t *testing.T) {
-	tests := []struct {
-		name       string
-		kind       probeKind
-		workspaces []string // loaded workspaces in the fake reply
-		queryWS    string   // ?workspace= param
-		wantStatus int
-	}{
-		{"liveness/ok", probeLiveness, nil, "", http.StatusOK},
-		{"liveness/ok-with-workspaces", probeLiveness, []string{"/ws"}, "", http.StatusOK},
-		{"readiness/no-ws", probeReadiness, nil, "", http.StatusServiceUnavailable},
-		{"readiness/ws-loaded-no-filter", probeReadiness, []string{"/ws"}, "", http.StatusOK},
-		{"readiness/ws-match", probeReadiness, []string{"/ws"}, "/ws", http.StatusOK},
-		{"readiness/ws-no-match", probeReadiness, []string{"/ws"}, "/other", http.StatusServiceUnavailable},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			reply := makeReply(1, tc.workspaces...)
+	// assertHandler stands up a handler with a fake querier and checks the HTTP
+	// status code for a given probe kind and ?workspace= filter.
+	assertHandler := func(name string, kind probeKind, workspaces []string, queryWS string, wantStatus int) {
+		t.Run(name, func(t *testing.T) {
+			reply := makeReply(1, workspaces...)
 			// Build a handler with a fake querier instead of dialing a real socket.
-			h := healthHTTPHandler(tc.kind, func(context.Context) (*proc.StatusReply, error) {
+			h := healthHTTPHandler(kind, func(context.Context) (*proc.StatusReply, error) {
 				return reply, nil
 			})
 			url := "/"
-			if tc.queryWS != "" {
-				url = fmt.Sprintf("/?workspace=%s", tc.queryWS)
+			if queryWS != "" {
+				url = fmt.Sprintf("/?workspace=%s", queryWS)
 			}
 			req := httptest.NewRequest(http.MethodGet, url, nil)
 			rec := httptest.NewRecorder()
 			h(rec, req)
-			if rec.Code != tc.wantStatus {
-				t.Errorf("status = %d, want %d (body: %q)", rec.Code, tc.wantStatus, rec.Body.String())
-			}
+			assert.Equal(t, wantStatus, rec.Code, "body: %q", rec.Body.String())
 		})
 	}
+
+	assertHandler("liveness/ok", probeLiveness, nil, "", http.StatusOK)
+	assertHandler("liveness/ok-with-workspaces", probeLiveness, []string{"/ws"}, "", http.StatusOK)
+	assertHandler("readiness/no-ws", probeReadiness, nil, "", http.StatusServiceUnavailable)
+	assertHandler("readiness/ws-loaded-no-filter", probeReadiness, []string{"/ws"}, "", http.StatusOK)
+	assertHandler("readiness/ws-match", probeReadiness, []string{"/ws"}, "/ws", http.StatusOK)
+	assertHandler("readiness/ws-no-match", probeReadiness, []string{"/ws"}, "/other", http.StatusServiceUnavailable)
 }
 
 // unreachable querier for testing the error path
@@ -197,9 +103,7 @@ func TestHealthHTTPHandlerUnreachable(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", rec.Code)
-	}
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 // TestResolveDeclaredWorkspacesMergesAndDedupes verifies that cfg and env
@@ -217,21 +121,15 @@ func TestResolveDeclaredWorkspacesMergesAndDedupes(t *testing.T) {
 		[]string{a, b}, // cfg
 		b+string(filepath.ListSeparator)+c+string(filepath.ListSeparator)+missing, // env (b is duplicate)
 	)
+	require.Len(t, got, 3)
 	want := map[string]bool{a: true, b: true, c: true}
-	if len(got) != len(want) {
-		t.Fatalf("got %d workspaces, want %d: %v", len(got), len(want), got)
-	}
 	for _, root := range got {
-		if !want[root] {
-			t.Errorf("unexpected root in result: %q", root)
-		}
+		assert.True(t, want[root], "unexpected root in result: %q", root)
 	}
 }
 
 func TestResolveDeclaredWorkspacesEmpty(t *testing.T) {
-	if got := resolveDeclaredWorkspaces(nil, ""); got != nil {
-		t.Errorf("expected nil for empty inputs; got %v", got)
-	}
+	assert.Nil(t, resolveDeclaredWorkspaces(nil, ""), "expected nil for empty inputs")
 }
 
 // TestAcquireRejectsNonDeclared confirms that once setDeclared has been
@@ -251,13 +149,10 @@ func TestAcquireRejectsNonDeclared(t *testing.T) {
 	reg.setDeclared([]string{allowed})
 
 	_, err := reg.acquire(ctx, forbidden)
-	if err == nil {
-		t.Fatal("acquire of non-declared root should error")
-	}
+	require.Error(t, err, "acquire of non-declared root should error")
 	var de *types.DiagnosticError
-	if !errors.As(err, &de) || de.Code != types.SandboxPolicyMismatch {
-		t.Errorf("expected MGS2010 SandboxPolicyMismatch; got %v", err)
-	}
+	require.ErrorAs(t, err, &de)
+	assert.Equal(t, types.SandboxPolicyMismatch, de.Code, "expected MGS2010 SandboxPolicyMismatch")
 }
 
 // TestAcquireAdmitsDeclaredEvenWithoutMagusYaml verifies that a declared
@@ -269,9 +164,7 @@ func TestAcquireAdmitsDeclaredEvenWithoutMagusYaml(t *testing.T) {
 	allowed := t.TempDir()
 	// Write an empty magus.yaml so config loading succeeds and the test
 	// reaches the magus.Open step deterministically.
-	if err := os.WriteFile(filepath.Join(allowed, "magus.yaml"), []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(allowed, "magus.yaml"), []byte(""), 0o644))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	lim := cache.NewLimiter(1)
@@ -284,8 +177,9 @@ func TestAcquireAdmitsDeclaredEvenWithoutMagusYaml(t *testing.T) {
 	_, err := reg.acquire(ctx, allowed)
 	if err != nil {
 		var de *types.DiagnosticError
-		if errors.As(err, &de) && de.Code == types.SandboxPolicyMismatch {
-			t.Fatalf("acquire of declared root was wrongly rejected by the allowlist gate: %v", err)
+		if errors.As(err, &de) {
+			assert.NotEqual(t, types.SandboxPolicyMismatch, de.Code,
+				"acquire of declared root was wrongly rejected by the allowlist gate: %v", err)
 		}
 	}
 }
@@ -342,7 +236,7 @@ func TestWarmCompletesAndPopulatesStatus(t *testing.T) {
 	}
 	// Any workspace that loaded successfully must appear in status().
 	// The exact count depends on whether magus.Open succeeds for bare dirs.
-	_ = reg.status() // must not panic
+	assert.NotPanics(t, func() { _ = reg.status() })
 }
 
 // TestWarmInBackgroundTrackedByClose verifies that close() waits for an

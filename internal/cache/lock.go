@@ -47,6 +47,10 @@ func (k *keyedLock) acquire(ctx context.Context, key string) (func(), error) {
 		return nil, ctx.Err()
 	}
 
+	// The unlock closure operates on the captured e, not a fresh map lookup. That
+	// is what makes key resurrection safe: if this holder is the last waiter, the
+	// entry is deleted, and a new acquirer may insert a different entry under the
+	// same key — but we still release this e.sem, never the resurrected one.
 	return func() {
 		<-e.sem
 		k.mu.Lock()

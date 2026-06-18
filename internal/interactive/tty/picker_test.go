@@ -1,8 +1,9 @@
 package tty
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFilter_AND(t *testing.T) {
@@ -12,27 +13,23 @@ func TestFilter_AND(t *testing.T) {
 		"services/api",
 		"tools/scripts",
 	}
-	cases := []struct {
-		name   string
-		filter string
-		want   []int
-	}{
-		{"empty matches all", "", []int{0, 1, 2, 3}},
-		{"single token substring", "dash", []int{0, 1}},
-		{"AND narrows", "dash mobile", []int{1}},
-		{"AND no match", "dash api", nil},
-		{"case insensitive", "DASH WEB", []int{0}},
-		{"order independent", "mobile dash", []int{1}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := Filter(items, tc.filter)
-			if len(got) == 0 && len(tc.want) == 0 {
-				return
-			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("Filter(%q) = %v, want %v", tc.filter, got, tc.want)
-			}
-		})
-	}
+
+	t.Run("empty matches all", func(t *testing.T) {
+		assert.Equal(t, []int{0, 1, 2, 3}, Filter(items, ""))
+	})
+	t.Run("single token substring", func(t *testing.T) {
+		assert.Equal(t, []int{0, 1}, Filter(items, "dash"))
+	})
+	t.Run("AND narrows", func(t *testing.T) {
+		assert.Equal(t, []int{1}, Filter(items, "dash mobile"))
+	})
+	t.Run("AND no match", func(t *testing.T) {
+		assert.Empty(t, Filter(items, "dash api"))
+	})
+	t.Run("case insensitive", func(t *testing.T) {
+		assert.Equal(t, []int{0}, Filter(items, "DASH WEB"))
+	})
+	t.Run("order independent", func(t *testing.T) {
+		assert.Equal(t, []int{1}, Filter(items, "mobile dash"))
+	})
 }

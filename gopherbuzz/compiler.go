@@ -87,8 +87,8 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*Chunk, error) {
 	// Even in SharedGlobals mode, block-local variables (depth > 0) use slots,
 	// so nextSlot may be > 0 and the window must be pre-allocated.
 	c.chunk.LocalCount = int(c.nextSlot)
-	FoldConsts(c.chunk)
-	FusePeephole(c.chunk)
+	vmpackage.FoldConsts(c.chunk)
+	vmpackage.FusePeephole(c.chunk)
 	return c.chunk, nil
 }
 
@@ -614,10 +614,10 @@ func (c *compiler) compileZdefDecl(call *ast.CallExpr, names []string) error {
 	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(tmp), 0) // bind handle, pops it
 	c.chunk.Private = append(c.chunk.Private, tmp)
 	for _, name := range names {
-		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(tmp), 0)    // push handle
-		c.chunk.Emit(vmpackage.OpLoadConst, c.nameConst(name), 0)  // push key
-		c.chunk.Emit(vmpackage.OpGetIndex, 0, 0)                   // → handle[name]
-		c.chunk.Emit(vmpackage.OpDefName, c.nameConst(name), 0)    // bind global
+		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(tmp), 0)   // push handle
+		c.chunk.Emit(vmpackage.OpLoadConst, c.nameConst(name), 0) // push key
+		c.chunk.Emit(vmpackage.OpGetIndex, 0, 0)                  // → handle[name]
+		c.chunk.Emit(vmpackage.OpDefName, c.nameConst(name), 0)   // bind global
 		c.chunk.Exports = append(c.chunk.Exports, name)
 	}
 	return nil
@@ -1186,9 +1186,9 @@ func (c *compiler) compileFunChunkThis(name, doc string, params []string, stmts 
 	}
 	fc.chunk.Emit(vmpackage.OpReturnNull, 0, 0)
 	fc.chunk.LocalCount = int(fc.nextSlot)
-	fc.chunk.UpvalInfos = make([]UpvalInfo, len(fc.upvals))
+	fc.chunk.UpvalInfos = make([]vmpackage.UpvalInfo, len(fc.upvals))
 	for i, u := range fc.upvals {
-		fc.chunk.UpvalInfos[i] = UpvalInfo{IsLocal: u.isLocal, Index: u.index}
+		fc.chunk.UpvalInfos[i] = vmpackage.UpvalInfo{IsLocal: u.isLocal, Index: u.index}
 	}
 	return c.chunk.AddFun(fc.chunk), nil
 }
@@ -1225,7 +1225,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	c.typeDecls[v.Name] = v
 	nameIdx := c.nameConst(v.Name)
 	// Store the ObjectDecl as a const so the VM can access field info.
-	declIdx := c.chunk.AddConst(ObjDeclValue(v))
+	declIdx := c.chunk.AddConst(vmpackage.ObjDeclValue(v))
 	c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
 	c.chunk.Emit(vmpackage.OpDefName, nameIdx, 0)
 	if c.depth == 0 {

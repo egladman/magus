@@ -1,0 +1,4 @@
+// @error: must have a type annotation
+// Strict parity with upstream Buzz: every parameter must be typed.
+fun f(n) > int { return n; }
+final __r = f(1);

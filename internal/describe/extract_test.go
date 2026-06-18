@@ -1,10 +1,11 @@
 package describe
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func nodeByName(nodes []types.TargetGraphNode, name string) (types.TargetGraphNode, bool) {
@@ -39,21 +40,15 @@ export fun a_gen(args: [str]) > void { go["x"](); }
 	g := Extract(src)
 
 	foo, ok := nodeByName(g, "foo-bar")
-	if !ok {
-		t.Fatalf("missing foo-bar; got %v", g)
-	}
-	if foo.Doc != "foo does a thing." {
-		t.Errorf("foo-bar doc = %q, want %q", foo.Doc, "foo does a thing.")
-	}
-	if !reflect.DeepEqual(foo.Dependencies, []string{"baz"}) {
-		t.Errorf("foo-bar deps = %v, want [baz] (comment mention ignored)", foo.Dependencies)
-	}
-	if baz, _ := nodeByName(g, "baz"); baz.Doc != "" {
-		t.Errorf("baz doc = %q, want empty (blank line breaks contiguity)", baz.Doc)
-	}
-	if genAll, _ := nodeByName(g, "gen-all"); !reflect.DeepEqual(genAll.Dependencies, []string{"a-gen"}) {
-		t.Errorf("gen-all deps = %v, want [a-gen] (*-gen glob)", genAll.Dependencies)
-	}
+	require.True(t, ok, "missing foo-bar; got %v", g)
+	assert.Equal(t, "foo does a thing.", foo.Doc)
+	assert.Equal(t, []string{"baz"}, foo.Dependencies, "comment mention ignored")
+
+	baz, _ := nodeByName(g, "baz")
+	assert.Empty(t, baz.Doc, "blank line breaks contiguity")
+
+	genAll, _ := nodeByName(g, "gen-all")
+	assert.Equal(t, []string{"a-gen"}, genAll.Dependencies, "*-gen glob")
 }
 
 // TestCharms checks that a target's charm reads are extracted: the magus.has_charm
@@ -71,16 +66,11 @@ export fun fmt(args: [str]) > void {
 export fun plain(args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
-	if !reflect.DeepEqual(build.Charms, []string{"container"}) {
-		t.Errorf("build charms = %v, want [container]", build.Charms)
-	}
+	assert.Equal(t, []string{"container"}, build.Charms)
 	fmtNode, _ := nodeByName(g, "fmt")
-	if !reflect.DeepEqual(fmtNode.Charms, []string{"rw"}) {
-		t.Errorf("fmt charms = %v, want [rw] (has_charm(\"rw\"), comment mention ignored)", fmtNode.Charms)
-	}
-	if plain, _ := nodeByName(g, "plain"); len(plain.Charms) != 0 {
-		t.Errorf("plain charms = %v, want none", plain.Charms)
-	}
+	assert.Equal(t, []string{"rw"}, fmtNode.Charms, `has_charm("rw"), comment mention ignored`)
+	plain, _ := nodeByName(g, "plain")
+	assert.Empty(t, plain.Charms)
 }
 
 // TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
@@ -102,13 +92,48 @@ export fun scan(args: [str]) > void { os.exec("trivy", []); other["x"](); }
 		{Spell: "go", Ops: []string{"golangci-lint", "go-vet"}}, // grouped, deduped, call order
 		{Spell: "md", Ops: []string{"markdownlint"}},
 	}
-	if !reflect.DeepEqual(lint.Spells, want) {
-		t.Errorf("lint spells = %+v, want %+v", lint.Spells, want)
-	}
+	assert.Equal(t, want, lint.Spells)
 	// scan only calls a host module and an unknown identifier: no spell ops.
-	if scan, _ := nodeByName(g, "scan"); len(scan.Spells) != 0 {
-		t.Errorf("scan spells = %+v, want none (os.exec is host, other[] is not a spell)", scan.Spells)
+	scan, _ := nodeByName(g, "scan")
+	assert.Empty(t, scan.Spells, "os.exec is host, other[] is not a spell")
+}
+
+// TestSpellOpsThroughHelper pins helper-following: a target that factors its spell
+// ops, charms, and dependency edges into a same-file helper (image_build →
+// build_variant → docker[...]/cosign[...]) keeps them attributed instead of
+// silently dropping them. The helper is a plain (non-exported) fun, so it is not a
+// node of its own; its work belongs to every target that calls it. A recursive
+// helper must not loop (cycle guard), and a helper's own spell ops only attribute
+// to callers, never leak between sibling targets.
+func TestSpellOpsThroughHelper(t *testing.T) {
+	g := Extract(`import "magus/spell/docker";
+import "magus/spell/cosign";
+
+fun build_variant(tag: str) > void {
+    if (magus.has_charm("sign")) { cosign["cosign-sign"](); }
+    docker["docker-buildx"]();
+    self_loop();
+}
+fun self_loop() > void { self_loop(); }
+
+export fun image_build(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    build_variant("latest");
+}
+export fun preflight(args: [str]) > void { go["x"](); }
+`)
+	img, ok := nodeByName(g, "image-build")
+	require.True(t, ok, "missing image-build; got %v", g)
+	wantSpells := []types.TargetSpellUse{
+		{Spell: "cosign", Ops: []string{"cosign-sign"}},
+		{Spell: "docker", Ops: []string{"docker-buildx"}},
 	}
+	assert.Equal(t, wantSpells, img.Spells, "ops through helper")
+	assert.Equal(t, []string{"sign"}, img.Charms, "charm through helper")
+	assert.Equal(t, []string{"preflight"}, img.Dependencies)
+	// The helper's ops belong only to callers; a sibling that never calls it stays clean.
+	pf, _ := nodeByName(g, "preflight")
+	assert.Empty(t, pf.Spells, "helper ops must not leak between siblings")
 }
 
 // TestSpellOpsIgnoresStringLiterals pins that a call-form token appearing as free
@@ -125,9 +150,7 @@ export fun help(args: [str]) > void {
 	// The only real call is go["go-build"](); the go.fmt()/go["go-test"] mentions
 	// live inside the echo string and must be ignored.
 	want := []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-build"}}}
-	if !reflect.DeepEqual(help.Spells, want) {
-		t.Errorf("help spells = %+v, want %+v (string-literal mentions must not count)", help.Spells, want)
-	}
+	assert.Equal(t, want, help.Spells, "string-literal mentions must not count")
 }
 
 // TestNameNormalization pins the fix for the node-vs-edge name mismatch: node
@@ -138,13 +161,10 @@ func TestNameNormalization(t *testing.T) {
 	g := Extract(`export fun goBuild(args: [str]) > void { go["x"](); }
 export fun ci(args: [str]) > void { magus.needs(magus.target.literal("goBuild")); }
 `)
-	if _, ok := nodeByName(g, "go-build"); !ok {
-		t.Fatalf("camelCase goBuild should normalize to go-build; got %v", g)
-	}
+	_, ok := nodeByName(g, "go-build")
+	require.True(t, ok, "camelCase goBuild should normalize to go-build; got %v", g)
 	ci, _ := nodeByName(g, "ci")
-	if !reflect.DeepEqual(ci.Dependencies, []string{"go-build"}) {
-		t.Errorf("ci deps = %v, want [go-build] (dep name normalized to match node)", ci.Dependencies)
-	}
+	assert.Equal(t, []string{"go-build"}, ci.Dependencies, "dep name normalized to match node")
 }
 
 // TestBraceInString guards collectBody: a `}` inside a string literal must not
@@ -157,9 +177,7 @@ func TestBraceInString(t *testing.T) {
 export fun fmt(args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
-	if !reflect.DeepEqual(build.Dependencies, []string{"fmt"}) {
-		t.Errorf("build deps = %v, want [fmt] (brace in string must not truncate body)", build.Dependencies)
-	}
+	assert.Equal(t, []string{"fmt"}, build.Dependencies, "brace in string must not truncate body")
 }
 
 // TestTrailingComment guards codeBody: a depends_on in a trailing inline comment
@@ -171,9 +189,7 @@ func TestTrailingComment(t *testing.T) {
 export fun real(args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
-	if !reflect.DeepEqual(build.Dependencies, []string{"real"}) {
-		t.Errorf("build deps = %v, want [real] (trailing comment ignored)", build.Dependencies)
-	}
+	assert.Equal(t, []string{"real"}, build.Dependencies, "trailing comment ignored")
 }
 
 // TestNeedsGlobMultiPattern guards multi-handle needs: each magus.target.glob in a
@@ -187,9 +203,7 @@ export fun check_lint(args: [str]) > void { go["x"](); }
 `)
 	all, _ := nodeByName(g, "all")
 	want := []string{"docs-gen", "check-lint"}
-	if !reflect.DeepEqual(all.Dependencies, want) {
-		t.Errorf("all deps = %v, want %v (both glob patterns honored)", all.Dependencies, want)
-	}
+	assert.Equal(t, want, all.Dependencies, "both glob patterns honored")
 }
 
 // TestNeedsHandles guards the magus.needs handle edges: named is an exact dep,
@@ -207,13 +221,9 @@ export fun test(args: [str]) > void {
 }
 `)
 	test, ok := nodeByName(g, "test")
-	if !ok {
-		t.Fatalf("missing test; got %v", g)
-	}
+	require.True(t, ok, "missing test; got %v", g)
 	want := []string{"build", "a-gen", "b-gen"}
-	if !reflect.DeepEqual(test.Dependencies, want) {
-		t.Errorf("test deps = %v, want %v (named exact + glob + regex; comment ignored)", test.Dependencies, want)
-	}
+	assert.Equal(t, want, test.Dependencies, "named exact + glob + regex; comment ignored")
 }
 
 func TestExternalCrossDependencies(t *testing.T) {
@@ -226,18 +236,12 @@ export fun build_playground(args: [str]) > void {
 export fun preflight(args: [str]) > void { go["x"](); }
 `)
 	bp, ok := nodeByName(g, "build-playground")
-	if !ok {
-		t.Fatalf("missing build-playground; got %v", g)
-	}
+	require.True(t, ok, "missing build-playground; got %v", g)
 	// The cross-project edge is a CrossDependency (project + target), not a same-project
 	// dependency; the project path is left raw for the caller to resolve.
 	want := []types.CrossTargetRef{{Project: "../gopherbuzz", Target: "build"}}
-	if !reflect.DeepEqual(bp.CrossDependencies, want) {
-		t.Errorf("build-playground CrossDependencies = %v, want %v", bp.CrossDependencies, want)
-	}
-	if !reflect.DeepEqual(bp.Dependencies, []string{"preflight"}) {
-		t.Errorf("build-playground Dependencies = %v, want [preflight] (external is not a same-project dep)", bp.Dependencies)
-	}
+	assert.Equal(t, want, bp.CrossDependencies)
+	assert.Equal(t, []string{"preflight"}, bp.Dependencies, "external is not a same-project dep")
 }
 
 // TestDependencyTokensInStringLiterals ensures dependency-edge tokens that appear
@@ -252,15 +256,9 @@ export fun build(args: [str]) > void {
 export fun setup(args: [str]) > void { go["x"](); }
 `)
 	b, ok := nodeByName(g, "build")
-	if !ok {
-		t.Fatalf("missing build; got %v", g)
-	}
-	if len(b.Dependencies) != 0 {
-		t.Errorf("build.Dependencies = %v, want none (the literal handle is inside a string literal)", b.Dependencies)
-	}
-	if len(b.CrossDependencies) != 0 {
-		t.Errorf("build.CrossDependencies = %v, want none (the cross-project ref is inside a string literal)", b.CrossDependencies)
-	}
+	require.True(t, ok, "missing build; got %v", g)
+	assert.Empty(t, b.Dependencies, "the literal handle is inside a string literal")
+	assert.Empty(t, b.CrossDependencies, "the cross-project ref is inside a string literal")
 }
 
 func TestCycle(t *testing.T) {
@@ -268,21 +266,15 @@ func TestCycle(t *testing.T) {
 export fun b(args: [str]) > void { magus.needs(magus.target.literal("c")); }
 export fun c(args: [str]) > void { go["x"](); }
 `)
-	if c := Cycle(acyclic); c != nil {
-		t.Errorf("acyclic graph reported cycle %v", c)
-	}
+	assert.Nil(t, Cycle(acyclic), "acyclic graph reported cycle")
 
 	cyclic := Extract(`export fun a(args: [str]) > void { magus.needs(magus.target.literal("b")); }
 export fun b(args: [str]) > void { magus.needs(magus.target.literal("c")); }
 export fun c(args: [str]) > void { magus.needs(magus.target.literal("a")); }
 `)
 	c := Cycle(cyclic)
-	if c == nil {
-		t.Fatal("cyclic graph reported no cycle")
-	}
-	if c[0] != c[len(c)-1] {
-		t.Errorf("cycle %v should start and end at the same node", c)
-	}
+	require.NotNil(t, c, "cyclic graph reported no cycle")
+	assert.Equal(t, c[0], c[len(c)-1], "cycle should start and end at the same node")
 }
 
 // TestCycleAcrossNormalization is the regression for the silent-pass bug: a real
@@ -292,7 +284,5 @@ func TestCycleAcrossNormalization(t *testing.T) {
 	g := Extract(`export fun aB(args: [str]) > void { magus.needs(magus.target.literal("bC")); }
 export fun bC(args: [str]) > void { magus.needs(magus.target.literal("aB")); }
 `)
-	if Cycle(g) == nil {
-		t.Error("mixed-case cycle aB→bC→aB not detected")
-	}
+	assert.NotNil(t, Cycle(g), "mixed-case cycle aB→bC→aB not detected")
 }

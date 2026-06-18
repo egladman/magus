@@ -132,8 +132,6 @@ func resolveTailTarget(ws types.WorkspaceRepository, args []string) (projectPath
 	return expanded[0].Path, t.Name, nil
 }
 
-// lookupLog calls the appropriate cache method depending on whether a target filter is set.
-
 // printTail reads the entire file and writes the last n lines to stdout.
 // n == 0 writes the whole file.
 func printTail(f *os.File, n int) error {

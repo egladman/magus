@@ -85,8 +85,6 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "See also: `magus config view` to inspect the resolved runtime configuration.")
 }
 
-// ── graph ─────────────────────────────────────────────────────────────────────
-
 func describeGraph(ctx context.Context, root string, args []string) error {
 	pos, err := cmdParse("describe graph", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
@@ -190,8 +188,6 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// ── spells ────────────────────────────────────────────────────────────────────
-
 // filterByName returns a single-element slice holding the item whose name equals
 // name, or nil if none match. Used to turn a list view into a one-entity detail.
 func filterByName[T any](items []T, name string, nameOf func(T) string) []T {
@@ -283,8 +279,8 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 				fmt.Printf("      %s: %s\n", tgt, firstLine(doc))
 			}
 		}
-		if t.ForeignProcess {
-			fmt.Printf("    foreign-process: true\n")
+		if t.Opaque {
+			fmt.Printf("    opaque: true\n")
 		}
 	}
 	return nil
@@ -298,8 +294,6 @@ func firstLine(s string) string {
 	}
 	return s
 }
-
-// ── targets ───────────────────────────────────────────────────────────────────
 
 // describeTargetNoun routes `describe target[s]`: no name lists every target;
 // `target <path:target>` evaluates one into its full dispatch plan.
@@ -371,8 +365,6 @@ func describeTargets(ctx context.Context, root string) error {
 	}
 	return nil
 }
-
-// ── projects ──────────────────────────────────────────────────────────────────
 
 func describeProjects(ctx context.Context, root string, args []string) error {
 	var evaluated bool
@@ -453,14 +445,17 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			}
 			for targetName, pol := range p.TargetPolicies {
 				fmt.Printf("  policy: %s", targetName)
-				if pol.CheckClean {
-					fmt.Printf("  check_clean")
+				if pol.FailOnDrift {
+					fmt.Printf("  fail_on_drift")
 				}
-				if pol.TrackFlake {
-					fmt.Printf("  track_flake")
+				if pol.RetryOnFlake {
+					fmt.Printf("  retry_on_flake")
 				}
-				if pol.Isolated {
-					fmt.Printf("  isolated")
+				if pol.SkipCache {
+					fmt.Printf("  skip_cache")
+				}
+				if pol.Exclusive {
+					fmt.Printf("  exclusive")
 				}
 				fmt.Println()
 			}
@@ -514,8 +509,6 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 	}
 	return nil
 }
-
-// ── target (evaluated) ────────────────────────────────────────────────────────
 
 // describeTarget renders one evaluated target. pos is describeTargetNoun's parsed
 // positionals (pos[0] = path:target ref, optional pos[1] = project path); flags
@@ -598,14 +591,17 @@ func describeTarget(ctx context.Context, root string, pos []string) error {
 		}
 		if e.Policy != nil {
 			fmt.Printf("  policy:")
-			if e.Policy.CheckClean {
-				fmt.Printf("  check_clean")
+			if e.Policy.FailOnDrift {
+				fmt.Printf("  fail_on_drift")
 			}
-			if e.Policy.TrackFlake {
-				fmt.Printf("  track_flake")
+			if e.Policy.RetryOnFlake {
+				fmt.Printf("  retry_on_flake")
 			}
-			if e.Policy.Isolated {
-				fmt.Printf("  isolated")
+			if e.Policy.SkipCache {
+				fmt.Printf("  skip_cache")
+			}
+			if e.Policy.Exclusive {
+				fmt.Printf("  exclusive")
 			}
 			fmt.Println()
 		}
@@ -613,8 +609,6 @@ func describeTarget(ctx context.Context, root string, pos []string) error {
 	}
 	return nil
 }
-
-// ── workspaces ────────────────────────────────────────────────────────────────
 
 func describeWorkspaces(ctx context.Context, root string, args []string) error {
 	_, err := cmdParse("describe workspaces", args, func(fs *flag.FlagSet) {
@@ -706,8 +700,6 @@ func describeWorkspacesOutput(ctx context.Context, root string) (types.Workspace
 		Workspaces: entries,
 	}, nil
 }
-
-// ── mcp-tools ─────────────────────────────────────────────────────────────────
 
 func describeMCPTools(args []string) error {
 	pos, err := cmdParse("describe mcp-tools", args, func(fs *flag.FlagSet) {

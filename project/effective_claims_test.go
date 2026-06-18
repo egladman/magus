@@ -1,8 +1,9 @@
 package project
 
 import (
-	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/types"
 )
@@ -29,16 +30,8 @@ func TestEffectiveClaimsLastWins(t *testing.T) {
 		},
 	)
 
-	jsonClaims := EffectiveClaims(p, 0)
-	if len(jsonClaims) != 0 {
-		t.Errorf("idx=0 (json) effective claims = %v; want empty (ts outranks by order)", jsonClaims)
-	}
-
-	tsClaims := EffectiveClaims(p, 1)
-	want := []string{"**/*.json", "**/*.ts"}
-	if !slices.Equal(tsClaims, want) {
-		t.Errorf("idx=1 (ts) effective claims = %v; want %v", tsClaims, want)
-	}
+	assert.Empty(t, EffectiveClaims(p, 0), "idx=0 (json) effective claims should be empty (ts outranks by order)")
+	assert.Equal(t, []string{"**/*.json", "**/*.ts"}, EffectiveClaims(p, 1))
 }
 
 // TestEffectiveClaimsWeightWins covers the case where an earlier-registered
@@ -55,16 +48,8 @@ func TestEffectiveClaimsWeightWins(t *testing.T) {
 		},
 	)
 
-	tsClaims := EffectiveClaims(p, 0)
-	wantTS := []string{"**/*.json", "**/*.ts"}
-	if !slices.Equal(tsClaims, wantTS) {
-		t.Errorf("ts effective claims = %v; want %v", tsClaims, wantTS)
-	}
-
-	jsonClaims := EffectiveClaims(p, 1)
-	if len(jsonClaims) != 0 {
-		t.Errorf("json effective claims = %v; want empty (ts outranks by weight)", jsonClaims)
-	}
+	assert.Equal(t, []string{"**/*.json", "**/*.ts"}, EffectiveClaims(p, 0))
+	assert.Empty(t, EffectiveClaims(p, 1), "json effective claims should be empty (ts outranks by weight)")
 }
 
 // TestEffectiveClaimsRemovedClaimsStillApplied verifies WithoutClaim still
@@ -79,9 +64,5 @@ func TestEffectiveClaimsRemovedClaimsStillApplied(t *testing.T) {
 		},
 	)
 
-	got := EffectiveClaims(p, 0)
-	want := []string{"**/*.ts"}
-	if !slices.Equal(got, want) {
-		t.Errorf("effective claims = %v; want %v", got, want)
-	}
+	assert.Equal(t, []string{"**/*.ts"}, EffectiveClaims(p, 0))
 }

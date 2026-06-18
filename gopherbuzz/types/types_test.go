@@ -2,97 +2,56 @@ package types
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseAnnot_Primitives(t *testing.T) {
-	cases := []struct {
-		input    string
-		wantName string
-	}{
-		{"int", "int"},
-		{"double", "double"},
-		{"str", "str"},
-		{"bool", "bool"},
-		{"null", "null"},
-		{"void", "void"},
-		{"any", "any"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
-			got := ParseAnnot(tc.input)
-			if got.TypeName() != tc.wantName {
-				t.Errorf("ParseAnnot(%q).TypeName() = %q, want %q", tc.input, got.TypeName(), tc.wantName)
-			}
+	for _, name := range []string{"int", "double", "str", "bool", "null", "void", "any"} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, name, ParseAnnot(name).TypeName())
 		})
 	}
 }
 
 func TestParseAnnot_EmptyReturnsAny(t *testing.T) {
-	got := ParseAnnot("")
-	if got.TypeName() != "any" {
-		t.Errorf("ParseAnnot(\"\").TypeName() = %q, want %q", got.TypeName(), "any")
-	}
+	assert.Equal(t, "any", ParseAnnot("").TypeName())
 }
 
 func TestParseAnnot_ListType(t *testing.T) {
-	got := ParseAnnot("[str]")
-	if got.TypeName() != "[str]" {
-		t.Errorf("ParseAnnot(\"[str]\").TypeName() = %q, want %q", got.TypeName(), "[str]")
-	}
+	assert.Equal(t, "[str]", ParseAnnot("[str]").TypeName())
 }
 
 func TestParseAnnot_MapType(t *testing.T) {
-	got := ParseAnnot("{str:int}")
-	if got.TypeName() != "{str:int}" {
-		t.Errorf("ParseAnnot(\"{str:int}\").TypeName() = %q, want %q", got.TypeName(), "{str:int}")
-	}
+	assert.Equal(t, "{str:int}", ParseAnnot("{str:int}").TypeName())
 }
 
 func TestParseAnnot_FuncType(t *testing.T) {
-	got := ParseAnnot("fun(int)str")
-	if got.TypeName() != "fun(int)str" {
-		t.Errorf("ParseAnnot(\"fun(int)str\").TypeName() = %q, want %q", got.TypeName(), "fun(int)str")
-	}
+	assert.Equal(t, "fun(int)str", ParseAnnot("fun(int)str").TypeName())
 }
 
 func TestParseAnnot_NamedType(t *testing.T) {
-	got := ParseAnnot("MyRecord")
-	if got.TypeName() != "MyRecord" {
-		t.Errorf("ParseAnnot(\"MyRecord\").TypeName() = %q, want %q", got.TypeName(), "MyRecord")
-	}
+	assert.Equal(t, "MyRecord", ParseAnnot("MyRecord").TypeName())
 }
 
 func TestCompat_AnyIsCompatWithAnything(t *testing.T) {
-	if !Compat(Any, Int) {
-		t.Error("Compat(Any, Int) = false, want true")
-	}
-	if !Compat(Str, Any) {
-		t.Error("Compat(Str, Any) = false, want true")
-	}
+	assert.True(t, Compat(Any, Int), "Compat(Any, Int)")
+	assert.True(t, Compat(Str, Any), "Compat(Str, Any)")
 }
 
 func TestCompat_NullIsCompatWithAnything(t *testing.T) {
-	if !Compat(Null, Str) {
-		t.Error("Compat(Null, Str) = false, want true")
-	}
+	assert.True(t, Compat(Null, Str), "Compat(Null, Str)")
 }
 
 func TestCompat_SameTypeName(t *testing.T) {
-	if !Compat(Int, Int) {
-		t.Error("Compat(Int, Int) = false, want true")
-	}
-	if !Compat(Str, Str) {
-		t.Error("Compat(Str, Str) = false, want true")
-	}
+	assert.True(t, Compat(Int, Int), "Compat(Int, Int)")
+	assert.True(t, Compat(Str, Str), "Compat(Str, Str)")
 }
 
 func TestCompat_DifferentTypes(t *testing.T) {
-	if Compat(Int, Str) {
-		t.Error("Compat(Int, Str) = true, want false")
-	}
-	if Compat(Bool, Double) {
-		t.Error("Compat(Bool, Float) = true, want false")
-	}
+	assert.False(t, Compat(Int, Str), "Compat(Int, Str)")
+	assert.False(t, Compat(Bool, Double), "Compat(Bool, Double)")
 }
 
 // TestCompat_NilFuncReturn guards the structural recursion against nil leaves. A
@@ -100,12 +59,8 @@ func TestCompat_DifferentTypes(t *testing.T) {
 // guard, comparing two such types nested in a map panicked with a nil deref.
 func TestCompat_NilFuncReturn(t *testing.T) {
 	funAny := func() *FuncType { return &FuncType{Params: []Type{Any}} }
-	if funAny().Ret != nil {
-		t.Fatal("setup: fun(any) should have nil Ret")
-	}
-	if !Compat(funAny(), funAny()) {
-		t.Error("Compat(fun(any), fun(any)) = false, want true")
-	}
+	require.Nil(t, funAny().Ret, "setup: fun(any) should have nil Ret")
+	assert.True(t, Compat(funAny(), funAny()), "Compat(fun(any), fun(any))")
 	// The original crash shape: {str: fun(fun(any)) bool} compared to itself.
 	mapOfFunc := func() Type {
 		return &MapType{Key: Str, Val: &FuncType{
@@ -113,9 +68,7 @@ func TestCompat_NilFuncReturn(t *testing.T) {
 			Ret:    Bool,
 		}}
 	}
-	if !Compat(mapOfFunc(), mapOfFunc()) {
-		t.Error("Compat over nested nil-return func types = false, want true")
-	}
+	assert.True(t, Compat(mapOfFunc(), mapOfFunc()), "Compat over nested nil-return func types")
 }
 
 func TestCompat_ContainerElementAny(t *testing.T) {
@@ -124,22 +77,14 @@ func TestCompat_ContainerElementAny(t *testing.T) {
 	listStr := &ListType{Elem: Str}
 
 	// The top-level Any-escape rule applies element-wise: [any] <-> [double].
-	if !Compat(listAny, listDouble) {
-		t.Error("Compat([any], [double]) = false, want true")
-	}
-	if !Compat(listDouble, listAny) {
-		t.Error("Compat([double], [any]) = false, want true")
-	}
+	assert.True(t, Compat(listAny, listDouble), "Compat([any], [double])")
+	assert.True(t, Compat(listDouble, listAny), "Compat([double], [any])")
 	// Concrete element mismatches are still rejected.
-	if Compat(listStr, listDouble) {
-		t.Error("Compat([str], [double]) = true, want false")
-	}
+	assert.False(t, Compat(listStr, listDouble), "Compat([str], [double])")
 
 	mapAny := &MapType{Key: Str, Val: Any}
 	mapDouble := &MapType{Key: Str, Val: Double}
-	if !Compat(mapAny, mapDouble) {
-		t.Error("Compat({str:any}, {str:double}) = false, want true")
-	}
+	assert.True(t, Compat(mapAny, mapDouble), "Compat({str:any}, {str:double})")
 }
 
 func TestCompat_FuncTypes(t *testing.T) {
@@ -147,10 +92,6 @@ func TestCompat_FuncTypes(t *testing.T) {
 	f2 := &FuncType{Params: []Type{Int}, Ret: Str}
 	f3 := &FuncType{Params: []Type{Str}, Ret: Int}
 
-	if !Compat(f1, f2) {
-		t.Error("Compat(identical FuncTypes) = false, want true")
-	}
-	if Compat(f1, f3) {
-		t.Error("Compat(different FuncTypes) = true, want false")
-	}
+	assert.True(t, Compat(f1, f2), "Compat(identical FuncTypes)")
+	assert.False(t, Compat(f1, f3), "Compat(different FuncTypes)")
 }

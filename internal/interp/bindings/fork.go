@@ -35,7 +35,7 @@ type forkOpts struct {
 // charms (see resolveCharmArgs). Empty Cmd is a no-op. opts.cwd defaults to "."
 // (the process cwd). Write-mode rides along as the "rw" charm on ctx, so no
 // separate write flag is needed.
-func runForkTarget(ctx context.Context, tgt ispell.Target, opts forkOpts) (run.ExecResult, error) {
+func runForkTarget(ctx context.Context, tgt ispell.Op, opts forkOpts) (run.ExecResult, error) {
 	if tgt.Cmd == "" {
 		return run.ExecResult{}, nil
 	}

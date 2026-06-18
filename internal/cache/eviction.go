@@ -57,7 +57,6 @@ func (c *Cache) evictLRU(ctx context.Context, limit int64) {
 		}
 	}
 
-	casDir := filepath.Join(c.dir, "cas")
 	for _, e := range entries {
 		if total <= limit {
 			break
@@ -73,15 +72,16 @@ func (c *Cache) evictLRU(ctx context.Context, limit int64) {
 			total -= info.Size()
 		}
 		for _, blob := range e.blobs {
-			if len(blob) < 2 {
+			if blob == "" {
 				continue
 			}
 			blobRefs[blob]--
 			if blobRefs[blob] > 0 {
 				continue
 			}
-			bp := filepath.Join(casDir, blob[:2], blob)
-			if info, err := os.Stat(bp); err == nil {
+			// Use the authoritative blobPath so the shard layout (incl. the <2-char
+			// fallback) can't diverge from the writer in manifest.go.
+			if info, err := os.Stat(c.blobPath(blob)); err == nil {
 				total -= info.Size()
 			}
 		}

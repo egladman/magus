@@ -1,11 +1,11 @@
 package flake
 
 import (
-	"math"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/stretchr/testify/assert"
 )
 
 var testCfg = Config{
@@ -43,9 +43,8 @@ func TestShouldRetry_Bootstrap(t *testing.T) {
 	t.Parallel()
 	rt := buildRuntime([]string{"pass", "pass"}, true) // only 2 outcomes < 5
 	d := rt.Decide(testProject, testTarget, true)
-	if !d.Retry || d.Reason != ReasonBootstrap {
-		t.Errorf("bootstrap: Retry=%v Reason=%q, want Retry=true Reason=bootstrap", d.Retry, d.Reason)
-	}
+	assert.True(t, d.Retry)
+	assert.Equal(t, ReasonBootstrap, d.Reason)
 }
 
 // TestShouldRetry_UnaffectedFailure verifies that an unaffected project
@@ -55,9 +54,8 @@ func TestShouldRetry_UnaffectedFailure(t *testing.T) {
 	// 10 clean passes → score = 0 (no flakes), well past bootstrap.
 	rt := buildRuntime([]string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass"}, true)
 	d := rt.Decide(testProject, testTarget, false /*not affected*/)
-	if !d.Retry || d.Reason != ReasonUnaffectedFailure {
-		t.Errorf("unaffected: Retry=%v Reason=%q, want Retry=true Reason=unaffected_failure", d.Retry, d.Reason)
-	}
+	assert.True(t, d.Retry)
+	assert.Equal(t, ReasonUnaffectedFailure, d.Reason)
 }
 
 // TestShouldRetry_PredictedFlake verifies that a target above the flake
@@ -67,9 +65,8 @@ func TestShouldRetry_PredictedFlake(t *testing.T) {
 	// 3 flakes, 7 passes → flake rate 30%; Wilson LB should be well above 5%.
 	rt := buildRuntime([]string{"pass", "flake", "pass", "flake", "pass", "flake", "pass", "pass", "pass", "pass"}, true)
 	d := rt.Decide(testProject, testTarget, true /*affected*/)
-	if !d.Retry || d.Reason != ReasonPredictedFlake {
-		t.Errorf("predicted_flake: Retry=%v Reason=%q, want Retry=true Reason=predicted_flake", d.Retry, d.Reason)
-	}
+	assert.True(t, d.Retry)
+	assert.Equal(t, ReasonPredictedFlake, d.Reason)
 }
 
 // TestShouldRetry_Skip verifies that a clean target with no flake history is
@@ -79,9 +76,7 @@ func TestShouldRetry_Skip(t *testing.T) {
 	// 10 clean passes, no flakes → score = 0.
 	rt := buildRuntime([]string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass"}, true)
 	d := rt.Decide(testProject, testTarget, true /*affected*/)
-	if d.Retry {
-		t.Errorf("skip: Retry=true, want false (no flake history, likely real failure)")
-	}
+	assert.False(t, d.Retry, "no flake history, likely real failure")
 }
 
 // TestScore_WilsonMath checks the Wilson lower bound formula against a known value.
@@ -94,19 +89,14 @@ func TestScore_WilsonMath(t *testing.T) {
 	rt := buildRuntime([]string{"pass", "flake", "pass", "flake", "pass", "flake", "pass", "pass", "pass", "pass"}, true)
 	got := rt.Score(testProject, testTarget)
 	// Hand-computed Wilson LB ≈ 0.115; allow ±0.02 tolerance.
-	want := 0.115
-	if math.Abs(got-want) > 0.02 {
-		t.Errorf("Score = %.4f, want ~%.4f (±0.02)", got, want)
-	}
+	assert.InDelta(t, 0.115, got, 0.02)
 }
 
 // TestScore_ColdStart verifies that Score returns 0 below MinSamples.
 func TestScore_ColdStart(t *testing.T) {
 	t.Parallel()
 	rt := buildRuntime([]string{"flake", "flake"}, true) // only 2 outcomes < MinSamples=5
-	if got := rt.Score(testProject, testTarget); got != 0 {
-		t.Errorf("cold start: Score = %.4f, want 0", got)
-	}
+	assert.Zero(t, rt.Score(testProject, testTarget), "cold start")
 }
 
 // TestIsSuspectedRegression verifies the clean→fail pattern is detected.
@@ -114,9 +104,7 @@ func TestIsSuspectedRegression(t *testing.T) {
 	t.Parallel()
 	// Mostly passing history, then two consecutive affected failures.
 	rt := buildRuntime([]string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "fail", "fail"}, true)
-	if !rt.IsRegression(testProject, testTarget) {
-		t.Errorf("expected IsRegression=true for clean→fail pattern")
-	}
+	assert.True(t, rt.IsRegression(testProject, testTarget), "clean→fail pattern")
 }
 
 // TestIsSuspectedRegression_FalsePositive verifies that a known flaky target
@@ -125,9 +113,7 @@ func TestIsSuspectedRegression_FalsePositive(t *testing.T) {
 	t.Parallel()
 	// High flake rate (5 flakes in 10) → score well above threshold → not a regression.
 	rt := buildRuntime([]string{"flake", "pass", "flake", "pass", "flake", "pass", "flake", "pass", "fail", "fail"}, true)
-	if rt.IsRegression(testProject, testTarget) {
-		t.Errorf("expected IsRegression=false for known-flaky target")
-	}
+	assert.False(t, rt.IsRegression(testProject, testTarget), "known-flaky target")
 }
 
 // TestIsSuspectedRegression_UnaffectedFails verifies that failures on unaffected
@@ -151,9 +137,7 @@ func TestIsSuspectedRegression_UnaffectedFails(t *testing.T) {
 			Attempts:       1,
 		})
 	}
-	if rt.IsRegression(testProject, testTarget) {
-		t.Errorf("expected IsRegression=false for unaffected failures")
-	}
+	assert.False(t, rt.IsRegression(testProject, testTarget), "unaffected failures")
 }
 
 // TestRecordOutcome_Eviction verifies that the window caps at OutcomeWindow
@@ -175,16 +159,10 @@ func TestRecordOutcome_Eviction(t *testing.T) {
 		})
 	}
 	s := rt.Stats(testProject, testTarget)
-	if len(s.RecentOutcomes) != forecast.OutcomeWindow {
-		t.Errorf("len(RecentOutcomes) = %d, want %d", len(s.RecentOutcomes), forecast.OutcomeWindow)
-	}
+	assert.Len(t, s.RecentOutcomes, forecast.OutcomeWindow)
 	// The first "flake" entry should have been evicted; counters must match.
-	if s.FlakeCount != 0 {
-		t.Errorf("FlakeCount = %d, want 0 (flake entry should have been evicted)", s.FlakeCount)
-	}
-	if s.PassCount != forecast.OutcomeWindow {
-		t.Errorf("PassCount = %d, want %d", s.PassCount, forecast.OutcomeWindow)
-	}
+	assert.Zero(t, s.FlakeCount, "flake entry should have been evicted")
+	assert.Equal(t, forecast.OutcomeWindow, s.PassCount)
 }
 
 // TestLastPassTime returns the timestamp of the most recent pass or flake.
@@ -200,7 +178,5 @@ func TestLastPassTime(t *testing.T) {
 	}
 	got := rt.LastPassTime(testProject, testTarget)
 	want := now.Add(time.Minute) // second "pass" entry
-	if !got.Equal(want) {
-		t.Errorf("LastPassTime = %v, want %v", got, want)
-	}
+	assert.True(t, got.Equal(want), "LastPassTime = %v, want %v", got, want)
 }

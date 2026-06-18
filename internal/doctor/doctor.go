@@ -198,6 +198,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkReflinkSupport(),
 		r.checkLanguageCoverage(projects),
 		r.checkCITarget(projects),
+		r.checkMagusfileSyntax(projects),
 		r.checkSpellDocs(project.DefaultSpellRegistry().All()),
 		r.checkExplicitVCS(),
 		r.checkWatchBackend(),

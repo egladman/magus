@@ -3,6 +3,9 @@ package types
 import (
 	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newWorkspace(paths ...string) *Workspace {
@@ -19,25 +22,21 @@ func TestWorkspaceAllIsSorted(t *testing.T) {
 	for _, p := range ws.All() {
 		got = append(got, p.Path)
 	}
-	want := []string{"api", "cmd/tool", "web/studio"}
-	if !slices.Equal(got, want) {
-		t.Errorf("All() paths = %v, want %v (deterministic sort)", got, want)
-	}
+	assert.Equal(t, []string{"api", "cmd/tool", "web/studio"}, got, "All() must return a deterministic sort")
 }
 
 func TestWorkspaceGet(t *testing.T) {
 	ws := newWorkspace("api")
-	if p := ws.Get("api"); p == nil || p.Path != "api" {
-		t.Errorf("Get(api) = %v, want project api", p)
-	}
-	if p := ws.Get("missing"); p != nil {
-		t.Errorf("Get(missing) = %v, want nil", p)
-	}
+
+	p := ws.Get("api")
+	require.NotNil(t, p)
+	assert.Equal(t, "api", p.Path)
+
+	assert.Nil(t, ws.Get("missing"))
+
 	// A nil workspace must not panic — Get guards the receiver.
 	var nilWS *Workspace
-	if p := nilWS.Get("api"); p != nil {
-		t.Errorf("(*Workspace)(nil).Get(api) = %v, want nil", p)
-	}
+	assert.Nil(t, nilWS.Get("api"))
 }
 
 func TestWorkspaceUnderPath(t *testing.T) {
@@ -51,8 +50,5 @@ func TestWorkspaceUnderPath(t *testing.T) {
 	// Matching is path-segment aware: "web" and its descendants match because
 	// "web/" is a prefix of "web/", "web/admin/", etc. "webhook" must NOT match
 	// ("webhook/" does not have the prefix "web/").
-	want := []string{"web", "web/admin", "web/studio"}
-	if !slices.Equal(got, want) {
-		t.Errorf("UnderPath(web) = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"web", "web/admin", "web/studio"}, got)
 }

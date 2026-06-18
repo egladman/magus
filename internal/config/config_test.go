@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,9 +17,7 @@ import (
 func TestDefaults_FlakeEnabled(t *testing.T) {
 	t.Parallel()
 	cfg := Defaults()
-	if !cfg.Flake.Enabled {
-		t.Error("Defaults().Flake.Enabled = false, want true")
-	}
+	assert.True(t, cfg.Flake.Enabled, "Defaults().Flake.Enabled should be true")
 }
 
 // TestSave_Concurrent verifies that 10 goroutines concurrently calling Save
@@ -47,17 +47,11 @@ func TestSave_Concurrent(t *testing.T) {
 			break
 		}
 	}
-	if !anyOK {
-		t.Fatal("all concurrent Save calls failed")
-	}
+	require.True(t, anyOK, "all concurrent Save calls failed")
 
 	// Final file must be valid YAML.
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
+	require.NoError(t, err)
 	var m map[string]interface{}
-	if err := yaml.Unmarshal(data, &m); err != nil {
-		t.Errorf("final file is not valid YAML: %v\n%s", err, data)
-	}
+	assert.NoError(t, yaml.Unmarshal(data, &m), "final file is not valid YAML:\n%s", data)
 }

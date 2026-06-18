@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Operations and the magus work hierarchy</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="index.html">Docs</a></li>
+        <li><a href="editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="operations-and-the-magus-work-hierarchy">Operations and the magus work hierarchy</h1>
+<p>This document formally defines an <strong>Operation</strong> — magus's smallest named unit of
+tool work — and fixes its place in the hierarchy between <a href="spells.html">Spells</a>,
+<a href="targets.html">Targets</a>, and the result a run produces. It also disambiguates the
+two words magus overloads, <em>op</em> and <em>Target</em>.</p>
+<blockquote>
+<p><strong>Status.</strong> The hierarchy, the <code>ExecResult</code> value type, and the <code>ispell.Op</code> (née
+<code>ispell.Target</code>) Operation type all exist today. A per-op <code>OpResult</code>/<code>TargetResult</code>
+consolidation was prototyped and removed as speculative (no consumer); the run
+path reports at the <strong>target</strong> level only, via the <code>target.result</code> event
+(<code>internal/report</code>). The Operation-layer rows below are kept as the conceptual
+model, marked <strong>(not built)</strong>.</p>
+</blockquote>
+<h2 id="what-an-operation-is">What an Operation is</h2>
+<p>An <strong>Operation</strong> (op) is one tool-native action a <a href="spells.html">Spell</a> exposes,
+named after the CLI command it runs — <code>go-build</code>, <code>go-vet</code>, <code>golangci-lint</code>,
+<code>cargo-clippy</code>, <code>eslint</code>. It is the unit a <a href="targets.html">Target</a> <em>composes</em>: a
+target body calls ops, ops do the tool work.</p>
+<p>An Operation is declared in one of two shapes, which decode to the same thing
+(see <a href="spells.html#operations-come-in-two-shapes">Operations come in two shapes</a>):</p>
+<ul>
+<li><strong>Fork op</strong> — a <code>{cmd, args, charms}</code> record. magus forks the command directly
+(no shell), so one fork op runs exactly <strong>one process</strong>.</li>
+<li><strong>Function op</strong> — an exported handler dispatched in-VM (HTTP, signing, a cache
+backend's <code>get-entry</code>). It may run zero or many processes, or none.</li>
+</ul>
+<p>An Operation is <em>how</em> a tool performs an action; a <a href="targets.html">Target</a> is <em>what</em>
+you run. You <strong>bind</strong> spells (which contribute ops) and <strong>invoke</strong> targets (which
+call ops). A target with no ops of its own — like <code>ci</code> — is pure composition: it
+only <code>needs</code> other targets.</p>
+<h2 id="the-work-hierarchy">The work hierarchy</h2>
+<pre><code>Spell ──exposes──▶ Operation (op)              go-build, eslint, golangci-lint
+  │                   │  fork op    → one process
+  │                   │  function op → arbitrary in-VM work
+  │                   ▼ runs
+  │                Process  ──yields──▶  ExecResult
+  │
+Target (export fun) ──composes──▶ Operations  +  ──needs──▶ other Targets
+  │
+  ▼ run by the dispatcher (cacheable, charm-modified)
+target.result event   (per target; no per-op breakdown)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Entity</th>
+<th>Cardinality</th>
+<th>Identity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Spell</strong></td>
+<td>a library of operations</td>
+<td>many spells per project</td>
+<td><code>name</code> + its ops</td>
+</tr>
+<tr>
+<td><strong>Operation</strong></td>
+<td>one tool-native action</td>
+<td>many ops per spell</td>
+<td><code>spell</code> + op name</td>
+</tr>
+<tr>
+<td><strong>Process</strong></td>
+<td>one forked command</td>
+<td>0..N per op (1 for a fork op)</td>
+<td>argv</td>
+</tr>
+<tr>
+<td><strong>Target</strong></td>
+<td>a runnable <code>export fun</code></td>
+<td>one per name per project</td>
+<td><code>Path + Name</code> (<a href="targets.html">Target</a>)</td>
+</tr>
+</tbody>
+</table>
+<p>Charms (<a href="charms.html">charms.md</a>) sit orthogonal to this stack: a charm rewrites an
+Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own.</p>
+<h2 id="results-what-each-layer-produces">Results: what each layer produces</h2>
+<table>
+<thead>
+<tr>
+<th>Result</th>
+<th>Layer</th>
+<th>Shape</th>
+<th>Returned or emitted</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>ExecResult</code></strong></td>
+<td>Process</td>
+<td><code>{stdout, stderr, code, ok}</code></td>
+<td><strong>returned</strong> by <code>os.exec</code>, <code>magus.cmd</code>, a fork op</td>
+<td>exists</td>
+</tr>
+<tr>
+<td><code>OpResult</code></td>
+<td>Operation</td>
+<td><code>ExecResult</code> + op identity (<code>spell</code>, <code>op</code>)</td>
+<td>would be returned by the op handler</td>
+<td><strong>(not built)</strong></td>
+</tr>
+<tr>
+<td><strong><code>target.result</code></strong></td>
+<td>Target</td>
+<td><code>{project, target, status, cache_hit, duration_ms}</code></td>
+<td><strong>emitted</strong> by the dispatcher (<code>internal/report</code>)</td>
+<td>exists</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p><strong><code>ExecResult</code> exists in both worlds.</strong> It is the Go <code>run.ExecResult</code> and the
+spell-op <strong>capture record</strong> a <code>Capture: true</code> op returns &quot;instead of void&quot; — the
+same <code>{stdout, stderr, code, ok}</code> shape <code>os.exec</code> returns.</p>
+</li>
+<li>
+<p><strong>The target result is emitted, not returned.</strong> A target is cacheable, and on a
+<strong>cache hit the body never runs</strong> — outputs are replayed without executing the
+<code>export fun</code>. A return value cannot exist on a hit, yet a cache hit is exactly
+what you most want to report. So the dispatcher assembles and emits a
+<code>target.result</code> event from <code>cache.OnResult</code>, which fires for both the ran and the
+cached case. It reports at the <strong>target</strong> level — a per-op <code>[OpResult]</code> breakdown
+was prototyped and removed as speculative (no consumer, and it misattributed ops
+across the cross-project boundary).</p>
+</li>
+</ul>
+<h2 id="disambiguating-op-and-target">Disambiguating &quot;op&quot; and &quot;Target&quot;</h2>
+<p>magus overloads two words. Formalizing <strong>Operation</strong> fixes the first and exposes a
+latent misnaming in the second.</p>
+<p><strong>Three unrelated &quot;op&quot;s.</strong> Only the first is the Operation defined here:</p>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Type</th>
+<th>Shape</th>
+<th>Domain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Operation</strong></td>
+<td><code>Operation</code></td>
+<td><code>spell</code> + op name + impl</td>
+<td>the spell op defined in this doc</td>
+</tr>
+<tr>
+<td><strong>PatchOp</strong></td>
+<td><code>PatchOp</code></td>
+<td><code>{op, path, value, from}</code></td>
+<td>RFC 6902 charm patch (<a href="charms.html">charms.md</a>)</td>
+</tr>
+<tr>
+<td><strong>RemoteOp</strong></td>
+<td><code>RemoteOp</code></td>
+<td><code>{op, outcome, duration, bytes}</code></td>
+<td>remote-cache backend call (telemetry)</td>
+</tr>
+</tbody>
+</table>
+<p><code>PatchOp</code> and <code>RemoteOp</code> keep their names — they are genuinely different
+operations. The handler callback parameter is named <code>cb</code>, not <code>op</code>, for exactly
+this reason (<a href="spells.html#operations-come-in-two-shapes">spells.md</a>).</p>
+<p><strong>Two &quot;Target&quot;s.</strong> These are distinct and must not be conflated:</p>
+<ul>
+<li><strong><code>types.Target</code></strong> — the addressable <strong>work-unit</strong>: <code>Path + Name</code>, plus charms
+and changed files. This is <em>the</em> Target (<a href="targets.html">targets.md</a>).</li>
+<li><strong><code>ispell.Op</code></strong> (formerly <code>ispell.Target</code>) — &quot;a single dispatchable surface of a
+spell,&quot; i.e. an <strong>Operation</strong>. It was named <code>Target</code>, colliding with the
+work-unit above; renamed to <code>Op</code> to formalize this vocabulary.</li>
+</ul>
+<h3 id="naming-decision-done-ispelltarget--ispellop">Naming decision (done): <code>ispell.Target</code> → <code>ispell.Op</code></h3>
+<p><code>ispell.Target</code> <em>was</em> an Operation misnamed as a Target. It is now <code>ispell.Op</code>
+(<code>Spec.Ops</code>, <code>OpNames</code>, and the resolve/fork/bind paths followed), wire formats
+preserved. The docs warn against substituting &quot;Operation&quot; for a work-unit Target
+(<a href="targets.html">targets.md</a>); that warning is about <code>types.Target</code> and never
+protected <code>ispell.Target</code>, which was the actual offender.</p>
+<h2 id="relationship-to-the-value-types">Relationship to the value types</h2>
+<p>The serializable Buzz value types model the <em>nouns</em> around this hierarchy:</p>
+<table>
+<thead>
+<tr>
+<th>Value type</th>
+<th>Models</th>
+<th>Layer it touches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>Target</code></strong></td>
+<td>a resolved work-unit (<code>Path + Name + charms + files</code>) plus its per-target policy (<code>skipCache</code>, <code>exclusive</code>, …)</td>
+<td>Target</td>
+</tr>
+<tr>
+<td><strong><code>TargetQuery</code></strong></td>
+<td>an unresolved dependency edge (a query → 0..N Targets)</td>
+<td>Target (<code>magus.needs</code> edge)</td>
+</tr>
+<tr>
+<td><strong><code>ExecResult</code></strong></td>
+<td>the <code>{stdout, stderr, code, ok}</code> outcome of one process</td>
+<td>Process</td>
+</tr>
+</tbody>
+</table>
+<p><code>TargetQuery</code> <em>produces</em> <code>Target</code>s; a <code>Target</code> is run as a set of <code>Operation</code>s;
+each <code>Operation</code> yields an <code>ExecResult</code>.</p>
+<h2 id="glossary">Glossary</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Spell</strong></td>
+<td>A library of tool-native Operations for one toolchain (<a href="spells.html">spells.md</a>).</td>
+</tr>
+<tr>
+<td><strong>Operation (op)</strong></td>
+<td>One tool-native action a spell exposes, named after its CLI command. The unit a target composes.</td>
+</tr>
+<tr>
+<td><strong>Target</strong></td>
+<td>A runnable <code>export fun</code>; the work-unit <code>Path + Name</code> you invoke (<a href="targets.html">targets.md</a>).</td>
+</tr>
+<tr>
+<td><strong>Charm</strong></td>
+<td>A named modifier of an Operation's argv (<a href="charms.html">charms.md</a>).</td>
+</tr>
+<tr>
+<td><strong>ExecResult</strong></td>
+<td>The result of one process: <code>{stdout, stderr, code, ok}</code>.</td>
+</tr>
+<tr>
+<td><strong>target.result</strong></td>
+<td>The dispatcher-emitted report event for one target run: project, target, status, cache hit, duration.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="spells.html">spells.md</a> — anatomy of a spell, the two op shapes, naming operations.</li>
+<li><a href="targets.html">targets.md</a> — the work-unit Target, <code>Path + Name</code>, the seven lifecycle names.</li>
+<li><a href="charms.html">charms.md</a> — how a charm patches an Operation's argv.</li>
+</ul>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/operations.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-18 01:25:54 UTC from commit <a href="https://github.com/egladman/tack/commit/ef0246dafb58152a2a36d7feb35d63c8dc8c9578"><code>ef0246d</code></a></small>
+  </footer>
+</body>
+</html>

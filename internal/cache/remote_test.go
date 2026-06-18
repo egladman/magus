@@ -16,6 +16,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRemoteBackendFSBuiltOnce verifies that two independent caches sharing a
@@ -25,9 +28,7 @@ import (
 // of rebuilding.
 func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewFSRemoteBackend: %v", err)
-	}
+	require.NoError(t, err, "NewFSRemoteBackend")
 
 	openWithRemote := func(t *testing.T) (root string, c *Cache) {
 		t.Helper()
@@ -38,13 +39,11 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 			WithRemoteBackend(remote),
 			WithInsecureRemote(),
 		)
-		if err != nil {
-			t.Fatalf("cache.Open: %v", err)
-		}
+		require.NoError(t, err, "cache.Open")
 		return root, c
 	}
 
-	// --- workspace 1: local miss → build → push to remote ---
+	// workspace 1: local miss → build → push to remote
 	root1, c1 := openWithRemote(t)
 	writeMain(t, root1, "package main")
 	out1 := touchOut(t, root1)
@@ -56,17 +55,11 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 		runs++
 		return os.WriteFile(out1, []byte("built"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("Run c1: %v", err)
-	}
-	if r1.Hit {
-		t.Fatal("c1: expected cache miss, got hit")
-	}
-	if runs != 1 {
-		t.Fatalf("c1: expected 1 fn call, got %d", runs)
-	}
+	require.NoError(t, err, "Run c1")
+	assert.False(t, r1.Hit, "c1: expected cache miss, got hit")
+	assert.Equal(t, 1, runs, "c1: expected 1 fn call")
 
-	// --- workspace 2: same sources, empty local cache → remote hit ---
+	// workspace 2: same sources, empty local cache → remote hit
 	root2, c2 := openWithRemote(t)
 	// Reproduce the same source content so the spec hash matches.
 	writeMain(t, root2, "package main")
@@ -78,23 +71,13 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 		runs++ // must not be called
 		return os.WriteFile(out2, []byte("built"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("Run c2: %v", err)
-	}
-	if !r2.Hit {
-		t.Fatal("c2: expected remote hit, got miss (fn ran again)")
-	}
-	if runs != 1 {
-		t.Fatalf("fn called %d times; remote restore should have prevented a second build", runs)
-	}
+	require.NoError(t, err, "Run c2")
+	assert.True(t, r2.Hit, "c2: expected remote hit, got miss (fn ran again)")
+	assert.Equal(t, 1, runs, "remote restore should have prevented a second build")
 
 	got, err := os.ReadFile(out2)
-	if err != nil {
-		t.Fatalf("c2: output not restored: %v", err)
-	}
-	if string(got) != "built" {
-		t.Errorf("c2: output = %q, want %q", string(got), "built")
-	}
+	require.NoError(t, err, "c2: output not restored")
+	assert.Equal(t, "built", string(got), "c2: output")
 }
 
 // staticBackend serves one pre-built entry for a single (project, hash) and
@@ -138,31 +121,22 @@ func buildEntry(t *testing.T, project, hash, outPath, manifestBlob string, casBl
 		CreatedAt:   time.Now().UTC(),
 	}
 	mb, err := json.Marshal(m)
-	if err != nil {
-		t.Fatalf("marshal manifest: %v", err)
-	}
+	require.NoError(t, err, "marshal manifest")
 
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
 	add := func(name string, data []byte) {
-		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Size: int64(len(data)), Mode: 0o644}); err != nil {
-			t.Fatalf("tar header %s: %v", name, err)
-		}
-		if _, err := tw.Write(data); err != nil {
-			t.Fatalf("tar write %s: %v", name, err)
-		}
+		require.NoError(t, tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Size: int64(len(data)), Mode: 0o644}), "tar header %s", name)
+		_, err := tw.Write(data)
+		require.NoError(t, err, "tar write %s", name)
 	}
 	add("manifests/"+flattenProject(project)+"/"+hash+".json", mb)
 	for name, data := range casBlobs {
 		add("cas/"+name[:2]+"/"+name, data)
 	}
-	if err := tw.Close(); err != nil {
-		t.Fatalf("tar close: %v", err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatalf("gzip close: %v", err)
-	}
+	require.NoError(t, tw.Close(), "tar close")
+	require.NoError(t, gz.Close(), "gzip close")
 	return buf.Bytes()
 }
 
@@ -184,9 +158,7 @@ func learnHash(t *testing.T) (project, hash string) {
 	r, err := c.Run(context.Background(), spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("learnHash run: %v", err)
-	}
+	require.NoError(t, err, "learnHash run")
 	return spec.ProjectPath, r.Hash
 }
 
@@ -200,9 +172,7 @@ func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, r
 	c, err := Open(filepath.Join(t.TempDir(), ".magus"),
 		WithMutable(true), WithRemoteBackend(backend),
 		WithInsecureRemote()) // integrity-only path: no trust set
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	spec := makeSpec(root)
@@ -212,13 +182,9 @@ func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, r
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
+	require.NoError(t, err, "run")
 	data, err := os.ReadFile(out)
-	if err != nil {
-		t.Fatalf("read output: %v", err)
-	}
+	require.NoError(t, err, "read output")
 	return r.Hit, string(data), ran
 }
 
@@ -234,15 +200,9 @@ func TestRemoteRejectsPoisonedBlob(t *testing.T) {
 		map[string][]byte{goodBlob: []byte("EVIL!")}) // stored bytes ≠ name
 
 	hit, output, ran := runAgainst(t, &staticBackend{project: project, hash: hash, entry: entry})
-	if hit {
-		t.Fatal("poisoned entry was replayed as a cache hit; the store was trusted")
-	}
-	if !ran {
-		t.Fatal("expected a local rebuild after rejecting the poisoned entry")
-	}
-	if output != "built" {
-		t.Fatalf("output = %q, want %q (poisoned bytes must never reach the tree)", output, "built")
-	}
+	assert.False(t, hit, "poisoned entry was replayed as a cache hit; the store was trusted")
+	assert.True(t, ran, "expected a local rebuild after rejecting the poisoned entry")
+	assert.Equal(t, "built", output, "poisoned bytes must never reach the tree")
 }
 
 // TestRemoteRejectsMissingBlob covers the completeness check: a manifest that
@@ -257,20 +217,15 @@ func TestRemoteRejectsMissingBlob(t *testing.T) {
 		map[string][]byte{decoy: []byte("decoy")})
 
 	hit, output, ran := runAgainst(t, &staticBackend{project: project, hash: hash, entry: entry})
-	if hit {
-		t.Fatal("entry with a missing referenced blob was replayed as a hit")
-	}
-	if !ran || output != "built" {
-		t.Fatalf("expected local rebuild to built; ran=%v output=%q", ran, output)
-	}
+	assert.False(t, hit, "entry with a missing referenced blob was replayed as a hit")
+	assert.True(t, ran, "expected local rebuild after rejecting the entry")
+	assert.Equal(t, "built", output, "expected local rebuild to built")
 }
 
 func genKeypair(t *testing.T) (pub []byte, seed []byte) {
 	t.Helper()
 	pk, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
+	require.NoError(t, err, "generate key")
 	return pk, priv.Seed()
 }
 
@@ -289,9 +244,7 @@ func openSigned(t *testing.T, remote RemoteBackend, seed []byte, trusted [][]byt
 		opts = append(opts, WithInsecureRemote()) // no trust set: unsigned-producer case
 	}
 	c, err := Open(filepath.Join(t.TempDir(), ".magus"), opts...)
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err, "cache.Open")
 	return root, c
 }
 
@@ -309,9 +262,7 @@ func buildCanonical(t *testing.T, root string, c *Cache) (Result, bool) {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
+	require.NoError(t, err, "run")
 	return r, ran
 }
 
@@ -319,28 +270,21 @@ func buildCanonical(t *testing.T, root string, c *Cache) (Result, bool) {
 // and replayed on a fresh machine that trusts that key.
 func TestRemoteSignedRoundTrip(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewFSRemoteBackend: %v", err)
-	}
+	require.NoError(t, err, "NewFSRemoteBackend")
 	pub, seed := genKeypair(t)
 	trusted := [][]byte{pub}
 
 	// Producer: signs and pushes.
 	root1, c1 := openSigned(t, remote, seed, trusted)
 	r1, ran1 := buildCanonical(t, root1, c1)
-	if r1.Hit || !ran1 {
-		t.Fatalf("producer: expected miss+build; hit=%v ran=%v", r1.Hit, ran1)
-	}
+	assert.False(t, r1.Hit, "producer: expected miss")
+	assert.True(t, ran1, "producer: expected build")
 
 	// Consumer: verifies and replays — fn must not run.
 	root2, c2 := openSigned(t, remote, nil, trusted)
 	r2, ran2 := buildCanonical(t, root2, c2)
-	if !r2.Hit {
-		t.Fatal("consumer: expected a verified remote hit, got miss")
-	}
-	if ran2 {
-		t.Fatal("consumer: fn ran; the signed entry should have replayed")
-	}
+	assert.True(t, r2.Hit, "consumer: expected a verified remote hit, got miss")
+	assert.False(t, ran2, "consumer: fn ran; the signed entry should have replayed")
 }
 
 // TestRemoteRejectsUnsignedEntry: with a trust set configured, an unsigned entry
@@ -348,53 +292,39 @@ func TestRemoteSignedRoundTrip(t *testing.T) {
 // and the consumer rebuilds locally.
 func TestRemoteRejectsUnsignedEntry(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewFSRemoteBackend: %v", err)
-	}
+	require.NoError(t, err, "NewFSRemoteBackend")
 	pub, _ := genKeypair(t)
 
 	// Producer without a signing key pushes an UNSIGNED entry.
 	root1, c1 := openSigned(t, remote, nil, nil)
-	if _, ran := buildCanonical(t, root1, c1); !ran {
-		t.Fatal("producer: expected a build")
-	}
+	_, ran := buildCanonical(t, root1, c1)
+	require.True(t, ran, "producer: expected a build")
 
 	// Consumer with a trust set must refuse the unsigned entry.
 	root2, c2 := openSigned(t, remote, nil, [][]byte{pub})
 	r2, ran2 := buildCanonical(t, root2, c2)
-	if r2.Hit {
-		t.Fatal("consumer replayed an unsigned entry despite a configured trust set")
-	}
-	if !ran2 {
-		t.Fatal("consumer: expected a local rebuild after refusing the unsigned entry")
-	}
+	assert.False(t, r2.Hit, "consumer replayed an unsigned entry despite a configured trust set")
+	assert.True(t, ran2, "consumer: expected a local rebuild after refusing the unsigned entry")
 }
 
 // TestRemoteRejectsUntrustedSigner: an entry validly signed by key A is refused by
 // a consumer that trusts only key B.
 func TestRemoteRejectsUntrustedSigner(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewFSRemoteBackend: %v", err)
-	}
+	require.NoError(t, err, "NewFSRemoteBackend")
 	pubA, seedA := genKeypair(t)
 	pubB, _ := genKeypair(t)
 
 	// Producer signs with A.
 	root1, c1 := openSigned(t, remote, seedA, [][]byte{pubA})
-	if _, ran := buildCanonical(t, root1, c1); !ran {
-		t.Fatal("producer: expected a build")
-	}
+	_, ran := buildCanonical(t, root1, c1)
+	require.True(t, ran, "producer: expected a build")
 
 	// Consumer trusts only B → must refuse A's entry.
 	root2, c2 := openSigned(t, remote, nil, [][]byte{pubB})
 	r2, ran2 := buildCanonical(t, root2, c2)
-	if r2.Hit {
-		t.Fatal("consumer replayed an entry signed by an untrusted key")
-	}
-	if !ran2 {
-		t.Fatal("consumer: expected a local rebuild after refusing the untrusted entry")
-	}
+	assert.False(t, r2.Hit, "consumer replayed an entry signed by an untrusted key")
+	assert.True(t, ran2, "consumer: expected a local rebuild after refusing the untrusted entry")
 }
 
 // TestRemoteRequiresTrustSetOrOptOut: the cache package enforces its own trust
@@ -402,18 +332,14 @@ func TestRemoteRejectsUntrustedSigner(t *testing.T) {
 // caller explicitly opts into insecure (unsigned) mode.
 func TestRemoteRequiresTrustSetOrOptOut(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewFSRemoteBackend: %v", err)
-	}
-	if _, err := Open(filepath.Join(t.TempDir(), ".magus"),
-		WithMutable(true), WithRemoteBackend(remote)); err == nil {
-		t.Fatal("Open accepted a remote backend with no trust set and no opt-out")
-	}
-	if _, err := Open(filepath.Join(t.TempDir(), ".magus"),
+	require.NoError(t, err, "NewFSRemoteBackend")
+	_, err = Open(filepath.Join(t.TempDir(), ".magus"),
+		WithMutable(true), WithRemoteBackend(remote))
+	assert.Error(t, err, "Open accepted a remote backend with no trust set and no opt-out")
+	_, err = Open(filepath.Join(t.TempDir(), ".magus"),
 		WithMutable(true), WithRemoteBackend(remote),
-		WithInsecureRemote()); err != nil {
-		t.Fatalf("Open rejected remote + explicit opt-out: %v", err)
-	}
+		WithInsecureRemote())
+	assert.NoError(t, err, "Open rejected remote + explicit opt-out")
 }
 
 type tarMember struct {
@@ -429,19 +355,12 @@ func buildRawEntry(t *testing.T, members []tarMember) []byte {
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
 	for _, m := range members {
-		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: m.name, Size: int64(len(m.data)), Mode: 0o644}); err != nil {
-			t.Fatalf("tar header %s: %v", m.name, err)
-		}
-		if _, err := tw.Write(m.data); err != nil {
-			t.Fatalf("tar write %s: %v", m.name, err)
-		}
+		require.NoError(t, tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: m.name, Size: int64(len(m.data)), Mode: 0o644}), "tar header %s", m.name)
+		_, err := tw.Write(m.data)
+		require.NoError(t, err, "tar write %s", m.name)
 	}
-	if err := tw.Close(); err != nil {
-		t.Fatalf("tar close: %v", err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatalf("gzip close: %v", err)
-	}
+	require.NoError(t, tw.Close(), "tar close")
+	require.NoError(t, gz.Close(), "gzip close")
 	return buf.Bytes()
 }
 
@@ -456,9 +375,7 @@ func TestRemoteRejectsDuplicateManifest(t *testing.T) {
 		Outputs:   []OutputRecord{{Path: "test/pkg/out.txt", Blob: good, Mode: 0o644, Size: 5}},
 		CreatedAt: time.Now().UTC(),
 	})
-	if err != nil {
-		t.Fatalf("marshal manifest: %v", err)
-	}
+	require.NoError(t, err, "marshal manifest")
 	mPath := "manifests/" + flattenProject(project) + "/" + hash + ".json"
 	entry := buildRawEntry(t, []tarMember{
 		{mPath, mb},
@@ -467,12 +384,9 @@ func TestRemoteRejectsDuplicateManifest(t *testing.T) {
 	})
 
 	hit, output, ran := runAgainst(t, &staticBackend{project: project, hash: hash, entry: entry})
-	if hit {
-		t.Fatal("entry with a duplicate manifest was replayed")
-	}
-	if !ran || output != "built" {
-		t.Fatalf("expected a local rebuild; ran=%v output=%q", ran, output)
-	}
+	assert.False(t, hit, "entry with a duplicate manifest was replayed")
+	assert.True(t, ran, "expected a local rebuild")
+	assert.Equal(t, "built", output, "expected a local rebuild to built")
 }
 
 // TestRemoteRejectsOversizedArchive: two blobs each under the import limit but
@@ -491,9 +405,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 		},
 		CreatedAt: time.Now().UTC(),
 	})
-	if err != nil {
-		t.Fatalf("marshal manifest: %v", err)
-	}
+	require.NoError(t, err, "marshal manifest")
 	mPath := "manifests/" + flattenProject(project) + "/" + hash + ".json"
 	entry := buildRawEntry(t, []tarMember{
 		{mPath, mb},
@@ -507,9 +419,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 		WithRemoteBackend(&staticBackend{project: project, hash: hash, entry: entry}),
 		WithInsecureRemote(),
 		WithMaxImportBytes(2000)) // fits manifest + one blob, not both
-	if err != nil {
-		t.Fatalf("cache.Open: %v", err)
-	}
+	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	spec := makeSpec(root)
@@ -520,13 +430,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if r.Hit {
-		t.Fatal("oversized archive was imported as a hit")
-	}
-	if !ran {
-		t.Fatal("expected a local rebuild after rejecting the oversized archive")
-	}
+	require.NoError(t, err, "run")
+	assert.False(t, r.Hit, "oversized archive was imported as a hit")
+	assert.True(t, ran, "expected a local rebuild after rejecting the oversized archive")
 }

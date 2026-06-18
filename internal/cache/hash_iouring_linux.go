@@ -1,9 +1,5 @@
 package cache
 
-// io_uring fast-path for batched file hashing on Linux. Submits IORING_OP_READ
-// for files that missed the mtime cache; falls back to hashFile on per-file errors
-// or ring-level failure. Ring memory model lives in hash_iouring_linux_ring.go.
-
 import (
 	"crypto/sha256"
 	"encoding/hex"

@@ -39,14 +39,18 @@ const (
 	jitCancelCheck = 2 // poll cancellation, then re-enter at resumeIP
 )
 
-// nanbox bit patterns the emitters bake in (must match value_nanbox.go).
+// nanbox bit patterns the emitters bake in, DERIVED from the canonical nanbox
+// layout in value_nanbox.go rather than hand-copied. A change to that layout now
+// flows through automatically (or fails to compile) instead of silently
+// desyncing the generated code from the interpreter's value representation — a
+// mismatch the differential suite catches only when run on a JIT arch.
 const (
-	jitIntHeader = int64(0x7FFA_0000_0000_0000) // qnanMask | nanboxInt<<48
-	jitIntHi16   = 0x7FFA                       // (intValue >> 48)
-	jitBoolHi16  = 0x7FF9                       // (boolValue >> 48)
-	jitFalseBits = int64(0x7FF9_0000_0000_0000) // False
-	jitNullBits  = int64(0x7FF8_0000_0000_0000) // Null
-	jitQNaNMask  = int64(0x7FF8_0000_0000_0000) // qnanMask
+	jitIntHeader = int64(qnanMask | (nanboxInt << coarseShift))                   // int48 tag header
+	jitIntHi16   = int64((qnanMask | (nanboxInt << coarseShift)) >> coarseShift)  // intValue >> 48 == 0x7FFA
+	jitBoolHi16  = int64((qnanMask | (nanboxBool << coarseShift)) >> coarseShift) // boolValue >> 48 == 0x7FF9
+	jitFalseBits = int64(qnanMask | (nanboxBool << coarseShift))                  // False
+	jitNullBits  = int64(qnanMask | (nanboxNull << coarseShift))                  // Null
+	jitQNaNMask  = int64(qnanMask)                                                // qnanMask
 )
 
 //go:noescape
@@ -88,6 +92,11 @@ func (vm *VM) jitRun() (Value, bool, error) {
 		copy(ns, vm.stack)
 		vm.stack = ns
 	}
+	// Invariant: stackData below aliases &vm.stack[0] for the whole native run.
+	// It stays valid only because generated code never reallocates vm.stack — the
+	// no-call eligibility filter (depths rejects OpCall) plus this pre-reservation
+	// to `need` guarantee no in-flight growth. Lifting the JIT to compile calls
+	// would break this and must re-establish the pointer per re-entry.
 	ctx := jitCtx{
 		stackData: &vm.stack[0],
 		base:      int64(f.base),
@@ -125,13 +134,28 @@ func jitCompileCached(chunk *Chunk) *compiledJIT {
 		}
 		return jc
 	}
-	jc := compileJIT(chunk)
+	jc := safeCompileJIT(chunk)
 	if jc == nil {
 		jitCache.Store(chunk, jitIneligible)
 		return nil
 	}
 	jitCache.Store(chunk, jc)
 	return jc
+}
+
+// safeCompileJIT wraps compileJIT so a code-generator defect degrades to the
+// interpreter rather than crashing the host. The underlying assembler
+// (golang-asm) panics on an unencodable instruction instead of returning an
+// error, so a panic here means "this chunk hit a codegen bug" — mark it
+// ineligible (nil) and let the interpreter run it. This preserves the JIT's
+// core contract: an unhandled shape is slow, never wrong.
+func safeCompileJIT(chunk *Chunk) (jc *compiledJIT) {
+	defer func() {
+		if recover() != nil {
+			jc = nil
+		}
+	}()
+	return compileJIT(chunk)
 }
 
 // depths computes the operand-stack depth on entry to each instruction and the

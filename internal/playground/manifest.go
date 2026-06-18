@@ -15,13 +15,9 @@ var builtinSpellOps = map[string][]string{
 	"go":      {"go-build", "go-test", "go-vet", "go-fmt", "go-mod-tidy", "go-generate", "go-clean", "golangci-lint", "govulncheck"},
 	"rs":      {"cargo-build", "cargo-test", "cargo-clippy", "cargo-fmt", "cargo-clean"},
 	"py":      {"pytest", "ruff-check", "ruff-format", "uv-build", "uv-clean"},
-	"js":      {"eslint", "prettier", "vitest", "preflight"},
 	"ts":      {"tsc", "eslint", "prettier", "vitest", "preflight"},
 	"docker":  {"docker-build", "docker-build-check", "hadolint"},
-	"compose": {"docker-compose-build", "docker-compose-config"},
 	"buf":     {"buf-build", "buf-lint", "buf-format", "buf-generate"},
 	"buzz":    {"buzz-check", "buzz-test", "magus-buzz"},
-	"zig":     {"zig-build", "zig-build-test", "zig-fmt", "clean"},
-	"yaml":    {"yamlfmt", "yamllint"},
 	"md":      {"markdownlint", "prettier"},
 }

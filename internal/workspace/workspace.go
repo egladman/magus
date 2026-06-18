@@ -48,5 +48,6 @@ type ProjectOption func(p *types.Project) error
 // BindingOption mutates a spell Binding at registration time.
 type BindingOption func(b *types.Binding) error
 
-// TargetOption mutates a types.TargetPolicy at registration time.
-type TargetOption func(p *types.TargetPolicy)
+// TargetOption sets a per-target execution-policy field on a types.Target at
+// registration time.
+type TargetOption func(t *types.Target)

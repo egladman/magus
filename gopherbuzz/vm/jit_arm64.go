@@ -38,6 +38,11 @@ const (
 
 // jitEntry is declared in jit_shared.go; jit_arm64.s provides the arm64 impl.
 
+// flushICache performs AArch64 instruction-cache maintenance over [p, p+n) so
+// freshly written, then RX-mapped, bytes are coherently fetched as code.
+// Implemented in jit_arm64.s; amd64 needs no equivalent (x86 is I-cache coherent).
+func flushICache(p *byte, n int)
+
 func compileJIT(chunk *Chunk) *compiledJIT {
 	entry, maxDepth, ok := depths(chunk)
 	if !ok {
@@ -498,5 +503,8 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		_ = unix.Munmap(mem)
 		return nil
 	}
+	// AArch64 needs explicit cache maintenance before the freshly written bytes
+	// are fetched as instructions; Mprotect alone does not invalidate the I-cache.
+	flushICache(&mem[0], len(mem))
 	return &compiledJIT{code: mem, entry: &mem[0], maxDepth: maxDepth}
 }
