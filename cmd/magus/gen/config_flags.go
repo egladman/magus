@@ -22,6 +22,7 @@ var ConfigFlagSpecs = []ConfigFlagSpec{
 	{"cache-immutable", "MAGUS_CACHE_IMMUTABLE", "bool"},
 	{"cache-size-mb", "MAGUS_CACHE_SIZE_MB", "int"},
 	{"", "MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "stringslice"},
+	{"cache-remote-insecure", "MAGUS_CACHE_REMOTE_INSECURE", "bool"},
 	{"ci-max-shards", "MAGUS_CI_MAX_SHARDS", "int"},
 	{"ci-runner-pool-budget", "MAGUS_CI_RUNNER_POOL_BUDGET", "int"},
 	{"flake-enabled", "MAGUS_FLAKE_ENABLED", "bool"},
@@ -74,6 +75,7 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.Cache.Dir, "cache-dir", cfg.Cache.Dir, "MAGUS_CACHE_DIR: MAGUS_CACHE_DIR")
 	fs.BoolVar(&cfg.Cache.Immutable, "cache-immutable", cfg.Cache.Immutable, "MAGUS_CACHE_IMMUTABLE: MAGUS_CACHE_IMMUTABLE")
 	fs.IntVar(&cfg.Cache.SizeMB, "cache-size-mb", cfg.Cache.SizeMB, "MAGUS_CACHE_SIZE_MB: MAGUS_CACHE_SIZE_MB")
+	fs.BoolVar(&cfg.Cache.Remote.Insecure, "cache-remote-insecure", cfg.Cache.Remote.Insecure, "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are")
 	fs.IntVar(&cfg.CI.MaxShards, "ci-max-shards", cfg.CI.MaxShards, "MAGUS_CI_MAX_SHARDS: MAGUS_CI_MAX_SHARDS")
 	fs.IntVar(&cfg.CI.RunnerPoolBudget, "ci-runner-pool-budget", cfg.CI.RunnerPoolBudget, "MAGUS_CI_RUNNER_POOL_BUDGET: MAGUS_CI_RUNNER_POOL_BUDGET")
 	fs.BoolVar(&cfg.Flake.Enabled, "flake-enabled", cfg.Flake.Enabled, "MAGUS_FLAKE_ENABLED: MAGUS_FLAKE_ENABLED")

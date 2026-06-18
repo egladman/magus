@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engines: how magus runs a magusfile</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="index.html">Docs</a></li>
+        <li><a href="editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="engines-how-magus-runs-a-magusfile">Engines: how magus runs a magusfile</h1>
+<p>A <strong>magusfile</strong> is written in <a href="https://buzz-lang.dev/">Buzz</a> and runs on the
+embedded Buzz VM through a small internal seam. A <code>magusfile.buzz</code> exposes the
+<code>magus.*</code> API and composes <a href="spells.html">spells</a>, <a href="targets.html">targets</a>, and
+<a href="charms.html">charms</a>. This document explains the seam and how a new language
+would plug in.</p>
+<h2 id="the-engine-interface">The engine interface</h2>
+<p>The backend implements one small interface, <code>engine.Engine</code>, which is a
+factory for <code>engine.Session</code>:</p>
+<pre><code class="language-go">// internal/interp/engine/engine.go
+type Engine interface {
+    ID() string
+    NewSession(ctx context.Context) (Session, error)
+}
+
+type Session interface {
+    Close() error
+    SetGlobal(name string, v Value)
+    GetGlobal(name string) Value
+    NewTable() Table
+    LoadString(code string) (Value, error)
+    DoString(code string) error
+    Call(p CallParams, args ...Value) error
+}
+</code></pre>
+<p><code>Value</code> and <code>Table</code> are engine-neutral handles, so host code reads and writes
+script values without knowing the concrete VM. The backend registers itself at
+<code>init()</code> time:</p>
+<pre><code class="language-go">// internal/interp/engine/buzz/buzz.go
+func init() { engine.Register(&quot;buzz&quot;, engineImpl{}) }
+</code></pre>
+<p>and is found by name through <code>engine.Lookup(name)</code>. The registered backend in a
+stock magus binary is <code>buzz</code>.</p>
+<p>The backend is pulled into the binary by blank import in
+<a href="../cmd/magus/packs_interp.go"><code>cmd/magus/packs_interp.go</code></a>:</p>
+<pre><code class="language-go">_ &quot;.../internal/interp/engine/buzz&quot;
+</code></pre>
+<h2 id="the-spell-contract">The spell contract</h2>
+<p>A spell exports a fixed set of <code>mgs_</code>-prefixed functions (see
+<a href="spells.html#authoring-a-custom-spell">spells.md</a>). The list of optional functions
+and the decoder keys they map to is <strong>single-sourced</strong> in
+<a href="../internal/spell/contract.go"><code>internal/spell/contract.go</code></a> as
+<code>OptionalContract</code>, and the Buzz resolver (<code>internal/spell/resolve.go</code>) iterates
+that one list. A spell's <code>mgs_</code> functions decode to a <code>Spec</code> for every scalar and
+list contribution (<code>needs</code>, <code>provides</code>, <code>claims</code>, <code>version_cmd</code>, <code>opaque</code>) and
+for record-shaped ops (<code>{cmd, args, charms}</code>).</p>
+<p>Spells support <strong>function-ops</strong> — ops whose handler does host work in-VM rather
+than forking a command — so a remote cache backend (<code>get_artifact</code>/<code>put_artifact</code>)
+can be authored and wired with <code>magus.cache.remote</code>. A handler hands its command
+to the injected <code>cb</code> callback (the form the resolver also extracts statically).</p>
+<p><strong>Doc-comment capture.</strong> Buzz captures a handler's doc comment at compile time
+(the parser binds the comment to the function node; <code>FunDoc</code> reads it back), and
+<code>magus doctor</code> enforces one on each function-handler target. Note Buzz's
+<code>Chunk.Doc</code> is in-memory only and not serialized to bytecode, so Buzz captures
+docs only for freshly-compiled workspace <code>.buzz</code> spells, never the embedded
+built-ins.</p>
+<h2 id="extra-is-self-complete"><code>extra</code> is self-complete</h2>
+<p>Every magus host module (including <code>json</code>, <code>crypto</code>, and the <code>fs</code>/<code>env</code> methods
+Buzz's stdlib also covers) is on the <code>extra</code> surface. This is deliberate: it was
+tempting to make <code>extra</code> a strict <em>delta</em> over Buzz's stdlib (omit the overlaps),
+but that split a single concept across two namespaces — <code>fs.exists</code> was native
+while <code>fs.join</code>/<code>glob</code> were <code>extra.fs</code>, so authors had to memorize which side each
+call lived on. Self-complete <code>extra</code> means one import covers a whole domain
+(<code>extra.fs.*</code>), and it does not shadow the stdlib (<code>extra.fs.exists</code> ≠ native
+<code>fs.exists</code>). The <code>extra</code> forms are also <strong>sandbox-aware</strong> where the bare stdlib
+is not — e.g. <code>extra.env.get</code>/<code>lookup</code> honor the env allowlist, while Buzz's
+<code>os.env</code> is raw. Methods that have a native Buzz equivalent are noted per-method
+in the <a href="modules/index.html">module reference</a>; either works. The cross-reference
+lives in <code>internal/std/buzz_overlap.go</code>.</p>
+<p>A few entries are <em>not</em> treated as duplicates because the magus behavior the
+stdlib can't reproduce: magus's <code>os.exit</code> raises a lifecycle error (Buzz's
+hard-exits the process), magus's <code>os.sleep</code> is cancellable (Buzz's blocks), and
+magus's <code>crypto.*_file</code> hashes a file (Buzz's <code>hash</code> only takes a string). These
+stay on the magus surface.</p>
+<p>A workspace spell lives at <code>spells/&lt;name&gt;/spell.buzz</code> (or flat
+<code>spells/&lt;name&gt;.buzz</code>).</p>
+<h2 id="built-in-spell-vs-language-builtins">&quot;Built-in spell&quot; vs language &quot;builtins&quot;</h2>
+<p>A <strong>built-in spell</strong> is a spell whose bytecode is compiled from
+<code>magus/spells/&lt;name&gt;/spell.buzz</code> and embedded in the magus binary (<code>go</code>,
+<code>typescript</code>, <code>docker</code>, …; see <a href="spells.html#built-in">spells.md</a>). This is a magus
+concept and is unrelated to Buzz's language <strong>builtins</strong> (<code>spawn</code>, list/map
+methods, etc.), which are part of the Buzz language itself. The docs always write
+&quot;built-in spell&quot; when they mean the former.</p>
+<h2 id="adding-a-new-language">Adding a new language</h2>
+<p>The engine interface is the stable, clean part of the seam. Plugging in a second
+language today, however, also touches a handful of <strong>hard-coded dispatch spots</strong>
+above the interface — this is honest current state, not the end state:</p>
+<ol>
+<li>Implement <code>engine.Engine</code>/<code>Session</code> for the VM and <code>engine.Register</code> it (the
+clean part).</li>
+<li>Map the file extension to the engine in <code>engineForExt</code>
+(<code>internal/interp/source.go</code>) and add the glob to <code>scriptExts</code> /
+the <code>magusfile.&lt;ext&gt;</code> lists.</li>
+<li>Branch the runtime where it special-cases an engine by name
+(<code>src.Engine == &quot;buzz&quot;</code> in <code>internal/interp/runtime.go</code>).</li>
+<li>Provide the per-engine host bindings (the <code>magus.*</code> surface), as
+<code>internal/interp/bindings/buzz.go</code> does today.</li>
+</ol>
+<p><strong>Future direction — registry-driven discovery.</strong> The intent is to derive
+extensions, magusfile filenames, and dispatch from the engine registry itself, so
+adding a language means registering a backend (with its extensions and binding
+installer) and nothing else — no edits to <code>source.go</code>, <code>runtime.go</code>, or
+switch statements. That refactor is deliberately out of scope for now; the
+hard-coded spots above are the seam's known leaks, documented so they
+are visible rather than surprising.</p>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="spells.html">spells.md</a>: the <code>mgs_</code> spell contract and how spells compose.</li>
+<li><a href="targets.html">targets.md</a>: the runnable unit and its CLI grammar.</li>
+<li><a href="modules/index.html">modules/index.md</a>: the <code>magus.*</code> host module reference.</li>
+</ul>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/engines.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-16 17:28:31 UTC from commit <a href="https://github.com/egladman/tack/commit/a8396fbfd2b64e596d5481cd614ba047c98ebd85"><code>a8396fbf</code></a></small>
+  </footer>
+</body>
+</html>

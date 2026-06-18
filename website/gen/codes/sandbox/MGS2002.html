@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS2002 — path write denied by sandbox</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../index.html">Docs</a></li>
+        <li><a href="../../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mgs2002--path-write-denied-by-sandbox">MGS2002 — path write denied by sandbox</h1>
+<p>A spell tried to write to a file outside the workspace and outside the
+configured allowlist.</p>
+<pre><code>[MGS2002] fs write denied: /home/user/.bashrc
+</code></pre>
+<h2 id="why">Why</h2>
+<p>The sandbox denies writes outside <code>&lt;workspace&gt;</code> and <code>/tmp</code> by default.
+This blocks the supply-chain attack pattern of modifying shell startup
+files, sudoers, or cron tables for persistence.</p>
+<h2 id="resolution">Resolution</h2>
+<ol>
+<li>
+<p><strong>If the write target is a legitimate cache</strong> (e.g. a Rust spell
+writing to <code>~/.cargo/registry/cache</code>): add it to <code>magus.yaml</code>:</p>
+<pre><code class="language-yaml">sandbox:
+  allow:
+    - path: ~/.cargo
+      mode: rw
+</code></pre>
+</li>
+<li>
+<p><strong>If the spell should be writing inside the workspace</strong> but is using
+an absolute path: the spell has a bug. File an issue with the spell
+author; in the meantime grant the path explicitly or disable sandbox
+mode.</p>
+</li>
+<li>
+<p><strong>If this is a malicious spell</strong>: do not grant the path. Uninstall.</p>
+</li>
+</ol>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/codes/sandbox/MGS2002.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 18:36:37 UTC from commit <a href="https://github.com/egladman/tack/commit/77bb067c75ce277cf7571c9a2f3a03c544df410e"><code>77bb067c</code></a></small>
+  </footer>
+</body>
+</html>

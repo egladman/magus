@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`semver`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../index.html">Docs</a></li>
+        <li><a href="../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="semver"><code>semver</code></h1>
+<p>Semantic version parsing and comparison (SemVer 2.0.0).</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;semver&quot;</code>) and call methods in <code>camelCase</code> (<code>semver.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="compare"><code>compare</code></h3>
+<p>Compare two semver strings; op is &quot;==&quot;, &quot;!=&quot;, &quot;&lt;&quot;, &quot;&lt;=&quot;, &quot;&gt;&quot;, or &quot;&gt;=&quot; — true when the relation holds.</p>
+<p><strong>Signature:</strong> <code>semver.compare(a, op, b) → bool</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>a</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>op</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>b</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> bool</p>
+<h3 id="parse"><code>parse</code></h3>
+<p>Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.</p>
+<p><strong>Signature:</strong> <code>semver.parse(v) → map[string]any</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>v</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/modules/semver.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-11 00:38:15 UTC from commit <a href="https://github.com/egladman/tack/commit/56e0f4debf1ec3a45a68fce4138570a6086735aa"><code>56e0f4de</code></a></small>
+  </footer>
+</body>
+</html>

@@ -1,6 +1,6 @@
 // Package config holds the magus configuration schema and yaml-based loader.
 // Config is loaded in priority order: defaults → magus.yaml → MAGUS_* env vars → CLI flags.
-// Env vars use MAGUS_ prefix + yaml-tag path uppercased (e.g. interpreter.lua.engine → MAGUS_INTERPRETER_LUA_ENGINE).
+// Env vars use MAGUS_ prefix + yaml-tag path uppercased (e.g. cache.dir → MAGUS_CACHE_DIR).
 package config
 
 import (
@@ -115,6 +115,11 @@ type Cache struct {
 // in the magusfile; everything here is declarative policy.
 type CacheRemote struct {
 	TrustedKeys []string `yaml:"trusted_keys"` // base64 Ed25519 public keys a remote artifact must be signed by; required when a backend is wired
+	// Insecure disables remote-cache signature verification: unsigned artifacts are
+	// imported and produced with no trust set. A shared cache without signing is a
+	// supply-chain hazard — use only for trusted single-repo CI, or to validate a
+	// backend before minting keys. When true, trusted_keys is not required.
+	Insecure bool `yaml:"insecure"`
 }
 
 // CI controls CI fan-out behaviour.
@@ -212,6 +217,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
 		{"MAGUS_CACHE_IMMUTABLE", "cache.immutable", "false", "When true (or 1), open the cache in read-only mode: replay hits but never write new entries"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
+		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only"},
 		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},
 		{"MAGUS_LOG_LEVEL", "log.level", "info", "Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table)"},
 		{"MAGUS_CONCURRENCY", "concurrency", "min(NumCPU,8)", "Maximum number of concurrently running per-project build steps"},
@@ -241,7 +247,6 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DAEMON_IDLE_TTL", "daemon.idle_ttl", "6h", "Idle workspace eviction TTL for the multi-workspace daemon; e.g. \"6h\", \"30m\""},
 		{"MAGUS_DAEMON_WORKSPACES", "daemon.workspaces", "", "Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
 		{"MAGUS_ASSUME_INTERACTIVE", "assume_interactive", "false", "When 1 or true, assume an interactive terminal even if detection says otherwise"},
-		{"MAGUS_INTERPRETER_LUA_ENGINE", "interpreter.lua.engine", "", "Select the Lua scripting backend: luajit (cgo) or gopherlua (pure-Go); empty picks the best compiled-in engine"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server even when the binary was built with -tags mcp"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},

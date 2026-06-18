@@ -1,0 +1,388 @@
+// magusfile.buzz — website, the magus documentation site, a standalone magus project.
+//
+// Renders the sibling magus/docs tree (Markdown) into ./gen as a static HTML
+// site. The render is dry — Buzz stdlib (io/std) plus the magus host modules
+// (markdown.toHtml for GFM->HTML, os.exec/fs for the rest) —
+// so it lives in this project's `generate` target and needs no separate
+// `magus buzz` script. Source docs live one level up (../docs, ../README.md);
+// git runs as `git -C ..` so the per-page commit footer keys off the same
+// magus/-relative paths the source tree uses.
+//
+// It renders the committed Markdown under ../docs (including the module/manpage
+// reference the root project generates); the root's own drift gate keeps that
+// Markdown fresh, so the site just renders whatever is checked in.
+//
+//   magus run generate website    -- render docs/ -> gen/ and gate on drift
+//   magus run generate:rw website -- render and keep the result (no gate)
+//   magus run serve website       -- watch ../docs and re-render on change
+
+import "magus";
+// Host utility modules under bare names. markdown (GFM->HTML) is magus-only; fs/os
+// carry magus's exec/watch/read methods layered onto Buzz's stdlib. io/std are
+// Buzz stdlib (File, print).
+import "markdown";
+import "fs";
+import "io";
+import "os";
+import "std";
+// The playground embeds the gopherbuzz Buzz VM, so build-playground depends on
+// gopherbuzz's build. Importing it by path binds its targets as cross-project
+// handles (gopherbuzz.build), referenced from build_playground below.
+import "project/../gopherbuzz" as gopherbuzz;
+
+magus.project.register(fun(p, cb) > bool { cb({
+    "outputs": ["gen/**", "MAGUS.md"],
+    // The cross-project dependency on gopherbuzz is declared via the project import
+    // above (build_playground uses gopherbuzz.build); magus folds that into this
+    // project's affected set, so a gopherbuzz change still marks the site affected —
+    // no separate project-level depends_on.
+    "targets": {
+        // generate renders the site and then gates on drift, mirroring the root
+        // project's generate: a cache hit would skip the render, and the gate
+        // must run every time. isolated so its git-status check isn't tripped by
+        // a peer target mutating the tree mid-check.
+        "generate": {"cachable": false, "isolated": true},
+        "serve": {"cachable": false},
+        // build-playground shells out to TinyGo to rebuild a non-deterministic
+        // binary; a cache hit would replay a stale one. Run by hand when the
+        // interpreter or playground host changes (TinyGo is not a CI tool).
+        "build-playground": {"cachable": false},
+    },
+}); return true; });
+
+// ── configuration ───────────────────────────────────────────────────────────
+final ROOT = "..";          // the magus/ workspace dir, relative to this project
+final DOCS = "docs";        // source docs subtree under ROOT
+final OUT  = "gen";          // generated site output, under this project
+final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
+final GH   = "https://github.com/egladman/tack";
+
+// Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
+// magusfile load — these shell out to git, and a magusfile is parsed on every
+// `magus ls`). Buzz lets a function reassign a typed global, so the render
+// helpers read these like the consts the standalone generator used.
+var metaPrefix: str = "";
+var metaBranch: str = "";
+var metaFull: str = "";
+var metaShort: str = "";
+var metaStamp: str = "";
+var metaCommits: {str: str} = {};
+var metaLoaded: bool = false;
+
+// ── shell capture ─────────────────────────────────────────────────────────────
+fun capture(cmd: str) > str {
+    final tmp = os.tmpFilename("sitegen");
+    final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
+    if (code != 0) {
+        fs.delete(tmp);
+        return "";
+    }
+    final f = io.File.open(tmp, io.FileMode.read);
+    final out = f.readAll();
+    f.close();
+    fs.delete(tmp);
+    return out.trim();
+}
+
+// ── build metadata ───────────────────────────────────────────────────────────
+fun gitBranch() > str {
+    final b = capture("git -C " + ROOT + " rev-parse --abbrev-ref HEAD");
+    if (b == "") { return "main"; }
+    return b;
+}
+
+// Map of repo-root-relative source path -> "full|short|date" of the most recent
+// commit that touched it, built from ONE git log (newest-first, so a file's first
+// sighting wins) instead of a git call per page. ">>>" can't begin a repo path,
+// so it cleanly marks each commit header; the file names follow until the next.
+// Run with `git -C ..` so the pathspecs (README.md, docs) and emitted paths are
+// magus/-relative, matching metaPrefix.
+fun buildCommits() > {str: str} {
+    var m: {str: str} = mut {};
+    final log = capture("TZ=UTC git -C " + ROOT + " log --first-parent --diff-merges=first-parent --name-only "
+        + "--date=format-local:'%Y-%m-%d %H:%M:%S UTC' "
+        + "--format='>>>%H|%h|%cd' -- README.md docs");
+    var cur = "";
+    foreach (line in log.split("\n")) {
+        if (line.startsWith(">>>")) {
+            cur = line.sub(3);
+        } else {
+            if (line != "" and cur != "") {
+                if (m[line] == null) { m[line] = cur; }
+            }
+        }
+    }
+    return m;
+}
+
+// loadMeta populates the metaXxx globals once. metaPrefix is ROOT's repo prefix
+// (e.g. "magus/"), so metaPrefix + a magus/-relative source path is the key into
+// metaCommits. metaFull/Short/Stamp are the HEAD fallback for a not-yet-committed
+// page; a committed page instead credits the last commit that touched its source.
+fun loadMeta() > void {
+    if (metaLoaded) { return; }
+    metaPrefix = capture("git -C " + ROOT + " rev-parse --show-prefix");
+    metaBranch = gitBranch();
+    metaFull = capture("git -C " + ROOT + " rev-parse HEAD");
+    metaShort = capture("git -C " + ROOT + " rev-parse --short HEAD");
+    metaStamp = capture("TZ=UTC git -C " + ROOT + " show -s --date=format-local:'%Y-%m-%d %H:%M:%S UTC' --format=%cd HEAD");
+    metaCommits = buildCommits();
+    metaLoaded = true;
+}
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+fun titleOf(md: str, rel: str) > str {
+    foreach (line in md.split("\n")) {
+        if (line.startsWith("# ")) { return line.sub(2).trim(); }
+    }
+    return rel;
+}
+
+fun outName(base: str) > str {
+    if (base == "README.md") { return "index.html"; }
+    return base.sub(0, base.len() - 3) + ".html";
+}
+
+// Footer crediting the last commit that touched a page's source (a magus/-relative
+// path), falling back to HEAD for a not-yet-committed file. Keying off the file's
+// own history means a page changes when its source does, not when any commit lands.
+fun commitFooter(path: str) > str {
+    var cFull = metaFull;
+    var cShort = metaShort;
+    var cStamp = metaStamp;
+    final rec = metaCommits[metaPrefix + path];
+    if (rec != null) {
+        final parts = rec.split("|");
+        cFull = parts[0];
+        cShort = parts[1];
+        cStamp = parts[2];
+    }
+    return "Generated " + cStamp + " from commit "
+        + "<a href=\"" + GH + "/commit/" + cFull + "\"><code>" + cShort + "</code></a>";
+}
+
+// rootPrefix returns the relative path from a generated page back up to gen/'s
+// root ("" for spells.html, "../" for modules/fs.html, "../../" for
+// codes/sandbox/X.html), so the shared nav links and theme.js resolve at any
+// page depth and the site still works when served under a project subpath.
+fun rootPrefix(srcRel: str) > str {
+    var rel = srcRel;
+    if (rel.startsWith(DOCS + "/")) { rel = rel.sub((DOCS + "/").len()); }
+    final depth = rel.split("/").len() - 1;
+    var out = "";
+    var i = 0;
+    while (i < depth) { out = out + "../"; i = i + 1; }
+    return out;
+}
+
+// srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
+// it drives both the per-page commit footer and the "Suggest an edit" link.
+fun page(title: str, content: str, srcRel: str) > str {
+    final root = rootPrefix(srcRel);
+    return "<!DOCTYPE html>\n"
+        + "<html lang=\"en\">\n"
+        + "<head>\n"
+        + "  <meta charset=\"utf-8\">\n"
+        + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        + "  <title>" + title + "</title>\n"
+        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "  <script src=\"" + root + "theme.js\"></script>\n"
+        + "</head>\n"
+        + "<body>\n"
+        + "  <header class=\"container\">\n"
+        + "    <nav>\n"
+        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><strong>magus</strong></a></li></ul>\n"
+        + "      <ul>\n"
+        + "        <li><a href=\"" + root + "index.html\">Docs</a></li>\n"
+        + "        <li><a href=\"" + root + "editor.html\">Playground</a></li>\n"
+        + "        <li><a href=\"" + GH + "\">Source</a></li>\n"
+        + "        <li><button id=\"theme-toggle\" class=\"outline\" style=\"padding:0.2rem 0.7rem\">◐</button></li>\n"
+        + "      </ul>\n"
+        + "    </nav>\n"
+        + "  </header>\n"
+        + "  <main class=\"container\">\n"
+        + "    <article>\n"
+        + content
+        + "    </article>\n"
+        + "    <p><a href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a></p>\n"
+        + "  </main>\n"
+        + "  <footer class=\"container\">\n"
+        + "    <small>" + commitFooter(srcRel) + "</small>\n"
+        + "  </footer>\n"
+        + "</body>\n"
+        + "</html>\n";
+}
+
+// ── renderers ─────────────────────────────────────────────────────────────────
+// Render the repo's top-level README.md as the site landing page (index.html).
+// Links of the form href="docs/X" (relative from the repo root) resolve from
+// gen/index.html as href="X" — strip the docs/ prefix.
+fun renderRoot() > void {
+    final f = io.File.open(ROOT + "/README.md", io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    var html = markdown.toHtml(md);
+    while (html.indexOf("href=\"docs/") != null) {
+        html = html.replace("href=\"docs/", "href=\"");
+    }
+
+    final doc = page(titleOf(md, "README.md"), html, "README.md");
+    final of = io.File.open(OUT + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    std.print("  README.md -> " + OUT + "/index.html");
+}
+
+// Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
+// docs/ subtree; srcRel (DOCS/rel) is magus/-relative for the footer/edit link.
+fun renderFile(rel: str) > void {
+    final f = io.File.open(ROOT + "/" + DOCS + "/" + rel, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    final html = markdown.toHtml(md);
+    final doc = page(titleOf(md, rel), html, DOCS + "/" + rel);
+
+    final parts = rel.split("/");
+    final base = parts[parts.len() - 1];
+    var dir = OUT;
+    if (parts.len() > 1) { dir = OUT + "/" + parts.sub(0, parts.len() - 1).join("/"); }
+    fs.makeDirectory(dir);
+
+    final of = io.File.open(dir + "/" + outName(base), io.FileMode.write);
+    of.write(doc);
+    of.close();
+    std.print("  " + rel + " -> " + dir + "/" + outName(base));
+}
+
+// True if path is a directory.
+fun isDir(path: str) > bool {
+    return os.execute(["test", "-d", path]) == 0;
+}
+
+// Recursively walk ../docs (the output lives outside it, under gen).
+fun walk(rel: str) > void {
+    var dir = ROOT + "/" + DOCS;
+    if (rel != "") { dir = ROOT + "/" + DOCS + "/" + rel; }
+
+    foreach (name in fs.list(dir)) {
+        var childRel = name;
+        if (rel != "") { childRel = rel + "/" + name; }
+
+        if (isDir(ROOT + "/" + DOCS + "/" + childRel)) {
+            walk(childRel);
+        } else {
+            if (name.endsWith(".md")) { renderFile(childRel); }
+        }
+    }
+}
+
+// site_render rebuilds gen/ from ../docs and the root README. Pure function of
+// git history (footers) and the source tree — reproducible and gate-stable.
+fun site_render() > void {
+    loadMeta();
+    fs.delete(OUT);
+    fs.makeDirectory(OUT);
+    std.print("generating site from " + ROOT + "/" + DOCS + "/ -> " + OUT + "/");
+
+    // Copy static assets referenced by the root README (images, badges).
+    os.execute(["sh", "-c", "[ -d " + ROOT + "/assets ] && cp -r " + ROOT + "/assets " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -f " + ROOT + "/coverage.svg ] && cp " + ROOT + "/coverage.svg " + OUT + "/ || true"]);
+
+    // Copy the WebAssembly playground — the editor page plus the committed
+    // buzz.wasm and its TinyGo glue. These are source artifacts of this project
+    // (rebuilt by the build-playground target), not rendered from docs, so the
+    // render only copies them; that keeps the drift gate stable.
+    os.execute(["sh", "-c", "[ -f editor.html ] && cp editor.html " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -f theme.js ] && cp theme.js " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -d playground ] && cp -r playground " + OUT + "/ || true"]);
+
+    renderRoot();
+    walk("");
+    std.print("done");
+}
+
+// ── targets ──────────────────────────────────────────────────────────────────
+export fun preflight(_args: [str]) > void {}
+
+// md-generate renders MAGUS.md (the target catalog + dependency graph) via
+// `magus describe graph`, parsed statically from this magusfile so it stays in
+// lockstep with the project's targets. Re-run after editing targets and commit:
+// `magus run md-generate site`.
+export fun md_generate(_args: [str]) > void {
+    final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
+    fs.writeFile("MAGUS.md", doc + "\n");
+}
+
+// generate renders the site and refreshes MAGUS.md, then gates on drift: a clean
+// checkout only goes dirty when gen/ or MAGUS.md actually changed (i.e. a doc edit
+// or target change wasn't re-rendered and committed). Run the `rw` charm
+// (`generate:rw`) to keep the result instead of gating.
+export fun generate(_args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"), magus.target.literal("md-generate"));
+    site_render();
+    if (magus.has_charm("rw")) { return; }
+
+    final drift = os.exec("git", ["status", "--porcelain", "--", OUT, "MAGUS.md"]).stdout;
+    if (drift != "") {
+        throw "generate: " + OUT + " or MAGUS.md drifted; re-run `magus run generate:rw site` and commit:\n" + drift;
+    }
+}
+
+export fun format(_args: [str]) > void { magus.needs(magus.target.literal("generate")); }
+export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
+export fun build(_args: [str]) > void { magus.needs(magus.target.literal("generate")); }
+export fun test(_args: [str]) > void { magus.needs(magus.target.literal("format")); }
+
+// 'ci' is the conventional anchor `magus affected ci` keys off; it fans out
+// lint/build/test, each of which waits for the render via generate.
+export fun ci(_args: [str]) > void {
+    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+}
+
+// build-playground rebuilds the WebAssembly interpreter the playground page
+// loads: TinyGo compiles ../cmd/buzz-playground to website/playground/buzz.wasm and
+// the matching wasm_exec.js glue is copied beside it. Both are committed (like
+// default.pgo), so CI — which has no TinyGo — never rebuilds them; the render
+// just copies the checked-in result into gen/. Run this after changing the
+// interpreter (../gopherbuzz) or the playground host (../internal/playground),
+// then commit the refreshed artifacts. TinyGo ≥ 0.40 is required; the glue must
+// come from the same TinyGo that built the wasm.
+export fun build_playground(_args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    // The playground embeds the gopherbuzz Buzz VM, so this target depends on
+    // gopherbuzz's build specifically — a target-level cross-project dependency.
+    magus.needs(gopherbuzz.build);
+    // Run from the magus module root (..) so TinyGo resolves the go.mod there.
+    // -stack-size lifts TinyGo's small default goroutine stack so the embedded
+    // interpreter has room to recurse (e.g. fib in the showcase magusfile).
+    // -scheduler=asyncify is the wasm default, pinned so the status banner's
+    // reported scheduler is guaranteed to match the build.
+    os.exec("tinygo",
+        ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
+         "-o", "website/playground/buzz.wasm", "./cmd/buzz-playground"],
+        "..", {});
+    os.exec("sh",
+        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" website/playground/wasm_exec.js"],
+        "..", {});
+    magus.info("rebuilt website/playground/buzz.wasm + wasm_exec.js — commit the result");
+}
+
+// serve watches ../docs and re-renders gen/ on change — handy for local docs
+// work. fs.watch BLOCKS until interrupted (Ctrl-C); the output lives
+// outside the watched tree (under gen), so a render can't retrigger the watch.
+// try/catch keeps a bad render from ending the watch; returning false keeps watching.
+export fun serve(_args: [str]) > void {
+    site_render();
+    magus.info("watching " + ROOT + "/" + DOCS + " — re-rendering " + OUT + " on change (Ctrl-C to stop)");
+    fs.watch([ROOT + "/" + DOCS], fun(_changed: [str]) > bool {
+        magus.info("change detected — re-rendering");
+        try {
+            site_render();
+        } catch (e) {
+            magus.warn("render failed, still watching: " + e);
+        }
+        return false;
+    });
+}

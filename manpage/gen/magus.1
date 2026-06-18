@@ -94,6 +94,9 @@ When true (or 1), open the cache in read\-only mode: replay hits but never write
 \fBMAGUS_CACHE_SIZE_MB\fR
 Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBcache.size_mb\fR.
 .TP
+\fBMAGUS_CACHE_REMOTE_INSECURE\fR
+Disable remote\-cache signature verification (accept/produce unsigned artifacts); for trusted single\-repo CI only (default: false). Equivalent magus.yaml key: \fBcache.remote.insecure\fR.
+.TP
 \fBMAGUS_LOG_FORMAT\fR
 Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: \fBlog.format\fR.
 .TP
@@ -180,9 +183,6 @@ Colon\-separated list of workspace roots the daemon will serve; non\-empty list 
 .TP
 \fBMAGUS_ASSUME_INTERACTIVE\fR
 When 1 or true, assume an interactive terminal even if detection says otherwise (default: false). Equivalent magus.yaml key: \fBassume_interactive\fR.
-.TP
-\fBMAGUS_INTERPRETER_LUA_ENGINE\fR
-Select the Lua scripting backend: luajit (cgo) or gopherlua (pure\-Go); empty picks the best compiled\-in engine. Equivalent magus.yaml key: \fBinterpreter.lua.engine\fR.
 .TP
 \fBMAGUS_MCP_ENABLED\fR
 When 0 or false, refuse to start the MCP server even when the binary was built with \-tags mcp (default: true). Equivalent magus.yaml key: \fBmcp.enabled\fR.

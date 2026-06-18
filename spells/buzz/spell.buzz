@@ -25,7 +25,7 @@ import "magus/target";
 export fun mgs_getName() > str { return "buzz"; }
 
 export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.buzz", "**/*.buzz"];
+    return ["**/*.buzz"];
 }
 
 // No mgs_getVersionCommand: there's no useful Buzz-toolchain version to probe here.
@@ -36,18 +36,18 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 // check type-checks every Buzz source without running it (buzz --check). buzz takes
 // one script per invocation, so find feeds xargs one file at a time (-n1); -print0
-// pairs with -0 for safe paths, and -r skips an empty set — the shell pattern the
-// bash spell uses for shellcheck.
+// pairs with -0 for safe paths, and -r skips an empty set — the same -print0 | xargs
+// pattern the bash spell uses for shellcheck.
 fun buzzCheck(target: Target, cb: fun(any)) > bool {
     cb({"cmd": "sh", "args": ["-c",
-        "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --check"]});
+        "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"]});
     return true;
 }
 
 // test runs each source's Buzz `test {}` blocks (buzz --test).
 fun buzzTest(target: Target, cb: fun(any)) > bool {
     cb({"cmd": "sh", "args": ["-c",
-        "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --test"]});
+        "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"]});
     return true;
 }
 
@@ -60,7 +60,7 @@ fun buzzTest(target: Target, cb: fun(any)) > bool {
 // reads {...} in a string as interpolation, and MAGUS is always set here anyway.)
 fun magusBuzz(target: Target, cb: fun(any)) > bool {
     cb({"cmd": "sh", "args": ["-c",
-        "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"]});
+        "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"]});
     return true;
 }
 

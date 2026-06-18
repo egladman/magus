@@ -10,15 +10,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 	"unicode"
 
+	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/ast"
 	"github.com/egladman/magus/internal/cache/reflink"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -769,11 +771,6 @@ func (*runner) checkEnvVars() Check {
 
 // ── Target-name convention check ──────────────────────────────────────────────
 
-var (
-	buzzTargetDeclRe = regexp.MustCompile(`(?m)\bexport\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)`)
-	hasCharmDeclRe   = regexp.MustCompile(`has_charm\(\s*"([^"]+)"`)
-)
-
 // checkTargetNameConventions warns when a workspace declares target functions
 // using more than one naming convention (snake_case, camelCase, PascalCase).
 // magus normalizes all of them to the same canonical kebab-case target, so this
@@ -847,15 +844,23 @@ func magusfileSourcesInDir(dir string) []string {
 }
 
 // declaredTargetNames extracts the raw identifiers of target functions declared
-// in a Buzz magusfile source: `export fun NAME`.
+// in a Buzz magusfile source: `export fun NAME`. Names are returned verbatim (not
+// normalized) so the caller can classify the source's naming convention. A source
+// that fails to parse yields no names (best-effort).
 func declaredTargetNames(path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
+	prog, err := buzz.Parse(string(data))
+	if err != nil || prog == nil {
+		return nil
+	}
 	var names []string
-	for _, m := range buzzTargetDeclRe.FindAllStringSubmatch(string(data), -1) {
-		names = append(names, m[1])
+	for _, stmt := range prog.Stmts {
+		if fn, ok := stmt.(*ast.FunDecl); ok && fn.IsExported {
+			names = append(names, fn.Name)
+		}
 	}
 	return names
 }
@@ -920,16 +925,17 @@ func (r *runner) checkCharmTargetCollision(projects []*types.Project) Check {
 }
 
 // declaredCharmNames extracts the charm names a magusfile's target bodies branch
-// on: every has_charm("NAME") literal (including the built-in has_charm("rw")).
+// on: every has_charm("NAME") literal (including the built-in has_charm("rw")). It
+// reuses the static target-graph extractor, so a has_charm mention inside a comment
+// or string literal is correctly ignored.
 func declaredCharmNames(path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	src := string(data)
 	var names []string
-	for _, m := range hasCharmDeclRe.FindAllStringSubmatch(src, -1) {
-		names = append(names, m[1])
+	for _, n := range describe.Extract(string(data)) {
+		names = append(names, n.Charms...)
 	}
 	return names
 }

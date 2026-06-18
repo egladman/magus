@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Telemetry (OpenTelemetry)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="index.html">Docs</a></li>
+        <li><a href="editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="telemetry-opentelemetry">Telemetry (OpenTelemetry)</h1>
+<p>magus can export <strong>metrics</strong> and <strong>traces</strong> to any OTLP collector you run.
+Telemetry is <strong>OFF by default</strong> — there is no magus-operated backend; the
+collector is yours and magus connects only to the endpoint you configure.</p>
+<p>This page is the complete reference for everything magus emits. Instrument
+definitions live in
+<a href="../internal/observability/provider_otel.go"><code>internal/observability/provider_otel.go</code></a>;
+config in <a href="../internal/config/config.go"><code>internal/config/config.go</code></a>.</p>
+<h2 id="enabling">Enabling</h2>
+<p>In <code>magus.yaml</code>:</p>
+<pre><code class="language-yaml">telemetry:
+  enabled: true
+  endpoint: &quot;localhost:4318&quot; # host:port, no scheme
+  protocol: &quot;http&quot; # &quot;grpc&quot; (default) or &quot;http&quot;
+  insecure: true # plaintext for local collectors
+  service_name: &quot;magus&quot; # resource attribute service.name
+  sample_ratio: 1.0 # head-based trace sampling, [0,1]
+  headers: # static headers on every OTLP request
+    x-api-key: &quot;…&quot;
+</code></pre>
+<p>Or via the environment:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAGUS_TELEMETRY_ENABLED</code></td>
+<td><code>telemetry.enabled</code></td>
+<td><code>false</code></td>
+<td>Turn OTLP export on; magus connects to the endpoint when true</td>
+</tr>
+<tr>
+<td><code>MAGUS_TELEMETRY_ENDPOINT</code></td>
+<td><code>telemetry.endpoint</code></td>
+<td>—</td>
+<td>OTLP collector address as <code>host:port</code> (no scheme); required</td>
+</tr>
+<tr>
+<td><code>MAGUS_TELEMETRY_PROTOCOL</code></td>
+<td><code>telemetry.protocol</code></td>
+<td><code>grpc</code></td>
+<td>OTLP wire protocol: <code>grpc</code> or <code>http</code></td>
+</tr>
+<tr>
+<td><code>MAGUS_TELEMETRY_INSECURE</code></td>
+<td><code>telemetry.insecure</code></td>
+<td><code>false</code></td>
+<td>Disable TLS for the OTLP exporter (plaintext local collectors)</td>
+</tr>
+<tr>
+<td><code>MAGUS_TELEMETRY_SERVICE_NAME</code></td>
+<td><code>telemetry.service_name</code></td>
+<td><code>magus</code></td>
+<td>Value of the resource attribute <code>service.name</code></td>
+</tr>
+<tr>
+<td><code>MAGUS_TELEMETRY_SAMPLE_RATIO</code></td>
+<td><code>telemetry.sample_ratio</code></td>
+<td><code>1.0</code></td>
+<td>Head-based trace sampling ratio in <code>[0,1]</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Export details.</strong> Metrics are pushed over OTLP on a periodic reader every
+<strong>30s</strong>. Traces are batched and sampled head-based by <code>sample_ratio</code>
+(<code>1.0</code> = every trace). Metrics are unsampled — every recorded point is exported.</p>
+<h2 id="resource-attributes">Resource attributes</h2>
+<p>Every metric and span carries these resource attributes:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>service.name</code></td>
+<td><code>telemetry.service_name</code> (default <code>magus</code>)</td>
+</tr>
+<tr>
+<td><code>service.version</code></td>
+<td>the magus build version</td>
+</tr>
+<tr>
+<td><code>magus.workspace.root</code></td>
+<td>the workspace root, when set</td>
+</tr>
+<tr>
+<td><code>process.*</code></td>
+<td>detected process metadata (pid, runtime, …)</td>
+</tr>
+<tr>
+<td><code>host.*</code></td>
+<td>detected host metadata</td>
+</tr>
+</tbody>
+</table>
+<h2 id="metrics">Metrics</h2>
+<h3 id="cache-local">Cache (local)</h3>
+<p>Low-cardinality aggregate view of the on-disk content-addressed cache; no
+per-project attribute.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Instrument</th>
+<th>Unit</th>
+<th>Attributes</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus.cache.hits</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>outcome=hit</code></td>
+<td>Cache replays (a <code>Cache.Run</code> served from disk)</td>
+</tr>
+<tr>
+<td><code>magus.cache.misses</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>outcome=miss</code></td>
+<td>Genuine builds (no entry found)</td>
+</tr>
+<tr>
+<td><code>magus.cache.errors</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>outcome=error</code></td>
+<td>Build steps that failed</td>
+</tr>
+<tr>
+<td><code>magus.cache.duration</code></td>
+<td>histogram</td>
+<td><code>s</code></td>
+<td><code>outcome ∈ {hit, miss}</code></td>
+<td>Wall-clock of a single <code>Cache.Run</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="remote-cache">Remote cache</h3>
+<p>The <a href="remote-cache.html">shared backend</a> (S3, GitHub Actions, …) — exported only
+when one is wired via <code>magus.cache.remote(...)</code>. These mirror the local-cache
+vocabulary under a <code>.remote</code> prefix so a remote hit is <strong>never</strong> folded into the
+local counters: a remote hit is still a <em>local</em> miss, because the remote fetch
+only runs after the local store misses. Instrumentation wraps the backend
+interface, so it applies to every backend (including ones you write) with no
+backend changes.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Instrument</th>
+<th>Unit</th>
+<th>Attributes</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus.cache.remote.hits</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>op=get</code>, <code>outcome=hit</code></td>
+<td>Remote <code>get</code> returned an entry</td>
+</tr>
+<tr>
+<td><code>magus.cache.remote.misses</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>op=get</code>, <code>outcome=miss</code></td>
+<td>Remote <code>get</code> found nothing</td>
+</tr>
+<tr>
+<td><code>magus.cache.remote.errors</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>op ∈ {get, put}</code>, <code>outcome=error</code></td>
+<td>A remote operation failed</td>
+</tr>
+<tr>
+<td><code>magus.cache.remote.duration</code></td>
+<td>histogram</td>
+<td><code>s</code></td>
+<td><code>op ∈ {get, put}</code>, <code>outcome</code></td>
+<td>Wall-clock of a single remote operation</td>
+</tr>
+<tr>
+<td><code>magus.cache.remote.io.size</code></td>
+<td>histogram</td>
+<td><code>By</code></td>
+<td><code>op ∈ {get, put}</code></td>
+<td>Bytes transferred — recorded on hits and puts only (egress/ingress cost)</td>
+</tr>
+</tbody>
+</table>
+<p><code>outcome ∈ {hit, miss, stored, error}</code> — <code>stored</code> is a successful <code>put</code>.
+<strong>Remote hit-rate</strong> is <code>hits / (hits + misses)</code>. <strong>Put success</strong> is the
+<code>magus.cache.remote.duration</code> count for <code>op=put</code> minus
+<code>magus.cache.remote.errors</code> for <code>op=put</code>.</p>
+<h3 id="graph">Graph</h3>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Instrument</th>
+<th>Unit</th>
+<th>Attributes</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus.graph.queries</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>op</code>, <code>strategy</code></td>
+<td>Number of graph query operations</td>
+</tr>
+<tr>
+<td><code>magus.graph.query.duration</code></td>
+<td>histogram</td>
+<td><code>s</code></td>
+<td><code>op</code>, <code>strategy</code></td>
+<td>Wall-clock of a single graph query</td>
+</tr>
+</tbody>
+</table>
+<p><code>strategy</code> is present only when the query reports one. <code>op=build</code> is the full
+graph build.</p>
+<h3 id="target-runs">Target runs</h3>
+<p>Per-project, per-spell. <code>magus.project</code> has unbounded cardinality — see
+<a href="#cardinality">Cardinality</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Instrument</th>
+<th>Unit</th>
+<th>Attributes</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus.target.runs</code></td>
+<td>counter</td>
+<td><code>{call}</code></td>
+<td><code>magus.project</code>, <code>magus.spell</code>, <code>magus.target</code>, <code>outcome</code>, <code>cache.hit</code></td>
+<td>Target executions, including cache replays</td>
+</tr>
+<tr>
+<td><code>magus.target.duration</code></td>
+<td>histogram</td>
+<td><code>s</code></td>
+<td>same</td>
+<td>Wall-clock of a single target execution</td>
+</tr>
+</tbody>
+</table>
+<p><code>outcome ∈ {success, error}</code> · <code>cache.hit ∈ {true, false}</code> · one row is emitted
+per resolved spell per project.</p>
+<h3 id="concurrency-pool">Concurrency pool</h3>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Instrument</th>
+<th>Unit</th>
+<th>Attributes</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus.pool.wait.duration</code></td>
+<td>histogram</td>
+<td><code>s</code></td>
+<td>—</td>
+<td>Time a target waited for a slot</td>
+</tr>
+<tr>
+<td><code>magus.pool.slots.inflight</code></td>
+<td>up-down counter</td>
+<td><code>{slot}</code></td>
+<td>—</td>
+<td>Concurrency slots currently in use (gauge-like)</td>
+</tr>
+</tbody>
+</table>
+<p><code>magus.pool.slots.inflight</code> is an up-down counter: it rises as targets acquire
+slots and falls as they release, so its value reads as the live in-use depth.</p>
+<h2 id="traces-spans">Traces (spans)</h2>
+<p>Spans are sampled head-based by <code>telemetry.sample_ratio</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Span</th>
+<th>Attributes</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus.target.run</code></td>
+<td><code>magus.project</code>, <code>magus.target</code></td>
+<td>One per target execution (miss path)</td>
+</tr>
+<tr>
+<td><code>magus.cache.hash</code></td>
+<td>—</td>
+<td>Hashing a target's inputs (every <code>Cache.Run</code>)</td>
+</tr>
+<tr>
+<td><code>magus.cache.replay</code></td>
+<td>—</td>
+<td>Restoring outputs from a cache hit</td>
+</tr>
+<tr>
+<td><code>magus.cache.snapshot</code></td>
+<td>—</td>
+<td>Capturing outputs after a build (miss path, writable cache)</td>
+</tr>
+<tr>
+<td><code>magus.cache.remote.get</code></td>
+<td><code>magus.project</code></td>
+<td>A remote fetch; spans the network round-trip and the import</td>
+</tr>
+<tr>
+<td><code>magus.cache.remote.put</code></td>
+<td><code>magus.project</code></td>
+<td>A remote upload</td>
+</tr>
+<tr>
+<td><code>magus.cache.remote.prune</code></td>
+<td>—</td>
+<td>A retention sweep (<code>magus config cache prune --remote</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>magus.cache.hash</code> / <code>replay</code> / <code>snapshot</code> spans break a target's latency
+down by phase — hashing vs. building vs. I/O. The remote <code>get</code>/<code>put</code> spans put a
+network fetch or upload inline in the build trace with its own latency, so a slow
+remote round-trip is visible instead of opaque time inside the target.</p>
+<h2 id="cardinality">Cardinality</h2>
+<p><code>magus.target.runs</code> and <code>magus.target.duration</code> include <code>magus.project</code>, which is
+unbounded in large monorepos. If your setup has thousands of projects, drop or
+relabel the attribute at the collector:</p>
+<pre><code class="language-yaml"># OpenTelemetry Collector — attributes processor
+processors:
+  attributes/drop_project:
+    actions:
+      - key: magus.project
+        action: delete
+</code></pre>
+<p>Alternatively, use an SDK View at startup to drop the attribute before it leaves
+the process. Every other metric intentionally omits <code>magus.project</code>. The remote
+<code>get</code>/<code>put</code> <strong>spans</strong> carry <code>magus.project</code>, but spans are sampled and not
+aggregated into time series, so they don't create cardinality the way a metric
+attribute would.</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/telemetry.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 00:46:01 UTC from commit <a href="https://github.com/egladman/tack/commit/565b22ef35749afa95290608068d159d4a3d879f"><code>565b22ef</code></a></small>
+  </footer>
+</body>
+</html>

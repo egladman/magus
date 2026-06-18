@@ -63,9 +63,9 @@ type Table interface {
 }
 
 // ContextSetter is implemented by engine sessions that support per-call
-// context propagation (gopherlua, luajit). The pool uses it to thread the
-// job's context — including the limiter slot and ancestor chain — into the VM
-// before invoking a target, so the budget is enforced uniformly across backends.
+// context propagation. The pool uses it to thread the job's context —
+// including the limiter slot and ancestor chain — into the VM before invoking
+// a target, so the budget is enforced uniformly.
 type ContextSetter interface {
 	SetContext(context.Context)
 }

@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/targetgraph"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -167,7 +167,7 @@ func (m *Magus) applyCrossProjectDependencies(ctx context.Context) error {
 			if src.Engine != "buzz" {
 				continue
 			}
-			for _, n := range targetgraph.Extract(concatSource(src)) {
+			for _, n := range describe.Extract(concatSource(src)) {
 				for _, ref := range n.CrossDependencies {
 					if r, err := file.Resolve(ref.Project, p.Path); err == nil {
 						extra = append(extra, r)
@@ -217,10 +217,10 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 				}
 			}
 			if src.Engine == "buzz" {
-				nodes := targetgraph.Extract(concatSource(src))
+				nodes := describe.Extract(concatSource(src))
 				resolveCrossDependencies(nodes, p.Path)
 				entry.Nodes = nodes
-				entry.Cycle = targetgraph.Cycle(nodes)
+				entry.Cycle = describe.Cycle(nodes)
 			}
 			out.Projects = append(out.Projects, entry)
 		}

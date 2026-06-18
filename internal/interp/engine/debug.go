@@ -54,9 +54,8 @@ type DebugReader interface {
 }
 
 // Stepper is an optional interface for sessions that support line-level step
-// hooks. LuaJIT uses C-level debug hooks; gopher-lua uses source-level
-// instrumentation (gopherlua.rewriteSteps) that injects hook trampolines
-// before each statement at compile time.
+// hooks: source-level instrumentation that injects hook trampolines before each
+// statement at compile time, firing a callback as execution crosses statements.
 //
 // SetStepHook installs cb to fire on the next event matching mask. cb is
 // invoked synchronously on the script execution goroutine and may re-enter

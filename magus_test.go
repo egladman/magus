@@ -816,11 +816,23 @@ func b64Pub(t *testing.T) (pub string, seed string) {
 // TestRemoteCacheRequiresTrustSet is the paranoid root: a wired remote backend
 // with no declared trust set must be a hard error, not a silent unverified cache.
 func TestRemoteCacheRequiresTrustSet(t *testing.T) {
-	if _, err := remoteCacheSigningOpts(nil); err == nil {
+	if _, err := remoteCacheSigningOpts(nil, false); err == nil {
 		t.Fatal("empty trust set was accepted; a remote cache must require trusted_keys")
 	}
-	if _, err := remoteCacheSigningOpts([]string{}); err == nil {
+	if _, err := remoteCacheSigningOpts([]string{}, false); err == nil {
 		t.Fatal("empty trust-set slice was accepted")
+	}
+}
+
+// TestRemoteCacheInsecureSkipsTrustSet: the explicit opt-out accepts a wired
+// backend with no trust set and no signing key, yielding the insecure option.
+func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
+	opts, err := remoteCacheSigningOpts(nil, true)
+	if err != nil {
+		t.Fatalf("insecure mode rejected empty trust set: %v", err)
+	}
+	if len(opts) != 1 {
+		t.Fatalf("insecure: got %d opts, want 1 (WithInsecureRemote)", len(opts))
 	}
 }
 
@@ -829,7 +841,7 @@ func TestRemoteCacheRequiresTrustSet(t *testing.T) {
 func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 	pub, seed := b64Pub(t)
 
-	opts, err := remoteCacheSigningOpts([]string{pub})
+	opts, err := remoteCacheSigningOpts([]string{pub}, false)
 	if err != nil {
 		t.Fatalf("valid trust set rejected: %v", err)
 	}
@@ -838,7 +850,7 @@ func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 	}
 
 	t.Setenv(signingKeyEnv, seed)
-	opts, err = remoteCacheSigningOpts([]string{pub})
+	opts, err = remoteCacheSigningOpts([]string{pub}, false)
 	if err != nil {
 		t.Fatalf("valid trust set + signing key rejected: %v", err)
 	}
@@ -850,12 +862,12 @@ func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 // TestRemoteCacheRejectsMalformedKeys: bad base64 in either the trust set or the
 // signing-key env var is a clear configuration error, not a silent fallback.
 func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
-	if _, err := remoteCacheSigningOpts([]string{"not!base64!"}); err == nil {
+	if _, err := remoteCacheSigningOpts([]string{"not!base64!"}, false); err == nil {
 		t.Error("malformed trusted key was accepted")
 	}
 	pub, _ := b64Pub(t)
 	t.Setenv(signingKeyEnv, "not!base64!")
-	if _, err := remoteCacheSigningOpts([]string{pub}); err == nil {
+	if _, err := remoteCacheSigningOpts([]string{pub}, false); err == nil {
 		t.Error("malformed signing key was accepted")
 	}
 }

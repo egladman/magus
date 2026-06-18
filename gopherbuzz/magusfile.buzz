@@ -24,12 +24,22 @@ import "fs";
 
 magus.project.register(fun(p, cb) > bool {
     cb({
-        "spells": [go],
-        // pgo-generate writes a fresh, non-deterministic profile from the live VM; a
-        // cache hit would replay a stale one instead of re-sampling, so it must run
-        // every time it's invoked.
+        // The magusfile spell dispatches this file's custom export-fun targets
+        // (generate, md-generate, …); the go spell claims **/*.go and the module
+        // files. Listing spells explicitly replaces the default set, so magusfile
+        // must be named here or the custom targets won't run.
+        "spells": [magus.spell.get("magusfile"), go],
+        // MAGUS.md is the generated target catalog; the cache snapshots it after
+        // generate so a hit restores it without re-describing.
+        "outputs": ["MAGUS.md"],
         "targets": {
+            // pgo-generate writes a fresh, non-deterministic profile from the live VM; a
+            // cache hit would replay a stale one instead of re-sampling, so it must run
+            // every time it's invoked.
             "pgo-generate": {"cachable": false},
+            // generate drift-gates MAGUS.md, so it inspects `git status`: run alone
+            // (isolated) and every time (cachable: false), mirroring the root project.
+            "generate": {"cachable": false, "isolated": true},
         },
     });
     return true;
@@ -38,10 +48,32 @@ magus.project.register(fun(p, cb) > bool {
 // ── targets ──────────────────────────────────────────────────────────────────
 // Each exported function is a runnable target, delegating to the go spell's
 // tool-native ops. gopherbuzz is a pure library module, so the pipeline is the
-// Go lifecycle only — no docs/generate machinery.
+// Go lifecycle plus md-generate, which renders the project's MAGUS.md catalog.
 
 export fun preflight(_args: [str]) > void {}
-export fun generate(_args: [str]) > void { magus.needs(magus.target.literal("preflight")); }
+
+// generate regenerates MAGUS.md and gates on drift, mirroring the root project: a
+// cache hit would skip the check, so it runs every time. Run the `rw` charm
+// (`generate:rw gopherbuzz`) to keep the result instead of gating.
+export fun generate(_args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"), magus.target.literal("md-generate"));
+    if (magus.has_charm("rw")) { return; }
+
+    final drift = os.exec("git", ["status", "--porcelain", "--", "MAGUS.md"]).stdout;
+    if (drift != "") {
+        throw "generate: MAGUS.md drifted after regeneration; re-run "
+            + "`magus run generate:rw gopherbuzz` and commit:\n" + drift;
+    }
+}
+
+// md-generate renders MAGUS.md (the target catalog + dependency graph) via
+// `magus describe graph`, parsed statically from this magusfile so it stays in
+// lockstep with the project's targets. Re-run after editing targets and commit:
+// `magus run md-generate gopherbuzz`.
+export fun md_generate(_args: [str]) > void {
+    final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
+    fs.writeFile("MAGUS.md", doc + "\n");
+}
 export fun format(_args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); }
 export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
 export fun build(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }

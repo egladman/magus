@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -252,33 +253,35 @@ func ghaBackend(t *testing.T) *spellRemoteBackend {
 	return &spellRemoteBackend{drv: drv}
 }
 
+// ghaEmulator emulates the GitHub Actions Cache service v2: the Twirp RPCs
+// (CreateCacheEntry / FinalizeCacheEntryUpload / GetCacheEntryDownloadURL) plus
+// the Azure-style blob PUT/GET the signed URLs point back at.
 type ghaEmulator struct {
 	mu        sync.Mutex
-	nextID    int64
-	idToKey   map[int64]string
-	uploads   map[int64][]byte
-	committed map[string][]byte
+	pending   map[string][]byte // key -> uploaded bytes, awaiting finalize
+	committed map[string][]byte // key -> finalized bytes
 }
 
 func newGHAEmulator() *ghaEmulator {
 	return &ghaEmulator{
-		idToKey:   map[int64]string{},
-		uploads:   map[int64][]byte{},
+		pending:   map[string][]byte{},
 		committed: map[string][]byte{},
 	}
 }
 
+const ghaTwirp = "/twirp/github.actions.results.api.v1.CacheService/"
+
 func (e *ghaEmulator) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_apis/artifactcache/cache"):
-			e.lookup(w, r)
-		case r.Method == http.MethodPost && r.URL.Path == "/_apis/artifactcache/caches":
-			e.reserve(w, r)
-		case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/_apis/artifactcache/caches/"):
+		case r.Method == http.MethodPost && r.URL.Path == ghaTwirp+"CreateCacheEntry":
+			e.createEntry(w, r)
+		case r.Method == http.MethodPost && r.URL.Path == ghaTwirp+"FinalizeCacheEntryUpload":
+			e.finalize(w, r)
+		case r.Method == http.MethodPost && r.URL.Path == ghaTwirp+"GetCacheEntryDownloadURL":
+			e.downloadURL(w, r)
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/upload/"):
 			e.upload(w, r)
-		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_apis/artifactcache/caches/"):
-			e.commit(w, r)
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/blob/"):
 			e.blob(w, r)
 		default:
@@ -287,76 +290,84 @@ func (e *ghaEmulator) handler() http.Handler {
 	})
 }
 
-func (e *ghaEmulator) lookup(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Query().Get("keys")
-	e.mu.Lock()
-	_, ok := e.committed[key]
-	e.mu.Unlock()
-	if !ok {
-		w.WriteHeader(http.StatusNoContent)
+func (e *ghaEmulator) createEntry(w http.ResponseWriter, r *http.Request) {
+	var body struct{ Key, Version string }
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.Key == "" {
+		http.Error(w, "missing key", http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"archiveLocation": "http://" + r.Host + "/blob/" + key,
+	e.mu.Lock()
+	_, exists := e.committed[body.Key]
+	e.mu.Unlock()
+	if exists {
+		// Already stored: v2 reports the conflict as ok=false, no upload URL.
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":              true,
+		"signedUploadUrl": "http://" + r.Host + "/upload/" + body.Key,
 	})
 }
 
-func (e *ghaEmulator) reserve(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Key, Version string }
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	e.mu.Lock()
-	e.nextID++
-	id := e.nextID
-	e.idToKey[id] = body.Key
-	e.uploads[id] = nil
-	e.mu.Unlock()
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]int64{"cacheId": id})
-}
-
-func (e *ghaEmulator) cacheID(path string) int64 {
-	var id int64
-	_, _ = fmt.Sscanf(filepath.Base(path), "%d", &id)
-	return id
-}
-
 func (e *ghaEmulator) upload(w http.ResponseWriter, r *http.Request) {
-	id := e.cacheID(r.URL.Path)
-	chunk, _ := io.ReadAll(r.Body)
-	var off, end, total int64
-	if _, err := fmt.Sscanf(r.Header.Get("Content-Range"), "bytes %d-%d/%d", &off, &end, &total); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if got := r.Header.Get("x-ms-blob-type"); got != "BlockBlob" {
+		http.Error(w, "x-ms-blob-type="+got, http.StatusBadRequest)
 		return
 	}
+	key := strings.TrimPrefix(r.URL.Path, "/upload/")
+	body, _ := io.ReadAll(r.Body)
 	e.mu.Lock()
-	buf := e.uploads[id]
-	if int64(len(buf)) < total {
-		grown := make([]byte, total)
-		copy(grown, buf)
-		buf = grown
-	}
-	copy(buf[off:], chunk)
-	e.uploads[id] = buf
+	e.pending[key] = body
 	e.mu.Unlock()
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusCreated)
 }
 
-func (e *ghaEmulator) commit(w http.ResponseWriter, r *http.Request) {
-	id := e.cacheID(r.URL.Path)
-	var body struct{ Size int64 }
+func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Key       string
+		SizeBytes string // int64 is a JSON string in proto3
+		Version   string
+	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	e.mu.Lock()
-	key := e.idToKey[id]
-	data := e.uploads[id]
-	if body.Size != int64(len(data)) {
-		e.mu.Unlock()
+	data, ok := e.pending[body.Key]
+	e.mu.Unlock()
+	if !ok {
+		http.Error(w, "no pending upload for key", http.StatusBadRequest)
+		return
+	}
+	if want, _ := strconv.ParseInt(body.SizeBytes, 10, 64); want != int64(len(data)) {
 		http.Error(w, "size mismatch", http.StatusBadRequest)
 		return
 	}
-	e.committed[key] = data
+	e.mu.Lock()
+	e.committed[body.Key] = data
+	delete(e.pending, body.Key)
 	e.mu.Unlock()
-	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "entryId": "1"})
+}
+
+func (e *ghaEmulator) downloadURL(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Key         string
+		RestoreKeys []string
+		Version     string
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	e.mu.Lock()
+	_, ok := e.committed[body.Key]
+	e.mu.Unlock()
+	if !ok {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":                true,
+		"signedDownloadUrl": "http://" + r.Host + "/blob/" + body.Key,
+		"matchedKey":        body.Key,
+	})
 }
 
 func (e *ghaEmulator) blob(w http.ResponseWriter, r *http.Request) {
@@ -377,7 +388,7 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	defer srv.Close()
 
 	t.Setenv("GITHUB_ACTIONS", "true") // enabled() gate
-	t.Setenv("ACTIONS_CACHE_URL", srv.URL+"/")
+	t.Setenv("ACTIONS_RESULTS_URL", srv.URL+"/")
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
 
 	store := ghaBackend(t)

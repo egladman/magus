@@ -413,7 +413,7 @@ func recordProjectOpts(ctx context.Context, sess *buzzeng.Session, fn buzzeng.Va
 }
 
 // projectBaseName returns the last path segment of a workspace-relative project
-// path ("magus/site" -> "site"), or the path itself when it has no separator.
+// path ("magus/website" -> "website"), or the path itself when it has no separator.
 func projectBaseName(path string) string {
 	if i := strings.LastIndex(path, "/"); i >= 0 {
 		return path[i+1:]
@@ -685,7 +685,7 @@ func buildTargetNS(targets map[string]buzzeng.Callable) buzzeng.Value {
 
 	// named/glob/regex return typed Target handles (a tagged map carrying the
 	// matching mode and the literal pattern) consumed by magus.needs. The pattern
-	// must be a string literal so the static extractor (internal/targetgraph) can
+	// must be a string literal so the static extractor (internal/describe) can
 	// recover the edge from source without evaluating the magusfile.
 	ns.MapSet("literal", buzzeng.DirectValue("magus.target.literal", buildBuzzTargetHandle("literal")))
 	ns.MapSet("glob", buzzeng.DirectValue("magus.target.glob", buildBuzzTargetHandle("glob")))

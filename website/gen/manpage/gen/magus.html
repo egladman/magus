@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magus</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../index.html">Docs</a></li>
+        <li><a href="../../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="magus">magus</h1>
+<p>magus - workspace-aware build orchestrator and content-addressed cache</p>
+<h2 id="synopsis">Synopsis</h2>
+<p><strong>magus</strong> [flags] &lt;subcommand&gt; [args]</p>
+<h2 id="description">Description</h2>
+<p>magus is a standalone build orchestrator and content-addressed cache for
+multi-language monorepos, and an evolution of Mage. It provides workspace-aware
+subcommands for building, testing, linting, and inspecting projects without
+requiring Mage to be installed.</p>
+<p>magus reads optional configuration from magus.yaml (XDG, workspace root, or
+CWD) and MAGUS_* environment variables. All configuration can be overridden
+with CLI flags.</p>
+<h2 id="global-flags">Global Flags</h2>
+<p>Global flags are accepted by every subcommand and may appear before or
+after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
+<dl>
+<dt><strong>--root</strong> <em>path</em></dt>
+<dd>Workspace root. Default: walk up from cwd until go.mod is found. Must precede the subcommand.</dd>
+<dt><strong>--config</strong> <em>path</em></dt>
+<dd>Config file path. Default: search for magus.yaml in CWD, workspace root, and $XDG_CONFIG_HOME/magus/. Must precede the subcommand.</dd>
+<dt><strong>--output</strong> <em>fmt</em>, <strong>-o</strong> <em>fmt</em></dt>
+<dd>Output format: text (default), json, yaml, name, wide, or template=&lt;go-template&gt;. Honoured by subcommands that emit structured data.</dd>
+<dt><strong>--concurrency</strong> <em>N</em></dt>
+<dd>Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).</dd>
+<dt><strong>-v</strong></dt>
+<dd>Increase log verbosity. Repeat for more detail (-v, -vv, -vvv).</dd>
+</dl>
+<h2 id="subcommands">Subcommands</h2>
+<dl>
+<dt><strong>ls</strong></dt>
+<dd>List all discovered projects. See <a href="magus-ls.html"><strong>magus-ls</strong>(1)</a>.</dd>
+<dt><strong>describe</strong></dt>
+<dd>Explain why a project is in the affected set. See <a href="magus-describe.html"><strong>magus-describe</strong>(1)</a>.</dd>
+<dt><strong>run</strong></dt>
+<dd>Run a target for selected projects. See <a href="magus-run.html"><strong>magus-run</strong>(1)</a>.</dd>
+<dt><strong>x</strong></dt>
+<dd>Interactive shorthand: pick project + target. See <a href="magus-x.html"><strong>magus-x</strong>(1)</a>.</dd>
+<dt><strong>where</strong></dt>
+<dd>Print the absolute path of a project. See <a href="magus-where.html"><strong>magus-where</strong>(1)</a>.</dd>
+<dt><strong>tail</strong></dt>
+<dd>Stream the most recent cached log (interactive only). See <a href="magus-tail.html"><strong>magus-tail</strong>(1)</a>.</dd>
+<dt><strong>affected</strong></dt>
+<dd>Run a target for VCS-diff affected projects. See <a href="magus-affected.html"><strong>magus-affected</strong>(1)</a>.</dd>
+<dt><strong>watch</strong></dt>
+<dd>Emit changed file paths to stdout. See <a href="magus-watch.html"><strong>magus-watch</strong>(1)</a>.</dd>
+<dt><strong>status</strong></dt>
+<dd>Inspect concurrency pool and configuration. See <a href="magus-status.html"><strong>magus-status</strong>(1)</a>.</dd>
+<dt><strong>doctor</strong></dt>
+<dd>Validate the workspace. See <a href="magus-doctor.html"><strong>magus-doctor</strong>(1)</a>.</dd>
+<dt><strong>config</strong></dt>
+<dd>View or update magus configuration. See <a href="magus-config.html"><strong>magus-config</strong>(1)</a>.</dd>
+<dt><strong>server</strong></dt>
+<dd>Manage the persistent magus daemon. See <a href="magus-server.html"><strong>magus-server</strong>(1)</a>.</dd>
+<dt><strong>completion</strong></dt>
+<dd>Print a shell completion script. See <a href="magus-completion.html"><strong>magus-completion</strong>(1)</a>.</dd>
+<dt><strong>init</strong></dt>
+<dd>Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver). See <a href="magus-init.html"><strong>magus-init</strong>(1)</a>.</dd>
+<dt><strong>self</strong></dt>
+<dd>Manage the magus binary (update/install need -tags selfmanage). See <a href="magus-self.html"><strong>magus-self</strong>(1)</a>.</dd>
+<dt><strong>version</strong></dt>
+<dd>Print version, commit, and build date. See <a href="magus-version.html"><strong>magus-version</strong>(1)</a>.</dd>
+</dl>
+<h2 id="environment">Environment</h2>
+<dl>
+<dt><strong>MAGUS_CACHE_DIR</strong></dt>
+<dd>Override the default cache location (.magus/ in the workspace root). Equivalent magus.yaml key: <strong>cache.dir</strong>.</dd>
+<dt><strong>MAGUS_CACHE_IMMUTABLE</strong></dt>
+<dd>When true (or 1), open the cache in read-only mode: replay hits but never write new entries (default: false). Equivalent magus.yaml key: <strong>cache.immutable</strong>.</dd>
+<dt><strong>MAGUS_CACHE_SIZE_MB</strong></dt>
+<dd>Cache disk usage cap in MB (binary, 1&lt;&lt;20); 0 means unlimited (default: 0). Equivalent magus.yaml key: <strong>cache.size_mb</strong>.</dd>
+<dt><strong>MAGUS_LOG_FORMAT</strong></dt>
+<dd>Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: <strong>log.format</strong>.</dd>
+<dt><strong>MAGUS_LOG_LEVEL</strong></dt>
+<dd>Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: <strong>log.level</strong>.</dd>
+<dt><strong>MAGUS_CONCURRENCY</strong></dt>
+<dd>Maximum number of concurrently running per-project build steps (default: min(NumCPU,8)). Equivalent magus.yaml key: <strong>concurrency</strong>.</dd>
+<dt><strong>MAGUS_HISTORY_PATH</strong></dt>
+<dd>Path to the runtime-history JSON shared by flake detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: <strong>history_path</strong>.</dd>
+<dt><strong>MAGUS_DRY_RUN</strong></dt>
+<dd>When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: <strong>dry_run</strong>.</dd>
+<dt><strong>MAGUS_STRICT</strong></dt>
+<dd>When 1 or true, workspace correctness warnings (e.g. unregistered dependencies) become errors that fail the run (default: false). Equivalent magus.yaml key: <strong>strict</strong>.</dd>
+<dt><strong>MAGUS_VCS_ENABLED</strong></dt>
+<dd>Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: <strong>vcs.enabled</strong>.</dd>
+<dt><strong>MAGUS_VCS_NAME</strong></dt>
+<dd>Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj. Equivalent magus.yaml key: <strong>vcs.name</strong>.</dd>
+<dt><strong>MAGUS_VCS_BASE_REF</strong></dt>
+<dd>Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalent magus.yaml key: <strong>vcs.base_ref</strong>.</dd>
+<dt><strong>MAGUS_VCS_&lt;NAME&gt;_BASE_REF</strong></dt>
+<dd>Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs</dd>
+<dt><strong>MAGUS_DAEMON_SOCKET</strong></dt>
+<dd>Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: <strong>daemon.socket</strong>.</dd>
+<dt><strong>MAGUS_CI_MAX_SHARDS</strong></dt>
+<dd>Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: <strong>ci.max_shards</strong>.</dd>
+<dt><strong>MAGUS_CI_RUNNER_POOL_BUDGET</strong></dt>
+<dd>Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited (default: 0). Equivalent magus.yaml key: <strong>ci.runner_pool_budget</strong>.</dd>
+<dt><strong>MAGUS_SHARD</strong></dt>
+<dd>CI matrix shard ID (e.g. &quot;0&quot;); equivalent to magus run --shard; set by .github/actions/magus</dd>
+<dt><strong>MAGUS_N_SHARDS</strong></dt>
+<dd>Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus</dd>
+<dt><strong>MAGUS_GRAPH_DIRECTION</strong></dt>
+<dd>Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: <strong>graph.direction</strong>.</dd>
+<dt><strong>MAGUS_GRAPH_SPELL</strong></dt>
+<dd>Filter graph output to a single spell. Equivalent magus.yaml key: <strong>graph.spell</strong>.</dd>
+<dt><strong>MAGUS_GRAPH_DEPTH</strong></dt>
+<dd>Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: <strong>graph.depth</strong>.</dd>
+<dt><strong>MAGUS_GRAPH_ROOTS</strong></dt>
+<dd>Comma-separated starting nodes for graph traversal. Equivalent magus.yaml key: <strong>graph.roots</strong>.</dd>
+<dt><strong>MAGUS_TELEMETRY_ENABLED</strong></dt>
+<dd>Turn OTLP export on; magus connects to telemetry.endpoint when true (default: false). Equivalent magus.yaml key: <strong>telemetry.enabled</strong>.</dd>
+<dt><strong>MAGUS_TELEMETRY_ENDPOINT</strong></dt>
+<dd>OTLP collector address as host:port (no scheme); required when telemetry is enabled. Equivalent magus.yaml key: <strong>telemetry.endpoint</strong>.</dd>
+<dt><strong>MAGUS_TELEMETRY_PROTOCOL</strong></dt>
+<dd>OTLP wire protocol: grpc or http (default: grpc). Equivalent magus.yaml key: <strong>telemetry.protocol</strong>.</dd>
+<dt><strong>MAGUS_TELEMETRY_INSECURE</strong></dt>
+<dd>Disable TLS for the OTLP exporter (plaintext local-collector setups) (default: false). Equivalent magus.yaml key: <strong>telemetry.insecure</strong>.</dd>
+<dt><strong>MAGUS_TELEMETRY_SERVICE_NAME</strong></dt>
+<dd>Value of the resource attribute service.name on emitted spans/metrics (default: magus). Equivalent magus.yaml key: <strong>telemetry.service_name</strong>.</dd>
+<dt><strong>MAGUS_TELEMETRY_SAMPLE_RATIO</strong></dt>
+<dd>Head-based trace sampling ratio in [0,1] (default: 1.0). Equivalent magus.yaml key: <strong>telemetry.sample_ratio</strong>.</dd>
+<dt><strong>MAGUS_DAEMON_ADDRESS</strong></dt>
+<dd>Adopt-server socket as a unix:// URL; empty auto-generates a per-process socket. Equivalent magus.yaml key: <strong>daemon.address</strong>.</dd>
+<dt><strong>MAGUS_DAEMON_IDLE_TTL</strong></dt>
+<dd>Idle workspace eviction TTL for the multi-workspace daemon; e.g. &quot;6h&quot;, &quot;30m&quot; (default: 6h). Equivalent magus.yaml key: <strong>daemon.idle_ttl</strong>.</dd>
+<dt><strong>MAGUS_DAEMON_WORKSPACES</strong></dt>
+<dd>Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010). Equivalent magus.yaml key: <strong>daemon.workspaces</strong>.</dd>
+<dt><strong>MAGUS_ASSUME_INTERACTIVE</strong></dt>
+<dd>When 1 or true, assume an interactive terminal even if detection says otherwise (default: false). Equivalent magus.yaml key: <strong>assume_interactive</strong>.</dd>
+<dt><strong>MAGUS_INTERPRETER_LUA_ENGINE</strong></dt>
+<dd>Select the Lua scripting backend: luajit (cgo) or gopherlua (pure-Go); empty picks the best compiled-in engine. Equivalent magus.yaml key: <strong>interpreter.lua.engine</strong>.</dd>
+<dt><strong>MAGUS_MCP_ENABLED</strong></dt>
+<dd>When 0 or false, refuse to start the MCP server even when the binary was built with -tags mcp (default: true). Equivalent magus.yaml key: <strong>mcp.enabled</strong>.</dd>
+<dt><strong>MAGUS_MCP_ADDRESS</strong></dt>
+<dd>host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: <strong>mcp.address</strong>.</dd>
+<dt><strong>MAGUS_HINTS_ENABLED</strong></dt>
+<dd>When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: <strong>hints.enabled</strong>.</dd>
+<dt><strong>MAGUS_FLAKE_ENABLED</strong></dt>
+<dd>Master switch for flakiness detection and auto-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: <strong>flake.enabled</strong>.</dd>
+<dt><strong>MAGUS_FLAKE_BOOTSTRAP_SAMPLES</strong></dt>
+<dd>Number of outcomes below which all failures are retried once (bootstrap phase) (default: 20). Equivalent magus.yaml key: <strong>flake.bootstrap_samples</strong>.</dd>
+<dt><strong>MAGUS_FLAKE_MIN_SAMPLES</strong></dt>
+<dd>Minimum outcomes required before Wilson-score flake rate gates retry decisions (default: 20). Equivalent magus.yaml key: <strong>flake.min_samples</strong>.</dd>
+<dt><strong>MAGUS_FLAKE_THRESHOLD</strong></dt>
+<dd>Wilson lower-bound flake rate above which a project+target is considered flaky (default: 0.05). Equivalent magus.yaml key: <strong>flake.threshold</strong>.</dd>
+<dt><strong>MAGUS_FLAKE_ANNOTATE_GHA</strong></dt>
+<dd>When true, emit ::warning annotations and flake summary to $GITHUB_STEP_SUMMARY (default: true). Equivalent magus.yaml key: <strong>flake.annotate_gha</strong>.</dd>
+<dt><strong>MAGUS_REPORT_FILTER</strong></dt>
+<dd>Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query). Equivalent magus.yaml key: <strong>report.filter</strong>.</dd>
+<dt><strong>MAGUS_SANDBOX_ENABLED</strong></dt>
+<dd>When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: false). Equivalent magus.yaml key: <strong>sandbox.enabled</strong>.</dd>
+</dl>
+<h2 id="files">Files</h2>
+<dl>
+<dt><strong>magus.yaml</strong>, <strong>.magus.yaml</strong></dt>
+<dd>Configuration file. Searched in CWD, workspace root, and
+$XDG_CONFIG_HOME/magus/ in ascending priority order. Both plain and
+dot-prefixed names are accepted; having both in the same directory is an error.</dd>
+<dt><strong>.magus-cache/</strong></dt>
+<dd>Content-addressed build cache in the workspace root. Override with
+MAGUS_CACHE_DIR.</dd>
+</dl>
+<h2 id="see-also">See Also</h2>
+<p><a href="magus-ls.html"><strong>magus-ls</strong>(1)</a>, <a href="magus-describe.html"><strong>magus-describe</strong>(1)</a>, <a href="magus-run.html"><strong>magus-run</strong>(1)</a>, <a href="magus-x.html"><strong>magus-x</strong>(1)</a>, <a href="magus-where.html"><strong>magus-where</strong>(1)</a>, <a href="magus-tail.html"><strong>magus-tail</strong>(1)</a>, <a href="magus-affected.html"><strong>magus-affected</strong>(1)</a>, <a href="magus-watch.html"><strong>magus-watch</strong>(1)</a>, <a href="magus-status.html"><strong>magus-status</strong>(1)</a>, <a href="magus-doctor.html"><strong>magus-doctor</strong>(1)</a>, <a href="magus-config.html"><strong>magus-config</strong>(1)</a>, <a href="magus-server.html"><strong>magus-server</strong>(1)</a>, <a href="magus-completion.html"><strong>magus-completion</strong>(1)</a>, <a href="magus-init.html"><strong>magus-init</strong>(1)</a>, <a href="magus-self.html"><strong>magus-self</strong>(1)</a>, <a href="magus-version.html"><strong>magus-version</strong>(1)</a></p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/manpage/gen/magus.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:15:29 UTC from commit <a href="https://github.com/egladman/tack/commit/ce03d86009fb586d971c8d56e1d4558560e71e13"><code>ce03d860</code></a></small>
+  </footer>
+</body>
+</html>

@@ -14,9 +14,10 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 export fun mgs_getVersionCommand() > [str] { return ["docker", "--version"]; }
 
 fun dockerBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "docker", "args": ["build"]}); return true; }
+fun dockerBuildx(target: Target, cb: fun(any)) > bool { cb({"cmd": "docker", "args": ["buildx", "build"]}); return true; }
 fun dockerBuildCheck(target: Target, cb: fun(any)) > bool { cb({"cmd": "docker", "args": ["build", "--check"]}); return true; }
 fun hadolint(target: Target, cb: fun(any)) > bool { cb({"cmd": "hadolint", "args": ["Dockerfile"]}); return true; }
 
 export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
-    return {"docker-build": dockerBuild, "docker-build-check": dockerBuildCheck, "hadolint": hadolint};
+    return {"docker-build": dockerBuild, "docker-buildx": dockerBuildx, "docker-build-check": dockerBuildCheck, "hadolint": hadolint};
 }

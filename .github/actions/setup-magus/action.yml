@@ -1,31 +1,64 @@
 name: Setup magus
 description: >
-  Install the magus binary (prebuilt release with go-build fallback) and restore
-  Go module and Go build caches.
+  Install the magus binary into the runner tool cache ($RUNNER_TOOL_CACHE) and put
+  it on PATH, so every job step that follows can run `magus`. With `version` set it
+  downloads that release; otherwise it builds from source. The source is sparse-
+  checked-out from THIS action's own repository — not the caller's workspace — so
+  the action works when another repo references it (dogfooding). Stopgap until
+  magus ships a packaged release; then only the install path stays, the source
+  build drops.
 
 inputs:
   version:
     description: >
       Release tag to install (e.g. v0.5.0). Empty string always builds from
-      source using the checked-out code.
+      source at the ref this action was referenced at.
     required: false
     default: ''
 
 runs:
   using: composite
   steps:
+    # Sparse-check out the magus source from this action's own repo at the ref it
+    # was referenced at, so a from-source build does not depend on the caller's
+    # checkout containing magus. Same-repo (a local `./` reference) falls back to
+    # the caller repo + commit. Cone mode also pulls the root files (go.mod, go.sum,
+    # go.work, go.work.sum); the listed dirs are everything `./cmd/magus` imports.
+    - name: Check out magus source
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      with:
+        repository: ${{ github.action_repository || github.repository }}
+        ref: ${{ github.action_ref || github.sha }}
+        path: ${{ runner.temp }}/magus-src
+        sparse-checkout: |
+          cmd
+          internal
+          project
+          schema
+          types
+          vcs
+          gopherbuzz
+
+    # The resolved commit keys the binary cache exactly (a moving branch ref still
+    # rebuilds when its tip changes; a tag/sha reuses).
+    - name: Resolve magus source commit
+      id: src
+      shell: bash
+      run: echo "sha=$(git -C "$RUNNER_TEMP/magus-src" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
     - name: Setup Go
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
       with:
-        go-version-file: go.mod
-        cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
+        go-version-file: ${{ runner.temp }}/magus-src/go.mod
+        cache: true
+        cache-dependency-path: ${{ runner.temp }}/magus-src/go.sum
 
     - name: Restore magus binary cache
       id: magus-cache
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ~/.cache/magus/bin
-        key: ${{ runner.os }}-magus-${{ inputs.version }}-${{ hashFiles('magus/cmd/magus/**', '**/*.go', 'go.sum') }}
+        path: ${{ runner.tool_cache }}/magus/bin
+        key: ${{ runner.os }}-magus-${{ inputs.version }}-${{ steps.src.outputs.sha }}
 
     - name: Install magus from release
       id: prebuilt
@@ -48,8 +81,8 @@ runs:
         cd "${TMP}"
         grep "${ASSET}" SHA256SUMS | sha256sum --check --status
 
-        mkdir -p ~/.cache/magus/bin
-        tar -xzf "${ASSET}" -C ~/.cache/magus/bin magus
+        mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
+        tar -xzf "${ASSET}" -C "$RUNNER_TOOL_CACHE/magus/bin" magus
         echo "magus: installed prebuilt ${VERSION} for ${OS}/${ARCH}" >&2
 
     - name: Build magus from source
@@ -58,13 +91,13 @@ runs:
         (inputs.version == '' || steps.prebuilt.outcome == 'failure')
       shell: bash
       run: |
-        mkdir -p ~/.cache/magus/bin
-        go build -o ~/.cache/magus/bin/magus ./cmd/magus
+        mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
+        ( cd "$RUNNER_TEMP/magus-src" && go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus )
         echo "magus: built from source" >&2
 
     - name: Add magus to PATH
       shell: bash
-      run: echo "$HOME/.cache/magus/bin" >> "$GITHUB_PATH"
+      run: echo "$RUNNER_TOOL_CACHE/magus/bin" >> "$GITHUB_PATH"
 
     - name: Verify magus
       shell: bash

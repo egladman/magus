@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`archive`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../index.html">Docs</a></li>
+        <li><a href="../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="archive"><code>archive</code></h1>
+<p>Archive creation and extraction with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst. Symlinks and non-regular entries are skipped.</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;archive&quot;</code>) and call methods in <code>camelCase</code> (<code>archive.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="uncompress"><code>uncompress</code></h3>
+<p>Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading path components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).</p>
+<p><strong>Signature:</strong> <code>archive.uncompress(src, dest, [opts]) → map[string]any</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dest</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>opts</code></td>
+<td><code>map[string]any</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="compress"><code>compress</code></h3>
+<p>Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts keys: format (string, override format detection), threads (int, parallel encode workers; 0 or omitted = auto), level (int, compression level; -1 = format default), follow_symlinks (bool, default false), max_size (int, output byte cap, default 10 GiB).</p>
+<p><strong>Signature:</strong> <code>archive.compress(src, dest, [opts]) → map[string]any</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dest</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>opts</code></td>
+<td><code>map[string]any</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/modules/archive.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-11 00:38:15 UTC from commit <a href="https://github.com/egladman/tack/commit/56e0f4debf1ec3a45a68fce4138570a6086735aa"><code>56e0f4de</code></a></small>
+  </footer>
+</body>
+</html>

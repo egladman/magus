@@ -8,7 +8,7 @@
 // instantiates this module; all behavior lives here and in
 // internal/playground.Shell (which is pure Go and host-tested).
 //
-// The page provides the static structure (see magus/site/editor.html). This
+// The page provides the static structure (see magus/website/editor.html). This
 // program grabs the elements by id, wires event handlers, and renders into them.
 //
 // All execution is in-memory: a browser cannot fork processes or touch a

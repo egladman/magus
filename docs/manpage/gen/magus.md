@@ -98,6 +98,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CACHE_SIZE_MB**
 : Cache disk usage cap in MB (binary, 1\<\<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: **cache.size_mb**.
 
+**MAGUS_CACHE_REMOTE_INSECURE**
+: Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only (default: false). Equivalent magus.yaml key: **cache.remote.insecure**.
+
 **MAGUS_LOG_FORMAT**
 : Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: **log.format**.
 
@@ -184,9 +187,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_ASSUME_INTERACTIVE**
 : When 1 or true, assume an interactive terminal even if detection says otherwise (default: false). Equivalent magus.yaml key: **assume_interactive**.
-
-**MAGUS_INTERPRETER_LUA_ENGINE**
-: Select the Lua scripting backend: luajit (cgo) or gopherlua (pure-Go); empty picks the best compiled-in engine. Equivalent magus.yaml key: **interpreter.lua.engine**.
 
 **MAGUS_MCP_ENABLED**
 : When 0 or false, refuse to start the MCP server even when the binary was built with -tags mcp (default: true). Equivalent magus.yaml key: **mcp.enabled**.

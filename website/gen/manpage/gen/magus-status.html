@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magus-status</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../index.html">Docs</a></li>
+        <li><a href="../../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="magus-status">magus-status</h1>
+<p>Inspect concurrency pool and configuration</p>
+<h2 id="synopsis">Synopsis</h2>
+<p><strong>magus</strong> status [flags]</p>
+<h2 id="description">Description</h2>
+<p>Show the magus configuration that affects this process — telemetry, cache
+settings — and, when a parent magus process is running, the live state of its
+concurrency pool (current slot usage, queued waiters).</p>
+<p>When --watch is non-zero, status polls and reprints at that interval. On a
+TTY the screen is cleared between reprints; piped output appends each
+snapshot on its own line for log capture.</p>
+<h2 id="options">Options</h2>
+<dl>
+<dt><strong>--compact</strong></dt>
+<dd>Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)</dd>
+<dt><strong>--socket</strong> <em>string</em></dt>
+<dd>Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir</dd>
+<dt><strong>--watch</strong> <em>duration</em></dt>
+<dd>Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<p><em>One-shot status snapshot</em></p>
+<pre><code>magus status
+</code></pre>
+<p><em>Live updates every second</em></p>
+<pre><code>magus status --watch=1s
+</code></pre>
+<p><em>Single-line snapshot for a multiplexer sidebar</em></p>
+<pre><code>magus status --compact --watch=1s
+</code></pre>
+<p><em>Inspect a specific running parent</em></p>
+<pre><code>magus status --socket=unix:///run/user/1000/magus/daemon.sock
+</code></pre>
+<h2 id="see-also">See Also</h2>
+<p><a href="magus.html"><strong>magus</strong>(1)</a>, <a href="magus-ls.html"><strong>magus-ls</strong>(1)</a>, <a href="magus-describe.html"><strong>magus-describe</strong>(1)</a>, <a href="magus-run.html"><strong>magus-run</strong>(1)</a>, <a href="magus-x.html"><strong>magus-x</strong>(1)</a>, <a href="magus-where.html"><strong>magus-where</strong>(1)</a>, <a href="magus-tail.html"><strong>magus-tail</strong>(1)</a>, <a href="magus-affected.html"><strong>magus-affected</strong>(1)</a>, <a href="magus-watch.html"><strong>magus-watch</strong>(1)</a>, <a href="magus-doctor.html"><strong>magus-doctor</strong>(1)</a>, <a href="magus-config.html"><strong>magus-config</strong>(1)</a>, <a href="magus-server.html"><strong>magus-server</strong>(1)</a>, <a href="magus-completion.html"><strong>magus-completion</strong>(1)</a>, <a href="magus-init.html"><strong>magus-init</strong>(1)</a>, <a href="magus-self.html"><strong>magus-self</strong>(1)</a>, <a href="magus-version.html"><strong>magus-version</strong>(1)</a></p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/manpage/gen/magus-status.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 16:15:29 UTC from commit <a href="https://github.com/egladman/tack/commit/ce03d86009fb586d971c8d56e1d4558560e71e13"><code>ce03d860</code></a></small>
+  </footer>
+</body>
+</html>

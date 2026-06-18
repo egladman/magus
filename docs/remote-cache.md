@@ -64,7 +64,7 @@ the next section). Generate a key with `magus config cache key generate`.
 ### GitHub Actions Cache
 
 The `actions` spell ([`spells/github/actions`](../spells/github/actions/spell.buzz))
-stores artifacts in the GitHub Actions Cache, over its v1 API.
+stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.
 
 ```buzz
 import "spells/github/actions" as github;
@@ -77,7 +77,7 @@ automatically inside a GitHub Actions job:
 | variable                | provided by | purpose                                    |
 | ----------------------- | ----------- | ------------------------------------------ |
 | `GITHUB_ACTIONS`        | the runner  | gates the backend (`"true"` only in a job) |
-| `ACTIONS_CACHE_URL`     | the runner  | cache service base URL                     |
+| `ACTIONS_RESULTS_URL`   | the runner  | cache service (v2) base URL                |
 | `ACTIONS_RUNTIME_TOKEN` | the runner  | bearer token for the cache service         |
 
 There is no *transport* to configure: bind it, and it activates in CI and stays
@@ -140,6 +140,18 @@ so a shared cache can never come up unverified. *Upgrading an existing remote
 cache:* add `cache.remote.trusted_keys` to `magus.yaml` and set `MAGUS_CACHE_SIGNING_KEY`
 on trusted pushes, or the run fails at load with a message telling you exactly
 that.
+
+### Insecure mode (no signing)
+
+`cache.remote.insecure: true` (env `MAGUS_CACHE_REMOTE_INSECURE`) is the explicit
+opt-out: the backend runs with **no trust set and no signing key**, importing and
+producing **unsigned** artifacts. This removes the supply-chain protection above —
+any writer the store trusts can inject files into a consumer's build — so it is
+only appropriate for a **trusted single-repo CI** (no fork PRs writing the store)
+or for **validating a backend before minting keys**. It is off by default and must
+be set deliberately; prefer a signed trust set for anything shared. Setting it is
+mutually exclusive with `trusted_keys` in effect — when `insecure` is true,
+verification is skipped regardless of any keys.
 
 ### Generating and trusting a key
 

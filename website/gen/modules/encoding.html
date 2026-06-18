@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`encoding`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../index.html">Docs</a></li>
+        <li><a href="../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="encoding"><code>encoding</code></h1>
+<p>Base64/hex/URL text codecs.</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;encoding&quot;</code>) and call methods in <code>camelCase</code> (<code>encoding.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="base64-encode"><code>base64_encode</code></h3>
+<p>Encode data as standard (padded) base64.</p>
+<p><strong>Signature:</strong> <code>encoding.base64Encode(data) → string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>str.encodeBase64 (built-in string method)</code> — the magus form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="base64-decode"><code>base64_decode</code></h3>
+<p>Decode a standard (padded) base64 string; errors on malformed input.</p>
+<p><strong>Signature:</strong> <code>encoding.base64Decode(s) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="base64url-encode"><code>base64url_encode</code></h3>
+<p>Encode data as URL-safe (padded) base64.</p>
+<p><strong>Signature:</strong> <code>encoding.base64urlEncode(data) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="base64url-decode"><code>base64url_decode</code></h3>
+<p>Decode a URL-safe (padded) base64 string; errors on malformed input.</p>
+<p><strong>Signature:</strong> <code>encoding.base64urlDecode(s) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="hex-encode"><code>hex_encode</code></h3>
+<p>Encode data as lowercase hex.</p>
+<p><strong>Signature:</strong> <code>encoding.hexEncode(data) → string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>str.hex (built-in string method)</code> — the magus form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="hex-decode"><code>hex_decode</code></h3>
+<p>Decode a hex string; errors on malformed input.</p>
+<p><strong>Signature:</strong> <code>encoding.hexDecode(s) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="url-encode"><code>url_encode</code></h3>
+<p>Percent-encode s for use in a URL query component.</p>
+<p><strong>Signature:</strong> <code>encoding.urlEncode(s) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="url-decode"><code>url_decode</code></h3>
+<p>Decode a percent-encoded URL query component; errors on malformed input.</p>
+<p><strong>Signature:</strong> <code>encoding.urlDecode(s) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="parse-url"><code>parse_url</code></h3>
+<p>Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.</p>
+<p><strong>Signature:</strong> <code>encoding.parseUrl(raw_url) → map[string]any</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>raw_url</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="build-url"><code>build_url</code></h3>
+<p>Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.</p>
+<p><strong>Signature:</strong> <code>encoding.buildUrl(parts) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>parts</code></td>
+<td><code>map[string]any</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/modules/encoding.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-11 00:38:15 UTC from commit <a href="https://github.com/egladman/tack/commit/56e0f4debf1ec3a45a68fce4138570a6086735aa"><code>56e0f4de</code></a></small>
+  </footer>
+</body>
+</html>

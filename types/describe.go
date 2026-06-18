@@ -64,7 +64,7 @@ const TargetGraphDefinition = "The target dependency graph is the magus.needs " 
 
 // TargetGraphNode is one target in the graph: its run name, its doc comment, the
 // names of the targets it depends on, and the charm names its body branches on.
-// This is the single node type: the static extractor (internal/targetgraph)
+// This is the single node type: the static extractor (internal/describe)
 // populates it directly, and `magus describe graph` serializes it. Wire keys
 // mirror the field names in snake_case (dependencies, not the abbreviated deps),
 // matching the project-level depends_on and the rest of this file.

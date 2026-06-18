@@ -88,11 +88,14 @@ func describeUsage() {
 // ── graph ─────────────────────────────────────────────────────────────────────
 
 func describeGraph(ctx context.Context, root string, args []string) error {
-	_, err := cmdParse("describe graph", args, func(fs *flag.FlagSet) {
+	pos, err := cmdParse("describe graph", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus describe graph [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus describe graph [flags] [project...]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.TargetGraphDefinition)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A trailing list of project paths scopes the graph to those projects")
+			fmt.Fprintln(os.Stderr, "(cross-project edges to projects left out are dropped); default is all.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -114,6 +117,22 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	out := ws.DescribeGraph()
+
+	// A trailing list of project paths scopes the graph to those projects; the
+	// cross-project edge pass in the renderer drops edges to projects left out.
+	if len(pos) > 0 {
+		want := make(map[string]bool, len(pos))
+		for _, a := range pos {
+			want[a] = true
+		}
+		kept := out.Projects[:0]
+		for _, p := range out.Projects {
+			if want[p.Path] {
+				kept = append(kept, p)
+			}
+		}
+		out.Projects = kept
+	}
 
 	switch spec.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:

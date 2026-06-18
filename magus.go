@@ -234,12 +234,19 @@ const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 
 // remoteCacheSigningOpts turns the declared trust set (base64 public keys) plus the
 // signing-key env var into cache options, enforcing that a wired remote backend
-// declares a non-empty trust set so a shared cache never comes up unverified.
-func remoteCacheSigningOpts(trustedB64 []string) ([]cache.Option, error) {
+// declares a non-empty trust set so a shared cache never comes up unverified —
+// unless insecure is set, the explicit opt-out that accepts and produces unsigned
+// artifacts (no trust set, no signing key) for trusted single-repo CI or backend
+// validation.
+func remoteCacheSigningOpts(trustedB64 []string, insecure bool) ([]cache.Option, error) {
+	if insecure {
+		return []cache.Option{cache.WithInsecureRemote()}, nil
+	}
 	if len(trustedB64) == 0 {
 		return nil, fmt.Errorf("magus: a remote cache backend is wired (magus.cache.remote) but no trust set is declared; " +
-			"set cache.remote.trusted_keys in magus.yaml to the Ed25519 public key(s) that sign artifacts — " +
-			"a shared cache with no signature verification is a supply-chain hazard and is not allowed")
+			"set cache.remote.trusted_keys in magus.yaml to the Ed25519 public key(s) that sign artifacts (or set " +
+			"cache.remote.insecure / MAGUS_CACHE_REMOTE_INSECURE to accept unsigned artifacts) — " +
+			"a shared cache with no signature verification is a supply-chain hazard and is not allowed by default")
 	}
 	pubkeys := make([][]byte, 0, len(trustedB64))
 	for i, k := range trustedB64 {
@@ -307,7 +314,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
 	// every machine so the misconfiguration can't silently go live.
 	if name := m.wsReg.RemoteBackend(); name != "" {
-		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys)
+		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure)
 		if sErr != nil {
 			return nil, sErr
 		}

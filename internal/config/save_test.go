@@ -64,7 +64,7 @@ func TestKnownKeys(t *testing.T) {
 		t.Errorf("KnownKeys not sorted: %v", keys)
 	}
 	want := map[string]bool{
-		"cache.dir": true, "cache.size_mb": true, "cache.immutable": true, "cache.remote.trusted_keys": true,
+		"cache.dir": true, "cache.size_mb": true, "cache.immutable": true, "cache.remote.trusted_keys": true, "cache.remote.insecure": true,
 		"ci.max_shards": true, "ci.runner_pool_budget": true,
 		"flake.enabled": true, "flake.bootstrap_samples": true, "flake.min_samples": true, "flake.annotate_gha": true, "flake.threshold": true,
 		"daemon.idle_ttl": true,

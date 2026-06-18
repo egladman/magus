@@ -30,6 +30,8 @@ import "std";
 
 import "magus/spell/go";
 import "magus/spell/docker";
+// cosign signs the published images (image-build under the cd charm).
+import "magus/spell/cosign";
 // Dogfood: magus is configured and extended in Buzz, so it carries a Buzz spell
 // and binds it to itself. The buzz spell's needs cover **/*.buzz, so editing a
 // spell or this magusfile marks the project affected, and `magus run buzz-check`
@@ -47,12 +49,17 @@ import "project/gopherbuzz" as gopherbuzz;
 
 // Cross-shard remote cache: share dependency builds between CI shards via GitHub
 // Actions Cache. The github spell self-gates on GITHUB_ACTIONS, so this is a
-// no-op locally (no remote calls, no exports) and only active in GHA.
+// no-op locally (no remote calls, no exports) and only active in GHA. Bound only
+// when the remote cache is configured — a trust set (MAGUS_CACHE_REMOTE_TRUSTED_KEYS,
+// the public key) or an explicit signing waiver (MAGUS_CACHE_REMOTE_INSECURE).
+// Gating here keeps an unconfigured run (e.g. a release that must build clean off
+// the cache) from failing to load, instead of binding a backend with no trust set.
 import "spells/github/actions" as github;
-magus.cache.remote(github);
-// The trust set that secures this backend (cache.remote.trusted_keys) is declared in
-// magus.yaml — it is declarative config, not build logic. A remote backend with
-// no trust set is rejected at load.
+final cache_trusted = os.env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
+final cache_insecure = os.env("MAGUS_CACHE_REMOTE_INSECURE");
+if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" or cache_insecure == "1") {
+    magus.cache.remote(github);
+}
 
 // The go spell claims **/*.go, so editing Go sources marks this project affected
 // for `magus affected ci`. outputs are the regenerable artifacts the cache
@@ -81,6 +88,9 @@ magus.project.register(fun(p, cb) > bool { cb({
         // ci-shard recomputes the affected set and writes $GITHUB_OUTPUT every
         // time; a cache hit would skip the write and leave the matrix job blank.
         "ci-shard": {"cachable": false},
+        // image-build pushes and signs under the cd charm; a cache hit must never
+        // skip those side effects.
+        "image-build": {"cachable": false},
     },
 }); return true; });
 
@@ -135,29 +145,55 @@ export fun go_build(args: [str]) > void {
 }
 
 // ── image targets ────────────────────────────────────────────────────────────
-// Dockerfile is at the repo root, so these exec with dir ".." (build context = repo).
+// Built from this directory (the magus source: go.mod, cmd/magus, gopherbuzz) with
+// the magus Dockerfiles. The `cd` charm publishes: build every variant for its
+// platforms, push to GHCR, and cosign-sign each pushed digest. Without it,
+// image-build loads a single-arch local image for inspection / image-scan.
 
-// The image's address. Local by default; the `cd` charm flips it to the GHCR
-// registry so the same build can be published — and image-scan, which depends on
-// image-build, scans that same address because charms propagate to dependencies.
-fun image_tag() > str {
-    if (magus.has_charm("cd")) { return "ghcr.io/egladman/magus:git-" + commit(); }
-    return "magus:git-" + commit();
-}
+final IMAGE = "ghcr.io/egladman/magus";
 
-// Builds the Docker image (Dockerfile at the repo root, context = repo). The `cd`
-// charm publishes it: image_tag() resolves to the GHCR address and the build is
-// pushed (the runner is assumed already logged in to ghcr.io — e.g. the CD
-// workflow's login step).
-export fun image_build(args: [str]) > void {
-    docker["docker-build"]({"cwd": "..", "args": [
+// Local (loaded) image address used by image-scan.
+fun image_tag() > str { return "magus:" + commit(); }
+
+// build_variant runs one buildx build through the docker spell. When publish, it
+// builds the given platforms and --pushes, then cosign-signs the pushed digest
+// (read from the buildx --metadata-file); otherwise it --loads a single-arch image
+// locally. The runner is assumed logged in to the registry (the CD workflow's
+// login step) with a buildx builder + qemu available for cross-platform builds.
+fun build_variant(dockerfile: str, platforms: str, tags: [str], meta: str, publish: bool) > void {
+    var args = mut ["-f", dockerfile,
         "--build-arg", "VERSION=" + version(),
         "--build-arg", "COMMIT=" + commit(),
-        "--build-arg", "DATE=" + build_date(),
-        "-t", image_tag(),
-        "."]});
+        "--build-arg", "DATE=" + build_date()];
+    foreach (t in tags) { args.append("-t"); args.append(t); }
+    if (publish) {
+        args.append("--platform"); args.append(platforms);
+        args.append("--metadata-file"); args.append(meta);
+        args.append("--push");
+    } else {
+        args.append("--load");
+    }
+    args.append(".");
+    docker["docker-buildx"]({"cwd": ".", "args": args});
+
+    if (publish) {
+        final digest = serialize.jsonDecode(fs.readFile(meta)).q("containerimage.digest").stringValue();
+        cosign["cosign-sign"]({"args": [IMAGE + "@" + digest]});
+    }
+}
+
+// image-build: under the `cd` charm, build + push + sign both images — static
+// (Dockerfile.static, pure-Go, linux/amd64+arm64, the primary :<version>/:latest
+// tags) and CGO (Dockerfile, glibc, linux/amd64, :<version>-cgo/:latest-cgo).
+// Without `cd`, load a single-arch static image tagged image_tag() for local use.
+export fun image_build(args: [str]) > void {
     if (magus.has_charm("cd")) {
-        os.exec("docker", ["push", image_tag()]);
+        build_variant("Dockerfile.static", "linux/amd64,linux/arm64",
+            [IMAGE + ":" + version(), IMAGE + ":latest"], "static-meta.json", true);
+        build_variant("Dockerfile", "linux/amd64",
+            [IMAGE + ":" + version() + "-cgo", IMAGE + ":latest-cgo"], "cgo-meta.json", true);
+    } else {
+        build_variant("Dockerfile.static", "linux/amd64", [image_tag()], "", false);
     }
 }
 
@@ -218,7 +254,7 @@ export fun config_generate(args: [str]) > void {
 // Regenerates the committed Markdown that feeds the docs site — module reference
 // docs (from the host bindings) and man pages (from the CLI registry). Both live
 // under docs/ as registered outputs, so a stale doc trips the drift gate. The
-// `site` project renders this Markdown into HTML (see site/magusfile.buzz).
+// `website` project renders this Markdown into HTML (see website/magusfile.buzz).
 export fun docs_generate(args: [str]) > void {
     os.exec("go", ["run", "./cmd/magus-docs-gen", "-out", "./docs/modules"]);
     os.exec("go", ["run", "./cmd/manpage-gen", "-format", "md", "-out", "./docs/manpage/gen"]);
@@ -347,8 +383,13 @@ fun badge_color(pct: str) > str {
 
 // Runs the suite with -coverprofile, reads the total off `go tool cover -func`,
 // and writes the coverage.svg badge (color picked by threshold) via the shim.
+// The profile run goes through the go spell's go-test op rather than a raw
+// os.exec: the appended flags are exactly what the op's `cd` charm adds
+// (-covermode=atomic -coverprofile=coverage.out), so coverage stays in lockstep
+// with how the project's other targets drive Go. `go tool cover -func` has no
+// spell op, so it stays os.exec.
 export fun coverage(args: [str]) > void {
-    os.exec("go", ["test", "-covermode=atomic", "-coverprofile=coverage.out", "./..."]);
+    go["go-test"]({"args": ["-covermode=atomic", "-coverprofile=coverage.out"]});
     final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
     final svg = os.exec("go", ["run", "./cmd/coverage-badge",
         "-label", "coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
@@ -477,4 +518,44 @@ export fun ci_shard(args: [str]) > void {
     var existing = "";
     if (fs.exists(p)) { existing = fs.readFile(p); }
     fs.writeFile(p, existing + block);
+
+    // Also render a human-readable summary — the shard plan plus the workspace
+    // dependency graph — to the job's step summary. GitHub renders ```mermaid
+    // fences in its flavored markdown, so the same chart MAGUS.md embeds
+    // (`magus describe graph -o mermaid`) shows up inline on the run.
+    final summaryPath = os.env("GITHUB_STEP_SUMMARY");
+    if (summaryPath != null and ("" + summaryPath) != "") {
+        final sp = "" + summaryPath;
+        var md = "## Affected CI plan\n\n"
+            + plan.q("count").integerValue() + " shard(s), max parallel "
+            + plan.q("max_parallel").integerValue() + "\n\n"
+            + "| shard | projects |\n| --- | --- |\n";
+        // Scope the dependency graph to the affected projects. ci-shard runs with
+        // the magus project as cwd, and magus/ is itself a workspace, so point
+        // describe graph at the workspace root ($GITHUB_WORKSPACE) — otherwise it
+        // resolves the nested magus workspace and the affected paths wouldn't match.
+        var graphArgs = mut [];
+        final root = os.env("GITHUB_WORKSPACE");
+        if (root != null and ("" + root) != "") {
+            graphArgs.append("--root"); graphArgs.append("" + root);
+        }
+        graphArgs.append("describe"); graphArgs.append("graph"); graphArgs.append("-o"); graphArgs.append("mermaid");
+        var nproj = 0;
+        foreach (row in plan.q("matrix").listValue()) {
+            final projects = row.q("projects").stringValue();
+            md = md + "| " + row.q("shard").stringValue() + " | " + projects + " |\n";
+            foreach (proj in projects.split(" ")) {
+                if (proj != "") { graphArgs.append(proj); nproj = nproj + 1; }
+            }
+        }
+        // Render the affected-scoped graph only when something is affected.
+        if (nproj > 0) {
+            md = md + "\n## Dependency graph (affected)\n\n```mermaid\n"
+                + magus.cmd(graphArgs).stdout
+                + "\n```\n";
+        }
+        var existingSummary = "";
+        if (fs.exists(sp)) { existingSummary = fs.readFile(sp); }
+        fs.writeFile(sp, existingSummary + md);
+    }
 }

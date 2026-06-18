@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS2006 — likely PATH-shim manager stripped</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../index.html">Docs</a></li>
+        <li><a href="../../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mgs2006--likely-path-shim-manager-stripped">MGS2006 — likely PATH-shim manager stripped</h1>
+<p>A subprocess failed and magus suspects the cause is sandbox
+stripping the env vars that a PATH-shim runtime manager (mise, asdf,
+direnv) relies on.</p>
+<pre><code>[MGS2006] mise shims appear stripped from PATH; the build is using system tools instead
+  cmd=go missing_var=MISE_DATA_DIR
+</code></pre>
+<h2 id="why">Why</h2>
+<p><code>mise</code>, <code>asdf</code>, and <code>direnv</code> work by injecting a shim directory into
+<code>PATH</code> and reading a tool-version file from the workspace. The shim
+binary is invoked when the user runs <code>go</code>, then <code>mise</code> looks at its
+own <code>MISE_*</code> env vars to decide which Go version to dispatch to.</p>
+<p>When sandbox strips <code>MISE_*</code> (or <code>ASDF_*</code>, <code>DIRENV_*</code>) from the
+child's environment, the shim runs without configuration and either
+fails or falls back to a system tool the user did not intend to use.</p>
+<h2 id="resolution">Resolution</h2>
+<p>Add the variables your runtime manager needs to <code>sandbox.env.passthrough</code>:</p>
+<pre><code class="language-yaml">sandbox:
+  env:
+    passthrough:
+      - &quot;MISE_*&quot; # mise
+      - &quot;ASDF_*&quot; # asdf
+      - &quot;DIRENV_*&quot; # direnv
+</code></pre>
+<p>Pick the one (or two) you actually use. The wildcard is a suffix match
+so <code>MISE_*</code> covers <code>MISE_DATA_DIR</code>, <code>MISE_SHIMS</code>, <code>__MISE_*</code>, etc.</p>
+<p>These variables do not, by themselves, contain credentials a
+supply-chain attacker would target — they are configuration for a
+local tool manager. Adding them to the passthrough list does not
+weaken sandbox's secret-protection guarantee.</p>
+<p>If you do not use a PATH-shim manager and this code fires, the
+heuristic is wrong; please file an issue with the parent <code>PATH</code> and
+the failing command.</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/codes/sandbox/MGS2006.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-09 18:36:37 UTC from commit <a href="https://github.com/egladman/tack/commit/77bb067c75ce277cf7571c9a2f3a03c544df410e"><code>77bb067c</code></a></small>
+  </footer>
+</body>
+</html>

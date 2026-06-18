@@ -152,11 +152,11 @@ var goldenBuiltins = map[string]Spec{
 	},
 	"buzz": {
 		Name:  "buzz",
-		Needs: []string{"**/*.buzz", "**/*.buzz"},
+		Needs: []string{"**/*.buzz"},
 		Targets: map[string]Target{
-			"buzz-check": {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --check"}},
-			"buzz-test":  {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 buzz --test"}},
-			"magus-buzz": {Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.buzz' -o -name '*.buzz' \\) -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}},
+			"buzz-check": {Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}},
+			"buzz-test":  {Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}},
+			"magus-buzz": {Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}},
 		},
 	},
 	"compose": {
@@ -165,6 +165,15 @@ var goldenBuiltins = map[string]Spec{
 		Targets: map[string]Target{
 			"docker-compose-build":  {Cmd: "docker", Args: []string{"compose", "build"}},
 			"docker-compose-config": {Cmd: "docker", Args: []string{"compose", "config", "--quiet"}},
+		},
+	},
+	"cosign": {
+		Name:       "cosign",
+		VersionCmd: []string{"cosign", "version"},
+		Targets: map[string]Target{
+			"cosign-sign":   {Cmd: "cosign", Args: []string{"sign", "--yes"}},
+			"cosign-verify": {Cmd: "cosign", Args: []string{"verify"}},
+			"cosign-attest": {Cmd: "cosign", Args: []string{"attest", "--yes"}},
 		},
 	},
 	"css": {
@@ -184,6 +193,7 @@ var goldenBuiltins = map[string]Spec{
 		VersionCmd: []string{"docker", "--version"},
 		Targets: map[string]Target{
 			"docker-build":       {Cmd: "docker", Args: []string{"build"}},
+			"docker-buildx":      {Cmd: "docker", Args: []string{"buildx", "build"}},
 			"docker-build-check": {Cmd: "docker", Args: []string{"build", "--check"}},
 			"hadolint":           {Cmd: "hadolint", Args: []string{"Dockerfile"}},
 		},

@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`fs`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../index.html">Docs</a></li>
+        <li><a href="../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="fs"><code>fs</code></h1>
+<p>Filesystem and path primitives.</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;fs&quot;</code>) and call methods in <code>camelCase</code> (<code>fs.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="glob"><code>glob</code></h3>
+<p>Return paths matching pattern (doublestar-style).</p>
+<p><strong>Signature:</strong> <code>fs.glob(pattern) → []string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pattern</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> []string</p>
+<h3 id="dirname"><code>dirname</code></h3>
+<p>Directory portion of path.</p>
+<p><strong>Signature:</strong> <code>fs.dirname(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="basename"><code>basename</code></h3>
+<p>Final element of path.</p>
+<p><strong>Signature:</strong> <code>fs.basename(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="exists"><code>exists</code></h3>
+<p>True iff path exists.</p>
+<p><strong>Signature:</strong> <code>fs.exists(path) → bool</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.exists</code> — the magus form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> bool</p>
+<h3 id="read-file"><code>read_file</code></h3>
+<p>Return the contents of path as a string.</p>
+<p><strong>Signature:</strong> <code>fs.readFile(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="write-file"><code>write_file</code></h3>
+<p>Write content to path (mode 0644).</p>
+<p><strong>Signature:</strong> <code>fs.writeFile(path, content)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="mkdirall"><code>mkdirall</code></h3>
+<p>Create path and parents (default mode 0755).</p>
+<p><strong>Signature:</strong> <code>fs.mkdirall(path, [perm])</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.makeDirectory</code> — the magus form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>perm</code></td>
+<td><code>int</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="join"><code>join</code></h3>
+<p>Join path elements with the OS separator.</p>
+<p><strong>Signature:</strong> <code>fs.join(parts...) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>parts</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="remove-all"><code>remove_all</code></h3>
+<p>Recursively remove path (no error if missing).</p>
+<p><strong>Signature:</strong> <code>fs.removeAll(path)</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.delete</code> — the magus form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="list-dir"><code>list_dir</code></h3>
+<p>Return directory entries; empty if path does not exist.</p>
+<p><strong>Signature:</strong> <code>fs.listDir(path) → []string</code></p>
+<p><strong>Also in Buzz's stdlib:</strong> <code>fs.list</code> — the magus form is sandbox-aware.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> []string</p>
+<h3 id="ext"><code>ext</code></h3>
+<p>File-name extension of path, including the leading dot (&quot;&quot; if none).</p>
+<p><strong>Signature:</strong> <code>fs.ext(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="is-dir"><code>is_dir</code></h3>
+<p>True iff path exists and is a directory (a sandbox-denied path reads as false).</p>
+<p><strong>Signature:</strong> <code>fs.isDir(path) → bool</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> bool</p>
+<h3 id="is-file"><code>is_file</code></h3>
+<p>True iff path exists and is a regular file (a sandbox-denied path reads as false).</p>
+<p><strong>Signature:</strong> <code>fs.isFile(path) → bool</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> bool</p>
+<h3 id="stat"><code>stat</code></h3>
+<p>Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.</p>
+<p><strong>Signature:</strong> <code>fs.stat(path) → map[string]any</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="copy-file"><code>copy_file</code></h3>
+<p>Copy the file at src to dst (overwriting), preserving its permission bits.</p>
+<p><strong>Signature:</strong> <code>fs.copyFile(src, dst)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dst</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="copy-dir"><code>copy_dir</code></h3>
+<p>Recursively copy the directory tree at src to dst, preserving permission bits.</p>
+<p><strong>Signature:</strong> <code>fs.copyDir(src, dst)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dst</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="watch"><code>watch</code></h3>
+<p>Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.</p>
+<p><strong>Signature:</strong> <code>fs.watch(paths, callback)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>paths</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>callback</code></td>
+<td><code>Callback</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="walk"><code>walk</code></h3>
+<p>Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.</p>
+<p><strong>Signature:</strong> <code>fs.walk(root, callback)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>root</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>callback</code></td>
+<td><code>Callback</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="append-file"><code>append_file</code></h3>
+<p>Append content to path (creating if absent, mode 0644).</p>
+<p><strong>Signature:</strong> <code>fs.appendFile(path, content)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="chmod"><code>chmod</code></h3>
+<p>Change the permission bits of path to mode (octal integer, e.g. 0755).</p>
+<p><strong>Signature:</strong> <code>fs.chmod(path, mode)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td><code>int</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="symlink"><code>symlink</code></h3>
+<p>Create a symbolic link at link pointing to target.</p>
+<p><strong>Signature:</strong> <code>fs.symlink(target, link)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>target</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>link</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="readlink"><code>readlink</code></h3>
+<p>Return the target of the symbolic link at path.</p>
+<p><strong>Signature:</strong> <code>fs.readlink(path) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="temp-dir"><code>temp_dir</code></h3>
+<p>Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.</p>
+<p><strong>Signature:</strong> <code>fs.tempDir([prefix]) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>prefix</code></td>
+<td><code>string</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/modules/fs.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-11 00:38:15 UTC from commit <a href="https://github.com/egladman/tack/commit/56e0f4debf1ec3a45a68fce4138570a6086735aa"><code>56e0f4de</code></a></small>
+  </footer>
+</body>
+</html>

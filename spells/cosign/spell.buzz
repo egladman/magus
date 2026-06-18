@@ -1,0 +1,38 @@
+// cosign — sign, verify, and attest container images and artifacts with Sigstore
+// cosign.
+//
+// Authored source for the built-in "cosign" spell; compiled to bytecode and
+// embedded at build time (see cmd/magus-spells-gen). Each op forks `cosign` on
+// PATH — no shell. sign/attest pass --yes so they run unattended: keyless OIDC in
+// CI (with id-token permission) or a configured key locally. The caller appends
+// the image reference (by digest) and any flags via the op's args.
+//
+// Use it from a magusfile to sign right after a push — locally or in CI — instead
+// of wiring a cosign-specific CI action:
+//
+//   import "magus/spell/cosign" as cosign
+//   cosign["cosign-sign"]({"args": ["ghcr.io/egladman/magus@" + digest]})
+//
+// It claims no source globs: cosign acts on a registry reference, not the working
+// tree, so it is imported and invoked explicitly rather than auto-bound to a
+// project's files.
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "cosign"; }
+
+export fun mgs_getVersionCommand() > [str] { return ["cosign", "version"]; }
+
+// --yes skips the interactive transparency-log confirmation so signing/attesting
+// runs unattended; the caller appends the target reference and flags.
+fun sign(target: Target, cb: fun(any)) > bool { cb({"cmd": "cosign", "args": ["sign", "--yes"]}); return true; }
+fun verify(target: Target, cb: fun(any)) > bool { cb({"cmd": "cosign", "args": ["verify"]}); return true; }
+fun attest(target: Target, cb: fun(any)) > bool { cb({"cmd": "cosign", "args": ["attest", "--yes"]}); return true; }
+
+export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+    return {
+        "cosign-sign": sign,
+        "cosign-verify": verify,
+        "cosign-attest": attest,
+    };
+}

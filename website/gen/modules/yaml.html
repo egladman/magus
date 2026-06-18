@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>`yaml`</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../index.html">Docs</a></li>
+        <li><a href="../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="yaml"><code>yaml</code></h1>
+<p>YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;yaml&quot;</code>) and call methods in <code>camelCase</code> (<code>yaml.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="parse"><code>parse</code></h3>
+<p>Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.</p>
+<p><strong>Signature:</strong> <code>yaml.parse(source) → any</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> any</p>
+<h3 id="stringify"><code>stringify</code></h3>
+<p>Encode a value to a YAML string; errors on unencodable input.</p>
+<p><strong>Signature:</strong> <code>yaml.stringify(value) → string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td><code>any</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+    </article>
+    <p><a href="https://github.com/egladman/tack/edit/claude/magus-hello-world-updates-innwus/magus/docs/modules/yaml.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-11 00:38:15 UTC from commit <a href="https://github.com/egladman/tack/commit/56e0f4debf1ec3a45a68fce4138570a6086735aa"><code>56e0f4de</code></a></small>
+  </footer>
+</body>
+</html>

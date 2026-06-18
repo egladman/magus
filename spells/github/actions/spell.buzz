@@ -20,15 +20,19 @@
 // input shape varies per op (and a handler may skip cb entirely), so io is typed
 // `any`.
 //
-// The GitHub Actions Cache v1 protocol is implemented here in Buzz using the
-// magus host http module (http.get/post for the JSON API plus the byte-level
-// http.download/upload_chunked/byteSize primitives), os.env for the runner
-// environment, and Buzz's serialize for JSON — so everything GitHub-specific
-// stays out of the Go tree.
+// This targets the GitHub Actions Cache service **v2** — the Twirp API at
+// ACTIONS_RESULTS_URL that replaced the v1 _apis/artifactcache REST service GitHub
+// retired in early 2025. The flow is: CreateCacheEntry returns a pre-signed Azure
+// blob URL, the artifact is PUT there directly, then FinalizeCacheEntryUpload
+// commits it; reads call GetCacheEntryDownloadURL and GET the returned blob URL.
+// It is implemented in Buzz using the magus host http module (http.post for the
+// JSON-over-Twirp RPCs plus the byte-level http.download/upload_chunked/byteSize
+// primitives), os.env for the runner environment, and serialize for JSON — so
+// everything GitHub-specific stays out of the Go tree.
 //
 // Auth and endpoint come from the runner environment:
 //   GITHUB_ACTIONS         — "true" only under GitHub Actions (gates the backend)
-//   ACTIONS_CACHE_URL      — base API URL (always ends in "/")
+//   ACTIONS_RESULTS_URL    — cache service base URL (always ends in "/")
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
 import "http"
@@ -65,23 +69,30 @@ fun getenv(name: str) > str {
 
 // --- implementation -------------------------------------------------------
 
-// Version salt mixed into every key; bump to invalidate all artifacts at once.
+// Version salt mixed into every entry's `version` field; bump to invalidate all
+// artifacts at once. Independent of the cache *service* version (v2).
 final CACHE_VERSION = "magus-remote-v1";
-// Accept header carrying the API version the v1 cache service expects.
-final API_ACCEPT = "application/json;api-version=6.0-preview.1";
-// 32 MiB: the GitHub Actions Cache per-PATCH ceiling.
-final CHUNK = 33554432;
+// Twirp service path; methods hang off this under ACTIONS_RESULTS_URL.
+final SERVICE = "twirp/github.actions.results.api.v1.CacheService/";
 
-fun base() > str { return getenv("ACTIONS_CACHE_URL"); }
+fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
 fun token() > str { return getenv("ACTIONS_RUNTIME_TOKEN"); }
 
-// cache_key derives a GitHub Actions Cache key from the spec hash. The hash
-// already folds in the project path (see cache/hash.go), so it is unique per
-// project and needs no extra namespacing — and being hex, it is URL-safe.
+// cache_key derives the cache key from the spec hash. The hash already folds in
+// the project path (see cache/hash.go), so it is unique per project and needs no
+// extra namespacing — and being hex, it is URL-safe.
 fun cache_key(hash: str) > str { return "magus-" + hash; }
 
-fun auth_headers() > any {
-    return mut {"Authorization": "Bearer " + token(), "Accept": API_ACCEPT};
+// rpc POSTs a JSON Twirp request to the named CacheService method and returns the
+// host http response map ({status, body}).
+fun rpc(method: str, payload: any) > any {
+    final url = base() + SERVICE + method;
+    final headers = mut {
+        "Authorization": "Bearer " + token(),
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    };
+    return http.post(url, serialize.jsonEncode(payload), headers);
 }
 
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
@@ -92,20 +103,18 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
     cb(io);
     final hash = "" + io["hash"];
     final dest = "" + io["dest"];
-    final key = cache_key(hash);
-    final url = base() + "_apis/artifactcache/cache?keys=" + key + "&version=" + CACHE_VERSION;
-    final res = http.get(url, auth_headers());
-    if (res["status"] != 200) { return false; }  // 204 = miss
-    // jsonDecode returns a Boxed tree: navigate with .q(key) and read the leaf
-    // with a typed accessor (.string() → the str, or null if absent/wrong type).
-    final loc = serialize.jsonDecode(res["body"]).q("archiveLocation").string();
-    if (loc == null or loc == "") { return false; }
-    // The archive location is a pre-signed blob URL; it needs no auth header.
-    return http.download("" + loc, dest, {}) == 200;
+    final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
+    if (res["status"] != 200) { return false; }
+    final decoded = serialize.jsonDecode(res["body"]);
+    if (!decoded.q("ok").booleanValue()) { return false; }   // ok=false ⇒ miss
+    final loc = decoded.q("signedDownloadUrl").stringValue();
+    if (loc == "") { return false; }
+    // The download URL is a pre-signed Azure blob URL; it needs no auth header.
+    return http.download(loc, dest, {}) == 200;
 }
 
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
-// success or when another runner already stored the same key (409), else false.
+// success or when another runner already stored the same key, else false.
 export fun put_artifact(target: Target, cb: fun(any)) > bool {
     if (base() == "" or token() == "") { return false; }
     var io = {};
@@ -114,25 +123,23 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     final src = "" + io["src"];
     final key = cache_key(hash);
 
-    // 1. Reserve the artifact.
-    var json_headers = auth_headers();
-    json_headers["Content-Type"] = "application/json";
-    final reserve = serialize.jsonEncode({"key": key, "version": CACHE_VERSION});
-    final rres = http.post(base() + "_apis/artifactcache/caches", reserve, json_headers);
-    if (rres["status"] == 409) { return true; }   // another runner won the race
-    if (rres["status"] != 201) { return false; }
-    final cache_id = serialize.jsonDecode(rres["body"]).q("cacheId").integer();
-    final url = base() + "_apis/artifactcache/caches/" + cache_id;
+    // 1. Reserve the entry → pre-signed Azure upload URL.
+    final cres = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
+    if (cres["status"] == 409) { return true; }   // another runner already reserved this key
+    if (cres["status"] != 200) { return false; }
+    final upload = serialize.jsonDecode(cres["body"]).q("signedUploadUrl").stringValue();
+    if (upload == "") { return true; }             // ok=false with no URL ⇒ entry already exists
 
-    // 2. Upload the file in Content-Range chunks.
-    var bin_headers = auth_headers();
-    bin_headers["Content-Type"] = "application/octet-stream";
-    final ures = http.upload_chunked("PATCH", url, src, CHUNK, bin_headers);
-    if (ures[0] != 204) { return false; }
+    // 2. Upload the artifact to Azure as a single Put Blob (chunk_size 0 = whole
+    //    file, no Content-Range). Azure returns 201 Created on success.
+    final ures = http.upload_chunked("PUT", upload, src, 0, mut {"x-ms-blob-type": "BlockBlob"});
+    final ucode = ures[0];
+    if (ucode != 201 and ucode != 200) { return false; }
 
-    // 3. Commit with the exact byte size.
-    final commit = serialize.jsonEncode({"size": http.byteSize(src)});
-    final cres = http.post(url, commit, json_headers);
-    final code = cres["status"];
-    return code == 200 or code == 201 or code == 204;
+    // 3. Commit with the exact byte size. int64 fields are JSON strings in proto3,
+    //    so send sizeBytes as a string.
+    final fres = rpc("FinalizeCacheEntryUpload",
+        {"key": key, "sizeBytes": "" + http.byteSize(src), "version": CACHE_VERSION});
+    if (fres["status"] != 200) { return false; }
+    return serialize.jsonDecode(fres["body"]).q("ok").booleanValue();
 }

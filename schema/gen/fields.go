@@ -36,6 +36,14 @@ func init() {
 			Usage:    "MAGUS_CACHE_REMOTE_TRUSTED_KEYS: MAGUS_CACHE_REMOTE_TRUSTED_KEYS",
 		},
 		{
+			GoPath:   "Cache.Remote.Insecure",
+			YamlPath: "cache.remote.insecure",
+			EnvVar:   "MAGUS_CACHE_REMOTE_INSECURE",
+			Flag:     FlagNames{Long: "cache-remote-insecure"},
+			Kind:     KindBool,
+			Usage:    "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are",
+		},
+		{
 			GoPath:   "CI.MaxShards",
 			YamlPath: "ci.max_shards",
 			EnvVar:   "MAGUS_CI_MAX_SHARDS",
