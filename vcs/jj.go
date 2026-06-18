@@ -93,14 +93,6 @@ func (v jjVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
 }
 
-// Describe reports "" — jj has no native tag-describe (tags live in the colocated
-// git backend, with no first-class jj command for the git-describe shape). Per
-// the interface contract a backend without the concept returns "" rather than
-// faking it; a jj user needing tag info reaches for vcs.exe().
-func (jjVCS) Describe(_ context.Context, _ string) (string, error) {
-	return "", nil
-}
-
 func (jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 	// ShortHash is the short commit_id (a prefix of Hash), not change_id, so it
 	// stays consistent with Hash and the agnostic Commit.ID model.

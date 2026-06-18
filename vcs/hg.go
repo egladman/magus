@@ -112,24 +112,6 @@ func (hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 	}, nil
 }
 
-// Describe returns the working revision's latest reachable tag (Mercurial's
-// {latesttag}), with a -dirty suffix for a modified tree. A repo with no tags
-// reports "" (Mercurial's "null" sentinel is normalized away), matching the
-// interface's "no describe available" contract.
-func (hgVCS) Describe(ctx context.Context, dir string) (string, error) {
-	tag, err := vcsOutput(ctx, dir, "hg", "log", "-r", ".", "--template", "{latesttag}")
-	if err != nil {
-		return "", err
-	}
-	if tag == "" || tag == "null" {
-		return "", nil
-	}
-	if dirty, _ := vcsOutput(ctx, dir, "hg", "status"); dirty != "" {
-		tag += "-dirty"
-	}
-	return tag, nil
-}
-
 // hgCommitTemplate emits the NUL-delimited fields parseCommit expects: node,
 // short node, author name/email, the record date (RFC 3339), parents, and the
 // full message. \0 is the field delimiter; Mercurial converts it to NUL.

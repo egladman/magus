@@ -83,7 +83,7 @@ Full metadata table: short_hash, hash, branch, commit_date, is_dirty.
 
 ### `commit`
 
-Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up — test a field (e.g. c.date == "") rather than for null.
+Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns nil when no VCS is resolved or the revision can't be looked up.
 
 **Signature:** `vcs.commit([rev]) → any`
 
@@ -95,13 +95,13 @@ Resolve a revision (a VCS-native rev expression; omit for the current revision) 
 
 ### `history`
 
-Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.
+Up to limit recent commits, newest first; each is the same record vcs.commit returns. An empty list when no VCS is resolved.
 
-**Signature:** `vcs.history([limit]) → any`
+**Signature:** `vcs.history(limit) → any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
-| `limit` | `int` | yes | |
+| `limit` | `int` |  | |
 
 **Returns:** any
 
@@ -110,14 +110,6 @@ Up to limit recent commits, newest first; each is the same record vcs.commit ret
 Absolute path to the active VCS executable (git/hg/jj), or "" if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).
 
 **Signature:** `vcs.exe() → string`
-
-**Returns:** string
-
-### `describe`
-
-Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). "" when no VCS is resolved, or for a backend without a tag-describe concept (jj) — so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.
-
-**Signature:** `vcs.describe() → string`
 
 **Returns:** string
 

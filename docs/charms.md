@@ -98,55 +98,42 @@ Add charms to the target ref and the `command:` line updates. Two caveats: funct
 
 ## Declaring what a charm does
 
-A charm only does something for a target that declares it. Declarations live in a spell's `charms` table, keyed by charm name. There are two charm-construction modules — pick by where the spell runs — plus the raw-data escape hatch.
+A charm only does something for a target that declares it. Declarations live in a spell's `charms` table, keyed by charm name.
 
-### 1. Built-in fork spells (`import "magus/charm"`)
+### 1. Built-in spells (raw RFC 6902 data)
 
-A built-in fork spell is **self-contained**: it imports only the pure-Buzz modules `magus/target` and `magus/charm`, so it compiles to bare bytecode with no host bindings. `magus/charm` exports the core constructors as **bare functions** (the same flat-import idiom `magus/target` uses for `Target`), each resolving a _value anchor_ to an index so you never count positions:
+Built-in spells import only `magus/target`, so they write the patch as plain data:
 
 ```buzz
-import "magus/target";
-import "magus/charm";
-
 fun lint(target: Target, cb: fun(any)) > bool {
-    final args = ["tool", "golangci-lint", "run", "./..."];
-    cb({"cmd": "go", "args": args, "charms": {
-        "rw":    after(args, "run", ["--fix"]),  // insert after "run" — index-proof
-        "debug": append(["-v"]),                 // append
+    cb({"cmd": "go", "args": ["tool", "golangci-lint", "run", "./..."], "charms": {
+        "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},
+        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
     }});
     return true;
 }
 ```
 
-`magus/charm` ships the **core** constructors: `append`, `prepend`, `after`, `before`, `set`, `drop`. For the advanced set (`move`/`copy`/`test`, the predicate `*Func` variants, `path`) reach the host `charm` module from a non-built-in spell (next section). The constructors return the same `{ops: [...]}` record the raw form below produces, so the two interoperate.
+### 2. Workspace spells & magusfiles (the `charm` constructors)
 
-### 2. Workspace spells & magusfiles (`import "charm"`)
-
-A workspace spell (imported by path) or a magusfile runs with host bindings, so it imports the host **`charm`** module, which carries the **full** constructor set as namespaced methods:
+Import `magus/extra` and build the patch through `extra.charm` constructors that resolve a value anchor to an index for you:
 
 ```buzz
-import "charm";
-final args = ["tool", "golangci-lint", "run", "./..."];
-charms = {
-    "rw":    charm.after(args, "run", ["--fix"]),  // insert after "run"
-    "debug": charm.append(["-v"]),                 // append
-    "stamp": charm.move(args, "run", charm.path(args, "./...")), // advanced: see below
+import "magus/extra";
+const base = ["tool", "golangci-lint", "run", "./..."];
+ops = {
+    "lint": {
+        "cmd":  "go",
+        "args": base,
+        "charms": {
+            "rw":    extra.charm.after(base, "run", ["--fix"]),  // insert after "run"
+            "debug": extra.charm.append(["-v"]),                 // append
+        },
+    },
 };
 ```
 
-> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and `remove` would be shadowed by the built-in map `.remove()` method. This is a *constructor name only* — `charm.drop` emits the standard RFC 6902 `{"op": "remove", …}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
-
-### 3. Raw RFC 6902 data (the lowest level)
-
-The constructors are pure convenience: they only build the `{ops: [...]}` record, which is a plain RFC 6902 JSON Patch. You can **always declare the patch notation explicitly** — for an op no constructor covers (several edits in one charm), for full control, or just by preference. The raw form is first-class, not a fallback:
-
-```buzz
-"rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},
-```
-
-The six ops are exactly RFC 6902's (`add`/`remove`/`replace`/`move`/`copy`/`test`); see [the patch model](#reference-the-patch-model). magus adds no ops and renames none — the constructors are sugar over this vocabulary.
-
-### 4. Function targets & ops (branch in code)
+### 3. Function targets & ops (branch in code)
 
 When the argv needs to be computed, branch in code. A magusfile function target receives the forwarded CLI args:
 
@@ -154,7 +141,7 @@ When the argv needs to be computed, branch in code. A magusfile function target 
 export fun lint(args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
-    os.exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
+    extra.os.exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
 }
 ```
 
@@ -173,9 +160,7 @@ Spell op methods receive the active charm set as `opts.charms` (a lookup table: 
 
 ## The `charm` constructor reference
 
-Both charm modules build a charm's patch; every constructor returns `{ ops = [...] }`. The `argv`-taking constructors resolve a _value anchor_ (or predicate for the `*Func` variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.
-
-The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm.after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare — `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
+`magus.extra.charm` builds a charm's patch. Every constructor returns `{ ops = [...] }`. The `argv`-taking constructors resolve a _value anchor_ (or predicate for `*_func` variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.
 
 | Constructor                             | Builds                                                                                       |
 | --------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -184,11 +169,11 @@ The table is the **full** set, available on the host `charm` module (`import "ch
 | `after(argv, anchor, vals)`             | insert `vals` just after the first element equal to `anchor`                                 |
 | `before(argv, anchor, vals)`            | insert `vals` just before `anchor`                                                           |
 | `set(argv, anchor, val)`                | replace the element equal to `anchor` with `val`                                             |
-| `drop(argv, anchor)`                    | remove the element equal to `anchor`                                                         |
+| `remove(argv, anchor)`                  | remove the element equal to `anchor`                                                         |
 | `afterFunc(argv, fn, vals)`             | `after`, but match by predicate                                                              |
 | `beforeFunc(argv, fn, vals)`            | `before`, by predicate                                                                       |
 | `setFunc(argv, fn, val)`                | `set`, by predicate                                                                          |
-| `dropFunc(argv, fn)`                    | `drop`, by predicate                                                                         |
+| `removeFunc(argv, fn)`                  | `remove`, by predicate                                                                       |
 | `move(argv, anchor, to)`                | move the `anchor` element to pointer `to` (`"/-"` end, `"/0"` front, or `path(...)`)         |
 | `copy(argv, anchor, to)`                | copy the `anchor` element to pointer `to`                                                    |
 | `test(argv, anchor)`                    | guard: assert `anchor` is still at its position when the patch applies (else the run errors) |
@@ -196,18 +181,16 @@ The table is the **full** set, available on the host `charm` module (`import "ch
 | `path(argv, anchor)`                    | the JSON Pointer (`"/N"`) of `anchor`, for use as a `to` destination or in a hand-written op |
 | `pathFunc(argv, fn)`                    | `path`, by predicate                                                                         |
 
-Method names are camelCase (`charm.afterFunc`, `charm.pathFunc`), following Buzz's convention.
+Methods are camelCase off the `magus/extra` import (`extra.charm.afterFunc`), following Buzz's convention.
 
 A missing anchor is a **load-time error**, not a silently wrong index.
 
 ## Use-case cookbook
 
-The examples use the host module (`charm.*`); inside a self-contained built-in spell call the bare `magus/charm` form (`append(...)`, `after(...)`, …) instead.
-
 **Append a flag** (e.g. a `debug` charm adding `-v`):
 
 ```buzz
-debug = charm.append(["-v"]);
+debug = extra.charm.append(["-v"]);
 // {"ops":[{"op":"add","path":"/-","value":"-v"}]}
 ```
 
@@ -215,25 +198,24 @@ debug = charm.append(["-v"]);
 
 ```buzz
 // base ["test", "./..."]: add -race right after "test"
-race = charm.after(["test", "./..."], "test", ["-race"]);
+race = extra.charm.after(["test", "./..."], "test", ["-race"]);
 // {"ops":[{"op":"add","path":"/1","value":"-race"}]}
 ```
 
 **Swap a flag** (e.g. `gofmt -l .` → `-w .`):
 
 ```buzz
-rw = charm.set(["-l", "."], "-l", "-w");
+rw = extra.charm.set(["-l", "."], "-l", "-w");
 // {"ops":[{"op":"replace","path":"/0","value":"-w"}]}
 ```
 
 **Drop a flag** (e.g. `ruff format --check .` → `ruff format .`):
 
 ```buzz
-rw = charm.drop(base, "--check");   // host; bare drop(base, "--check") in magus/charm
-// {"ops":[{"op":"remove","path":"/3"}]}
+rw = extra.charm.remove(base, "--check");
 ```
 
-**Several edits in one charm** (remove higher indices first to avoid reshuffling) — drop to the raw form, since each constructor yields a single op:
+**Several edits in one charm** (remove higher indices first to avoid reshuffling):
 
 ```buzz
 // cargo fmt -- --check  →  cargo fmt
@@ -243,19 +225,10 @@ rw = { "ops": [
 ]};
 ```
 
-**Move/copy/test (advanced, host module only).** Reposition an existing arg, or guard that one is where you think:
+**Match by predicate:**
 
 ```buzz
-// move the matched flag to the end; charm.path resolves an anchor to its pointer
-reorder = charm.move(base, "--config", "/-");
-// assert "run" is still at its index when the patch applies, else the run errors
-guard   = charm.test(base, "run");
-```
-
-**Match by predicate** (the `*Func` variants, host module only):
-
-```buzz
-cap = charm.setFunc(base, fun(s: str) > bool { return s.startsWith("-j"); }, "-j16");
+cap = extra.charm.setFunc(base, fun(s: str) > bool { return s.startsWith("-j"); }, "-j16");
 ```
 
 Conditional or per-invocation logic belongs in a **function target**, not a charm. Charms are static data resolved at author time.
@@ -286,15 +259,14 @@ This is a deliberate, enforced boundary, not a missing feature.
 
 ### When you've left the charm layer
 
-**Function target** (most common): write an exported function and call the tool via `os.exec`:
+**Function target** (most common): write an exported function and call the tool via `extra.os.exec`:
 
 ```buzz
 // magusfile.buzz
-import "os";
 export fun lint(args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
-    os.exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);
+    extra.os.exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);
 }
 ```
 
@@ -309,9 +281,8 @@ Charm args are **literal** — there is no `${VAR}` interpolation, by design. Th
 - **Known at load time:** build the string in code and pass it to a constructor:
 
   ```buzz
-  import "charm";
-  import "env";
-  charms = { "rw": charm.after(base, "run", ["--config={env.get("LINT_CONFIG")}"]) };
+  import "magus/extra";
+  charms = { "rw": extra.charm.after(base, "run", ["--config={extra.env.get("LINT_CONFIG")}"]) };
   ```
 
 - **Per-invocation:** use a function target. Charms are static data; they cannot read the env at run time.

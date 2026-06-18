@@ -184,12 +184,6 @@ func (gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 	}, nil
 }
 
-// Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
-// short hash when no tag is reachable), with a -dirty suffix for a modified tree.
-func (gitVCS) Describe(ctx context.Context, dir string) (string, error) {
-	return vcsOutput(ctx, dir, "git", "describe", "--tags", "--always", "--dirty")
-}
-
 // gitCommitFormat emits the NUL-delimited fields parseCommit expects: id, short,
 // author name/email, the commit (record) date as strict ISO 8601 / RFC 3339
 // (%cI), parents, and the raw message (%B).

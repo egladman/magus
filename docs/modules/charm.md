@@ -72,11 +72,11 @@ Replace the first argv element equal to anchor with val.
 
 **Returns:** map[string]any
 
-### `drop`
+### `remove`
 
-Drop (remove) the first argv element equal to anchor.
+Remove the first argv element equal to anchor.
 
-**Signature:** `charm.drop(argv, anchor) → map[string]any`
+**Signature:** `charm.remove(argv, anchor) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -127,11 +127,11 @@ Replace the first argv element for which fn(s) is truthy with val.
 
 **Returns:** map[string]any
 
-### `drop_func`
+### `remove_func`
 
-Drop (remove) the first argv element for which fn(s) is truthy.
+Remove the first argv element for which fn(s) is truthy.
 
-**Signature:** `charm.dropFunc(argv, fn) → map[string]any`
+**Signature:** `charm.removeFunc(argv, fn) → map[string]any`
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

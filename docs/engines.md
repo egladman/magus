@@ -84,7 +84,7 @@ call lived on. Self-complete `extra` means one import covers a whole domain
 is not — e.g. `extra.env.get`/`lookup` honor the env allowlist, while Buzz's
 `os.env` is raw. Methods that have a native Buzz equivalent are noted per-method
 in the [module reference](modules/index.md); either works. The cross-reference
-lives in `hostbuzz/overlap.go`.
+lives in `internal/std/buzz_overlap.go`.
 
 A few entries are _not_ treated as duplicates because the magus behavior the
 stdlib can't reproduce: magus's `os.exit` raises a lifecycle error (Buzz's

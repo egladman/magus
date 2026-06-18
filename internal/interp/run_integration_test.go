@@ -83,7 +83,7 @@ export fun build(args: [str]) > void {
 }
 
 // TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
-// end-to-end: the magus-bindings-gen-emitted hostbuzz/gen trampolines must decode a variadic
+// end-to-end: the magus-bindings-gen-emitted buzzgen trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
 // charm.append), with camelCase methods (Buzz's convention).

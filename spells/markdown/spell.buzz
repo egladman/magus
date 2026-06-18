@@ -1,6 +1,4 @@
 import "magus/target";
-// charm constructors derive argv patches from an anchor arg, not a counted index.
-import "magus/charm";
 
 export fun mgs_getName() > str { return "md"; }
 
@@ -19,10 +17,9 @@ fun markdownlint(target: Target, cb: fun(any)) > bool {
 fun prettier(target: Target, cb: fun(any)) > bool {
     // --no-error-on-unmatched-pattern: the claimed globs include **/*.mdx, but a
     // project may have only .md files; without it prettier exits non-zero on the
-    // empty .mdx glob. The `rw` charm swaps --check for --write by anchor.
-    final args = ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"];
-    cb({"cmd": "prettier", "args": args, "charms": {
-        "rw": set(args, "--check", "--write"),
+    // empty .mdx glob. --check stays at index 0 so the `write` charm can swap it.
+    cb({"cmd": "prettier", "args": ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "--write"}]},
     }});
     return true;
 }

@@ -1,6 +1,4 @@
 import "magus/target";
-// charm constructors derive argv patches from an anchor arg, not a counted index.
-import "magus/charm";
 
 export fun mgs_getName() > str { return "py"; }
 
@@ -17,23 +15,21 @@ fun uvBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "uv", "args": ["bu
 fun uvClean(target: Target, cb: fun(any)) > bool { cb({"cmd": "uv", "args": ["clean"]}); return true; }
 fun pytest(target: Target, cb: fun(any)) > bool {
     cb({"cmd": "uv", "args": ["run", "pytest"], "charms": {
-        "debug": append(["-v"]),
+        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
     }});
     return true;
 }
 fun ruffCheck(target: Target, cb: fun(any)) > bool {
-    final args = ["run", "ruff", "check", "."];
-    cb({"cmd": "uv", "args": args, "charms": {
-        "debug": append(["-v"]),
-        "rw": after(args, "check", ["--fix"]),
-        "gha": after(args, "check", ["--output-format=github"]),
+    cb({"cmd": "uv", "args": ["run", "ruff", "check", "."], "charms": {
+        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
+        "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},
+        "gha": {"ops": [{"op": "add", "path": "/3", "value": "--output-format=github"}]},
     }});
     return true;
 }
 fun ruffFormat(target: Target, cb: fun(any)) > bool {
-    final args = ["run", "ruff", "format", "--check", "."];
-    cb({"cmd": "uv", "args": args, "charms": {
-        "rw": drop(args, "--check"),
+    cb({"cmd": "uv", "args": ["run", "ruff", "format", "--check", "."], "charms": {
+        "rw": {"ops": [{"op": "remove", "path": "/3"}]},
     }});
     return true;
 }

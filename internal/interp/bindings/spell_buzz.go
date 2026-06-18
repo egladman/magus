@@ -6,8 +6,8 @@ import (
 	"os"
 
 	buzzeng "github.com/egladman/gopherbuzz"
-	"github.com/egladman/magus/hostbuzz"
 	ispell "github.com/egladman/magus/internal/spell"
+	buzzgen "github.com/egladman/magus/internal/std/gen/buzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -105,7 +105,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 	// cb delivers the op's inputs by copying req.Params into the map the handler
 	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after
 	// cb(io) returns. A handler that needs no inputs simply never calls cb.
-	params := hostbuzz.AnyToValue(req.Params)
+	params := buzzgen.AnyToValue(req.Params)
 	tgt := targetValue(ctx, req)
 	cb := buzzeng.DirectValue("magus.cb", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		if len(args) > 0 && args[0].IsMap() && params.IsMap() {
@@ -121,7 +121,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 	if err != nil {
 		return nil, fmt.Errorf("spell function-op %q: %w", fn, err)
 	}
-	return hostbuzz.ValueToAny(rv), nil
+	return buzzgen.ValueToAny(rv), nil
 }
 
 // targetValue builds the Buzz Target value a spell handler receives as its first

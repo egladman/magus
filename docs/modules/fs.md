@@ -279,26 +279,3 @@ Create a new temporary directory (in os.TempDir()) with an optional name prefix 
 
 **Returns:** string
 
-### `read_lines`
-
-Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.
-
-**Signature:** `fs.readLines(path) → []string`
-
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
-
-**Returns:** []string
-
-### `write_lines`
-
-Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.
-
-**Signature:** `fs.writeLines(path, lines)`
-
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
-| `lines` | `[]string` |  | |
-

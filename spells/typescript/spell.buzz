@@ -4,8 +4,6 @@
 // css, markdown, ...) don't also claim files inside a TS project.
 
 import "magus/target";
-// charm constructors derive argv patches from an anchor arg, not a counted index.
-import "magus/charm";
 
 export fun mgs_getName() > str { return "ts"; }
 
@@ -28,16 +26,15 @@ fun eslint(target: Target, cb: fun(any)) > bool { cb({"cmd": "pnpm", "args": ["e
 // preflight is a no-op marker op (no command).
 fun preflight(target: Target, cb: fun(any)) > bool { cb({}); return true; }
 fun prettier(target: Target, cb: fun(any)) > bool {
-    final args = ["exec", "prettier", "--check", "."];
-    cb({"cmd": "pnpm", "args": args, "charms": {
-        "rw": set(args, "--check", "--write"),
+    cb({"cmd": "pnpm", "args": ["exec", "prettier", "--check", "."], "charms": {
+        "rw": {"ops": [{"op": "replace", "path": "/2", "value": "--write"}]},
     }});
     return true;
 }
 fun tsc(target: Target, cb: fun(any)) > bool { cb({"cmd": "pnpm", "args": ["exec", "tsc"]}); return true; }
 fun vitest(target: Target, cb: fun(any)) > bool {
     cb({"cmd": "pnpm", "args": ["exec", "vitest", "run"], "charms": {
-        "gha": append(["--reporter=github-actions"]),
+        "gha": {"ops": [{"op": "add", "path": "/-", "value": "--reporter=github-actions"}]},
     }});
     return true;
 }

@@ -24,13 +24,6 @@ type VCSDriver interface {
 	FindCommit(ctx context.Context, dir, rev string) (Commit, error)
 	// History returns up to limit recent commits, newest first.
 	History(ctx context.Context, dir string, limit int) ([]Commit, error)
-	// Describe returns a human-readable version string derived from the nearest
-	// tag (git's `describe --tags --always --dirty`: tag, else short id, with a
-	// -dirty suffix for a modified tree). Tags are a git-shaped concept; a backend
-	// without an equivalent returns "" rather than faking one — callers treat ""
-	// as "no describe available" and fall back (e.g. to a short hash), and a magus
-	// author needing backend-specific behavior reaches for vcs.exe().
-	Describe(ctx context.Context, dir string) (string, error)
 }
 
 // Person identifies who authored a revision.
@@ -57,50 +50,6 @@ type Commit struct {
 	Subject string
 	Body    string
 	// Parents are parent IDs — more than one for a merge.
-	Parents []string
-}
-
-// Record is the Buzz boundary map vcs.commit / vcs.history entries return:
-// {id, short, author {name, email}, date, subject, body, parents}. date is
-// RFC3339, empty when the VCS reported no timestamp. The generated trampoline
-// calls it (see hostbuzz.Recorder).
-func (c Commit) Record() map[string]any {
-	date := ""
-	if !c.Date.IsZero() {
-		date = c.Date.Format(time.RFC3339)
-	}
-	return map[string]any{
-		"id":      c.ID,
-		"short":   c.Short,
-		"author":  map[string]any{"name": c.Author.Name, "email": c.Author.Email},
-		"date":    date,
-		"subject": c.Subject,
-		"body":    c.Body,
-		"parents": c.Parents,
-	}
-}
-
-// CommitAuthor is the boundary mirror of the {name, email} author record a
-// vcs.commit / vcs.history result carries. The Buzz `object CommitAuthor` mirror
-// is generated from this struct by cmd/magus-types-gen; keep them in lockstep.
-type CommitAuthor struct {
-	Name  string
-	Email string
-}
-
-// CommitRecord is the boundary mirror of the record vcs.commit / vcs.history
-// return — the serializable, every-field-present view of a Commit (Date as an
-// RFC3339 string, not time.Time). A magusfile annotates `> Commit` to get
-// compile-checked field access on a commit record; the runtime value is the
-// matching map (see commitToMap). The Buzz `object Commit` mirror is generated
-// from this struct by cmd/magus-types-gen (go:generate -type Commit).
-type CommitRecord struct {
-	ID      string `buzz:"id"`
-	Short   string
-	Author  CommitAuthor
-	Date    string
-	Subject string
-	Body    string
 	Parents []string
 }
 

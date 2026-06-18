@@ -527,7 +527,7 @@ func TestDedupStrings(t *testing.T) {
 // These tests exercise the real spells/aws/s3-cache/spell.buzz against an emulator that
 // independently recomputes the AWS SigV4 signature for every request and rejects
 // a mismatch — the same check S3 performs. The signing-key chain is already
-// verified against AWS's published vector in std (extra_crypto_test.go); here we
+// verified against AWS's published vector in internal/std (extra_crypto_test.go); here we
 // validate the spell's canonical-request and string-to-sign construction by
 // cross-checking it with a second, independent (Go) implementation.
 
