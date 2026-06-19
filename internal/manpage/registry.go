@@ -410,7 +410,6 @@ The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.`,
 		fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 		fs.Bool("force", false, "Overwrite an existing config file")
 		fs.String("vcs", "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
-		fs.String("lang", "teal", "Magusfile language to scaffold (teal|buzz)")
 	},
 	Examples: []Example{
 		{"Bootstrap the current repo", "magus init"},

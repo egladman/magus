@@ -22,7 +22,7 @@ func writeFile(t *testing.T, dir, rel, content string) {
 }
 
 // parseMagusfile evaluates the magusfile in dir in parse mode, which fires
-// its top-level spell imports / magus.project.register calls.
+// its top-level spell imports / magus.project calls.
 func parseMagusfile(t *testing.T, dir string) error {
 	t.Helper()
 	srcs, err := interp.FindAll(dir)
@@ -39,7 +39,7 @@ func parseMagusfile(t *testing.T, dir string) error {
 
 // TestBuzzLocalSpellImport verifies a workspace-local Buzz spell is importable by
 // path — `import "spells/widget"` resolves ./spells/widget.buzz, binds the handle
-// under the basename (widget), and binding it via magus.project.register registers
+// under the basename (widget), and binding it via magus.project registers
 // the spell by value.
 func TestBuzzLocalSpellImport(t *testing.T) {
 	dir := t.TempDir()
@@ -53,12 +53,12 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [widget]}); return true; });`)
+magus.project(".", {"spells": [widget]});`)
 
 	require.NoError(t, parseMagusfile(t, dir))
 
 	sp, ok := project.DefaultSpellRegistry().Lookup("widgetimport")
-	require.True(t, ok, "widgetimport not registered after import + project.register")
+	require.True(t, ok, "widgetimport not registered after import + magus.project")
 	assert.Contains(t, sp.Targets(), "build")
 	assert.Contains(t, sp.Sources(), "**/*.ts")
 
@@ -99,7 +99,7 @@ func TestBuzzSpellImportNoOps(t *testing.T) {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/noops";
-magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [noops]}); return true; });`)
+magus.project(".", {"spells": [noops]});`)
 
 	require.NoError(t, parseMagusfile(t, dir), "parse should not fail")
 	_, ok := project.DefaultSpellRegistry().Lookup("noopsbuzzspell")
@@ -303,7 +303,7 @@ export fun mgs_listTargets() > any {
 		writeFile(t, dir, "spells/parity.buzz", src)
 		writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/parity";
-magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [parity]}); return true; });`)
+magus.project(".", {"spells": [parity]});`)
 		require.NoError(t, parseMagusfile(t, dir), "parse")
 	}
 

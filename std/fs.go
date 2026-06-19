@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module fs -lang buzz -out ../hostbuzz/gen/fs.go
+//go:generate go run ../cmd/magus-bindings-gen -module fs -lang buzz -out ../host/gen/fs.go
 
 func init() { Register(Fs) }
 
@@ -217,21 +217,27 @@ var Fs = Module{
 // FsGlob returns paths matching the doublestar pattern, filtered to those the
 // sandbox policy permits reading.
 func FsGlob(ctx context.Context, pattern string) ([]string, error) {
-	matches, err := doublestar.FilepathGlob(pattern)
+	// Glob against the project dir (resolvePath is a no-op without a context cwd),
+	// then report matches relative to it so the returned paths read the same as
+	// the pattern the caller passed — independent of the process working directory.
+	base := cwdFromContext(ctx)
+	matches, err := doublestar.FilepathGlob(resolvePath(ctx, pattern))
 	if err != nil {
 		return nil, fmt.Errorf("fs.glob %q: %w", pattern, err)
 	}
 	p := sandbox.FromContext(ctx)
-	if p == nil {
-		return matches, nil
-	}
-	// Filter out paths the policy denies so spells cannot enumerate filenames
-	// outside the allowlist even when the actual read would later be blocked.
 	allowed := matches[:0]
 	for _, m := range matches {
-		if p.CheckRead(m) == nil {
-			allowed = append(allowed, m)
+		// The sandbox sees the absolute match; the caller sees it relative to base.
+		if p != nil && p.CheckRead(m) != nil {
+			continue
 		}
+		if base != "" {
+			if rel, rerr := filepath.Rel(base, m); rerr == nil {
+				m = rel
+			}
+		}
+		allowed = append(allowed, m)
 	}
 	return allowed, nil
 }
@@ -248,6 +254,7 @@ func FsBasename(_ context.Context, path string) (string, error) {
 
 // FsExists reports whether path exists; a sandbox-denied path is reported as absent.
 func FsExists(ctx context.Context, path string) (bool, error) {
+	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		// Treat a sandbox-denied path as "does not exist" rather than
 		// raising — many magusfiles call fs.exists as a probe and a hard
@@ -261,6 +268,7 @@ func FsExists(ctx context.Context, path string) (bool, error) {
 
 // FsReadFile returns the contents of path as a string, subject to the sandbox read policy.
 func FsReadFile(ctx context.Context, path string) (string, error) {
+	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		return "", err
 	}
@@ -273,6 +281,7 @@ func FsReadFile(ctx context.Context, path string) (string, error) {
 
 // FsWriteFile writes content to path (mode 0644), subject to the sandbox write policy.
 func FsWriteFile(ctx context.Context, path string, content string) error {
+	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
@@ -284,6 +293,7 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 
 // FsMkdirAll creates path and any missing parents with the given mode, subject to the sandbox write policy.
 func FsMkdirAll(ctx context.Context, path string, perm int) error {
+	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
@@ -300,6 +310,7 @@ func FsJoin(_ context.Context, parts ...string) (string, error) {
 
 // FsRemoveAll recursively removes path (no error if missing), subject to the sandbox write policy.
 func FsRemoveAll(ctx context.Context, path string) error {
+	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
@@ -311,6 +322,7 @@ func FsRemoveAll(ctx context.Context, path string) error {
 
 // FsListDir returns the entry names in path, or nil if it does not exist, subject to the sandbox read policy.
 func FsListDir(ctx context.Context, path string) ([]string, error) {
+	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		return nil, err
 	}
@@ -337,6 +349,7 @@ func FsExt(_ context.Context, path string) (string, error) {
 // sandbox-denied path is reported as false rather than raising, so the predicate
 // is safe to use as a probe.
 func FsIsDir(ctx context.Context, path string) (bool, error) {
+	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
 	}
@@ -347,6 +360,7 @@ func FsIsDir(ctx context.Context, path string) (bool, error) {
 // FsIsFile reports whether path exists and is a regular file. A sandbox-denied
 // path is reported as false (see FsIsDir).
 func FsIsFile(ctx context.Context, path string) (bool, error) {
+	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
 	}
@@ -358,6 +372,7 @@ func FsIsFile(ctx context.Context, path string) (bool, error) {
 // sandbox read policy. Unlike the probe predicates a missing path is an error,
 // since a caller asking for metadata expects the entry to exist.
 func FsStat(ctx context.Context, path string) (types.FileInfo, error) {
+	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		return types.FileInfo{}, err
 	}
@@ -376,6 +391,7 @@ func FsStat(ctx context.Context, path string) (types.FileInfo, error) {
 // FsCopyFile copies src to dst (overwriting), preserving src's permission bits.
 // Both ends are subject to the sandbox policy: src must be readable, dst writable.
 func FsCopyFile(ctx context.Context, src, dst string) error {
+	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
 	if err := checkRead(ctx, src); err != nil {
 		return err
 	}
@@ -392,6 +408,7 @@ func FsCopyFile(ctx context.Context, src, dst string) error {
 // permission bits. Each source entry is checked for read and each destination
 // for write, so a sandbox-denied path stops the copy with a diag error.
 func FsCopyDir(ctx context.Context, src, dst string) error {
+	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
 	walkErr := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -491,6 +508,7 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 	}
 	opts := []watch.Option{watch.WithIgnore(watch.BuiltinIgnore)}
 	for _, p := range paths {
+		p = resolvePath(ctx, p)
 		if err := checkRead(ctx, p); err != nil {
 			return err
 		}
@@ -506,7 +524,7 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 	}
 	defer func() { _ = w.Close() }()
 
-	cwd, _ := os.Getwd()
+	cwd, _ := EffectiveCwd(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -535,6 +553,8 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 // Sandbox-denied entries are silently skipped (dirs skip their whole subtree;
 // files are just omitted), matching the filtering policy of FsGlob.
 func FsWalk(ctx context.Context, root string, cb Callback) error {
+	base := cwdFromContext(ctx)
+	root = resolvePath(ctx, root)
 	if err := checkRead(ctx, root); err != nil {
 		return err
 	}
@@ -548,7 +568,15 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 			}
 			return nil //nolint:nilerr // sandbox-denied path silently skipped
 		}
-		ret, callErr := cb.Call(ctx, path, d.IsDir())
+		// The callback sees paths relative to the project dir, matching the root
+		// it passed in; the sandbox check above used the absolute path.
+		cbPath := path
+		if base != "" {
+			if rel, rerr := filepath.Rel(base, path); rerr == nil {
+				cbPath = rel
+			}
+		}
+		ret, callErr := cb.Call(ctx, cbPath, d.IsDir())
 		if callErr != nil {
 			return callErr
 		}
@@ -562,6 +590,7 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 // FsAppendFile appends content to path (creating the file if absent, mode 0644),
 // subject to the sandbox write policy.
 func FsAppendFile(ctx context.Context, path, content string) error {
+	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
@@ -581,6 +610,7 @@ func FsAppendFile(ctx context.Context, path, content string) error {
 
 // FsChmod changes the permission bits of path, subject to the sandbox write policy.
 func FsChmod(ctx context.Context, path string, mode int) error {
+	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
@@ -593,6 +623,9 @@ func FsChmod(ctx context.Context, path string, mode int) error {
 // FsSymlink creates a symbolic link at link pointing to target, subject to the
 // sandbox write policy on link.
 func FsSymlink(ctx context.Context, target, link string) error {
+	// Only link (the path being created) is resolved against the project dir;
+	// target is the link's stored contents, interpreted relative to the link.
+	link = resolvePath(ctx, link)
 	if err := checkWrite(ctx, link); err != nil {
 		return err
 	}
@@ -605,6 +638,7 @@ func FsSymlink(ctx context.Context, target, link string) error {
 // FsReadlink returns the destination of the symbolic link at path, subject to
 // the sandbox read policy.
 func FsReadlink(ctx context.Context, path string) (string, error) {
+	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
 		return "", err
 	}

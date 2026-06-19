@@ -179,10 +179,10 @@ func TestBytecodeVersionGuard(t *testing.T) {
 		// Valid header + empty Name, then Params count = 0xFFFFFFFF.
 		// checkCount must reject this before make([]string, n) fires.
 		var buf []byte
-		buf = append(buf, 'B', 'Z', 'B', 'C')                              // magic
-		buf = append(buf, byte(BytecodeVersion), byte(BytecodeVersion>>8)) // version LE
-		buf = append(buf, 0, 0, 0, 0)                                      // Name: u32(0) = ""
-		buf = append(buf, 0xFF, 0xFF, 0xFF, 0xFF)                          // Params count = 0xFFFFFFFF
+		buf = append(buf, 'B', 'Z', 'B', 'C')                                                  // magic
+		buf = append(buf, byte(vmpackage.BytecodeVersion), byte(vmpackage.BytecodeVersion>>8)) // version LE
+		buf = append(buf, 0, 0, 0, 0)                                                          // Name: u32(0) = ""
+		buf = append(buf, 0xFF, 0xFF, 0xFF, 0xFF)                                              // Params count = 0xFFFFFFFF
 		_, err := UnmarshalChunk(buf)
 		assert.Error(t, err, "expected error for huge count")
 	})
@@ -251,10 +251,10 @@ func TestEval_ConstBinding(t *testing.T) {
 func TestEval_DirectCall(t *testing.T) {
 	sess := newSession(context.Background())
 	called := false
-	sess.SetGlobal("fn", DirectValue("fn", func(_ context.Context, args []Value) (Value, error) {
+	sess.SetGlobal("fn", vmpackage.DirectValue("fn", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 		called = true
 		assert.Len(t, args, 1, "args")
-		return Null, nil
+		return vmpackage.Null, nil
 	}))
 	require.NoError(t, sess.Exec(context.Background(), `fn("hello");`))
 	assert.True(t, called, "direct function was not called")
@@ -262,16 +262,16 @@ func TestEval_DirectCall(t *testing.T) {
 
 func TestEval_MemberAccess(t *testing.T) {
 	sess := newSession(context.Background())
-	m := NewMap()
-	m.MapSet("name", StrValue("test"))
+	m := vmpackage.NewMap()
+	m.MapSet("name", vmpackage.StrValue("test"))
 	sess.SetGlobal("obj", m)
 
-	var gotName Value
-	sess.SetGlobal("capture", DirectValue("capture", func(_ context.Context, args []Value) (Value, error) {
+	var gotName vmpackage.Value
+	sess.SetGlobal("capture", vmpackage.DirectValue("capture", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 		if len(args) > 0 {
 			gotName = args[0]
 		}
-		return Null, nil
+		return vmpackage.Null, nil
 	}))
 
 	require.NoError(t, sess.Exec(context.Background(), `capture(obj.name);`))
@@ -313,12 +313,12 @@ func TestEval_DoUntilCancellable(t *testing.T) {
 
 func TestEval_FunClosure(t *testing.T) {
 	sess := newSession(context.Background())
-	var stored Value
-	sess.SetGlobal("register", DirectValue("register", func(_ context.Context, args []Value) (Value, error) {
+	var stored vmpackage.Value
+	sess.SetGlobal("register", vmpackage.DirectValue("register", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 		if len(args) >= 2 {
 			stored = args[1]
 		}
-		return Null, nil
+		return vmpackage.Null, nil
 	}))
 
 	require.NoError(t, sess.Exec(context.Background(), `register("build", fun() > void {});`))
@@ -327,18 +327,18 @@ func TestEval_FunClosure(t *testing.T) {
 
 func TestEval_TargetNew(t *testing.T) {
 	sess := newSession(context.Background())
-	targets := make(map[string]Callable)
+	targets := make(map[string]vmpackage.Callable)
 
-	sess.SetGlobal("target_new", DirectValue("target_new", func(_ context.Context, args []Value) (Value, error) {
+	sess.SetGlobal("target_new", vmpackage.DirectValue("target_new", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 		if len(args) < 2 {
-			return Null, nil
+			return vmpackage.Null, nil
 		}
 		name := args[0].AsString()
 		fn := args[1]
-		targets[strings.ToLower(name)] = func(ctx context.Context, callArgs []Value) (Value, error) {
+		targets[strings.ToLower(name)] = func(ctx context.Context, callArgs []vmpackage.Value) (vmpackage.Value, error) {
 			return sess.CallValue(ctx, fn, callArgs)
 		}
-		return Null, nil
+		return vmpackage.Null, nil
 	}))
 
 	require.NoError(t, sess.Exec(context.Background(), `target_new("build", fun() > void {});`))
@@ -353,14 +353,14 @@ func TestEval_MagusfilePattern(t *testing.T) {
 	defer sess.Close()
 
 	registered := ""
-	projectNS := NewMap()
-	projectNS.MapSet("register", DirectValue("register", func(_ context.Context, args []Value) (Value, error) {
+	projectNS := vmpackage.NewMap()
+	projectNS.MapSet("register", vmpackage.DirectValue("register", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 		if len(args) > 0 {
 			registered = args[0].AsString()
 		}
-		return Null, nil
+		return vmpackage.Null, nil
 	}))
-	host := NewMap()
+	host := vmpackage.NewMap()
 	host.MapSet("project", projectNS)
 	sess.SetGlobal("host", host)
 
@@ -388,12 +388,12 @@ func TestTestBlocks(t *testing.T) {
 	defer func() { _ = sess.Close() }()
 
 	ran := 0
-	sess.SetGlobal("touch", DirectValue("touch", func(_ context.Context, _ []Value) (Value, error) {
+	sess.SetGlobal("touch", vmpackage.DirectValue("touch", func(_ context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
 		ran++
-		return Null, nil
+		return vmpackage.Null, nil
 	}))
-	sess.SetGlobal("boom", DirectValue("boom", func(_ context.Context, _ []Value) (Value, error) {
-		return Null, fmt.Errorf("kaboom")
+	sess.SetGlobal("boom", vmpackage.DirectValue("boom", func(_ context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
+		return vmpackage.Null, fmt.Errorf("kaboom")
 	}))
 
 	src := `
@@ -678,8 +678,8 @@ func TestYieldOutsideFiberDismissed(t *testing.T) {
 // is rejected: direct callables have no Buzz bytecode and cannot yield.
 func TestFiberDirectRejected(t *testing.T) {
 	sess := newSession(context.Background())
-	sess.SetGlobal("nat", DirectValue("nat", func(_ context.Context, _ []Value) (Value, error) {
-		return IntValue(42), nil
+	sess.SetGlobal("nat", vmpackage.DirectValue("nat", func(_ context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
+		return vmpackage.IntValue(42), nil
 	}))
 	assert.Error(t, sess.Exec(context.Background(), `final f = &nat();`), "& on a direct callable should error")
 }
@@ -693,17 +693,17 @@ func TestFiberDebugIntrospectsFiberStack(t *testing.T) {
 
 	type snapshot struct {
 		depth  int
-		frames []DebugFrame
+		frames []vmpackage.DebugFrame
 	}
 	var got snapshot
 
 	// inner() is called from inside the fiber body so the fiber stack is at
 	// least 2 frames deep (top-level + gen + inner). probe() captures the
 	// session's view of the live stack at that moment.
-	sess.SetGlobal("probe", DirectValue("probe", func(_ context.Context, _ []Value) (Value, error) {
+	sess.SetGlobal("probe", vmpackage.DirectValue("probe", func(_ context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
 		got.depth = sess.CallDepth()
 		got.frames = sess.Frames()
-		return Null, nil
+		return vmpackage.Null, nil
 	}))
 
 	src := `
@@ -762,7 +762,7 @@ resume f;
 
 // runProgJIT compiles src and runs it with the JIT forced on or off, returning
 // the top-level return value and any error.
-func runProgJIT(t *testing.T, src string, jit bool) (Value, error) {
+func runProgJIT(t *testing.T, src string, jit bool) (vmpackage.Value, error) {
 	t.Helper()
 	prog, err := ParseEmbedded(src)
 	require.NoError(t, err, "parse")
@@ -973,26 +973,26 @@ final __r = b.get();`, 99)
 	})
 }
 
-func evalResult(t *testing.T, src string) Value {
+func evalResult(t *testing.T, src string) vmpackage.Value {
 	t.Helper()
 	sess := newSession(context.Background())
 	require.NoErrorf(t, sess.Exec(context.Background(), "final __r = "+src+";"), "exec %q", src)
 	return sess.GetGlobal("__r")
 }
 
-func wantInt(t *testing.T, v Value, want int64) {
+func wantInt(t *testing.T, v vmpackage.Value, want int64) {
 	t.Helper()
 	assert.Truef(t, v.IsInt(), "got %v (%s), want int %d", v.String(), v.Kind(), want)
 	assert.Equalf(t, want, v.AsInt(), "got %v (%s), want int %d", v.String(), v.Kind(), want)
 }
 
-func wantStr(t *testing.T, v Value, want string) {
+func wantStr(t *testing.T, v vmpackage.Value, want string) {
 	t.Helper()
 	assert.Truef(t, v.IsStr(), "got %v (%s), want str %q", v.String(), v.Kind(), want)
 	assert.Equalf(t, want, v.AsString(), "got %v (%s), want str %q", v.String(), v.Kind(), want)
 }
 
-func wantBool(t *testing.T, v Value, want bool) {
+func wantBool(t *testing.T, v vmpackage.Value, want bool) {
 	t.Helper()
 	assert.Truef(t, v.IsBool(), "got %v (%s), want bool %v", v.String(), v.Kind(), want)
 	assert.Equalf(t, want, v.AsBool(), "got %v (%s), want bool %v", v.String(), v.Kind(), want)
@@ -1383,7 +1383,7 @@ func TestPromoteKeepsExportedInEnv(t *testing.T) {
 // runProg compiles src with the given options and runs it against a fresh env
 // that has the VM intrinsics available (spawn, zdef) via the Env fallback in
 // slot mode, returning the program's top-level return value.
-func runProg(t *testing.T, src string, opts CompileOptions) Value {
+func runProg(t *testing.T, src string, opts CompileOptions) vmpackage.Value {
 	t.Helper()
 	prog, err := ParseEmbedded(src)
 	require.NoError(t, err, "parse")

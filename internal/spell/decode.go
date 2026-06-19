@@ -7,10 +7,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Obj is a read view over a host-language record — e.g. a Buzz map. An engine
-// wraps its native value in a small adapter (~15 lines), so Decode reads a spell
-// definition once, identically, regardless of authoring language.
-// It is the marshalling boundary: the single place that knows a spell's shape.
+// Obj is a read view over a spell record — a Buzz map, wrapped in a small adapter
+// (buzzSpellObj). Decoupling Decode from the concrete value type keeps the
+// marshalling in one place: Obj is the single boundary that knows a spell's shape,
+// and is the seam a second authoring backend would implement.
 type Obj interface {
 	// Str returns the string at key and whether it was present as a string.
 	Str(key string) (string, bool)
@@ -29,7 +29,7 @@ type Obj interface {
 	// the field takes across a spell's life: a function (in a definition —
 	// needs()/provides() are called with args) or an already-resolved list (in a
 	// bound handle, where define/load marshalled the result back as data so
-	// project.register can decode the spell by value at bind time). Absent yields
+	// magus.project can decode the spell by value at bind time). Absent yields
 	// (nil, nil). Calling a function is the one genuinely engine-specific act:
 	// Buzz calls through its session.
 	CallStrs(key string, args ...string) ([]string, error)
@@ -84,8 +84,8 @@ func Decode(src Obj) (Descriptor, error) {
 			if spec.Bool("handler") {
 				docOps = append(docOps, op)
 			}
-			// An op declared with "fn" is a function-op dispatched in-VM; otherwise
-			// it is a fork op running the declared command. Mutually exclusive.
+			// An op declared with "fn" is a handler op dispatched in-VM; otherwise
+			// it is a command op running the declared command. Mutually exclusive.
 			if fn, ok := spec.Str("fn"); ok && fn != "" {
 				t.Func = fn
 			} else if cmd, ok := spec.Str("cmd"); ok {

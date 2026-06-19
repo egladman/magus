@@ -175,7 +175,7 @@ func Build(w *types.Workspace, opts ...types.GraphOption) (*types.Graph, error) 
 						"consumer", m.Consumer,
 						"missing_dep", m.Dep,
 						"fix", fmt.Sprintf(
-							"register %q with magus.project.register(%q, fun(p, cb) { cb({...}); }) in a magusfile, "+
+							"configure %q with magus.project(%q, {...}) in a magusfile, "+
 								"or correct the path passed to magus.WithDependsOn in %q",
 							dep, dep, p.Path,
 						),

@@ -49,7 +49,7 @@ func Discover(ctx context.Context, root string) (*types.Workspace, error) {
 			dirMtimes[path] = info.ModTime().UnixNano()
 		}
 		rel := projectPath(abs, path)
-		if hasMarker(path) {
+		if hasDeclaration(path) {
 			mu.Lock()
 			ws.Projects[rel] = &types.Project{Path: rel, Dir: path}
 			mu.Unlock()
@@ -76,8 +76,9 @@ func projectPath(root, dir string) string {
 	return filepath.ToSlash(rel)
 }
 
-// hasMarker reports whether dir contains a magusfile or declaration file for any spell.
-func hasMarker(dir string) bool {
+// hasDeclaration reports whether dir has a declaration file or matching
+// declaration-dir glob for any registered spell.
+func hasDeclaration(dir string) bool {
 	for _, s := range defaultRegistry.All() {
 		for _, f := range s.DeclarationFiles() {
 			if _, err := os.Stat(filepath.Join(dir, f)); err == nil {

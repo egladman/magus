@@ -21,7 +21,7 @@ type yieldSignal struct{ value Value }
 func (*yieldSignal) Error() string { return "buzz: fiber yield" }
 
 // frame is a single activation record.
-// ultra-opt: frames are stored in a pre-allocated []frame (not []*frame) to
+// optimization: frames are stored in a pre-allocated []frame (not []*frame) to
 // eliminate one heap allocation per call. env is used only for globals and
 // closures; local variables use stack slots [base..base+localCount).
 // measured: BenchmarkFib allocs/op: 16M → ~0.
@@ -37,7 +37,7 @@ type frame struct {
 	// this is the bound receiver for a method call (the object whose method this
 	// frame is executing), or Null for a plain function / top-level. Read by
 	// OpLoadThis. Set from fn.This in OpCall/call, replacing the old per-call
-	// newEnv+define("this") — see the ultra-opt note in OpCall.
+	// newEnv+define("this") — see the optimization note in OpCall.
 	this Value
 }
 
@@ -265,7 +265,7 @@ func (vm *VM) peek() Value { return vm.stack[len(vm.stack)-1] }
 // dropWindowThreshold is the callee-window slot count above which frame
 // teardown eagerly nil-clears the dropped slots to release their heap refs.
 //
-// ultra-opt: clearing every dropped window unconditionally measured +13.5% on
+// optimization: clearing every dropped window unconditionally measured +13.5% on
 //
 //	Fib (benchstat n=10) — most frames span only a handful of slots whose
 //	contents are overwritten by the next call's pushes, so eager clearing is
@@ -284,7 +284,7 @@ const dropWindowThreshold = 32
 // second-from-top with v and shrinks the stack by one, clearing the dropped
 // top slot so the backing array retains no heap reference.
 //
-// ultra-opt: binary operators consume two operands and produce one. Doing that
+// optimization: binary operators consume two operands and produce one. Doing that
 //
 //	in place avoids the pop+pop+push trio (two reslices + two nil-clears + one
 //	append/grow-check) the naive form pays — a net saving of one append and one
@@ -303,7 +303,7 @@ func (vm *VM) replaceTop2(v Value) {
 
 // checkCancel is called on backward jumps and function calls to honour context
 // cancellation.
-// ultra-opt: checking every 256 events amortises the channel-select overhead.
+// optimization: checking every 256 events amortises the channel-select overhead.
 // measured: N=256 reduced cancel-check cost to <1% of loop time.
 // trade-off: up to 256 extra operations before cancellation is noticed.
 // assumes: ctx.Done() closed only when ctx is cancelable; fast path otherwise.
@@ -330,7 +330,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 	if len(vm.frames) == 0 {
 		return Null, nil
 	}
-	// ultra-opt: hoist the active frame pointer and its code slice into locals so
+	// optimization: hoist the active frame pointer and its code slice into locals so
 	//   the per-instruction dispatch path avoids re-deriving &vm.frames[len-1] (a
 	//   length load + bounds check + address-of) and re-dereferencing f.chunk.Code
 	//   (two pointer hops to a slice header) on every opcode. f and code are
@@ -346,7 +346,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 	//   assumes: one VM per goroutine — vm.frames is never mutated concurrently.
 	f := &vm.frames[len(vm.frames)-1]
 	code := f.chunk.Code
-	// ultra-opt: no per-instruction `f.ip >= len(code)` bound check. The compiler
+	// optimization: no per-instruction `f.ip >= len(code)` bound check. The compiler
 	//   guarantees every chunk ends in a terminating OpReturn/OpReturnNull (emitted
 	//   unconditionally at each chunk-creation site), so control flow can never
 	//   fall off the end — ip always lands on the terminator first, which pops the
@@ -359,7 +359,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 	//   assumes: chunk invariant above; a malformed chunk lacking a terminator
 	//     would index out of range (caught by the recover at the top of exec).
 	//
-	// ultra-opt: hoist stepHook nil-ness into a local bool so the per-instruction
+	// optimization: hoist stepHook nil-ness into a local bool so the per-instruction
 	//   branch reads a register/stack slot rather than dereferencing vm.stepHook
 	//   (a function-pointer field inside the VM struct) on every opcode. In normal
 	//   (non-debug) runs debug is false and the compiler can predict all six hook
@@ -419,7 +419,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			vm.push(v)
 
 		case OpStoreName:
-			// ultra-opt: store *consumes* its operand (pop, not peek). Assignment
+			// optimization: store *consumes* its operand (pop, not peek). Assignment
 			//   is statement-only in buzz (AST has AssignStmt, no AssignExpr) and
 			//   compileAssign is OpStoreName's sole emitter, so the stored value is
 			//   never read back — the compiler no longer emits the trailing OpPop
@@ -488,14 +488,14 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpAdd:
 			sp := len(vm.stack)
 			right, left := vm.stack[sp-1], vm.stack[sp-2]
-			// ultra-opt: int+int fast path inlined, in place — no clear needed
+			// optimization: int+int fast path inlined, in place — no clear needed
 			// because the dropped int operand carries no heap reference.
 			if left.tag() == tagInt && right.tag() == tagInt {
 				vm.stack[sp-2] = IntValue(int64(left.num()) + int64(right.num()))
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float+float fast path — see floatBinop. A float carries no
+			// optimization: float+float fast path — see floatBinop. A float carries no
 			// heap ref, so the dropped slot needs no clear (mirrors the int path).
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = FloatValue(left.AsFloat() + right.AsFloat())
@@ -511,13 +511,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpSub:
 			sp := len(vm.stack)
 			right, left := vm.stack[sp-1], vm.stack[sp-2]
-			// ultra-opt: int-int fast path.
+			// optimization: int-int fast path.
 			if left.tag() == tagInt && right.tag() == tagInt {
 				vm.stack[sp-2] = IntValue(int64(left.num()) - int64(right.num()))
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float+float fast path; see OpAdd.
+			// optimization: float+float fast path; see OpAdd.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = FloatValue(left.AsFloat() - right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -537,7 +537,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float+float fast path; see OpAdd.
+			// optimization: float+float fast path; see OpAdd.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = FloatValue(left.AsFloat() * right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -557,7 +557,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float/float fast path; see OpAdd. A zero divisor falls
+			// optimization: float/float fast path; see OpAdd. A zero divisor falls
 			// through so arith() raises buzz's float divide-by-zero error.
 			if left.tag() == tagFloat && right.tag() == tagFloat && right.AsFloat() != 0 {
 				vm.stack[sp-2] = FloatValue(left.AsFloat() / right.AsFloat())
@@ -587,7 +587,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpEqual:
 			sp := len(vm.stack)
 			right, left := vm.stack[sp-1], vm.stack[sp-2]
-			// ultra-opt: int==int fast path, in place — mirrors the OpLess/Le/Gt/Ge
+			// optimization: int==int fast path, in place — mirrors the OpLess/Le/Gt/Ge
 			// inline paths. Skips the valuesEqual call + tag switch for the common
 			// case, and skips the clear since neither int operand holds a heap ref.
 			if left.tag() == tagInt && right.tag() == tagInt {
@@ -595,7 +595,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float==float fast path; matches valuesEqual's tagFloat case.
+			// optimization: float==float fast path; matches valuesEqual's tagFloat case.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = BoolValue(left.AsFloat() == right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -606,13 +606,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpNotEqual:
 			sp := len(vm.stack)
 			right, left := vm.stack[sp-1], vm.stack[sp-2]
-			// ultra-opt: int!=int fast path; see OpEqual.
+			// optimization: int!=int fast path; see OpEqual.
 			if left.tag() == tagInt && right.tag() == tagInt {
 				vm.stack[sp-2] = BoolValue(left.num() != right.num())
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float!=float fast path; see OpEqual.
+			// optimization: float!=float fast path; see OpEqual.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = BoolValue(left.AsFloat() != right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -623,13 +623,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpLess:
 			sp := len(vm.stack)
 			right, left := vm.stack[sp-1], vm.stack[sp-2]
-			// ultra-opt: int comparison fast path.
+			// optimization: int comparison fast path.
 			if left.tag() == tagInt && right.tag() == tagInt {
 				vm.stack[sp-2] = BoolValue(int64(left.num()) < int64(right.num()))
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float<>float fast path; see OpAdd.
+			// optimization: float<>float fast path; see OpAdd.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = BoolValue(left.AsFloat() < right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -649,7 +649,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float<>float fast path; see OpAdd.
+			// optimization: float<>float fast path; see OpAdd.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = BoolValue(left.AsFloat() <= right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -669,7 +669,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float<>float fast path; see OpAdd.
+			// optimization: float<>float fast path; see OpAdd.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = BoolValue(left.AsFloat() > right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -689,7 +689,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				vm.stack = vm.stack[:sp-1]
 				continue
 			}
-			// ultra-opt: float<>float fast path; see OpAdd.
+			// optimization: float<>float fast path; see OpAdd.
 			if left.tag() == tagFloat && right.tag() == tagFloat {
 				vm.stack[sp-2] = BoolValue(left.AsFloat() >= right.AsFloat())
 				vm.stack = vm.stack[:sp-1]
@@ -870,7 +870,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			vm.push(heapValue(tagList, &listObj{Items: items, Mut: ins.B&InstrMutBit != 0}))
 
 		case OpNewMap:
-			// ultra-opt: read k/v pairs directly from stack — no intermediate slice.
+			// optimization: read k/v pairs directly from stack — no intermediate slice.
 			n := int(ins.A)
 			m := newMapObj()
 			m.Mut = ins.B&InstrMutBit != 0
@@ -915,7 +915,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			switch callee.tag() {
 			case tagDirect:
 				directFn := vm.asDirect(callee)
-				// ultra-opt: pass the operand-stack window directly instead of
+				// optimization: pass the operand-stack window directly instead of
 				//   copying args into a fresh slice per call. A direct callable runs
 				//   synchronously and never mutates this VM's stack mid-call — it
 				//   receives only (ctx, args), and the session-bound direct callables that do
@@ -951,7 +951,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				if err := vm.checkCancel(); err != nil {
 					return Null, err
 				}
-				// ultra-opt: the ordinary call path builds the frame inline (rather
+				// optimization: the ordinary call path builds the frame inline (rather
 				//   than via enterFun, which OpInvoke shares) so the hot recursive
 				//   call path stays branch-lean — routing it through the out-of-line
 				//   enterFun measured ~+3% on BenchmarkFib and ~+12% on BenchmarkCall.
@@ -1029,7 +1029,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// method here (e.g. when recv is a map whose entry is a bound method),
 			// which is the uncommon path this opcode deliberately doesn't optimize.
 			//
-			// ultra-opt: an immutable-map receiver (e.g. the `math` module in
+			// optimization: an immutable-map receiver (e.g. the `math` module in
 			//   NBody's math.sqrt(d2)) resolves the same callee every call, so an
 			//   (chunk, ip, receiver) hit skips getMember's mapMethod string-switch
 			//   and map hash lookup — the per-call dispatch the NBody profile spent
@@ -1332,7 +1332,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			vm.push(vm.allocFib(&fibObj{vm: fibVM, status: fibSuspended}))
 
 		case OpBuildStr:
-			// ultra-opt: build the interpolation into the per-VM strScratch byte
+			// optimization: build the interpolation into the per-VM strScratch byte
 			//   buffer, then string()-copy out once. A single pass over the A stack
 			//   values already eliminated the A-1 intermediate strObj allocations a
 			//   chained OpAdd would make; reusing strScratch across calls now also
@@ -1361,7 +1361,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			vm.push(StrValue(string(buf)))
 
 		case OpBinLC:
-			// ultra-opt: fused GetLocal;LoadConst;<binop>. Reads the local and the
+			// optimization: fused GetLocal;LoadConst;<binop>. Reads the local and the
 			//   constant directly — eliminating two pushes, two pops, and two switch
 			//   dispatches per occurrence — then runs the SAME polymorphic op as the
 			//   unfused form, so it stays correct when an any-typed operand defeats
@@ -1372,7 +1372,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			//   C > 0 (4-instruction register form, Pass 1C): skip three OpNops and
 			//     write the result directly to stack[frame.base + C - 1]; the SetLocal
 			//     was absorbed at compile time so no runtime check is needed.
-			//   ultra-opt (P1-M5): bit 31 of B = "both operands are statically proven
+			//   optimization (P1-M5): bit 31 of B = "both operands are statically proven
 			//     int" (set by FusePeephole when OpGetLocal.B==sInt && const is tagInt).
 			//     When set, skip the two runtime tag comparisons entirely — sub-opcode
 			//     is still in bits 30-24, masked with 0x7F; const index in bits 23-0.
@@ -1473,7 +1473,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					continue
 				}
 			}
-			// ultra-opt: float+float fast path for the fused superinstruction — the
+			// optimization: float+float fast path for the fused superinstruction — the
 			// float kernels' inner-loop locals (Mandelbrot zx/zy, NBody accumulators)
 			// land here. floatBinop returns ok==false for OpMod / float divide-by-zero,
 			// which fall through to applyBinop so arith() reports the exact error.
@@ -1501,7 +1501,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			}
 
 		case OpBinLL:
-			// ultra-opt: fused GetLocal;GetLocal;<binop>. Reads both locals directly,
+			// optimization: fused GetLocal;GetLocal;<binop>. Reads both locals directly,
 			// eliminating two pushes, two pops, and two switch dispatches per use.
 			//   A = left slot; B = right slot (low 16 bits) | sub-opcode (high 16 bits).
 			//   C == 0 (3-instruction fusion): skip two OpNops, push result (or absorb
@@ -1509,7 +1509,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			//   C > 0 (4-instruction register form, Pass 1L): skip three OpNops and
 			//     write the result directly to stack[frame.base + C - 1]; the SetLocal
 			//     was absorbed at compile time so no runtime check is needed.
-			//   ultra-opt (P1-M5): bit 31 of B = "both operands are statically proven
+			//   optimization (P1-M5): bit 31 of B = "both operands are statically proven
 			//     int" (set by FusePeephole when both OpGetLocal.B==sInt). When set,
 			//     skip the two runtime tag comparisons; sub-op masked with 0x7FFF.
 			bothInt := ins.B < 0 // bit 31
@@ -1609,7 +1609,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					continue
 				}
 			}
-			// ultra-opt: float+float fast path for the fused superinstruction — the
+			// optimization: float+float fast path for the fused superinstruction — the
 			// float kernels' inner-loop locals (Mandelbrot zx/zy, NBody accumulators)
 			// land here. floatBinop returns ok==false for OpMod / float divide-by-zero,
 			// which fall through to applyBinop so arith() reports the exact error.
@@ -1637,7 +1637,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			}
 
 		case OpCmpLC:
-			// ultra-opt: fused GetLocal;LoadConst;<cmp>;JumpFalse.
+			// optimization: fused GetLocal;LoadConst;<cmp>;JumpFalse.
 			//   A = local slot; B = const-pool index (low 24)|cmp-op (high 8).
 			//   Jump target is in code[f.ip].A (the first absorbed OpNop); skip 3 NOPs.
 			sub := OpCode(uint32(ins.B) >> 24)
@@ -1663,7 +1663,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					cond = a != b
 				}
 			} else if left.tag() == tagFloat && right.tag() == tagFloat {
-				// ultra-opt: float loop-condition fast path (e.g. `while (x < 10.0)`),
+				// optimization: float loop-condition fast path (e.g. `while (x < 10.0)`),
 				// mirroring the int arm — skips applyBinopâcompareâasNumeric.
 				a, b := left.AsFloat(), right.AsFloat()
 				switch sub {
@@ -1861,7 +1861,7 @@ func errCheckType(code int32, v Value) error {
 // would otherwise make. The caller refreshes its hoisted f/code after this
 // returns (the frames slice may have grown).
 //
-// ultra-opt: the register-window growth (the make+copy+nil-fill that only fires
+// optimization: the register-window growth (the make+copy+nil-fill that only fires
 //
 //	when the callee's window doesn't fit in the current stack length) lives in
 //	growWindow, marked noinline, so enterFun stays small enough for the inliner

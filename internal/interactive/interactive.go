@@ -62,8 +62,7 @@ func ScoreProjects(all []*types.Project, filters []string) []ScoredProject {
 // State is the persisted interactive-session state.
 // LastTarget is keyed by absolute project Dir.
 type State struct {
-	LastTarget     map[string]string `json:"lastTarget,omitempty"`
-	LastInvocation []string          `json:"lastInvocation,omitempty"`
+	LastTarget map[string]string `json:"lastTarget,omitempty"`
 }
 
 // StatePath returns the path to the State file under XDG_STATE_HOME.

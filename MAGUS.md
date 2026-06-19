@@ -47,7 +47,7 @@ graph LR
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
-outputs  hostbuzz/gen/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
+outputs  host/gen/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
 spells   magusfile, go, buzz, md (claims: **/*.md, **/*.mdx)
 ```
 
@@ -154,7 +154,7 @@ graph TB
 
 ### `image-scan`
 
-Scans the image with trivy; the `rw` charm writes SARIF and gates on HIGH/CRITICAL.
+Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
 
 **Defaults**
 
@@ -175,7 +175,7 @@ magus run image-scan:rw  # mutate in place instead of checking
 
 ### `generate`
 
-Regenerates every committed tree (the `*-generate` siblings), then gates on drift.
+Regenerates every *-generate sibling, then gates on git drift (exclusive, scoped to cwd).
 
 **Defaults**
 
@@ -204,7 +204,7 @@ magus run generate:rw  # mutate in place instead of checking
 
 ### `release`
 
-Cross-compiles a static binary per platform into dist/ and archives each one.
+Cross-compiles a static binary per platform into dist/ and archives each.
 
 **Defaults**
 
@@ -215,7 +215,7 @@ magus run release .  # from the workspace root
 
 ### `watch`
 
-Rebuilds on every debounced change until interrupted (Ctrl-C).
+Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.
 
 **Defaults**
 
@@ -228,7 +228,7 @@ magus run watch .  # from the workspace root
 
 ### `coverage`
 
-Runs the suite with -coverprofile, reads the total off `go tool cover -func`, and writes the coverage.svg badge (color picked by threshold) via the shim.
+Runs the suite with -coverprofile and writes the assets/coverage.svg badge.
 
 **Defaults**
 
@@ -239,7 +239,7 @@ magus run coverage .  # from the workspace root
 
 ### `buzz-check`
 
-Type-checks the repo's standalone Buzz with the upstream `buzz` toolchain.
+Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).
 
 **Defaults**
 
@@ -256,7 +256,7 @@ sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check
 
 ### `buzz-run`
 
-Type-checks the standalone Buzz with magus's own embedded engine (`$MAGUS buzz`).
+Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).
 
 **Defaults**
 
@@ -352,7 +352,7 @@ magus run ci .  # from the workspace root
 
 ### `ci-shard`
 
-Translates a `magus affected --plan` document (read on stdin) into the GitHub Actions shard-matrix outputs and appends them to $GITHUB_OUTPUT (matrix, count, max_parallel) for the workflow's matrix job to fan out on.
+Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.
 
 **Defaults**
 
@@ -388,7 +388,7 @@ go build
 
 ### `image-build`
 
-image-build: under the `cd` charm, build + push + sign both images — static (Dockerfile.static, pure-Go, linux/amd64+arm64, the primary :<version>/:latest tags) and CGO (Dockerfile, glibc, linux/amd64, :<version>-cgo/:latest-cgo).
+Under the cd charm, build+push+sign static and CGO images; else load a single-arch static image.
 
 **Defaults**
 
@@ -407,7 +407,7 @@ magus run image-build:cd  # apply the cd charm
 
 ### `man-generate`
 
-Renders the man pages and mirrors them into the embed dir so the shipped binary carries the current set for `magus self install`.
+Renders man pages and mirrors them into the embed dir for `magus self install`.
 
 **Defaults**
 
@@ -418,7 +418,7 @@ magus run man-generate .  # from the workspace root
 
 ### `bindings-generate`
 
-Regenerates the Go host bindings (std -> hostbuzz/gen) from the std.Module declarations.
+Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
 
 **Defaults**
 
@@ -440,7 +440,7 @@ magus run spells-generate .  # from the workspace root
 
 ### `config-generate`
 
-Regenerates the CLI config-flag plumbing (cmd/magus/gen, schema fields, env bindings) from internal/config/config.go.
+Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.
 
 **Defaults**
 
@@ -451,7 +451,7 @@ magus run config-generate .  # from the workspace root
 
 ### `docs-generate`
 
-Regenerates the committed Markdown that feeds the docs site — module reference docs (from the host bindings) and man pages (from the CLI registry).
+Regenerates the committed docs Markdown (module reference + man pages).
 
 **Defaults**
 
@@ -462,7 +462,7 @@ magus run docs-generate .  # from the workspace root
 
 ### `md-generate`
 
-Renders MAGUS.md (this catalog + dependency graph) via `magus describe graph`.
+Renders MAGUS.md via `magus describe graph`.
 
 **Defaults**
 
@@ -480,6 +480,140 @@ Gates the build on workspace health by running `magus doctor`.
 ```sh
 magus run preflight    # from the project directory
 magus run preflight .  # from the workspace root
+```
+
+## Project: magus/cmd/magus/starter
+
+<details>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/cmd/magus/starter</code></summary>
+
+```text
+sources  cmd/magus/starter/magusfile.buzz, cmd/magus/starter/magusfiles/**/*.buzz, magusfile.buzz, magusfiles/**/*.buzz
+spells   magusfile
+```
+
+</details>
+
+**Run order**
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 80
+---
+graph LR
+  preflight("preflight")
+  generate("generate")
+  format("format")
+  lint("lint")
+  build("build")
+  test("test")
+  ci("ci")
+  preflight --> generate
+  generate --> format
+  format --> lint
+  format --> build
+  format --> test
+  lint --> ci
+  build --> ci
+  test --> ci
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  class ci anchor
+  class build,format,generate,lint,preflight,test target
+```
+
+### `generate`
+
+**Defaults**
+
+```sh
+magus run generate                    # from the project directory
+magus run generate cmd/magus/starter  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+### `format`
+
+**Defaults**
+
+```sh
+magus run format                    # from the project directory
+magus run format cmd/magus/starter  # from the workspace root
+```
+
+**Depends on:**
+
+- [`generate`](#generate)
+
+### `lint`
+
+**Defaults**
+
+```sh
+magus run lint                    # from the project directory
+magus run lint cmd/magus/starter  # from the workspace root
+```
+
+**Depends on:**
+
+- [`format`](#format)
+
+### `build`
+
+**Defaults**
+
+```sh
+magus run build                    # from the project directory
+magus run build cmd/magus/starter  # from the workspace root
+```
+
+**Depends on:**
+
+- [`format`](#format)
+
+### `test`
+
+**Defaults**
+
+```sh
+magus run test                    # from the project directory
+magus run test cmd/magus/starter  # from the workspace root
+```
+
+**Depends on:**
+
+- [`format`](#format)
+
+### `ci`
+
+'ci' is the conventional anchor that `magus affected ci` keys off.
+
+**Defaults**
+
+```sh
+magus run ci                    # from the project directory
+magus run ci cmd/magus/starter  # from the workspace root
+```
+
+**Depends on:**
+
+- [`lint`](#lint)
+- [`build`](#build)
+- [`test`](#test)
+
+### `preflight`
+
+**Defaults**
+
+```sh
+magus run preflight                    # from the project directory
+magus run preflight cmd/magus/starter  # from the workspace root
 ```
 
 ## Project: magus/gopherbuzz
@@ -886,4 +1020,3 @@ magus run md-generate website  # from the workspace root
 - **Charm**: an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it.
 - **Module**: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.
 - **Buzz**: the language magusfiles are written in (the `.buzz` engine).
-

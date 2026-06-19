@@ -17,6 +17,11 @@
 //   - BinaryTrees:  allocate/walk/discard ~1M tree nodes (GC/allocation-heavy).
 //   - NBody:        5-body gravity, 1e4 steps (float arithmetic + sqrt over arrays).
 //
+// String/text workloads (substring extraction + maps; gopherbuzz's soft spot):
+//
+//   - KmerCount:       slide a 6-wide window over a ~1 KB string, tally k-mers in a map.
+//   - SubstringSearch: slide over the same string counting a short pattern (no map).
+//
 // The workloads mirror the in-tree engine suite (magus/internal/interp/engine);
 // here each is a *self-contained* program (no cross-call shared state), because
 // not every engine can persist a defined function or collection across compiled
@@ -487,6 +492,105 @@ e;`,
   e := 0.0
   for i := 0; i < n; i++ { e += 0.5*m[i]*(vx[i]*vx[i]+vy[i]*vy[i]+vz[i]*vz[i]) }
 }`,
+	},
+	{
+		// KmerCount slides a 6-wide window over a ~2 KB string and tallies the
+		// k-mers in a map, 500 times. It is deliberately a workload gopherbuzz does
+		// NOT win: every s.sub() allocates and content-interns a fresh substring
+		// (gopherbuzz interns all strings into a never-cleared global table), and the
+		// map is rebuilt each pass. A canonical k-nucleotide-style shape - the field
+		// here is string-handling, gopherbuzz's structural soft spot.
+		name: "KmerCount",
+		bzHot: `var base = "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT";
+var s = base.repeat(16); final L = s.len(); var total = 0; var r = 0;
+while (r < 50) {
+  var m = mut {}; var i = 0;
+  while (i < L - 5) {
+    final key = s.sub(i, len: 6); final c = m[key];
+    if (c == null) { m[key] = 1; } else { m[key] = c + 1; }
+    i = i + 1;
+  }
+  total = total + m.size(); r = r + 1;
+}
+return total;`,
+		lua: `local base = "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT"
+local s = base:rep(16); local L = #s; local total = 0
+for r = 1, 50 do
+  local m = {}
+  for i = 1, L - 5 do
+    local key = s:sub(i, i + 5); m[key] = (m[key] or 0) + 1
+  end
+  local d = 0; for _ in pairs(m) do d = d + 1 end
+  total = total + d
+end
+return total`,
+		tengo: `base := "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT"
+s := ""
+for i := 0; i < 16; i++ { s += base }
+L := len(s); total := 0
+for r := 0; r < 50; r++ {
+  m := {}
+  for i := 0; i < L - 5; i++ {
+    key := s[i:i+6]
+    if v := m[key]; v == undefined { m[key] = 1 } else { m[key] = v + 1 }
+  }
+  total += len(m)
+}`,
+		js: `var base = "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT";
+var s = base.repeat(16); var L = s.length; var total = 0;
+for (var r = 0; r < 50; r++) {
+  var m = {};
+  for (var i = 0; i < L - 5; i++) {
+    var key = s.substr(i, 6); var c = m[key];
+    if (c === undefined) { m[key] = 1; } else { m[key] = c + 1; }
+  }
+  total += Object.keys(m).length;
+}
+total;`,
+	},
+	{
+		// SubstringSearch slides over the same ~2 KB string counting occurrences of a
+		// short pattern by extracting each window and comparing, 800 times. No map -
+		// it isolates pure substring extraction (allocate + intern per window). Like
+		// KmerCount, this is chosen to show gopherbuzz's string cost honestly, not to
+		// flatter it.
+		name: "SubstringSearch",
+		bzHot: `var base = "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT";
+var s = base.repeat(16); final L = s.len(); final needle = "GCA"; var count = 0; var r = 0;
+while (r < 100) {
+  var i = 0;
+  while (i < L - 2) {
+    if (s.sub(i, len: 3) == needle) { count = count + 1; }
+    i = i + 1;
+  }
+  r = r + 1;
+}
+return count;`,
+		lua: `local base = "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT"
+local s = base:rep(16); local L = #s; local pat = "GCA"; local count = 0
+for r = 1, 100 do
+  for i = 1, L - 2 do
+    if s:sub(i, i + 2) == pat then count = count + 1 end
+  end
+end
+return count`,
+		tengo: `base := "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT"
+s := ""
+for i := 0; i < 16; i++ { s += base }
+L := len(s); pat := "GCA"; count := 0
+for r := 0; r < 100; r++ {
+  for i := 0; i < L - 2; i++ {
+    if s[i:i+3] == pat { count++ }
+  }
+}`,
+		js: `var base = "ACGTTGCAATGCCAGTACGATCGTTAGCATCGGATCCGATTACGGCATAGCTAGCTAGGCAACT";
+var s = base.repeat(16); var L = s.length; var pat = "GCA"; var count = 0;
+for (var r = 0; r < 100; r++) {
+  for (var i = 0; i < L - 2; i++) {
+    if (s.substr(i, 3) === pat) { count++; }
+  }
+}
+count;`,
 	},
 }
 

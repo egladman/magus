@@ -60,7 +60,7 @@ func TestKnownKeys(t *testing.T) {
 		"sandbox.allow.<name>.name": true, "sandbox.allow.<name>.path": true, "sandbox.allow.<name>.mode": true,
 		"graph.direction": true, "graph.spell": true, "graph.depth": true, "graph.roots": true,
 		"health.exempt": true,
-		"log.format":    true, "log.level": true, "concurrency": true, "history_path": true, "dry_run": true, "strict": true,
+		"log.format":    true, "log.level": true, "log.silent": true, "concurrency": true, "history_path": true, "dry_run": true, "strict": true,
 		"mcp.address":       true,
 		"telemetry.enabled": true, "telemetry.endpoint": true,
 		"telemetry.protocol": true, "telemetry.insecure": true,

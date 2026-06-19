@@ -182,11 +182,11 @@ func TestShell_completeToleratesWhitespace(t *testing.T) {
 const sampleMagusfile = `
 import "magus/spell/go";
 
-magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
+magus.project({
     "spells": [go],
     "outputs": ["bin/**"],
     "targets": {"regen-pgo": {"cachable": false}},
-}); return true; });
+});
 
 export fun format(args: [str]) > void { go["go-fmt"](); }
 export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }

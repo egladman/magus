@@ -22,7 +22,7 @@ import (
 	_ "github.com/egladman/magus/internal/interp/bindings"
 )
 
-// writeProject creates root/name/magusfile.buzz with body. No magus.project.register
+// writeProject creates root/name/magusfile.buzz with body. No magus.project
 // call is written: a bare magusfile that defines targets is expected to run via
 // the auto-bound magusfile spell.
 func writeProject(t *testing.T, root, name, body string) string {
@@ -108,7 +108,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(
 		`import "magus";`+"\n"+
 			`import "magus/spell/faketool";`+"\n"+
-			`magus.project.register("svc", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [faketool]}); return true; });`+"\n",
+			`magus.project("svc", {"spells": [faketool]});`+"\n",
 	), 0o644))
 
 	ctx := context.Background()
@@ -145,7 +145,7 @@ func TestExplicitRegisterDoesNotDoubleBind(t *testing.T) {
 	src := `import "magus";
 import "os";
 import "magus/spell/magusfile";
-magus.project.register("svc", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [magusfile]}); return true; });
+magus.project("svc", {"spells": [magusfile]});
 export fun hit(args: [str]) > void {
     os.execSh("printf x >> count", "");
 }

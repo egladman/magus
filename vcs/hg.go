@@ -16,11 +16,11 @@ import (
 
 type hgVCS struct{}
 
-func (hgVCS) Name() string     { return "hg" }
-func (hgVCS) Claims() []string { return []string{".hg"} }
-func (hgVCS) Base() string     { return "tip" }
+func (v hgVCS) Name() string     { return "hg" }
+func (v hgVCS) Claims() []string { return []string{".hg"} }
+func (v hgVCS) Base() string     { return "tip" }
 
-func (hgVCS) Root(ctx context.Context, dir string) (string, error) {
+func (v hgVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "hg", "root")
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -30,8 +30,8 @@ func (hgVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (hgVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
-	if err := checkBaseRef(base); err != nil {
+func (v hgVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+	if err := checkRef(base); err != nil {
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, "hg", "status",
@@ -44,7 +44,7 @@ func (hgVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 	return splitLines(out), nil
 }
 
-func (hgVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
+func (v hgVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
 	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log", "-r", ".", "--template", "{node}").Output()
 	if err != nil {
 		return types.DiffCommandHints{}, fmt.Errorf("hg log: %w", err)
@@ -57,6 +57,12 @@ func (hgVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffComm
 }
 
 func (v hgVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions) (types.Culprit, error) {
+	if err := checkRef(opts.Good); err != nil {
+		return types.Culprit{}, err
+	}
+	if err := checkRef(opts.Bad); err != nil {
+		return types.Culprit{}, err
+	}
 	if opts.Good == "" {
 		sha, err := v.commitBeforeTime(ctx, dir, opts.GoodBefore)
 		if err != nil {
@@ -89,7 +95,7 @@ func (v hgVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions)
 	return types.Culprit{SHA: sha, Info: info}, nil
 }
 
-func (hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
+func (v hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 	shortHash, err := vcsOutput(ctx, dir, "hg", "log", "-r", ".", "--template", "{short(node)}")
 	if err != nil {
 		return types.VCSMeta{}, err
@@ -116,7 +122,7 @@ func (hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 // {latesttag}), with a -dirty suffix for a modified tree. A repo with no tags
 // reports "" (Mercurial's "null" sentinel is normalized away), matching the
 // interface's "no describe available" contract.
-func (hgVCS) Describe(ctx context.Context, dir string) (string, error) {
+func (v hgVCS) Describe(ctx context.Context, dir string) (string, error) {
 	tag, err := vcsOutput(ctx, dir, "hg", "log", "-r", ".", "--template", "{latesttag}")
 	if err != nil {
 		return "", err
@@ -135,9 +141,12 @@ func (hgVCS) Describe(ctx context.Context, dir string) (string, error) {
 // full message. \0 is the field delimiter; Mercurial converts it to NUL.
 const hgCommitTemplate = `{node}\0{node|short}\0{person(author)}\0{email(author)}\0{date|rfc3339date}\0{parents % "{node} "}\0{desc}`
 
-func (hgVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
+func (v hgVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
 	if rev == "" {
 		rev = "."
+	}
+	if err := checkRef(rev); err != nil {
+		return types.Commit{}, err
 	}
 	out, err := vcsOutput(ctx, dir, "hg", "log", "-r", rev, "--template", hgCommitTemplate)
 	if err != nil {
@@ -165,12 +174,12 @@ func (v hgVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 // isAncestor, commitBeforeTime and commitInfo run via `hg -R dir` so they target
 // the repository under bisect, not the process cwd — the dir-scoping the
 // VCSDriver contract requires for correctness under concurrent runs.
-func (hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
+func (v hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
 	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log",
 		"-r", "("+sha+") and (ancestors(.) or .)",
 		"--template", "{node}").Output()
 	if err != nil {
-		return err
+		return fmt.Errorf("hg log: %w", err)
 	}
 	if strings.TrimSpace(string(out)) == "" {
 		return fmt.Errorf("hg: %s is not an ancestor of current revision", sha)
@@ -178,7 +187,7 @@ func (hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
 	return nil
 }
 
-func (hgVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
+func (v hgVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
 	// hg date() predicate requires a date string, not an epoch integer.
 	revset := fmt.Sprintf("max(date('<%s'))", t.UTC().Format("2006-01-02 15:04:05"))
 	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
@@ -192,7 +201,7 @@ func (hgVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (str
 	return sha, nil
 }
 
-func (hgVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
+func (v hgVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
 	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log", "-r", sha,
 		"--template", "{desc|firstline}  ({author|user}, {date|shortdate})").Output()
 	if err != nil {
@@ -201,7 +210,7 @@ func (hgVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (hgVCS) start(ctx context.Context, dir, bad, good string) error {
+func (v hgVCS) start(ctx context.Context, dir, bad, good string) error {
 	run := func(args ...string) error {
 		cmd := exec.CommandContext(ctx, "hg", args...)
 		cmd.Dir = dir
@@ -218,7 +227,7 @@ func (hgVCS) start(ctx context.Context, dir, bad, good string) error {
 	return run("bisect", "--good", good)
 }
 
-func (hgVCS) run(ctx context.Context, dir, shellCmd string) error {
+func (v hgVCS) run(ctx context.Context, dir, shellCmd string) error {
 	cmd := exec.CommandContext(ctx, "hg", "bisect", "--command", shellCmd)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
@@ -226,7 +235,7 @@ func (hgVCS) run(ctx context.Context, dir, shellCmd string) error {
 	return cmd.Run()
 }
 
-func (hgVCS) reset(ctx context.Context, dir string) error {
+func (v hgVCS) reset(ctx context.Context, dir string) error {
 	cmd := exec.CommandContext(ctx, "hg", "bisect", "--reset")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
@@ -234,7 +243,7 @@ func (hgVCS) reset(ctx context.Context, dir string) error {
 	return cmd.Run()
 }
 
-func (hgVCS) culprit(ctx context.Context, dir string) (string, error) {
+func (v hgVCS) culprit(ctx context.Context, dir string) (string, error) {
 	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log",
 		"-r", "bisect(bad)", "--template", "{node}\n").Output()
 	if err != nil {
@@ -273,7 +282,7 @@ func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []
 }
 
 // CheckMergeDriver reports whether the magus merge driver is registered in .hg/hgrc.
-func (hgVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
+func (v hgVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
 	data, err := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
 	if err != nil {
 		return false, nil

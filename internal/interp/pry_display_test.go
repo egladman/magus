@@ -90,7 +90,7 @@ func TestSpellModuleRequireUnknownFailsToCompile(t *testing.T) {
 	writeBzzBP(t, dir, `
 import "magus";
 import "magus/spell/dockr";
-magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [dockr]}); return true; });
+magus.project(".", {"spells": [dockr]});
 `)
 	src, err := interp.Find(dir)
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ import "spells/locreq";
 export fun check(args: [str]) > void {
     if (locreq.name != "locreq") { error("name mismatch: " + locreq.name); }
 }
-magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({"spells": [locreq]}); return true; });
+magus.project(".", {"spells": [locreq]});
 `)
 	src, err := interp.Find(dir)
 	require.NoError(t, err)

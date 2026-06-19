@@ -17,11 +17,11 @@ import (
 
 type gitVCS struct{}
 
-func (gitVCS) Name() string     { return "git" }
-func (gitVCS) Claims() []string { return []string{".git"} }
-func (gitVCS) Base() string     { return "origin/main" }
+func (v gitVCS) Name() string     { return "git" }
+func (v gitVCS) Claims() []string { return []string{".git"} }
+func (v gitVCS) Base() string     { return "origin/main" }
 
-func (gitVCS) Root(ctx context.Context, dir string) (string, error) {
+func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -31,8 +31,8 @@ func (gitVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
-	if err := checkBaseRef(base); err != nil {
+func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+	if err := checkRef(base); err != nil {
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", base+"...HEAD")
@@ -44,7 +44,7 @@ func (gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 	return splitLines(out), nil
 }
 
-func (gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
+func (v gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return types.DiffCommandHints{}, fmt.Errorf("git rev-parse HEAD: %w", err)
@@ -57,6 +57,12 @@ func (gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCom
 }
 
 func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions) (types.Culprit, error) {
+	if err := checkRef(opts.Good); err != nil {
+		return types.Culprit{}, err
+	}
+	if err := checkRef(opts.Bad); err != nil {
+		return types.Culprit{}, err
+	}
 	if opts.Good == "" {
 		sha, err := v.commitBeforeTime(ctx, dir, opts.GoodBefore)
 		if err != nil {
@@ -92,11 +98,11 @@ func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions
 // isAncestor, commitBeforeTime and commitInfo run via `git -C dir` so they target
 // the repository under bisect, not the process cwd — the dir-scoping the
 // VCSDriver contract requires for correctness under concurrent runs.
-func (gitVCS) isAncestor(ctx context.Context, dir, sha string) error {
+func (v gitVCS) isAncestor(ctx context.Context, dir, sha string) error {
 	return exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", sha, "HEAD").Run()
 }
 
-func (gitVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
+func (v gitVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "log",
 		"--before="+t.UTC().Format(time.RFC3339),
 		"-n", "1", "--format=%H").Output()
@@ -110,7 +116,7 @@ func (gitVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (st
 	return sha, nil
 }
 
-func (gitVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
+func (v gitVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "log", "-1",
 		"--format=%s  (%an, %ad)", "--date=short", sha).Output()
 	if err != nil {
@@ -119,7 +125,7 @@ func (gitVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (gitVCS) start(ctx context.Context, dir, bad, good string) error {
+func (v gitVCS) start(ctx context.Context, dir, bad, good string) error {
 	cmd := exec.CommandContext(ctx, "git", "bisect", "start", bad, good)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
@@ -127,7 +133,7 @@ func (gitVCS) start(ctx context.Context, dir, bad, good string) error {
 	return cmd.Run()
 }
 
-func (gitVCS) run(ctx context.Context, dir, shellCmd string) error {
+func (v gitVCS) run(ctx context.Context, dir, shellCmd string) error {
 	cmd := exec.CommandContext(ctx, "git", "bisect", "run", "sh", "-c", shellCmd)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
@@ -135,7 +141,7 @@ func (gitVCS) run(ctx context.Context, dir, shellCmd string) error {
 	return cmd.Run()
 }
 
-func (gitVCS) reset(ctx context.Context, dir string) error {
+func (v gitVCS) reset(ctx context.Context, dir string) error {
 	cmd := exec.CommandContext(ctx, "git", "bisect", "reset")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
@@ -143,7 +149,7 @@ func (gitVCS) reset(ctx context.Context, dir string) error {
 	return cmd.Run()
 }
 
-func (gitVCS) culprit(ctx context.Context, dir string) (string, error) {
+func (v gitVCS) culprit(ctx context.Context, dir string) (string, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "bisect", "log").Output()
 	if err != nil {
 		return "", fmt.Errorf("git bisect log: %w", err)
@@ -161,7 +167,7 @@ func (gitVCS) culprit(ctx context.Context, dir string) (string, error) {
 	return "", errors.New("could not parse culprit from git bisect log")
 }
 
-func (gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
+func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 	shortHash, err := vcsOutput(ctx, dir, "git", "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return types.VCSMeta{}, err
@@ -186,7 +192,7 @@ func (gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
 // short hash when no tag is reachable), with a -dirty suffix for a modified tree.
-func (gitVCS) Describe(ctx context.Context, dir string) (string, error) {
+func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 	return vcsOutput(ctx, dir, "git", "describe", "--tags", "--always", "--dirty")
 }
 
@@ -195,11 +201,16 @@ func (gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 // (%cI), parents, and the raw message (%B).
 const gitCommitFormat = "%H%x00%h%x00%an%x00%ae%x00%cI%x00%P%x00%B"
 
-func (gitVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
+func (v gitVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
 	if rev == "" {
 		rev = "HEAD"
 	}
-	out, err := vcsOutput(ctx, dir, "git", "log", "-1", "--format="+gitCommitFormat, rev)
+	if err := checkRef(rev); err != nil {
+		return types.Commit{}, err
+	}
+	// `--` separates the rev from any path-like positional args git might otherwise
+	// treat the rev as.
+	out, err := vcsOutput(ctx, dir, "git", "log", "-1", "--format="+gitCommitFormat, rev, "--")
 	if err != nil {
 		return types.Commit{}, fmt.Errorf("git log %s: %w", rev, err)
 	}
@@ -252,7 +263,7 @@ func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error)
 	return strings.Contains(string(data), gitAttrsBegin), nil
 }
 
-func (gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
+func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
 	attrsPath := filepath.Join(root, ".gitattributes")
 	var section strings.Builder
 	section.WriteString(gitAttrsBegin + "\n")
@@ -265,7 +276,7 @@ func (gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
 	return os.WriteFile(attrsPath, []byte(updated), 0o644)
 }
 
-func (gitVCS) writeGitConfig(ctx context.Context, root string) error {
+func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver", gitMergeDriver)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)

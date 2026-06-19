@@ -91,6 +91,14 @@ allocation footprint under sustained work:
   arithmetic and array updates (gopherbuzz runs it via a session so it can
   `import "math"`).
 
+And two **string/text** workloads, which stress substring extraction and map
+churn - the area gopherbuzz historically handled worst:
+
+- **KmerCount** - slide a 6-wide window over a ~1 KB string, tally the k-mers in a
+  map, 50x.
+- **SubstringSearch** - slide over the same string counting a short pattern by
+  extracting and comparing each window, 100x (no map).
+
 `LoopSum` and `Mandelbrot` are JIT-eligible, so gopherbuzz appears on each as two
 rows (`GopherbuzzJIT` / `GopherbuzzInterp`) via `vm.SetJIT`. Mandelbrot exercises
 the JIT's full range - nested loops, an `and` short-circuit escape condition, and
@@ -161,6 +169,39 @@ for warm `LoopSum`, effectively zero), and `foreach` reuses a per-slot iterator
 object, so map/list iteration is allocation-free too (`ForeachMap`'s 1e6 visits
 cost ~2 KB, not megabytes). `StringInterp` is the one workload that still
 allocates heavily, and it is GC-sensitive - its time carries a wide CI run to run.
+
+### String/text workloads
+
+Two text-processing workloads added to probe gopherbuzz's string handling head-on
+(its structural soft spot: every string is content-interned, and substrings churn
+the heap). Both are split-free and produce identical results across engines,
+guarded by a cross-engine agreement test (`extra_test.go`).
+
+- **KmerCount** - slide a 6-wide window over a ~1 KB string, tally the k-mers in a
+  map, 50x. Substring extraction + map churn.
+- **SubstringSearch** - slide over the same string counting a short pattern by
+  extracting each window and comparing, 100x. Substring extraction, no map.
+
+**Warm - execution time** (ms/op) | **allocation** (B/op), lower is better:
+
+| Engine | KmerCount | KmerCount B/op | SubstringSearch | SubstringSearch B/op |
+|---|--:|--:|--:|--:|
+| gopherbuzz | 15.2 | **553 KB** | **16.6** | **1 KB** |
+| gopher-lua | 18.1 | 2.7 MB | 19.9 | 3.7 MB |
+| tengo | **13.8** | 4.4 MB | 18.4 | 7.2 MB |
+| goja (JS) | 66 | 13 MB | 74 | 12 MB |
+
+These started ~10-18x *behind* gopher-lua and tengo - and profiling that gap was
+the point. It turned up two real bugs and one structural cost, all since fixed:
+`str.sub` rebuilt a `[]rune` of the whole string on every call (O(n) per call,
+O(n²) over a sliding window); each `s.sub(...)` allocated a fresh bound-method
+closure; and every substring appended a new entry to the never-freed global
+string-intern heap. With those addressed (an ASCII fast path in `sub`, caching
+string-method dispatch in the inline cache, and one cached heap index per
+interned string), gopherbuzz now leads the pure-Go field on `SubstringSearch`,
+trails only tengo on `KmerCount`, and allocates one to three orders of magnitude
+less than every peer. `StringInterp` above is the string workload it still loses:
+its strings are all unique, so interning can never amortize them.
 
 ### Compute kernels
 

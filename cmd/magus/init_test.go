@@ -17,7 +17,7 @@ func TestWriteMagusfileStub(t *testing.T) {
 	body := string(data)
 	for _, want := range []string{
 		`import "magus"`,
-		"magus.project.register(",
+		"magus.project",
 		`export fun preflight`,
 		`export fun test`,
 	} {

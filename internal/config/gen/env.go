@@ -168,6 +168,10 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_LOG_LEVEL"); v != "" {
 		cfg.Log.Level = v
 	}
+	if v := getenv("MAGUS_LOG_SILENT"); v != "" {
+		b := parseBoolEnv(v, cfg.Log.Silent != nil && *cfg.Log.Silent)
+		cfg.Log.Silent = &b
+	}
 	if v := getenv("MAGUS_HINTS_ENABLED"); v != "" {
 		b := parseBoolEnv(v, cfg.Hints.Enabled != nil && *cfg.Hints.Enabled)
 		cfg.Hints.Enabled = &b

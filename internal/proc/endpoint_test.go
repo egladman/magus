@@ -176,7 +176,10 @@ func TestQueryStatus(t *testing.T) {
 	status, err := QueryStatus(context.Background(), srv.Addr())
 	require.NoError(t, err)
 	assert.Equal(t, 4, status.Capacity)
-	assert.Equal(t, 1, status.InUse)
+	// The handler yields its admission slot for the duration of the forwarded run
+	// (so the adopted build's own RunAll competes for the full pool), so no slot is
+	// held while the handler blocks; the in-flight call is still tracked in Calls.
+	assert.Equal(t, 0, status.InUse)
 	require.Len(t, status.Calls, 1)
 	require.Len(t, status.Calls[0].Args, 3)
 	assert.Equal(t, "widget", status.Calls[0].Args[2])

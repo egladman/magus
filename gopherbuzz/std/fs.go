@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // fsModule builds the "fs" module matching Buzz's fs reference:
 // https://buzz-lang.dev/0.5.0/reference/std/fs.html
-func fsModule() buzz.Value {
+func fsModule() vm.Value {
 	m := mod()
 	m.MapSet("currentDirectory", fn("fs.currentDirectory", fsCurrentDirectory))
 	m.MapSet("makeDirectory", fn("fs.makeDirectory", fsMakeDirectory))
@@ -22,84 +22,84 @@ func fsModule() buzz.Value {
 	return m
 }
 
-func fsCurrentDirectory(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+func fsCurrentDirectory(_ context.Context, _ []vm.Value) (vm.Value, error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return buzz.Null, fmt.Errorf("fs.currentDirectory: %w", err)
+		return vm.Null, fmt.Errorf("fs.currentDirectory: %w", err)
 	}
-	return buzz.StrValue(dir), nil
+	return vm.StrValue(dir), nil
 }
 
-func fsMakeDirectory(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func fsMakeDirectory(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
-		return buzz.Null, fmt.Errorf("fs.makeDirectory: requires a str path argument")
+		return vm.Null, fmt.Errorf("fs.makeDirectory: requires a str path argument")
 	}
 	if err := os.MkdirAll(args[0].AsString(), 0o755); err != nil {
-		return buzz.Null, fmt.Errorf("fs.makeDirectory: %w", err)
+		return vm.Null, fmt.Errorf("fs.makeDirectory: %w", err)
 	}
-	return buzz.Null, nil
+	return vm.Null, nil
 }
 
-func fsDelete(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func fsDelete(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
-		return buzz.Null, fmt.Errorf("fs.delete: requires a str path argument")
+		return vm.Null, fmt.Errorf("fs.delete: requires a str path argument")
 	}
 	if err := os.RemoveAll(args[0].AsString()); err != nil {
-		return buzz.Null, fmt.Errorf("fs.delete: %w", err)
+		return vm.Null, fmt.Errorf("fs.delete: %w", err)
 	}
-	return buzz.Null, nil
+	return vm.Null, nil
 }
 
-func fsMove(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func fsMove(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 2 || !args[0].IsStr() || !args[1].IsStr() {
-		return buzz.Null, fmt.Errorf("fs.move: requires source and destination str arguments")
+		return vm.Null, fmt.Errorf("fs.move: requires source and destination str arguments")
 	}
 	if err := os.Rename(args[0].AsString(), args[1].AsString()); err != nil {
-		return buzz.Null, fmt.Errorf("fs.move: %w", err)
+		return vm.Null, fmt.Errorf("fs.move: %w", err)
 	}
-	return buzz.Null, nil
+	return vm.Null, nil
 }
 
-func fsList(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func fsList(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
-		return buzz.Null, fmt.Errorf("fs.list: requires a str path argument")
+		return vm.Null, fmt.Errorf("fs.list: requires a str path argument")
 	}
 	entries, err := os.ReadDir(args[0].AsString())
 	if err != nil {
-		return buzz.Null, fmt.Errorf("fs.list: %w", err)
+		return vm.Null, fmt.Errorf("fs.list: %w", err)
 	}
-	items := make([]buzz.Value, len(entries))
+	items := make([]vm.Value, len(entries))
 	for i, e := range entries {
-		items[i] = buzz.StrValue(e.Name())
+		items[i] = vm.StrValue(e.Name())
 	}
-	return buzz.ListValue(items), nil
+	return vm.ListValue(items), nil
 }
 
-func fsExists(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func fsExists(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
-		return buzz.Null, fmt.Errorf("fs.exists: requires a str path argument")
+		return vm.Null, fmt.Errorf("fs.exists: requires a str path argument")
 	}
 	_, err := os.Stat(args[0].AsString())
 	if err == nil {
-		return buzz.True, nil
+		return vm.True, nil
 	}
 	if os.IsNotExist(err) {
-		return buzz.False, nil
+		return vm.False, nil
 	}
-	return buzz.Null, fmt.Errorf("fs.exists: %w", err)
+	return vm.Null, fmt.Errorf("fs.exists: %w", err)
 }
 
 // fsModified returns the file's modification time in milliseconds since the
 // Unix epoch, or null when the path cannot be stat'ed (missing file included).
 // Null-on-absence rather than an error makes it directly usable as a change
 // poller: watch for the value to move, including through create and delete.
-func fsModified(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func fsModified(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
-		return buzz.Null, fmt.Errorf("fs.modified: requires a str path argument")
+		return vm.Null, fmt.Errorf("fs.modified: requires a str path argument")
 	}
 	info, err := os.Stat(args[0].AsString())
 	if err != nil {
-		return buzz.Null, nil
+		return vm.Null, nil
 	}
-	return buzz.FloatValue(float64(info.ModTime().UnixMilli())), nil
+	return vm.FloatValue(float64(info.ModTime().UnixMilli())), nil
 }

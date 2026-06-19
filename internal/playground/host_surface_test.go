@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func TestMagusSurfaceMatchesBindings(t *testing.T) {
 	}
 }
 
-func keySet(m buzz.Value) map[string]bool {
+func keySet(m vm.Value) map[string]bool {
 	s := map[string]bool{}
 	for _, k := range m.MapKeys() {
 		s[k] = true

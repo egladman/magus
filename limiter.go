@@ -18,7 +18,10 @@ func NewLimiter(n int) *Limiter {
 	return &Limiter{lim: cache.NewLimiter(n)}
 }
 
-// DefaultConcurrency returns min(NumCPU, 8) — the default when no explicit cap is set.
+// DefaultConcurrency returns the concurrency cap used when no explicit cap is set,
+// resolved by precedence: the MAGUS_CONCURRENCY env var if set to a positive int,
+// then 4 on GitHub-hosted runners (GITHUB_ACTIONS=true and RUNNER_ENVIRONMENT is not
+// self-hosted), then min(NumCPU, 8).
 func DefaultConcurrency() int { return cache.DefaultConcurrency() }
 
 // Capacity returns the configured concurrency cap.

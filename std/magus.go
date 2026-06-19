@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module magus -lang buzz -out ../hostbuzz/gen/magus.go
+//go:generate go run ../cmd/magus-bindings-gen -module magus -lang buzz -out ../host/gen/magus.go
 
 func init() { Register(Magus) }
 
@@ -45,7 +45,24 @@ var Magus = Module{
 			Returns: nil,
 			Impl:    MagusBustCache,
 		},
+		{
+			Name:     "has_charm",
+			BuzzName: "has_charm",
+			Doc:      "True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm(\"rw\")).",
+			Args: []Arg{
+				{Name: "name", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    MagusHasCharm,
+		},
 	},
+}
+
+// MagusHasCharm reports whether the execution charm name is active in ctx. It
+// backs magus.has_charm, the read side of the charm system: a function target
+// publishes conditionally on has_charm("rw"), or branches on a custom charm.
+func MagusHasCharm(ctx context.Context, name string) (bool, error) {
+	return types.HasCharm(ctx, name), nil
 }
 
 // MagusBustCache invalidates cached build entries. When projectPath is empty

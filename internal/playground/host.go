@@ -6,6 +6,7 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // installHost wires a session for magusfile evaluation: the std library (with
@@ -22,16 +23,16 @@ func installHost(sess *buzz.Session, rec *Recorder) {
 	}
 	// A workspace-local `import "spells/foo"` can't be resolved in the sandbox;
 	// report it instead of failing the whole evaluation with a file-not-found.
-	sess.SetModuleResolver(func(importPath string) (buzz.Value, bool) {
-		m := buzz.NewMap()
-		m.MapSet("name", buzz.StrValue(importPath))
+	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
+		m := vm.NewMap()
+		m.MapSet("name", vm.StrValue(importPath))
 		return m, true
 	})
 }
 
 // fn is a small constructor alias matching the std package's helper.
-func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) buzz.Value {
-	return buzz.DirectValue(name, f)
+func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
+	return vm.DirectValue(name, f)
 }
 
 // buildMagus builds the recording `magus` module. It MUST cover the same member
@@ -40,38 +41,33 @@ func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) 
 // guard test TestMagusSurfaceMatchesBindings enforces that parity, so a new (or
 // removed) real binding can't silently drift from this dry-run host. Members the
 // dry run doesn't meaningfully act on are stubbed; only structure-declaring members
-// (project.register, target.*, needs) are modeled into the graph.
-func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
-	m := buzz.NewMap()
+// (magus.project, target.*, needs) are modeled into the graph.
+func buildMagus(sess *buzz.Session, rec *Recorder) vm.Value {
+	m := vm.NewMap()
 
-	project := buzz.NewMap()
-	project.MapSet("register", fn("magus.project.register", func(ctx context.Context, args []buzz.Value) (buzz.Value, error) {
-		path, opts, err := captureRegister(ctx, sess, args)
-		if err != nil {
-			return buzz.Null, err
-		}
+	m.MapSet("project", fn("magus.project", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		path, opts := captureConfigure(args)
 		rec.recordProject(path, opts)
-		return buzz.Null, nil
+		return vm.Null, nil
 	}))
-	m.MapSet("project", project)
 
 	// magus.target.<mode>(...) return handles (mode-tagged maps) consumed by needs;
 	// expand_globs returns an empty list (its standalone, non-dependency use).
 	// Cross-project deps (import "project/...") aren't modeled in the single-file dry
 	// run — there's no sibling project to enumerate in the sandbox.
-	target := buzz.NewMap()
+	target := vm.NewMap()
 	target.MapSet("literal", targetHandle("literal"))
 	target.MapSet("glob", targetHandle("glob"))
 	target.MapSet("regex", targetHandle("regex"))
-	target.MapSet("expand_globs", fn("magus.target.expand_globs", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
-		return buzz.ListValue(nil), nil
+	target.MapSet("expand_globs", fn("magus.target.expand_globs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
 	}))
 	m.MapSet("target", target)
 
 	// magus.needs(handle, ...): record an exact same-project edge per literal handle;
 	// glob/regex aren't expanded in the dry run (no project target set to match
 	// against) — recorded as nothing.
-	m.MapSet("needs", fn("magus.needs", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("needs", fn("magus.needs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		for _, a := range args {
 			if !a.IsMap() {
 				continue
@@ -84,53 +80,53 @@ func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 				rec.addEdge(normalizeTarget(t))
 			}
 		}
-		return buzz.Null, nil
+		return vm.Null, nil
 	}))
 
 	// magus.cache.<...>: a namespace in the real module (cache.remote, …); stub it as
 	// a no-op namespace so cache.remote(github) at magusfile top level doesn't blow up.
-	cache := buzz.NewMap()
+	cache := vm.NewMap()
 	cache.MapSet("remote", fn("magus.cache.remote", retNull))
 	m.MapSet("cache", cache)
 
-	m.MapSet("has_charm", fn("magus.has_charm", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
-		return buzz.BoolValue(false), nil
+	m.MapSet("has_charm", fn("magus.has_charm", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.BoolValue(false), nil
 	}))
 
 	for _, level := range []string{"info", "warn", "error", "debug"} {
-		m.MapSet(level, fn("magus."+level, func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+		m.MapSet(level, fn("magus."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			// Recorded as a per-target op (attributed to rec.cur) so a dry-run
 			// shows each target's logs in order; not written to the shared output
 			// buffer, which would mix every probed target's logs together.
 			rec.addOp("log", level, strArg(args, 0, ""))
-			return buzz.Null, nil
+			return vm.Null, nil
 		}))
 	}
 
 	// magus.cmd(...) returns a captured-command result on the real module; stub it as
 	// an empty success so `magus.cmd(...).stdout` doesn't blow up in a dry run.
-	m.MapSet("cmd", fn("magus.cmd", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
-		res := buzz.NewMap()
-		res.MapSet("stdout", buzz.StrValue(""))
-		res.MapSet("stderr", buzz.StrValue(""))
-		res.MapSet("code", buzz.IntValue(0))
-		res.MapSet("success", buzz.BoolValue(true))
+	m.MapSet("cmd", fn("magus.cmd", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("stdout", vm.StrValue(""))
+		res.MapSet("stderr", vm.StrValue(""))
+		res.MapSet("code", vm.IntValue(0))
+		res.MapSet("success", vm.BoolValue(true))
 		return res, nil
 	}))
 
 	// magus.modules()/magus.module(name) are pure introspection on the real host
-	// module registry, which the sandbox doesn't wire (pulling hostbuzz/std in would
+	// module registry, which the sandbox doesn't wire (pulling host/std in would
 	// bloat the playground). Stub them as empty-but-shaped records so a reference and
 	// field access (e.g. magus.module(x).methods) resolve in a dry run.
-	m.MapSet("modules", fn("magus.modules", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
-		return buzz.ListValue(nil), nil
+	m.MapSet("modules", fn("magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
 	}))
-	m.MapSet("module", fn("magus.module", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
-		res := buzz.NewMap()
-		res.MapSet("name", buzz.StrValue(""))
-		res.MapSet("doc", buzz.StrValue(""))
-		res.MapSet("fields", buzz.ListValue(nil))
-		res.MapSet("methods", buzz.ListValue(nil))
+	m.MapSet("module", fn("magus.module", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("name", vm.StrValue(""))
+		res.MapSet("doc", vm.StrValue(""))
+		res.MapSet("fields", vm.ListValue(nil))
+		res.MapSet("methods", vm.ListValue(nil))
 		return res, nil
 	}))
 
@@ -146,62 +142,49 @@ func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 
 // targetHandle returns the magus.target.<mode> callable producing a mode-tagged
 // handle map ({mode, pattern}) for magus.needs to read.
-func targetHandle(mode string) buzz.Value {
-	return fn("magus.target."+mode, func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
-		h := buzz.NewMap()
-		h.MapSet("mode", buzz.StrValue(mode))
-		h.MapSet("pattern", buzz.StrValue(strArg(args, 0, "")))
+func targetHandle(mode string) vm.Value {
+	return fn("magus.target."+mode, func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		h := vm.NewMap()
+		h.MapSet("mode", vm.StrValue(mode))
+		h.MapSet("pattern", vm.StrValue(strArg(args, 0, "")))
 		return h, nil
 	})
 }
 
 // mapStr reads a string field from a map value, or returns the empty string value.
-func mapStr(m buzz.Value, key string) buzz.Value {
+func mapStr(m vm.Value, key string) vm.Value {
 	if v, ok := m.MapGet(key); ok && v.IsStr() {
 		return v
 	}
-	return buzz.StrValue("")
+	return vm.StrValue("")
 }
 
-func retNull(context.Context, []buzz.Value) (buzz.Value, error) { return buzz.Null, nil }
+func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
 
-// captureRegister runs a magus.project.register configurator and returns the
-// project path plus the options map it emits. It mirrors recordProjectOpts in the
-// real binding: register(fn) configures this project (path defaults to "."),
-// register(path, fn) an explicit one; the configurator emits its options via
-// cb({...}). Returns a null opts value (no-op) for a malformed call.
-func captureRegister(ctx context.Context, sess *buzz.Session, args []buzz.Value) (string, buzz.Value, error) {
+// captureConfigure reads a magus.project call into the project path plus
+// its options map. It mirrors the real binding: configure({...}) customizes this
+// project (path defaults to "."), configure(path, {...}) an explicit one. Returns a
+// null opts value (no-op) for a malformed call.
+func captureConfigure(args []vm.Value) (string, vm.Value) {
 	path := "."
-	var configurator buzz.Value
+	var opts vm.Value = vm.Null
 	if len(args) >= 1 && args[0].IsStr() {
 		path = args[0].AsString()
 		if len(args) >= 2 {
-			configurator = args[1]
+			opts = args[1]
 		}
 	} else if len(args) >= 1 {
-		configurator = args[0]
+		opts = args[0]
 	}
-	if !configurator.IsFun() {
-		return path, buzz.Null, nil
+	if !opts.IsMap() {
+		return path, vm.Null
 	}
-	captured := buzz.Null
-	cb := buzz.DirectValue("magus.cb", func(_ context.Context, a []buzz.Value) (buzz.Value, error) {
-		if len(a) > 0 {
-			captured = a[0]
-		}
-		return buzz.Null, nil
-	})
-	p := buzz.NewMap()
-	p.MapSet("path", buzz.StrValue(path))
-	if _, err := sess.CallValue(ctx, configurator, []buzz.Value{p, cb}); err != nil {
-		return path, buzz.Null, err
-	}
-	return path, captured, nil
+	return path, opts
 }
 
-// recordProject flattens the path and emitted options of a magus.project.register
+// recordProject flattens the path and emitted options of a magus.project
 // call into the graph model. It mirrors parseBuzzProjectOpts in the real binding.
-func (r *Recorder) recordProject(path string, opts buzz.Value) {
+func (r *Recorder) recordProject(path string, opts vm.Value) {
 	p := Project{Path: path}
 	if opts.IsMap() {
 		if v, ok := opts.MapGet("depends_on"); ok {
@@ -243,17 +226,17 @@ func (r *Recorder) recordProject(path string, opts buzz.Value) {
 // buildSpell builds the object bound by `import "magus/spell/<name>"`: each op is
 // a recording callable reachable as spell["<name>-<verb>"](), plus listTargets()
 // and the handle metadata fields the real spell handle exposes.
-func buildSpell(name string, ops []string, rec *Recorder) buzz.Value {
-	h := buzz.NewMap()
-	h.MapSet("name", buzz.StrValue(name))
+func buildSpell(name string, ops []string, rec *Recorder) vm.Value {
+	h := vm.NewMap()
+	h.MapSet("name", vm.StrValue(name))
 	for _, op := range ops {
-		h.MapSet(op, fn("spell."+op, func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+		h.MapSet(op, fn("spell."+op, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			rec.addOp("spell", op, spellArgsDetail(args))
-			return buzz.Null, nil
+			return vm.Null, nil
 		}))
 	}
 	opsCopy := append([]string(nil), ops...)
-	h.MapSet("listTargets", fn("spell.listTargets", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+	h.MapSet("listTargets", fn("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return strsToList(opsCopy), nil
 	}))
 	return h
@@ -262,66 +245,66 @@ func buildSpell(name string, ops []string, rec *Recorder) buzz.Value {
 // buildExtra builds the `magus/extra` aggregate: a namespace of recording host
 // utilities. Only the members magusfiles commonly reach are stubbed; each
 // records its call and returns a plausible canned value.
-func buildExtra(rec *Recorder) buzz.Value {
-	extra := buzz.NewMap()
+func buildExtra(rec *Recorder) vm.Value {
+	extra := vm.NewMap()
 
-	os := buzz.NewMap()
-	os.MapSet("exec", fn("extra.os.exec", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	os := vm.NewMap()
+	os.MapSet("exec", fn("extra.os.exec", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		rec.addOp("exec", strArg(args, 0, "exec"), execDetail(args))
-		res := buzz.NewMap()
-		res.MapSet("stdout", buzz.StrValue(""))
-		res.MapSet("stderr", buzz.StrValue(""))
-		res.MapSet("code", buzz.IntValue(0))
-		res.MapSet("success", buzz.BoolValue(true))
+		res := vm.NewMap()
+		res.MapSet("stdout", vm.StrValue(""))
+		res.MapSet("stderr", vm.StrValue(""))
+		res.MapSet("code", vm.IntValue(0))
+		res.MapSet("success", vm.BoolValue(true))
 		return res, nil
 	}))
 	extra.MapSet("os", os)
 
-	fs := buzz.NewMap()
+	fs := vm.NewMap()
 	fs.MapSet("exists", fn("extra.fs.exists", retBool(false)))
 	fs.MapSet("readFile", fn("extra.fs.readFile", retStr("")))
 	fs.MapSet("glob", fn("extra.fs.glob", retEmptyList))
 	fs.MapSet("list", fn("extra.fs.list", retEmptyList))
 	for _, name := range []string{"writeFile", "removeAll", "makeDirectory"} {
-		fs.MapSet(name, fn("extra.fs."+name, func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+		fs.MapSet(name, fn("extra.fs."+name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 			rec.addOp("exec", "fs."+name, "")
-			return buzz.Null, nil
+			return vm.Null, nil
 		}))
 	}
 	extra.MapSet("fs", fs)
 
-	vcs := buzz.NewMap()
+	vcs := vm.NewMap()
 	vcs.MapSet("shortHash", fn("extra.vcs.shortHash", retStr("0000000")))
 	vcs.MapSet("branch", fn("extra.vcs.branch", retStr("main")))
 	extra.MapSet("vcs", vcs)
 
-	env := buzz.NewMap()
+	env := vm.NewMap()
 	env.MapSet("get", fn("extra.env.get", retStr("")))
 	extra.MapSet("env", env)
 
 	return extra
 }
 
-func retBool(b bool) func(context.Context, []buzz.Value) (buzz.Value, error) {
-	return func(context.Context, []buzz.Value) (buzz.Value, error) { return buzz.BoolValue(b), nil }
+func retBool(b bool) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(context.Context, []vm.Value) (vm.Value, error) { return vm.BoolValue(b), nil }
 }
-func retStr(s string) func(context.Context, []buzz.Value) (buzz.Value, error) {
-	return func(context.Context, []buzz.Value) (buzz.Value, error) { return buzz.StrValue(s), nil }
+func retStr(s string) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(context.Context, []vm.Value) (vm.Value, error) { return vm.StrValue(s), nil }
 }
-func retEmptyList(context.Context, []buzz.Value) (buzz.Value, error) {
-	return buzz.ListValue(nil), nil
+func retEmptyList(context.Context, []vm.Value) (vm.Value, error) {
+	return vm.ListValue(nil), nil
 }
 
-func strsToList(ss []string) buzz.Value {
-	items := make([]buzz.Value, len(ss))
+func strsToList(ss []string) vm.Value {
+	items := make([]vm.Value, len(ss))
 	for i, s := range ss {
-		items[i] = buzz.StrValue(s)
+		items[i] = vm.StrValue(s)
 	}
-	return buzz.ListValue(items)
+	return vm.ListValue(items)
 }
 
 // valToStrings reads a Buzz str or [str] into a Go slice.
-func valToStrings(v buzz.Value) []string {
+func valToStrings(v vm.Value) []string {
 	if v.IsStr() {
 		return []string{v.AsString()}
 	}
@@ -338,14 +321,14 @@ func valToStrings(v buzz.Value) []string {
 }
 
 // strArg returns args[i] as a string, or fallback if it is absent or not a str.
-func strArg(args []buzz.Value, i int, fallback string) string {
+func strArg(args []vm.Value, i int, fallback string) string {
 	if i < len(args) && args[i].IsStr() {
 		return args[i].AsString()
 	}
 	return fallback
 }
 
-func spellArgsDetail(args []buzz.Value) string {
+func spellArgsDetail(args []vm.Value) string {
 	if len(args) == 0 || !args[0].IsMap() {
 		return ""
 	}
@@ -355,7 +338,7 @@ func spellArgsDetail(args []buzz.Value) string {
 	return ""
 }
 
-func execDetail(args []buzz.Value) string {
+func execDetail(args []vm.Value) string {
 	if len(args) >= 2 {
 		return strings.Join(valToStrings(args[1]), " ")
 	}

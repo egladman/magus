@@ -72,6 +72,10 @@ final CACHE_VERSION = "magus-remote-v1";
 final S3_TIME_LAYOUT = "2006-01-02T15:04:05Z07:00";
 
 // getenv reads one environment variable, returning "" when unset.
+// NOTE: byte-identical to the getenv in spells/github/actions/spell.buzz. The
+// duplication is intentional/temporary: there is no shared magus/... buzz helper
+// module for it yet (extracting one needs the embed+register plumbing magus/charm
+// uses). Track for follow-up; keep the two copies in sync.
 fun getenv(name: str) > str {
     final v = os.env(name);
     if (v == null) { return ""; }
@@ -109,6 +113,11 @@ fun hostOf(url: str) > str {
 
 // cache_key derives the object key from the spec hash (already unique per project;
 // hex, so URL-safe — no extra encoding needed in the canonical URI).
+// NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose:
+// S3 folds CACHE_VERSION into the key string ("magus-<hash>-<version>"), while GHA
+// keeps the version in a separate `version` request field. Do NOT change the
+// emitted string here — it would invalidate every existing S3 artifact. Track the
+// inconsistency for follow-up only.
 fun cache_key(hash: str) > str { return "magus-" + hash + "-" + CACHE_VERSION; }
 
 // amzTimestamp formats the current UTC time as a SigV4 x-amz-date (YYYYMMDDTHHMMSSZ),

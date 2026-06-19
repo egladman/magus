@@ -76,7 +76,15 @@ type Log struct {
 	Format string `yaml:"format" validate:"omitempty,oneof=pretty plain text json"` // pretty|plain|text|json
 	// Level is the minimum log level; "trace" also enables the startup timing table.
 	Level string `yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
+	// Silent suppresses progress like --quiet, and additionally bounds the failing-project
+	// dump (tail + path to the full log) and bubbles up only lines a target marks as a
+	// notice ("magus:notice:"). Normally set via -s/--silent; MAGUS_LOG_SILENT=1 is the env equivalent.
+	// Pointer to distinguish "not set" from explicit false.
+	Silent *bool `yaml:"silent"`
 }
+
+// IsSilent reports whether silent output mode is enabled.
+func (l Log) IsSilent() bool { return l.Silent != nil && *l.Silent }
 
 // Hints controls whether hint messages are emitted to the user.
 type Hints struct {

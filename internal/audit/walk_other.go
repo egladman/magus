@@ -11,7 +11,7 @@ import (
 type dirEntKind uint8
 
 const (
-	dentSkip dirEntKind = iota
+	_ dirEntKind = iota
 	dentDir
 	dentRegular
 )

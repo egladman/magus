@@ -14,6 +14,10 @@ import (
 	"golang.org/x/term"
 )
 
+// levelTrace mirrors config.LevelTrace (slog.LevelDebug-4); duplicated here
+// because config imports cache, so cache cannot import config back.
+const levelTrace slog.Level = slog.LevelDebug - 4
+
 // newLogger returns a *slog.Logger for the given format ("text", "json", or "pretty") and level.
 func newLogger(format string, level slog.Level) *slog.Logger {
 	switch strings.ToLower(format) {

@@ -6,20 +6,15 @@ import "magus";
 // magus). Methods are camelCase (Buzz's convention). Import each module you use.
 import "os";
 
-// Bind the spell(s) that build this project. Reach a built-in spell by importing
-// it; it binds under its basename. register takes a configurator: the host hands
-// it this project `p` and a sink `cb`, and you emit the project's options once via
-// cb({...}). Pass an explicit path — register("sub", fun(p, cb) {...}) — only to
-// configure a different project (e.g. one magusfile declaring several):
+// This directory is already a project — its magusfile registers it, and it runs
+// on defaults with no further ceremony. Customize only when you need to: call
+// magus.project with an options map to bind spells, declare outputs, or
+// add cross-project deps. Reach a built-in spell by importing it; it binds under
+// its basename. Pass an explicit path — configure("sub", {...}) — to configure a
+// different project (one magusfile declaring several):
 //
 //   import "magus/spell/go";
-//   magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({ "spells": [go] }); return true; });
-//
-magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
-    // "spells": [go],
-    // "outputs": ["bin/*", "dist/**"],
-    // "depends_on": ["../api"],
-}); return true; });
+//   magus.project({ "spells": [go], "outputs": ["bin/*"], "depends_on": ["../api"] });
 
 // Each exported function is a runnable target. Compose a stage by calling a bound
 // spell's tool-native op from its body, or run a command with os.exec

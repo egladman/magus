@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"math"
 
-	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // mathModule builds the "math" module matching Buzz's math reference:
 // https://buzz-lang.dev/0.5.0/reference/std/math.html
-func mathModule() buzz.Value {
+func mathModule() vm.Value {
 	m := mod()
-	m.MapSet("pi", buzz.FloatValue(math.Pi))
+	m.MapSet("pi", vm.FloatValue(math.Pi))
 	m.MapSet("abs", fn("math.abs", mathAbs))
 	m.MapSet("acos", fn("math.acos", mathUnary("math.acos", math.Acos)))
 	m.MapSet("asin", fn("math.asin", mathUnary("math.asin", math.Asin)))
@@ -55,7 +55,7 @@ func mathModule() buzz.Value {
 	return m
 }
 
-func toFloat(v buzz.Value, name string) (float64, error) {
+func toFloat(v vm.Value, name string) (float64, error) {
 	switch {
 	case v.IsFloat():
 		return v.AsFloat(), nil
@@ -66,115 +66,115 @@ func toFloat(v buzz.Value, name string) (float64, error) {
 	}
 }
 
-func mathUnary(name string, f func(float64) float64) func(context.Context, []buzz.Value) (buzz.Value, error) {
-	return func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathUnary(name string, f func(float64) float64) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 {
-			return buzz.Null, fmt.Errorf("%s: requires 1 argument", name)
+			return vm.Null, fmt.Errorf("%s: requires 1 argument", name)
 		}
 		x, err := toFloat(args[0], name)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.FloatValue(f(x)), nil
+		return vm.FloatValue(f(x)), nil
 	}
 }
 
-func mathBinaryFloat(name string, f func(float64, float64) float64) func(context.Context, []buzz.Value) (buzz.Value, error) {
-	return func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathBinaryFloat(name string, f func(float64, float64) float64) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 {
-			return buzz.Null, fmt.Errorf("%s: requires 2 arguments", name)
+			return vm.Null, fmt.Errorf("%s: requires 2 arguments", name)
 		}
 		a, err := toFloat(args[0], name)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
 		b, err := toFloat(args[1], name)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.FloatValue(f(a, b)), nil
+		return vm.FloatValue(f(a, b)), nil
 	}
 }
 
-func mathBinaryInt(name string, f func(int64, int64) int64) func(context.Context, []buzz.Value) (buzz.Value, error) {
-	return func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathBinaryInt(name string, f func(int64, int64) int64) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 {
-			return buzz.Null, fmt.Errorf("%s: requires 2 arguments", name)
+			return vm.Null, fmt.Errorf("%s: requires 2 arguments", name)
 		}
 		if !args[0].IsInt() || !args[1].IsInt() {
-			return buzz.Null, fmt.Errorf("%s: requires int arguments", name)
+			return vm.Null, fmt.Errorf("%s: requires int arguments", name)
 		}
-		return buzz.IntValue(f(args[0].AsInt(), args[1].AsInt())), nil
+		return vm.IntValue(f(args[0].AsInt(), args[1].AsInt())), nil
 	}
 }
 
-func mathAbs(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathAbs(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
-		return buzz.Null, fmt.Errorf("math.abs: requires 1 argument")
+		return vm.Null, fmt.Errorf("math.abs: requires 1 argument")
 	}
 	x, err := toFloat(args[0], "math.abs")
 	if err != nil {
-		return buzz.Null, err
+		return vm.Null, err
 	}
-	return buzz.FloatValue(math.Abs(x)), nil
+	return vm.FloatValue(math.Abs(x)), nil
 }
 
-func mathCeil(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathCeil(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
-		return buzz.Null, fmt.Errorf("math.ceil: requires 1 argument")
+		return vm.Null, fmt.Errorf("math.ceil: requires 1 argument")
 	}
 	x, err := toFloat(args[0], "math.ceil")
 	if err != nil {
-		return buzz.Null, err
+		return vm.Null, err
 	}
-	return buzz.IntValue(int64(math.Ceil(x))), nil
+	return vm.IntValue(int64(math.Ceil(x))), nil
 }
 
-func mathFloor(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathFloor(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
-		return buzz.Null, fmt.Errorf("math.floor: requires 1 argument")
+		return vm.Null, fmt.Errorf("math.floor: requires 1 argument")
 	}
 	x, err := toFloat(args[0], "math.floor")
 	if err != nil {
-		return buzz.Null, err
+		return vm.Null, err
 	}
-	return buzz.IntValue(int64(math.Floor(x))), nil
+	return vm.IntValue(int64(math.Floor(x))), nil
 }
 
 // mathLog computes log(base, n). Buzz's signature: fun log(double base, double n) > double.
-func mathLog(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathLog(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 2 {
-		return buzz.Null, fmt.Errorf("math.log: requires 2 arguments (base, n)")
+		return vm.Null, fmt.Errorf("math.log: requires 2 arguments (base, n)")
 	}
 	base, err := toFloat(args[0], "math.log")
 	if err != nil {
-		return buzz.Null, err
+		return vm.Null, err
 	}
 	n, err := toFloat(args[1], "math.log")
 	if err != nil {
-		return buzz.Null, err
+		return vm.Null, err
 	}
-	return buzz.FloatValue(math.Log(n) / math.Log(base)), nil
+	return vm.FloatValue(math.Log(n) / math.Log(base)), nil
 }
 
-func mathPow(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func mathPow(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 2 {
-		return buzz.Null, fmt.Errorf("math.pow: requires 2 arguments (x, y)")
+		return vm.Null, fmt.Errorf("math.pow: requires 2 arguments (x, y)")
 	}
 	x, err := toFloat(args[0], "math.pow")
 	if err != nil {
-		return buzz.Null, err
+		return vm.Null, err
 	}
 	y, err := toFloat(args[1], "math.pow")
 	if err != nil {
-		return buzz.Null, err
+		return vm.Null, err
 	}
 	result := math.Pow(x, y)
 	if math.IsInf(result, 1) {
-		return buzz.Null, fmt.Errorf("math.pow: overflow")
+		return vm.Null, fmt.Errorf("math.pow: overflow")
 	}
 	if result == 0 && (x != 0 || y >= 0) {
-		return buzz.Null, fmt.Errorf("math.pow: underflow")
+		return vm.Null, fmt.Errorf("math.pow: underflow")
 	}
-	return buzz.FloatValue(result), nil
+	return vm.FloatValue(result), nil
 }

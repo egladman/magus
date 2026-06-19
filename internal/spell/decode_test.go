@@ -109,8 +109,8 @@ func TestDecode_NameOnly(t *testing.T) {
 	assert.Nil(t, m.Ops)
 }
 
-// TestDecode_ForkOp verifies a fork op (cmd and args, no fn) populates the Target correctly.
-func TestDecode_ForkOp(t *testing.T) {
+// TestDecode_CommandOp verifies a fork op (cmd and args, no fn) populates the Target correctly.
+func TestDecode_CommandOp(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",
 		"ops": map[string]any{

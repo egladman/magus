@@ -468,6 +468,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
 	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   output format (text|json|yaml|name|wide|template=<go-template>)")
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
+	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
 	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        increase log verbosity (-v/-vv: debug; -vvv: trace)")
 	fmt.Fprintln(os.Stderr, "  --concurrency N      max parallel build steps (0 = config / MAGUS_CONCURRENCY / min(NumCPU,8))")
 	fmt.Fprintln(os.Stderr, "")

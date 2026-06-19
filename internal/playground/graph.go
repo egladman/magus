@@ -7,7 +7,7 @@
 //
 // A browser sandbox cannot fork processes or touch a filesystem, so a magusfile
 // is never executed for real here. Instead it is evaluated to the project graph
-// it builds (magus.project.register + exported target functions + depends_on
+// it builds (magus.project + exported target functions + depends_on
 // edges), and a target is "dry-run" to the ordered trace of host operations it
 // would invoke — mirroring `magus ls` / `magus run --dry-run`, never the tools.
 package playground
@@ -17,7 +17,7 @@ import (
 	"slices"
 )
 
-// Project is one magus.project.register(...) call, flattened to the fields the
+// Project is one magus.project(...) call, flattened to the fields the
 // playground surfaces.
 type Project struct {
 	Path      string   `json:"path"`

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	buzzeng "github.com/egladman/gopherbuzz"
+	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/audit"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/flake"
@@ -316,6 +316,9 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 					slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
 						slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("err", err.Error()))
 					probed = "UNPROBED"
+				} else {
+					slog.DebugContext(ctx, "magus: tool-version probe",
+						slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("version", probed))
 				}
 				v = probed
 				memo[key] = v
@@ -467,7 +470,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
 
-	ctx = buzzeng.WithPoolRegistry(ctx, m.buzzPoolRegistry())
+	ctx = buzz.WithPoolRegistry(ctx, m.buzzPoolRegistry())
 	// One coordinator per run so target-level cross-project deps (project imports)
 	// run their remote target at most once and detect cross-project cycles.
 	ctx = interp.WithCrossDispatch(ctx, interp.NewCrossDispatch())
@@ -499,7 +502,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	_, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
 		// Each step invocation gets a fresh TargetMemo so depends_on diamonds
 		// within one target's inline dispatch run shared deps exactly once.
-		ctx = buzzeng.WithTargetMemo(ctx, buzzeng.NewTargetMemo())
+		ctx = buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
 
 		p := byPath[s.ProjectPath]
 		handler := handlerOf[s.Target]

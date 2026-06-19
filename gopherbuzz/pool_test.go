@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	vmpackage "github.com/egladman/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ import (
 // to the ancestor's in-flight result and deadlock. The factory must never run —
 // the cycle is caught before any session is checked out.
 func TestDispatchRejectsCycleWithMemo(t *testing.T) {
-	p := newPool(func(context.Context) (*Session, map[string]Callable, error) {
+	p := newPool(func(context.Context) (*Session, map[string]vmpackage.Callable, error) {
 		t.Fatal("factory ran; the cycle should be caught before execution")
 		return nil, nil, nil
 	}, nil, 1)

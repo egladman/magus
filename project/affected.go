@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -56,6 +57,17 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 	}
 	closure := g.ReverseClosure(seed)
 	slices.Sort(closure)
+
+	// The affected-set derivation, end to end: the diff base, how many files
+	// changed, the projects that directly contain them (seed), and the dependency
+	// closure that selection expands to. The starting point for "why did magus run
+	// X?" (or "why didn't it run Y?"). -vv surfaces it.
+	slog.DebugContext(ctx, "affected: derived set",
+		slog.String("base", base),
+		slog.Int("changed_files", len(changed)),
+		slog.Any("seed", seed),
+		slog.Any("affected", closure),
+	)
 
 	return &types.AffectedResult{
 		Base:        base,

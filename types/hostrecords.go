@@ -4,7 +4,7 @@ package types
 // value a Go SDK caller gets and the serializable view a magusfile can annotate
 // (`> FileInfo`, `> HttpResponse`, …) for compile-checked field access. The host
 // Impl returns the struct; its Record method is the {field: value} map the
-// generated Buzz trampoline marshals (see hostbuzz.Recorder), so the Buzz boundary
+// generated Buzz trampoline marshals (see host.Recorder), so the Buzz boundary
 // is unchanged. The Buzz `object` mirrors are generated from these structs by
 // cmd/magus-types-gen (go:generate) and shipped in the magus/target module, so the
 // Go struct stays the single source of truth and struct, Record, and mirror can't
@@ -20,7 +20,7 @@ type FileInfo struct {
 }
 
 // Record is the Buzz boundary map fs.stat returns. The generated trampoline calls
-// it (see hostbuzz.Recorder) so a magusfile sees {size, mtime, mode, is_dir}.
+// it (see host.Recorder) so a magusfile sees {size, mtime, mode, is_dir}.
 func (fi FileInfo) Record() map[string]any {
 	return map[string]any{
 		"size":   fi.Size,

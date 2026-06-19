@@ -25,7 +25,7 @@ type Callable func(ctx context.Context, args []Value) (Value, error)
 
 // valueTag discriminates the kind of a Value.
 //
-// ultra-opt: a uint8 tag avoids the two-word interface dispatch of the old Val
+// optimization: a uint8 tag avoids the two-word interface dispatch of the old Val
 // interface. Immediate kinds (null/bool/int/float) carry their payload in num
 // and set obj=nil — zero GC allocation. Heap kinds carry one GC-visible pointer
 // in obj, allocated exactly once at value creation.
@@ -122,7 +122,7 @@ type listObj struct {
 // insertion order; M is a lazily-built key→index hash that exists only once
 // the map outgrows smallMapThreshold.
 //
-// ultra-opt: most maps and (especially) object field sets are tiny — a handful
+// optimization: most maps and (especially) object field sets are tiny — a handful
 //
 //	of keys — so the Go map's construction alloc and per-access hash are pure
 //	overhead. Below smallMapThreshold, set/get linear-scan Keys (a few string
@@ -539,7 +539,7 @@ func (v Value) Bool() bool {
 // --- mapObj helpers ---
 
 // newMapObj returns an empty mapObj. M is left nil: small maps linear-scan
-// (see mapObj's ultra-opt note) and the hash is built lazily on growth.
+// (see mapObj's optimization note) and the hash is built lazily on growth.
 func newMapObj() *mapObj { return &mapObj{} }
 
 // indexOf returns the slice index of key, or -1 if absent. It uses M when built

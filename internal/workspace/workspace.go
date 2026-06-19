@@ -7,7 +7,7 @@
 //
 //   - Import cycle: package magus imports internal/interp to evaluate magusfiles,
 //     and internal/interp's Buzz bindings build project options when Buzz code
-//     calls magus.project.register(...). Those option types cannot live in package
+//     calls magus.project(...). Those option types cannot live in package
 //     magus, and not in project either (the watch-ignore constructors need
 //     internal/file/watch, which already imports project).
 //   - Surface: Load and WithLimiter carry internal types (*config.Config,

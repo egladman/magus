@@ -3,7 +3,6 @@ package std
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"sync"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module vcs -lang buzz -out ../hostbuzz/gen/vcs.go
+//go:generate go run ../cmd/magus-bindings-gen -module vcs -lang buzz -out ../host/gen/vcs.go
 
 func init() { Register(Vcs) }
 
@@ -120,7 +119,7 @@ var (
 )
 
 func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
-	wd, err := os.Getwd()
+	wd, err := EffectiveCwd(ctx)
 	if err != nil {
 		wd = "."
 	}

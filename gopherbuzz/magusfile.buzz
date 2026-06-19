@@ -24,27 +24,24 @@ import "magus/spell/go";
 import "os";
 import "fs";
 
-magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool {
-    cb({
-        // The magusfile spell dispatches this file's custom export-fun targets
-        // (generate, md-generate, …); the go spell claims **/*.go and the module
-        // files. Listing spells explicitly replaces the default set, so magusfile
-        // must be named here or the custom targets won't run.
-        "spells": [magusfile, go],
-        // MAGUS.md is the generated target catalog; the cache snapshots it after
-        // generate so a hit restores it without re-describing.
-        "outputs": ["MAGUS.md"],
-        "targets": {
-            // pgo-generate writes a fresh, non-deterministic profile from the live VM; a
-            // cache hit would replay a stale one instead of re-sampling, so it must run
-            // every time it's invoked.
-            "pgo-generate": {"skipCache": true},
-            // generate drift-gates MAGUS.md, so it inspects `git status`: run alone
-            // (exclusive) and every time (skipCache: true), mirroring the root project.
-            "generate": {"skipCache": true, "exclusive": true},
-        },
-    });
-    return true;
+magus.project({
+    // The magusfile spell dispatches this file's custom export-fun targets
+    // (generate, md-generate, …); the go spell claims **/*.go and the module
+    // files. Listing spells explicitly replaces the default set, so magusfile
+    // must be named here or the custom targets won't run.
+    "spells": [magusfile, go],
+    // MAGUS.md is the generated target catalog; the cache snapshots it after
+    // generate so a hit restores it without re-describing.
+    "outputs": ["MAGUS.md"],
+    "targets": {
+        // pgo-generate writes a fresh, non-deterministic profile from the live VM; a
+        // cache hit would replay a stale one instead of re-sampling, so it must run
+        // every time it's invoked.
+        "pgo-generate": {"skipCache": true},
+        // generate drift-gates MAGUS.md, so it inspects `git status`: run alone
+        // (exclusive) and every time (skipCache: true), mirroring the root project.
+        "generate": {"skipCache": true, "exclusive": true},
+    },
 });
 
 // ── targets ──────────────────────────────────────────────────────────────────

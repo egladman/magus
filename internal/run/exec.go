@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -96,6 +97,12 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	} else {
 		c.Stdout, c.Stderr = outW, errW
 	}
+
+	// The single record of every subprocess magus spawns, with the directory it
+	// runs in — the first thing to reach for when a target behaves differently
+	// than its command run by hand. dir is the resolved subprocess cwd ("" inherits
+	// the process cwd).
+	slog.DebugContext(ctx, "run.exec", "cmd", name, "args", args, "dir", c.Dir)
 
 	runErr := c.Run()
 	if ctx.Err() != nil {

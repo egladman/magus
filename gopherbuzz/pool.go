@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"slices"
 	"sync"
+
+	vmpackage "github.com/egladman/gopherbuzz/vm"
 )
 
 // Semaphore is the concurrency budget the pool draws from. *cache.Limiter
@@ -21,7 +23,7 @@ type Semaphore interface {
 
 // WorkerFunc creates a pre-warmed Buzz session and target map for the pool.
 // The session is owned by the pool worker and must not be used concurrently.
-type WorkerFunc func(ctx context.Context) (*Session, map[string]Callable, error)
+type WorkerFunc func(ctx context.Context) (*Session, map[string]vmpackage.Callable, error)
 
 // TargetMemo is a per-invocation run-once tracker. It ensures a target executes
 // at most once within one top-level dispatch, even when concurrent `depends_on`
@@ -106,7 +108,7 @@ type Pool struct {
 
 type poolWorker struct {
 	sess    *Session
-	targets map[string]Callable
+	targets map[string]vmpackage.Callable
 }
 
 // PoolRegistry maps string keys to per-source Pools. Safe for concurrent use.

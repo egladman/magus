@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // execBuffer runs src against a session with the std library registered and
 // returns its globals. The src exercises the upstream-compatible Buffer Zig API.
-func execBuffer(t *testing.T, src string) map[string]buzz.Value {
+func execBuffer(t *testing.T, src string) map[string]vm.Value {
 	t.Helper()
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()

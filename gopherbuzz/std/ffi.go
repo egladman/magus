@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // ffiModule builds the "ffi" module.
@@ -30,15 +31,15 @@ import (
 //
 // read/write operate only on memory ffi.alloc returned (bounds-checked); see
 // vm/ffi_mem.go for why dereferencing a foreign address is deliberately excluded.
-func ffiModule() buzz.Value {
+func ffiModule() vm.Value {
 	m := mod()
 
 	// cstr mirrors upstream's ffi.cstr. In this embedding a Buzz str is already a
 	// valid null-terminated char* at the zdef boundary, so cstr is the identity —
 	// kept so scripts written against upstream Buzz still parse and run.
-	m.MapSet("cstr", fn("ffi.cstr", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("cstr", fn("ffi.cstr", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsStr() {
-			return buzz.Null, fmt.Errorf("ffi.cstr: requires a str argument")
+			return vm.Null, fmt.Errorf("ffi.cstr: requires a str argument")
 		}
 		return args[0], nil
 	}))
@@ -46,19 +47,19 @@ func ffiModule() buzz.Value {
 	// callback(fn, retType, paramTypes): wrap a Buzz function as a C function
 	// pointer (returned as an int address) to pass where C expects a callback —
 	// e.g. the comparator of qsort. The matching zdef parameter is declared void*.
-	m.MapSet("callback", fn("ffi.callback", func(ctx context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("callback", fn("ffi.callback", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 3 || !args[0].IsFun() || !args[1].IsStr() || !args[2].IsList() {
-			return buzz.Null, fmt.Errorf("ffi.callback: requires (fun fn, str retType, [str] paramTypes)")
+			return vm.Null, fmt.Errorf("ffi.callback: requires (fun fn, str retType, [str] paramTypes)")
 		}
 		params, err := stringList("ffi.callback paramTypes", args[2:])
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
 		addr, err := buzz.MakeCallback(ctx, args[0], args[1].AsString(), params)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.IntValue(int64(addr)), nil
+		return vm.IntValue(int64(addr)), nil
 	}))
 
 	m.MapSet("sizeOf", fn("ffi.sizeOf", typeMetric("ffi.sizeOf", func(size, _ int) int { return size })))
@@ -69,52 +70,52 @@ func ffiModule() buzz.Value {
 
 	// structLayout returns {size, align, offsets} so a script can place each field
 	// at its correct C offset inside an alloc block.
-	m.MapSet("structLayout", fn("ffi.structLayout", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("structLayout", fn("ffi.structLayout", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		fields, err := stringList("ffi.structLayout", args)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
 		size, align, offsets, err := buzz.StructLayout(fields)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		offVals := make([]buzz.Value, len(offsets))
+		offVals := make([]vm.Value, len(offsets))
 		for i, o := range offsets {
-			offVals[i] = buzz.IntValue(int64(o))
+			offVals[i] = vm.IntValue(int64(o))
 		}
-		out := buzz.NewMap()
-		out.MapSet("size", buzz.IntValue(int64(size)))
-		out.MapSet("align", buzz.IntValue(int64(align)))
-		out.MapSet("offsets", buzz.ListValue(offVals))
+		out := vm.NewMap()
+		out.MapSet("size", vm.IntValue(int64(size)))
+		out.MapSet("align", vm.IntValue(int64(align)))
+		out.MapSet("offsets", vm.ListValue(offVals))
 		return out, nil
 	}))
 
-	m.MapSet("alloc", fn("ffi.alloc", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("alloc", fn("ffi.alloc", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsInt() {
-			return buzz.Null, fmt.Errorf("ffi.alloc: requires an int size argument")
+			return vm.Null, fmt.Errorf("ffi.alloc: requires an int size argument")
 		}
 		addr, err := buzz.AllocFFI(int(args[0].AsInt()))
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.IntValue(int64(addr)), nil
+		return vm.IntValue(int64(addr)), nil
 	}))
 
-	m.MapSet("free", fn("ffi.free", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("free", fn("ffi.free", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsInt() {
-			return buzz.Null, fmt.Errorf("ffi.free: requires an int address argument")
+			return vm.Null, fmt.Errorf("ffi.free: requires an int address argument")
 		}
 		if err := buzz.FreeFFI(uintptr(args[0].AsInt())); err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.Null, nil
+		return vm.Null, nil
 	}))
 
 	// write(addr, offset, ctype, value): store a scalar. float/double read value
 	// as a float; every other type reads it as an int.
-	m.MapSet("write", fn("ffi.write", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("write", fn("ffi.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 4 || !args[0].IsInt() || !args[1].IsInt() || !args[2].IsStr() {
-			return buzz.Null, fmt.Errorf("ffi.write: requires (int addr, int offset, str ctype, value)")
+			return vm.Null, fmt.Errorf("ffi.write: requires (int addr, int offset, str ctype, value)")
 		}
 		addr := uintptr(args[0].AsInt())
 		offset := int(args[1].AsInt())
@@ -131,19 +132,19 @@ func ffiModule() buzz.Value {
 		case val.IsInt():
 			i = val.AsInt()
 		default:
-			return buzz.Null, fmt.Errorf("ffi.write: value for %q must be %s", ctype, numKind(isFloat))
+			return vm.Null, fmt.Errorf("ffi.write: value for %q must be %s", ctype, numKind(isFloat))
 		}
 		if err := buzz.WriteScalar(addr, offset, ctype, i, f, isFloat); err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.Null, nil
+		return vm.Null, nil
 	}))
 
 	// read(addr, offset, ctype): load a scalar, returning float for float/double
 	// and int otherwise.
-	m.MapSet("read", fn("ffi.read", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("read", fn("ffi.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 3 || !args[1].IsInt() || !args[2].IsStr() {
-			return buzz.Null, fmt.Errorf("ffi.read: requires (addr, int offset, str ctype)")
+			return vm.Null, fmt.Errorf("ffi.read: requires (addr, int offset, str ctype)")
 		}
 		var addr uintptr
 		switch {
@@ -152,20 +153,20 @@ func ffiModule() buzz.Value {
 		case args[0].IsInt():
 			addr = uintptr(args[0].AsInt())
 		default:
-			return buzz.Null, fmt.Errorf("ffi.read: addr must be an int or ud")
+			return vm.Null, fmt.Errorf("ffi.read: addr must be an int or ud")
 		}
 		ctype := args[2].AsString()
 		i, f, isFloat, err := buzz.ReadScalar(addr, int(args[1].AsInt()), ctype)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
 		if isFloat {
-			return buzz.FloatValue(f), nil
+			return vm.FloatValue(f), nil
 		}
 		if buzz.IsPointerCType(ctype) {
-			return buzz.UDValue(uintptr(uint64(i))), nil
+			return vm.UDValue(uintptr(uint64(i))), nil
 		}
-		return buzz.IntValue(i), nil
+		return vm.IntValue(i), nil
 	}))
 
 	return m
@@ -180,37 +181,37 @@ func numKind(isFloat bool) string {
 
 // typeMetric adapts ffi.sizeOf / ffi.alignOf: each takes one C type-name string
 // and returns the chosen layout metric.
-func typeMetric(name string, pick func(size, align int) int) func(context.Context, []buzz.Value) (buzz.Value, error) {
-	return func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func typeMetric(name string, pick func(size, align int) int) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsStr() {
-			return buzz.Null, fmt.Errorf("%s: requires a C type name str (e.g. \"int\", \"double\", \"char*\"); FFI here is C-ABI, not Zig", name)
+			return vm.Null, fmt.Errorf("%s: requires a C type name str (e.g. \"int\", \"double\", \"char*\"); FFI here is C-ABI, not Zig", name)
 		}
 		size, align, ok := buzz.CTypeLayout(args[0].AsString())
 		if !ok {
-			return buzz.Null, fmt.Errorf("%s: unknown C type %q", name, args[0].AsString())
+			return vm.Null, fmt.Errorf("%s: unknown C type %q", name, args[0].AsString())
 		}
-		return buzz.IntValue(int64(pick(size, align))), nil
+		return vm.IntValue(int64(pick(size, align))), nil
 	}
 }
 
 // structMetric adapts ffi.sizeOfStruct / ffi.alignOfStruct: each takes a list of
 // C field type-name strings.
-func structMetric(name string, pick func(size, align int) int) func(context.Context, []buzz.Value) (buzz.Value, error) {
-	return func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func structMetric(name string, pick func(size, align int) int) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		fields, err := stringList(name, args)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
 		size, align, _, err := buzz.StructLayout(fields)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.IntValue(int64(pick(size, align))), nil
+		return vm.IntValue(int64(pick(size, align))), nil
 	}
 }
 
 // stringList reads the first argument as a list of C type-name strings.
-func stringList(name string, args []buzz.Value) ([]string, error) {
+func stringList(name string, args []vm.Value) ([]string, error) {
 	if len(args) < 1 || !args[0].IsList() {
 		return nil, fmt.Errorf("%s: requires a [str] list of C field type names", name)
 	}

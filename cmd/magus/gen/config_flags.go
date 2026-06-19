@@ -53,6 +53,7 @@ var ConfigFlags = []ConfigFlag{
 	{"", "MAGUS_REPORT_FILTER", "stringslice"},
 	{"log-format", "MAGUS_LOG_FORMAT", "string"},
 	{"log-level", "MAGUS_LOG_LEVEL", "string"},
+	{"", "MAGUS_LOG_SILENT", "boolptr"},
 	{"", "MAGUS_HINTS_ENABLED", "boolptr"},
 	{"concurrency", "MAGUS_CONCURRENCY", "int"},
 	{"history-path", "MAGUS_HISTORY_PATH", "string"},

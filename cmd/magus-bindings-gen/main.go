@@ -1,7 +1,7 @@
 // Command magus-bindings-gen emits per-VM trampoline code from std.Module
 // declarations. Run via `go generate` from each module's source file:
 //
-//	//go:generate go run ../../cmd/magus-bindings-gen -module fs -lang buzz -out ../hostbuzz/gen/fs.go
+//	//go:generate go run ../../cmd/magus-bindings-gen -module fs -lang buzz -out ../host/gen/fs.go
 //
 // The generated file registers the module's methods on a backend Session by
 // decoding args, calling the Impl in the host package, and encoding results.
@@ -16,7 +16,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/egladman/magus/hostbuzz"
+	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/std"
 )
 
@@ -88,17 +88,17 @@ func goLiteral(v any) string {
 }
 
 // emitBuzz emits the Buzz trampolines for module m into package gen
-// (magus/hostbuzz/gen). It emits one Register<Module>(ctx, sess) that builds a
+// (magus/host/gen). It emits one Register<Module>(ctx, sess) that builds a
 // buzz map of DirectValue closures; Buzz closures return (Value, error) natively,
 // so host errors propagate as a Buzz runtime error instead of a panic. Method
 // names stay snake_case to match the magusfile DSL; multi-return Impls yield a list.
 //
 // This emits directly against the concrete magus/gopherbuzz value system, calling
-// the marshalling helpers in the parent hostbuzz package; see the registerAllBuzz
+// the marshalling helpers in the parent host package; see the registerAllBuzz
 // doc in interp/bindings/buzz.go for the full rationale.
 func emitBuzz(m std.Module) ([]byte, error) {
 	// Build the func body first, then derive the import set from what it uses:
-	// std (Impls/resolvers) and hostbuzz (marshalling) appear only when the module
+	// std (Impls/resolvers) and host (marshalling) appear only when the module
 	// has matching content, so a no-op import can't sneak in.
 	var body bytes.Buffer
 
@@ -107,10 +107,10 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	if m.Doc != "" {
 		fmt.Fprintf(&body, "// %s\n", m.Doc)
 	}
-	fmt.Fprintf(&body, "func %s(ctx context.Context, sess *buzz.Session) buzz.Value {\n", regFn)
+	fmt.Fprintf(&body, "func %s(ctx context.Context, sess *buzz.Session) vm.Value {\n", regFn)
 	fmt.Fprintln(&body, "\t_ = ctx")
 	fmt.Fprintln(&body, "\t_ = sess")
-	fmt.Fprintln(&body, "\tm := buzz.NewMap()")
+	fmt.Fprintln(&body, "\tm := vm.NewMap()")
 
 	for _, f := range m.Fields {
 		emitBuzzField(&body, f)
@@ -131,8 +131,9 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&b, `	"context"`)
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	buzz "github.com/egladman/gopherbuzz"`)
-	if bytes.Contains(body.Bytes(), []byte("hostbuzz.")) {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/hostbuzz"`)
+	fmt.Fprintln(&b, `	vm "github.com/egladman/gopherbuzz/vm"`)
+	if bytes.Contains(body.Bytes(), []byte("host.")) {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/host"`)
 	}
 	if bytes.Contains(body.Bytes(), []byte("std.")) {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/std"`)
@@ -153,11 +154,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 // is snake_case.
 func emitBuzzField(w *bytes.Buffer, f std.Field) {
 	callArgs := ""
-	if hostbuzz.FieldResolverTakesCtx(f) {
+	if host.FieldResolverTakesCtx(f) {
 		callArgs = "ctx"
 	}
-	fmt.Fprintf(w, "\tif v, err := std.%s(%s); err == nil {\n", hostbuzz.FieldFuncName(f), callArgs)
-	fmt.Fprintf(w, "\t\tm.MapSet(%q, %s)\n", hostbuzz.CamelCase(f.Name), buzzValConv(f.Type, "v"))
+	fmt.Fprintf(w, "\tif v, err := std.%s(%s); err == nil {\n", host.FieldFuncName(f), callArgs)
+	fmt.Fprintf(w, "\t\tm.MapSet(%q, %s)\n", host.CamelCase(f.Name), buzzValConv(f.Type, "v"))
 	fmt.Fprintln(w, "\t}")
 }
 
@@ -166,8 +167,11 @@ func emitBuzzField(w *bytes.Buffer, f std.Field) {
 // key is camelCased to match Buzz's convention (the snake_case descriptor name
 // stays the runtime label so errors still read e.g. "fs.readFile").
 func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method) {
-	name := hostbuzz.CamelCase(meth.Name)
-	fmt.Fprintf(w, "\tm.MapSet(%q, buzz.DirectValue(%q, func(ctx context.Context, bzArgs []buzz.Value) (buzz.Value, error) {\n",
+	name := host.CamelCase(meth.Name)
+	if meth.BuzzName != "" {
+		name = meth.BuzzName
+	}
+	fmt.Fprintf(w, "\tm.MapSet(%q, vm.DirectValue(%q, func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {\n",
 		name, m.Name+"."+name)
 
 	for i, a := range meth.Args {
@@ -187,14 +191,14 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method) {
 
 	switch len(meth.Returns) {
 	case 0:
-		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", hostbuzz.MethodFuncName(meth), callStr)
-		fmt.Fprintln(w, "\t\t\treturn buzz.Null, err")
+		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", host.MethodFuncName(meth), callStr)
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
 		fmt.Fprintln(w, "\t\t}")
-		fmt.Fprintln(w, "\t\treturn buzz.Null, nil")
+		fmt.Fprintln(w, "\t\treturn vm.Null, nil")
 	case 1:
-		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", hostbuzz.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", host.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn buzz.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
 		fmt.Fprintln(w, "\t\t}")
 		fmt.Fprintf(w, "\t\treturn %s, nil\n", returnConv(meth.Returns[0].Type, reflect.TypeOf(meth.Impl).Out(0), "ret0"))
 	default:
@@ -203,15 +207,15 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method) {
 			lhsParts = append(lhsParts, fmt.Sprintf("ret%d", i))
 		}
 		lhsParts = append(lhsParts, "err")
-		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), hostbuzz.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), host.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn buzz.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
 		fmt.Fprintln(w, "\t\t}")
 		items := make([]string, len(meth.Returns))
 		for i, ret := range meth.Returns {
 			items[i] = buzzValConv(ret.Type, fmt.Sprintf("ret%d", i))
 		}
-		fmt.Fprintf(w, "\t\treturn buzz.ListValue([]buzz.Value{%s}), nil\n", strings.Join(items, ", "))
+		fmt.Fprintf(w, "\t\treturn vm.ListValue([]vm.Value{%s}), nil\n", strings.Join(items, ", "))
 	}
 	fmt.Fprintln(w, "\t}))")
 }
@@ -220,45 +224,45 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method) {
 func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 	if a.Variadic {
 		// Only TypeString variadic is used in practice.
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.VariadicStr(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.VariadicStr(bzArgs, %d)\n", a.Name, idx)
 		return
 	}
 	switch a.Type {
 	case std.TypeString:
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.Str(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.Str(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeInt:
 		def := "0"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.Int(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := host.Int(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeFloat:
 		def := "0"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.Float(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := host.Float(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeIndex:
 		// Buzz lists are 0-based, matching the Go Impl — no offset.
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.Int(bzArgs, %d, 0)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.Int(bzArgs, %d, 0)\n", a.Name, idx)
 	case std.TypeBool:
 		def := "false"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := host.Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeStringSlice:
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.StrSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.StrSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringMap:
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.StrMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.StrMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.AnyMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.AnyMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeFunc:
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAny:
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.Any(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := host.Any(bzArgs, %d)\n", a.Name, idx)
 	default:
-		fmt.Fprintf(w, "\t\t%s := hostbuzz.Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
+		fmt.Fprintf(w, "\t\t%s := host.Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
 	}
 }
 
@@ -266,42 +270,42 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 var recorderType = reflect.TypeOf((*interface{ Record() map[string]any })(nil)).Elem()
 
 // returnConv returns the Go expression that converts a method's single return
-// (src) to a buzz.Value. When the Impl returns a typed record (or a slice of
+// (src) to a vm.Value. When the Impl returns a typed record (or a slice of
 // them) — i.e. its Go type implements Record — it marshals via Record so the Buzz
 // boundary stays the same map a magusfile reads, while the Go SDK gets the struct.
 // Otherwise it falls back to the TypeTag-driven conversion.
 func returnConv(tag std.TypeTag, goType reflect.Type, src string) string {
 	switch {
 	case goType.Implements(recorderType):
-		return "hostbuzz.AnyMapVal(" + src + ".Record())"
+		return "host.AnyMapVal(" + src + ".Record())"
 	case goType.Kind() == reflect.Slice && goType.Elem().Implements(recorderType):
-		return "hostbuzz.RecordsVal(" + src + ")"
+		return "host.RecordsVal(" + src + ")"
 	default:
 		return buzzValConv(tag, src)
 	}
 }
 
 // buzzValConv returns the Go expression that converts src (of the given
-// TypeTag) to a buzz.Value.
+// TypeTag) to a vm.Value.
 func buzzValConv(t std.TypeTag, src string) string {
 	switch t {
 	case std.TypeString:
-		return fmt.Sprintf("hostbuzz.StrVal(%s)", src)
+		return fmt.Sprintf("host.StrVal(%s)", src)
 	case std.TypeInt, std.TypeIndex:
-		return fmt.Sprintf("hostbuzz.IntVal(%s)", src)
+		return fmt.Sprintf("host.IntVal(%s)", src)
 	case std.TypeBool:
-		return fmt.Sprintf("hostbuzz.BoolVal(%s)", src)
+		return fmt.Sprintf("host.BoolVal(%s)", src)
 	case std.TypeFloat:
-		return fmt.Sprintf("hostbuzz.FloatVal(%s)", src)
+		return fmt.Sprintf("host.FloatVal(%s)", src)
 	case std.TypeStringSlice:
-		return fmt.Sprintf("hostbuzz.StrSliceVal(%s)", src)
+		return fmt.Sprintf("host.StrSliceVal(%s)", src)
 	case std.TypeStringMap:
-		return fmt.Sprintf("hostbuzz.StrMapVal(%s)", src)
+		return fmt.Sprintf("host.StrMapVal(%s)", src)
 	case std.TypeAnyMap:
-		return fmt.Sprintf("hostbuzz.AnyMapVal(%s)", src)
+		return fmt.Sprintf("host.AnyMapVal(%s)", src)
 	case std.TypeAny:
-		return fmt.Sprintf("hostbuzz.AnyVal(%s)", src)
+		return fmt.Sprintf("host.AnyVal(%s)", src)
 	default:
-		return fmt.Sprintf("hostbuzz.StrVal(%s)", src)
+		return fmt.Sprintf("host.StrVal(%s)", src)
 	}
 }

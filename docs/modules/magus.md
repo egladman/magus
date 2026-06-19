@@ -28,3 +28,15 @@ Invalidate the build cache. Escape hatch — prefer modeling missing inputs as S
 |-----------|------|----------|-------------|
 | `project_path` | `string` | yes | |
 
+### `has_charm`
+
+True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm("rw")).
+
+**Signature:** `magus.has_charm(name) → bool`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` |  | |
+
+**Returns:** bool
+

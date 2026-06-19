@@ -51,7 +51,7 @@ func TestStepHookLines(t *testing.T) {
 	defer s.Close()
 
 	var lines []int
-	s.SetStepHook(MaskLine, func(ev StepEvent, f DebugFrame) {
+	s.SetStepHook(vmpackage.MaskLine, func(ev vmpackage.StepEvent, f vmpackage.DebugFrame) {
 		if ev == vmpackage.StepLine {
 			lines = append(lines, f.Line)
 		}
@@ -78,10 +78,10 @@ func TestFramesAndLocals(t *testing.T) {
 		"}\n" + // 4
 		"final res = inner(21)\n" // 5
 
-	var frames []DebugFrame
-	var innerLocal Value
+	var frames []vmpackage.DebugFrame
+	var innerLocal vmpackage.Value
 	var captured bool
-	s.SetStepHook(MaskLine, func(ev StepEvent, f DebugFrame) {
+	s.SetStepHook(vmpackage.MaskLine, func(ev vmpackage.StepEvent, f vmpackage.DebugFrame) {
 		// Stop at line 3 (return), by which point `doubled` is assigned.
 		if captured || f.Line != 3 || f.Name != "inner" {
 			return

@@ -12,7 +12,7 @@ import "std";
 // handles (gopherbuzz.build), referenced from build_playground below.
 import "project/../gopherbuzz" as gopherbuzz;
 
-magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
+magus.project({
     "outputs": ["gen/**", "MAGUS.md"],
     // The cross-project dependency on gopherbuzz is declared via the project import
     // above (build_playground uses gopherbuzz.build); magus folds that into this
@@ -30,7 +30,7 @@ magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
         // interpreter or playground host changes (TinyGo is not a CI tool).
         "build-playground": {"skipCache": true},
     },
-}); return true; });
+});
 
 final ROOT = "..";          // the magus/ workspace dir, relative to this project
 final DOCS = "docs";        // source docs subtree under ROOT
@@ -265,7 +265,6 @@ fun site_render() > void {
 
     // Copy static assets referenced by the root README (images, badges).
     os.execute(["sh", "-c", "[ -d " + ROOT + "/assets ] && cp -r " + ROOT + "/assets " + OUT + "/ || true"]);
-    os.execute(["sh", "-c", "[ -f " + ROOT + "/coverage.svg ] && cp " + ROOT + "/coverage.svg " + OUT + "/ || true"]);
 
     // Copy the WebAssembly playground — the editor page plus the committed
     // buzz.wasm and its TinyGo glue. These are source artifacts of this project

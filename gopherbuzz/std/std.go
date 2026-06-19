@@ -27,6 +27,7 @@ import (
 	"os"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // Register installs every std module on sess. std.print writes to os.Stdout;
@@ -50,8 +51,8 @@ func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
 	sess.SetSyntheticModule("ffi", ffiModule())
 }
 
-func fn(name string, f func(context.Context, []buzz.Value) (buzz.Value, error)) buzz.Value {
-	return buzz.DirectValue(name, f)
+func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
+	return vm.DirectValue(name, f)
 }
 
-func mod() buzz.Value { return buzz.NewMap() }
+func mod() vm.Value { return vm.NewMap() }

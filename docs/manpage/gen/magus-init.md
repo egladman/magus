@@ -28,9 +28,6 @@ The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
 **--global**
 : Write only the global config; skip the workspace bootstrap
 
-**--lang** *string* (default: teal)
-: Magusfile language to scaffold (teal|buzz)
-
 **--local**
 : Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/
 

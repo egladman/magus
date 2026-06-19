@@ -83,7 +83,7 @@ export fun build(args: [str]) > void {
 }
 
 // TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
-// end-to-end: the magus-bindings-gen-emitted hostbuzz/gen trampolines must decode a variadic
+// end-to-end: the magus-bindings-gen-emitted host/gen trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
 // charm.append), with camelCase methods (Buzz's convention).
@@ -514,4 +514,43 @@ magus.target.new("build", fun(args: [str]) void {});
 `), 0o644))
 	err := runTarget(t, dir, "build")
 	assert.Error(t, err, "expected an error when using magus.target.new in buzz")
+}
+
+// TestRunRelativeFsResolvesToProjectDir verifies the chdir->ctx-cwd change: a
+// magusfile target running from a process cwd that is NOT the project dir still
+// resolves relative filesystem paths (read/write/mkdir/glob/copy/walk) against
+// the project dir, and glob/walk return paths relative to it. This is the
+// regression guard for the deserialization that removed os.Chdir.
+func TestRunRelativeFsResolvesToProjectDir(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun build(args: [str]) > void {
+    fs.mkdirall("sub");
+    fs.writeFile("sub/a.txt", "alpha");
+    fs.copyFile("sub/a.txt", "sub/b.txt");
+    // glob must return paths relative to the project dir, sorted.
+    var hits = fs.glob("sub/*.txt");
+    var acc = "";
+    var first = true;
+    foreach (h in hits) {
+        if (!first) { acc = acc + ","; }
+        acc = acc + h;
+        first = false;
+    }
+    fs.writeFile("glob.out", acc);
+}
+`)
+	require.NoError(t, runTarget(t, dir, "build"))
+
+	// Files landed in the project dir, not the process cwd.
+	for _, rel := range []string{"sub/a.txt", "sub/b.txt", "glob.out"} {
+		_, err := os.Stat(filepath.Join(dir, rel))
+		require.NoErrorf(t, err, "%s not created in project dir", rel)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "glob.out"))
+	require.NoError(t, err)
+	// Relative, sorted — not absolute paths.
+	assert.Equal(t, "sub/a.txt,sub/b.txt", string(got))
 }

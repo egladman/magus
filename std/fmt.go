@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module fmt -lang buzz -out ../hostbuzz/gen/fmt.go
+//go:generate go run ../cmd/magus-bindings-gen -module fmt -lang buzz -out ../host/gen/fmt.go
 
 func init() { Register(Fmt) }
 

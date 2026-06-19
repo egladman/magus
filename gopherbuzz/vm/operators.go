@@ -13,7 +13,7 @@ import (
 )
 
 // arith evaluates +, -, *, /, % with Buzz's numeric promotion rules.
-// ultra-opt: int+int fast path avoids float promotion for the hot case.
+// optimization: int+int fast path avoids float promotion for the hot case.
 // measured: eliminates conditional float-check on every arithmetic op.
 // trade-off: code slightly longer; branch predictor handles it well.
 // assumes: tagInt and tagFloat are distinct (value.go invariant).
@@ -101,7 +101,7 @@ func floatArith(op OpCode, a, b float64) (Value, error) {
 // their own single-op float path (the op is statically known there); this helper
 // exists only where the sub-opcode is a runtime value.
 //
-// ultra-opt: collapses the float arithmetic/compare dispatch the fused ops
+// optimization: collapses the float arithmetic/compare dispatch the fused ops
 //
 //	otherwise pay via applyBinop→arith→asNumeric×2→floatArith. The float kernels
 //	(Mandelbrot, NBody) drive their inner-loop locals through the fused ops, so

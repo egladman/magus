@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
-	_ "github.com/egladman/magus/internal/interp/bindings" // init() wires the magus host bindings (magus.project.register, etc.)
+	_ "github.com/egladman/magus/internal/interp/bindings" // init() wires the magus host bindings (magus.project, etc.)
 	"github.com/egladman/magus/internal/interp/engine"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/stretchr/testify/assert"
@@ -111,9 +111,9 @@ func TestIntegration_ProjectRegister(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	content := `
 import "magus";
-magus.project.register(".", fun(p: any, cb: fun(m: any) > void) > bool { cb({
+magus.project(".", {
     "outputs": ["bin/*"],
-}); return true; });
+});
 export fun build(args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))

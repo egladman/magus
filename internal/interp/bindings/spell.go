@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -13,6 +12,7 @@ import (
 
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -87,65 +87,81 @@ func newVersionProbe(argv []string) func(context.Context, string) (string, error
 	}
 }
 
-// newCommandRenderer returns the fork-command preview used by `magus describe`:
-// for a fork target it reports cmd plus the argv as reshaped by the active charms
-// (the same resolveCharmArgs the runtime uses), executing nothing. A function-op
-// target (Func set) or a no-op (empty Cmd) returns ok=false — there is no static
-// command to show.
+// handlerFn invokes a named in-VM spell function for a request. Built-in spells
+// have no script body and pass nil, which makes a handler op a no-op.
+type handlerFn func(ctx context.Context, fn string, req types.InvokeRequest) (any, error)
+
+// newCommandRenderer returns the command preview used by `magus describe`: for a
+// command op it reports cmd plus the argv as reshaped by the active charms,
+// executing nothing. A handler op or a no-op (empty Cmd) returns ok=false — there
+// is no static command to show.
 func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string) (string, []string, bool) {
 	return func(target string, charms []string) (string, []string, bool) {
-		tgt, ok := targets[target]
-		if !ok || tgt.Func != "" || tgt.Cmd == "" {
+		op, ok := targets[target]
+		if !ok || op.Kind() != types.OpCommand || op.Cmd == "" {
 			return "", nil, false
 		}
-		args, err := resolveCharmArgs(types.WithCharms(context.Background(), charms), tgt.Args, tgt.Charms)
+		args, err := resolveCharmArgs(types.WithCharms(context.Background(), charms), op.Args, op.Charms)
 		if err != nil {
 			return "", nil, false
 		}
-		return tgt.Cmd, args, true
+		return op.Cmd, args, true
 	}
+}
+
+// noResult is the invoker's no-op outcome — no Data, no error — for a request that
+// fans out to a spell with nothing to contribute: an unknown target, or a handler
+// op on a built-in spell (no script body to run). nil Data is an ordinary invoker
+// result (a command op returns it on success too; see types.Spell.Invoke), so this
+// is a real result rather than a sentinel — the helper names the intent and keeps
+// the nilnil suppression in one documented place.
+func noResult() (any, error) {
+	return nil, nil //nolint:nilnil // documented invoker no-op: nil Data, nil error
 }
 
 // dispatchOp is the single op-dispatch bridge between the magus host and the Buzz
-// interpreter. The priority is fixed and the same everywhere: prefer an op's
-// NATIVE in-VM function (Func) when a script body exists to run it, otherwise fall
-// back to FORKING its command (Cmd). runFn runs a named function-op against the
-// spell's script body and is nil for built-in spells — they have no body, so their
-// function-ops are a graceful no-op. An unknown target is also a no-op, matching
-// the fan-out-and-skip dispatch model.
-func dispatchOp(ctx context.Context, ops map[string]types.SpellOp, req types.InvokeRequest,
-	runFn func(ctx context.Context, fn string, req types.InvokeRequest) (any, error),
-) (any, error) {
-	tgt, ok := ops[req.Target]
+// interpreter. It resolves the request's target to a [types.SpellOp] and runs it by
+// its [types.OpKind]: an OpCommand runs the declared command as a subprocess; an
+// OpHandler invokes the in-VM function via run (nil for built-ins, so their handler
+// ops no-op). An unknown target is also a no-op, matching the fan-out-and-skip
+// dispatch model.
+func dispatchOp(ctx context.Context, ops map[string]types.SpellOp, req types.InvokeRequest, run handlerFn) (any, error) {
+	op, ok := ops[req.Target]
 	if !ok {
-		//nolint:nilnil // invoker no-op: an unknown target produces no Data and no error (fan-out-and-skip)
-		return nil, nil
+		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
+		return noResult()
 	}
-	if tgt.Func != "" {
-		if runFn == nil {
-			//nolint:nilnil // invoker no-op: built-in has no script body for a function-op
-			return nil, nil
+	switch op.Kind() {
+	case types.OpCommand:
+		slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Cmd, "dir", req.Dir)
+		_, err := runCommand(ctx, op, commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
+		return nil, err
+	case types.OpHandler:
+		if run == nil {
+			slog.DebugContext(ctx, "spell: handler op is a no-op for a built-in (no script body)", "target", req.Target, "fn", op.Func)
+			return noResult()
 		}
-		return runFn(ctx, tgt.Func, req)
+		slog.DebugContext(ctx, "spell: dispatch handler", "target", req.Target, "fn", op.Func, "dir", req.Dir)
+		return run(ctx, op.Func, req)
+	default:
+		return nil, fmt.Errorf("spell: unknown op kind %d for target %q", op.Kind(), req.Target)
 	}
-	_, err := runForkTarget(ctx, tgt, forkOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
-	return nil, err
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
-// are fork-only (cmd/args/charms data, no script body), so it dispatches through
-// the shared bridge with a nil function-op runner.
+// are command-only (cmd/args/charms data, no script body), so it dispatches
+// through the shared bridge with a nil handler runner.
 func newSpellInvoker(targets map[string]types.SpellOp) func(context.Context, types.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
 		return dispatchOp(ctx, targets, req, nil)
 	}
 }
 
-// forkTargetNames returns the spell's fork (forkable) target names, sorted.
-func forkTargetNames(targets map[string]types.SpellOp) []string {
+// commandTargetNames returns the spell's command (forkable) target names, sorted.
+func commandTargetNames(targets map[string]types.SpellOp) []string {
 	names := make([]string, 0, len(targets))
-	for name, tgt := range targets {
-		if tgt.Func == "" {
+	for name, op := range targets {
+		if op.Kind() == types.OpCommand {
 			names = append(names, name)
 		}
 	}
@@ -158,7 +174,7 @@ func forkTargetNames(targets map[string]types.SpellOp) []string {
 // raised: discovery paths cannot route an error back to a caller.
 func loadLocalSpell(ctx context.Context, path string) (ispell.Descriptor, bool) {
 	if !filepath.IsAbs(path) {
-		cwd, err := os.Getwd()
+		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
 			slog.Error("load local spell: getwd", "err", err)
 			return ispell.Descriptor{}, false
@@ -166,17 +182,6 @@ func loadLocalSpell(ctx context.Context, path string) (ispell.Descriptor, bool) 
 		path = filepath.Join(cwd, path)
 	}
 	return loadLocalBuzzSpell(ctx, path)
-}
-
-// hasFunctionOp reports whether any of m's targets is an in-VM function-op (Func
-// set) rather than a fork command.
-func hasFunctionOp(m ispell.Descriptor) bool {
-	for _, t := range m.Ops {
-		if t.Func != "" {
-			return true
-		}
-	}
-	return false
 }
 
 // loadSpellFile loads a spell file as a function-op-capable SpellDriver and
@@ -200,7 +205,7 @@ func loadSpellFile(ctx context.Context, path string) (types.SpellDriver, error) 
 // ispell.Decode a built-in uses, so a .buzz workspace spell and a built-in are
 // read and validated identically. Errors are logged, not raised, since discovery
 // paths cannot route an error back to the caller. Registration is deferred to
-// magus.project.register; the handle the caller builds carries the resolved spec
+// magus.project; the handle the caller builds carries the resolved spec
 // so it registers by value there.
 func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, bool) {
 	// loadBuzzSpell registers the spell with the function-op invoker (capturing its
@@ -241,7 +246,7 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 // registerLocalSpell registers a decoded fork-only workspace-local spell into the
 // default registry. The shared ispell.Decode produces m for the imported Buzz
 // spell by-value path, so this is the single deferred registration point (called at
-// magus.project.register bind time). A function-op spell instead registers eagerly
+// magus.project bind time). A function-op spell instead registers eagerly
 // at load via loadBuzzSpell.
 func registerLocalSpell(m ispell.Descriptor) {
 	opts := append(localSpellBaseOptions(m), types.WithInvoker(newSpellInvoker(m.Ops)))

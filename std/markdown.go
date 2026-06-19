@@ -14,7 +14,7 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module markdown -lang buzz -out ../hostbuzz/gen/markdown.go
+//go:generate go run ../cmd/magus-bindings-gen -module markdown -lang buzz -out ../host/gen/markdown.go
 
 func init() { Register(Markdown) }
 

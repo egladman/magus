@@ -1,11 +1,3 @@
-// Package magus is the high-level library for the magus build orchestrator.
-// Use [Open] for build/test cycles and [Inspect] for read-only commands.
-//
-// Boundary: the library links the engine-agnostic interp surface and the Buzz VM,
-// but deliberately not the host bindings (interp/bindings) or the Buzz engine
-// backend — cmd/magus blank-imports those. So a script-driven backend (e.g. the
-// spell-backed remote backend) reaches the library only through registered
-// hooks such as [cache.RegisterRemoteBackendOpener], never a direct import.
 package magus
 
 import (
@@ -22,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	buzzeng "github.com/egladman/gopherbuzz"
+	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/flake"
 	"github.com/egladman/magus/internal/config"
@@ -47,7 +39,7 @@ type Magus struct {
 	lim     *cache.Limiter
 
 	buzzPoolOnce sync.Once
-	buzzPoolReg  *buzzeng.PoolRegistry
+	buzzPoolReg  *buzz.PoolRegistry
 
 	wsReg *WorkspaceRegistry
 
@@ -181,7 +173,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	return cfg, nil
 }
 
-// preloadMagusfiles parses magusfiles in each project so magus.project.register() calls populate m.wsReg.
+// preloadMagusfiles parses magusfiles in each project so magus.project() calls populate m.wsReg.
 func preloadMagusfiles(ctx context.Context, m *Magus) error {
 	if !interp.Available() {
 		return nil
@@ -299,6 +291,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))
 	}
 	cfgOpts = append(cfgOpts, cache.WithLog(m.cfg.Log.Format, m.cfg.Log.SlogLevel()))
+	cfgOpts = append(cfgOpts, cache.WithSilent(m.cfg.Log.IsSilent()))
 	// Build the telemetry provider before the cache so a wired remote backend can
 	// be instrumented as it is attached. Init failure falls back to a no-op.
 	tel, err := observability.New(ctx, observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root))
@@ -445,17 +438,17 @@ func (m *Magus) limiter() *cache.Limiter {
 // The semaphore is derived from context at execution time (the workspace
 // limiter is stored in ctx by the RunAll scheduler), so individual pools
 // in the registry do not hold their own semaphore.
-func (m *Magus) buzzPoolRegistry() *buzzeng.PoolRegistry {
+func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 	m.buzzPoolOnce.Do(func() {
 		lim := m.limiter()
-		getSem := func(ctx context.Context) buzzeng.Semaphore {
+		getSem := func(ctx context.Context) buzz.Semaphore {
 			l := cache.LimiterFromContext(ctx)
 			if l == nil {
 				return nil
 			}
 			return l
 		}
-		m.buzzPoolReg = buzzeng.NewPoolRegistry(getSem, lim.Capacity())
+		m.buzzPoolReg = buzz.NewPoolRegistry(getSem, lim.Capacity())
 	})
 	return m.buzzPoolReg
 }

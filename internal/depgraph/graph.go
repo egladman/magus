@@ -16,14 +16,6 @@ type ID int32
 // NoID is the zero value returned when a lookup fails.
 const NoID ID = -1
 
-// Direction is the traversal direction for graph walks.
-type Direction int
-
-const (
-	Downstream Direction = iota // forward edges: node → dependencies
-	Upstream                    // reverse edges: node → dependents
-)
-
 // ErrCycle is returned by Builder.Build when the edge set forms a cycle.
 var ErrCycle = errors.New("graph: dependency cycle")
 

@@ -290,7 +290,7 @@ type lexer struct {
 }
 
 func newLexer(src string) *lexer {
-	// ultra-opt: pre-size the token slice to avoid repeated append regrowth+copy
+	// optimization: pre-size the token slice to avoid repeated append regrowth+copy
 	// of the backing array; tokenize is ~88% of parse-time allocation (alloc_space
 	// pprof). len(src)/4 is a slight over-estimate of the token count for Buzz
 	// source (most tokens span ≥4 bytes incl. surrounding whitespace), so the

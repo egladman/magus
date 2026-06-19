@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	core "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp/engine"
 )
 
@@ -71,7 +72,7 @@ func (s *session) Call(p engine.CallParams) error {
 	return v.s.core.ExecChunk(ctx, v.chunk)
 }
 
-func toEngine(v core.Value) engine.Value {
+func toEngine(v vm.Value) engine.Value {
 	switch {
 	case v.IsNull():
 		return engine.NilValue
@@ -93,21 +94,21 @@ func toEngine(v core.Value) engine.Value {
 	}
 }
 
-func fromEngine(ev engine.Value) core.Value {
+func fromEngine(ev engine.Value) vm.Value {
 	if ev == nil || ev.IsNil() {
-		return core.Null
+		return vm.Null
 	}
 	if v, ok := ev.(value); ok {
 		return v.v
 	}
 	if s, ok := ev.AsString(); ok {
-		return core.StrValue(s)
+		return vm.StrValue(s)
 	}
 	if n, ok := ev.AsNumber(); ok {
-		return core.FloatValue(n)
+		return vm.FloatValue(n)
 	}
 	if t, ok := ev.AsTable(); ok {
-		m := core.NewMap()
+		m := vm.NewMap()
 		t.ForEach(func(k, val engine.Value) {
 			if key, ok := k.AsString(); ok {
 				m.MapSet(key, fromEngine(val))
@@ -115,13 +116,13 @@ func fromEngine(ev engine.Value) core.Value {
 		})
 		return m
 	}
-	return core.BoolValue(ev.AsBool())
+	return vm.BoolValue(ev.AsBool())
 }
 
 // codeValue wraps a compiled Buzz Chunk as an engine.Value.
 type codeValue struct {
 	s     *session
-	chunk *core.Chunk
+	chunk *vm.Chunk
 }
 
 func (codeValue) IsNil() bool                        { return false }
@@ -132,8 +133,8 @@ func (codeValue) AsNumber() (float64, bool)          { return 0, false }
 func (codeValue) AsTable() (engine.Table, bool)      { return nil, false }
 func (c codeValue) AsFunction() (engine.Value, bool) { return c, true }
 
-// value wraps a non-collection core.Value (or a function) as engine.Value.
-type value struct{ v core.Value }
+// value wraps a non-collection vm.Value (or a function) as engine.Value.
+type value struct{ v vm.Value }
 
 func (e value) IsNil() bool    { return e.v.IsNull() }
 func (e value) String() string { return e.v.String() }
@@ -174,8 +175,8 @@ func (e value) AsFunction() (engine.Value, bool) {
 // table adapts a Buzz map and/or list to engine.Table. String keys use the map
 // half; integer keys use the items slice, growing as needed.
 type table struct {
-	mapV  core.Value   // map-backed entries
-	items []core.Value // list-backed entries (1-indexed via RawSetInt/RawGetInt)
+	mapV  vm.Value   // map-backed entries
+	items []vm.Value // list-backed entries (1-indexed via RawSetInt/RawGetInt)
 }
 
 func (t *table) IsNil() bool                      { return false }
@@ -187,7 +188,7 @@ func (t *table) AsTable() (engine.Table, bool)    { return t, true }
 
 func (t *table) String() string {
 	if len(t.items) > 0 {
-		return core.ListValue(t.items).String()
+		return vm.ListValue(t.items).String()
 	}
 	if t.mapV.IsMap() {
 		return t.mapV.String()
@@ -197,7 +198,7 @@ func (t *table) String() string {
 
 func (t *table) RawSetString(key string, v engine.Value) {
 	if !t.mapV.IsMap() {
-		t.mapV = core.NewMap()
+		t.mapV = vm.NewMap()
 	}
 	t.mapV.MapSet(key, fromEngine(v))
 }
@@ -212,7 +213,7 @@ func (t *table) RawGetString(key string) engine.Value {
 func (t *table) RawSetInt(key int, v engine.Value) {
 	idx := key - 1
 	for len(t.items) <= idx {
-		t.items = append(t.items, core.Null)
+		t.items = append(t.items, vm.Null)
 	}
 	t.items[idx] = fromEngine(v)
 }

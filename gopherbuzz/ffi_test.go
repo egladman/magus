@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	vmpackage "github.com/egladman/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,17 +41,17 @@ func TestParseCDeclsCharPtr(t *testing.T) {
 // cover. It ignores the library and returns canned values per type.
 type fakeFFI struct{ opened string }
 
-func (f *fakeFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
+func (f *fakeFFI) OpenLibrary(libname string, sigs []CFuncSig) (vmpackage.Value, error) {
 	f.opened = libname
-	m := NewMap()
+	m := vmpackage.NewMap()
 	for _, sig := range sigs {
 		sig := sig
-		m.MapSet(sig.Name, DirectValue(sig.Name, func(_ context.Context, args []Value) (Value, error) {
+		m.MapSet(sig.Name, vmpackage.DirectValue(sig.Name, func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 			// Echo: return the first int arg doubled, or a marker string.
 			if len(args) > 0 && args[0].IsInt() {
-				return IntValue(args[0].AsInt() * 2), nil
+				return vmpackage.IntValue(args[0].AsInt() * 2), nil
 			}
-			return StrValue("called:" + sig.Name), nil
+			return vmpackage.StrValue("called:" + sig.Name), nil
 		}))
 	}
 	return m, nil

@@ -63,7 +63,7 @@ type Commit struct {
 // Record is the Buzz boundary map vcs.commit / vcs.history entries return:
 // {id, short, author {name, email}, date, subject, body, parents}. date is
 // RFC3339, empty when the VCS reported no timestamp. The generated trampoline
-// calls it (see hostbuzz.Recorder).
+// calls it (see host.Recorder).
 func (c Commit) Record() map[string]any {
 	date := ""
 	if !c.Date.IsZero() {

@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module crypto -lang buzz -out ../hostbuzz/gen/crypto.go
+//go:generate go run ../cmd/magus-bindings-gen -module crypto -lang buzz -out ../host/gen/crypto.go
 
 func init() { Register(Crypto) }
 
@@ -98,6 +98,7 @@ func hashHex(newHash func() hash.Hash, data string) string {
 // large files don't load into memory. label names the op in errors. The sandbox
 // read policy is enforced, matching archive.* and fs.read_file.
 func hashFile(ctx context.Context, label string, newHash func() hash.Hash, path string) (string, error) {
+	path = resolvePath(ctx, path)
 	if p := sandbox.FromContext(ctx); p != nil {
 		if err := p.CheckRead(path); err != nil {
 			return "", fmt.Errorf("%s: %w", label, err)

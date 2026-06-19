@@ -7,33 +7,34 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/ast"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // debugModule builds the "debug" module matching Buzz's debug reference:
 // https://buzz-lang.dev/0.5.0/reference/std/debug.html
-func debugModule() buzz.Value {
+func debugModule() vm.Value {
 	m := mod()
 	m.MapSet("dump", fn("debug.dump", debugDump))
 	m.MapSet("ast", fn("debug.ast", debugAST))
 	return m
 }
 
-func debugDump(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func debugDump(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
 		fmt.Println("null")
-		return buzz.Null, nil
+		return vm.Null, nil
 	}
 	fmt.Println(args[0].String())
-	return buzz.Null, nil
+	return vm.Null, nil
 }
 
-func debugAST(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func debugAST(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
-		return buzz.Null, fmt.Errorf("debug.ast: requires a str source argument")
+		return vm.Null, fmt.Errorf("debug.ast: requires a str source argument")
 	}
 	prog, err := buzz.Parse(args[0].AsString())
 	if err != nil {
-		return buzz.Null, fmt.Errorf("debug.ast: %w", err)
+		return vm.Null, fmt.Errorf("debug.ast: %w", err)
 	}
 	stmts := make([]any, len(prog.Stmts))
 	for i, s := range prog.Stmts {
@@ -41,9 +42,9 @@ func debugAST(_ context.Context, args []buzz.Value) (buzz.Value, error) {
 	}
 	b, err := json.Marshal(map[string]any{"kind": "Program", "stmts": stmts})
 	if err != nil {
-		return buzz.Null, fmt.Errorf("debug.ast: %w", err)
+		return vm.Null, fmt.Errorf("debug.ast: %w", err)
 	}
-	return buzz.StrValue(string(b)), nil
+	return vm.StrValue(string(b)), nil
 }
 
 func nodeToMap(n ast.Node) any {

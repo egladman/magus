@@ -91,6 +91,14 @@ func NormalizeCharmName(name string) string {
 
 // Target identifies one unit of work (project × target name).
 // An empty Path means all projects.
+//
+// Target plays a dual role and the meaningful subset of fields differs by use:
+//   - As a work-unit it carries identity: Path/Name/Charms/Files describe which
+//     project×target to run and against which changed files.
+//   - As a policy bag it carries per-target execution policy:
+//     SkipCache/Exclusive/FailOnDrift/RetryOnFlake. When a Target is used purely
+//     as policy (Project.TargetPolicies values, EvaluatedTargetEntry.Policy) only
+//     these policy fields are meaningful; the identity fields are unset/ignored.
 type Target struct {
 	Path   string   `buzz:"projectPath"` // workspace-relative project path; empty = all projects
 	Name   string   // e.g. "build", "test"
@@ -183,7 +191,7 @@ type ExecResult struct {
 // Record is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
 // {stdout, stderr, code, ok}. The exec surfaces space-trim Stdout/Stderr before
 // building the struct (the captured-output convention), so this is a plain field
-// map. The generated trampoline calls it (see hostbuzz.Recorder).
+// map. The generated trampoline calls it (see host.Recorder).
 func (r ExecResult) Record() map[string]any {
 	return map[string]any{
 		"stdout": r.Stdout,

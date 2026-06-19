@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module os -lang buzz -out ../hostbuzz/gen/os.go
+//go:generate go run ../cmd/magus-bindings-gen -module os -lang buzz -out ../host/gen/os.go
 
 func init() { Register(Os) }
 
@@ -63,6 +63,15 @@ func cwdFromContext(ctx context.Context) string {
 	return d
 }
 
+// CwdFromContext returns the working directory carried by WithCwd and whether one
+// is set. Unlike EffectiveCwd it does not fall back to the process cwd, so a log
+// handler can attach the directory only when a magusfile target actually
+// established one — the process cwd is no longer meaningful for that correlation.
+func CwdFromContext(ctx context.Context) (string, bool) {
+	d, ok := ctx.Value(cwdKey{}).(string)
+	return d, ok && d != ""
+}
+
 // resolveDir computes the effective working directory for an exec primitive:
 // an explicit dir argument wins (joined onto the context cwd when relative);
 // otherwise the context cwd is used; "" means inherit the process cwd.
@@ -75,6 +84,33 @@ func resolveDir(ctx context.Context, dir string) string {
 		return dir
 	}
 	return filepath.Join(base, dir)
+}
+
+// resolvePath resolves a (possibly relative) filesystem path against the context
+// working directory set by WithCwd. It is a no-op — returning path unchanged —
+// when path is absolute or no context cwd is set, so callers that never set a cwd
+// keep resolving against the process working directory exactly as before. The
+// magusfile runner sets the cwd (instead of os.Chdir-ing the whole process) so
+// targets across projects can execute concurrently; every host module that
+// touches the filesystem routes its path argument through here so relative paths
+// still resolve against the project directory.
+func resolvePath(ctx context.Context, path string) string {
+	base := cwdFromContext(ctx)
+	if base == "" || path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(base, path)
+}
+
+// EffectiveCwd reports the working directory a host module should treat as "."
+// — the context cwd when set (the magusfile runner sets it per target), else the
+// process working directory. Exported so the interp host bindings can resolve
+// workspace-local paths against the same base the std modules use.
+func EffectiveCwd(ctx context.Context) (string, error) {
+	if base := cwdFromContext(ctx); base != "" {
+		return base, nil
+	}
+	return os.Getwd()
 }
 
 // Os is the "os" host module: direct-exec primitives (no shell invocation).
@@ -465,7 +501,7 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (an
 			}
 		}
 	}
-	return nil, fmt.Errorf("os.retry: failed after %d attempt(s): %w", max, lastErr)
+	return nil, fmt.Errorf("os.retry: %d attempt(s): %w", max, lastErr)
 }
 
 // retryFloat extracts a float64 from a Go any value (int, int64, or float64).

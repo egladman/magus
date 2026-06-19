@@ -28,6 +28,7 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // version is the Buzz language version gopherbuzz targets.
@@ -52,7 +53,7 @@ func main() {
 type opts struct {
 	eval     string   // -e <code>
 	check    bool     // -c / --check
-	embedded  bool     // --embedded
+	embedded bool     // --embedded
 	test     bool     // -t / --test
 	dumpAST  bool     // --ast
 	showVer  bool     // -v / --version
@@ -71,7 +72,7 @@ func run(argv []string) error {
 		return nil
 	}
 	if o.showVer {
-		fmt.Printf("buzz %s (gopherbuzz, bytecode v%d)\n", version, buzz.BytecodeVersion)
+		fmt.Printf("buzz %s (gopherbuzz, bytecode v%d)\n", version, vm.BytecodeVersion)
 		return nil
 	}
 
@@ -135,13 +136,13 @@ func run(argv []string) error {
 	// is invoked automatically after its top-level runs. The CLI args after the
 	// script name are passed as a [str]; a script with no `main` is a no-op.
 	if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
-		var items []buzz.Value
+		var items []vm.Value
 		if len(o.args) > 1 {
 			for _, a := range o.args[1:] {
-				items = append(items, buzz.StrValue(a))
+				items = append(items, vm.StrValue(a))
 			}
 		}
-		if _, err := sess.CallValue(ctx, mainFn, []buzz.Value{buzz.ListValue(items)}); err != nil {
+		if _, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)}); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}

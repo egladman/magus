@@ -11,7 +11,7 @@ package main
 //
 //	import "magus";
 //	import "magus/spell/go";
-//	magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
+//	magus.project({ "spells": [go] });
 //
 // Or from a Go magusfile using the magus package:
 //

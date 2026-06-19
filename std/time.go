@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module time -lang buzz -out ../hostbuzz/gen/time.go
+//go:generate go run ../cmd/magus-bindings-gen -module time -lang buzz -out ../host/gen/time.go
 
 func init() { Register(Time) }
 

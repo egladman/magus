@@ -6,7 +6,7 @@ import (
 	"github.com/samber/lo"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module strings -lang buzz -out ../hostbuzz/gen/strings.go
+//go:generate go run ../cmd/magus-bindings-gen -module strings -lang buzz -out ../host/gen/strings.go
 
 func init() { Register(Strings) }
 

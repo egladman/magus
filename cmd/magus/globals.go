@@ -6,7 +6,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 )
 
-// Bridge aliases: the output vocabulary lives in output_format.go (package main).
+// Bridge aliases: the output vocabulary lives in output.go (package main).
 // These keep the cmd/magus switch statements (case outputJSON, …) and OutputOptions
 // signatures reading naturally.
 
@@ -16,7 +16,6 @@ const (
 	outputYAML     = FormatYAML
 	outputJSONL    = FormatJSONL
 	outputName     = FormatName
-	outputWide     = FormatWide
 	outputTemplate = FormatTemplate
 	outputDot      = FormatDot
 	outputMermaid  = FormatMermaid
@@ -31,6 +30,7 @@ type globalFlags struct {
 	tee     string    // mirror structured output to this file in append-create mode
 	verbose verbosity // counted -v level
 	quiet   bool      // suppress progress; quiet wins over -v
+	silent  bool      // quiet + bounded failure dumps + bubbled notice lines
 }
 
 var global globalFlags
@@ -44,6 +44,8 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 	fs.Var(&global.verbose, "v", "increase log verbosity (-v/-vv: debug; -vvv: trace)")
 	fs.BoolVar(&global.quiet, "quiet", global.quiet, "suppress progress output; only print errors and dump failing project output to stderr")
 	fs.BoolVar(&global.quiet, "q", global.quiet, "short for --quiet")
+	fs.BoolVar(&global.silent, "silent", global.silent, "like --quiet, but bound failing output to its tail (+full-log path) and bubble up only lines a target marks with 'magus:notice:'")
+	fs.BoolVar(&global.silent, "s", global.silent, "short for --silent")
 }
 
 // cmdParse binds config/display flags, runs local registration, parses args, and returns positionals.

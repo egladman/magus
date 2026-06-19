@@ -7,6 +7,7 @@ package buzz
 
 import (
 	core "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp/engine"
 )
 
@@ -49,7 +50,7 @@ func (s *session) Upvalues(level int) map[string]engine.Value {
 func (s *session) CallDepth() int { return s.core.CallDepth() }
 
 func (s *session) SetStepHook(mask engine.StepMask, cb func(engine.StepEvent, engine.Frame)) {
-	s.core.SetStepHook(fromEngineMask(mask), func(ev core.StepEvent, f core.DebugFrame) {
+	s.core.SetStepHook(fromEngineMask(mask), func(ev vm.StepEvent, f vm.DebugFrame) {
 		cb(toEngineEvent(ev), engine.Frame{
 			Source:      f.Source,
 			ShortSrc:    f.Source,
@@ -62,7 +63,7 @@ func (s *session) SetStepHook(mask engine.StepMask, cb func(engine.StepEvent, en
 
 func (s *session) ClearStepHook() { s.core.ClearStepHook() }
 
-func toEngineMap(m map[string]core.Value) map[string]engine.Value {
+func toEngineMap(m map[string]vm.Value) map[string]engine.Value {
 	if len(m) == 0 {
 		return map[string]engine.Value{}
 	}
@@ -73,25 +74,25 @@ func toEngineMap(m map[string]core.Value) map[string]engine.Value {
 	return out
 }
 
-func fromEngineMask(m engine.StepMask) core.StepMask {
-	var out core.StepMask
+func fromEngineMask(m engine.StepMask) vm.StepMask {
+	var out vm.StepMask
 	if m&engine.MaskLine != 0 {
-		out |= core.MaskLine
+		out |= vm.MaskLine
 	}
 	if m&engine.MaskCall != 0 {
-		out |= core.MaskCall
+		out |= vm.MaskCall
 	}
 	if m&engine.MaskReturn != 0 {
-		out |= core.MaskReturn
+		out |= vm.MaskReturn
 	}
 	return out
 }
 
-func toEngineEvent(ev core.StepEvent) engine.StepEvent {
+func toEngineEvent(ev vm.StepEvent) engine.StepEvent {
 	switch ev {
-	case core.StepCall:
+	case vm.StepCall:
 		return engine.StepCall
-	case core.StepReturn:
+	case vm.StepReturn:
 		return engine.StepReturn
 	default:
 		return engine.StepLine

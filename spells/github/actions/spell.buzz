@@ -59,6 +59,10 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 
 // getenv reads one environment variable, returning "" when unset (os.env returns
 // null for an unset var; the callers below test against "").
+// NOTE: byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The
+// duplication is intentional/temporary: there is no shared magus/... buzz helper
+// module for it yet (extracting one needs the embed+register plumbing magus/charm
+// uses). Track for follow-up; keep the two copies in sync.
 fun getenv(name: str) > str {
     final v = os.env(name);
     if (v == null) { return ""; }
@@ -77,6 +81,10 @@ fun token() > str { return getenv("ACTIONS_RUNTIME_TOKEN"); }
 // cache_key derives the cache key from the spec hash. The hash already folds in
 // the project path (see cache/hash.go), so it is unique per project and needs no
 // extra namespacing — and being hex, it is URL-safe.
+// NOTE: cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose:
+// GHA keeps CACHE_VERSION in a separate `version` request field, while S3 folds it
+// into the key string. Do NOT change the emitted string here — it would invalidate
+// every existing GHA cache entry. Track the inconsistency for follow-up only.
 fun cache_key(hash: str) > str { return "magus-" + hash; }
 
 // rpc POSTs a JSON Twirp request to the named CacheService method and returns the

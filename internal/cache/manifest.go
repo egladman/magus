@@ -48,7 +48,7 @@ var pathFlattener = strings.NewReplacer("/", "__", "\\", "__")
 
 // flattenPath converts a project path to a flat directory name (/ and \ → __).
 func flattenPath(p string) string {
-	// ultra-opt: reuse a package-level Replacer instead of building one per call
+	// optimization: reuse a package-level Replacer instead of building one per call
 	// (NewReplacer's trie construction allocates ~6.8 KiB each time).
 	//   measured: BenchmarkFlattenPath -94.8% sec/op, -98.6% B/op, 8->2 allocs/op;
 	//   BenchmarkCacheHit (replay path, the common incremental case) -35.6% sec/op,

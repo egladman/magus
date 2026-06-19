@@ -354,12 +354,6 @@ func printInstallNextSteps(binaryPath, binDir string) {
 		fmt.Println("")
 	}
 
-	binaryName := "magus"
-	if runtime.GOOS == "windows" {
-		binaryName = "magus.exe"
-	}
-	_ = binaryName
-
 	// mgs symlink.
 	mgsPath := filepath.Join(binDir, "mgs")
 	fmt.Printf("  # Optional: add the 'mgs' shorthand:\n")

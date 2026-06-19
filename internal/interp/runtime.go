@@ -9,17 +9,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
-
-// chdirMu serializes all os.Chdir calls: the process working directory is
-// global state and concurrent changes corrupt relative path resolution.
-var chdirMu sync.Mutex
 
 type sourceCtxKey struct{}
 type normCtxKey struct{}
@@ -39,7 +36,7 @@ func SourceFromContext(ctx context.Context) *Source {
 }
 
 // WithProjectPath stores the workspace-relative path of the project whose
-// magusfile is being parsed, so magus.project.register(fn) — the contextual
+// magusfile is being parsed, so magus.project(fn) — the contextual
 // form with no explicit path — can default to "this project".
 func WithProjectPath(ctx context.Context, path string) context.Context {
 	return context.WithValue(ctx, projectPathCtxKey{}, path)
@@ -84,22 +81,18 @@ func Run(ctx context.Context, src *Source, target string, extraArgs []string, wo
 	return runBuzz(ctx, src, target, extraArgs, workDir)
 }
 
-// RunDir runs target for the project in dir, trying each engine in order and falling
-// back on ErrUnknownTarget. Returns ErrNoMagusfile or ErrUnknownTarget when not found.
+// RunDir runs target for the project in dir. Returns ErrNoMagusfile or
+// ErrUnknownTarget when not found.
 //
-// Each tried engine's source is fully executed (including top-level declarations
-// such as magus.project.register) before its target registry is consulted, so when
-// a target lives in a non-primary engine the earlier engine's source still runs.
-// In the common single-engine directory this is a single execution; mixing engines
-// in one directory is discouraged for this reason.
+// Buzz is the only engine today, so FindAll yields a single source and this
+// resolves to one execution. The loop is the seam a second engine would extend:
+// each source is fully executed (including top-level declarations such as
+// magus.project) before its target registry is consulted, and an unknown target
+// falls through to the next source.
 func RunDir(ctx context.Context, dir, target string, extraArgs []string) error {
 	srcs, err := FindAll(dir)
 	if err != nil {
 		return err
-	}
-
-	if len(srcs) > 1 && slog.Default().Enabled(ctx, slog.LevelDebug) {
-		warnCrossEngineShadow(ctx, srcs, target)
 	}
 
 	for _, src := range srcs {
@@ -110,32 +103,6 @@ func RunDir(ctx context.Context, dir, target string, extraArgs []string) error {
 		return err
 	}
 	return ErrUnknownTarget
-}
-
-// warnCrossEngineShadow logs a debug warning when target is declared in multiple engines.
-func warnCrossEngineShadow(ctx context.Context, srcs []*Source, target string) {
-	norm := targetNameNormalizerFrom(ctx)
-	normalizedTarget := norm.NormalizeTargetName(target)
-	var declarers []string
-	for _, src := range srcs {
-		targets, err := Parse(ctx, src)
-		if err != nil {
-			continue
-		}
-		for _, t := range targets {
-			if t.Key == normalizedTarget {
-				declarers = append(declarers, src.Engine)
-				break
-			}
-		}
-	}
-	if len(declarers) > 1 {
-		slog.DebugContext(ctx, "interp: cross-engine target shadowing",
-			slog.String("target", target),
-			slog.String("winner", declarers[0]),
-			slog.String("shadowed", strings.Join(declarers[1:], ",")),
-		)
-	}
 }
 
 // Parse executes src in parse mode (stubs magus.target) and returns discovered targets.
@@ -150,7 +117,7 @@ func Parse(ctx context.Context, src *Source) ([]Target, error) {
 
 // BuzzHostBindingsFn registers Go-backed host modules into a Buzz session.
 // parseMode=true stubs magus.target to collect names only.
-type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]buzz.Callable, parseMode bool)
+type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, parseMode bool)
 
 var buzzHostBindingsFn BuzzHostBindingsFn
 
@@ -164,24 +131,15 @@ func RegisterBuzzHostBindings(fn BuzzHostBindingsFn) {
 
 // runBuzz executes src on a fresh Buzz session and invokes target.
 func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
+	// Carry the target's directory on the context instead of os.Chdir-ing the whole
+	// process. The host modules (std.*) resolve relative paths against this cwd, so
+	// magusfile targets across projects — including a cross-project magus.needs that
+	// re-enters the interpreter — execute concurrently without corrupting a shared
+	// process working directory.
 	if workDir != "" {
-		chdirMu.Lock()
-		cwd, err := os.Getwd()
-		if err != nil {
-			chdirMu.Unlock()
-			return fmt.Errorf("magusfile: getwd: %w", err)
-		}
-		if err := os.Chdir(workDir); err != nil {
-			chdirMu.Unlock()
-			return fmt.Errorf("magusfile: chdir %s: %w", workDir, err)
-		}
-		defer func() {
-			if err := os.Chdir(cwd); err != nil {
-				slog.Warn("interp: chdir restore failed", slog.String("dir", cwd), slog.String("error", err.Error()))
-			}
-			chdirMu.Unlock()
-		}()
+		ctx = std.WithCwd(ctx, workDir)
 	}
+	slog.DebugContext(ctx, "interp: run magusfile target", "target", target, "dir", workDir)
 
 	buzzSess, targetMap, err := execBuzzSrc(ctx, src, false)
 	if err != nil {
@@ -201,9 +159,9 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 		return fmt.Errorf("magusfile: unknown target %q (registered: %s): %w",
 			target, strings.Join(names, ", "), ErrUnknownTarget)
 	}
-	buzzArgs := make([]buzz.Value, len(extraArgs))
+	buzzArgs := make([]vm.Value, len(extraArgs))
 	for i, s := range extraArgs {
-		buzzArgs[i] = buzz.StrValue(s)
+		buzzArgs[i] = vm.StrValue(s)
 	}
 	ctx, exitCode := types.WithExitRecorder(ctx)
 	ctx = WithSource(ctx, src)
@@ -238,13 +196,6 @@ func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
 	return out, nil
 }
 
-// NormalizeTarget normalizes a target name using the TargetNameNormalizer stored
-// in ctx (falls back to DefaultTargetNameNormalizer). Used by the pool to
-// normalize submitted target names before looking them up in the targets map.
-func NormalizeTarget(ctx context.Context, name string) string {
-	return targetNameNormalizerFrom(ctx).NormalizeTargetName(name)
-}
-
 // targetCollisionErr reports two source target names that normalize to the same
 // canonical key. Used by the Buzz registration path so the message
 // stays identical across engines.
@@ -254,7 +205,7 @@ func targetCollisionErr(prev, cur, key string) error {
 }
 
 // execBuzzSrc creates a Buzz Session, registers bindings, and executes source files.
-func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Session, map[string]buzz.Callable, error) {
+func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Session, map[string]vm.Callable, error) {
 	// The buzz path uses the standalone interpreter's concrete API (Exec,
 	// Targets, CallVal) directly; the engine.Session adapter is only for generic
 	// registry consumers, so there's no need to round-trip through engine.Lookup.
@@ -314,7 +265,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		}
 		seen[key] = name
 		captured := val
-		targetMap[key] = func(ctx context.Context, args []buzz.Value) (buzz.Value, error) {
+		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 			return buzzSess.CallValue(ctx, captured, args)
 		}
 	}
@@ -326,7 +277,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 // session for src. The returned WorkerFunc is safe to call from multiple goroutines because
 // execBuzzSrc reads sources by absolute path and does not acquire chdirMu.
 func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
-	return func(ctx context.Context) (*buzz.Session, map[string]buzz.Callable, error) {
+	return func(ctx context.Context) (*buzz.Session, map[string]vm.Callable, error) {
 		return execBuzzSrc(ctx, src, false)
 	}
 }

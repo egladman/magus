@@ -46,46 +46,46 @@ func mergeDriverUsage() error {
 func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		slog.WarnContext(ctx, "self init: skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
+		slog.WarnContext(ctx, "init: skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
 		return nil
 	}
 
 	globs := workspaceOutputGlobs(m)
 	if len(globs) == 0 {
-		slog.InfoContext(ctx, "self init: no projects declare Outputs yet; re-run `magus init` after adding them to wire the merge driver")
+		slog.InfoContext(ctx, "init: no projects declare Outputs yet; re-run `magus init` after adding them to wire the merge driver")
 		return nil
 	}
 
 	name, err := chooseInitVCS(ctx, root, m, vcsFlag)
 	if err != nil {
 		if errors.Is(err, tty.ErrAborted) {
-			slog.InfoContext(ctx, "self init: merge-driver setup skipped")
+			slog.InfoContext(ctx, "init: merge-driver setup skipped")
 			return nil
 		}
 		return err
 	}
 	if name == "" {
-		slog.WarnContext(ctx, "self init: non-interactive shell; re-run with --vcs to wire the merge driver",
+		slog.WarnContext(ctx, "init: non-interactive shell; re-run with --vcs to wire the merge driver",
 			slog.String("choices", strings.Join(vcs.InstallableVCSes(), "|")))
 		return nil
 	}
 
 	installer, ok := vcs.Installer(name)
 	if !ok {
-		return fmt.Errorf("self init: %q does not support merge-driver setup (choose one of: %s)", name, strings.Join(vcs.InstallableVCSes(), ", "))
+		return fmt.Errorf("init: %q does not support merge-driver setup (choose one of: %s)", name, strings.Join(vcs.InstallableVCSes(), ", "))
 	}
 
 	if err := installer.InstallMergeDriver(ctx, m.Root(), globs); err != nil {
-		return fmt.Errorf("self init: install %s merge driver: %w", name, err)
+		return fmt.Errorf("init: install %s merge driver: %w", name, err)
 	}
 
 	switch name {
 	case "git":
-		slog.InfoContext(ctx, "self init: wired git merge driver (.gitattributes + .git/config)", slog.Int("globs", len(globs)))
+		slog.InfoContext(ctx, "init: wired git merge driver (.gitattributes + .git/config)", slog.Int("globs", len(globs)))
 	case "hg":
-		slog.InfoContext(ctx, "self init: wired hg merge driver (.hg/hgrc)", slog.Int("globs", len(globs)))
+		slog.InfoContext(ctx, "init: wired hg merge driver (.hg/hgrc)", slog.Int("globs", len(globs)))
 	default:
-		slog.InfoContext(ctx, "self init: wired merge driver", slog.String("vcs", name), slog.Int("globs", len(globs)))
+		slog.InfoContext(ctx, "init: wired merge driver", slog.String("vcs", name), slog.Int("globs", len(globs)))
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 				return vcsFlag, nil
 			}
 		}
-		return "", fmt.Errorf("self init: unknown --vcs %q (choose one of: %s)", vcsFlag, strings.Join(choices, ", "))
+		return "", fmt.Errorf("init: unknown --vcs %q (choose one of: %s)", vcsFlag, strings.Join(choices, ", "))
 	}
 	if !isInteractiveTTY() {
 		return "", nil

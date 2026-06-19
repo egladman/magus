@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -45,6 +46,43 @@ func TestCrossDispatchCycle(t *testing.T) {
 	}
 	err := cd.Dispatch(context.Background(), "/ws/a", "build")
 	assert.Error(t, err, "expected a cross-project cycle error")
+}
+
+// TestCrossDispatchPanicUnblocksWaiters verifies that a panic in the runner is
+// converted to an error and re-raised, and — critically — that e.done is still
+// closed so concurrent waiters on the same key unblock instead of hanging forever.
+func TestCrossDispatchPanicUnblocksWaiters(t *testing.T) {
+	cd := NewCrossDispatch()
+	var started sync.WaitGroup
+	started.Add(1)
+	release := make(chan struct{})
+	cd.run = func(_ context.Context, _, _ string) error {
+		started.Done()
+		<-release // hold so a second caller parks on e.done before we panic
+		panic("kaboom")
+	}
+
+	// First caller drives the run and must recover the re-raised panic.
+	go func() {
+		defer func() {
+			assert.NotNil(t, recover(), "panic should propagate to the running caller")
+		}()
+		_ = cd.Dispatch(context.Background(), "/ws/a", "build")
+	}()
+
+	// Second caller parks on e.done; it must unblock with the converted error
+	// rather than hang.
+	started.Wait()
+	done := make(chan error, 1)
+	go func() { done <- cd.Dispatch(context.Background(), "/ws/a", "build") }()
+	close(release)
+
+	select {
+	case err := <-done:
+		assert.ErrorContains(t, err, "cross-dispatch panic")
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiter hung after runner panicked (e.done was not closed)")
+	}
 }
 
 // TestCrossDispatchDistinct verifies different (dir, target) keys each run.

@@ -6,7 +6,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/egladman/magus/hostbuzz"
+	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -42,7 +42,7 @@ func describeModules(args []string) error {
 	if len(rest) > 0 {
 		name = rest[0]
 	}
-	out := hostbuzz.ModulesOutput(name)
+	out := host.ModulesOutput(name)
 	if name != "" && len(out.Modules) == 0 {
 		mods := std.All()
 		names := make([]string, len(mods)) // module names, sorted for a stable suggestion
@@ -107,12 +107,9 @@ func describeModules(args []string) error {
 			fmt.Printf("    %s\n", meth.Doc)
 		}
 		fmt.Printf("    Signature: %s\n", meth.Buzz)
-		if meth.NativeBuzz != "" {
-			fmt.Printf("    (also in Buzz's stdlib: %s — the extra form is sandbox-aware)\n", meth.NativeBuzz)
+		if meth.BuzzStdlib != "" {
+			fmt.Printf("    (also in Buzz's stdlib: %s — the extra form is sandbox-aware)\n", meth.BuzzStdlib)
 		}
 	}
 	return nil
 }
-
-// buildModulesOutput moved to hostbuzz.ModulesOutput — the single core shared by
-// this CLI command and the native magus.modules()/magus.module() host methods.

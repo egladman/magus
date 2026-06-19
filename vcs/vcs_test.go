@@ -209,6 +209,28 @@ func TestDiffRejectsFlagLikeBase(t *testing.T) {
 	}
 }
 
+func TestFindCommitRejectsFlagLikeRev(t *testing.T) {
+	drivers := []types.VCSDriver{gitVCS{}, hgVCS{}, jjVCS{}}
+	for _, v := range drivers {
+		_, err := v.FindCommit(context.Background(), t.TempDir(), "-rf")
+		require.Errorf(t, err, "%s.FindCommit with flag-like rev should error", v.Name())
+		assert.Containsf(t, err.Error(), "looks like a flag", "%s.FindCommit error", v.Name())
+	}
+}
+
+func TestBisectRejectsFlagLikeRev(t *testing.T) {
+	drivers := []types.VCSDriver{gitVCS{}, hgVCS{}}
+	for _, v := range drivers {
+		_, err := v.Bisect(context.Background(), t.TempDir(), types.BisectOptions{Good: "-rf"})
+		require.Errorf(t, err, "%s.Bisect with flag-like good should error", v.Name())
+		assert.Containsf(t, err.Error(), "looks like a flag", "%s.Bisect good error", v.Name())
+
+		_, err = v.Bisect(context.Background(), t.TempDir(), types.BisectOptions{Bad: "-rf"})
+		require.Errorf(t, err, "%s.Bisect with flag-like bad should error", v.Name())
+		assert.Containsf(t, err.Error(), "looks like a flag", "%s.Bisect bad error", v.Name())
+	}
+}
+
 func TestDescribeGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not in PATH")

@@ -81,6 +81,13 @@ func WithLog(format string, level slog.Level) Option {
 	}
 }
 
+// WithSilent enables silent output mode: on top of quiet's suppression, a failing
+// project's dump is bounded to its tail (with a pointer to the retained full log)
+// and only target-marked important lines are bubbled up. See captureRun.
+func WithSilent(silent bool) Option {
+	return func(c *Cache) { c.silent = silent }
+}
+
 // Cache is an on-disk content-addressed build cache handle.
 type Cache struct {
 	dir            string
@@ -89,6 +96,7 @@ type Cache struct {
 	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
 	log            *slog.Logger
 	logLevel       slog.Level // effective minimum level; used by captureRun
+	silent         bool       // silent output mode: bounded failure dumps + bubbled important lines
 	hits           atomic.Int64
 	misses         atomic.Int64
 	errs           atomic.Int64
@@ -307,6 +315,24 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	}
 	result.Hash = hash
 
+	// The inputs that produced the cache key, summarised — the starting point for
+	// "why did this rebuild?". Counts (not per-file hashes) keep it cheap and off
+	// the pinned hashStep hot path; -vv surfaces it for every step. Diagnostics go
+	// to the default logger (stderr), not c.log (stdout cache-result events).
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		slog.LogAttrs(ctx, slog.LevelDebug, "cache.key",
+			slog.String("project", s.ProjectPath),
+			slog.String("target", s.Target),
+			slog.String("hash", shortHash(hash)),
+			slog.Int("sources", len(s.Sources)),
+			slog.Int("deps", len(s.Deps)),
+			slog.Any("tool_versions", s.ToolVersions),
+			slog.Any("charms", s.Charms),
+			slog.Int("env_allow", len(s.EnvAllow)),
+			slog.Bool("no_cache", s.NoCache),
+		)
+	}
+
 	// hashStep records freshly computed file hashes in the mtime memo; persist
 	// them. RunAll defers this to one flush after the whole batch (deferMtimeFlush)
 	// so a cold N-step build doesn't rewrite shared shards N times.
@@ -516,7 +542,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 		return isolationMu.RUnlock
 	}
 
-	// ultra-opt: coalesce the mtime-store flush to once per batch instead of once
+	// optimization: coalesce the mtime-store flush to once per batch instead of once
 	// per step. A per-step flush rewrites every shard a completing step shares with
 	// earlier steps, so a cold N-step build's shard writes grow super-linearly.
 	//   measured: BenchmarkRunAllColdMtime (24 projects × 64 files) -44.9% sec/op,
@@ -534,6 +560,14 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// markDone on every exit so a failing upstream cascades cancellation.
 			defer barrier.markDone(stepKey(s))
 
+			// Trace the DAG progression — blocked-on-deps, then admitted — so a
+			// "why is this serialized / what is it waiting on?" question can be read
+			// off the log at -vvv without a profiler.
+			if len(s.DependsOn) > 0 && slog.Default().Enabled(gctx, levelTrace) {
+				slog.LogAttrs(gctx, levelTrace, "schedule.wait",
+					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
+					slog.Any("depends_on", s.DependsOn))
+			}
 			// Wait for upstreams before acquiring a slot: holding a slot while
 			// blocked on a dep would deadlock a saturated limiter.
 			if err := barrier.waitForDeps(gctx, s); err != nil {
@@ -552,6 +586,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				return err
 			}
 			defer lim.Release()
+			if slog.Default().Enabled(gctx, levelTrace) {
+				slog.LogAttrs(gctx, levelTrace, "schedule.run",
+					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
+					slog.Bool("isolated", s.Isolated))
+			}
 
 			// Fold upstream keys into Deps for transitive cache-key propagation.
 			// After edges are ordering-only and excluded from the key.
@@ -857,6 +896,10 @@ func (c *Cache) logPath(projectPath, hash string) string {
 // captureRun runs fn while teeing stdout/stderr to logPath via context writers.
 // Quiet mode (logLevel >= Error) suppresses live terminal output; on failure it
 // dumps the captured log to stderr. On failure the log file is removed (not replayable).
+//
+// Silent mode (WithSilent) bubbles up only target-marked notice lines, and on
+// failure dumps just the log's tail and retains the full log so its printed path
+// resolves.
 func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn func(context.Context) error) error {
 	quiet := c.logLevel >= slog.LevelError
 
@@ -881,16 +924,39 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn 
 	if cerr := logF.Close(); cerr != nil && runErr == nil {
 		runErr = cerr
 	}
+
+	// Silent mode bubbles up only the lines the target marked as notices — the
+	// sole output for an otherwise-silent passing run.
+	if c.silent {
+		for _, msg := range extractNotices(logPath) {
+			_, _ = fmt.Fprintf(os.Stderr, "notice: %s: %s\n", projectPath, msg)
+		}
+	}
+
 	if runErr != nil {
-		if quiet {
+		switch {
+		case c.silent:
+			// Bound the dump to the log's tail and keep the full log so its path resolves.
+			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+				tail, omitted := tailLines(data, maxFailTailLines)
+				_, _ = fmt.Fprintf(os.Stderr, "\n── %s (failed) ──\n", projectPath)
+				if omitted > 0 {
+					_, _ = fmt.Fprintf(os.Stderr, "… %d earlier line(s) omitted; full log: %s\n", omitted, logPath)
+				}
+				_, _ = os.Stderr.Write(tail)
+				_, _ = fmt.Fprintln(os.Stderr)
+			}
+		case quiet:
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n── %s (failed) ──\n", projectPath)
 				_, _ = os.Stderr.Write(data)
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
 		}
-		if rmErr := os.Remove(logPath); rmErr != nil && !os.IsNotExist(rmErr) {
-			c.log.Warn("cache.warn", slog.String("msg", fmt.Sprintf("remove partial log %s: %v", logPath, rmErr)))
+		if !c.silent {
+			if rmErr := os.Remove(logPath); rmErr != nil && !os.IsNotExist(rmErr) {
+				c.log.Warn("cache.warn", slog.String("msg", fmt.Sprintf("remove partial log %s: %v", logPath, rmErr)))
+			}
 		}
 	}
 	return runErr

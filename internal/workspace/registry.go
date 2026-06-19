@@ -41,7 +41,7 @@ func ContextWithRegistry(ctx context.Context, reg *WorkspaceRegistry) context.Co
 }
 
 // WorkspaceRegistryFromContext returns the per-Open WorkspaceRegistry from ctx, or nil.
-// Used by the Teal magus.project.register and magus.target bindings.
+// Used by the Teal magus.project and magus.target bindings.
 func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
 	r, _ := ctx.Value(registryKey{}).(*WorkspaceRegistry)
 	return r
@@ -55,7 +55,7 @@ func (r *WorkspaceRegistry) RegisterProject(path string, opts ...ProjectOption) 
 	r.projectOpts[path] = append(r.projectOpts[path], opts...)
 }
 
-// registerPathHint explains the explicit-path form of magus.project.register when
+// registerPathHint explains the explicit-path form of magus.project when
 // the path didn't match a project — the classic footgun is passing the magusfile's
 // own directory name (relative to the workspace root) instead of omitting the path
 // to configure "this project". It lists the known projects so the caller can see
@@ -66,8 +66,8 @@ func registerPathHint(w types.WorkspaceRepository) string {
 		known = append(known, p.Path)
 	}
 	slices.Sort(known)
-	return fmt.Sprintf("explicit register paths are relative to the workspace root (known projects: %s); "+
-		"to configure the magusfile's own project, omit the path: register(fun(p, cb) { cb({...}); })",
+	return fmt.Sprintf("explicit configure paths are relative to the workspace root (known projects: %s); "+
+		"to configure the magusfile's own project, omit the path: configure({...})",
 		strings.Join(known, ", "))
 }
 

@@ -3,6 +3,7 @@ package interp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sync"
 
@@ -77,9 +78,11 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	c.mu.Lock()
 	if e, ok := c.m[key]; ok {
 		c.mu.Unlock()
+		slog.DebugContext(ctx, "interp: cross-project dispatch (awaiting in-flight run)", "dir", dir, "target", target)
 		<-e.done
 		return e.err
 	}
+	slog.DebugContext(ctx, "interp: cross-project dispatch", "dir", dir, "target", target)
 	e := &crossEntry{done: make(chan struct{})}
 	c.m[key] = e
 	c.mu.Unlock()
@@ -91,6 +94,18 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	rctx = withCrossAncestor(rctx, key)
 	// e.done is the publication point: e.err is written before close, and a waiter
 	// only reads it after <-e.done, so the write is visible without a data race.
+	// close is deferred and panic-recovering: c.run does work outside the buzz VM's
+	// own recover (file I/O, chdir, child-process plumbing), and a panic that left
+	// e.done unclosed would hang every waiter on this key — and, transitively, the
+	// run's errgroup.Wait — forever. Convert the panic to an error and re-raise so
+	// the caller's goroutine still unwinds.
+	defer func() {
+		if r := recover(); r != nil {
+			e.err = fmt.Errorf("cross-dispatch panic: %s target %q: %v", dir, target, r)
+			close(e.done)
+			panic(r)
+		}
+	}()
 	e.err = c.run(rctx, dir, target)
 	close(e.done)
 	return e.err

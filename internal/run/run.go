@@ -87,7 +87,7 @@ func Run(ctx context.Context, dir, name string, args ...string) error {
 	}
 	c := exec.CommandContext(ctx, name, args...)
 	c.Dir = dir
-	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_other.go
+	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
 	c.WaitDelay = 5 * time.Second
 	if w, ok := ctx.Value(contextKey{}).(writers); ok {
 		c.Stdout = w.stdout

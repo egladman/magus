@@ -5,7 +5,7 @@
 </p>
 
 <!-- Generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
-![Coverage](./coverage.svg)
+![Coverage](./assets/coverage.svg)
 
 A fast cross-platform task orchestrator for polyglot (mono)repos.
 
@@ -102,9 +102,9 @@ This writes a `magus.yaml` seeded with built-in defaults, stubs a starter `magus
 import "magus";
 import "spells/hello";   // ./spells/hello/spell.buzz
 
-magus.project.register(fun(p, cb) > bool { cb({
+magus.project({
     "spells": [hello],
-}); return true; });
+});
 
 // Each exported function becomes a runnable target.
 // 'ci' is the canonical entry point for `magus affected ci`.
@@ -399,9 +399,9 @@ import "magus";
 import "os";
 import "magus/spell/go";
 
-magus.project.register(fun(p, cb) > bool { cb({
+magus.project({
     "spells": [go],
-}); return true; });
+});
 
 export fun build_server(args: [str]) > void {
     os.exec("go", ["build", "-o", "bin/server", "./cmd/server"]);
@@ -415,7 +415,7 @@ Magusfiles see three distinct namespaces:
 | Tier                | Examples                                                                                                                | What it is                                                                              |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | **Language stdlib** | `std`, `os`, `fs`, `math` (`import "std"`, …)                                                                            | Buzz built-ins — untouched                                                              |
-| **`magus.*`**       | `magus.project.register`, `magus.needs`, `magus.target.literal/glob/regex/external`, `magus.cmd` | Build DSL — the primary authoring surface; targets are declared as exported functions   |
+| **`magus.*`**       | `magus.project`, `magus.needs`, `magus.target.literal/glob/regex/external`, `magus.cmd` | Build DSL — the primary authoring surface; targets are declared as exported functions   |
 | **Host modules**    | `os`, `fs`, `vcs`, … (`import "os"`, `import "fs"`, …)                                                                   | Runtime utilities — magus methods layered onto Buzz's own stdlib module names (a superset) |
 
 Each host module is imported under its **bare name** — `import "os"`, then `os.exec`; `import "fs"`, then `fs.glob`. magus layers its methods onto Buzz's own stdlib modules of the same name, so a single `import "os"` carries both surfaces, and adds whole modules Buzz lacks (`vcs`, `archive`, `http`, `charm`, …). Methods are camelCase (Buzz's convention); where a magus method overlaps a Buzz stdlib call, the magus form is sandbox-aware.
@@ -469,7 +469,7 @@ Built-in spells are compiled into the magus binary.
 
 ```buzz
 import "magus/spell/go";
-magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
+magus.project({ "spells": [go] });
 ```
 
 Available built-ins:
@@ -501,7 +501,7 @@ matched verbatim, so kebab names are reached by subscript:
 
 ```buzz
 import "magus/spell/go";
-magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
+magus.project({ "spells": [go] });
 
 export fun build(args: [str])  > void { go["go-build"]({ "cwd": "." }); }
 export fun lint(args: [str])   > void { go["golangci-lint"]({ "cwd": "." }); }
@@ -529,7 +529,7 @@ the spell:
 ```buzz
 import "magus/spell/go";
 import "os";
-magus.project.register("api/", fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
+magus.project("api/", { "spells": [go] });
 
 export fun build(args: [str]) > void { go["go-build"]({ "cwd": "api/" }); }
 export fun lint(args: [str])  > void { go["golangci-lint"]({ "cwd": "api/" }); }
@@ -576,14 +576,14 @@ Import the spell file by path — `import "spells/ruby"` resolves
 
 ```buzz
 import "spells/ruby" as rb;
-magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
+magus.project("gems/", { "spells": [rb] });
 
 export fun test(args: [str]) > void { rb.rspec({ "cwd": "gems/" }); }
 export fun lint(args: [str]) > void { rb.rubocop({ "cwd": "gems/" }); }
 ```
 
 The imported handle is pure: it registers nothing on its own. Binding happens
-when the handle is passed to `magus.project.register`.
+when the handle is listed in `magus.project`'s `spells`.
 
 For a step that needs a shell or arbitrary logic, skip the spell and write the
 target body directly with `extra.*` (see [Runtime API](#runtime-api-three-tiers)).
@@ -625,23 +625,23 @@ Magus infers dependencies between projects automatically from language manifests
 **In a magusfile.buzz:**
 
 ```buzz
-magus.project.register("apps/ui", fun(p, cb) > bool { cb({
+magus.project("apps/ui", {
     "spell":      { "name": "typescript" },
     "depends_on": ["api", "internal/schema"],
-}); return true; });
+});
 ```
 
 Paths can be repo-relative (`"api"`) or relative to the declaring project (`"../api"`).
 
 Declared dependencies affect `magus affected`: when `api` changes, `apps/ui` is included in the affected set and rebuilt downstream. They also appear in `magus describe` output and graph views.
 
-> **One concept, two granularities.** A dependency declares an _edge_ that magus resolves into the build graph — independent dependencies run in **parallel**, and a node runs once all of its dependencies have completed. (magus never sequences tasks just because you listed them in a certain order; the graph decides what can overlap.) What changes is granularity: `magus.project.register`'s `depends_on` names **projects** (a coarse cross-project edge that also feeds the affected set and cache key), while `magus.needs` inside a target names **targets** via typed handles — `magus.target.literal/glob/regex` for same-project targets, and a **project import** (`import "project/<path>" as <alias>`, then `<alias>.<target>`) for a specific target in another project:
+> **One concept, two granularities.** A dependency declares an _edge_ that magus resolves into the build graph — independent dependencies run in **parallel**, and a node runs once all of its dependencies have completed. (magus never sequences tasks just because you listed them in a certain order; the graph decides what can overlap.) What changes is granularity: `magus.project`'s `depends_on` names **projects** (a coarse cross-project edge that also feeds the affected set and cache key), while `magus.needs` inside a target names **targets** via typed handles — `magus.target.literal/glob/regex` for same-project targets, and a **project import** (`import "project/<path>" as <alias>`, then `<alias>.<target>`) for a specific target in another project:
 >
 > ```buzz
 > import "project/../api" as api;   // bind ../api's targets as cross-project handles
 >
 > // project-level: this project depends on ../api
-> magus.project.register(fun(p, cb) > bool { cb({ "depends_on": ["../api"] }); return true; });
+> magus.project({ "depends_on": ["../api"] });
 >
 > // target-level: this target depends on every *-build target in this project,
 > // and on api's compile target across the project boundary
@@ -650,7 +650,7 @@ Declared dependencies affect `magus affected`: when `api` changes, `apps/ui` is 
 > }
 > ```
 >
-> This mirrors Bazel, where a target's `deps` lists other targets: the call you use — `project.register`'s `depends_on` for projects, `magus.needs` for targets — fixes which you're naming.
+> This mirrors Bazel, where a target's `deps` lists other targets: the call you use — `magus.project`'s `depends_on` for projects, `magus.needs` for targets — fixes which you're naming.
 
 ---
 
@@ -1047,6 +1047,46 @@ Graph-emitting commands (`describe`, `affected --graph`, etc.) additionally supp
 magus describe api -o tree
 magus describe api -o mermaid | gh-mermaid
 ```
+
+### Silent mode: `-s` / `--silent`
+
+`-s` (or `MAGUS_LOG_SILENT=1`) is for agents and CI where unbounded output fills a
+context window or a log. It builds on `--quiet` — no progress, no passing-project
+chatter — and adds two things:
+
+- **No news is good news.** A passing run prints nothing unless a target *declares*
+  news. A target promotes a line by prefixing it with `magus:notice:`; only those
+  lines bubble up. Emit them from any command — they ride the target's normal output:
+
+  ```sh
+  # in a magusfile target body
+  os.exec("sh", ["-c", "echo 'magus:notice: deployed api v1.2.3'"]);
+  # → prints:  notice: services/api: deployed api v1.2.3
+  ```
+
+- **Bounded failures.** A failing project's output is trimmed to its last 50 lines;
+  the full log is retained and its path printed, so an agent reads more only if it
+  needs to:
+
+  ```
+  ── services/api (failed) ──
+  … 214 earlier line(s) omitted; full log: .magus/logs/<hash>.log
+  <last 50 lines>
+  ```
+
+Notice lines are bubbled on fresh runs; a cache hit replays nothing (unchanged ⇒
+no news). `--silent` implies `--quiet`.
+
+---
+
+## Repository layout
+
+Most of the tree is the `github.com/egladman/magus` module. The exception is
+`gopherbuzz/`, the embedded scripting-language module (the Buzz VM that evaluates
+`magusfile.buzz`). It is its own Go module (`github.com/egladman/gopherbuzz`)
+developed in-tree and consumed via a local `replace` directive in `go.mod`; there
+is no separate upstream repository to sync against — the in-tree sources are the
+source of truth.
 
 ---
 

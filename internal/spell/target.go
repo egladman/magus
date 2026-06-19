@@ -27,9 +27,9 @@ var TargetModuleSource string
 
 // PatchOpSource / CharmTypeSource / RunSource are the generated Buzz `object`
 // mirrors of types.PatchOp, types.Charm, and types.Run — the {cmd, args, charms}
-// command a fork target's handler hands to its cb callback, down to the RFC 6902
+// command a command target's handler hands to its cb callback, down to the RFC 6902
 // ops. Unlike the other record mirrors they are inlined into self-contained
-// built-ins (every fork spell references Run), so they ship in the magus/target
+// built-ins (every command spell references Run), so they ship in the magus/target
 // bundle (see builtinModuleSources). Order matters in that bundle: PatchOp precedes
 // Charm (Charm.ops is [PatchOp]) precedes Run (Run.charms is {str: Charm}).
 //
@@ -106,7 +106,7 @@ const CharmModulePath = "magus/charm"
 // (std/charm.go), shipped as the magus/charm source module. Unlike the
 // type mirrors it is hand-written (charm's constructors are logic, not a struct),
 // kept in lockstep with the Go module by charm_parity_test. A self-contained
-// built-in fork spell imports it (`import "magus/charm"`) to build patches with
+// built-in command spell imports it (`import "magus/charm"`) to build patches with
 // charm.after / charm.set / … instead of hand-written positional pointers; it is
 // pure Buzz with no host calls, so it compiles into a bare built-in.
 //
@@ -119,8 +119,8 @@ var CharmModuleSource string
 // carries the value types; magus/charm the patch constructors. Any other import
 // means the spell needs host bindings and is not a built-in.
 var builtinModuleSources = map[string]string{
-	// The magus/target bundle carries Target plus the fork-command value types
-	// PatchOp/Charm/Run (every fork spell references Run). Order is load-bearing:
+	// The magus/target bundle carries Target plus the command value types
+	// PatchOp/Charm/Run (every command spell references Run). Order is load-bearing:
 	// PatchOp before Charm before Run, since each references the prior.
 	TargetModulePath: strings.Join([]string{TargetModuleSource, PatchOpSource, CharmTypeSource, RunSource}, "\n"),
 	CharmModulePath:  CharmModuleSource,
@@ -178,12 +178,12 @@ func inlineBuiltinImports(src string, seen map[string]bool) (body string, prepen
 	return strings.Join(kept, "\n"), prepend, true
 }
 
-// IsSelfContained reports whether src is a fork spell — one that imports only the
+// IsSelfContained reports whether src is a command spell — one that imports only the
 // pure-types magus/target module (or nothing). Such a spell's op handlers run a
 // declared command via the injected run-callback and carry no host side effects,
 // so their specs can be extracted once at spec-resolution time (see
 // resolveOps). A spell importing host modules (e.g. magus/extra/http) is a
-// function-op spell whose handlers must be dispatched at invoke time instead.
+// handler op spell whose handlers must be dispatched at invoke time instead.
 func IsSelfContained(src string) bool {
 	_, ok := SelfContainedBuiltinSource(src)
 	return ok

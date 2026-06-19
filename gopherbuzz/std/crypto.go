@@ -11,15 +11,15 @@ import (
 	"hash"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 	"golang.org/x/crypto/sha3"
 )
 
 // cryptoModule builds the "crypto" module matching Buzz's crypto reference:
 // https://buzz-lang.dev/0.5.0/reference/std/crypto.html
-func cryptoModule() buzz.Value {
+func cryptoModule() vm.Value {
 	m := mod()
-	m.MapSet("HashAlgorithm", buzz.EnumDefValue("HashAlgorithm", []string{
+	m.MapSet("HashAlgorithm", vm.EnumDefValue("HashAlgorithm", []string{
 		"Md5",
 		"Sha1",
 		"Sha224",
@@ -37,15 +37,15 @@ func cryptoModule() buzz.Value {
 	return m
 }
 
-func cryptoHash(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+func cryptoHash(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 2 {
-		return buzz.Null, fmt.Errorf("crypto.hash: requires (HashAlgorithm algo, str data)")
+		return vm.Null, fmt.Errorf("crypto.hash: requires (HashAlgorithm algo, str data)")
 	}
 	if args[0].Kind() != "enum" {
-		return buzz.Null, fmt.Errorf("crypto.hash: first argument must be a HashAlgorithm enum value, got %s", args[0].Kind())
+		return vm.Null, fmt.Errorf("crypto.hash: first argument must be a HashAlgorithm enum value, got %s", args[0].Kind())
 	}
 	if !args[1].IsStr() {
-		return buzz.Null, fmt.Errorf("crypto.hash: second argument must be str, got %s", args[1].Kind())
+		return vm.Null, fmt.Errorf("crypto.hash: second argument must be str, got %s", args[1].Kind())
 	}
 
 	algoFull := args[0].String() // "HashAlgorithm.Md5" etc. — String() on enum returns "EnumName.CaseName"
@@ -82,8 +82,8 @@ func cryptoHash(_ context.Context, args []buzz.Value) (buzz.Value, error) {
 	case "Sha3512":
 		h = sha3.New512()
 	default:
-		return buzz.Null, fmt.Errorf("crypto.hash: unknown HashAlgorithm case %q", algoCase)
+		return vm.Null, fmt.Errorf("crypto.hash: unknown HashAlgorithm case %q", algoCase)
 	}
 	h.Write(data)
-	return buzz.StrValue(hex.EncodeToString(h.Sum(nil))), nil
+	return vm.StrValue(hex.EncodeToString(h.Sum(nil))), nil
 }

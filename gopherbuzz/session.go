@@ -18,7 +18,7 @@ type Session struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	env           *vmpackage.Env
-	targets       map[string]Callable
+	targets       map[string]vmpackage.Callable
 	tests         []TestEntry
 	exportedNames map[string]bool
 	// embedded relaxes the script-conformance rules upstream Buzz enforces (no
@@ -32,8 +32,8 @@ type Session struct {
 	// helpers set/restore it (save-and-restore so a pry() eval doesn't clobber the
 	// paused outer VM). stepHook/stepMask carry a pending step hook onto each VM.
 	curVM    *vmpackage.VM
-	stepHook func(StepEvent, DebugFrame)
-	stepMask StepMask
+	stepHook func(vmpackage.StepEvent, vmpackage.DebugFrame)
+	stepMask vmpackage.StepMask
 	// searchPaths is the ordered list of path templates searched when an import
 	// statement names a module not yet bound in the session. Each template holds
 	// `?` (replaced with the import path) and may reference environment variables
@@ -51,13 +51,13 @@ type Session struct {
 	// module value. An `import "<path>"` binds it under the path's basename
 	// (or alias) without touching the filesystem; see loadFileImports. The host
 	// registers these via SetSyntheticModule.
-	syntheticModules map[string]Value
+	syntheticModules map[string]vmpackage.Value
 	// moduleResolver, if set, is consulted for an import path that is neither
 	// already bound nor a synthetic module, before the includeDirs file search.
 	// It lets the host resolve a path-style import to a prebuilt module value
 	// on demand (e.g. a magus spell handle for `import "spells/hello"`). A false
 	// return falls through to the file search. Set via SetModuleResolver.
-	moduleResolver func(importPath string) (Value, bool)
+	moduleResolver func(importPath string) (vmpackage.Value, bool)
 	// importedTypes accumulates the exported object/enum declarations of flat
 	// imported .buzz modules, so compileShared can hand them to the checker and
 	// the importing file can name those types in annotations and literals. The
@@ -99,9 +99,9 @@ type Session struct {
 // The import binds v under the path's basename (e.g. "util" for "magus/extra"),
 // or under an explicit alias. Host-provided modules resolve before any file
 // search, so they need no .buzz file on disk.
-func (s *Session) SetSyntheticModule(importPath string, v Value) {
+func (s *Session) SetSyntheticModule(importPath string, v vmpackage.Value) {
 	if s.syntheticModules == nil {
-		s.syntheticModules = map[string]Value{}
+		s.syntheticModules = map[string]vmpackage.Value{}
 	}
 	s.syntheticModules[importPath] = v
 }
@@ -111,7 +111,7 @@ func (s *Session) SetSyntheticModule(importPath string, v Value) {
 // layers its own methods onto a stdlib module under a shared name (e.g. magus
 // merging host methods onto Buzz's bare "os"/"fs"/"crypto") read the registered
 // module back so it can be extended in place rather than replaced.
-func (s *Session) SyntheticModule(importPath string) (Value, bool) {
+func (s *Session) SyntheticModule(importPath string) (vmpackage.Value, bool) {
 	v, ok := s.syntheticModules[importPath]
 	return v, ok
 }
@@ -132,7 +132,7 @@ func (s *Session) SetSourceModule(importPath, src string) {
 // (see the moduleResolver field). fn is called with the import path and binds its
 // returned value under the path's basename (or alias) when it reports ok; a false
 // return leaves the import for the includeDirs file search.
-func (s *Session) SetModuleResolver(fn func(importPath string) (Value, bool)) {
+func (s *Session) SetModuleResolver(fn func(importPath string) (vmpackage.Value, bool)) {
 	s.moduleResolver = fn
 }
 
@@ -149,8 +149,8 @@ func newSession(ctx context.Context) *Session {
 		ctx:           ctx2,
 		cancel:        cancel,
 		env:           env,
-		embedded:       true,
-		targets:       make(map[string]Callable),
+		embedded:      true,
+		targets:       make(map[string]vmpackage.Callable),
 		exportedNames: make(map[string]bool),
 		loadedPaths:   make(map[string]bool),
 	}
@@ -175,17 +175,17 @@ const testRegistrarName = "$buzz_test"
 // zero-argument closure that runs its body.
 type TestEntry struct {
 	Name string
-	Fn   Value
+	Fn   vmpackage.Value
 }
 
 // registerTest is the session-bound implementation of the test-block registrar.
 // The compiler calls it once per test block with (name, bodyClosure).
-func (s *Session) registerTest(_ context.Context, args []Value) (Value, error) {
+func (s *Session) registerTest(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 	if len(args) != 2 || !args[0].IsStr() {
-		return Null, fmt.Errorf("buzz: internal: malformed test registration")
+		return vmpackage.Null, fmt.Errorf("buzz: internal: malformed test registration")
 	}
 	s.tests = append(s.tests, TestEntry{Name: args[0].AsString(), Fn: args[1]})
-	return Null, nil
+	return vmpackage.Null, nil
 }
 
 // Tests returns the test blocks registered while executing this session's code,
@@ -199,22 +199,22 @@ func (s *Session) Tests() []TestEntry { return s.tests }
 //
 // Returns the yielded value, or null if nothing was yielded or the fiber is
 // over (upstream parity: resume never errors on a completed fiber).
-func (s *Session) builtinResume(ctx context.Context, args []Value) (Value, error) {
+func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 	if len(args) < 1 {
-		return Null, fmt.Errorf("buzz: resume requires a fiber argument")
+		return vmpackage.Null, fmt.Errorf("buzz: resume requires a fiber argument")
 	}
 	fib, ok := vmpackage.AsFiber(args[0])
 	if !ok {
-		return Null, fmt.Errorf("buzz: resume requires a fiber, got %s", args[0].Kind())
+		return vmpackage.Null, fmt.Errorf("buzz: resume requires a fiber, got %s", args[0].Kind())
 	}
 	switch fib.Status() {
 	case vmpackage.FiberDone:
 		// upstream: resume on a completed fiber returns null. If the fiber ended
 		// in an error, re-surface it rather than swallowing it (Err is nil for a
 		// clean completion, so this returns null, nil in that case).
-		return Null, fib.Err()
+		return vmpackage.Null, fib.Err()
 	case vmpackage.FiberRunning:
-		return Null, fmt.Errorf("buzz: cannot resume a running fiber (recursive resume)")
+		return vmpackage.Null, fmt.Errorf("buzz: cannot resume a running fiber (recursive resume)")
 	}
 	fibVM := fib.VM()
 	fibVM.SetCtx(ctx)
@@ -229,24 +229,24 @@ func (s *Session) builtinResume(ctx context.Context, args []Value) (Value, error
 		}
 		fib.SetStatus(vmpackage.FiberDone)
 		fib.SetErr(err) // cache so a later resume/resolve re-surfaces it
-		return Null, err
+		return vmpackage.Null, err
 	}
 	fib.SetStatus(vmpackage.FiberDone)
-	fib.SetReturn(result) // cache for resolve
-	return Null, nil      // upstream: resume returns null on normal completion
+	fib.SetReturn(result)      // cache for resolve
+	return vmpackage.Null, nil // upstream: resume returns null on normal completion
 }
 
 // builtinResolve is the session-aware implementation of `resolve fiber`. It
 // runs the fiber to completion, ignoring all yield points, and returns the
 // fiber function's return value. Calling resolve on an already-done fiber
 // returns the cached return value (upstream: resolve is idempotent after done).
-func (s *Session) builtinResolve(ctx context.Context, args []Value) (Value, error) {
+func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 	if len(args) < 1 {
-		return Null, fmt.Errorf("buzz: resolve requires a fiber argument")
+		return vmpackage.Null, fmt.Errorf("buzz: resolve requires a fiber argument")
 	}
 	fib, ok := vmpackage.AsFiber(args[0])
 	if !ok {
-		return Null, fmt.Errorf("buzz: resolve requires a fiber, got %s", args[0].Kind())
+		return vmpackage.Null, fmt.Errorf("buzz: resolve requires a fiber, got %s", args[0].Kind())
 	}
 	switch fib.Status() {
 	case vmpackage.FiberDone:
@@ -254,7 +254,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []Value) (Value, erro
 		// (Err is nil for a clean completion).
 		return fib.Return(), fib.Err()
 	case vmpackage.FiberRunning:
-		return Null, fmt.Errorf("buzz: cannot resolve a running fiber (recursive resolve)")
+		return vmpackage.Null, fmt.Errorf("buzz: cannot resolve a running fiber (recursive resolve)")
 	}
 	fibVM := fib.VM()
 	fibVM.SetCtx(ctx)
@@ -267,7 +267,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []Value) (Value, erro
 		if err := ctx.Err(); err != nil {
 			fib.SetStatus(vmpackage.FiberDone)
 			fib.SetErr(err)
-			return Null, err
+			return vmpackage.Null, err
 		}
 		result, err := fibVM.Exec()
 		if err == nil {
@@ -282,7 +282,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []Value) (Value, erro
 		}
 		fib.SetStatus(vmpackage.FiberDone)
 		fib.SetErr(err)
-		return Null, err
+		return vmpackage.Null, err
 	}
 }
 
@@ -390,7 +390,7 @@ func (s *Session) SetPromoteTopLevel(on bool) { s.promoteTopLevel = on }
 func (s *Session) IncludeDirs() []string { return s.includeDirs }
 
 // Targets returns the target map populated by magus.target.new().
-func (s *Session) Targets() map[string]Callable { return s.targets }
+func (s *Session) Targets() map[string]vmpackage.Callable { return s.targets }
 
 // Exec parses, type-checks, compiles, and executes Buzz source code in the session's environment.
 // Type errors are returned as hard errors (Buzz is statically typed).
@@ -455,10 +455,10 @@ func (s *Session) enter(vm *vmpackage.VM) func() {
 // Eval compiles and runs code against the session's shared scope and returns the
 // program's result value (the value of a trailing `return <expr>`, else Null).
 // The REPL uses it to print bare expressions.
-func (s *Session) Eval(ctx context.Context, code string) (Value, error) {
+func (s *Session) Eval(ctx context.Context, code string) (vmpackage.Value, error) {
 	chunk, err := s.compileShared(code)
 	if err != nil {
-		return Null, err
+		return vmpackage.Null, err
 	}
 	return s.EvalChunk(ctx, chunk)
 }
@@ -467,7 +467,7 @@ func (s *Session) Eval(ctx context.Context, code string) (Value, error) {
 // REPL driver compiles first (to tell a syntax error — fall back to the
 // statement form — from a runtime error) then runs exactly once via this, so a
 // snippet with side effects never executes twice.
-func (s *Session) EvalChunk(ctx context.Context, chunk *Chunk) (Value, error) {
+func (s *Session) EvalChunk(ctx context.Context, chunk *vmpackage.Chunk) (vmpackage.Value, error) {
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
 	v, err := vm.Run(chunk, s.env)
@@ -476,10 +476,10 @@ func (s *Session) EvalChunk(ctx context.Context, chunk *Chunk) (Value, error) {
 
 // Globals returns a snapshot of the session's top-level bindings (name → value),
 // including host-injected globals. The REPL filters host names for .globals.
-func (s *Session) Globals() map[string]Value {
+func (s *Session) Globals() map[string]vmpackage.Value {
 	names := s.env.Names()
 	slots := s.env.Slots()
-	out := make(map[string]Value, len(names))
+	out := make(map[string]vmpackage.Value, len(names))
 	for name, slot := range names {
 		out[name] = slots[slot]
 	}
@@ -489,12 +489,12 @@ func (s *Session) Globals() map[string]Value {
 // Exports returns the subset of Globals() whose names were declared with
 // export in a file executed via Exec or ExecChunk. The map is a fresh snapshot;
 // mutations don't affect the session.
-func (s *Session) Exports() map[string]Value {
+func (s *Session) Exports() map[string]vmpackage.Value {
 	if len(s.exportedNames) == 0 {
 		return nil
 	}
 	all := s.Globals()
-	out := make(map[string]Value, len(s.exportedNames))
+	out := make(map[string]vmpackage.Value, len(s.exportedNames))
 	for name := range s.exportedNames {
 		if v, ok := all[name]; ok {
 			out[name] = v
@@ -514,7 +514,7 @@ func (s *Session) DoString(code string) error { return s.Exec(s.ctx, code) }
 // (injected globals, prior definitions, target callbacks), so top-level
 // declarations are Env bindings (SharedGlobals), not per-Run slots. Predefined
 // globals are passed to the checker so they aren't flagged as undefined.
-func (s *Session) compileShared(code string) (*Chunk, error) {
+func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
 	prog, err := parseModed(code, !s.embedded)
 	if err != nil {
 		return nil, err
@@ -716,7 +716,7 @@ func (s *Session) bindNamespaceObject(name string, exports []string) {
 	if _, exists := s.env.Get(name); exists {
 		return
 	}
-	m := NewMap()
+	m := vmpackage.NewMap()
 	for _, n := range exports {
 		if v, ok := s.env.Get(n); ok {
 			m.MapSet(n, v)
@@ -751,7 +751,7 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	}
 
 	// Collect new globals: anything in sub-session not in the host snapshot.
-	m := NewMap()
+	m := vmpackage.NewMap()
 	for name, slot := range sub.env.Names() {
 		if _, wasHost := hostNames[name]; !wasHost {
 			m.MapSet(name, sub.env.Slots()[slot])
@@ -809,12 +809,12 @@ func bzzExists(path string) bool { _, err := os.Stat(path); return err == nil }
 // Compile parses, type-checks, and returns a runnable Chunk bound to this
 // session's shared-globals scope. Pass the result to ExecChunk to run it,
 // optionally multiple times without re-parsing.
-func (s *Session) Compile(code string) (*Chunk, error) {
+func (s *Session) Compile(code string) (*vmpackage.Chunk, error) {
 	return s.compileShared(code)
 }
 
 // ExecChunk runs a previously compiled Chunk in the session's environment.
-func (s *Session) ExecChunk(ctx context.Context, chunk *Chunk) error {
+func (s *Session) ExecChunk(ctx context.Context, chunk *vmpackage.Chunk) error {
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
 	_, err := vm.Run(chunk, s.env)
@@ -827,12 +827,12 @@ func (s *Session) ExecChunk(ctx context.Context, chunk *Chunk) error {
 }
 
 // SetGlobal binds name to v in the session's global Env.
-func (s *Session) SetGlobal(name string, v Value) { s.env.Define(name, v) }
+func (s *Session) SetGlobal(name string, v vmpackage.Value) { s.env.Define(name, v) }
 
 // GetGlobal returns the value bound to name, or Null if unbound. The signature
 // matches the cross-engine engine.Session interface (which returns a bare
 // Value); absence and an explicit null binding both yield Null.
-func (s *Session) GetGlobal(name string) Value {
+func (s *Session) GetGlobal(name string) vmpackage.Value {
 	v, _ := s.env.Get(name)
 	return v
 }
@@ -845,11 +845,11 @@ func (s *Session) Close() error {
 
 // CallValue invokes a Buzz function (or direct callable) Value with the given arguments.
 // Host code (e.g. magus target dispatch) uses this to call back into Buzz.
-func (s *Session) CallValue(ctx context.Context, fn Value, args []Value) (Value, error) {
+func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
 	if err := vm.Call(fn, args); err != nil {
-		return Null, err
+		return vmpackage.Null, err
 	}
 	result, err := vm.Exec()
 	return result, err

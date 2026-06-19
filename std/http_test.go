@@ -101,6 +101,44 @@ func (timeoutError) Error() string   { return "i/o timeout" }
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
 
+// TestHTTPClientTimeout checks that both the shared default client and a
+// per-call client built from opts carry a non-zero overall Timeout, so a
+// stalled server cannot hang a request indefinitely.
+func TestHTTPClientTimeout(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, defaultHTTPTimeout, defaultHTTPClient.Timeout, "default client timeout")
+
+	// A custom client (retry opt set) still carries the default timeout.
+	o := parseHTTPOpts(map[string]any{"retry": int64(2)})
+	assert.Equal(t, defaultHTTPTimeout, o.client().Timeout, "custom client default timeout")
+
+	// An explicit timeout opt overrides the default.
+	o = parseHTTPOpts(map[string]any{"timeout": float64(0.25)})
+	assert.True(t, o.custom(), "timeout opt should make the request custom")
+	assert.Equal(t, 250*time.Millisecond, o.client().Timeout, "explicit timeout opt")
+}
+
+// TestHTTPTimeoutBoundsSlowServer checks that a server which accepts the
+// connection then stalls is bounded by the per-call timeout rather than
+// hanging forever.
+func TestHTTPTimeoutBoundsSlowServer(t *testing.T) {
+	t.Parallel()
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-block // never write; hold the request open until the test ends
+	}))
+	defer srv.Close()
+	defer close(block)
+
+	start := time.Now()
+	_, err := HTTPGet(context.Background(), srv.URL, nil, map[string]any{
+		"timeout": float64(0.05), // 50ms
+		"retry":   int64(0),      // no retries: bound a single attempt
+	})
+	require.Error(t, err, "want a timeout error, not a hang")
+	assert.Less(t, time.Since(start), 5*time.Second, "request was not bounded by timeout")
+}
+
 func TestHTTPFail(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

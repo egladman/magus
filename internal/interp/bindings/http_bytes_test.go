@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func newHTTPBytesSession(t *testing.T) *buzz.Session {
 }
 
 // callHTTPExport execs src, then invokes the exported function name with args.
-func callHTTPExport(t *testing.T, sess *buzz.Session, src, name string, args ...buzz.Value) buzz.Value {
+func callHTTPExport(t *testing.T, sess *buzz.Session, src, name string, args ...vm.Value) vm.Value {
 	t.Helper()
 	require.NoError(t, sess.Exec(context.Background(), src), "Exec")
 	fn, ok := sess.Exports()[name]
@@ -53,7 +54,7 @@ import "http" as xhttp
 export fun dl(url: str, dest: str) > int {
     return xhttp.download(url, dest, {"X-Test": "yes"});
 }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "dl", buzz.StrValue(srv.URL), buzz.StrValue(dest))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "dl", vm.StrValue(srv.URL), vm.StrValue(dest))
 	require.True(t, got.IsInt(), "status not an int: %v", got)
 	assert.Equal(t, int64(200), got.AsInt())
 	data, err := os.ReadFile(dest)
@@ -71,7 +72,7 @@ func TestDownloadNon2xxWritesNoFile(t *testing.T) {
 	src := `
 import "http" as xhttp
 export fun dl(url: str, dest: str) > int { return xhttp.download(url, dest, {}); }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "dl", buzz.StrValue(srv.URL), buzz.StrValue(dest))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "dl", vm.StrValue(srv.URL), vm.StrValue(dest))
 	assert.Equal(t, int64(204), got.AsInt())
 	_, err := os.Stat(dest)
 	assert.True(t, os.IsNotExist(err), "expected no file at %s, stat err = %v", dest, err)
@@ -83,7 +84,7 @@ func TestSizeReportsByteLength(t *testing.T) {
 	src := `
 import "http" as xhttp
 export fun sz(p: str) > int { return xhttp.byteSize(p); }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "sz", buzz.StrValue(p))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "sz", vm.StrValue(p))
 	assert.Equal(t, int64(len(blob)), got.AsInt())
 }
 
@@ -114,7 +115,7 @@ import "http" as xhttp
 export fun up(url: str, src: str, chunk: int) > any {
     return xhttp.upload_chunked("PATCH", url, src, chunk, {});
 }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", buzz.StrValue(srv.URL), buzz.StrValue(srcFile), buzz.IntValue(4))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StrValue(srv.URL), vm.StrValue(srcFile), vm.IntValue(4))
 	require.True(t, got.IsList(), "upload return = %v, want [status, body]", got)
 	require.Len(t, got.ListItems(), 2, "upload return = %v, want [status, body]", got)
 	assert.Equal(t, int64(204), got.ListItems()[0].AsInt(), "final status")
@@ -152,7 +153,7 @@ import "http" as xhttp
 export fun up(url: str, src: str) > any {
     return xhttp.upload_chunked("PUT", url, src, 0, {});
 }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", buzz.StrValue(srv.URL), buzz.StrValue(srcFile))
+	got := callHTTPExport(t, newHTTPBytesSession(t), src, "up", vm.StrValue(srv.URL), vm.StrValue(srcFile))
 	assert.Equal(t, int64(200), got.ListItems()[0].AsInt(), "status")
 	assert.Empty(t, gotRange, "single-shot upload sent Content-Range %q, want none", gotRange)
 	assert.Equal(t, blob, gotBody, "uploaded bytes")

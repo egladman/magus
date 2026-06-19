@@ -37,6 +37,12 @@ type options struct {
 	// [retryTransport]: it is asked whether a given response/error pair warrants
 	// another attempt. Exactly one of resp/err is non-nil per call.
 	decide func(resp *http.Response, err error) bool
+	// timeout sets http.Client.Timeout on the client built by [NewHTTPClient].
+	// Zero leaves the base client's timeout untouched. Because the retry loop
+	// lives inside the transport, this bounds the whole Do call (every attempt
+	// plus backoff between them), so a stalled server cannot hang a request
+	// indefinitely. It has no effect on [Do].
+	timeout time.Duration
 }
 
 // Option configures a [Do] call.
@@ -78,6 +84,13 @@ func WithMaxElapsed(d time.Duration) Option { return func(o *options) { o.maxEla
 func WithRetryDecider(fn func(resp *http.Response, err error) bool) Option {
 	return func(o *options) { o.decide = fn }
 }
+
+// WithTimeout sets http.Client.Timeout on the client built by [NewHTTPClient].
+// Because the retry loop lives inside the transport, it bounds the whole Do call
+// (every attempt plus backoff) so a stalled server cannot hang a request
+// indefinitely. Zero (the default) leaves the base client's timeout untouched.
+// It has no effect on [Do].
+func WithTimeout(d time.Duration) Option { return func(o *options) { o.timeout = d } }
 
 // Do runs fn with exponential backoff. It returns nil on the first success,
 // or the final error wrapped with the attempt count. It returns ctx.Err()
@@ -276,6 +289,9 @@ func NewHTTPClient(base *http.Client, opts ...Option) *http.Client {
 		*clone = *base
 	}
 	clone.Transport = &retryTransport{base: baseTransport, opts: cfg}
+	if cfg.timeout > 0 {
+		clone.Timeout = cfg.timeout
+	}
 	return clone
 }
 

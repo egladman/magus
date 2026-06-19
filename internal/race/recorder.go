@@ -138,7 +138,12 @@ func (r *recorder) close() {
 	r.mu.Unlock()
 	if w != nil {
 		_ = w.Close()
-		<-done // not held under the mutex: drain needs it to append final events
+		// Wait for drain to flush final events, but bound it: if fsnotify's Events
+		// channel never closes and ctx was never cancelled, don't block forever.
+		select {
+		case <-done: // not held under the mutex: drain needs it to append final events
+		case <-time.After(5 * time.Second):
+		}
 	}
 }
 

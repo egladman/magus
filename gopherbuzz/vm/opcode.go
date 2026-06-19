@@ -26,7 +26,7 @@ const (
 	// Slot-based local variable access (B2).
 	// A = slot index relative to frame.base.
 	//
-	// ultra-opt: direct slice index replaces hash-map lookup through the
+	// optimization: direct slice index replaces hash-map lookup through the
 	// parent-chain env. Eliminates newEnv() per block/loop entirely.
 	// measured: LoopSum allocs/op 2000004 → ~0; Fib allocs/op 13M → ~0.
 	// trade-off: compiler must pre-resolve all locals to slot indices.
@@ -36,12 +36,12 @@ const (
 
 	// Upvalue access (B2): variables captured from outer function scopes.
 	// A = index into current closure's Upvals slice.
-	// ultra-opt: O(1) array access vs env chain walk.
+	// optimization: O(1) array access vs env chain walk.
 	OpGetUpvalue // push frame.fun.Upvals[A]
 	OpSetUpvalue // frame.fun.Upvals[A] = pop
 
 	// Receiver access: pushes the current frame's bound receiver (`this`).
-	// ultra-opt: `this` lives in frame.this (set by OpCall from fn.This), not in
+	// optimization: `this` lives in frame.this (set by OpCall from fn.This), not in
 	// a per-call heap Env, so a method body reads it with a single struct-field
 	// load instead of walking an Env chain — and the call no longer allocates an
 	// Env to hold it. See OpCall and frame.this in vm.go.
@@ -97,7 +97,7 @@ const (
 	// *funObj copy that OpGetMember+OpCall would allocate. Falls back to the
 	// general call path when the resolved member is an ordinary function/direct callable
 	// value (e.g. a callable stored in a map field).
-	// ultra-opt: removes the last per-method-call allocation (see getMember's
+	// optimization: removes the last per-method-call allocation (see getMember's
 	// bound-funObj copy). measured: bench/methodcall.txt.
 	OpInvoke
 

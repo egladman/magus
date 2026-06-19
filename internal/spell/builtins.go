@@ -84,7 +84,7 @@ func loadBuiltins() map[string]Descriptor {
 			_ = sess.Close()
 			panic("magus/spell: exec built-in " + name + ": " + err.Error())
 		}
-		spec, err := Resolve(ctx, sess, ForkExtract)
+		spec, err := Resolve(ctx, sess, CommandOps)
 		_ = sess.Close()
 		if err != nil {
 			panic("magus/spell: resolve built-in " + name + ": " + err.Error())

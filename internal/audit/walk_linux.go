@@ -11,7 +11,7 @@ import (
 type dirEntKind uint8
 
 const (
-	dentSkip dirEntKind = iota // not a file/dir we care about
+	_ dirEntKind = iota // not a file/dir we care about
 	dentDir
 	dentRegular
 )

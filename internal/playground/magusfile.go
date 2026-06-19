@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // Graph is the evaluated shape of a magusfile: its registered projects, the
@@ -33,7 +34,7 @@ type DryRunResult struct {
 type targetInfo struct {
 	key  string
 	name string
-	val  buzz.Value
+	val  vm.Value
 }
 
 // evalAndProbe runs the magusfile top level (registering projects), discovers

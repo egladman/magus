@@ -284,6 +284,14 @@ func init() {
 			Usage:    "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.",
 		},
 		{
+			GoPath:   "Log.Silent",
+			YamlPath: "log.silent",
+			EnvVar:   "MAGUS_LOG_SILENT",
+			Flag:     FlagNames{Long: ""},
+			Kind:     KindBoolPtr,
+			Usage:    "MAGUS_LOG_SILENT: Silent suppresses progress like --quiet, and additionally bounds the failing-project",
+		},
+		{
 			GoPath:   "Hints.Enabled",
 			YamlPath: "hints.enabled",
 			EnvVar:   "MAGUS_HINTS_ENABLED",

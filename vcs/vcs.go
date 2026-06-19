@@ -117,11 +117,11 @@ func perVCSEnv(name, suffix string) string {
 	return "MAGUS_VCS_" + strings.ToUpper(name) + "_" + suffix
 }
 
-// checkBaseRef rejects a base ref that begins with "-", which a VCS would
+// checkRef rejects a base ref / rev / sha that begins with "-", which a VCS would
 // otherwise read as a flag (argument injection) when passed as a standalone token.
-func checkBaseRef(base string) error {
-	if strings.HasPrefix(base, "-") {
-		return fmt.Errorf("vcs: refusing base ref %q that looks like a flag", base)
+func checkRef(ref string) error {
+	if strings.HasPrefix(ref, "-") {
+		return fmt.Errorf("vcs: refusing ref %q that looks like a flag", ref)
 	}
 	return nil
 }

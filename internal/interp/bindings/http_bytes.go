@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/vm"
 )
 
 // maxChunk caps a single upload chunk; callers may request less but not more.
@@ -27,22 +27,22 @@ const maxChunk = 32 * 1024 * 1024
 // VM glue, hand-written against the gopherbuzz value API and merged onto the
 // generated `http` module map at bind time (see registerHostModules); it lives
 // here, not on the VM-agnostic std surface.
-func registerHTTPBytes() buzz.Value {
-	m := buzz.NewMap()
+func registerHTTPBytes() vm.Value {
+	m := vm.NewMap()
 
 	// download(url, dest, headers?) -> int
 	// GET url, streaming the response body to dest (created/truncated). Returns
 	// the HTTP status code; the body is never materialised as a Buzz string, so
 	// arbitrary binary survives intact. A non-2xx status writes no file.
-	m.MapSet("download", buzz.DirectValue("http.download", func(ctx context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("download", vm.DirectValue("http.download", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		url := httpStrArg(args, 0)
 		dest := httpStrArg(args, 1)
 		headers := httpMapArg(args, 2)
 		status, err := httpDownload(ctx, url, dest, headers)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.IntValue(int64(status)), nil
+		return vm.IntValue(int64(status)), nil
 	}))
 
 	// byteSize(path) -> int
@@ -51,12 +51,12 @@ func registerHTTPBytes() buzz.Value {
 	// which len() on a Buzz string cannot give for binary data. Named byteSize
 	// (not size) because a module map's built-in .size() method — its entry count —
 	// shadows a stored key of the same name.
-	m.MapSet("byteSize", buzz.DirectValue("http.byteSize", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("byteSize", vm.DirectValue("http.byteSize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		fi, err := os.Stat(httpStrArg(args, 0))
 		if err != nil {
-			return buzz.Null, fmt.Errorf("http.byteSize: %w", err)
+			return vm.Null, fmt.Errorf("http.byteSize: %w", err)
 		}
-		return buzz.IntValue(fi.Size()), nil
+		return vm.IntValue(fi.Size()), nil
 	}))
 
 	// upload_chunked(method, url, src, chunk_size, headers?) -> [int, str]
@@ -66,7 +66,7 @@ func registerHTTPBytes() buzz.Value {
 	// GitHub Actions Cache (and RFC 7233 servers) expect. chunk_size <= 0 sends
 	// the whole file in one request with no Content-Range. Returns the final
 	// [status, body]; body is small (servers ack chunks with empty/JSON bodies).
-	m.MapSet("upload_chunked", buzz.DirectValue("http.upload_chunked", func(ctx context.Context, args []buzz.Value) (buzz.Value, error) {
+	m.MapSet("upload_chunked", vm.DirectValue("http.upload_chunked", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		method := httpStrArg(args, 0)
 		url := httpStrArg(args, 1)
 		src := httpStrArg(args, 2)
@@ -74,9 +74,9 @@ func registerHTTPBytes() buzz.Value {
 		headers := httpMapArg(args, 4)
 		status, body, err := httpUploadChunked(ctx, method, url, src, chunk, headers)
 		if err != nil {
-			return buzz.Null, err
+			return vm.Null, err
 		}
-		return buzz.ListValue([]buzz.Value{buzz.IntValue(int64(status)), buzz.StrValue(body)}), nil
+		return vm.ListValue([]vm.Value{vm.IntValue(int64(status)), vm.StrValue(body)}), nil
 	}))
 
 	return m
@@ -189,21 +189,21 @@ func httpSendChunk(ctx context.Context, method, url string, body io.Reader, leng
 	return resp.StatusCode, string(rb), nil
 }
 
-func httpStrArg(args []buzz.Value, i int) string {
+func httpStrArg(args []vm.Value, i int) string {
 	if i < len(args) && args[i].IsStr() {
 		return args[i].AsString()
 	}
 	return ""
 }
 
-func httpIntArg(args []buzz.Value, i int) int64 {
+func httpIntArg(args []vm.Value, i int) int64 {
 	if i < len(args) && args[i].IsInt() {
 		return args[i].AsInt()
 	}
 	return 0
 }
 
-func httpMapArg(args []buzz.Value, i int) map[string]string {
+func httpMapArg(args []vm.Value, i int) map[string]string {
 	if i >= len(args) || !args[i].IsMap() {
 		return nil
 	}

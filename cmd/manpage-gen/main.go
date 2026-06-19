@@ -27,7 +27,6 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	imanpage "github.com/egladman/magus/internal/manpage"
-	"github.com/egladman/magus/manpage"
 )
 
 func main() {
@@ -72,7 +71,7 @@ func genRoff(outDir, date, ver string) {
 
 func renderMain(date, ver string) []byte {
 	var buf bytes.Buffer
-	w := manpage.NewWriter(&buf)
+	w := imanpage.NewWriter(&buf)
 
 	w.TH("magus", "1", date, "magus "+ver, "magus Manual")
 
@@ -97,8 +96,8 @@ func renderMain(date, ver string) []byte {
 	w.SH("Subcommands")
 	w.Indent()
 	for _, seg := range imanpage.All {
-		manRef := fmt.Sprintf(`\fBmagus\-%s\fR(1)`, manpage.EscapeHyphen(seg.Name))
-		body := manpage.Escape(seg.Short) + `. See ` + manRef + `.`
+		manRef := fmt.Sprintf(`\fBmagus\-%s\fR(1)`, imanpage.EscapeHyphen(seg.Name))
+		body := imanpage.Escape(seg.Short) + `. See ` + manRef + `.`
 		w.TP(w.B(seg.Name), body)
 	}
 	w.Dedent()
@@ -112,20 +111,20 @@ func renderMain(date, ver string) []byte {
 
 func renderSegment(seg imanpage.Segment, date, ver string) []byte {
 	var buf bytes.Buffer
-	w := manpage.NewWriter(&buf)
+	w := imanpage.NewWriter(&buf)
 
 	pageName := "magus-" + seg.Name
 	w.TH(pageName, "1", date, "magus "+ver, "magus Manual")
 
 	w.SH("Name")
-	fmt.Fprintf(&buf, "%s \\- %s\n", manpage.EscapeHyphen(pageName), manpage.Escape(seg.Short))
+	fmt.Fprintf(&buf, "%s \\- %s\n", imanpage.EscapeHyphen(pageName), imanpage.Escape(seg.Short))
 
 	w.SH("Synopsis")
 	if sp := strings.Index(seg.Usage, " "); sp < 0 {
-		fmt.Fprintln(&buf, `.B `+manpage.EscapeHyphen(seg.Usage))
+		fmt.Fprintln(&buf, `.B `+imanpage.EscapeHyphen(seg.Usage))
 	} else {
-		fmt.Fprintln(&buf, `.B `+manpage.EscapeHyphen(seg.Usage[:sp]))
-		fmt.Fprintln(&buf, `.RI "`+manpage.Escape(strings.TrimSpace(seg.Usage[sp:]))+`"`)
+		fmt.Fprintln(&buf, `.B `+imanpage.EscapeHyphen(seg.Usage[:sp]))
+		fmt.Fprintln(&buf, `.RI "`+imanpage.Escape(strings.TrimSpace(seg.Usage[sp:]))+`"`)
 	}
 
 	if seg.Long != "" {
@@ -140,7 +139,7 @@ func renderSegment(seg imanpage.Segment, date, ver string) []byte {
 		w.Indent()
 		fs.VisitAll(func(f *flag.Flag) {
 			typeName, _ := flag.UnquoteUsage(f)
-			w.TP(flagLabel(w, f.Name, typeName, f.DefValue), manpage.Escape(f.Usage))
+			w.TP(flagLabel(w, f.Name, typeName, f.DefValue), imanpage.Escape(f.Usage))
 		})
 		w.Dedent()
 	}
@@ -151,11 +150,11 @@ func renderSegment(seg imanpage.Segment, date, ver string) []byte {
 		}
 		fs := flag.NewFlagSet(seg.Name+" "+child.Name, flag.ContinueOnError)
 		child.BuildFlags(fs)
-		w.SS(manpage.EscapeHyphen(seg.Name) + " " + child.Name + " options")
+		w.SS(imanpage.EscapeHyphen(seg.Name) + " " + child.Name + " options")
 		w.Indent()
 		fs.VisitAll(func(f *flag.Flag) {
 			typeName, _ := flag.UnquoteUsage(f)
-			w.TP(flagLabel(w, f.Name, typeName, f.DefValue), manpage.Escape(f.Usage))
+			w.TP(flagLabel(w, f.Name, typeName, f.DefValue), imanpage.Escape(f.Usage))
 		})
 		w.Dedent()
 	}
@@ -164,7 +163,7 @@ func renderSegment(seg imanpage.Segment, date, ver string) []byte {
 		w.SH("Subcommands")
 		w.Indent()
 		for _, child := range seg.Children {
-			w.TP(w.B(child.Name), manpage.Escape(child.Short))
+			w.TP(w.B(child.Name), imanpage.Escape(child.Short))
 		}
 		w.Dedent()
 	}
@@ -173,7 +172,7 @@ func renderSegment(seg imanpage.Segment, date, ver string) []byte {
 		w.SH("Targets")
 		w.Indent()
 		for _, t := range seg.Targets {
-			w.TP(w.B(t.Name), manpage.Escape(t.Short))
+			w.TP(w.B(t.Name), imanpage.Escape(t.Short))
 		}
 		w.Dedent()
 	}
@@ -182,7 +181,7 @@ func renderSegment(seg imanpage.Segment, date, ver string) []byte {
 		w.SH("Examples")
 		for _, ex := range seg.Examples {
 			if ex.Comment != "" {
-				fmt.Fprintf(&buf, "\\fI%s\\fR\n", manpage.Escape(ex.Comment))
+				fmt.Fprintf(&buf, "\\fI%s\\fR\n", imanpage.Escape(ex.Comment))
 				w.P()
 			}
 			w.Example(ex.Command)
@@ -194,14 +193,14 @@ func renderSegment(seg imanpage.Segment, date, ver string) []byte {
 	return buf.Bytes()
 }
 
-func writeEnvSection(w *manpage.Writer, _ *bytes.Buffer) {
+func writeEnvSection(w *imanpage.Writer, _ *bytes.Buffer) {
 	w.SH("Environment")
 	w.Indent()
 	for _, d := range config.EnvVarDocs() {
 		label := `\fB` + d.EnvVar + `\fR`
-		body := manpage.Escape(d.Desc)
+		body := imanpage.Escape(d.Desc)
 		if d.Default != "" {
-			body += ` (default: ` + manpage.Escape(d.Default) + `)`
+			body += ` (default: ` + imanpage.Escape(d.Default) + `)`
 		}
 		if d.YAMLKey != "" {
 			body += `. Equivalent magus.yaml key: ` + w.B(d.YAMLKey) + `.`
@@ -211,13 +210,13 @@ func writeEnvSection(w *manpage.Writer, _ *bytes.Buffer) {
 	w.Dedent()
 }
 
-func writeFilesSection(w *manpage.Writer) {
+func writeFilesSection(w *imanpage.Writer) {
 	w.SH("Files")
 	w.TP(`\fBmagus.yaml\fR, \fB.magus.yaml\fR`, escapeMulti(filesConfig))
 	w.TP(`\fB.magus\-cache/\fR`, escapeMulti(filesCache))
 }
 
-func writeSeeAlso(w *manpage.Writer, buf *bytes.Buffer, currentName string) {
+func writeSeeAlso(w *imanpage.Writer, buf *bytes.Buffer, currentName string) {
 	w.SH("See Also")
 	var refs []string
 	if currentName != "" {
@@ -227,24 +226,24 @@ func writeSeeAlso(w *manpage.Writer, buf *bytes.Buffer, currentName string) {
 		if seg.Name == currentName {
 			continue
 		}
-		refs = append(refs, fmt.Sprintf(`\fBmagus\-%s\fR(1)`, manpage.EscapeHyphen(seg.Name)))
+		refs = append(refs, fmt.Sprintf(`\fBmagus\-%s\fR(1)`, imanpage.EscapeHyphen(seg.Name)))
 	}
 	fmt.Fprintln(buf, strings.Join(refs, ",\n"))
 	fmt.Fprintln(buf, `.br`)
 }
 
 // flagLabel builds the .TP label for a CLI flag.
-func flagLabel(w *manpage.Writer, name, typeName, defValue string) string {
+func flagLabel(w *imanpage.Writer, name, typeName, defValue string) string {
 	prefix := "--"
 	if len(name) == 1 {
 		prefix = "-"
 	}
-	label := `\fB` + manpage.EscapeHyphen(prefix) + manpage.EscapeHyphen(name) + `\fR`
+	label := `\fB` + imanpage.EscapeHyphen(prefix) + imanpage.EscapeHyphen(name) + `\fR`
 	if typeName != "" && typeName != "bool" {
 		label += ` \fI` + typeName + `\fR`
 	}
 	if defValue != "" && defValue != "false" && defValue != "0" && defValue != "0s" {
-		label += ` (default: ` + manpage.Escape(defValue) + `)`
+		label += ` (default: ` + imanpage.Escape(defValue) + `)`
 	}
 	_ = w // may be used for future B/I formatting
 	return label
@@ -252,9 +251,9 @@ func flagLabel(w *manpage.Writer, name, typeName, defValue string) string {
 
 // escapeMulti escapes a roff body that may span several source lines.
 func escapeMulti(s string) string {
-	parts := manpage.SplitParas(s)
+	parts := imanpage.SplitParas(s)
 	for i := range parts {
-		parts[i] = manpage.Escape(parts[i])
+		parts[i] = imanpage.Escape(parts[i])
 	}
 	return strings.Join(parts, "\n")
 }
@@ -285,7 +284,7 @@ func renderMainMD() []byte {
 	m.p(mdB("magus") + " [flags] " + mdEsc("<subcommand>") + " [args]")
 
 	m.h2("Description")
-	for _, para := range manpage.SplitParas(mainDescription) {
+	for _, para := range imanpage.SplitParas(mainDescription) {
 		m.p(mdEsc(para))
 	}
 
@@ -325,7 +324,7 @@ func renderSegmentMD(seg imanpage.Segment) []byte {
 
 	if seg.Long != "" {
 		m.h2("Description")
-		for _, para := range manpage.SplitParas(seg.Long) {
+		for _, para := range imanpage.SplitParas(seg.Long) {
 			m.p(mdEsc(para))
 		}
 	}

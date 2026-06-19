@@ -6,7 +6,7 @@ package types
 const SpellDefinition = "A spell is a language/runtime adapter that " +
 	"teaches magus how to build, test, lint, and format projects of a given type. " +
 	"Spells are registered at startup and bound to projects by importing the spell " +
-	"and passing its handle to magus.project.register in the magusfile."
+	"and listing it in the spells of magus.project in the magusfile."
 
 // SpellEntry is the structured view of a single spell.
 type SpellEntry struct {
@@ -103,7 +103,7 @@ type TargetGraphProject struct {
 	Nodes  []TargetGraphNode `json:"nodes,omitempty"  yaml:"nodes,omitempty"`
 	Cycle  []string          `json:"cycle,omitempty"  yaml:"cycle,omitempty"`
 	// DependsOn are the workspace-relative paths of the projects this project
-	// depends on (its project-level deps, declared in magus.project.register).
+	// depends on (its project-level deps, declared in magus.project).
 	// They draw the project → project arrows in the combined workspace graph;
 	// intra-project target edges live on each node's Dependencies.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
@@ -158,12 +158,12 @@ type ModuleMethodEntry struct {
 	Name       string `json:"name"                  yaml:"name"`
 	Doc        string `json:"doc,omitempty"         yaml:"doc,omitempty"`
 	Buzz       string `json:"buzz"                  yaml:"buzz"`
-	NativeBuzz string `json:"native_buzz,omitempty" yaml:"native_buzz,omitempty"`
+	BuzzStdlib string `json:"buzz_stdlib,omitempty" yaml:"buzz_stdlib,omitempty"`
 }
 
 // Record is the Buzz boundary map for a method entry (magus.module's methods).
 func (m ModuleMethodEntry) Record() map[string]any {
-	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "nativeBuzz": m.NativeBuzz}
+	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "buzzStdlib": m.BuzzStdlib}
 }
 
 // ModuleFieldEntry is one static, table-level value on a module (e.g. vcs.name).
@@ -188,7 +188,7 @@ type ModuleEntry struct {
 
 // Record is the Buzz boundary map magus.modules / magus.module return:
 // {name, doc, fields, methods}. fields/methods are always present (empty in the
-// summary view). The generated/hand-written bindings marshal it via hostbuzz.Recorder.
+// summary view). The generated/hand-written bindings marshal it via host.Recorder.
 func (e ModuleEntry) Record() map[string]any {
 	fields := make([]any, len(e.Fields))
 	for i, f := range e.Fields {
@@ -238,7 +238,7 @@ type EvaluatedTargetEntry struct {
 	DependsOn []string              `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string              `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpellEntry `json:"spells,omitempty"     yaml:"spells,omitempty"`
-	Policy    *Target               `json:"policy,omitempty"    yaml:"policy,omitempty"`
+	Policy    *Target               `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnFlake)
 	Exclusive bool                  `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 }
 

@@ -26,7 +26,7 @@ import "os"  in a magusfile
   `time`, `fmt`, `markdown`, `charm`, `encoding`, `path`, `strings`, `semver`,
   `yaml`, `platform`, and the `magus` core namespace.
 - The native-equivalent cross-reference (which host method duplicates a Buzz
-  stdlib call) is in [`../hostbuzz/overlap.go`](../hostbuzz/overlap.go).
+  stdlib call) is in [`../host/overlap.go`](../host/overlap.go).
 
 Anything magus-specific goes **here**, never in `gopherbuzz/std` — that package
 stays upstream-shaped so standalone Buzz programs remain portable.
@@ -48,7 +48,7 @@ func init() { Register(Os) }
 ```
 
 `magus-bindings-gen` reflects over each `Impl` and emits the Buzz trampoline into
-the sibling [`../hostbuzz/gen`](../hostbuzz) package (`//go:generate` lives next to
+the sibling [`../host/gen`](../host) package (`//go:generate` lives next to
 each descriptor in `std/*.go`); a drift test keeps the generated files in lockstep
 with the declarations. This is the single source of truth: declare the typed
 signature, regenerate, and the docs (`magus describe module`, `docs/modules/*.md`)
@@ -56,7 +56,7 @@ and the Buzz binding both follow. Adding a module is one descriptor + `Register`
 in `init()` + a `//go:generate` line.
 
 `std` itself stays VM-agnostic: the Buzz value marshalling and the trampolines
-live in [`../hostbuzz`](../hostbuzz), and the few byte-level companions that can't
+live in [`../host`](../host), and the few byte-level companions that can't
 be declared (the `crypto.hmacSha256` / `http.download` family, whose args cross
 as `[int]` byte lists the `TypeTag` set can't express) are hand-written VM glue in
 `internal/interp/bindings`.

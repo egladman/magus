@@ -25,7 +25,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module archive -lang buzz -out ../hostbuzz/gen/archive.go
+//go:generate go run ../cmd/magus-bindings-gen -module archive -lang buzz -out ../host/gen/archive.go
 
 func init() { Register(Archive) }
 
@@ -108,6 +108,7 @@ func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
 }
 
 func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
+	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
 	strip := archiveOptInt(opts, "strip", 0)
 	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
 
@@ -174,6 +175,7 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 }
 
 func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
+	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
 	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
 	level := archiveOptInt(opts, "level", -1)
 	followSymlinks := archiveOptBool(opts, "follow_symlinks", false)

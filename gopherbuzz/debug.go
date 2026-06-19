@@ -15,7 +15,7 @@ import vmpackage "github.com/egladman/gopherbuzz/vm"
 
 // Frames returns the active call stack of the currently-executing VM, innermost
 // first. Empty when no run is in progress.
-func (s *Session) Frames() []DebugFrame {
+func (s *Session) Frames() []vmpackage.DebugFrame {
 	if s.curVM == nil {
 		return nil
 	}
@@ -34,7 +34,7 @@ func (s *Session) CallDepth() int {
 // Locals returns the named locals of the frame at level (0 = innermost) in the
 // current VM, read from its stack register window. Empty when the level is out
 // of range or no debug-name info was compiled.
-func (s *Session) Locals(level int) map[string]Value {
+func (s *Session) Locals(level int) map[string]vmpackage.Value {
 	if s.curVM == nil {
 		return nil
 	}
@@ -43,7 +43,7 @@ func (s *Session) Locals(level int) map[string]Value {
 
 // Upvalues returns the captured upvalues of the frame at level (0 = innermost),
 // keyed by name. Empty when the frame is not a closure or no names were compiled.
-func (s *Session) Upvalues(level int) map[string]Value {
+func (s *Session) Upvalues(level int) map[string]vmpackage.Value {
 	if s.curVM == nil {
 		return nil
 	}
@@ -54,7 +54,7 @@ func (s *Session) Upvalues(level int) map[string]Value {
 // cb runs synchronously on the execution goroutine and may re-enter the pry
 // REPL. It applies to the VM currently executing; if none is active the hook is
 // stored and applied to the next run that starts.
-func (s *Session) SetStepHook(mask StepMask, cb func(StepEvent, DebugFrame)) {
+func (s *Session) SetStepHook(mask vmpackage.StepMask, cb func(vmpackage.StepEvent, vmpackage.DebugFrame)) {
 	s.stepHook = cb
 	s.stepMask = mask
 	if s.curVM != nil {

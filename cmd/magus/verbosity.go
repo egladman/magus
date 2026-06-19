@@ -1,12 +1,52 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strconv"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/std"
 )
+
+// dirHandler stamps each record with a "dir" attribute — the magusfile working
+// directory established by a target, pulled from the context.
+// Because execution no longer changes the process working directory (targets carry
+// their cwd on the context so they can run concurrently), a bare log line can no
+// longer be traced to the project that emitted it; this restores that correlation
+// for every slog.*Context call. An explicit "dir" attribute on the record wins, so
+// callers that already know a more specific directory (e.g. a subprocess cwd) are
+// left untouched.
+type dirHandler struct{ slog.Handler }
+
+func (h dirHandler) Handle(ctx context.Context, r slog.Record) error {
+	dir, ok := std.CwdFromContext(ctx)
+	if !ok {
+		return h.Handler.Handle(ctx, r)
+	}
+	hasDir := false
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == "dir" {
+			hasDir = true
+			return false
+		}
+		return true
+	})
+	if !hasDir {
+		r = r.Clone()
+		r.AddAttrs(slog.String("dir", dir))
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h dirHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	return dirHandler{h.Handler.WithAttrs(as)}
+}
+
+func (h dirHandler) WithGroup(name string) slog.Handler {
+	return dirHandler{h.Handler.WithGroup(name)}
+}
 
 // verbosity is a counted flag value (flag.Value); IsBoolFlag lets -v be used without an argument.
 type verbosity int
@@ -61,10 +101,16 @@ func levelName(lvl slog.Level) string {
 
 // applyDisplay configures the process-global slog logger and writes the resolved level back to globalCfg.
 func applyDisplay() {
-	lvl := effectiveLevel(global.verbose, global.quiet)
-	addSource := !global.quiet && global.verbose >= 3
+	// --silent implies --quiet's suppression; the extra behavior rides on Log.Silent.
+	quiet := global.quiet || global.silent
+	lvl := effectiveLevel(global.verbose, quiet)
+	addSource := !quiet && global.verbose >= 3
 
 	globalCfg.Log.Level = levelName(lvl)
+	if global.silent {
+		s := true
+		globalCfg.Log.Silent = &s
+	}
 
 	opts := &slog.HandlerOptions{Level: lvl, AddSource: addSource}
 	var h slog.Handler
@@ -73,5 +119,5 @@ func applyDisplay() {
 	} else {
 		h = slog.NewTextHandler(os.Stderr, opts)
 	}
-	slog.SetDefault(slog.New(h))
+	slog.SetDefault(slog.New(dirHandler{h}))
 }

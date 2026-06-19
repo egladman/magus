@@ -115,10 +115,6 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be a unix:// URL (got %q)", f.Value)
 	case "mcp_address":
 		return fmt.Sprintf("must be a valid host:port, e.g. 127.0.0.1:7391 (got %q)", f.Value)
-	case "unique":
-		return fmt.Sprintf("entries must have unique %s field", f.Param)
-	case "unique_names":
-		return fmt.Sprintf("duplicate entry name (%s)", f.Param)
 	default:
 		if f.Param != "" {
 			return fmt.Sprintf("failed %s=%s (got %q)", f.Tag, f.Param, f.Value)

@@ -138,7 +138,7 @@ func gitRoot(dir string) string {
 // dependencies (project imports, recovered statically) into its DependsOn, so
 // the affected set and scheduling treat them exactly like a project-level depends_on
 // — letting a magusfile declare a cross-project dependency once, at the target,
-// rather than also in project.register. It mutates the workspace's projects in
+// rather than also in magus.project. It mutates the workspace's projects in
 // place. ctx is honored between projects so a cancelled construction stops promptly;
 // a project whose source can't be read or whose dep path won't resolve contributes
 // nothing (best-effort, matching the static extractor's never-error contract).

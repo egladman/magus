@@ -11,7 +11,7 @@ var _benchCtx = context.Background()
 
 // benchSession creates a session and defines src once; returns a precompiled
 // chunk for the "hot" portion and the session's env so globals are available.
-func benchSetup(b *testing.B, init, hot string) (*Chunk, *vmpackage.Env) {
+func benchSetup(b *testing.B, init, hot string) (*vmpackage.Chunk, *vmpackage.Env) {
 	b.Helper()
 	sess := newSession(_benchCtx)
 	if init != "" {
@@ -434,8 +434,8 @@ run();`,
 // longer depends on `import "std"`.
 func BenchmarkDirectCall(b *testing.B) {
 	sess := newSession(_benchCtx)
-	sess.SetGlobal("nat", DirectValue("nat", func(_ context.Context, args []Value) (Value, error) {
-		return IntValue(int64(len(args))), nil
+	sess.SetGlobal("nat", vmpackage.DirectValue("nat", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
+		return vmpackage.IntValue(int64(len(args))), nil
 	}))
 	prog, err := ParseEmbedded(`var sum = 0;
 var i = 0;

@@ -576,7 +576,7 @@ func TestGraphWarnsOnUnresolvedDep(t *testing.T) {
 		"consumer=api",
 		"missing_dep=internal/db-typo",
 		"did_you_mean=internal/db",
-		"magus.project.register",
+		"magus.project",
 	} {
 		assert.Contains(t, got, want, "log output missing %q", want)
 	}
@@ -668,7 +668,7 @@ func TestUnregisteredDepErrorMessage(t *testing.T) {
 		"api -> internal/db-typo",
 		"(did you mean: internal/db)",
 		"svc-b -> shared/missing",
-		"fix: register the missing project(s)",
+		"fix: configure the missing project(s)",
 	} {
 		assert.Contains(t, msg, want, "Error() missing %q", want)
 	}

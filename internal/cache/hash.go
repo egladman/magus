@@ -32,7 +32,7 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 	// byte identical to the prior fmt formatting, so existing cache keys stay valid
 	// and keyVersion need not change.
 	//
-	// ultra-opt: fmt.Fprintf -> append+Write on the key serialization path.
+	// optimization: fmt.Fprintf -> append+Write on the key serialization path.
 	// BenchmarkHashStep (200 deps/40 env/20 tools): -41% sec/op (71.6µ->42.1µ),
 	// -47% B/op, -97% allocs/op (274->9), p=0.000 n=10. This hot path overrides the
 	// usual fmt-for-legibility preference; TestHashKeyByteLayout pins the exact
@@ -271,7 +271,7 @@ type relAbs struct{ rel, abs string }
 // expandSources turns source globs into a sorted slice of (rel, abs) pairs.
 // Uses a single WalkDir pass with compiled matchers; prunes well-known ignore dirs early.
 // Output globs are excluded from the walk (output tree is never an input).
-func expandSources(globs []string, root string, exclude []string) ([]relAbs, error) {
+func expandSources(globs []string, root string, outputGlobs []string) ([]relAbs, error) {
 	if len(globs) == 0 {
 		return nil, nil
 	}
@@ -283,9 +283,9 @@ func expandSources(globs []string, root string, exclude []string) ([]relAbs, err
 
 	var exclPats []compiledGlob
 	var prunePrefixes []string
-	if len(exclude) > 0 {
-		exclNorm := make([]string, len(exclude))
-		for i, g := range exclude {
+	if len(outputGlobs) > 0 {
+		exclNorm := make([]string, len(outputGlobs))
+		for i, g := range outputGlobs {
 			exclNorm[i] = filepath.ToSlash(g)
 			if p := staticDirPrefix(exclNorm[i]); p != "" {
 				prunePrefixes = append(prunePrefixes, p)
@@ -299,7 +299,7 @@ func expandSources(globs []string, root string, exclude []string) ([]relAbs, err
 	// except for the filesystem root ("/"), which magus never uses as a workspace.
 	rootLen := len(root)
 
-	// ultra-opt: pre-size out to len(globs) as an allocation floor. Spell Sources
+	// optimization: pre-size out to len(globs) as an allocation floor. Spell Sources
 	// are dominated by exact-path globs (package.json, lockfiles, *.mod) that each
 	// match ~1 file, so len(globs) is a good first estimate and skips the early
 	// 0→1→2→…→256 reallocs of nil-slice growth. Larger trees still amortize via

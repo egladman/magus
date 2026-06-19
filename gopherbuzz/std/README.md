@@ -48,7 +48,7 @@ magus registers this package first, then layers its host methods onto the same
 bare module names and adds modules Buzz has no concept of (`vcs`, `archive`,
 `http`, `env`, `time`, `charm`, …). The union is what a magusfile sees. The
 cross-reference of which magus method has a native Buzz equivalent lives in
-[`magus/hostbuzz/overlap.go`](../../hostbuzz/overlap.go); the superset itself is
+[`magus/host/overlap.go`](../../host/overlap.go); the superset itself is
 described in [`magus/std/README.md`](../../std/README.md).
 
 The split is deliberate: edit **this** package only to track upstream Buzz; put

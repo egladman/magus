@@ -11,11 +11,11 @@ import (
 
 type jjVCS struct{}
 
-func (jjVCS) Name() string     { return "jj" }
-func (jjVCS) Claims() []string { return []string{".jj"} }
-func (jjVCS) Base() string     { return "trunk()" }
+func (v jjVCS) Name() string     { return "jj" }
+func (v jjVCS) Claims() []string { return []string{".jj"} }
+func (v jjVCS) Base() string     { return "trunk()" }
 
-func (jjVCS) Root(ctx context.Context, dir string) (string, error) {
+func (v jjVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "jj", "workspace", "root")
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -25,8 +25,8 @@ func (jjVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (jjVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
-	if err := checkBaseRef(base); err != nil {
+func (v jjVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+	if err := checkRef(base); err != nil {
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, "jj", "diff", "--name-only", "--from", base)
@@ -38,7 +38,7 @@ func (jjVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 	return splitLines(out), nil
 }
 
-func (jjVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
+func (v jjVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
 	cmd := exec.CommandContext(ctx, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id")
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -52,7 +52,7 @@ func (jjVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffComm
 	}, nil
 }
 
-func (jjVCS) Bisect(_ context.Context, _ string, _ types.BisectOptions) (types.Culprit, error) {
+func (v jjVCS) Bisect(_ context.Context, _ string, _ types.BisectOptions) (types.Culprit, error) {
 	return types.Culprit{}, types.ErrVCSUnsupported
 }
 
@@ -65,9 +65,12 @@ const jjCommitTemplate = `commit_id ++ "\0" ++ commit_id.short() ++ "\0" ++ ` +
 	`committer.timestamp().format("%Y-%m-%dT%H:%M:%S%:z") ++ "\0" ++ ` +
 	`parents.map(|c| c.commit_id()).join(" ") ++ "\0" ++ description`
 
-func (jjVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
+func (v jjVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
 	if rev == "" {
 		rev = "@"
+	}
+	if err := checkRef(rev); err != nil {
+		return types.Commit{}, err
 	}
 	out, err := vcsOutput(ctx, dir, "jj", "log", "-r", rev, "--no-graph", "-T", jjCommitTemplate)
 	if err != nil {
@@ -97,11 +100,11 @@ func (v jjVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 // git backend, with no first-class jj command for the git-describe shape). Per
 // the interface contract a backend without the concept returns "" rather than
 // faking it; a jj user needing tag info reaches for vcs.exe().
-func (jjVCS) Describe(_ context.Context, _ string) (string, error) {
+func (v jjVCS) Describe(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
 
-func (jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
+func (v jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 	// ShortHash is the short commit_id (a prefix of Hash), not change_id, so it
 	// stays consistent with Hash and the agnostic Commit.ID model.
 	shortHash, err := vcsOutput(ctx, dir, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id.short()")

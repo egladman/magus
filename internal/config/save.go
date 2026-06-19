@@ -304,12 +304,6 @@ func setSliceEntry(m map[string]interface{}, slicePath, entryName, templatePath 
 	return nil
 }
 
-// InitDefaults returns a Config seeded with every built-in value
-// magus knows about, suitable for serialising to a fresh magus.yaml.
-func InitDefaults() Config {
-	return Defaults()
-}
-
 // Init writes a magus.yaml containing every built-in default to path.
 // It refuses to overwrite an existing file unless force is true. The
 // parent directory is created if missing.
@@ -322,7 +316,7 @@ func Init(path string, force bool) error {
 		}
 	}
 
-	cfg := InitDefaults()
+	cfg := Defaults()
 	if err := Validate(cfg); err != nil {
 		return fmt.Errorf("init: built-in defaults failed validation: %w", err)
 	}

@@ -50,7 +50,7 @@ type CompileOptions struct {
 // slot-based locals (the one-shot fast path); set SharedGlobals for the
 // session model. (This is the standalone counterpart to Session.Compile, which
 // compiles source against a session's shared scope.)
-func CompileWith(prog *ast.Program, opts CompileOptions) (*Chunk, error) {
+func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, error) {
 	c := newCompiler(nil, "<main>", nil)
 	c.useSlots = !opts.SharedGlobals
 	c.debugLines = opts.DebugLines
@@ -401,7 +401,7 @@ type upvalRef struct {
 }
 
 type compiler struct {
-	chunk     *Chunk
+	chunk     *vmpackage.Chunk
 	parent    *compiler
 	typeDecls map[string]*ast.ObjectDecl
 	loops     []loopInfo
@@ -457,7 +457,7 @@ type compiler struct {
 
 func newCompiler(parent *compiler, name string, params []string) *compiler {
 	c := &compiler{
-		chunk:     &Chunk{Name: name, Params: params},
+		chunk:     &vmpackage.Chunk{Name: name, Params: params},
 		parent:    parent,
 		typeDecls: map[string]*ast.ObjectDecl{},
 	}
@@ -549,7 +549,7 @@ func blockHasDecls(stmts []ast.Node) bool {
 }
 
 func (c *compiler) nameConst(s string) int32 {
-	return c.chunk.AddConst(StrValue(s))
+	return c.chunk.AddConst(vmpackage.StrValue(s))
 }
 
 // globalName maps a top-level identifier to its shared-Env key. A private var or
@@ -1142,7 +1142,7 @@ func (c *compiler) compileFunChunk(name, doc string, params []string, stmts []as
 // on the AST before this lowering — never sees the synthetic reference.
 func (c *compiler) compileTestDecl(v *ast.TestDecl) error {
 	c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(testRegistrarName), 0)
-	c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(v.Name)), 0)
+	c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(v.Name)), 0)
 	idx, err := c.compileFunChunk("test "+v.Name, "", nil, v.Body.Stmts)
 	if err != nil {
 		return err
@@ -1157,7 +1157,7 @@ func (c *compiler) compileTestDecl(v *ast.TestDecl) error {
 // for an object method's direct body, enabling this.field slot access there.
 func (c *compiler) compileFunChunkThis(name, doc string, params []string, stmts []ast.Node, thisFields map[string]int32) (int32, error) {
 	fc := &compiler{
-		chunk:      &Chunk{Name: name, Doc: doc, Params: params},
+		chunk:      &vmpackage.Chunk{Name: name, Doc: doc, Params: params},
 		parent:     c,
 		typeDecls:  make(map[string]*ast.ObjectDecl),
 		useSlots:   true,
@@ -1239,7 +1239,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 }
 
 func (c *compiler) compileEnumDecl(v *ast.EnumDecl) error {
-	idx := c.chunk.AddConst(EnumDefValue(v.Name, v.Cases))
+	idx := c.chunk.AddConst(vmpackage.EnumDefValue(v.Name, v.Cases))
 	c.chunk.Emit(vmpackage.OpLoadConst, idx, 0)
 	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
 	if c.depth == 0 {
@@ -1266,16 +1266,16 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			c.chunk.Emit(vmpackage.OpLoadFalse, 0, 0)
 		}
 	case *ast.IntLit:
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(IntValue(v.Val)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.IntValue(v.Val)), 0)
 	case *ast.FloatLit:
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(FloatValue(v.Val)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.FloatValue(v.Val)), 0)
 	case *ast.StringLit:
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(v.Val)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(v.Val)), 0)
 	case *ast.PatLit:
 		// Compile the regex once, at compile time, so a malformed pattern is a
 		// compile error and the value lives in the const pool (no per-eval recompile,
 		// no new Exec opcode).
-		pv, err := PatValue(v.Pattern)
+		pv, err := vmpackage.PatValue(v.Pattern)
 		if err != nil {
 			return fmt.Errorf("buzz: line %d:%d: %w", v.Line, v.Col, err)
 		}
@@ -1437,13 +1437,13 @@ func (c *compiler) compileExpr(n ast.Node) error {
 
 func (c *compiler) compileInterp(v *ast.InterpExpr) error {
 	if len(v.Parts) == 0 {
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue("")), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue("")), 0)
 		return nil
 	}
 	// Push each part's value; OpBuildStr will convert and join them all at once.
 	for _, part := range v.Parts {
 		if part.Expr == nil {
-			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(part.Lit)), 0)
+			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(part.Lit)), 0)
 		} else {
 			if err := c.compileExpr(part.Expr); err != nil {
 				return err
@@ -1574,7 +1574,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 	decl, ok := c.typeDecls[v.TypeName]
 	if !ok {
 		for i, key := range v.Keys {
-			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(key)), 0)
+			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(key)), 0)
 			if err := c.compileExpr(v.Values[i]); err != nil {
 				return err
 			}
@@ -1588,7 +1588,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 		overrides[k] = v.Values[i]
 	}
 	for _, f := range decl.Fields {
-		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(StrValue(f.Name)), 0)
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(f.Name)), 0)
 		if expr, hasOverride := overrides[f.Name]; hasOverride {
 			if err := c.compileExpr(expr); err != nil {
 				return err
