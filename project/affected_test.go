@@ -74,6 +74,68 @@ func TestAffectedFromPathsOutsideWorkspace(t *testing.T) {
 	assert.Equal(t, []string{"api"}, r.Seed)
 }
 
+// TestWorkspaceRelative covers the pure prefix-stripping: diff paths come back
+// relative to the VCS root, but project attribution needs them relative to the
+// workspace root.
+func TestWorkspaceRelative(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nested workspace strips prefix and drops outsiders", func(t *testing.T) {
+		t.Parallel()
+		got := workspaceRelative("magus/", []string{
+			"magus/gopherbuzz/parser.go",
+			"magus/internal/doctor/doctor.go",
+			".github/workflows/ci.yaml", // outside the workspace subtree
+			"other/x.go",                // outside the workspace subtree
+		})
+		assert.Equal(t, []string{"gopherbuzz/parser.go", "internal/doctor/doctor.go"}, got)
+	})
+
+	t.Run("empty prefix: workspace is the VCS root, unchanged", func(t *testing.T) {
+		t.Parallel()
+		in := []string{"gopherbuzz/parser.go", "internal/x.go"}
+		assert.Equal(t, in, workspaceRelative("", in))
+	})
+}
+
+// TestVCSRootPrefix verifies the walk-up marker search returns the slash-terminated
+// subdir prefix (no subprocess), and "" when the workspace is the VCS root or no
+// marker is found.
+func TestVCSRootPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("workspace nested below the marker", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+		ws := filepath.Join(root, "magus")
+		require.NoError(t, os.MkdirAll(filepath.Join(ws, "gopherbuzz"), 0o755))
+		assert.Equal(t, "magus/", vcsRootPrefix(ws, []string{".git"}))
+		assert.Equal(t, "magus/gopherbuzz/", vcsRootPrefix(filepath.Join(ws, "gopherbuzz"), []string{".git"}))
+	})
+
+	t.Run("workspace is the marker dir", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+		assert.Equal(t, "", vcsRootPrefix(root, []string{".git"}))
+	})
+
+	t.Run("marker is a file (worktree/submodule)", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /elsewhere"), 0o644))
+		ws := filepath.Join(root, "sub")
+		require.NoError(t, os.Mkdir(ws, 0o755))
+		assert.Equal(t, "sub/", vcsRootPrefix(ws, []string{".git"}))
+	})
+
+	t.Run("no marker found: empty (best-effort)", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "", vcsRootPrefix(t.TempDir(), []string{".magus-no-such-marker"}))
+	})
+}
+
 // countObserver counts the graph events it receives.
 type countObserver struct{ builds, queries, errs int }
 

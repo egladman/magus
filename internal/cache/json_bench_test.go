@@ -155,7 +155,7 @@ func BenchmarkMtimeStoreFlushAllDirty(b *testing.B) {
 // BenchmarkMtimeStoreConcurrentFlush measures contention when N goroutines
 // concurrently set + flush entries that land on distinct shards. Mirrors
 // the fan-out hot path where each completed target calls flush() at the end
-// of its hashSpec.
+// of its hashStep.
 func BenchmarkMtimeStoreConcurrentFlush(b *testing.B) {
 	for _, workers := range []int{1, 4, 8} {
 		workers := workers

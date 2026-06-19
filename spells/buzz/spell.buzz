@@ -35,17 +35,15 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 // one script per invocation, so find feeds xargs one file at a time (-n1); -print0
 // pairs with -0 for safe paths, and -r skips an empty set — the same -print0 | xargs
 // pattern the bash spell uses for shellcheck.
-fun buzzCheck(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "sh", "args": ["-c",
+fun buzzCheck(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "sh", args = ["-c",
         "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"]});
-    return true;
 }
 
 // test runs each source's Buzz `test {}` blocks (buzz --test).
-fun buzzTest(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "sh", "args": ["-c",
+fun buzzTest(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "sh", args = ["-c",
         "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"]});
-    return true;
 }
 
 // magus-buzz executes each source through `magus buzz`, magus's own embedded Buzz
@@ -55,13 +53,12 @@ fun buzzTest(target: Target, cb: fun(any)) > bool {
 // subprocess, so this resolves to the current magus even uninstalled / under
 // `go run`, with no dependence on PATH. (A bare $MAGUS, not ${MAGUS:-magus}: Buzz
 // reads {...} in a string as interpolation, and MAGUS is always set here anyway.)
-fun magusBuzz(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "sh", "args": ["-c",
+fun magusBuzz(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "sh", args = ["-c",
         "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"]});
-    return true;
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
     return {
         "buzz-check": buzzCheck,
         "buzz-test": buzzTest,

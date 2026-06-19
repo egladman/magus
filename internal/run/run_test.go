@@ -20,7 +20,7 @@ func TestExecInjectsMAGUS(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("'sh' not available")
 	}
-	res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS"`}, ExecSpec{Capture: true})
+	res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS"`}, ExecOptions{Capture: true})
 	require.NoError(t, err)
 	want, err := os.Executable()
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 	}
 	level := func(t *testing.T) string {
 		t.Helper()
-		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_LEVEL"`}, ExecSpec{Capture: true})
+		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_LEVEL"`}, ExecOptions{Capture: true})
 		require.NoError(t, err)
 		return res.Stdout
 	}

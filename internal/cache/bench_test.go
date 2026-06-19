@@ -39,9 +39,9 @@ func writeBenchProject(b *testing.B, root, project string) (outPath string) {
 	return filepath.Join(project, "out.bin")
 }
 
-// benchSpec returns a Spec for a project in root with one declared output.
-func benchSpec(root, project, outRel string) Spec {
-	return Spec{
+// benchStep returns a Step for a project in root with one declared output.
+func benchStep(root, project, outRel string) Step {
+	return Step{
 		ProjectPath:   project,
 		Sources:       []string{project + "/*.go"},
 		Outputs:       []string{outRel},
@@ -62,13 +62,13 @@ func buildFn(root, outRel string) func(context.Context) error {
 	}
 }
 
-// BenchmarkCacheMiss measures the full miss path: spec hashing, fn execution,
+// BenchmarkCacheMiss measures the full miss path: step hashing, fn execution,
 // output snapshotting, and manifest writing. A fresh cache dir per iteration
 // ensures every Run is a miss.
 func BenchmarkCacheMiss(b *testing.B) {
 	root := b.TempDir()
 	outRel := writeBenchProject(b, root, "pkg")
-	spec := benchSpec(root, "pkg", outRel)
+	step := benchStep(root, "pkg", outRel)
 	fn := buildFn(root, outRel)
 	ctx := context.Background()
 
@@ -76,13 +76,13 @@ func BenchmarkCacheMiss(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		cdir := filepath.Join(b.TempDir(), ".magus-cache")
 		c := openBenchCache(b, cdir, true)
-		if _, err := c.Run(ctx, spec, fn); err != nil {
+		if _, err := c.Run(ctx, step, fn); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkCacheHit measures the hot replay path: spec hashing, manifest
+// BenchmarkCacheHit measures the hot replay path: step hashing, manifest
 // lookup, and output extraction from the content-addressed store.
 // The cache is pre-populated once before the loop so every b.N iteration
 // is a guaranteed hit — the build fn is never called.
@@ -90,20 +90,20 @@ func BenchmarkCacheHit(b *testing.B) {
 	root := b.TempDir()
 	cdir := filepath.Join(b.TempDir(), ".magus")
 	outRel := writeBenchProject(b, root, "pkg")
-	spec := benchSpec(root, "pkg", outRel)
+	step := benchStep(root, "pkg", outRel)
 	fn := buildFn(root, outRel)
 	ctx := context.Background()
 
 	// Warm the cache.
 	warm := openBenchCache(b, cdir, true)
-	if _, err := warm.Run(ctx, spec, fn); err != nil {
+	if _, err := warm.Run(ctx, step, fn); err != nil {
 		b.Fatalf("warm run: %v", err)
 	}
 
 	c := openBenchCache(b, cdir, true)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, err := c.Run(ctx, spec, fn)
+		r, err := c.Run(ctx, step, fn)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -125,12 +125,12 @@ func BenchmarkRunAll(b *testing.B) {
 			root := b.TempDir()
 			cdir := filepath.Join(b.TempDir(), ".magus")
 
-			specs := make([]Spec, n)
+			steps := make([]Step, n)
 			fns := make([]func(context.Context) error, n)
-			for i := range specs {
+			for i := range steps {
 				p := fmt.Sprintf("svc-%d", i+1)
 				outRel := writeBenchProject(b, root, p)
-				specs[i] = benchSpec(root, p, outRel)
+				steps[i] = benchStep(root, p, outRel)
 				fns[i] = buildFn(root, outRel)
 			}
 
@@ -138,7 +138,7 @@ func BenchmarkRunAll(b *testing.B) {
 
 			// Pre-populate the cache so RunAll replays on every b.N iteration.
 			warm := openBenchCache(b, cdir, true)
-			for i, s := range specs {
+			for i, s := range steps {
 				s := s
 				fn := fns[i]
 				if _, err := warm.Run(ctx, s, fn); err != nil {
@@ -149,7 +149,7 @@ func BenchmarkRunAll(b *testing.B) {
 			c := openBenchCache(b, cdir, true)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := c.RunAll(ctx, specs, func(_ context.Context, s Spec) error {
+				if _, err := c.RunAll(ctx, steps, func(_ context.Context, s Step) error {
 					// fn not called on hit; this closure is only needed for the
 					// RunAll signature. The warm cache ensures it is never invoked.
 					return nil
@@ -164,7 +164,7 @@ func BenchmarkRunAll(b *testing.B) {
 // writeBenchProjectFiles writes nFiles Go source files for project under root and
 // returns the declared output path. Many files per project spread hashes across
 // many of the 256 mtime shards, so a multi-project cold build shares shards across
-// specs — the case where per-spec mtime flushing rewrites accumulating shards.
+// steps — the case where per-step mtime flushing rewrites accumulating shards.
 func writeBenchProjectFiles(b *testing.B, root, project string, nFiles int) (outRel string) {
 	b.Helper()
 	dir := filepath.Join(root, project)
@@ -184,8 +184,8 @@ func writeBenchProjectFiles(b *testing.B, root, project string, nFiles int) (out
 // BenchmarkRunAllColdMtime measures a cold (cache-empty) fan-out build over a
 // multi-file, multi-project workspace — the path where the mtime store is
 // re-populated and persisted. It is the benchmark behind moving the mtime flush
-// from per-spec (inside hashSpec) to once-per-RunAll: with per-spec flush each
-// completing spec rewrites every shard it shares with earlier specs, so the bytes
+// from per-step (inside hashStep) to once-per-RunAll: with per-step flush each
+// completing step rewrites every shard it shares with earlier steps, so the bytes
 // written to the shard files grow super-linearly in the project count.
 func BenchmarkRunAllColdMtime(b *testing.B) {
 	const (
@@ -193,12 +193,12 @@ func BenchmarkRunAllColdMtime(b *testing.B) {
 		nFiles    = 64
 	)
 	root := b.TempDir()
-	specs := make([]Spec, nProjects)
+	steps := make([]Step, nProjects)
 	fns := make([]func(context.Context) error, nProjects)
-	for i := range specs {
+	for i := range steps {
 		p := fmt.Sprintf("svc-%02d", i)
 		outRel := writeBenchProjectFiles(b, root, p, nFiles)
-		specs[i] = benchSpec(root, p, outRel)
+		steps[i] = benchStep(root, p, outRel)
 		fns[i] = buildFn(root, outRel)
 	}
 	ctx := context.Background()
@@ -209,17 +209,17 @@ func BenchmarkRunAllColdMtime(b *testing.B) {
 		// are hashed and the mtime shards are dirtied and flushed.
 		cdir := filepath.Join(b.TempDir(), ".magus")
 		c := openBenchCache(b, cdir, true)
-		if _, err := c.RunAll(ctx, specs, func(ctx context.Context, s Spec) error {
-			return fns[indexOfSpec(specs, s.ProjectPath)](ctx)
+		if _, err := c.RunAll(ctx, steps, func(ctx context.Context, s Step) error {
+			return fns[indexOfStep(steps, s.ProjectPath)](ctx)
 		}, WithConcurrency(8)); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func indexOfSpec(specs []Spec, project string) int {
-	for i := range specs {
-		if specs[i].ProjectPath == project {
+func indexOfStep(steps []Step, project string) int {
+	for i := range steps {
+		if steps[i].ProjectPath == project {
 			return i
 		}
 	}

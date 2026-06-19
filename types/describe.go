@@ -161,11 +161,21 @@ type ModuleMethodEntry struct {
 	NativeBuzz string `json:"native_buzz,omitempty" yaml:"native_buzz,omitempty"`
 }
 
+// Record is the Buzz boundary map for a method entry (magus.module's methods).
+func (m ModuleMethodEntry) Record() map[string]any {
+	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "nativeBuzz": m.NativeBuzz}
+}
+
 // ModuleFieldEntry is one static, table-level value on a module (e.g. vcs.name).
 type ModuleFieldEntry struct {
 	Name string `json:"name"          yaml:"name"`
 	Type string `json:"type"          yaml:"type"`
 	Doc  string `json:"doc,omitempty" yaml:"doc,omitempty"`
+}
+
+// Record is the Buzz boundary map for a field entry (magus.module's fields).
+func (f ModuleFieldEntry) Record() map[string]any {
+	return map[string]any{"name": f.Name, "type": f.Type, "doc": f.Doc}
 }
 
 // ModuleEntry is a module's summary; Fields/Methods are populated only for the detail view.
@@ -174,6 +184,21 @@ type ModuleEntry struct {
 	Doc     string              `json:"doc,omitempty"     yaml:"doc,omitempty"`
 	Fields  []ModuleFieldEntry  `json:"fields,omitempty"  yaml:"fields,omitempty"`
 	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
+}
+
+// Record is the Buzz boundary map magus.modules / magus.module return:
+// {name, doc, fields, methods}. fields/methods are always present (empty in the
+// summary view). The generated/hand-written bindings marshal it via hostbuzz.Recorder.
+func (e ModuleEntry) Record() map[string]any {
+	fields := make([]any, len(e.Fields))
+	for i, f := range e.Fields {
+		fields[i] = f.Record()
+	}
+	methods := make([]any, len(e.Methods))
+	for i, m := range e.Methods {
+		methods[i] = m.Record()
+	}
+	return map[string]any{"name": e.Name, "doc": e.Doc, "fields": fields, "methods": methods}
 }
 
 // ModulesOutput is the top-level result for "describe modules" / "describe module <name>".

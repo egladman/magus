@@ -140,7 +140,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 
 // pushToRemote exports the local artifact for (projectPath, hash) and uploads it.
 // Errors are logged but not returned: a failed push is not a build failure.
-func (c *Cache) pushToRemote(ctx context.Context, s Spec, hash string) {
+func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 	if !c.remote.Active(ctx) {
 		return // skip the export entirely when the backend is inactive
 	}

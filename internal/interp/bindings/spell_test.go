@@ -260,27 +260,31 @@ export fun check(args: [str]) > void {
 	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "vcs.commit facade")
 }
 
-// TestVcsCommitNullOutsideRepo pins the new contract that powers build_date's
-// fallback: outside any repository, vcs.commit() is null (not an empty record).
-func TestVcsCommitNullOutsideRepo(t *testing.T) {
+// TestVcsCommitEmptyOutsideRepo pins the contract that powers build_date's
+// fallback: outside any repository, vcs.commit() returns the zero record (every
+// field empty), not null — callers test a field (c.date == "") for "no commit".
+func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
 	dir := t.TempDir() // a bare temp dir, not under version control
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
 export fun check(args: [str]) > void {
-    if (vcs.commit() != null) { error("expected null outside a repo"); }
+    final c = vcs.commit();
+    if (c == null) { magus.fatal("vcs.commit should be an empty record, not null, outside a repo"); }
+    if (c.date != "") { magus.fatal("vcs.commit().date should be empty outside a repo"); }
+    if (c.id != "") { magus.fatal("vcs.commit().id should be empty outside a repo"); }
 }`)
 	srcs, err := interp.FindAll(dir)
 	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "vcs.commit null case")
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "vcs.commit empty-record case")
 }
 
-// TestEngineSpecParity locks the engine-agnostic mgs_ contract: a Buzz spell
+// TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
 // declaring every optional mgs_ function with record-shaped ops resolves to the
-// expected Spec. It guards the resolver (internal/spell/resolve.go) against
+// expected Descriptor. It guards the resolver (internal/spell/resolve.go) against
 // dropping fields — claims is asserted explicitly because that is the field that
 // previously regressed.
-func TestEngineSpecParity(t *testing.T) {
+func TestEngineDescriptorParity(t *testing.T) {
 	buzzSrc := `export fun mgs_getName() > str { return "parity_buzz"; }
 export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.rb", "Gemfile.lock"]; }
 export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**"]; }

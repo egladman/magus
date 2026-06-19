@@ -7,9 +7,9 @@ import (
 
 // bindOnlyFields filters out boolptr fields — they are env-only and must not
 // appear in BindFlags to avoid corrupting the three-state nil/*bool value.
-func bindOnlyFields(specs []FlagSpec) []FlagSpec {
-	out := make([]FlagSpec, 0, len(specs))
-	for _, s := range specs {
+func bindOnlyFields(defs []FlagDef) []FlagDef {
+	out := make([]FlagDef, 0, len(defs))
+	for _, s := range defs {
 		if s.Kind != "boolptr" {
 			out = append(out, s)
 		}

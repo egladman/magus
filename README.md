@@ -396,7 +396,7 @@ No Go toolchain. No `go.mod`. No network access.
 
 ```buzz
 import "magus";
-import "magus/extra";
+import "os";
 import "magus/spell/go";
 
 magus.project.register(fun(p, cb) > bool { cb({
@@ -404,7 +404,7 @@ magus.project.register(fun(p, cb) > bool { cb({
 }); return true; });
 
 export fun build_server(args: [str]) > void {
-    extra.os.exec("go", ["build", "-o", "bin/server", "./cmd/server"]);
+    os.exec("go", ["build", "-o", "bin/server", "./cmd/server"]);
 }
 ```
 
@@ -416,15 +416,17 @@ Magusfiles see three distinct namespaces:
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | **Language stdlib** | `std`, `os`, `fs`, `math` (`import "std"`, …)                                                                            | Buzz built-ins — untouched                                                              |
 | **`magus.*`**       | `magus.project.register`, `magus.needs`, `magus.target.literal/glob/regex/external`, `magus.cmd` | Build DSL — the primary authoring surface; targets are declared as exported functions   |
-| **Std modules**     | `extra.os`, `extra.fs`, … (`import "magus/extra"`)                                                                       | Runtime utility library, reached off the `extra` aggregate import                       |
+| **Host modules**    | `os`, `fs`, `vcs`, … (`import "os"`, `import "fs"`, …)                                                                   | Runtime utilities — magus methods layered onto Buzz's own stdlib module names (a superset) |
 
-The magus host utilities are one aggregate import: `import "magus/extra"` binds `extra`, and modules hang off it — `extra.os.exec`, `extra.fs.glob`, `extra.vcs`. Methods are camelCase (Buzz's convention). Keeping the bare names `os`/`fs`/`crypto` free for Buzz's own stdlib (`import "std"`, `import "os"`) means the two never collide.
+Each host module is imported under its **bare name** — `import "os"`, then `os.exec`; `import "fs"`, then `fs.glob`. magus layers its methods onto Buzz's own stdlib modules of the same name, so a single `import "os"` carries both surfaces, and adds whole modules Buzz lacks (`vcs`, `archive`, `http`, `charm`, …). Methods are camelCase (Buzz's convention); where a magus method overlaps a Buzz stdlib call, the magus form is sandbox-aware.
 
 ```buzz
-import "magus/extra";   // binds `extra`: extra.os, extra.fs, extra.vcs, …
+import "os";    // os.exec, os.which, … (plus Buzz's own os.sleep/env)
+import "fs";    // fs.glob, fs.readFile, …
+import "vcs";   // vcs.shortHash, vcs.describe, …
 ```
 
-The most-used module is **`extra.os`** — process execution. `extra.os.exec` runs a command directly (no shell; args are never interpolated, so it's injection-proof); `extra.os.execSh` runs a line through the shell for pipes and globs. Both stream output live and return an `ExecResult` (`{stdout, stderr, code, ok}`), raising on non-zero exit unless called with `{allowFailure: true}`. The rest cover filesystem (`extra.fs`), VCS introspection (`extra.vcs`), `extra.env`, `extra.crypto`, `extra.http`, `extra.json`, `extra.platform`, `extra.charm`, and `extra.archive`. Every module's full method list is in the **[module reference](docs/modules/index.md)**.
+The most-used module is **`os`** — process execution. `os.exec` runs a command directly (no shell; args are never interpolated, so it's injection-proof); `os.execSh` runs a line through the shell for pipes and globs. Both stream output live and return an `ExecResult` (`{stdout, stderr, code, ok}`), raising on non-zero exit unless called with `{allowFailure: true}`. The rest cover filesystem (`fs`), VCS introspection (`vcs`), `env`, `crypto`, `http`, `json`, `platform`, `charm`, and `archive`. Every module's full method list is in the **[module reference](docs/modules/index.md)**.
 
 Structured logging is on the `magus` namespace itself — `magus.info(msg, fields?)`, plus `magus.debug`/`magus.warn`/`magus.error` — so a magusfile can log into the process logger without an import. `magus.hint(msg)` prints a deduped, advisory nudge (honoring `MAGUS_HINTS_ENABLED`) without affecting the exit code; `magus.fatal(msg)` logs an error and aborts the run.
 
@@ -446,7 +448,7 @@ Inside a magusfile target the forwarded args arrive as the first parameter:
 export fun test(args: [str]) > void {
     var argv = ["test", "./..."];
     for (a in args) { argv.append(a); }
-    extra.os.exec("go", argv);
+    os.exec("go", argv);
 }
 ```
 
@@ -526,7 +528,7 @@ the spell:
 
 ```buzz
 import "magus/spell/go";
-import "magus/extra";
+import "os";
 magus.project.register("api/", fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
 
 export fun build(args: [str]) > void { go["go-build"]({ "cwd": "api/" }); }
@@ -534,7 +536,7 @@ export fun lint(args: [str])  > void { go["golangci-lint"]({ "cwd": "api/" }); }
 
 // use gotestsum instead of `go test` for this project
 export fun test(args: [str]) > void {
-    extra.os.exec("gotestsum", ["--", "./..."], "api/");
+    os.exec("gotestsum", ["--", "./..."], "api/");
 }
 ```
 
@@ -887,9 +889,9 @@ Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
 ```buzz
 export fun build(args: [str]) > void {
-    extra.os.exec("go", ["generate", "./..."]);
+    os.exec("go", ["generate", "./..."]);
     magus.pry();   // execution pauses here; inspect or modify state
-    extra.os.exec("go", ["build", "./..."]);
+    os.exec("go", ["build", "./..."]);
 }
 ```
 

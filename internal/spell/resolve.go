@@ -33,7 +33,7 @@ func ForkOrFunctionOps(src string) ResolveMode {
 
 // Resolve calls a Buzz spell module's exported mgs_ functions
 // once and assembles the definition map the shared decoder reads (keyed by the
-// decoder's field names), returning the decoded Spec. Centralizing it here
+// decoder's field names), returning the decoded Descriptor. Centralizing it here
 // keeps the mgs_ naming in one place and lets the decoder, bind-time handles, and
 // the embedded built-ins all read plain data uniformly.
 //
@@ -43,17 +43,17 @@ func ForkOrFunctionOps(src string) ResolveMode {
 // buzz engine wrap it for the bare-session case.
 //
 // mode selects how a function-valued mgs_listTargets is reduced (see resolveOps).
-func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Spec, error) {
+func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Descriptor, error) {
 	ex := sess.Exports()
 
 	nameFn, ok := ex["mgs_getName"]
 	if !ok {
-		return Spec{}, fmt.Errorf("magus/spell: a spell module must `export fun mgs_getName`")
+		return Descriptor{}, fmt.Errorf("magus/spell: a spell module must `export fun mgs_getName`")
 	}
 	def := buzz.NewMap()
 	nv, err := sess.CallValue(ctx, nameFn, nil)
 	if err != nil {
-		return Spec{}, fmt.Errorf("magus/spell: mgs_getName: %w", err)
+		return Descriptor{}, fmt.Errorf("magus/spell: mgs_getName: %w", err)
 	}
 	def.MapSet("name", nv)
 
@@ -70,14 +70,14 @@ func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Spec, e
 		}
 		rv, err := sess.CallValue(ctx, fn, args)
 		if err != nil {
-			return Spec{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
+			return Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 		}
 		// ops is post-processed here because its handlers can be function-valued
 		// (a Buzz-only form) and need resolving to data. See contract.go.
 		if f.Field == "ops" {
 			rv, err = resolveOps(ctx, sess, rv, mode)
 			if err != nil {
-				return Spec{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
+				return Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 			}
 		}
 		def.MapSet(f.Field, rv)
@@ -86,12 +86,13 @@ func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Spec, e
 }
 
 // resolveOps reduces a function-valued mgs_listTargets — the strictly-typed
-// {str: fun(Target, fun(any)) bool} form a spell returns, referencing its op
+// {str: fun(Target, fun(Run)) void} (fork) or {str: fun(Target, fun(any)) bool}
+// (function-op) form a spell returns, referencing its op
 // handlers directly by value — into the records the shared decoder reads. A function
 // value becomes either:
 //
 //   - ForkExtract: the {cmd, args, charms} spec the handler passes to its injected
-//     cb-callback, captured by calling the handler once (recordForkSpec). The
+//     cb-callback, captured by calling the handler once (recordForkRun). The
 //     decoder then reads it as an ordinary fork target — so the built-in fork path,
 //     BuiltinsHash, and charm enumeration are all unchanged.
 //   - FunctionOps: a {"fn": <handler>} record naming the handler for invoke-time
@@ -119,7 +120,7 @@ func resolveOps(ctx context.Context, sess *buzz.Session, ops buzz.Value, mode Re
 		// doctor doc-comment check applies to) from a plain {cmd,args} record op.
 		doc := v.FunDoc()
 		if mode == ForkExtract {
-			spec, err := recordForkSpec(ctx, sess, v)
+			spec, err := recordForkRun(ctx, sess, v)
 			if err != nil {
 				return buzz.Null, fmt.Errorf("op %q: %w", k, err)
 			}
@@ -152,15 +153,15 @@ func resolveOps(ctx context.Context, sess *buzz.Session, ops buzz.Value, mode Re
 	return out, nil
 }
 
-// recordForkSpec calls a fork op handler once with a recording cb-callback and
-// returns the single {cmd, args, charms} spec the handler hands to cb(...). A
-// fork handler must be straight-line: `cb({...}); return true;`, calling cb exactly
+// recordForkRun calls a fork op handler once with a recording cb-callback and
+// returns the single {cmd, args, charms} Run the handler hands to cb(...). A
+// fork handler must be straight-line: `cb(Run{...});`, calling cb exactly
 // once with a constant command — it must not branch on or read the Target (passed
 // as null here, so a value pulled from it would be null). The recorded cmd/args,
-// when present, must be strings (an empty record is allowed — a no-op marker op),
+// when present, must be strings (an empty Run is allowed — a no-op marker op),
 // so a second cb(...) call or a null value read from the Target fails at
 // resolution rather than silently caching a wrong spec.
-func recordForkSpec(ctx context.Context, sess *buzz.Session, fn buzz.Value) (buzz.Value, error) {
+func recordForkRun(ctx context.Context, sess *buzz.Session, fn buzz.Value) (buzz.Value, error) {
 	captured := buzz.Null
 	calls := 0
 	cb := buzz.DirectValue("magus.cb", func(_ context.Context, args []buzz.Value) (buzz.Value, error) {
@@ -176,26 +177,30 @@ func recordForkSpec(ctx context.Context, sess *buzz.Session, fn buzz.Value) (buz
 	if _, err := sess.CallValue(ctx, fn, []buzz.Value{buzz.Null, cb}); err != nil {
 		return buzz.Null, err
 	}
-	if !captured.IsMap() {
-		return buzz.Null, fmt.Errorf("fork op handler must call `cb({...})` with a command record")
+	// The handler hands cb an Run object (magus/target); MapView yields its
+	// {cmd, args, charms} field map. MapView also accepts a plain map, so a spell or
+	// test that passes a bare record still resolves identically.
+	mv, ok := captured.MapView()
+	if !ok {
+		return buzz.Null, fmt.Errorf("fork op handler must call `cb(Run{...})` with a command record")
 	}
-	if cmd, ok := captured.MapGet("cmd"); ok && !cmd.IsStr() {
-		return buzz.Null, fmt.Errorf("fork op handler's cb({...}) cmd must be a string")
+	if cmd, ok := mv.MapGet("cmd"); ok && !cmd.IsStr() {
+		return buzz.Null, fmt.Errorf("fork op handler's cb(Run{...}) cmd must be a string")
 	}
-	if args, ok := captured.MapGet("args"); ok && args.IsList() {
+	if args, ok := mv.MapGet("args"); ok && args.IsList() {
 		for _, a := range args.ListItems() {
 			if !a.IsStr() {
-				return buzz.Null, fmt.Errorf("fork op handler's cb({...}) args must all be strings")
+				return buzz.Null, fmt.Errorf("fork op handler's cb(Run{...}) args must all be strings")
 			}
 		}
 	}
-	return captured, nil
+	return mv, nil
 }
 
 // DecodeHandle decodes a bind-time spell handle — a map of resolved native data
-// built by a workspace-local spell import — into a Spec, so a workspace-local
+// built by a workspace-local spell import — into a Descriptor, so a workspace-local
 // Buzz spell can be registered by value at bind time.
-func DecodeHandle(v buzz.Value) (Spec, error) {
+func DecodeHandle(v buzz.Value) (Descriptor, error) {
 	return Decode(buzzSpellObj{v: v})
 }
 
@@ -224,10 +229,17 @@ func (o buzzSpellObj) Strs(key string) []string { return mapStrSlice(o.v, key) }
 
 func (o buzzSpellObj) Obj(key string) (Obj, bool) {
 	x, ok := o.v.MapGet(key)
-	if !ok || !x.IsMap() {
+	if !ok {
 		return nil, false
 	}
-	return buzzSpellObj{v: x}, true
+	// MapView accepts both a map and an object instance (a Run/Charm/PatchOp literal
+	// a fork handler built), yielding the field map either way — so the decoder reads
+	// the typed-object and bare-record forms identically.
+	mv, ok := x.MapView()
+	if !ok {
+		return nil, false
+	}
+	return buzzSpellObj{v: mv}, true
 }
 
 func (o buzzSpellObj) Objs(key string) []Obj {
@@ -237,8 +249,8 @@ func (o buzzSpellObj) Objs(key string) []Obj {
 	}
 	var out []Obj
 	for _, it := range x.ListItems() {
-		if it.IsMap() {
-			out = append(out, buzzSpellObj{v: it})
+		if mv, ok := it.MapView(); ok {
+			out = append(out, buzzSpellObj{v: mv})
 		}
 	}
 	return out

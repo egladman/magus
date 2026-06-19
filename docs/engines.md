@@ -71,20 +71,20 @@ to the injected `cb` callback (the form the resolver also extracts statically).
 docs only for freshly-compiled workspace `.buzz` spells, never the embedded
 built-ins.
 
-## `extra` is self-complete
+## Host modules are a superset of Buzz's stdlib
 
-Every magus host module (including `json`, `crypto`, and the `fs`/`env` methods
-Buzz's stdlib also covers) is on the `extra` surface. This is deliberate: it was
-tempting to make `extra` a strict _delta_ over Buzz's stdlib (omit the overlaps),
-but that split a single concept across two namespaces — `fs.exists` was native
-while `fs.join`/`glob` were `extra.fs`, so authors had to memorize which side each
-call lived on. Self-complete `extra` means one import covers a whole domain
-(`extra.fs.*`), and it does not shadow the stdlib (`extra.fs.exists` ≠ native
-`fs.exists`). The `extra` forms are also **sandbox-aware** where the bare stdlib
-is not — e.g. `extra.env.get`/`lookup` honor the env allowlist, while Buzz's
-`os.env` is raw. Methods that have a native Buzz equivalent are noted per-method
-in the [module reference](modules/index.md); either works. The cross-reference
-lives in `internal/std/buzz_overlap.go`.
+magus layers its host methods onto Buzz's own stdlib modules under the **same bare
+names**: `import "os"` carries both Buzz's `os.*` (sleep, env, execute) and magus's
+additions (`os.exec`, `os.which`, …); `import "fs"` carries Buzz's `fs` plus
+`fs.glob`/`readFile`; and magus adds whole modules Buzz lacks (`vcs`, `archive`,
+`http`, `charm`, …). One import per domain covers the union — there's no separate
+`extra` namespace to remember which side a call lives on.
+
+Where a method overlaps a Buzz stdlib call, the magus form is **sandbox-aware**
+while the bare stdlib is not — e.g. `env.get`/`lookup` honor the env allowlist,
+whereas Buzz's `os.env` is raw. Those overlaps are noted per-method in the
+[module reference](modules/index.md) (either works); the cross-reference lives in
+`hostbuzz/overlap.go`.
 
 A few entries are _not_ treated as duplicates because the magus behavior the
 stdlib can't reproduce: magus's `os.exit` raises a lifecycle error (Buzz's

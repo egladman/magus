@@ -7,17 +7,17 @@ import (
 	"github.com/egladman/magus/internal/config"
 )
 
-// ConfigFlagSpec documents one config field exposed as a CLI flag.
-type ConfigFlagSpec struct {
+// ConfigFlag documents one config field exposed as a CLI flag.
+type ConfigFlag struct {
 	Flag   string // CLI flag name, e.g. "cache-dir"
 	EnvVar string // matching MAGUS_* env var
 	Kind   string // "string", "int", "bool", "float64", "duration", or "boolptr"
 }
 
-// ConfigFlagSpecs is the generated inventory of every config-backed flag.
+// ConfigFlags is the generated inventory of every config-backed flag.
 // Consumed by magus doctor (env-var typo detection) and the man-page generator.
 // Do not edit by hand — regenerate with: go generate ./cmd/magus/...
-var ConfigFlagSpecs = []ConfigFlagSpec{
+var ConfigFlags = []ConfigFlag{
 	{"cache-dir", "MAGUS_CACHE_DIR", "string"},
 	{"cache-immutable", "MAGUS_CACHE_IMMUTABLE", "bool"},
 	{"cache-size-mb", "MAGUS_CACHE_SIZE_MB", "int"},

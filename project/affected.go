@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,7 +31,8 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 		}
 		return nil, errors.Join(types.ErrAffectedFallback, err)
 	}
-	changed := normalizeFiles(rawFiles)
+	prefix := vcsRootPrefix(w.Root, res.VCS.Claims())
+	changed := workspaceRelative(prefix, normalizeFiles(rawFiles))
 	base = res.Base
 
 	idx := newProjectIndex(w)
@@ -62,6 +64,51 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 		FilesBySeed: filesBySeed,
 		Affected:    closure,
 	}, nil
+}
+
+// vcsRootPrefix returns the slash-terminated path from the VCS root down to wsRoot
+// (e.g. "magus/"), or "" when wsRoot is itself the VCS root or no marker is found.
+// It walks up from wsRoot for any of the VCS's claim markers (.git, .hg, …) with
+// plain filesystem stats — no `git rev-parse` subprocess — and because the marker
+// dir is an ancestor of wsRoot by construction, the prefix is a pure lexical slice
+// (no absolute-path resolution or symlink evaluation).
+func vcsRootPrefix(wsRoot string, claims []string) string {
+	for dir := wsRoot; ; {
+		for _, c := range claims {
+			if _, err := os.Stat(filepath.Join(dir, c)); err == nil {
+				rel, err := filepath.Rel(dir, wsRoot)
+				if err != nil || rel == "." {
+					return "" // wsRoot is the VCS root; diff paths already match
+				}
+				return filepath.ToSlash(rel) + "/"
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "" // reached the filesystem root without a marker (best-effort)
+		}
+		dir = parent
+	}
+}
+
+// workspaceRelative rewrites VCS diff paths — reported relative to the VCS root — to
+// be relative to the workspace root by stripping prefix, dropping any path that
+// falls outside the workspace. When a workspace is nested below its VCS root (e.g. a
+// magus workspace in a subdir of a larger monorepo), every diff path otherwise
+// carries the subdir prefix, matches no project in projectForFile, and collapses the
+// affected set onto the root project so nested projects never seed. An empty prefix
+// (workspace is the VCS root, the common case) returns the input untouched.
+func workspaceRelative(prefix string, files []string) []string {
+	if prefix == "" {
+		return files
+	}
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		if rel, ok := strings.CutPrefix(f, prefix); ok {
+			out = append(out, rel)
+		}
+	}
+	return out
 }
 
 func normalizeFiles(files []string) []string {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+
+	"github.com/egladman/magus/types"
 )
 
 // ApplyPatch applies an RFC 6902 JSON Patch to argv, treating argv as a JSON
@@ -16,7 +18,7 @@ import (
 // always argv: paths are single-token pointers ("/N" or, for add, "/-"), and
 // values are strings. The op vocabulary is complete (add/remove/replace/move/
 // copy/test); the test suite checks it against the RFC's own examples.
-func ApplyPatch(argv []string, ops []PatchOp) ([]string, error) {
+func ApplyPatch(argv []string, ops []types.PatchOp) ([]string, error) {
 	out := slices.Clone(argv)
 	for i, op := range ops {
 		next, err := applyOp(out, op)
@@ -29,7 +31,7 @@ func ApplyPatch(argv []string, ops []PatchOp) ([]string, error) {
 }
 
 // applyOp applies a single op to argv (already a private copy ApplyPatch owns).
-func applyOp(argv []string, op PatchOp) ([]string, error) {
+func applyOp(argv []string, op types.PatchOp) ([]string, error) {
 	switch op.Op {
 	case OpAdd:
 		i, err := argvIndex(op.Path, len(argv), true)

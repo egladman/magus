@@ -484,8 +484,8 @@ func (m *Magus) flakeConfig() flake.Config {
 	}
 }
 
-// baseSpec returns the cache.Spec for p; always includes magusfiles so edits produce a miss.
-func (m *Magus) baseSpec(p *types.Project) cache.Spec {
+// baseStep returns the cache.Step for p; always includes magusfiles so edits produce a miss.
+func (m *Magus) baseStep(p *types.Project) cache.Step {
 	sources := make([]string, 0, len(p.Sources))
 	for _, glob := range p.Sources {
 		sources = append(sources, joinGlob(p.Path, glob))
@@ -498,7 +498,7 @@ func (m *Magus) baseSpec(p *types.Project) cache.Spec {
 	for _, o := range p.Outputs {
 		outputs = append(outputs, joinGlob(p.Path, o))
 	}
-	return cache.Spec{
+	return cache.Step{
 		ProjectPath:     p.Path,
 		Sources:         sources,
 		Outputs:         outputs,

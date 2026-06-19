@@ -179,3 +179,16 @@ type ExecResult struct {
 	Code   int
 	OK     bool `buzz:"ok"`
 }
+
+// Record is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
+// {stdout, stderr, code, ok}. The exec surfaces space-trim Stdout/Stderr before
+// building the struct (the captured-output convention), so this is a plain field
+// map. The generated trampoline calls it (see hostbuzz.Recorder).
+func (r ExecResult) Record() map[string]any {
+	return map[string]any{
+		"stdout": r.Stdout,
+		"stderr": r.Stderr,
+		"code":   r.Code,
+		"ok":     r.OK,
+	}
+}

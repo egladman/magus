@@ -1,4 +1,6 @@
 import "magus/target";
+// charm constructors derive argv patches from an anchor arg, not a counted index.
+import "magus/charm";
 
 export fun mgs_getName() > str { return "py"; }
 
@@ -11,29 +13,28 @@ export fun mgs_getVersionCommand() > [str] { return ["python3", "--version"]; }
 
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
-fun uvBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "uv", "args": ["build"]}); return true; }
-fun uvClean(target: Target, cb: fun(any)) > bool { cb({"cmd": "uv", "args": ["clean"]}); return true; }
-fun pytest(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "uv", "args": ["run", "pytest"], "charms": {
-        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
+fun uvBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "uv", args = ["build"]}); }
+fun uvClean(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "uv", args = ["clean"]}); }
+fun pytest(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "uv", args = ["run", "pytest"], charms = {
+        "debug": append(["-v"]),
     }});
-    return true;
 }
-fun ruffCheck(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "uv", "args": ["run", "ruff", "check", "."], "charms": {
-        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
-        "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},
-        "gha": {"ops": [{"op": "add", "path": "/3", "value": "--output-format=github"}]},
+fun ruffCheck(target: Target, cb: fun(Run)) > void {
+    final args = ["run", "ruff", "check", "."];
+    cb(Run{cmd = "uv", args = args, charms = {
+        "debug": append(["-v"]),
+        "rw": after(args, "check", ["--fix"]),
+        "gha": after(args, "check", ["--output-format=github"]),
     }});
-    return true;
 }
-fun ruffFormat(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "uv", "args": ["run", "ruff", "format", "--check", "."], "charms": {
-        "rw": {"ops": [{"op": "remove", "path": "/3"}]},
+fun ruffFormat(target: Target, cb: fun(Run)) > void {
+    final args = ["run", "ruff", "format", "--check", "."];
+    cb(Run{cmd = "uv", args = args, charms = {
+        "rw": drop(args, "--check"),
     }});
-    return true;
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
     return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat};
 }

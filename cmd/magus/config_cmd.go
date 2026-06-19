@@ -70,14 +70,14 @@ func runConfigView(cfg config.Config, args []string) error {
 	if err != nil {
 		return err
 	}
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, cfg)
+		return emitFormatted(opts, cfg)
 	case outputName:
 		for _, k := range config.KnownKeys() {
 			fmt.Println(k)

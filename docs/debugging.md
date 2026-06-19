@@ -9,17 +9,17 @@ Both share the same evaluator. Pry adds stack-introspection commands (`.where`, 
 
 ## Interactive REPL
 
-`magus repl` opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the `magus` object (including the `extra` modules and spell bindings) is preloaded. If a `magusfile.buzz` is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.
+`magus repl` opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the `magus` object (including the host modules and spell bindings) is preloaded. If a `magusfile.buzz` is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.
 
 The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).
 
 ```buzz
 // example session
-> extra.os.execSh("git rev-parse --short HEAD").stdout
+> os.execSh("git rev-parse --short HEAD").stdout
 abc1234
 > go.name
 go
-> extra.os.exec("go", ["build", "./..."])
+> os.exec("go", ["build", "./..."])
 ```
 
 Lines starting with `//` are treated as comments and skipped. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit.
@@ -43,9 +43,9 @@ Call `magus.pry()` anywhere in a magusfile target to suspend execution and drop 
 ```buzz
 export fun build(args: [str]) > void {
     const outputs = ["bin/foo", "bin/bar"];
-    extra.os.exec("go", ["generate", "./..."]);
+    os.exec("go", ["generate", "./..."]);
     magus.pry();   // execution pauses here; inspect or modify state
-    extra.os.exec("go", ["build", "./..."]);
+    os.exec("go", ["build", "./..."]);
 }
 ```
 

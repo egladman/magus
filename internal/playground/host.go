@@ -118,10 +118,26 @@ func buildMagus(sess *buzz.Session, rec *Recorder) buzz.Value {
 		return res, nil
 	}))
 
-	// Runtime-only members (a debugger, hints, fatal-abort) have no dry-run effect;
-	// stub them as no-ops so a reference resolves. They're here to satisfy the surface
-	// parity guard, not because the dry run acts on them.
-	for _, name := range []string{"hint", "fatal", "pry"} {
+	// magus.modules()/magus.module(name) are pure introspection on the real host
+	// module registry, which the sandbox doesn't wire (pulling hostbuzz/std in would
+	// bloat the playground). Stub them as empty-but-shaped records so a reference and
+	// field access (e.g. magus.module(x).methods) resolve in a dry run.
+	m.MapSet("modules", fn("magus.modules", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+		return buzz.ListValue(nil), nil
+	}))
+	m.MapSet("module", fn("magus.module", func(_ context.Context, _ []buzz.Value) (buzz.Value, error) {
+		res := buzz.NewMap()
+		res.MapSet("name", buzz.StrValue(""))
+		res.MapSet("doc", buzz.StrValue(""))
+		res.MapSet("fields", buzz.ListValue(nil))
+		res.MapSet("methods", buzz.ListValue(nil))
+		return res, nil
+	}))
+
+	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
+	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
+	// satisfy the surface parity guard, not because the dry run acts on them.
+	for _, name := range []string{"hint", "fatal", "pry", "bustCache"} {
 		m.MapSet(name, fn("magus."+name, retNull))
 	}
 

@@ -16,10 +16,10 @@ func TestResolveOutput(t *testing.T) {
 	// assertResolve checks a successful resolution's format and template.
 	assertResolve := func(input string, wantFmt Format, wantTmpl string) {
 		t.Run("ok/"+input, func(t *testing.T) {
-			spec, err := ResolveOutput(input)
+			opts, err := ResolveOutput(input)
 			require.NoError(t, err)
-			assert.Equal(t, wantFmt, spec.Format)
-			assert.Equal(t, wantTmpl, spec.Template)
+			assert.Equal(t, wantFmt, opts.Format)
+			assert.Equal(t, wantTmpl, opts.Template)
 		})
 	}
 
@@ -306,8 +306,8 @@ func TestWriteFormattedJSON(t *testing.T) {
 		N    int    `json:"n"`
 	}{Name: "hello", N: 42}
 
-	spec := outputSpec{Format: outputJSON}
-	require.NoError(t, writeFormatted(&buf, spec, v))
+	opts := OutputOptions{Format: outputJSON}
+	require.NoError(t, writeFormatted(&buf, opts, v))
 
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &decoded), "output was %q", buf.String())
@@ -316,8 +316,8 @@ func TestWriteFormattedJSON(t *testing.T) {
 
 func TestWriteFormattedUnknownFormat(t *testing.T) {
 	var buf bytes.Buffer
-	spec := outputSpec{Format: "unsupported-format"}
-	err := writeFormatted(&buf, spec, struct{}{})
+	opts := OutputOptions{Format: "unsupported-format"}
+	err := writeFormatted(&buf, opts, struct{}{})
 	require.Error(t, err, "expected error for unsupported format")
 	assert.Contains(t, err.Error(), "unsupported format")
 }
@@ -325,9 +325,9 @@ func TestWriteFormattedUnknownFormat(t *testing.T) {
 func TestResolveOutput_GraphFormatExtras(t *testing.T) {
 	t.Parallel()
 	for _, fmt := range []Format{outputDot, outputMermaid, outputTree} {
-		spec, err := ResolveOutput(string(fmt), outputDot, outputMermaid, outputTree)
+		opts, err := ResolveOutput(string(fmt), outputDot, outputMermaid, outputTree)
 		assert.NoError(t, err, "ResolveOutput(%q, extras)", fmt)
-		assert.Equal(t, fmt, spec.Format)
+		assert.Equal(t, fmt, opts.Format)
 	}
 }
 

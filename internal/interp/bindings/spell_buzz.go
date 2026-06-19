@@ -6,8 +6,8 @@ import (
 	"os"
 
 	buzzeng "github.com/egladman/gopherbuzz"
+	"github.com/egladman/magus/hostbuzz"
 	ispell "github.com/egladman/magus/internal/spell"
-	buzzgen "github.com/egladman/magus/internal/std/gen/buzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -23,15 +23,15 @@ import (
 // the function-op invoker capture the spell source; the spec-only handle
 // can't. Op bodies re-read their inputs each invocation, so a fixed captured
 // source is correct, and the registration is idempotent for re-imports.
-func loadBuzzSpell(ctx context.Context, path string) (ispell.Spec, *types.Spell, error) {
+func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.Spell, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ispell.Spec{}, nil, fmt.Errorf("load spell %q: %w", path, err)
+		return ispell.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
 	}
 	src := string(data)
-	spec, err := extractSpecWithModules(ctx, src)
+	spec, err := extractDescriptorWithModules(ctx, src)
 	if err != nil {
-		return ispell.Spec{}, nil, fmt.Errorf("load spell %q: %w", path, err)
+		return ispell.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
 	}
 	sp := types.NewSpell(spec.Name,
 		types.WithSources(spec.Needs...),
@@ -53,16 +53,16 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Spec, *types.Spell,
 	return spec, project.DefaultSpellRegistry().RegisterIfAbsent(sp), nil
 }
 
-// extractSpecWithModules runs the spell module in a session that has the std
+// extractDescriptorWithModules runs the spell module in a session that has the std
 // and extra host modules registered, then resolves its mgs_ functions. This is the
 // load-time twin of callBuzzSpellFunc's session setup, so a spell that imports
 // host modules at top level loads as well as it runs.
-func extractSpecWithModules(ctx context.Context, src string) (ispell.Spec, error) {
+func extractDescriptorWithModules(ctx context.Context, src string) (ispell.Descriptor, error) {
 	sess := buzzeng.NewSession(ctx, buzzeng.WithEmbedded())
 	defer sess.Close()
 	registerHostModules(ctx, sess)
 	if err := sess.Exec(ctx, src); err != nil {
-		return ispell.Spec{}, err
+		return ispell.Descriptor{}, err
 	}
 	return ispell.Resolve(ctx, sess, ispell.ForkOrFunctionOps(src))
 }
@@ -72,7 +72,7 @@ func extractSpecWithModules(ctx context.Context, src string) (ispell.Spec, error
 // runner — function-ops (Func set) run in the VM with req.Params and return their
 // result as Data, while fork ops fork. This is the same priority rule the built-in
 // invoker uses; only the function-op branch differs (built-ins pass nil).
-func newBuzzSpellInvoker(spec ispell.Spec, src string) func(context.Context, types.InvokeRequest) (any, error) {
+func newBuzzSpellInvoker(spec ispell.Descriptor, src string) func(context.Context, types.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
 		return dispatchOp(ctx, spec.Ops, req, func(ctx context.Context, fn string, req types.InvokeRequest) (any, error) {
 			return callBuzzSpellFunc(ctx, src, fn, req)
@@ -105,7 +105,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 	// cb delivers the op's inputs by copying req.Params into the map the handler
 	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after
 	// cb(io) returns. A handler that needs no inputs simply never calls cb.
-	params := buzzgen.AnyToValue(req.Params)
+	params := hostbuzz.AnyToValue(req.Params)
 	tgt := targetValue(ctx, req)
 	cb := buzzeng.DirectValue("magus.cb", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		if len(args) > 0 && args[0].IsMap() && params.IsMap() {
@@ -121,7 +121,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 	if err != nil {
 		return nil, fmt.Errorf("spell function-op %q: %w", fn, err)
 	}
-	return buzzgen.ValueToAny(rv), nil
+	return hostbuzz.ValueToAny(rv), nil
 }
 
 // targetValue builds the Buzz Target value a spell handler receives as its first

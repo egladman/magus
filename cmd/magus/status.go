@@ -56,17 +56,17 @@ func status(ctx context.Context, args []string) error {
 		return runProbe(ctx, socket, kind, workspace)
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
 
 	if watchInterval == 0 {
-		return printStatus(ctx, socket, spec, 0, compact)
+		return printStatus(ctx, socket, opts, 0, compact)
 	}
 
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	useGrid := gridEnabled(spec, isTTY) && !compact
+	useGrid := gridEnabled(opts, isTTY) && !compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
 	// but re-query the daemon only at the user-specified watchInterval.
@@ -78,10 +78,10 @@ func status(ctx context.Context, args []string) error {
 
 	animFrame := 0
 	for {
-		if spec.Format == outputText && isTTY {
+		if opts.Format == outputText && isTTY {
 			fmt.Print("\033[H\033[2J")
 		}
-		if err := printStatus(ctx, socket, spec, animFrame, compact); err != nil {
+		if err := printStatus(ctx, socket, opts, animFrame, compact); err != nil {
 			return err
 		}
 		if !useGrid {
@@ -134,25 +134,25 @@ type cacheStatus struct {
 }
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(ctx context.Context, socket string, spec outputSpec, animFrame int, compact bool) error {
+func printStatus(ctx context.Context, socket string, opts OutputOptions, animFrame int, compact bool) error {
 	r := buildStatusReport(ctx, socket)
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, r)
+		return emitFormatted(opts, r)
 	default:
 		if compact {
 			printStatusCompact(os.Stdout, r, time.Now())
 			return nil
 		}
 		isTTY := term.IsTerminal(int(os.Stdout.Fd()))
-		printStatusText(os.Stdout, r, gridEnabled(spec, isTTY), animFrame)
+		printStatusText(os.Stdout, r, gridEnabled(opts, isTTY), animFrame)
 	}
 	return nil
 }
 
 // gridEnabled returns true when the pool graphic should be rendered.
-func gridEnabled(spec outputSpec, isTTY bool) bool {
-	return spec.Format == outputText && isTTY && os.Getenv("NO_COLOR") == ""
+func gridEnabled(opts OutputOptions, isTTY bool) bool {
+	return opts.Format == outputText && isTTY && os.Getenv("NO_COLOR") == ""
 }
 
 func buildStatusReport(ctx context.Context, socket string) statusReport {

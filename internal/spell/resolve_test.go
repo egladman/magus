@@ -13,7 +13,7 @@ import (
 // src, and resolves its spec in the given mode — the same setup Extract
 // uses, but with the mode passed explicitly so the FunctionOps branch can be
 // exercised without a host-importing spell.
-func resolve(t *testing.T, src string, mode ResolveMode) (Spec, error) {
+func resolve(t *testing.T, src string, mode ResolveMode) (Descriptor, error) {
 	t.Helper()
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())

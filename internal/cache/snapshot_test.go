@@ -26,7 +26,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 	out := touchOut(t, root)
 	require.NoError(t, os.WriteFile(out, make([]byte, 4<<10 /* 4 KiB */), 0o644))
 
-	spec := Spec{
+	step := Step{
 		ProjectPath:   "test/pkg",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
@@ -39,7 +39,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 	require.NoError(t, err)
 
 	// First run: populate the cache normally.
-	_, err = c2.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c2.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, make([]byte, 4<<10), 0o644)
 	})
 	require.NoError(t, err, "prime run")
@@ -78,7 +78,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 
 	c3, err := Open(cdir)
 	require.NoError(t, err)
-	_, runErr := c3.Run(context.Background(), spec, func(_ context.Context) error {
+	_, runErr := c3.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, newContent, 0o644)
 	})
 	// The run must fail (snapshot fails because CAS is read-only).
@@ -134,14 +134,14 @@ func TestExportFDsBounded(t *testing.T) {
 		outputs = append(outputs, filepath.ToSlash(rel))
 	}
 
-	spec := Spec{
+	step := Step{
 		ProjectPath:   "test/pkg",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
 		Outputs:       outputs,
 	}
 
-	_, err := c.Run(context.Background(), spec, func(_ context.Context) error { return nil })
+	_, err := c.Run(context.Background(), step, func(_ context.Context) error { return nil })
 	require.NoError(t, err, "prime")
 
 	// Count open FDs before Export.
@@ -188,14 +188,14 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 
 	c, err := Open(cdir)
 	require.NoError(t, err, "cache.Open")
 
 	// Populate the cache.
-	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
 	require.NoError(t, err, "initial run")
@@ -218,7 +218,7 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c2, err := Open(cdir)
 	require.NoError(t, err, "cache.Open(second)")
-	r, err := c2.Run(context.Background(), spec, func(_ context.Context) error {
+	r, err := c2.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("rebuilt"), 0o644)
 	})
 	require.NoError(t, err, "run after corruption")
@@ -247,10 +247,10 @@ func TestPermDeniedCacheDirReturnsError(t *testing.T) {
 
 	root := t.TempDir()
 	writeMain(t, root, "package main")
-	spec := makeSpec(root)
+	step := makeStep(root)
 
 	// Run should either succeed (read-mode hit) or return an error — never panic.
-	_, runErr := c.Run(context.Background(), spec, func(_ context.Context) error { return nil })
+	_, runErr := c.Run(context.Background(), step, func(_ context.Context) error { return nil })
 	_ = runErr // any outcome (success or error) is acceptable; the test guards against panic
 }
 
@@ -262,14 +262,14 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 
 	c, err := Open(cdir)
 	require.NoError(t, err, "cache.Open")
 
 	// Populate the cache successfully.
-	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("first"), 0o644)
 	})
 	require.NoError(t, err, "initial run")
@@ -283,7 +283,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	c2, err := Open(cdir)
 	require.NoError(t, err, "cache.Open(read)")
 	calls := 0
-	r, err := c2.Run(context.Background(), spec, func(_ context.Context) error {
+	r, err := c2.Run(context.Background(), step, func(_ context.Context) error {
 		calls++
 		return os.WriteFile(out, []byte("second"), 0o644)
 	})

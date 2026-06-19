@@ -12,18 +12,18 @@ const (
 
 var raceModes = []string{raceWatch, raceReplay}
 
-// raceSpec is the parsed --race value; Replay additionally re-runs projects to detect non-determinism.
-type raceSpec struct {
+// raceOptions is the parsed --race value; Replay additionally re-runs projects to detect non-determinism.
+type raceOptions struct {
 	Enabled bool
 	Replay  bool
 }
 
 // resolveRace validates --race (empty = disabled); modes are comma-combinable.
-func resolveRace(input string) (raceSpec, error) {
+func resolveRace(input string) (raceOptions, error) {
 	if input == "" {
-		return raceSpec{}, nil
+		return raceOptions{}, nil
 	}
-	var spec raceSpec
+	var opts raceOptions
 	for _, part := range strings.Split(input, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -31,15 +31,15 @@ func resolveRace(input string) (raceSpec, error) {
 		}
 		switch part {
 		case raceWatch:
-			spec.Enabled = true
+			opts.Enabled = true
 		case raceReplay:
-			spec.Replay = true
+			opts.Replay = true
 		default:
-			return raceSpec{}, fmt.Errorf("unknown race mode %q (choose: %s)",
+			return raceOptions{}, fmt.Errorf("unknown race mode %q (choose: %s)",
 				part, strings.Join(raceModes, ", "))
 		}
 	}
-	return spec, nil
+	return opts, nil
 }
 
 var raceFormatHelp = "Race-condition diagnostics (" + strings.Join(raceModes, "|") + ", comma-combinable); omit to disable. " +

@@ -285,7 +285,7 @@ func TestSetGraphObserver_Invoked(t *testing.T) {
 	assert.Equal(t, before, builds, "SetGraphObserver(nil): OnBuild called after clearing observer")
 }
 
-func TestSpecFor_RootProject(t *testing.T) {
+func TestStepFor_RootProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	m, err := inspect(context.Background(), root)
@@ -295,7 +295,7 @@ func TestSpecFor_RootProject(t *testing.T) {
 		Sources: []string{"**/*.go"},
 		Outputs: []string{"bin/app"},
 	}
-	spec := m.baseSpec(p)
+	spec := m.baseStep(p)
 	assert.Equal(t, ".", spec.ProjectPath, "ProjectPath")
 	// Root project: declared glob passes through unchanged; magusfile globs are
 	// also appended (see magusfileGlobs). Use Contains rather than exact-count.
@@ -305,7 +305,7 @@ func TestSpecFor_RootProject(t *testing.T) {
 	assert.Equal(t, m.Root(), spec.WorkspaceRoot, "WorkspaceRoot")
 }
 
-func TestSpecFor_NestedProject(t *testing.T) {
+func TestStepFor_NestedProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "api/magusfile.buzz")
 	m, err := inspect(context.Background(), root)
@@ -315,7 +315,7 @@ func TestSpecFor_NestedProject(t *testing.T) {
 		Sources: []string{"**/*.go"},
 		Outputs: []string{"bin/server"},
 	}
-	spec := m.baseSpec(p)
+	spec := m.baseStep(p)
 	// Declared glob is prefixed with the project path.
 	assert.Contains(t, spec.Sources, "api/**/*.go", "Sources must contain project-prefixed glob")
 	// Project-local magusfile glob is included.

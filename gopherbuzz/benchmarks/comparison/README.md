@@ -109,14 +109,17 @@ collections, and strings aren't compiled), so gopherbuzz is reported as a single
 
 ## Representative results
 
-benchstat median, n=6, amd64 Xeon @ 2.80 GHz, Go 1.25.
+benchstat median, n=6, Go 1.25. The gopherbuzz rows were re-measured on an
+amd64 Xeon @ 2.10 GHz; the comparison engines (gopher-lua, tengo, goja) are from
+an earlier run on an amd64 Xeon @ 2.80 GHz. Read the gopherbuzz-vs-engine gap as
+conservative - gopherbuzz is reported on the slower box.
 
 ```mermaid
 xychart-beta
     title "LoopSum 0..1e6 - warm, ms/op (lower is better)"
     x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
     y-axis "ms/op" 0 --> 430
-    bar [5.8, 50.5, 84.0, 424]
+    bar [5.7, 50.5, 84.0, 424]
 ```
 
 ```mermaid
@@ -124,7 +127,7 @@ xychart-beta
     title "Fib(30) - warm, ms/op (lower is better)"
     x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
     y-axis "ms/op" 0 --> 430
-    bar [182, 260, 220, 412]
+    bar [187, 260, 220, 412]
 ```
 
 ### Scripting microbenchmarks
@@ -133,8 +136,8 @@ xychart-beta
 
 | Engine | LoopSum | Fib(30) | Call | ForeachList | ForeachMap | StringInterp |
 |---|--:|--:|--:|--:|--:|--:|
-| gopherbuzz (JIT) | **5.8** | - | - | - | - | - |
-| gopherbuzz | 35.9 | **182** | **115** | **38** | **74** | 37 |
+| gopherbuzz (JIT) | **5.7** | - | - | - | - | - |
+| gopherbuzz | 40.6 | **187** | **126** | **39** | **51** | 38 |
 | gopher-lua | 50.5 | 260 | 130 | 148 | 179 | **25** |
 | tengo | 84.0 | 220 | 139 | 60 | 139 | 28 |
 | goja (JS) | 424 | 412 | 576 | 561 | 941 | 53 |
@@ -148,15 +151,16 @@ gopher-lua's and tengo's string handling edge it out - disclosed, not hidden.
 
 | Engine | LoopSum | Fib(30) | Call | ForeachList | ForeachMap | StringInterp |
 |---|--:|--:|--:|--:|--:|--:|
-| gopherbuzz | ~0 | 3.9 KB | 2.2 KB | 339 KB | 6.9 MB | 13 MB |
+| gopherbuzz | ~0 | 3.9 KB | 2.4 KB | ~90 KB | ~2.4 KB | ~4 MB |
 | gopher-lua | 15 MB | 88 KB | 31 MB | 23 MB | 9.2 MB | 5.3 MB |
 | tengo | 15 MB | 27 MB | 23 MB | 7.9 MB | 60 MB | 14 MB |
 | goja (JS) | 107 MB | 40 KB | 114 MB | 118 MB | 394 MB | 15 MB |
 
 gopherbuzz's NaN-boxed `[]uint64` stack keeps the numeric/call paths at KB (or,
-for warm `LoopSum`, effectively zero); the collection and string workloads do
-allocate, but still far below the others. `StringInterp` is the exception and is
-GC-sensitive - its time carries a wide CI run to run.
+for warm `LoopSum`, effectively zero), and `foreach` reuses a per-slot iterator
+object, so map/list iteration is allocation-free too (`ForeachMap`'s 1e6 visits
+cost ~2 KB, not megabytes). `StringInterp` is the one workload that still
+allocates heavily, and it is GC-sensitive - its time carries a wide CI run to run.
 
 ### Compute kernels
 
@@ -164,8 +168,8 @@ GC-sensitive - its time carries a wide CI run to run.
 
 | Engine | Mandelbrot | MatMul | BinaryTrees | NBody |
 |---|--:|--:|--:|--:|
-| gopherbuzz (JIT) | **30** | - | - | - |
-| gopherbuzz | 306 | 80 | 201 | 148 |
+| gopherbuzz (JIT) | **26** | - | - | - |
+| gopherbuzz | 370 | 82 | 116 | 155 |
 | gopher-lua | 246 | **55** | 163 | 155 |
 | tengo | 406 | 80 | **114** | **146** |
 | goja (JS) | 2276 | 417 | 269 | 726 |
@@ -174,30 +178,31 @@ GC-sensitive - its time carries a wide CI run to run.
 
 | Engine | Mandelbrot | MatMul | BinaryTrees | NBody |
 |---|--:|--:|--:|--:|
-| gopherbuzz | **512 B** | **2.3 MB** | 41 MB | **11 KB** |
+| gopherbuzz | **~770 B** | **1.2 MB** | **18 MB** | **17 KB** |
 | gopher-lua | 93 MB | 8.5 MB | 45 MB | 25 MB |
-| tengo | 103 MB | 13 MB | **24 MB** | 27 MB |
+| tengo | 103 MB | 13 MB | 24 MB | 27 MB |
 | goja (JS) | 453 MB | 56 MB | 146 MB | 98 MB |
 
 The compute kernels are where the field is most honest. **On Mandelbrot the JIT
-changes the game outright: 30 ms vs gopher-lua's 246 - an ~8× lead** - because
+changes the game outright: 26 ms vs gopher-lua's 246 - an ~9× lead** - because
 the kernel is now JIT-eligible (the baseline JIT learned the `and` short-circuit
 and int→float promotion, so its nested float loop compiles to native SSE code).
 Off the JIT, the interpreter is competitive rather than dominant: an inline
 float+float fast path in the arithmetic/comparison dispatch keeps float operands
 off the polymorphic `arith→asNumeric→floatArith` fallback, so `GopherbuzzInterp`
-lands at 306 ms - behind gopher-lua on Mandelbrot but, on the un-JIT'd kernels,
-ahead of gopher-lua on NBody (148 vs 155, a whisker behind tengo's 146) while
-gopher-lua keeps the integer kernels (MatMul, BinaryTrees). And gopherbuzz's
-*allocation* is in a different class throughout: Mandelbrot in kilobytes vs
-93-453 MB, NBody in 11 KB vs 25-98 MB - a tiny, GC-quiet footprint whether
-interpreted or JIT'd.
+lands at 370 ms - behind gopher-lua on Mandelbrot but, on the un-JIT'd kernels,
+level with gopher-lua on NBody (155 vs 155, a whisker behind tengo's 146) and now
+tied with tengo on BinaryTrees (116 vs 114, well ahead of gopher-lua's 163);
+gopher-lua keeps MatMul (55 vs 82). And gopherbuzz's *allocation* is in a
+different class throughout - and now leads every compute kernel: Mandelbrot in
+hundreds of bytes vs 93-453 MB, BinaryTrees at 18 MB vs 24-146 MB, NBody in 17 KB
+vs 25-98 MB - a tiny, GC-quiet footprint whether interpreted or JIT'd.
 
 **The fresh axis.** Re-run with `-bench='/Fresh/'` to construct a new VM every
 iteration. On these heavy workloads the *time* barely moves (per-run setup is
 noise); the difference shows in *allocations*, where Fresh exposes the per-VM
 construction that Warm amortizes away (e.g. gopherbuzz `LoopSum` goes from ~0 to
-~3 KB/op, Fib from 3.9 KB to 26 KB/op).
+~3 KB/op, Fib from 3.9 KB to 31 KB/op).
 
 ### Extended tier (opt-in)
 
@@ -219,12 +224,12 @@ Indicative warm times (ms/op):
 
 | Workload | LuaJIT | Umka | best pure-Go | gopherbuzz |
 |---|--:|--:|--:|--:|
-| LoopSum | 1.5 | 35 | 5.8 (gopherbuzz JIT) | 5.8 / 35.9 |
-| Fib(30) | 24 | 140 | 182 (gopherbuzz) | 182 |
-| Call | 1.2 | 70 | 115 (gopherbuzz) | 115 |
-| Mandelbrot | 4.9 | 152 | 30 (gopherbuzz JIT) | 30 / 306 |
-| MatMul | 0.9 | 37 | 55 (gopher-lua) | 80 |
-| NBody | 1.7 | 60 | 146 (tengo) | 148 |
+| LoopSum | 1.5 | 35 | 5.7 (gopherbuzz JIT) | 5.7 / 40.6 |
+| Fib(30) | 24 | 140 | 187 (gopherbuzz) | 187 |
+| Call | 1.2 | 70 | 126 (gopherbuzz) | 126 |
+| Mandelbrot | 4.9 | 152 | 26 (gopherbuzz JIT) | 26 / 370 |
+| MatMul | 0.9 | 37 | 55 (gopher-lua) | 82 |
+| NBody | 1.7 | 60 | 146 (tengo) | 155 |
 
 Two honest takeaways:
 

@@ -68,6 +68,11 @@ func heapValue[T heapVal](tag valueTag, ptr T) Value {
 	return Value{t: tag, obj: ptr}
 }
 
+// internedStrValue wraps an interned *strObj. This build carries the pointer in
+// the Value, so equal strings already share a representation; only the NaN-box
+// build needs the index-caching override. See StrValue.
+func internedStrValue(o *strObj) Value { return heapValue(tagStr, o) }
+
 // sameObj reports payload identity (reference equality for lists/maps/objects).
 // Interface comparison compares (type, data); since the tags already matched at
 // the call site, this is equivalent to the unsafe build's raw pointer compare.

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/std"
+	"github.com/egladman/magus/std"
 )
 
 // TestModuleDocsUpToDate verifies the checked-in docs/modules/*.md are exactly

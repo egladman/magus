@@ -23,7 +23,6 @@ import (
 
 	buzzeng "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/cache"
-	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -415,12 +414,12 @@ export final cname = build().charms[0];
 }
 
 func TestNewCommandRenderer(t *testing.T) {
-	targets := map[string]ispell.Op{
-		"lint": {Cmd: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]ispell.Charm{
-			"write": {Ops: []ispell.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
-			"debug": {Ops: []ispell.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		}},
-		"build": {Cmd: "go", Args: []string{"build"}},
+	targets := map[string]types.SpellOp{
+		"lint": {Run: types.Run{Cmd: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]types.Charm{
+			"write": {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+			"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		}}},
+		"build": {Run: types.Run{Cmd: "go", Args: []string{"build"}}},
 		"fn":    {Func: "handler"}, // function-op: no static command
 		"noop":  {},                // empty cmd
 	}
@@ -467,10 +466,10 @@ func TestNewCommandRenderer(t *testing.T) {
 func TestResolveCharmArgs(t *testing.T) {
 	base := []string{"run", "./..."}
 	// write inserts --fix before ./... (index 1); debug/trace append at the end.
-	charmArgs := map[string]ispell.Charm{
-		"write": {Ops: []ispell.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
-		"debug": {Ops: []ispell.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		"trace": {Ops: []ispell.PatchOp{{Op: "add", Path: "/-", Value: "--trace"}}},
+	charmArgs := map[string]types.Charm{
+		"write": {Ops: []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
+		"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		"trace": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--trace"}}},
 	}
 	with := func(names ...string) context.Context {
 		return types.WithCharms(context.Background(), names)
@@ -527,7 +526,7 @@ func TestDedupStrings(t *testing.T) {
 // These tests exercise the real spells/aws/s3-cache/spell.buzz against an emulator that
 // independently recomputes the AWS SigV4 signature for every request and rejects
 // a mismatch — the same check S3 performs. The signing-key chain is already
-// verified against AWS's published vector in internal/std (extra_crypto_test.go); here we
+// verified against AWS's published vector in std (extra_crypto_test.go); here we
 // validate the spell's canonical-request and string-to-sign construction by
 // cross-checking it with a second, independent (Go) implementation.
 

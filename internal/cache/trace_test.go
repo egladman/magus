@@ -36,7 +36,7 @@ func TestRun_PhaseSpans(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
-	spec := Spec{
+	step := Step{
 		ProjectPath:   "p",
 		Sources:       []string{"p/*.go"},
 		Outputs:       []string{"p/out.txt"},
@@ -45,7 +45,7 @@ func TestRun_PhaseSpans(t *testing.T) {
 
 	// Miss: hash, then snapshot (no replay).
 	miss := &recTracer{}
-	_, err = c.Run(ContextWithTracer(context.Background(), miss), spec, func(context.Context) error {
+	_, err = c.Run(ContextWithTracer(context.Background(), miss), step, func(context.Context) error {
 		return os.WriteFile(outPath, []byte("ok"), 0o644)
 	})
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestRun_PhaseSpans(t *testing.T) {
 
 	// Hit: hash, then replay (no snapshot).
 	hit := &recTracer{}
-	r2, err := c.Run(ContextWithTracer(context.Background(), hit), spec, func(context.Context) error {
+	r2, err := c.Run(ContextWithTracer(context.Background(), hit), step, func(context.Context) error {
 		t.Error("fn should not run on a hit")
 		return nil
 	})

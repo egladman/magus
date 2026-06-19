@@ -216,8 +216,9 @@ under their own `.remote` prefix and are never folded into the local
 
 Any store reachable over HTTP can be a backend. Implement the three function-ops
 (`enabled`/`get_artifact`/`put_artifact`) in a spell — read inputs from the `cb(io)`
-callback (`io.hash`, `io.dest`/`io.src`), use the `magus/extra/http` byte
-primitives and `magus/extra/crypto` for *request* signing (e.g. AWS SigV4), and
+callback (`io.hash`, `io.dest`/`io.src`), use the `http` byte primitives
+(`http.download`/`upload_chunked`/`byteSize`) and `crypto` for *request* signing
+(e.g. AWS SigV4 via `crypto.hmacSha256`), and
 return the boolean result. The two shipped backends are worked examples; start
 from whichever transport is closest.
 

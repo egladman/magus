@@ -23,7 +23,7 @@ type graphRenderOptions struct {
 
 // renderWorkspaceGraph emits the project dependency graph; respects -o (text|json|yaml|dot|mermaid|tree).
 func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opts graphRenderOptions) error {
-	spec, err := ResolveOutput(global.output, outputDot, outputMermaid, outputTree)
+	outOpts, err := ResolveOutput(global.output, outputDot, outputMermaid, outputTree)
 	if err != nil {
 		return err
 	}
@@ -56,9 +56,9 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 		}
 	}
 
-	switch spec.Format {
+	switch outOpts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, magus.ComposeGraph(ws, composeOpts...))
+		return emitFormatted(outOpts, magus.ComposeGraph(ws, composeOpts...))
 	case outputName:
 		out := magus.ComposeGraph(ws, composeOpts...)
 		for _, n := range out.Nodes {

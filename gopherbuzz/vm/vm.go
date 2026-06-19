@@ -129,6 +129,22 @@ type VM struct {
 	// and pushes Null, continuing normally (upstream parity: yields are dismissed
 	// outside a fiber context without error).
 	isFiber bool
+	// iterPool caches one iterState per stack slot that has ever hosted a foreach.
+	// A foreach's iterState lives at a fixed stack slot for the loop's duration and
+	// never escapes to Buzz code, so it is created (and interned into the global
+	// heap) once per slot and reused for every later foreach there, instead of
+	// allocating + interning a fresh one each iteration. This keeps iteration
+	// allocation-free after warmup and stops per-iteration growth of the global
+	// heap table. Per-VM, so concurrent VMs never share iter state. See
+	// iterStateForSlot.
+	iterPool []iterSlot
+}
+
+// iterSlot pools one iterState for a single stack slot: the interned Value pushed
+// onto the value stack and the *iterStateObj it resolves to. See iterStateForSlot.
+type iterSlot struct {
+	obj *iterStateObj
+	val Value
 }
 
 func NewVM(ctx context.Context) *VM {
@@ -1035,7 +1051,14 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					return Null, err
 				}
 				callee = c
-				if receiver.tag() == tagMap && !vm.asMap(receiver).Mut {
+				// Cache the resolved member when the receiver is immutable, so a
+				// monomorphic call site (same string/immutable-map receiver every
+				// pass, e.g. a loop's `s.sub(i, k)`) skips both getMember's resolution
+				// and the fresh bound-method DirectValue it allocates each call. A
+				// string is always immutable; a map only when it is not Mut. The recv
+				// Value pins the exact heap object (indices are never reused), so the
+				// cached callee can never be served for a different object.
+				if receiver.tag() == tagStr || (receiver.tag() == tagMap && !vm.asMap(receiver).Mut) {
 					vm.icacheLearn(ip, f.chunk, receiver, c)
 				}
 			}
@@ -1128,19 +1151,26 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 
 		case OpIterInit:
 			iter := vm.pop()
+			// The iterState occupies this stack slot for the whole loop and never
+			// escapes, so it is pooled per slot and reused rather than freshly
+			// allocated + interned each iteration (see iterStateForSlot).
+			s := len(vm.stack)
+			st := vm.iterStateForSlot(s)
 			switch iter.tag() {
 			case tagList:
-				vm.push(vm.allocIterState(&iterStateObj{list: vm.asList(iter)}))
+				st.list = vm.asList(iter)
 			case tagMap:
-				vm.push(vm.allocIterState(&iterStateObj{mapObj: vm.asMap(iter)}))
+				st.mapObj = vm.asMap(iter)
 			case tagRange:
 				r := vm.asRange(iter)
-				vm.push(vm.allocIterState(&iterStateObj{rng: r, rangeIdx: r.Lo}))
+				st.rng = r
+				st.rangeIdx = r.Lo
 			case tagFib:
-				vm.push(vm.allocIterState(&iterStateObj{fib: iter.asFib()}))
+				st.fib = iter.asFib()
 			default:
 				return Null, errCannotIterate(iter)
 			}
+			vm.push(vm.iterPool[s].val)
 
 		case OpIterNext:
 			state := vm.asIterState(vm.peek())
@@ -1760,6 +1790,33 @@ func (vm *VM) fiberIterNext(f *fibObj) (Value, bool, error) {
 	f.status = fibDone
 	f.returnVal = res
 	return Null, true, nil
+}
+
+// iterStateForSlot returns the pooled iterState for stack slot s, reset for a
+// fresh iteration. The object — and its single global-heap interning — is created
+// lazily the first time a foreach runs at that slot and reused for every later
+// foreach there.
+//
+// Reuse is safe because no two live iterStates ever share a slot: the value stack
+// holds one value per slot, and a loop keeps its iterState parked at slot s until
+// it ends (nested loops and nested calls run at strictly higher slots). Early
+// exits (break/return/throw) abandon the slot's value by truncating the stack
+// without releasing the pool entry; the next foreach at slot s just resets and
+// reuses the pooled object. The full reset (*obj = iterStateObj{}) also drops the
+// reference to the previously iterated collection, so the pool retains at most
+// one collection per slot — strictly less than the old path, which pinned every
+// iterState (and its collection) in the never-freed global heap.
+func (vm *VM) iterStateForSlot(s int) *iterStateObj {
+	for len(vm.iterPool) <= s {
+		vm.iterPool = append(vm.iterPool, iterSlot{})
+	}
+	slot := &vm.iterPool[s]
+	if slot.obj == nil {
+		slot.obj = &iterStateObj{}
+		slot.val = vm.allocIterState(slot.obj)
+	}
+	*slot.obj = iterStateObj{}
+	return slot.obj
 }
 
 //go:noinline

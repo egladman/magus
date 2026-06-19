@@ -3,6 +3,8 @@ package spell
 import (
 	"testing"
 
+	"github.com/egladman/magus/types"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +15,7 @@ func TestBuiltins_NonEmpty(t *testing.T) {
 	for key, s := range m {
 		assert.NotEmptyf(t, s.Name, "Builtins()[%q].Name is empty", key)
 		// The registry is keyed by runtime name, so the key is the spell's Name.
-		assert.Equalf(t, key, s.Name, "Builtins() key %q != Spec.Name %q", key, s.Name)
+		assert.Equalf(t, key, s.Name, "Builtins() key %q != Descriptor.Name %q", key, s.Name)
 	}
 }
 
@@ -52,5 +54,5 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 	// rw charm drops --diff (remove /2) so tidy actually applies the changes.
 	w, ok := tidy.Charms["rw"]
 	require.True(t, ok, "tidy has no rw charm")
-	assert.Equal(t, []PatchOp{{Op: "remove", Path: "/2"}}, w.Ops)
+	assert.Equal(t, []types.PatchOp{{Op: "remove", Path: "/2"}}, w.Ops)
 }

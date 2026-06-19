@@ -136,7 +136,7 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
-	spec := cache.Spec{
+	spec := cache.Step{
 		ProjectPath:   "p",
 		Sources:       []string{"p/*.go"},
 		Outputs:       []string{"p/out.txt"},
@@ -179,7 +179,7 @@ func TestMetricRecordNoProjectAttr(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
-	spec := cache.Spec{
+	spec := cache.Step{
 		ProjectPath:   "p",
 		Sources:       []string{"p/*.go"},
 		Outputs:       []string{"p/out.txt"},
@@ -228,7 +228,7 @@ func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
-	spec := cache.Spec{
+	spec := cache.Step{
 		ProjectPath:   "p",
 		Sources:       []string{"p/*.go"},
 		Outputs:       []string{"p/out.txt"},
@@ -285,7 +285,7 @@ func TestTargetRunOptions(t *testing.T) {
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
 	outPath := filepath.Join(srcDir, "out.txt")
-	spec := cache.Spec{
+	spec := cache.Step{
 		ProjectPath:   "p",
 		Sources:       []string{"p/*.go"},
 		Outputs:       []string{"p/out.txt"},
@@ -323,14 +323,14 @@ func TestTargetRunOptions(t *testing.T) {
 	// Multi-spell: two spells → two rows per run.
 	multiSpellsOf := func(string) []string { return []string{"go", "typescript"} }
 	multiOpts := TargetRunOptions(context.Background(), rec, multiSpellsOf)
-	multiSpec := cache.Spec{
+	multiStep := cache.Step{
 		ProjectPath:   "q",
 		Sources:       []string{"p/*.go"},
 		WorkspaceRoot: root,
 		Target:        "build",
 	}
 	before := len(rec.targetRuns)
-	_, err = c.Run(context.Background(), multiSpec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), multiStep, func(_ context.Context) error {
 		return nil
 	}, multiOpts...)
 	require.NoError(t, err, "Run(multi-spell)")

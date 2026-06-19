@@ -146,13 +146,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return nil
 	}
 
-	spec, specErr := outputSpecOrDefault()
-	if specErr != nil {
-		return specErr
+	opts, optsErr := outputOptionsOrDefault()
+	if optsErr != nil {
+		return optsErr
 	}
 
 	var rw *magus.ReportWriter
-	if spec.Format == outputJSONL {
+	if opts.Format == outputJSONL {
 		w, cleanup, openErr := outputDst()
 		if openErr != nil {
 			return openErr

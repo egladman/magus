@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// depSpec builds a minimal spec for project path p depending on deps. Sources
-// is left empty (no files), so the spec always misses and runs fn.
-func depSpec(root, p string, deps ...string) Spec {
-	return Spec{
+// depStep builds a minimal step for project path p depending on deps. Sources
+// is left empty (no files), so the step always misses and runs fn.
+func depStep(root, p string, deps ...string) Step {
+	return Step{
 		ProjectPath:   p,
 		WorkspaceRoot: root,
 		DependsOn:     deps,
@@ -75,15 +75,15 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 
 	// A hashes a real source file; B depends on A but declares no sources, so
 	// its key can only change via upstream-key propagation.
-	mkSpecs := func() []Spec {
-		return []Spec{
+	mkSteps := func() []Step {
+		return []Step{
 			{ProjectPath: "A", WorkspaceRoot: root, Target: "build", Sources: []string{"a.txt"}},
 			{ProjectPath: "B", WorkspaceRoot: root, Target: "build", DependsOn: []string{"A"}},
 		}
 	}
 	run := func() (keyA, keyB string) {
-		results, err := c.RunAll(context.Background(), mkSpecs(),
-			func(_ context.Context, _ Spec) error { return nil },
+		results, err := c.RunAll(context.Background(), mkSteps(),
+			func(_ context.Context, _ Step) error { return nil },
 			WithConcurrency(4))
 		require.NoError(t, err, "RunAll")
 		return results[0].Hash, results[1].Hash
@@ -108,16 +108,16 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 
 // TestRunAllAfterCrossTargetOrdering verifies the After edge: P:test must wait
 // for P:build even though both share a ProjectPath. This also exercises the
-// (project,target) keying — the two specs are distinct nodes, not collapsed.
+// (project,target) keying — the two steps are distinct nodes, not collapsed.
 func TestRunAllAfterCrossTargetOrdering(t *testing.T) {
 	root, c := openCache(t)
 	rec := newOrderRecorder()
 
-	specs := []Spec{
+	steps := []Step{
 		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{DepKey("P", "build")}},
 		{ProjectPath: "P", WorkspaceRoot: root, Target: "build"},
 	}
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		id := s.ProjectPath + ":" + s.Target
 		if s.Target == "test" {
 			assert.True(t, rec.doneBefore("P:build"), "P:test started before P:build finished")
@@ -134,11 +134,11 @@ func TestRunAllAfterCrossTargetOrdering(t *testing.T) {
 // P:build, P:build after P:test) is detected before any goroutine launches.
 func TestRunAllAfterCycleRejected(t *testing.T) {
 	root, c := openCache(t)
-	specs := []Spec{
+	steps := []Step{
 		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{DepKey("P", "build")}},
 		{ProjectPath: "P", WorkspaceRoot: root, Target: "build", After: []string{DepKey("P", "test")}},
 	}
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, _ Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, _ Step) error {
 		return nil
 	}, WithConcurrency(8))
 	assert.Error(t, err, "expected cycle error")
@@ -151,13 +151,13 @@ func TestRunAllDependencyOrdering(t *testing.T) {
 	root, c := openCache(t)
 	rec := newOrderRecorder()
 
-	specs := []Spec{
-		depSpec(root, "C", "B"),
-		depSpec(root, "B", "A"),
-		depSpec(root, "A"),
+	steps := []Step{
+		depStep(root, "C", "B"),
+		depStep(root, "B", "A"),
+		depStep(root, "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		// Upstream must already be finished when this fn runs.
 		switch s.ProjectPath {
 		case "B":
@@ -180,14 +180,14 @@ func TestRunAllDependencyDiamond(t *testing.T) {
 	root, c := openCache(t)
 	rec := newOrderRecorder()
 
-	specs := []Spec{
-		depSpec(root, "D", "B", "C"),
-		depSpec(root, "B", "A"),
-		depSpec(root, "C", "A"),
-		depSpec(root, "A"),
+	steps := []Step{
+		depStep(root, "D", "B", "C"),
+		depStep(root, "B", "A"),
+		depStep(root, "C", "A"),
+		depStep(root, "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		switch s.ProjectPath {
 		case "B", "C":
 			assert.Truef(t, rec.doneBefore("A"), "%s started before A finished", s.ProjectPath)
@@ -202,16 +202,16 @@ func TestRunAllDependencyDiamond(t *testing.T) {
 }
 
 // TestRunAllDependencyOutOfScope verifies that a dependency on a project not
-// present in the specs slice does not deadlock: the dependent runs anyway.
+// present in the steps slice does not deadlock: the dependent runs anyway.
 func TestRunAllDependencyOutOfScope(t *testing.T) {
 	root, c := openCache(t)
 	var ran bool
 
-	specs := []Spec{
-		depSpec(root, "X", "not-in-this-run"),
+	steps := []Step{
+		depStep(root, "X", "not-in-this-run"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		ran = true
 		return nil
 	}, WithConcurrency(4))
@@ -219,37 +219,37 @@ func TestRunAllDependencyOutOfScope(t *testing.T) {
 	assert.True(t, ran, "X did not run despite its only dependency being out of scope")
 }
 
-// TestRunAllSelfDependencyDoesNotDeadlock verifies that a spec listing itself
+// TestRunAllSelfDependencyDoesNotDeadlock verifies that a step listing itself
 // in DependsOn is tolerated (the self-edge is skipped) rather than blocking
 // forever on its own completion.
 func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 	root, c := openCache(t)
 	var ran bool
 
-	specs := []Spec{
-		depSpec(root, "self", "self"),
+	steps := []Step{
+		depStep(root, "self", "self"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		ran = true
 		return nil
 	}, WithConcurrency(4))
 	require.NoError(t, err, "RunAll")
-	assert.True(t, ran, "self-dependent spec deadlocked instead of running")
+	assert.True(t, ran, "self-dependent step deadlocked instead of running")
 }
 
-// TestRunAllIsolatedRunsAlone verifies the Spec.Isolated contract: an isolated
-// spec never executes concurrently with any other spec, while non-isolated specs
+// TestRunAllIsolatedRunsAlone verifies the Step.Isolated contract: an isolated
+// step never executes concurrently with any other step, while non-isolated steps
 // still overlap with each other. The sleeps widen the windows so a broken lock
-// would let a reader land inside the isolated spec's span and trip the assertion.
+// would let a reader land inside the isolated step's span and trip the assertion.
 func TestRunAllIsolatedRunsAlone(t *testing.T) {
 	root, c := openCache(t)
 
-	specs := []Spec{
+	steps := []Step{
 		{ProjectPath: "isolated", WorkspaceRoot: root, Target: "gen", Isolated: true},
 	}
 	for i := range 6 {
-		specs = append(specs, Spec{
+		steps = append(steps, Step{
 			ProjectPath: "p" + string(rune('0'+i)), WorkspaceRoot: root, Target: "build",
 		})
 	}
@@ -257,38 +257,38 @@ func TestRunAllIsolatedRunsAlone(t *testing.T) {
 	var (
 		mu         sync.Mutex
 		inFlight   int
-		peak       int // max concurrent non-isolated specs — proves readers overlap
+		peak       int // max concurrent non-isolated steps — proves readers overlap
 		violations []string
 	)
-	enter := func(s Spec) {
+	enter := func(s Step) {
 		mu.Lock()
 		defer mu.Unlock()
 		inFlight++
 		if s.Isolated && inFlight != 1 {
-			violations = append(violations, "isolated spec started while another was in flight")
+			violations = append(violations, "isolated step started while another was in flight")
 		}
 		if !s.Isolated && inFlight > peak {
 			peak = inFlight
 		}
 	}
-	leave := func(s Spec) {
+	leave := func(s Step) {
 		mu.Lock()
 		defer mu.Unlock()
 		if s.Isolated && inFlight != 1 {
-			violations = append(violations, "another spec entered during isolated run")
+			violations = append(violations, "another step entered during isolated run")
 		}
 		inFlight--
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		enter(s)
 		time.Sleep(20 * time.Millisecond)
 		leave(s)
 		return nil
 	}, WithConcurrency(8))
 	require.NoError(t, err, "RunAll")
-	assert.Empty(t, violations, "isolated spec overlapped with others")
-	assert.GreaterOrEqual(t, peak, 2, "non-isolated specs never overlapped; the read lock is over-serializing")
+	assert.Empty(t, violations, "isolated step overlapped with others")
+	assert.GreaterOrEqual(t, peak, 2, "non-isolated steps never overlapped; the read lock is over-serializing")
 }
 
 // TestRunAllDependencyFailureCancelsDependents verifies that when an upstream
@@ -301,12 +301,12 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 	var bRan bool
 	var mu sync.Mutex
 
-	specs := []Spec{
-		depSpec(root, "B", "A"),
-		depSpec(root, "A"),
+	steps := []Step{
+		depStep(root, "B", "A"),
+		depStep(root, "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		if s.ProjectPath == "A" {
 			return wantErr
 		}
@@ -328,12 +328,12 @@ func TestRunAllDependencyCycleRejected(t *testing.T) {
 	root, c := openCache(t)
 	var ran bool
 
-	specs := []Spec{
-		depSpec(root, "A", "B"),
-		depSpec(root, "B", "A"),
+	steps := []Step{
+		depStep(root, "A", "B"),
+		depStep(root, "B", "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		ran = true
 		return nil
 	}, WithConcurrency(4))
@@ -346,33 +346,33 @@ func TestRunAllDependencyCycleRejected(t *testing.T) {
 func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 	root, c := openCache(t)
 
-	specs := []Spec{
-		depSpec(root, "A", "B"),
-		depSpec(root, "B", "C"),
-		depSpec(root, "C", "A"),
+	steps := []Step{
+		depStep(root, "A", "B"),
+		depStep(root, "B", "C"),
+		depStep(root, "C", "A"),
 	}
 
-	_, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		return nil
 	}, WithConcurrency(4))
 	assert.Error(t, err, "expected RunAll to reject the 3-node cycle")
 }
 
-// TestRunAllNoDependencies is a regression guard: specs with no DependsOn run
+// TestRunAllNoDependencies is a regression guard: steps with no DependsOn run
 // concurrently and every result slot is populated, matching pre-barrier
 // behaviour.
 func TestRunAllNoDependencies(t *testing.T) {
 	root, c := openCache(t)
 
-	specs := []Spec{
-		depSpec(root, "p0"),
-		depSpec(root, "p1"),
-		depSpec(root, "p2"),
+	steps := []Step{
+		depStep(root, "p0"),
+		depStep(root, "p1"),
+		depStep(root, "p2"),
 	}
 
 	var count int
 	var mu sync.Mutex
-	results, err := c.RunAll(context.Background(), specs, func(_ context.Context, s Spec) error {
+	results, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		mu.Lock()
 		count++
 		mu.Unlock()
@@ -382,6 +382,6 @@ func TestRunAllNoDependencies(t *testing.T) {
 	assert.Equal(t, 3, count, "expected 3 fn invocations")
 	require.Len(t, results, 3, "expected 3 results")
 	for i, r := range results {
-		assert.Equalf(t, specs[i].ProjectPath, r.ProjectPath, "results[%d].ProjectPath", i)
+		assert.Equalf(t, steps[i].ProjectPath, r.ProjectPath, "results[%d].ProjectPath", i)
 	}
 }

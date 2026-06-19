@@ -21,14 +21,14 @@ import (
 //go:embed gen/*.bo
 var builtinFS embed.FS
 
-// Builtins is the built-in spell registry, keyed by runtime spell name (Spec.Name,
+// Builtins is the built-in spell registry, keyed by runtime spell name (Descriptor.Name,
 // e.g. "go", "js"), loaded once. This is the registry callers use: users refer to a
 // spell by its name, and registration is by name. The source directory (e.g.
 // "golang") is an internal detail of how the bytecode is generated and embedded —
 // see builtinsByDir.
-var Builtins = sync.OnceValue(func() map[string]Spec {
+var Builtins = sync.OnceValue(func() map[string]Descriptor {
 	byDir := builtinsByDir()
-	out := make(map[string]Spec, len(byDir))
+	out := make(map[string]Descriptor, len(byDir))
 	for _, s := range byDir {
 		out[s.Name] = s
 	}
@@ -56,19 +56,19 @@ var BuiltinsHash = sync.OnceValue(func() string {
 })
 
 // loadBuiltins recovers every embedded built-in's bytecode, runs it, and resolves
-// the exported mgs_ functions into a Spec, keyed by source dir name (e.g. "golang";
-// Spec.Name is the runtime name). It backs builtinsByDir.
+// the exported mgs_ functions into a Descriptor, keyed by source dir name (e.g. "golang";
+// Descriptor.Name is the runtime name). It backs builtinsByDir.
 //
 // It panics on failure: the .bo blobs are a trusted build artifact, so a failure
 // here is a broken build (stale bytecode, a compiler/format mismatch), not bad
 // user input — the same severity as a missing embedded asset.
-func loadBuiltins() map[string]Spec {
+func loadBuiltins() map[string]Descriptor {
 	entries, err := builtinFS.ReadDir("gen")
 	if err != nil {
 		panic("magus/spell: read embedded built-ins: " + err.Error())
 	}
 	ctx := context.Background()
-	out := make(map[string]Spec, len(entries))
+	out := make(map[string]Descriptor, len(entries))
 	for _, e := range entries {
 		name := strings.TrimSuffix(e.Name(), ".bo")
 		blob, err := builtinFS.ReadFile("gen/" + e.Name())

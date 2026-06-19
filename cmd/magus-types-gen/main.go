@@ -23,9 +23,18 @@ import (
 // registry maps a -type name to the Go struct whose fields the Buzz object mirrors.
 // Add an entry here to generate another value type.
 var registry = map[string]reflect.Type{
-	"Target":      reflect.TypeOf(types.Target{}),
-	"TargetQuery": reflect.TypeOf(types.TargetQuery{}),
-	"ExecResult":  reflect.TypeOf(types.ExecResult{}),
+	"Target":        reflect.TypeOf(types.Target{}),
+	"TargetQuery":   reflect.TypeOf(types.TargetQuery{}),
+	"Run":           reflect.TypeOf(types.Run{}),
+	"Charm":         reflect.TypeOf(types.Charm{}),
+	"PatchOp":       reflect.TypeOf(types.PatchOp{}),
+	"ExecResult":    reflect.TypeOf(types.ExecResult{}),
+	"CommitAuthor":  reflect.TypeOf(types.CommitAuthor{}),
+	"Commit":        reflect.TypeOf(types.CommitRecord{}),
+	"FileInfo":      reflect.TypeOf(types.FileInfo{}),
+	"HttpResponse":  reflect.TypeOf(types.HTTPResponse{}),
+	"SemverVersion": reflect.TypeOf(types.SemverVersion{}),
+	"URL":           reflect.TypeOf(types.URL{}),
 }
 
 func main() {
@@ -102,6 +111,18 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 		// which must be generated and ordered before this type in the module source.
 		// Its zero value is an empty object literal.
 		return t.Name(), t.Name() + "{}", nil
+	case reflect.Map:
+		// A map field maps to a Buzz `{key: val}` type; the zero value is the empty
+		// map literal `{}`. Used by HttpResponse.headers ({str: str}).
+		keyT, _, kerr := buzzType(t.Key())
+		if kerr != nil {
+			return "", "", fmt.Errorf("map key: %w", kerr)
+		}
+		valT, _, verr := buzzType(t.Elem())
+		if verr != nil {
+			return "", "", fmt.Errorf("map value: %w", verr)
+		}
+		return "{" + keyT + ": " + valT + "}", "{}", nil
 	default:
 		return "", "", fmt.Errorf("unsupported Go type %s", t)
 	}

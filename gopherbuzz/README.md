@@ -18,7 +18,7 @@ xychart-beta
     title "LoopSum 0..1e6, warm, ms/op (lower is better)"
     x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
     y-axis "ms/op" 0 --> 430
-    bar [5.8, 50.5, 84.0, 424]
+    bar [5.7, 50.5, 84.0, 424]
 ```
 
 ```mermaid
@@ -29,8 +29,8 @@ xychart-beta
     bar [0, 15, 15, 107]
 ```
 
-That 5.8 ms is the JIT engaged; the same VM with the JIT off runs the loop in
-35.9 ms, still ahead of the others, but the native-code path is the headline.
+That 5.7 ms is the JIT engaged; the same VM with the JIT off runs the loop in
+40.6 ms, still ahead of the others, but the native-code path is the headline.
 Allocation is effectively zero either way: the NaN-boxed `[]uint64` stack has no
 GC-visible pointers.
 
@@ -38,20 +38,22 @@ GC-visible pointers.
 on the interpreter.** Its wheelhouse now covers both `LoopSum` *and* the
 `Mandelbrot` kernel - the baseline JIT learned the `and` short-circuit and
 int→float promotion, so Mandelbrot's nested float loop compiles to native SSE and
-runs in ~30 ms, an ~8× lead over gopher-lua's 246 ms. On the interpreter
+runs in ~26 ms, an ~9× lead over gopher-lua's 246 ms. On the interpreter
 gopherbuzz wins the lighter scripting microbenchmarks (loops, calls, `fib`,
 collection iteration) and, with the float fast path in the arithmetic dispatch,
 is competitive on the heavy compute kernels: it trails gopher-lua on un-JIT'd
-MatMul and tengo on BinaryTrees, edges past gopher-lua on NBody (a near-tie with
-tengo), and string building still goes to gopher-lua. Allocation stays well under
-the dynamically typed peers throughout, "kilobytes" on lean workloads and
-single-digit MB on collection- and string-heavy ones. The full win-and-lose
+MatMul, draws level with tengo on BinaryTrees and with gopher-lua on NBody, and
+string building still goes to gopher-lua. Allocation stays well under
+the dynamically typed peers throughout - "kilobytes" on lean workloads, and
+map/list iteration is allocation-free (`foreach` reuses a per-slot iterator);
+only string building reaches low single-digit MB. The full win-and-lose
 matrix (10 workloads, warm + fresh, plus an opt-in LuaJIT / Umka tier that is
 faster still) lives in [`benchmarks/`](benchmarks/), kept deliberately honest.
 
-benchstat median, amd64 Xeon @ 2.80 GHz, Go 1.25; cross-language microbenchmarks
-differ in semantics (types, safety, GC), so read as order-of-magnitude, not a
-verdict.
+benchstat median, Go 1.25; gopherbuzz re-measured on an amd64 Xeon @ 2.10 GHz,
+the comparison engines on an amd64 Xeon @ 2.80 GHz (so the gap is conservative).
+Cross-language microbenchmarks differ in semantics (types, safety, GC), so read
+as order-of-magnitude, not a verdict.
 
 Reproduce:
 

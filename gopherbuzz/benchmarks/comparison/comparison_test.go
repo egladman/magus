@@ -123,8 +123,10 @@ for i := 0; i < 1000000; i++ { sum += i }`,
 	{
 		name:    "Fib",
 		session: true,
-		bzSetup: `fun fib(n: int) > int { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); }`,
-		bzHot:   `fib(30);`,
+		// Named `fibo`, not `fib`: gopherbuzz reserves `fib` (upstream-parity
+		// keyword), so it cannot be a binding name. Other engines keep `fib`.
+		bzSetup: `fun fibo(n: int) > int { if (n <= 1) { return n; } return fibo(n - 1) + fibo(n - 2); }`,
+		bzHot:   `fibo(30);`,
 		lua: `local function fib(n) if n <= 1 then return n end return fib(n-1) + fib(n-2) end
 return fib(30)`,
 		tengo: `fib := func(n) { if n <= 1 { return n }; return fib(n-1) + fib(n-2) }

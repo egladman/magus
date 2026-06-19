@@ -253,18 +253,18 @@ type stage struct {
 	projects    []*types.Project
 }
 
-// buildSpec assembles the cache.Spec for running target on p.
-func (m *Magus) buildSpec(p *types.Project, target string) cache.Spec {
-	spec := m.baseSpec(p)
-	spec.Target = target
+// buildStep assembles the cache.Step for running target on p.
+func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
+	step := m.baseStep(p)
+	step.Target = target
 	for _, s := range p.ResolvedSpells {
-		spec.Sources = append(spec.Sources, s.TargetSources()[target]...)
+		step.Sources = append(step.Sources, s.TargetSources()[target]...)
 	}
-	spec.DependsOn = p.DependsOn
+	step.DependsOn = p.DependsOn
 	pol := p.TargetPolicies[target]
-	spec.NoCache = pol.SkipCache
-	spec.Isolated = pol.Exclusive
-	return spec
+	step.NoCache = pol.SkipCache
+	step.Isolated = pol.Exclusive
+	return step
 }
 
 // firstTargetPolicy returns the policy for target from the first project that declares one.
@@ -365,7 +365,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	slices.Sort(charmKey)
 	charmKey = slices.Compact(charmKey)
 
-	var specs []cache.Spec
+	var steps []cache.Step
 	byPath := make(map[string]*types.Project)
 	handlerOf := make(map[string]func(context.Context, *types.Project) error, len(stages))
 	active := make(map[string]struct{})
@@ -377,13 +377,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			trackFlake = true
 		}
 		for _, p := range st.projects {
-			spec := m.buildSpec(p, st.target)
-			spec.ToolVersions = toolVer[p.Path]
-			spec.Charms = charmKey
+			step := m.buildStep(p, st.target)
+			step.ToolVersions = toolVer[p.Path]
+			step.Charms = charmKey
 			if st.afterTarget != "" {
-				spec.After = []string{cache.DepKey(p.Path, st.afterTarget)}
+				step.After = []string{cache.DepKey(p.Path, st.afterTarget)}
 			}
-			specs = append(specs, spec)
+			steps = append(steps, step)
 			byPath[p.Path] = p
 			active[p.Path] = struct{}{}
 			for _, s := range p.ResolvedSpells {
@@ -393,7 +393,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 		}
 	}
-	if len(specs) == 0 {
+	if len(steps) == 0 {
 		return nil
 	}
 
@@ -450,7 +450,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 
-	checkOutputOverlap(dedupeByProject(specs), scopeLabel, opts.Report)
+	checkOutputOverlap(dedupeByProject(steps), scopeLabel, opts.Report)
 
 	var raceRT *race.Runtime
 	if opts.Race {
@@ -496,8 +496,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if m.cache == nil {
 		return fmt.Errorf("magus: workspace was constructed with Inspect; use Open to enable Run")
 	}
-	_, runErr := m.cache.RunAll(ctx, specs, func(ctx context.Context, s cache.Spec) error {
-		// Each spec invocation gets a fresh TargetMemo so depends_on diamonds
+	_, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
+		// Each step invocation gets a fresh TargetMemo so depends_on diamonds
 		// within one target's inline dispatch run shared deps exactly once.
 		ctx = buzzeng.WithTargetMemo(ctx, buzzeng.NewTargetMemo())
 
@@ -545,11 +545,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	return runErr
 }
 
-// dedupeByProject returns one spec per ProjectPath (first seen).
-func dedupeByProject(specs []cache.Spec) []cache.Spec {
-	seen := make(map[string]struct{}, len(specs))
-	out := make([]cache.Spec, 0, len(specs))
-	for _, s := range specs {
+// dedupeByProject returns one step per ProjectPath (first seen).
+func dedupeByProject(steps []cache.Step) []cache.Step {
+	seen := make(map[string]struct{}, len(steps))
+	out := make([]cache.Step, 0, len(steps))
+	for _, s := range steps {
 		if _, ok := seen[s.ProjectPath]; ok {
 			continue
 		}
@@ -652,21 +652,21 @@ func checkMissingDependencies(allProjects []*types.Project, dispatched map[strin
 
 // checkOutputOverlap detects projects in the same dispatch that declare the same
 // output glob (MGS4002). Runs at graph construction time.
-func checkOutputOverlap(specs []cache.Spec, target string, w *report.Writer) {
-	for i := 0; i < len(specs); i++ {
-		if len(specs[i].Outputs) == 0 {
+func checkOutputOverlap(steps []cache.Step, target string, w *report.Writer) {
+	for i := 0; i < len(steps); i++ {
+		if len(steps[i].Outputs) == 0 {
 			continue
 		}
-		outSet := make(map[string]struct{}, len(specs[i].Outputs))
-		for _, o := range specs[i].Outputs {
+		outSet := make(map[string]struct{}, len(steps[i].Outputs))
+		for _, o := range steps[i].Outputs {
 			outSet[o] = struct{}{}
 		}
-		for j := i + 1; j < len(specs); j++ {
-			if len(specs[j].Outputs) == 0 {
+		for j := i + 1; j < len(steps); j++ {
+			if len(steps[j].Outputs) == 0 {
 				continue
 			}
 			var overlap []string
-			for _, o := range specs[j].Outputs {
+			for _, o := range steps[j].Outputs {
 				if _, ok := outSet[o]; ok {
 					overlap = append(overlap, o)
 				}
@@ -674,7 +674,7 @@ func checkOutputOverlap(specs []cache.Spec, target string, w *report.Writer) {
 			if len(overlap) == 0 {
 				continue
 			}
-			pA, pB := specs[i].ProjectPath, specs[j].ProjectPath
+			pA, pB := steps[i].ProjectPath, steps[j].ProjectPath
 			if pA > pB {
 				pA, pB = pB, pA
 			}

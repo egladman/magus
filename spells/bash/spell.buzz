@@ -8,12 +8,11 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 // One shellcheck invocation over every shell source: find feeds xargs with NUL
 // separators, and -r skips running shellcheck on an empty set.
-fun shellcheck(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "sh", "args": ["-c",
+fun shellcheck(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "sh", args = ["-c",
         "find . \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"]});
-    return true;
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
     return {"shellcheck": shellcheck};
 }

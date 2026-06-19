@@ -97,11 +97,11 @@ func BenchmarkHashFilesBatch(b *testing.B) {
 	}
 }
 
-// BenchmarkHashSpec isolates cache-key serialization: no sources (so neither the
+// BenchmarkHashStep isolates cache-key serialization: no sources (so neither the
 // glob walk nor file hashing run), but many charms/env/deps/tools so the per-field
 // serialization dominates. This is the gate for the fmt.Fprintf → direct-write
 // optimization on the key path.
-func BenchmarkHashSpec(b *testing.B) {
+func BenchmarkHashStep(b *testing.B) {
 	c, err := Open(
 		b.TempDir(),
 		WithMutable(true),
@@ -122,7 +122,7 @@ func BenchmarkHashSpec(b *testing.B) {
 	for i := range tools {
 		tools[i] = fmt.Sprintf("tool-%02d:1.%d.0", i, i)
 	}
-	spec := &Spec{
+	step := &Step{
 		ProjectPath:     "pkg/example/service",
 		Target:          "build",
 		Charms:          []string{"race", "verbose", "coverage", "write"},
@@ -135,7 +135,7 @@ func BenchmarkHashSpec(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := c.hashSpec(ctx, spec); err != nil {
+		if _, err := c.hashStep(ctx, step); err != nil {
 			b.Fatal(err)
 		}
 	}

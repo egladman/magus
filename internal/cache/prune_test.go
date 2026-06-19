@@ -28,12 +28,12 @@ func TestPrune_DryRun_NothingDeleted(t *testing.T) {
 	c := openMutableCache(t)
 
 	// Populate one entry with a no-op function.
-	spec := Spec{
+	step := Step{
 		WorkspaceRoot: t.TempDir(),
 		ProjectPath:   "api/",
 		Target:        "build",
 	}
-	_, err := c.Run(context.Background(), spec, func(ctx context.Context) error { return nil })
+	_, err := c.Run(context.Background(), step, func(ctx context.Context) error { return nil })
 	require.NoError(t, err)
 
 	n, freed, err := c.Prune(context.Background(), time.Now().Add(time.Hour), true)

@@ -96,3 +96,15 @@ Return the value of name, or def when name is unset or stripped by the sandbox. 
 
 **Returns:** string
 
+### `require`
+
+Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).
+
+**Signature:** `env.require(name) → string`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` |  | |
+
+**Returns:** string
+

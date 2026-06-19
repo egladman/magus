@@ -11,6 +11,8 @@
 // and every replay snapshots more than necessary.
 
 import "magus/target";
+// charm constructors derive argv patches from an anchor arg, not a counted index.
+import "magus/charm";
 
 export fun mgs_getName() > str { return "buf"; }
 
@@ -24,25 +26,24 @@ export fun mgs_listProvidedGlobs() > [str] { return ["gen/**"]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["buf", "--version"]; }
 
-fun bufBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "buf", "args": ["build"]}); return true; }
-fun bufGenerate(target: Target, cb: fun(any)) > bool { cb({"cmd": "buf", "args": ["generate"]}); return true; }
-fun bufLint(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "buf", "args": ["lint"], "charms": {
-        "gha": {"ops": [{"op": "add", "path": "/-", "value": "--error-format=github-actions"}]},
+fun bufBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "buf", args = ["build"]}); }
+fun bufGenerate(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "buf", args = ["generate"]}); }
+fun bufLint(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "buf", args = ["lint"], charms = {
+        "gha": append(["--error-format=github-actions"]),
     }});
-    return true;
 }
 
 // format checks by default (--exit-code fails CI when files would change); the
 // write charm applies the formatting in place.
-fun bufFormat(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "buf", "args": ["format", "--exit-code"], "charms": {
-        "rw": {"ops": [{"op": "replace", "path": "/1", "value": "-w"}]},
+fun bufFormat(target: Target, cb: fun(Run)) > void {
+    final args = ["format", "--exit-code"];
+    cb(Run{cmd = "buf", args = args, charms = {
+        "rw": set(args, "--exit-code", "-w"),
     }});
-    return true;
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
     return {
         "buf-build": bufBuild,
         "buf-generate": bufGenerate,

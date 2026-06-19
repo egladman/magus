@@ -21,9 +21,9 @@ import (
 // keyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
 const keyVersion = 3
 
-// hashSpec computes the cache key for a Spec (version, path, target, sources,
+// hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
-func (c *Cache) hashSpec(ctx context.Context, s *Spec) (string, error) {
+func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 	h := sha256.New()
 
 	// Build each key line in a reused scratch buffer and write it straight to the
@@ -33,7 +33,7 @@ func (c *Cache) hashSpec(ctx context.Context, s *Spec) (string, error) {
 	// and keyVersion need not change.
 	//
 	// ultra-opt: fmt.Fprintf -> append+Write on the key serialization path.
-	// BenchmarkHashSpec (200 deps/40 env/20 tools): -41% sec/op (71.6µ->42.1µ),
+	// BenchmarkHashStep (200 deps/40 env/20 tools): -41% sec/op (71.6µ->42.1µ),
 	// -47% B/op, -97% allocs/op (274->9), p=0.000 n=10. This hot path overrides the
 	// usual fmt-for-legibility preference; TestHashKeyByteLayout pins the exact
 	// bytes so the optimization cannot silently change cache keys.

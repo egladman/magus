@@ -4,6 +4,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/egladman/magus/types"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -128,7 +130,7 @@ func TestDecode_ForkOp(t *testing.T) {
 }
 
 // TestDecode_CharmReplaceOp checks that a charm carrying a replace patch op is
-// decoded into the canonical PatchOp.
+// decoded into the canonical types.PatchOp.
 func TestDecode_CharmReplaceOp(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",
@@ -152,11 +154,11 @@ func TestDecode_CharmReplaceOp(t *testing.T) {
 	require.True(t, ok, `Targets["fmt"] missing`)
 	charm, ok := tgt.Charms["write"]
 	require.True(t, ok, `Charms["write"] missing`)
-	assert.Equal(t, []PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, charm.Ops)
+	assert.Equal(t, []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, charm.Ops)
 }
 
 // TestDecode_CharmAddOp checks that a charm carrying an append patch op (add /-)
-// is decoded into the canonical PatchOp.
+// is decoded into the canonical types.PatchOp.
 func TestDecode_CharmAddOp(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",
@@ -178,7 +180,7 @@ func TestDecode_CharmAddOp(t *testing.T) {
 	require.NoError(t, err)
 	charm, ok := m.Ops["test"].Charms["debug"]
 	require.True(t, ok, `Charms["debug"] missing`)
-	assert.Equal(t, []PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, charm.Ops)
+	assert.Equal(t, []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, charm.Ops)
 }
 
 // TestDecode_CharmRootRejected checks that a root-path op (whole-argv replace)

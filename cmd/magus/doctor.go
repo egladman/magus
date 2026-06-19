@@ -33,7 +33,7 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 		doctor.WithDaemonInfo(daemonInfo),
 	)
 
-	if err := emitDoctor(spec, out); err != nil {
+	if err := emitDoctor(opts, out); err != nil {
 		return err
 	}
 	if out.Summary.Fail > 0 || (globalCfg.Strict && out.Summary.Warn > 0) {
@@ -80,10 +80,10 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-func emitDoctor(spec outputSpec, out doctor.Report) error {
-	switch spec.Format {
+func emitDoctor(opts OutputOptions, out doctor.Report) error {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, c := range out.Checks {
 			if c.Status != "ok" {

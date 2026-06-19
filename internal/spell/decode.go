@@ -35,17 +35,17 @@ type Obj interface {
 	CallStrs(key string, args ...string) ([]string, error)
 }
 
-// Decode marshals a spell definition record into the canonical Spec,
+// Decode marshals a spell definition record into the canonical Descriptor,
 // resolving needs()/provides() and validating op names and charm strategies. It
 // is the single reader the Buzz engine routes through, so a spell's shape is
 // known in exactly one place. Decode is pure: it neither registers the spell nor
 // touches any global state.
-func Decode(src Obj) (Spec, error) {
+func Decode(src Obj) (Descriptor, error) {
 	name, _ := src.Str("name")
 	if name == "" {
-		return Spec{}, fmt.Errorf("spell: name is required")
+		return Descriptor{}, fmt.Errorf("spell: name is required")
 	}
-	m := Spec{
+	m := Descriptor{
 		Name:       name,
 		Claims:     src.Strs("claims"),
 		VersionCmd: src.Strs("version_cmd"),
@@ -54,18 +54,18 @@ func Decode(src Obj) (Spec, error) {
 
 	needs, err := src.CallStrs("needs", "")
 	if err != nil {
-		return Spec{}, fmt.Errorf("spell %q: needs(): %w", name, err)
+		return Descriptor{}, fmt.Errorf("spell %q: needs(): %w", name, err)
 	}
 	m.Needs = needs
 
 	provides, err := src.CallStrs("provides")
 	if err != nil {
-		return Spec{}, fmt.Errorf("spell %q: provides(): %w", name, err)
+		return Descriptor{}, fmt.Errorf("spell %q: provides(): %w", name, err)
 	}
 	m.Provides = provides
 
 	if ops, ok := src.Obj("ops"); ok {
-		opMap := map[string]Op{}
+		opMap := map[string]types.SpellOp{}
 		var docOps []string
 		for _, op := range ops.Keys() {
 			spec, ok := ops.Obj(op)
@@ -73,14 +73,14 @@ func Decode(src Obj) (Spec, error) {
 				continue
 			}
 			if err := types.ValidateTargetName(op); err != nil {
-				return Spec{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
+				return Descriptor{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
 			}
-			t := Op{Capture: spec.Bool("capture"), Args: spec.Strs("args")}
+			t := types.SpellOp{Run: types.Run{Args: spec.Strs("args")}, Capture: spec.Bool("capture")}
 			if doc, ok := spec.Str("doc"); ok {
 				t.Doc = doc
 			}
 			// A function-authored op (vs a plain {cmd,args} record op) is a candidate
-			// for the doctor doc-comment check; see Spec.DocOps.
+			// for the doctor doc-comment check; see Descriptor.DocOps.
 			if spec.Bool("handler") {
 				docOps = append(docOps, op)
 			}
@@ -92,7 +92,7 @@ func Decode(src Obj) (Spec, error) {
 				t.Cmd = cmd
 			}
 			if charms, ok := spec.Obj("charms"); ok {
-				cm := map[string]Charm{}
+				cm := map[string]types.Charm{}
 				for _, cn := range charms.Keys() {
 					ce, ok := charms.Obj(cn)
 					if !ok {
@@ -101,9 +101,9 @@ func Decode(src Obj) (Spec, error) {
 					// A charm value is { ops = [ {op, path, value?, from?}, ... ] },
 					// an RFC 6902 patch over the base argv (built by the charm.*
 					// constructors at author time).
-					var ch Charm
+					var ch types.Charm
 					for _, opObj := range ce.Objs("ops") {
-						po := PatchOp{}
+						po := types.PatchOp{}
 						po.Op, _ = opObj.Str("op")
 						po.Path, _ = opObj.Str("path")
 						if v, ok := opObj.Str("value"); ok {
@@ -115,7 +115,7 @@ func Decode(src Obj) (Spec, error) {
 						ch.Ops = append(ch.Ops, po)
 					}
 					if err := ValidatePatch(ch.Ops); err != nil {
-						return Spec{}, fmt.Errorf("spell %q op %q charm %q: %w", name, op, cn, err)
+						return Descriptor{}, fmt.Errorf("spell %q op %q charm %q: %w", name, op, cn, err)
 					}
 					cm[cn] = ch
 				}

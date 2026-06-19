@@ -20,7 +20,7 @@ import (
 
 // snapshot records the project's declared outputs into the cache and writes the manifest.
 // A project with no declared outputs records an empty manifest (correct cache hit on rerun).
-func (c *Cache) snapshot(s Spec, hash string) ([]string, error) {
+func (c *Cache) snapshot(s Step, hash string) ([]string, error) {
 	root := s.WorkspaceRoot
 	matches, err := expandOutputGlobs(s.Outputs, root)
 	if err != nil {

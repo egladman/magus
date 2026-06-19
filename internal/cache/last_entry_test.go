@@ -28,7 +28,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
 	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main() {}\n"), 0o644))
 	outRel := filepath.Join("myservice", "out.bin")
-	spec := Spec{
+	step := Step{
 		ProjectPath:   "myservice",
 		Sources:       []string{"myservice/*.go"},
 		Outputs:       []string{outRel},
@@ -45,7 +45,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 
 	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
 	require.NoError(t, err)
-	_, err = c.Run(context.Background(), spec, fn)
+	_, err = c.Run(context.Background(), step, fn)
 	require.NoError(t, err)
 
 	m, logPath, err := c.LastEntry("myservice")
@@ -76,14 +76,14 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 
-	buildSpec := Spec{
+	buildStep := Step{
 		ProjectPath:   "svc",
 		Sources:       []string{"svc/*.go"},
 		Outputs:       []string{"svc/build.out"},
 		WorkspaceRoot: root,
 		Target:        "build",
 	}
-	testSpec := Spec{
+	testStep := Step{
 		ProjectPath:   "svc",
 		Sources:       []string{"svc/*.go"},
 		Outputs:       []string{"svc/test.out"},
@@ -91,9 +91,9 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 		Target:        "test",
 	}
 
-	_, err = c.Run(context.Background(), buildSpec, writeOutput("build.out"))
+	_, err = c.Run(context.Background(), buildStep, writeOutput("build.out"))
 	require.NoError(t, err)
-	_, err = c.Run(context.Background(), testSpec, writeOutput("test.out"))
+	_, err = c.Run(context.Background(), testStep, writeOutput("test.out"))
 	require.NoError(t, err)
 
 	// Filtering by "test" should return only the test entry.

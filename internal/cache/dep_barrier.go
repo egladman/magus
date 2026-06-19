@@ -18,10 +18,10 @@ func DepKey(project, target string) string {
 	return project + nodeKeySep + target
 }
 
-// specKey is the node key for s itself.
-func specKey(s Spec) string { return DepKey(s.ProjectPath, s.Target) }
+// stepKey is the node key for s itself.
+func stepKey(s Step) string { return DepKey(s.ProjectPath, s.Target) }
 
-// depBarrier gates RunAll goroutines on inter-spec completion. One entry per node
+// depBarrier gates RunAll goroutines on inter-step completion. One entry per node
 // key; dependents block in waitForDeps until markDone closes its channel.
 // Out-of-scope edges (no entry) are skipped, never blocked on.
 // Requires an acyclic graph: checkAcyclic must be called before launching goroutines.
@@ -36,10 +36,10 @@ type barrierEntry struct {
 
 // newDepBarrier builds a barrier with one entry per distinct node key.
 // The map is immutable after construction; per-entry close is serialized by sync.Once.
-func newDepBarrier(specs []Spec) *depBarrier {
-	done := make(map[string]*barrierEntry, len(specs))
-	for _, s := range specs {
-		k := specKey(s)
+func newDepBarrier(steps []Step) *depBarrier {
+	done := make(map[string]*barrierEntry, len(steps))
+	for _, s := range steps {
+		k := stepKey(s)
 		if _, ok := done[k]; !ok {
 			done[k] = &barrierEntry{ch: make(chan struct{})}
 		}
@@ -58,8 +58,8 @@ func (b *depBarrier) markDone(key string) {
 
 // waitForDeps blocks until all in-scope upstreams (DependsOn same-target + After keys)
 // have markDone'd, or ctx is cancelled.
-func (b *depBarrier) waitForDeps(ctx context.Context, s Spec) error {
-	self := specKey(s)
+func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
+	self := stepKey(s)
 	wait := func(key string) error {
 		if key == self {
 			return nil
@@ -90,14 +90,14 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Spec) error {
 
 // checkAcyclic reports an error if in-scope DependsOn/After edges form a cycle,
 // using three-colour DFS. A batch that passes this check cannot deadlock the barrier.
-func checkAcyclic(specs []Spec) error {
-	inScope := make(map[string]bool, len(specs))
-	for _, s := range specs {
-		inScope[specKey(s)] = true
+func checkAcyclic(steps []Step) error {
+	inScope := make(map[string]bool, len(steps))
+	for _, s := range steps {
+		inScope[stepKey(s)] = true
 	}
-	adj := make(map[string][]string, len(specs))
-	for _, s := range specs {
-		self := specKey(s)
+	adj := make(map[string][]string, len(steps))
+	for _, s := range steps {
+		self := stepKey(s)
 		add := func(dep string) {
 			if dep == self || !inScope[dep] {
 				return
@@ -117,7 +117,7 @@ func checkAcyclic(specs []Spec) error {
 		grey
 		black
 	)
-	color := make(map[string]int, len(specs))
+	color := make(map[string]int, len(steps))
 	var stack []string
 
 	var visit func(n string) []string
@@ -144,8 +144,8 @@ func checkAcyclic(specs []Spec) error {
 		return nil
 	}
 
-	for _, s := range specs {
-		k := specKey(s)
+	for _, s := range steps {
+		k := stepKey(s)
 		if color[k] != white {
 			continue
 		}

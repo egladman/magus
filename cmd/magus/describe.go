@@ -105,7 +105,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 
 	// Like `magus graph`, accept the graph-only -o formats on top of the common
 	// set; markdown renders the full MAGUS.md doc (the catalog + the graph).
-	spec, err := ResolveOutput(global.output, outputDot, outputMermaid, outputMarkdown)
+	opts, err := ResolveOutput(global.output, outputDot, outputMermaid, outputMarkdown)
 	if err != nil {
 		return err
 	}
@@ -132,9 +132,9 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		out.Projects = kept
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, p := range out.Projects {
 			for _, n := range p.Nodes {
@@ -234,7 +234,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -254,9 +254,9 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		}
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, t := range out.Spells {
 			fmt.Println(t.Name)
@@ -326,7 +326,7 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 }
 
 func describeTargets(ctx context.Context, root string) error {
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -338,9 +338,9 @@ func describeTargets(ctx context.Context, root string) error {
 
 	out := ws.DescribeTargets()
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, t := range out.Targets {
 			fmt.Println(t.Name)
@@ -384,7 +384,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -405,9 +405,9 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			}
 		}
 
-		switch spec.Format {
+		switch opts.Format {
 		case outputJSON, outputYAML, outputJSONL, outputTemplate:
-			return emitFormatted(spec, out)
+			return emitFormatted(opts, out)
 		case outputName:
 			for _, p := range out.Projects {
 				fmt.Println(p.Path)
@@ -474,9 +474,9 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		}
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, p := range out.Projects {
 			fmt.Println(p.Path)
@@ -527,7 +527,7 @@ func describeTarget(ctx context.Context, root string, pos []string) error {
 		t.Path = pos[1]
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -542,9 +542,9 @@ func describeTarget(ctx context.Context, root string, pos []string) error {
 		return err
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, e := range out.Targets {
 			fmt.Printf("%s:%s\n", e.Project, e.Target)
@@ -625,7 +625,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -635,9 +635,9 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, w := range out.Workspaces {
 			fmt.Println(w.Root)
@@ -716,7 +716,7 @@ func describeMCPTools(args []string) error {
 		return err
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -731,9 +731,9 @@ func describeMCPTools(args []string) error {
 		}
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, t := range out.MCPTools {
 			fmt.Println(t.Name)

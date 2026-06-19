@@ -136,8 +136,8 @@ func TestPrettyHandlerReproLine(t *testing.T) {
 // name:charm1,charm2 when charms are active (the `magus run` charm-suffix syntax).
 func TestReproTarget(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "test", reproTarget(Spec{Target: "test"}))
-	assert.Equal(t, "test:debug,race", reproTarget(Spec{Target: "test", Charms: []string{"debug", "race"}}))
+	assert.Equal(t, "test", reproTarget(Step{Target: "test"}))
+	assert.Equal(t, "test:debug,race", reproTarget(Step{Target: "test", Charms: []string{"debug", "race"}}))
 }
 
 // TestRecordAttrExtraction verifies the attr extraction helpers.

@@ -25,19 +25,19 @@ func main() {
 	applyEnvOut := flag.String("apply-env-out", "", "Generated ApplyEnv output path (skip when empty)")
 	flag.Parse()
 
-	specs, err := parseConfigSpecs(*configPath)
+	defs, err := parseConfigFlags(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config/flag: %v\n", err)
 		os.Exit(1)
 	}
 
 	if *outPath != "" {
-		flagData := flagTmplData{Specs: specs}
+		flagData := flagTmplData{Defs: defs}
 		if err := writeTemplate(*outPath, outputTmpl, flagData); err != nil {
 			fmt.Fprintf(os.Stderr, "config/flag: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "config/flag: wrote %d specs to %s\n", len(specs), *outPath)
+		fmt.Fprintf(os.Stderr, "config/flag: wrote %d defs to %s\n", len(defs), *outPath)
 	}
 
 	schemaOutputs := []struct {
@@ -45,9 +45,9 @@ func main() {
 		tmpl *template.Template
 		data any
 	}{
-		{*fieldsOut, fieldsTmpl, specs},
-		{*bindOut, bindTmpl, bindOnlyFields(specs)},
-		{*applyEnvOut, applyEnvTmpl, specs},
+		{*fieldsOut, fieldsTmpl, defs},
+		{*bindOut, bindTmpl, bindOnlyFields(defs)},
+		{*applyEnvOut, applyEnvTmpl, defs},
 	}
 	for _, o := range schemaOutputs {
 		if o.path == "" {
@@ -76,13 +76,13 @@ func writeTemplate(path string, tmpl *template.Template, data any) error {
 	return nil
 }
 
-// flagTmplData bundles specs with derived metadata for the flags template.
+// flagTmplData bundles defs with derived metadata for the flags template.
 type flagTmplData struct {
-	Specs []FlagSpec
+	Defs []FlagDef
 }
 
-// FlagSpec describes one config field exposed as a CLI flag.
-type FlagSpec struct {
+// FlagDef describes one config field exposed as a CLI flag.
+type FlagDef struct {
 	Flag      string // CLI flag long name, e.g. "cache-dir"
 	FlagShort string // optional short name, e.g. "c" (from `cli:"short=c"`)
 	EnvVar    string // matching MAGUS_* env var, e.g. "MAGUS_CACHE_DIR"
@@ -92,7 +92,7 @@ type FlagSpec struct {
 	Usage     string // sanitized one-line description for flag.Usage
 }
 
-func parseConfigSpecs(configPath string) ([]FlagSpec, error) {
+func parseConfigFlags(configPath string) ([]FlagDef, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, configPath, nil, parser.ParseComments)
 	if err != nil {
@@ -105,8 +105,8 @@ func parseConfigSpecs(configPath string) ([]FlagSpec, error) {
 		if !ok {
 			continue
 		}
-		for _, spec := range gd.Specs {
-			ts, ok := spec.(*ast.TypeSpec)
+		for _, def := range gd.Specs {
+			ts, ok := def.(*ast.TypeSpec)
 			if !ok {
 				continue
 			}
@@ -123,13 +123,13 @@ func parseConfigSpecs(configPath string) ([]FlagSpec, error) {
 		return nil, fmt.Errorf("no Config struct found in %s", configPath)
 	}
 
-	var specs []FlagSpec
-	walkStruct(root, structs, nil, "cfg", &specs)
-	return specs, nil
+	var defs []FlagDef
+	walkStruct(root, structs, nil, "cfg", &defs)
+	return defs, nil
 }
 
 // walkStruct recurses through st collecting scalar leaf fields.
-func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath []string, goBase string, out *[]FlagSpec) {
+func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath []string, goBase string, out *[]FlagDef) {
 	for _, field := range st.Fields.List {
 		if len(field.Names) == 0 {
 			continue // skip embedded fields
@@ -176,7 +176,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			usage = envVar
 		}
 
-		*out = append(*out, FlagSpec{
+		*out = append(*out, FlagDef{
 			Flag:      flagName,
 			FlagShort: cliShort,
 			EnvVar:    envVar,
@@ -319,18 +319,18 @@ import (
 	"github.com/egladman/magus/internal/config"
 )
 
-// ConfigFlagSpec documents one config field exposed as a CLI flag.
-type ConfigFlagSpec struct {
+// ConfigFlag documents one config field exposed as a CLI flag.
+type ConfigFlag struct {
 	Flag   string // CLI flag name, e.g. "cache-dir"
 	EnvVar string // matching MAGUS_* env var
 	Kind   string // "string", "int", "bool", "float64", "duration", or "boolptr"
 }
 
-// ConfigFlagSpecs is the generated inventory of every config-backed flag.
+// ConfigFlags is the generated inventory of every config-backed flag.
 // Consumed by magus doctor (env-var typo detection) and the man-page generator.
 // Do not edit by hand — regenerate with: go generate ./cmd/magus/...
-var ConfigFlagSpecs = []ConfigFlagSpec{
-{{- range .Specs}}
+var ConfigFlags = []ConfigFlag{
+{{- range .Defs}}
 	{"{{.Flag}}", "{{.EnvVar}}", "{{.Kind}}"},
 {{- end}}
 }
@@ -344,7 +344,7 @@ var ConfigFlagSpecs = []ConfigFlagSpec{
 // Fields with kind "boolptr" use three-way nil/true/false semantics and are
 // env-only; they are omitted here to avoid losing the nil state via flag.
 func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
-{{- range .Specs}}
+{{- range .Defs}}
 {{- if eq .Kind "string"}}
 	fs.StringVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
 {{- else if eq .Kind "int"}}

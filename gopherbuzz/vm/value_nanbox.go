@@ -181,7 +181,7 @@ func gHeapGet(idx uint64) heapVal {
 
 // encodeHeap packs a valueTag and global heap index into a NaN-box heap-ref Value.
 func encodeHeap(t valueTag, idx uint64) Value {
-	fine := uint64(t-tagStr) // tagStr (4) is the base of heap tags; fine kind 0=str, ...
+	fine := uint64(t - tagStr) // tagStr (4) is the base of heap tags; fine kind 0=str, ...
 	return Value(qnanMask | (nanboxHeap << coarseShift) | (fine << fineShift) | (idx & idxMask44))
 }
 
@@ -189,6 +189,23 @@ func encodeHeap(t valueTag, idx uint64) Value {
 // This is the shared constructor used by StrValue, ListValue, NewMap, etc.
 func heapValue[T heapVal](tag valueTag, ptr T) Value {
 	return encodeHeap(tag, gHeapAlloc(ptr))
+}
+
+// internedStrValue returns the string Value for an interned *strObj, caching its
+// global-heap index on the object (stored as index+1, 0 = unset) so every Value
+// for the same content shares one heap entry instead of appending a fresh one on
+// each StrValue call. This keeps string-churning loops (e.g. a sliding sub())
+// from growing the never-freed heap. A lost CAS race orphans one heap slot,
+// which is bounded and harmless since it still points at the same strObj.
+func internedStrValue(o *strObj) Value {
+	if e := atomic.LoadUint64(&o.heapIdx); e != 0 {
+		return encodeHeap(tagStr, e-1)
+	}
+	idx := gHeapAlloc(o)
+	if !atomic.CompareAndSwapUint64(&o.heapIdx, 0, idx+1) {
+		idx = atomic.LoadUint64(&o.heapIdx) - 1
+	}
+	return encodeHeap(tagStr, idx)
 }
 
 // sameObj reports heap identity. Callers have already verified a.tag() == b.tag(),
@@ -199,7 +216,7 @@ func sameObj(a, b Value) bool {
 
 // value-level asX accessors: look up the global heap table.
 
-func nanboxObj(v Value) heapVal             { return gHeapGet(uint64(v) & idxMask44) }
+func nanboxObj(v Value) heapVal            { return gHeapGet(uint64(v) & idxMask44) }
 func (v Value) asStr() *strObj             { return nanboxObj(v).(*strObj) }
 func (v Value) asUD() *udObj               { return nanboxObj(v).(*udObj) }
 func (v Value) asList() *listObj           { return nanboxObj(v).(*listObj) }

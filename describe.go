@@ -294,7 +294,7 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 		if p == nil {
 			continue
 		}
-		spec := m.baseSpec(p)
+		step := m.baseStep(p)
 
 		spellEntries := make([]types.EvaluatedSpellEntry, 0, len(p.ResolvedSpells))
 		charmSet := map[string]struct{}{}
@@ -327,8 +327,8 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 			Project:   et.Path,
 			Target:    et.Name,
 			Dir:       p.Dir,
-			Sources:   spec.Sources,
-			Outputs:   spec.Outputs,
+			Sources:   step.Sources,
+			Outputs:   step.Outputs,
 			DependsOn: p.DependsOn,
 			Charms:    charms,
 			Spells:    spellEntries,
@@ -352,7 +352,7 @@ func (m *Magus) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 	all := m.ws.All()
 	entries := make([]types.EvaluatedProjectEntry, 0, len(all))
 	for _, p := range all {
-		spec := m.baseSpec(p)
+		step := m.baseStep(p)
 
 		spellEntries := make([]types.EvaluatedSpellEntry, 0, len(p.ResolvedSpells))
 		for i, s := range p.ResolvedSpells {
@@ -369,8 +369,8 @@ func (m *Magus) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 		entry := types.EvaluatedProjectEntry{
 			Path:      p.Path,
 			Dir:       p.Dir,
-			Sources:   spec.Sources,
-			Outputs:   spec.Outputs,
+			Sources:   step.Sources,
+			Outputs:   step.Outputs,
 			DependsOn: p.DependsOn,
 			Spells:    spellEntries,
 			Exclusive: p.Exclusive,

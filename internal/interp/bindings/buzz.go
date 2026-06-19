@@ -13,6 +13,8 @@ import (
 	buzzeng "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/ast"
 	buzzstd "github.com/egladman/gopherbuzz/std"
+	"github.com/egladman/magus/hostbuzz"
+	buzzgen "github.com/egladman/magus/hostbuzz/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
@@ -21,8 +23,6 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/run"
 	ispell "github.com/egladman/magus/internal/spell"
-	"github.com/egladman/magus/internal/std"
-	"github.com/egladman/magus/internal/std/gen/buzz"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -34,7 +34,7 @@ func init() {
 
 // registerAllBuzz installs the magus.* host API into a Buzz session.
 //
-// These bindings (and the magus-bindings-gen-emitted ones in gen/buzz) are written
+// These bindings (and the magus-bindings-gen-emitted ones in hostbuzz/gen) are written
 // directly against the concrete magus/gopherbuzz value system — NewMap, DirectValue,
 // StrValue, and friends — rather than behind the generic engine.Value /
 // engine.Session abstraction. That is deliberate, not a layering gap:
@@ -69,6 +69,35 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	}))
 	magus.MapSet("pry", buzzeng.DirectValue("magus.pry", buildBuzzPry(sess, parseMode)))
 
+	// The host-declarable subset (magus.cmd, magus.bust_cache) is generated from
+	// the std.Magus descriptor like every other module, so the two can't drift and
+	// a declared method can't be silently left unbound. Merged onto the hand-built
+	// magus map above (which carries only the VM-infra members — needs/target/
+	// project/cache/pry/log — that can't share a Go Impl across the boundary).
+	mergeModuleMap(magus, buzzgen.RegisterMagus(ctx, sess))
+
+	// magus.modules() / magus.module(name): typed, native introspection of the host
+	// module registry — the same hostbuzz.ModulesOutput core `magus describe
+	// module[s]` formats, marshalled straight to Buzz records instead of scraping a
+	// subprocess's `-o json` stdout. modules() lists every module {name, doc, fields,
+	// methods}; module(name) returns one with fields + per-method Buzz signatures, and
+	// raises on an unknown name. Hand-written (not declarative) because the core uses
+	// hostbuzz, which std can't import.
+	magus.MapSet("modules", buzzeng.DirectValue("magus.modules", func(_ context.Context, _ []buzzeng.Value) (buzzeng.Value, error) {
+		return hostbuzz.RecordsVal(hostbuzz.ModulesOutput("").Modules), nil
+	}))
+	magus.MapSet("module", buzzeng.DirectValue("magus.module", func(_ context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
+		name := ""
+		if len(args) > 0 && args[0].IsStr() {
+			name = args[0].AsString()
+		}
+		out := hostbuzz.ModulesOutput(name)
+		if len(out.Modules) == 0 {
+			return buzzeng.Null, fmt.Errorf("magus.module: unknown module %q", name)
+		}
+		return hostbuzz.AnyMapVal(out.Modules[0].Record()), nil
+	}))
+
 	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one
 	// way to log from a magusfile — there is no separate std log module. Each level
 	// writes into the process slog logger via emitMagusLog.
@@ -76,16 +105,6 @@ func registerAllBuzz(ctx context.Context, sess *buzzeng.Session, targets map[str
 	magus.MapSet("debug", buzzeng.DirectValue("magus.debug", buzzLogFn(slog.LevelDebug)))
 	magus.MapSet("warn", buzzeng.DirectValue("magus.warn", buzzLogFn(slog.LevelWarn)))
 	magus.MapSet("error", buzzeng.DirectValue("magus.error", buzzLogFn(slog.LevelError)))
-
-	// magus.cmd runs the magus binary with args; it raises when the invocation
-	// exits non-zero (parity with os.exec).
-	magus.MapSet("cmd", buzzeng.DirectValue("magus.cmd", func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
-		rec, err := std.MagusCmd(ctx, argStrSlice(args, 0))
-		if err != nil {
-			return buzzeng.Null, err
-		}
-		return execRecordToBuzz(rec), nil
-	}))
 
 	// magus.hint(msg): advisory nudge (see emitMagusHint) — non-fatal, deduped,
 	// honors the hints toggle.
@@ -240,7 +259,7 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Va
 }
 
 // magusModules builds every magus host module (os/platform/fs/vcs/env/crypto/
-// http/archive/charm/semver/yaml/…) via the magus-bindings-gen-emitted buzzgen
+// http/archive/charm/semver/yaml/…) via the magus-bindings-gen-emitted hostbuzz/gen
 // trampolines, keyed by the bare import name each is exposed under. The closures
 // capture sess so host callbacks (e.g. arg.index_func, os.with_env) can call back
 // into the VM.
@@ -251,10 +270,10 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (buzzeng.Va
 // sit alongside crypto.sha256Hex and http.get.
 func magusModules(ctx context.Context, sess *buzzeng.Session) map[string]buzzeng.Value {
 	cryptoNS := buzzgen.RegisterCrypto(ctx, sess)
-	mergeModuleMap(cryptoNS, std.RegisterExtraCrypto(ctx, sess))
+	mergeModuleMap(cryptoNS, registerCryptoBytes())
 
 	httpNS := buzzgen.RegisterHttp(ctx, sess)
-	mergeModuleMap(httpNS, std.RegisterExtraHTTP(ctx, sess))
+	mergeModuleMap(httpNS, registerHTTPBytes())
 
 	return map[string]buzzeng.Value{
 		"os":       buzzgen.RegisterOs(ctx, sess),
@@ -313,15 +332,35 @@ func registerHostModules(ctx context.Context, sess *buzzeng.Session) {
 	}
 	// Canonical value types (Target/Charm) plus the generated TargetQuery as a
 	// flat-importable source module, so a spell's mgs_listTargets can be typed
-	// {str: fun(Target, fun(any)) bool} instead of `any`, and a magusfile can name or
+	// {str: fun(Target, fun(any)) void/bool} instead of `any`, and a magusfile can name or
 	// build a TargetQuery. Single source of truth lives in the spell package. The
 	// built-in generator inlines only TargetModuleSource (Target/Charm) — built-ins
 	// have no use for TargetQuery — so it is appended only here, on the runtime path.
 	sess.SetSourceModule(ispell.TargetModulePath, strings.Join([]string{
 		ispell.TargetModuleSource,
+		// Fork-command value types (PatchOp < Charm < Run ordering: each references
+		// the prior). Inlined into built-ins too — see builtinModuleSources.
+		ispell.PatchOpSource,
+		ispell.CharmTypeSource,
+		ispell.RunSource,
 		ispell.TargetQuerySource,
 		ispell.ExecResultSource,
+		// Boundary mirrors of the host-method record shapes, so a magusfile can
+		// annotate a vcs.commit / fs.stat / http.* / semver.parse / parse_url result
+		// for compile-checked field access. CommitAuthor precedes Commit (Commit's
+		// author field is typed CommitAuthor).
+		ispell.CommitAuthorSource,
+		ispell.CommitSource,
+		ispell.FileInfoSource,
+		ispell.HTTPResponseSource,
+		ispell.SemverVersionSource,
+		ispell.URLSource,
 	}, "\n"))
+	// magus/charm: the pure-Buzz patch constructors, registered as its own source
+	// module so a function-op spell or a magusfile can `import "magus/charm"` and
+	// build charms with charm.after/set/… (the built-in generator inlines it for
+	// self-contained fork spells; see SelfContainedBuiltinSource).
+	sess.SetSourceModule(ispell.CharmModulePath, ispell.CharmModuleSource)
 }
 
 // buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes
@@ -399,7 +438,7 @@ func buildProjectNS(ctx context.Context, sess *buzzeng.Session) buzzeng.Value {
 
 // recordProjectOpts calls a register configurator once with the project handle p
 // and a recording sink cb, returning the single options map it emits via cb({...}).
-// Mirrors recordForkSpec: the function must call cb exactly once with a map. p
+// Mirrors recordForkRun: the function must call cb exactly once with a map. p
 // carries the project's workspace path and name so a configurator may branch on
 // them; the common case ignores it.
 func recordProjectOpts(ctx context.Context, sess *buzzeng.Session, fn buzzeng.Value, path string) (buzzeng.Value, error) {
@@ -534,7 +573,7 @@ func parseBuzzProjectOpts(ctx context.Context, v buzzeng.Value) ([]workspace.Pro
 // magus.project.register can decode and register the spell by value at bind time —
 // needed because the spell is evaluated in a throwaway session whose functions are
 // gone by then.
-func spellHandleFromMeta(m ispell.Spec) buzzeng.Value {
+func spellHandleFromMeta(m ispell.Descriptor) buzzeng.Value {
 	h := buzzeng.NewMap()
 	h.MapSet("name", buzzeng.StrValue(m.Name))
 	h.MapSet("needs", strSliceToBuzzList(m.Needs))
@@ -557,7 +596,7 @@ func spellHandleFromMeta(m ispell.Spec) buzzeng.Value {
 // the target's base argv and overlays opts.env on the subprocess — so
 // flag-carrying and cross-compile invocations need no os.exec. With no opts.args
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
-func bindBuzzTargetDispatch(h buzzeng.Value, targets map[string]ispell.Op) {
+func bindBuzzTargetDispatch(h buzzeng.Value, targets map[string]types.SpellOp) {
 	h.MapSet("listTargets", buzzeng.DirectValue("spell.listTargets", func(_ context.Context, _ []buzzeng.Value) (buzzeng.Value, error) {
 		return strSliceToBuzzList(forkTargetNames(targets)), nil
 	}))
@@ -570,7 +609,7 @@ func bindBuzzTargetDispatch(h buzzeng.Value, targets map[string]ispell.Op) {
 
 // bindBuzzForkTargetMethod attaches tgt as a callable method named target on h,
 // so spell.<target>(opts?) forks the target.
-func bindBuzzForkTargetMethod(h buzzeng.Value, target string, tgt ispell.Op) {
+func bindBuzzForkTargetMethod(h buzzeng.Value, target string, tgt types.SpellOp) {
 	h.MapSet(target, buzzeng.DirectValue("spell."+target, func(ctx context.Context, args []buzzeng.Value) (buzzeng.Value, error) {
 		opts := spellOptsFromBuzz(args, 0)
 		res, err := runBuzzForkTarget(ctx, tgt, opts)
@@ -585,7 +624,7 @@ func bindBuzzForkTargetMethod(h buzzeng.Value, target string, tgt ispell.Op) {
 }
 
 // execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec record to
-// a Buzz map, marshalled the same way os.exec's record is (see gen/buzz.bzAnyVal):
+// a Buzz map, marshalled the same way os.exec's record is (see hostbuzz.AnyVal):
 // string/bool direct, int as a Buzz int.
 func execRecordToBuzz(rec map[string]any) buzzeng.Value {
 	m := buzzeng.NewMap()
@@ -606,7 +645,7 @@ func execRecordToBuzz(rec map[string]any) buzzeng.Value {
 // runForkTarget). With explicit opts.args it uses them; otherwise it forwards the
 // `magus run <t> -- <extra>` args, so a bare go.test() still threads through
 // `magus run test -- -run X`.
-func runBuzzForkTarget(ctx context.Context, tgt ispell.Op, opts forkOpts) (run.ExecResult, error) {
+func runBuzzForkTarget(ctx context.Context, tgt types.SpellOp, opts forkOpts) (run.ExecResult, error) {
 	if !opts.hasArgs {
 		opts.args = project.ExtraArgs(ctx)
 	}
@@ -645,7 +684,7 @@ func spellOptsFromBuzz(args []buzzeng.Value, idx int) (opts forkOpts) {
 
 // targetsToBuzzMap marshals resolved targets back to the nested ops map shape
 // ispell.Decode reads (a fork target unless it declares fn).
-func targetsToBuzzMap(targets map[string]ispell.Op) buzzeng.Value {
+func targetsToBuzzMap(targets map[string]types.SpellOp) buzzeng.Value {
 	ops := buzzeng.NewMap()
 	for name, t := range targets {
 		op := buzzeng.NewMap()
@@ -671,7 +710,7 @@ func targetsToBuzzMap(targets map[string]ispell.Op) buzzeng.Value {
 
 // patchOpsToBuzzList marshals a charm's RFC 6902 ops back to the array-of-records
 // list shape ispell.Decode reads.
-func patchOpsToBuzzList(ops []ispell.PatchOp) buzzeng.Value {
+func patchOpsToBuzzList(ops []types.PatchOp) buzzeng.Value {
 	items := make([]buzzeng.Value, len(ops))
 	for i, po := range ops {
 		m := buzzeng.NewMap()

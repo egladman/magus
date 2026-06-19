@@ -116,8 +116,8 @@ type Stats struct {
 	Error int
 }
 
-// Spec is the hashable description of a cached build step.
-type Spec struct {
+// Step is the hashable description of a cached build step.
+type Step struct {
 	ProjectPath     string   // repo-relative project directory
 	Sources         []string // doublestar globs (relative to WorkspaceRoot) for the cache key
 	EnvAllow        []string // env var names whose values contribute to the key
@@ -131,7 +131,7 @@ type Spec struct {
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	NoCache         bool     // when true, always run fn — never replay or snapshot (long-running targets)
-	Isolated        bool     // RunAll only: when true, runs alone — no other spec in the batch runs concurrently with it (ignored by Run, which has no batch)
+	Isolated        bool     // RunAll only: when true, runs alone — no other step in the batch runs concurrently with it (ignored by Run, which has no batch)
 }
 
 // Result is the outcome of a Cache.Run call.
@@ -144,16 +144,16 @@ type Result struct {
 }
 
 type runCtx struct {
-	spec        *Spec
+	step        *Step
 	concurrency int
 	limiter     *Limiter
 	onHit       func(*Result)
 	onMiss      func(*Result)
 	onError     func(error)
-	onSpec      func(*Spec)
-	onResult    func(*Spec, *Result, error)
+	onStep      func(*Step)
+	onResult    func(*Step, *Result, error)
 	// deferMtimeFlush suppresses the per-Run mtime flush so a RunAll batch can
-	// flush once after all specs complete instead of once per spec.
+	// flush once after all steps complete instead of once per step.
 	deferMtimeFlush bool
 }
 
@@ -182,13 +182,13 @@ func OnError(fn func(error)) RunOption {
 }
 
 // OnResult fires after every Cache.Run regardless of outcome (after OnHit/OnMiss/OnError).
-func OnResult(fn func(*Spec, *Result, error)) RunOption {
+func OnResult(fn func(*Step, *Result, error)) RunOption {
 	return func(rc *runCtx) { rc.onResult = fn }
 }
 
-// OnSpec fires before hashing, allowing the caller to mutate the Spec (e.g. extend EnvAllow).
-func OnSpec(fn func(*Spec)) RunOption {
-	return func(rc *runCtx) { rc.onSpec = fn }
+// OnStep fires before hashing, allowing the caller to mutate the Step (e.g. extend EnvAllow).
+func OnStep(fn func(*Step)) RunOption {
+	return func(rc *runCtx) { rc.onStep = fn }
 }
 
 // WithConcurrency caps in-flight RunAll builds. 1 = serial, 0 = unlimited.
@@ -286,13 +286,13 @@ func (c *Cache) Stats() Stats {
 // Run executes fn under the cache. On a hash match it replays recorded outputs;
 // otherwise fn runs and its outputs are snapshotted. Per-hash locking prevents
 // manifest races when multiple RunAll goroutines share the same key.
-func (c *Cache) Run(ctx context.Context, s Spec, fn func(context.Context) error, opts ...RunOption) (Result, error) {
-	rc := &runCtx{spec: &s}
+func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
+	rc := &runCtx{step: &s}
 	for _, o := range opts {
 		o(rc)
 	}
-	if rc.onSpec != nil {
-		rc.onSpec(rc.spec)
+	if rc.onStep != nil {
+		rc.onStep(rc.step)
 	}
 
 	start := time.Now()
@@ -300,16 +300,16 @@ func (c *Cache) Run(ctx context.Context, s Spec, fn func(context.Context) error,
 	tracer := tracerFromContext(ctx)
 
 	hashCtx, endHash := tracer.StartSpan(ctx, "magus.cache.hash")
-	hash, err := c.hashSpec(hashCtx, rc.spec)
+	hash, err := c.hashStep(hashCtx, rc.step)
 	endHash(err)
 	if err != nil {
 		return result, fmt.Errorf("magus/cache: hash %q: %w", s.ProjectPath, err)
 	}
 	result.Hash = hash
 
-	// hashSpec records freshly computed file hashes in the mtime memo; persist
+	// hashStep records freshly computed file hashes in the mtime memo; persist
 	// them. RunAll defers this to one flush after the whole batch (deferMtimeFlush)
-	// so a cold N-spec build doesn't rewrite shared shards N times.
+	// so a cold N-step build doesn't rewrite shared shards N times.
 	if !rc.deferMtimeFlush {
 		c.mtimes.flush(ctx)
 	}
@@ -374,7 +374,7 @@ func (c *Cache) Run(ctx context.Context, s Spec, fn func(context.Context) error,
 					rc.onHit(&result)
 				}
 				if rc.onResult != nil {
-					rc.onResult(rc.spec, &result, nil)
+					rc.onResult(rc.step, &result, nil)
 				}
 				return result, nil
 			}
@@ -406,7 +406,7 @@ func (c *Cache) Run(ctx context.Context, s Spec, fn func(context.Context) error,
 			rc.onError(runErr)
 		}
 		if rc.onResult != nil {
-			rc.onResult(rc.spec, &result, runErr)
+			rc.onResult(rc.step, &result, runErr)
 		}
 		return result, runErr
 	}
@@ -447,29 +447,29 @@ func (c *Cache) Run(ctx context.Context, s Spec, fn func(context.Context) error,
 		rc.onMiss(&result)
 	}
 	if rc.onResult != nil {
-		rc.onResult(rc.spec, &result, nil)
+		rc.onResult(rc.step, &result, nil)
 	}
 	return result, nil
 }
 
-// reproTarget renders the spec's target with its active charms the way the CLI
+// reproTarget renders the step's target with its active charms the way the CLI
 // spells it — "name" or "name:charm1,charm2" — so the pretty reporter can print a
 // copy-pasteable `magus run <target> <project>` for the just-run project.
-func reproTarget(s Spec) string {
+func reproTarget(s Step) string {
 	if len(s.Charms) == 0 {
 		return s.Target
 	}
 	return s.Target + ":" + strings.Join(s.Charms, ",")
 }
 
-// RunAll schedules specs concurrently (bounded by WithConcurrency/WithLimiter).
-// Spec.DependsOn imposes scheduling order for in-scope specs only; out-of-scope
+// RunAll schedules steps concurrently (bounded by WithConcurrency/WithLimiter).
+// Step.DependsOn imposes scheduling order for in-scope steps only; out-of-scope
 // deps are ignored. A cyclic DependsOn graph is rejected before any goroutine
-// launches. Upstream cache keys are folded into dependent Spec.Deps transitively
+// launches. Upstream cache keys are folded into dependent Step.Deps transitively
 // (happens-before: markDone writes the key before waitForDeps returns in dependents).
 // Every goroutine is launched immediately and blocks on deps without holding a
 // slot, so the pool never deadlocks and g.Wait() always drains cleanly.
-func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Context, Spec) error, opts ...RunOption) ([]Result, error) {
+func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Context, Step) error, opts ...RunOption) ([]Result, error) {
 	rc := &runCtx{}
 	for _, o := range opts {
 		o(rc)
@@ -484,28 +484,28 @@ func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Contex
 		lim = NewLimiter(n)
 	}
 
-	if err := checkAcyclic(specs); err != nil {
+	if err := checkAcyclic(steps); err != nil {
 		return nil, err
 	}
 
-	barrier := newDepBarrier(specs)
+	barrier := newDepBarrier(steps)
 
 	var keysMu sync.Mutex
-	resolvedKeys := make(map[string]string, len(specs))
+	resolvedKeys := make(map[string]string, len(steps))
 
-	// isolationMu serializes Spec.Isolated specs against the whole batch: an
-	// isolated spec takes the write lock (runs alone); every other spec takes the
-	// read lock (runs in parallel with peers but never alongside an isolated spec).
+	// isolationMu serializes Step.Isolated steps against the whole batch: an
+	// isolated step takes the write lock (runs alone); every other step takes the
+	// read lock (runs in parallel with peers but never alongside an isolated step).
 	//
 	// Ordering is load-bearing: the lock is taken *after* waitForDeps (so an isolated
-	// spec's own deps aren't blocked by its own writer intent) and *before* the
+	// step's own deps aren't blocked by its own writer intent) and *before* the
 	// limiter slot (so a pending writer never holds a slot — which would let it
 	// starve a dependent of the slot it needs). That ordering is also why the lock
 	// necessarily spans the *whole* c.Run below, not just fn: moving it inside
 	// c.Run would put it after the slot and reintroduce the starvation it avoids.
 	// The cost is that an isolated *cache hit* also serializes its replay, which is
 	// fine — isolated targets are rare and typically NoCache. A batch with no
-	// isolated specs only ever takes uncontended read locks.
+	// isolated steps only ever takes uncontended read locks.
 	var isolationMu sync.RWMutex
 	acquireIsolation := func(isolated bool) func() {
 		if isolated {
@@ -517,8 +517,8 @@ func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Contex
 	}
 
 	// ultra-opt: coalesce the mtime-store flush to once per batch instead of once
-	// per spec. A per-spec flush rewrites every shard a completing spec shares with
-	// earlier specs, so a cold N-spec build's shard writes grow super-linearly.
+	// per step. A per-step flush rewrites every shard a completing step shares with
+	// earlier steps, so a cold N-step build's shard writes grow super-linearly.
 	//   measured: BenchmarkRunAllColdMtime (24 projects × 64 files) -44.9% sec/op,
 	//   -81.0% B/op, -28.7% allocs/op (benchstat, n=10, p=0.000).
 	//   trade-off: a build killed mid-flight persists the memo once at the end
@@ -527,12 +527,12 @@ func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Contex
 	// Member Run calls skip the per-call mtime flush; the batch flushes once below.
 	opts = append(opts, deferMtimeFlush())
 
-	results := make([]Result, len(specs))
+	results := make([]Result, len(steps))
 	g, gctx := errgroup.WithContext(ctx)
-	for i, s := range specs {
+	for i, s := range steps {
 		g.Go(func() error {
 			// markDone on every exit so a failing upstream cascades cancellation.
-			defer barrier.markDone(specKey(s))
+			defer barrier.markDone(stepKey(s))
 
 			// Wait for upstreams before acquiring a slot: holding a slot while
 			// blocked on a dep would deadlock a saturated limiter.
@@ -578,7 +578,7 @@ func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Contex
 			// ensures dependents see the key when they unblock.
 			if r.Hash != "" {
 				keysMu.Lock()
-				resolvedKeys[specKey(s)] = r.Hash
+				resolvedKeys[stepKey(s)] = r.Hash
 				keysMu.Unlock()
 			}
 			results[i] = r
@@ -587,8 +587,8 @@ func (c *Cache) RunAll(ctx context.Context, specs []Spec, fn func(context.Contex
 	}
 	err := g.Wait()
 	// Flush the shared mtime memo once for the whole batch. WithoutCancel so a
-	// cancelled run still persists the hashing already done (the per-spec flush it
-	// replaced also persisted completed specs before cancellation).
+	// cancelled run still persists the hashing already done (the per-step flush it
+	// replaced also persisted completed steps before cancellation).
 	c.mtimes.flush(context.WithoutCancel(ctx))
 	return results, err
 }

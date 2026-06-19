@@ -162,7 +162,7 @@ func TargetRunOptions(ctx context.Context, p Provider, spellsOf func(projectPath
 		return nil
 	}
 	return []cache.RunOption{
-		cache.OnResult(func(s *cache.Spec, r *cache.Result, err error) {
+		cache.OnResult(func(s *cache.Step, r *cache.Result, err error) {
 			outcome := "success"
 			if err != nil {
 				outcome = "error"

@@ -40,7 +40,7 @@ func ls(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -68,9 +68,9 @@ func ls(ctx context.Context, root string, args []string) error {
 		})
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		for _, p := range out.Projects {
 			fmt.Println(p.Path)

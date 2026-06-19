@@ -169,7 +169,7 @@ func WriterFromContext(ctx context.Context) *Writer {
 // RunOptions returns a cache.RunOption that records hit/miss/error events into w per spec.
 func RunOptions(w *Writer) []cache.RunOption {
 	return []cache.RunOption{
-		cache.OnResult(func(s *cache.Spec, r *cache.Result, err error) {
+		cache.OnResult(func(s *cache.Step, r *cache.Result, err error) {
 			tr := TargetResult{
 				Project:    s.ProjectPath,
 				Target:     s.Target,

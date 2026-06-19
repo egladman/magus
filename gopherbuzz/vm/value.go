@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"unicode/utf8"
 
 	"github.com/egladman/gopherbuzz/ast"
 )
@@ -66,7 +68,41 @@ const (
 
 // --- heap payload types ---
 
-type strObj struct{ V string }
+// strObj backs Buzz strings. V is the immutable content. ascii caches whether V
+// is pure ASCII (0 unknown, 1 yes, -1 no), computed once by isASCII; when true,
+// a rune index equals a byte index, letting rune-indexed methods (sub) slice
+// bytes directly instead of materializing a []rune of the whole string per call.
+//
+// heapIdx is used only by the NaN-box build (internedStrValue): it caches this
+// interned string's global-heap index (stored as index+1, 0 = unset) so that
+// every Value for the same content shares one heap entry instead of appending a
+// fresh one on each StrValue call. The safe/unsafe builds store the *strObj
+// pointer in the Value directly and never read it.
+type strObj struct {
+	V       string
+	heapIdx uint64
+	ascii   int32
+}
+
+// isASCII reports whether V is pure ASCII, caching the answer. Concurrent callers
+// derive the same value, so the store is idempotent and needs no lock.
+func (o *strObj) isASCII() bool {
+	switch atomic.LoadInt32(&o.ascii) {
+	case 1:
+		return true
+	case -1:
+		return false
+	}
+	v := int32(1)
+	for i := 0; i < len(o.V); i++ {
+		if o.V[i] >= utf8.RuneSelf {
+			v = -1
+			break
+		}
+	}
+	atomic.StoreInt32(&o.ascii, v)
+	return v == 1
+}
 
 // udObj boxes a foreign FFI pointer (`ud`). It is heap-allocated because a full
 // 64-bit address fits neither the NaN-boxed int's ~48-bit payload nor a float64
@@ -265,8 +301,11 @@ func internStr(s string) *strObj {
 
 // StrValue returns a Buzz string Value wrapping s. Interns the *strObj so that
 // equal strings always share the same pointer, enabling O(1) equality via
-// pointer comparison in valuesEqual.
-func StrValue(s string) Value { return heapValue(tagStr, internStr(s)) }
+// pointer comparison in valuesEqual. internedStrValue is build-specific: the
+// NaN-box build caches one global-heap index per interned string (so repeated
+// content does not churn the heap), while the safe/unsafe builds carry the
+// pointer in the Value directly.
+func StrValue(s string) Value { return internedStrValue(internStr(s)) }
 
 // UDValue boxes a foreign FFI pointer (`ud`). See udObj for why it is heap-boxed.
 func UDValue(addr uintptr) Value { return heapValue(tagUD, &udObj{Addr: addr}) }

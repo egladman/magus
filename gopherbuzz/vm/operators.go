@@ -794,7 +794,8 @@ func mapMethod(vm *VM, m Value, name string) Value {
 // strMethod returns a bound DirectValue for the named built-in String method,
 // or Null if name is not a known string method.
 func strMethod(vm *VM, s Value, name string) Value {
-	str := vm.asStr(s).V
+	sobj := vm.asStr(s)
+	str := sobj.V
 	switch name {
 	case "len":
 		return DirectValue("str.len", func(_ context.Context, _ []Value) (Value, error) {
@@ -880,11 +881,30 @@ func strMethod(vm *VM, s Value, name string) Value {
 			if len(args) < 1 || !args[0].IsInt() {
 				return Null, fmt.Errorf("str.sub: requires (int start, int? len)")
 			}
-			runes := []rune(str)
 			start := int(args[0].AsInt())
 			if start < 0 {
 				start = 0
 			}
+			// Fast path: for a pure-ASCII string a rune index equals a byte index,
+			// so the substring is a direct byte slice - no []rune copy of the whole
+			// string per call. The result is identical to the rune path below.
+			if sobj.isASCII() {
+				if start >= len(str) {
+					return StrValue(""), nil
+				}
+				end := len(str)
+				if len(args) >= 2 && args[1].IsInt() {
+					length := int(args[1].AsInt())
+					if length < 0 {
+						length = 0
+					}
+					if start+length < end {
+						end = start + length
+					}
+				}
+				return StrValue(str[start:end]), nil
+			}
+			runes := []rune(str)
 			if start >= len(runes) {
 				return StrValue(""), nil
 			}

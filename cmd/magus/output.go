@@ -27,17 +27,17 @@ func outputDst() (io.Writer, func() error, error) {
 	return io.MultiWriter(os.Stdout, f), f.Close, nil
 }
 
-// emitFormatted renders v with spec to the structured-output destination (stdout,
+// emitFormatted renders v with opts to the structured-output destination (stdout,
 // mirrored to --tee) and closes it. It owns the outputDst/cleanup pair so every
 // command's `-o json|yaml|jsonl|template` arm is one call instead of repeating the
 // same dst/defer/writeFormatted dance.
-func emitFormatted(spec outputSpec, v any) error {
+func emitFormatted(opts OutputOptions, v any) error {
 	w, cleanup, err := outputDst()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	return writeFormatted(w, spec, v)
+	return writeFormatted(w, opts, v)
 }
 
 func writeJSON(w io.Writer, v any) error {
@@ -93,9 +93,9 @@ func writeJSONL(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
-// writeFormatted dispatches v to json/yaml/jsonl/template based on spec.Format.
-func writeFormatted(w io.Writer, spec outputSpec, v any) error {
-	switch spec.Format {
+// writeFormatted dispatches v to json/yaml/jsonl/template based on opts.Format.
+func writeFormatted(w io.Writer, opts OutputOptions, v any) error {
+	switch opts.Format {
 	case outputJSON:
 		return writeJSON(w, v)
 	case outputYAML:
@@ -103,9 +103,9 @@ func writeFormatted(w io.Writer, spec outputSpec, v any) error {
 	case outputJSONL:
 		return writeJSONL(w, v)
 	case outputTemplate:
-		return writeTemplate(w, v, spec.Template)
+		return writeTemplate(w, v, opts.Template)
 	default:
-		return fmt.Errorf("writeFormatted: unsupported format %q", spec.Format)
+		return fmt.Errorf("writeFormatted: unsupported format %q", opts.Format)
 	}
 }
 
@@ -188,40 +188,40 @@ const (
 // template= form is handled separately by ResolveOutput.
 var CommonFormats = []Format{FormatText, FormatJSON, FormatYAML, FormatJSONL, FormatName, FormatWide}
 
-// OutputSpec is the parsed -o value; Template is set when Format is FormatTemplate.
+// OutputOptions is the parsed -o value; Template is set when Format is FormatTemplate.
 // Obtain one from ResolveOutput — the zero value (empty Format) is not a valid
-// spec and matches no renderer.
-type OutputSpec struct {
+// opts and matches no renderer.
+type OutputOptions struct {
 	Format   Format
 	Template string
 }
 
-// ResolveOutput parses an -o/--output value into an OutputSpec. An empty input
+// ResolveOutput parses an -o/--output value into an OutputOptions. An empty input
 // resolves to FormatText; a "template=<body>" input resolves to FormatTemplate
 // carrying the body. Any extra formats (e.g. the graph-only FormatDot/Mermaid/
 // Tree) are matched verbatim and take precedence over the built-in set, letting
 // a command opt into formats beyond CommonFormats. Unknown values are an error.
-func ResolveOutput(input string, extra ...Format) (OutputSpec, error) {
+func ResolveOutput(input string, extra ...Format) (OutputOptions, error) {
 	if input == "" {
-		return OutputSpec{Format: FormatText}, nil
+		return OutputOptions{Format: FormatText}, nil
 	}
 	for _, v := range extra {
 		if string(v) == input {
-			return OutputSpec{Format: v}, nil
+			return OutputOptions{Format: v}, nil
 		}
 	}
 	if body, ok := strings.CutPrefix(input, "template="); ok {
 		if body == "" {
-			return OutputSpec{}, fmt.Errorf("output template body must be non-empty (e.g. -o template='{{.Path}}')")
+			return OutputOptions{}, fmt.Errorf("output template body must be non-empty (e.g. -o template='{{.Path}}')")
 		}
-		return OutputSpec{Format: FormatTemplate, Template: body}, nil
+		return OutputOptions{Format: FormatTemplate, Template: body}, nil
 	}
 	for _, v := range CommonFormats {
 		if string(v) == input {
-			return OutputSpec{Format: v}, nil
+			return OutputOptions{Format: v}, nil
 		}
 	}
-	return OutputSpec{}, fmt.Errorf("unknown output format %q (choose: %s, template=<go-template>)", input, JoinFormats(CommonFormats, ", "))
+	return OutputOptions{}, fmt.Errorf("unknown output format %q (choose: %s, template=<go-template>)", input, JoinFormats(CommonFormats, ", "))
 }
 
 // JoinFormats renders fs as a sep-joined string for help and error text.

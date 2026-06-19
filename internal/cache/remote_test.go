@@ -23,7 +23,7 @@ import (
 
 // TestRemoteBackendFSBuiltOnce verifies that two independent caches sharing a
 // single FSRemoteBackend dedup builds: the first workspace misses (builds, pushes
-// to remote); the second workspace for the same spec gets a remote hit (fn
+// to remote); the second workspace for the same step gets a remote hit (fn
 // never runs, output is replayed) — i.e. the second workspace restores instead
 // of rebuilding.
 func TestRemoteBackendFSBuiltOnce(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	root1, c1 := openWithRemote(t)
 	writeMain(t, root1, "package main")
 	out1 := touchOut(t, root1)
-	spec1 := makeSpec(root1)
+	spec1 := makeStep(root1)
 	spec1.Outputs = []string{"test/pkg/out.txt"}
 
 	runs := 0
@@ -61,10 +61,10 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 
 	// workspace 2: same sources, empty local cache → remote hit
 	root2, c2 := openWithRemote(t)
-	// Reproduce the same source content so the spec hash matches.
+	// Reproduce the same source content so the step hash matches.
 	writeMain(t, root2, "package main")
 	out2 := touchOut(t, root2)
-	spec2 := makeSpec(root2)
+	spec2 := makeStep(root2)
 	spec2.Outputs = []string{"test/pkg/out.txt"}
 
 	r2, err := c2.Run(context.Background(), spec2, func(_ context.Context) error {
@@ -145,24 +145,24 @@ func sha256Hex(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// learnHash builds the canonical spec once in a throwaway local cache to discover
+// learnHash builds the canonical step once in a throwaway local cache to discover
 // the content hash the remote entry must be keyed under.
 func learnHash(t *testing.T) (project, hash string) {
 	t.Helper()
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	out := filepath.Join(root, "test", "pkg", "out.txt")
-	r, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
 	require.NoError(t, err, "learnHash run")
-	return spec.ProjectPath, r.Hash
+	return step.ProjectPath, r.Hash
 }
 
-// runAgainst opens a fresh cache wired to backend, runs the canonical spec, and
+// runAgainst opens a fresh cache wired to backend, runs the canonical step, and
 // reports whether it hit and what the output ended up as. The fn writes "built",
 // so a genuine rebuild yields "built" while an accepted poisoned entry would yield
 // the poisoned bytes.
@@ -175,10 +175,10 @@ func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, r
 	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
 	touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	out := filepath.Join(root, "test", "pkg", "out.txt")
-	r, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
@@ -248,17 +248,17 @@ func openSigned(t *testing.T, remote RemoteBackend, seed []byte, trusted [][]byt
 	return root, c
 }
 
-// buildCanonical runs the canonical spec in c against workspace root, writing
+// buildCanonical runs the canonical step in c against workspace root, writing
 // "built" on a miss. It reports the result and whether fn actually ran.
 func buildCanonical(t *testing.T, root string, c *Cache) (Result, bool) {
 	t.Helper()
 	writeMain(t, root, "package main")
 	touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	ran := false
-	r, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
@@ -422,11 +422,11 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
 	touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	ran := false
-	r, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/hostbuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -11,7 +12,7 @@ import (
 // TestBuildModulesOutput_List covers the no-name list view: every module is
 // present with a doc, and methods are NOT expanded (that's the detail view).
 func TestBuildModulesOutput_List(t *testing.T) {
-	out := buildModulesOutput("")
+	out := hostbuzz.ModulesOutput("")
 	require.NotZero(t, out.Count)
 	assert.Equal(t, len(out.Modules), out.Count)
 	var sawEnv bool
@@ -29,7 +30,7 @@ func TestBuildModulesOutput_List(t *testing.T) {
 // expanded with both engine signatures, and the native-Buzz cross-reference is
 // surfaced for overlap entries (env.get/lookup).
 func TestBuildModulesOutput_Detail(t *testing.T) {
-	out := buildModulesOutput("env")
+	out := hostbuzz.ModulesOutput("env")
 	require.Equal(t, 1, out.Count)
 	require.Equal(t, "env", out.Modules[0].Name)
 	byName := map[string]struct{ buzz, native string }{}
@@ -45,7 +46,7 @@ func TestBuildModulesOutput_Detail(t *testing.T) {
 // TestBuildModulesOutput_Unknown: an unknown name yields an empty result so the
 // command can report it (rather than silently listing all).
 func TestBuildModulesOutput_Unknown(t *testing.T) {
-	out := buildModulesOutput("definitely-not-a-module")
+	out := hostbuzz.ModulesOutput("definitely-not-a-module")
 	assert.Empty(t, out.Modules)
 }
 

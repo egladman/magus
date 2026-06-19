@@ -6,12 +6,17 @@
 // `fmt` is the `gofmt` binary.
 //
 // mgs_listTargets returns the op handlers by value, typed
-// {str: fun(Target, fun(any)) bool}: the checker verifies each handler exists with
-// the right signature, so a typo'd op is a compile error. A handler declares its
+// {str: fun(Target, fun(Run)) void}: the checker verifies each handler exists with
+// the right signature, so a typo'd op is a compile error. A fork handler declares its
 // command by handing the {cmd, args, charms} record to the magus-injected cb
-// callback — the same command data as before, now reached through a typed contract.
+// callback, so it returns nothing (void) — the command travels through cb, not the
+// return. (Only cache-backend function-op spells return bool; fork handlers do not.)
 
 import "magus/target";
+// charm constructors compute argv patches from anchors, so the charms below
+// reference an arg by value (e.g. "run", "--diff") instead of a hand-counted
+// index that silently breaks when the args change.
+import "magus/charm";
 
 export fun mgs_getName() > str { return "go"; }
 
@@ -21,50 +26,46 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
 
-fun goBuild(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["build"]}); return true; }
-fun goClean(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["clean", "./..."]}); return true; }
-fun goGenerate(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["generate", "./..."]}); return true; }
+fun goBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["build"]}); }
+fun goClean(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["clean", "./..."]}); }
+fun goGenerate(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["generate", "./..."]}); }
 
-fun goFmt(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "gofmt", "args": ["-l", "."], "charms": {
-        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "-w"}]},
+fun goFmt(target: Target, cb: fun(Run)) > void {
+    final args = ["-l", "."];
+    cb(Run{cmd = "gofmt", args = args, charms = {
+        "rw": set(args, "-l", "-w"),
     }});
-    return true;
 }
-fun golangCILint(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "go", "args": ["tool", "golangci-lint", "run", "./..."], "charms": {
-        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
-        "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},
+fun golangCILint(target: Target, cb: fun(Run)) > void {
+    final args = ["tool", "golangci-lint", "run", "./..."];
+    cb(Run{cmd = "go", args = args, charms = {
+        "debug": append(["-v"]),
+        "rw": after(args, "run", ["--fix"]),
     }});
-    return true;
 }
 // The cd charm instruments the run with an atomic-mode coverage profile written
 // to coverage.out — the deliverable a CD pipeline ships to a coverage service
 // (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
-fun goTest(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "go", "args": ["test", "./..."], "charms": {
-        "debug": {"ops": [{"op": "add", "path": "/-", "value": "-v"}]},
-        "cd": {"ops": [
-            {"op": "add", "path": "/-", "value": "-covermode=atomic"},
-            {"op": "add", "path": "/-", "value": "-coverprofile=coverage.out"},
-        ]},
+fun goTest(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "go", args = ["test", "./..."], charms = {
+        "debug": append(["-v"]),
+        "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }});
-    return true;
 }
 // tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes —
 // safe for CI gating); the write charm applies the changes.
-fun goModTidy(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "go", "args": ["mod", "tidy", "--diff"], "charms": {
-        "rw": {"ops": [{"op": "remove", "path": "/2"}]},
+fun goModTidy(target: Target, cb: fun(Run)) > void {
+    final args = ["mod", "tidy", "--diff"];
+    cb(Run{cmd = "go", args = args, charms = {
+        "rw": drop(args, "--diff"),
     }});
-    return true;
 }
-fun goVet(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["vet", "./..."]}); return true; }
+fun goVet(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["vet", "./..."]}); }
 // Scans for known vulnerabilities in the module's call graph. Run as a `go tool`
 // (like golangci-lint) so it resolves from go.mod's tool block, not PATH.
-fun goVulncheck(target: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["tool", "govulncheck", "./..."]}); return true; }
+fun goVulncheck(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["tool", "govulncheck", "./..."]}); }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
     return {
         "go-build": goBuild,
         "go-clean": goClean,

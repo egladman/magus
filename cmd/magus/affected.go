@@ -196,13 +196,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return nil
 	}
 
-	spec, specErr := outputSpecOrDefault()
-	if specErr != nil {
-		return specErr
+	opts, optsErr := outputOptionsOrDefault()
+	if optsErr != nil {
+		return optsErr
 	}
 
 	var rw *magus.ReportWriter
-	if spec.Format == outputJSONL {
+	if opts.Format == outputJSONL {
 		w, cleanup, openErr := outputDst()
 		if openErr != nil {
 			return openErr
@@ -449,7 +449,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		return fmt.Errorf("magus affected --explain: project path required")
 	}
 
-	spec, err := outputSpecOrDefault()
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
@@ -488,9 +488,9 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		}
 	}
 
-	switch spec.Format {
+	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(spec, out)
+		return emitFormatted(opts, out)
 	case outputName:
 		if out.Affected {
 			fmt.Println(out.Project)

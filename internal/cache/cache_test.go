@@ -36,11 +36,11 @@ func writeMain(t *testing.T, root, body string) {
 	require.NoError(t, os.WriteFile(abs, []byte(body), 0o644), "write")
 }
 
-// makeSpec returns the canonical Spec used across these tests:
+// makeStep returns the canonical Step used across these tests:
 // project test/pkg, sources "test/pkg/*.go", rooted at the given
 // workspace.
-func makeSpec(root string) Spec {
-	return Spec{
+func makeStep(root string) Step {
+	return Step{
 		ProjectPath:   "test/pkg",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
@@ -63,8 +63,8 @@ func TestMissThenHit(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 
 	calls := 0
 	fn := func(_ context.Context) error {
@@ -72,7 +72,7 @@ func TestMissThenHit(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	r1, err := c.Run(context.Background(), spec, fn)
+	r1, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "Run(miss)")
 	require.False(t, r1.Hit, "first Run must miss")
 	require.Equal(t, 1, calls, "fn called once")
@@ -81,14 +81,14 @@ func TestMissThenHit(t *testing.T) {
 	// Re-open in read-only mode so the second call can hit.
 	c2, err := Open(cdir, WithMutable(false))
 	require.NoError(t, err, "cache.Open(read)")
-	r2, err := c2.Run(context.Background(), spec, fn)
+	r2, err := c2.Run(context.Background(), step, fn)
 	require.NoError(t, err, "Run(hit)")
 	assert.True(t, r2.Hit, "second Run must hit")
 	assert.Equal(t, 1, calls, "fn must not run again after hit")
 	assert.Equal(t, r1.Hash, r2.Hash, "hit hash must equal miss hash")
 }
 
-// TestNoCacheAlwaysRuns verifies that a Spec with NoCache=true never replays:
+// TestNoCacheAlwaysRuns verifies that a Step with NoCache=true never replays:
 // fn runs on every Run with identical inputs (no snapshot, no hit), so a
 // long-running target re-executes instead of replaying a cached completion.
 func TestNoCacheAlwaysRuns(t *testing.T) {
@@ -96,9 +96,9 @@ func TestNoCacheAlwaysRuns(t *testing.T) {
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
-	spec.NoCache = true
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	step.NoCache = true
 
 	calls := 0
 	fn := func(_ context.Context) error {
@@ -106,10 +106,10 @@ func TestNoCacheAlwaysRuns(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	r1, err := c.Run(context.Background(), spec, fn)
+	r1, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "first Run")
 	require.False(t, r1.Hit, "first Run want miss")
-	r2, err := c.Run(context.Background(), spec, fn)
+	r2, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "second Run")
 	require.False(t, r2.Hit, "second Run want miss (NoCache must never replay)")
 	assert.Equal(t, 2, calls, "NoCache must run every time")
@@ -125,42 +125,42 @@ func TestModeAutoWritesOnMiss(t *testing.T) {
 	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	calls := 0
 	fn := func(_ context.Context) error { calls++; return os.WriteFile(out, []byte("built"), 0o644) }
 
-	r1, err := c.Run(context.Background(), spec, fn)
+	r1, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "Run(miss)")
 	require.False(t, r1.Hit, "first Run must miss")
 
 	// Re-open (same dir, same default mode) — must hit.
 	c2, err := Open(cdir)
 	require.NoError(t, err, "cache.Open(auto, second)")
-	r2, err := c2.Run(context.Background(), spec, fn)
+	r2, err := c2.Run(context.Background(), step, fn)
 	require.NoError(t, err, "Run(hit)")
 	assert.True(t, r2.Hit, "ModeAuto must hit on second run")
 	assert.Equal(t, 1, calls, "fn called once")
 }
 
 // TestModeAutoReplaysOnHit verifies that ModeAuto does not call fn
-// when the cache already has a valid manifest for the spec.
+// when the cache already has a valid manifest for the step.
 func TestModeAutoReplaysOnHit(t *testing.T) {
 	root, cdir, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
-	_, err := c.Run(context.Background(), spec, fn)
+	_, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "prime")
 
 	// Re-open (default mutable) — must hit without calling fn.
 	c2, err := Open(cdir)
 	require.NoError(t, err, "cache.Open")
 	calls := 0
-	r, err := c2.Run(context.Background(), spec, func(_ context.Context) error { calls++; return fn(context.Background()) })
+	r, err := c2.Run(context.Background(), step, func(_ context.Context) error { calls++; return fn(context.Background()) })
 	require.NoError(t, err, "Run")
 	assert.True(t, r.Hit, "must replay on hit")
 	assert.Equal(t, 0, calls, "fn must not run on hit")
@@ -173,20 +173,20 @@ func TestImmutableDoesNotWriteOnMiss(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
 	c, err := Open(cdir, WithMutable(false))
 	require.NoError(t, err, "cache.Open(immutable)")
-	r, err := c.Run(context.Background(), spec, fn)
+	r, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "first Run")
 	require.False(t, r.Hit, "first Run want miss")
 
 	// Re-open mutable — must still miss (nothing was written).
 	c2, err := Open(cdir)
 	require.NoError(t, err, "cache.Open")
-	r, err = c2.Run(context.Background(), spec, fn)
+	r, err = c2.Run(context.Background(), step, fn)
 	require.NoError(t, err, "second Run after immutable miss")
 	assert.False(t, r.Hit, "second Run after immutable miss want miss")
 }
@@ -197,26 +197,26 @@ func TestHashChangesOnSourceEdit(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main // v1")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
-	r1, err := c.Run(context.Background(), spec, fn)
+	r1, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err)
 	writeMain(t, root, "package main // v2")
-	r2, err := c.Run(context.Background(), spec, fn)
+	r2, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err)
 	assert.NotEqual(t, r1.Hash, r2.Hash, "hash must change after source edit")
 }
 
-// TestActionDiscriminant verifies that two specs differing only in
+// TestActionDiscriminant verifies that two steps differing only in
 // Action produce different hashes.
 func TestActionDiscriminant(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
 
-	base := makeSpec(root)
+	base := makeStep(root)
 	base.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
@@ -237,17 +237,17 @@ func TestClean(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
-	_, err := c.Run(context.Background(), spec, fn)
+	_, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err)
 	require.NoError(t, c.Clean(context.Background(), "test/pkg"), "Clean")
 
 	calls := 0
 	wrapped := func(_ context.Context) error { calls++; return fn(context.Background()) }
-	r, err := c.Run(context.Background(), spec, wrapped)
+	r, err := c.Run(context.Background(), step, wrapped)
 	require.NoError(t, err)
 	assert.False(t, r.Hit, "Run after Clean must miss")
 	assert.Equal(t, 1, calls, "fn called once after Clean")
@@ -259,10 +259,10 @@ func TestStats(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 
-	_, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("out"), 0o644)
 	})
 	require.NoError(t, err)
@@ -290,12 +290,12 @@ func TestCacheSizeCapAccepted(t *testing.T) {
 func TestPanicInFnDoesNotDeadlock(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 
 	// The panic from fn must propagate out of Run rather than deadlock.
 	assert.Panics(t, func() {
-		_, _ = c.Run(context.Background(), spec, func(_ context.Context) error {
+		_, _ = c.Run(context.Background(), step, func(_ context.Context) error {
 			panic(errors.New("boom"))
 		})
 	}, "expected panic to propagate from fn")
@@ -303,16 +303,16 @@ func TestPanicInFnDoesNotDeadlock(t *testing.T) {
 
 // TestExportImportRoundTrip verifies that a cache snapshot exported to a
 // gzip-tar and imported into a fresh cache directory produces hits on the
-// same spec.
+// same step.
 func TestExportImportRoundTrip(t *testing.T) {
 	root, _, src := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 
 	// Populate the source cache.
-	_, err := src.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err := src.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
 	require.NoError(t, err, "populate")
@@ -327,9 +327,9 @@ func TestExportImportRoundTrip(t *testing.T) {
 	require.NoError(t, err, "Open dst")
 	require.NoError(t, dst.Import(context.Background(), &rawBuf), "Import")
 
-	// Verify that the spec hits in the destination cache.
+	// Verify that the step hits in the destination cache.
 	calls := 0
-	r, err := dst.Run(context.Background(), spec, func(_ context.Context) error { calls++; return nil })
+	r, err := dst.Run(context.Background(), step, func(_ context.Context) error { calls++; return nil })
 	require.NoError(t, err, "Run after import")
 	assert.True(t, r.Hit, "Run after Import must hit")
 	assert.Equal(t, 0, calls, "fn must not run after Import hit")
@@ -337,14 +337,14 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 // TestOnResult verifies that the OnResult callback fires exactly once
 // after every Cache.Run regardless of whether the result is a hit, miss,
-// or error, and that the Spec and Result passed to it are consistent.
+// or error, and that the Step and Result passed to it are consistent.
 func TestOnResult(t *testing.T) {
 	t.Parallel()
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
-	spec := makeSpec(root)
-	spec.Outputs = []string{"test/pkg/out.txt"}
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
 
 	type call struct {
 		projectPath string
@@ -352,20 +352,20 @@ func TestOnResult(t *testing.T) {
 		err         error
 	}
 	var calls []call
-	onResult := OnResult(func(s *Spec, r *Result, err error) {
+	onResult := OnResult(func(s *Step, r *Result, err error) {
 		calls = append(calls, call{s.ProjectPath, r.Hit, err})
 	})
 
 	// Miss: fn runs and writes out.txt.
-	_, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("ok"), 0o644)
 	}, onResult)
 	require.NoError(t, err, "Run(miss)")
 	require.Len(t, calls, 1, "after miss")
 	assert.Equal(t, call{"test/pkg", false, nil}, calls[0], "after miss")
 
-	// Hit: same spec, fn must not run.
-	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
+	// Hit: same step, fn must not run.
+	_, err = c.Run(context.Background(), step, func(_ context.Context) error {
 		t.Error("fn must not run on hit")
 		return nil
 	}, onResult)
@@ -374,13 +374,13 @@ func TestOnResult(t *testing.T) {
 	assert.Equal(t, call{"test/pkg", true, nil}, calls[1], "after hit")
 
 	// Error: fn fails; OnResult fires with the error.
-	errSpec := Spec{
+	errStep := Step{
 		ProjectPath:   "test/pkg/err",
 		Sources:       []string{"test/pkg/*.go"},
 		WorkspaceRoot: root,
 	}
 	wantErr := errors.New("build failed")
-	_, err = c.Run(context.Background(), errSpec, func(_ context.Context) error {
+	_, err = c.Run(context.Background(), errStep, func(_ context.Context) error {
 		return wantErr
 	}, onResult)
 	require.Error(t, err, "Run(error): expected error")

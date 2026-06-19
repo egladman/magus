@@ -7,9 +7,8 @@ import (
 )
 
 // Bridge aliases: the output vocabulary lives in output_format.go (package main).
-// These keep the cmd/magus switch statements (case outputJSON, …) and outputSpec
+// These keep the cmd/magus switch statements (case outputJSON, …) and OutputOptions
 // signatures reading naturally.
-type outputSpec = OutputSpec
 
 const (
 	outputText     = FormatText
@@ -62,6 +61,6 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 	return fs.Args(), nil
 }
 
-func outputSpecOrDefault() (outputSpec, error) {
+func outputOptionsOrDefault() (OutputOptions, error) {
 	return ResolveOutput(global.output)
 }

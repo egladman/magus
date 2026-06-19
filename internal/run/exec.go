@@ -18,8 +18,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ExecSpec configures a single Exec subprocess fork.
-type ExecSpec struct {
+// ExecOptions configures a single Exec subprocess fork.
+type ExecOptions struct {
 	// Dir is the working directory; empty inherits the process cwd.
 	Dir string
 	// Env are per-call overrides as "KEY=value", layered after the sandbox's
@@ -39,8 +39,8 @@ type ExecSpec struct {
 
 // ExecResult is the outcome of Exec.
 type ExecResult struct {
-	Stdout  string // captured stdout, empty unless ExecSpec.Capture; not trimmed
-	Stderr  string // captured stderr, empty unless ExecSpec.Capture; not trimmed
+	Stdout  string // captured stdout, empty unless ExecOptions.Capture; not trimmed
+	Stderr  string // captured stderr, empty unless ExecOptions.Capture; not trimmed
 	Code    int    // exit code; -1 when the process was signaled or never started
 	Started bool   // whether the process actually started — distinguishes a -1 exit from a start failure
 }
@@ -60,15 +60,15 @@ func (r ExecResult) Record() map[string]any {
 
 // Exec is the shared subprocess primitive behind magus's exec surfaces — os.exec
 // and fork spell targets. It applies the sandbox policy from ctx (exec-deny
-// check + frozen BaseEnv), layers ExecSpec.Env overrides, streams output through
+// check + frozen BaseEnv), layers ExecOptions.Env overrides, streams output through
 // the ctx OutputWriters, optionally captures it, and cancels with the same
 // graceful signal + WaitDelay as Run. A sandbox exec denial is returned as an
 // MGS2007 diagnostic before the process starts (Started=false). The returned
 // error is the raw subprocess error (joined with ctx.Err on cancellation);
 // callers format their own "exit N" / start-failure messages from ExecResult.
-func Exec(ctx context.Context, name string, args []string, spec ExecSpec) (ExecResult, error) {
+func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
 	c := exec.CommandContext(ctx, name, args...)
-	c.Dir = spec.Dir
+	c.Dir = opts.Dir
 	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
 	c.WaitDelay = 5 * time.Second
 
@@ -83,14 +83,14 @@ func Exec(ctx context.Context, name string, args []string, spec ExecSpec) (ExecR
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
-	c.Env = childEnv(policy, spec.Env)
-	if spec.Stdin != "" {
-		c.Stdin = strings.NewReader(spec.Stdin)
+	c.Env = childEnv(policy, opts.Env)
+	if opts.Stdin != "" {
+		c.Stdin = strings.NewReader(opts.Stdin)
 	}
 
 	outW, errW := OutputWriters(ctx)
 	var outBuf, errBuf bytes.Buffer
-	if spec.Capture {
+	if opts.Capture {
 		c.Stdout = io.MultiWriter(outW, &outBuf)
 		c.Stderr = io.MultiWriter(errW, &errBuf)
 	} else {
@@ -109,7 +109,7 @@ func Exec(ctx context.Context, name string, args []string, spec ExecSpec) (ExecR
 	} else {
 		res.Code = -1 // process never started (binary not found, permission denied, etc.)
 	}
-	if spec.Capture {
+	if opts.Capture {
 		res.Stdout = outBuf.String()
 		res.Stderr = errBuf.String()
 	}

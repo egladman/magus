@@ -9,6 +9,7 @@ import (
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,13 +68,13 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 	assert.Equal(t, "gofmt", f.Cmd)
 	ch, ok := f.Charms["write"]
 	require.Truef(t, ok, "fmt missing charm \"write\": %+v", f)
-	want := ispell.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
-	assert.Equal(t, []ispell.PatchOp{want}, ch.Ops)
+	want := types.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
+	assert.Equal(t, []types.PatchOp{want}, ch.Ops)
 }
 
 // TestBuiltinBytecodeParity proves the embedded-bytecode pipeline end to end for
 // every self-contained built-in: authored .buzz -> Compile -> Marshal ->
-// UnmarshalChunk -> ExecChunk -> Resolve yields a Spec identical to the one in the
+// UnmarshalChunk -> ExecChunk -> Resolve yields a Descriptor identical to the one in the
 // in-process registry (ispell.Builtins(), keyed by runtime name). It walks the
 // spells/ source tree, skipping function-op spells (e.g. github) that import host
 // modules and so are not bare-compilable built-ins.
@@ -117,7 +118,7 @@ func TestBuiltinBytecodeParity(t *testing.T) {
 			require.NoError(t, err, "resolve")
 			w, ok := want[got.Name]
 			require.Truef(t, ok, "built-in %q (name %q) not in registry", dir, got.Name)
-			assert.Equalf(t, w, got, "Spec mismatch for %q", dir)
+			assert.Equalf(t, w, got, "Descriptor mismatch for %q", dir)
 		})
 	}
 }

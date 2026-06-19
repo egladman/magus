@@ -280,7 +280,7 @@ func TestCacheRunOptions(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
 	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644))
 	out := filepath.Join(root, "pkg", "out.bin")
-	spec := cache.Spec{
+	spec := cache.Step{
 		ProjectPath:   "pkg",
 		Sources:       []string{"pkg/*.go"},
 		Outputs:       []string{"pkg/out.bin"},

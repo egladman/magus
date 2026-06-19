@@ -21,6 +21,9 @@ import "serialize";
 import "io";
 // std for parseInt in the coverage target (color thresholds off the percentage).
 import "std";
+// magus/target carries the value-type mirrors (ExecResult, Commit, …) so an
+// os.exec / vcs.commit result can be annotated for compile-checked field access.
+import "magus/target";
 
 // The magusfile spell tracks this project's own magusfile.buzz as a source, so
 // editing it marks the project affected; bound below alongside the toolchains.
@@ -64,7 +67,7 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
     "spells": [magusfile, go, buzz, md],
     "outputs": [
-        "internal/std/gen/buzz/*.go",
+        "hostbuzz/gen/*.go",
         "docs/modules/*.md",
         "docs/manpage/gen/*.md",
         "manpage/gen/*.1",
@@ -93,7 +96,7 @@ magus.project.register(fun(p: any, cb: fun(m: any) > void) > bool { cb({
 }); return true; });
 
 fun version() > str {
-    final v = os.exec("git", ["describe", "--tags", "--always", "--dirty"]).stdout;
+    final v = vcs.describe();
     if (v == "") { return "unknown"; }
     return v;
 }
@@ -105,10 +108,11 @@ fun commit() > str {
 }
 
 // The commit's record date (RFC3339), not wall-clock, so the same source tree
-// builds reproducibly. nil when built outside a repo (e.g. from a tarball).
+// builds reproducibly. vcs.commit returns the zero record (empty date) when built
+// outside a repo (e.g. from a tarball), so an empty date is the "unknown" signal.
 fun build_date() > str {
-    final c = vcs.commit();
-    if (c == null) { return "unknown"; }
+    final c: Commit = vcs.commit();
+    if (c.date == "") { return "unknown"; }
     return c.date;
 }
 
@@ -225,10 +229,10 @@ export fun man_generate(args: [str]) > void {
 // magus project boundaries, and isolates failures: a stale directive in one area
 // fails only its own target instead of masking every generator after it.
 
-// Regenerates the Go host bindings (internal/std -> gen/buzz) from the
+// Regenerates the Go host bindings (std -> hostbuzz/gen) from the
 // std.Module declarations.
 export fun bindings_generate(args: [str]) > void {
-    os.exec("go", ["generate", "./internal/std/..."]);
+    os.exec("go", ["generate", "./std/..."]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spell/gen).

@@ -24,13 +24,13 @@ func runForProject(t *testing.T, c *Cache, root, projectPath, outContent string)
 	src := filepath.Join(abs, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package "+filepath.Base(projectPath)), 0o644), "write source")
 	out := filepath.Join(abs, "out.txt")
-	spec := Spec{
+	step := Step{
 		ProjectPath:   projectPath,
 		Sources:       []string{filepath.Join(projectPath, "*.go")},
 		Outputs:       []string{filepath.Join(projectPath, "out.txt")},
 		WorkspaceRoot: root,
 	}
-	_, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte(outContent), 0o644)
 	})
 	require.NoError(t, err, "Run %s", projectPath)

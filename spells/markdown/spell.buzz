@@ -1,4 +1,6 @@
 import "magus/target";
+// charm constructors derive argv patches from an anchor arg, not a counted index.
+import "magus/charm";
 
 export fun mgs_getName() > str { return "md"; }
 
@@ -10,20 +12,19 @@ export fun mgs_listClaimedGlobs() > [str] {
     return ["**/*.md", "**/*.mdx"];
 }
 
-fun markdownlint(target: Target, cb: fun(any)) > bool {
-    cb({"cmd": "markdownlint", "args": ["**/*.md", "**/*.mdx"]});
-    return true;
+fun markdownlint(target: Target, cb: fun(Run)) > void {
+    cb(Run{cmd = "markdownlint", args = ["**/*.md", "**/*.mdx"]});
 }
-fun prettier(target: Target, cb: fun(any)) > bool {
+fun prettier(target: Target, cb: fun(Run)) > void {
     // --no-error-on-unmatched-pattern: the claimed globs include **/*.mdx, but a
     // project may have only .md files; without it prettier exits non-zero on the
-    // empty .mdx glob. --check stays at index 0 so the `write` charm can swap it.
-    cb({"cmd": "prettier", "args": ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"], "charms": {
-        "rw": {"ops": [{"op": "replace", "path": "/0", "value": "--write"}]},
+    // empty .mdx glob. The `rw` charm swaps --check for --write by anchor.
+    final args = ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"];
+    cb(Run{cmd = "prettier", args = args, charms = {
+        "rw": set(args, "--check", "--write"),
     }});
-    return true;
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
     return {"markdownlint": markdownlint, "prettier": prettier};
 }

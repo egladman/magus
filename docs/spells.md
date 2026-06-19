@@ -41,7 +41,7 @@ magus run lint .         # runs your `lint` target, which calls go's golangci-li
 
 - **Reach for a target** when you want a _runnable verb_: the thing a teammate or CI types (`magus run test api`). Targets are your **public surface**; declare one per lifecycle step you want runnable. Until you export a target for an operation, `magus run <op>` is a graceful no-op.
 - **Reach for a spell** when you want to _package a toolchain's operations_ and _tell the cache which files matter_. Bind a built-in or load a spell file. Call its ops from inside target bodies.
-- **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with `extra.*` (e.g. `extra.os.exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
+- **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with the host modules (e.g. `os.exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
 - **Use the `::` escape hatch** (`magus run go::go-vet api`) only for ad-hoc runs or introspection. The everyday surface is your composed targets.
 
 magus deliberately does **not** decide what "lint" or "format" means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).
@@ -61,15 +61,15 @@ Binding a spell contributes its `needs`/`claims`/`provides` to that project's ca
 
 ### Operations come in two shapes
 
-1. **Forked command (declarative).** The op is a `{cmd, args, charms}` record. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.
+1. **Forked command (declarative).** The op is a `Run` — a `{cmd, args, charms}` object. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.
 
-2. **Typed handler.** `mgs_listTargets` returns `{str: fun(Target, fun(any)) bool}`. A **fork** handler passes its command record to the injected `cb` callback; a **function-op** handler does host work in-VM (HTTP, signing, a cache backend's `get-entry`). The built-in spells use the handler form; read any [`spells/<name>/spell.buzz`](../spells) for a worked example.
+2. **Typed handler.** The two handler kinds carry distinct signatures. A **fork** spell's `mgs_listTargets` returns `{str: fun(Target, fun(Run)) void}`: the handler builds a `Run` and passes it to the injected `cb` callback, returning nothing — the command travels through `cb`, so there is no result to return. A **function-op** spell (a cache backend, anything importing host modules) returns `{str: fun(Target, fun(any)) bool}`: the handler does host work in-VM (HTTP, signing, a cache backend's `get_artifact`) and its boolean *is* the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any [`spells/<name>/spell.buzz`](../spells) for a worked example.
 
 Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.
 
-A function-op handler does host work in-VM (HTTP, signing, a cache backend's `get-entry`) instead of forking a single command, calling host modules (`extra.http`, `extra.crypto`) as needed. This is what lets a remote cache backend be authored as a spell. `magus doctor` enforces a doc comment on each function-op handler, captured by the Buzz parser at compile time.
+A function-op handler does host work in-VM (HTTP, signing, a cache backend's `get-entry`) instead of forking a single command, calling host modules (`http`, `crypto`) as needed. This is what lets a remote cache backend be authored as a spell. `magus doctor` enforces a doc comment on each function-op handler, captured by the Buzz parser at compile time.
 
-The handler's second parameter is named **`cb`** (a plain callback): the handler calls `cb({cmd, args, charms})` once to declare the command it forks. The name stays `cb` rather than `op` on purpose — `op` already means two other things here (a charm patch's `op` field, and a spell's _ops_), so reusing it would be ambiguous.
+The handler's second parameter is named **`cb`** (a plain callback): the handler calls `cb(Run{cmd, args, charms})` once to declare the command it forks. The name stays `cb` rather than `op` on purpose — `op` already means two other things here (a charm patch's `op` field, and a spell's _ops_), so reusing it would be ambiguous.
 
 ## Binding a spell to a project
 
@@ -199,7 +199,7 @@ magus run <name> <project>             → executes the target; spell ops fork
                                           their commands (cached by needs/provides)
 ```
 
-Key invariant: **binding is not running.** A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; use `extra.*`).
+Key invariant: **binding is not running.** A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; call the host modules directly).
 
 ## Glossary
 
@@ -211,7 +211,7 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 | **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                      |
 | **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                             |
 | **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`), for affected-set attribution.                                                                                                                                                         |
-| **Fork op**        | An op that declares a `{cmd, args, charms}` command magus forks directly (no shell).                                                                                                                                               |
+| **Fork op**        | An op that declares a `Run` (`{cmd, args, charms}`) command magus forks directly (no shell).                                                                                                                                |
 | **Function-op**    | An op whose handler does host work in-VM (e.g. a cache backend) rather than forking a single command.                                                                                                                             |
 | **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                   |
 
@@ -222,8 +222,8 @@ Read these spells under [`magus/spells/`](../spells) when you outgrow a plain fo
 | Spell                                           | Kind            | What it demonstrates                                                                                                                                                                        |
 | ----------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`buf`](../spells/buf/spell.buzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files. |
-| [`actions`](../spells/github/actions/spell.buzz) | function-op     | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (`magus/extra/http`), wired with `magus.cache.remote`.  |
-| [`s3-cache`](../spells/aws/s3-cache/spell.buzz)  | function-op     | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `magus/extra/crypto`.                                                                         |
+| [`actions`](../spells/github/actions/spell.buzz) | function-op     | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the `http` byte primitives), wired with `magus.cache.remote`.  |
+| [`s3-cache`](../spells/aws/s3-cache/spell.buzz)  | function-op     | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                         |
 
 ## See also
 

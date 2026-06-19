@@ -120,40 +120,40 @@ func TestKeyIDDerivation(t *testing.T) {
 	assert.Equal(t, id, keyID(pub), "keyid is not deterministic")
 }
 
-// TestHashSpec_EnvUnsetVsEmpty verifies an allowlisted env var that is unset
+// TestHashStep_EnvUnsetVsEmpty verifies an allowlisted env var that is unset
 // hashes differently from one set to the empty string (R10).
-func TestHashSpec_EnvUnsetVsEmpty(t *testing.T) {
+func TestHashStep_EnvUnsetVsEmpty(t *testing.T) {
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
 	const k = "MAGUS_TEST_ENV_R10"
-	s := &Spec{ProjectPath: ".", WorkspaceRoot: root, EnvAllow: []string{k}}
+	s := &Step{ProjectPath: ".", WorkspaceRoot: root, EnvAllow: []string{k}}
 
 	os.Unsetenv(k)
-	hUnset, err := c.hashSpec(context.Background(), s)
-	require.NoError(t, err, "hashSpec(unset)")
+	hUnset, err := c.hashStep(context.Background(), s)
+	require.NoError(t, err, "hashStep(unset)")
 	t.Setenv(k, "")
-	hEmpty, err := c.hashSpec(context.Background(), s)
-	require.NoError(t, err, "hashSpec(empty)")
+	hEmpty, err := c.hashStep(context.Background(), s)
+	require.NoError(t, err, "hashStep(empty)")
 	assert.NotEqual(t, hEmpty, hUnset, "an unset env var must hash differently from one set to \"\"")
 }
 
-// TestHashSpec_Charms verifies active charms key the cache: a charm-variant run
+// TestHashStep_Charms verifies active charms key the cache: a charm-variant run
 // differs, while a charm-less run hashes identically to one with empty Charms
 // (so existing entries stay valid).
-func TestHashSpec_Charms(t *testing.T) {
+func TestHashStep_Charms(t *testing.T) {
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
-	base := &Spec{ProjectPath: ".", WorkspaceRoot: root, Target: "lint"}
-	hashOf := func(s *Spec) string {
-		h, err := c.hashSpec(context.Background(), s)
-		require.NoError(t, err, "hashSpec")
+	base := &Step{ProjectPath: ".", WorkspaceRoot: root, Target: "lint"}
+	hashOf := func(s *Step) string {
+		h, err := c.hashStep(context.Background(), s)
+		require.NoError(t, err, "hashStep")
 		return h
 	}
 
 	none := hashOf(base)
-	empty := hashOf(&Spec{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{}})
-	write := hashOf(&Spec{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{"write"}})
-	debug := hashOf(&Spec{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{"debug"}})
+	empty := hashOf(&Step{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{}})
+	write := hashOf(&Step{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{"write"}})
+	debug := hashOf(&Step{ProjectPath: ".", WorkspaceRoot: root, Target: "lint", Charms: []string{"debug"}})
 
 	assert.Equal(t, none, empty, "empty Charms must hash identically to no Charms (back-compat)")
 	assert.NotEqual(t, none, write, "charm-variant runs must differ from none")
@@ -161,86 +161,86 @@ func TestHashSpec_Charms(t *testing.T) {
 	assert.NotEqual(t, write, debug, "distinct charm-variant runs must differ from each other")
 }
 
-// TestHashSpec_SourceExecBit verifies that chmod +x on a source file changes
+// TestHashStep_SourceExecBit verifies that chmod +x on a source file changes
 // the key even though content, mtime, and size are unchanged (R10).
-func TestHashSpec_SourceExecBit(t *testing.T) {
+func TestHashStep_SourceExecBit(t *testing.T) {
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
 	script := filepath.Join(root, "run.sh")
 	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\necho hi\n"), 0o644))
-	s := &Spec{ProjectPath: ".", WorkspaceRoot: root, Sources: []string{"run.sh"}}
+	s := &Step{ProjectPath: ".", WorkspaceRoot: root, Sources: []string{"run.sh"}}
 
-	h1, err := c.hashSpec(context.Background(), s)
-	require.NoError(t, err, "hashSpec(0644)")
+	h1, err := c.hashStep(context.Background(), s)
+	require.NoError(t, err, "hashStep(0644)")
 	require.NoError(t, os.Chmod(script, 0o755))
-	h2, err := c.hashSpec(context.Background(), s)
-	require.NoError(t, err, "hashSpec(0755)")
+	h2, err := c.hashStep(context.Background(), s)
+	require.NoError(t, err, "hashStep(0755)")
 	assert.NotEqual(t, h1, h2, "chmod +x on a source file must change the hash")
 }
 
-// TestHashSpec_SpellDefVersion verifies that two Specs differing only in
+// TestHashStep_SpellDefVersion verifies that two Steps differing only in
 // SpellDefVersion produce different hashes (R2b coverage).
-func TestHashSpec_SpellDefVersion(t *testing.T) {
+func TestHashStep_SpellDefVersion(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
 
-	base := &Spec{ProjectPath: ".", WorkspaceRoot: root}
-	withV1 := &Spec{ProjectPath: ".", WorkspaceRoot: root, SpellDefVersion: "sha256:aabbcc"}
-	withV2 := &Spec{ProjectPath: ".", WorkspaceRoot: root, SpellDefVersion: "sha256:ddeeff"}
+	base := &Step{ProjectPath: ".", WorkspaceRoot: root}
+	withV1 := &Step{ProjectPath: ".", WorkspaceRoot: root, SpellDefVersion: "sha256:aabbcc"}
+	withV2 := &Step{ProjectPath: ".", WorkspaceRoot: root, SpellDefVersion: "sha256:ddeeff"}
 
-	h0, err := c.hashSpec(context.Background(), base)
-	require.NoError(t, err, "hashSpec(base)")
-	h1, err := c.hashSpec(context.Background(), withV1)
-	require.NoError(t, err, "hashSpec(v1)")
-	h2, err := c.hashSpec(context.Background(), withV2)
-	require.NoError(t, err, "hashSpec(v2)")
+	h0, err := c.hashStep(context.Background(), base)
+	require.NoError(t, err, "hashStep(base)")
+	h1, err := c.hashStep(context.Background(), withV1)
+	require.NoError(t, err, "hashStep(v1)")
+	h2, err := c.hashStep(context.Background(), withV2)
+	require.NoError(t, err, "hashStep(v2)")
 
 	assert.NotEqual(t, h0, h1, "empty and non-empty SpellDefVersion must hash differently")
 	assert.NotEqual(t, h1, h2, "different SpellDefVersion values must hash differently")
 	assert.NotEqual(t, h0, h2, "empty and second SpellDefVersion must hash differently")
 }
 
-// TestHashSpec_KeyVersionIsHashed verifies that keyVersion is mixed into the
-// hash: the hash of a fixed Spec is stable across calls (deterministic) and
+// TestHashStep_KeyVersionIsHashed verifies that keyVersion is mixed into the
+// hash: the hash of a fixed Step is stable across calls (deterministic) and
 // non-empty, confirming the format-version prefix is always written.
-func TestHashSpec_KeyVersionIsHashed(t *testing.T) {
+func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
-	s := &Spec{ProjectPath: ".", WorkspaceRoot: root}
+	s := &Step{ProjectPath: ".", WorkspaceRoot: root}
 
-	h1, err := c.hashSpec(context.Background(), s)
-	require.NoError(t, err, "first hashSpec")
-	h2, err := c.hashSpec(context.Background(), s)
-	require.NoError(t, err, "second hashSpec")
+	h1, err := c.hashStep(context.Background(), s)
+	require.NoError(t, err, "first hashStep")
+	h2, err := c.hashStep(context.Background(), s)
+	require.NoError(t, err, "second hashStep")
 
-	assert.Equal(t, h1, h2, "hashSpec not deterministic")
-	assert.NotEmpty(t, h1, "hashSpec returned empty hash")
+	assert.Equal(t, h1, h2, "hashStep not deterministic")
+	assert.NotEmpty(t, h1, "hashStep returned empty hash")
 	// The current keyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
 	const wantKeyVersion = 3
 	assert.Equal(t, wantKeyVersion, keyVersion, "keyVersion changed; update this test when bumping")
 }
 
-// TestHashSpec_ToolVersionsChangeMisses verifies that two Specs differing only
+// TestHashStep_ToolVersionsChangeMisses verifies that two Steps differing only
 // in ToolVersions produce different hashes (R1 coverage: a toolchain upgrade
 // with unchanged sources must miss). Order-independence is also checked.
-func TestHashSpec_ToolVersionsChangeMisses(t *testing.T) {
+func TestHashStep_ToolVersionsChangeMisses(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
 
-	base := &Spec{ProjectPath: ".", WorkspaceRoot: root}
-	v1 := &Spec{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"go:go1.22"}}
-	v2 := &Spec{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"go:go1.23"}}
+	base := &Step{ProjectPath: ".", WorkspaceRoot: root}
+	v1 := &Step{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"go:go1.22"}}
+	v2 := &Step{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"go:go1.23"}}
 	// Same set in a different order must hash identically (sorted before mixing).
-	orderA := &Spec{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"go:go1.22", "node:v20"}}
-	orderB := &Spec{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"node:v20", "go:go1.22"}}
+	orderA := &Step{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"go:go1.22", "node:v20"}}
+	orderB := &Step{ProjectPath: ".", WorkspaceRoot: root, ToolVersions: []string{"node:v20", "go:go1.22"}}
 
-	hash := func(s *Spec) string {
-		h, err := c.hashSpec(context.Background(), s)
-		require.NoError(t, err, "hashSpec")
+	hash := func(s *Step) string {
+		h, err := c.hashStep(context.Background(), s)
+		require.NoError(t, err, "hashStep")
 		return h
 	}
 
@@ -249,7 +249,7 @@ func TestHashSpec_ToolVersionsChangeMisses(t *testing.T) {
 	assert.Equal(t, hash(orderA), hash(orderB), "ToolVersions order must not affect the hash")
 }
 
-// TestHashKeyByteLayout pins the exact byte layout of the cache key. hashSpec
+// TestHashKeyByteLayout pins the exact byte layout of the cache key. hashStep
 // builds the key via direct buffer writes for speed; this asserts that layout
 // stays byte-for-byte identical to the documented "field:value\n" format, so the
 // optimization (and any future edit) cannot silently invalidate every cache entry.
@@ -258,7 +258,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 
 	// No sources and no EnvAllow → no file I/O and no environment lookups, so the
 	// key depends only on the literal fields below and the result is deterministic.
-	spec := &Spec{
+	step := &Step{
 		ProjectPath:     "pkg/x",
 		Target:          "build",
 		Charms:          []string{"race"},
@@ -267,10 +267,10 @@ func TestHashKeyByteLayout(t *testing.T) {
 		SpellDefVersion: "v1",
 	}
 
-	got, err := c.hashSpec(context.Background(), spec)
+	got, err := c.hashStep(context.Background(), step)
 	require.NoError(t, err)
 
-	// Reconstruct the expected byte stream independently, in hashSpec's field order.
+	// Reconstruct the expected byte stream independently, in hashStep's field order.
 	var want bytes.Buffer
 	fmt.Fprintf(&want, "keyVersion:%d\n", keyVersion)
 	want.WriteString("projectPath:pkg/x\n")

@@ -35,7 +35,7 @@ type forkOpts struct {
 // charms (see resolveCharmArgs). Empty Cmd is a no-op. opts.cwd defaults to "."
 // (the process cwd). Write-mode rides along as the "rw" charm on ctx, so no
 // separate write flag is needed.
-func runForkTarget(ctx context.Context, tgt ispell.Op, opts forkOpts) (run.ExecResult, error) {
+func runForkTarget(ctx context.Context, tgt types.SpellOp, opts forkOpts) (run.ExecResult, error) {
 	if tgt.Cmd == "" {
 		return run.ExecResult{}, nil
 	}
@@ -58,7 +58,7 @@ func runForkTarget(ctx context.Context, tgt ispell.Op, opts forkOpts) (run.ExecR
 // Because charms are element-level (no root replace), disjoint edits compose
 // freely; overlapping positions resolve by name order. The result is always a
 // fresh slice (callers may mutate it; base is the shared cached spec).
-func resolveCharmArgs(ctx context.Context, base []string, charms map[string]ispell.Charm) ([]string, error) {
+func resolveCharmArgs(ctx context.Context, base []string, charms map[string]types.Charm) ([]string, error) {
 	if len(charms) == 0 {
 		return slices.Clone(base), nil
 	}
@@ -68,7 +68,7 @@ func resolveCharmArgs(ctx context.Context, base []string, charms map[string]ispe
 	}
 	slices.Sort(names)
 
-	var ops []ispell.PatchOp
+	var ops []types.PatchOp
 	for _, name := range names {
 		if types.HasCharm(ctx, name) {
 			ops = append(ops, charms[name].Ops...)
@@ -109,7 +109,7 @@ func execFork(ctx context.Context, dir, cmd string, args []string, env map[strin
 			overrides = append(overrides, k+"="+env[k])
 		}
 	}
-	res, err := run.Exec(ctx, cmd, args, run.ExecSpec{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture})
+	res, err := run.Exec(ctx, cmd, args, run.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture})
 	if err != nil && errors.Is(err, &types.DiagnosticError{Code: types.ExecDenied}) {
 		return res, err // sandbox exec denial: surface the diagnostic verbatim
 	}
