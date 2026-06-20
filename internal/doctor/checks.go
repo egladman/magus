@@ -204,8 +204,10 @@ func checkExplicitVCS(root string, opts types.VCSOptions) Check {
 		return Check{Name: "vcs", Status: StatusOK, Message: fmt.Sprintf("pinned: %s (base_ref %s)", res.Name, res.Base)}
 	case types.VCSSourceAuto:
 		return Check{Name: "vcs", Status: StatusWarn, Message: fmt.Sprintf("auto-detected: %s (set MAGUS_VCS_NAME to pin)", res.Name)}
-	default:
+	case types.VCSSourceDefault:
 		return Check{Name: "vcs", Status: StatusWarn, Message: fmt.Sprintf("no VCS marker found at %s; falling back to %s", root, res.Name)}
+	default:
+		return Check{Name: "vcs", Status: StatusWarn, Message: fmt.Sprintf("unexpected vcs source %q (%s)", res.Source, res.Name)}
 	}
 }
 

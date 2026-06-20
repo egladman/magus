@@ -203,7 +203,7 @@ func serve(srv *Server, svc *service) {
 
 // writeErr sends an error reply; ignores send errors (best-effort on a broken connection).
 func writeErr(conn net.Conn, msg string) {
-	_ = writeFrame(conn, typeError, ErrorReply{Message: msg}) //nolint:errcheck
+	_ = writeFrame(conn, typeError, ErrorReply{Message: msg})
 }
 
 // handleConn reads one JSONL request frame, dispatches to the service, and writes the reply.
@@ -233,7 +233,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 			writeErr(conn, err.Error())
 			return
 		}
-		_ = writeFrame(conn, typeRunReply, reply) //nolint:errcheck
+		_ = writeFrame(conn, typeRunReply, reply)
 
 	case typeStatus:
 		var req StatusRequest
@@ -246,7 +246,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 			writeErr(conn, err.Error())
 			return
 		}
-		_ = writeFrame(conn, typeStatusReply, reply) //nolint:errcheck
+		_ = writeFrame(conn, typeStatusReply, reply)
 
 	case typeShutdown:
 		var req ShutdownRequest
@@ -259,7 +259,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 			writeErr(conn, err.Error())
 			return
 		}
-		_ = writeFrame(conn, typeShutdownReply, reply) //nolint:errcheck
+		_ = writeFrame(conn, typeShutdownReply, reply)
 
 	default:
 		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))

@@ -61,7 +61,6 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 		doctor.WithVersion(version),
 		doctor.WithCommit(commit),
 		doctor.WithFix(*fix),
-		doctor.WithStrict(globalCfg.Strict),
 		doctor.WithMCPStatus(doctor.MCPStatus{
 			Compiled: mcpIsCompiled,
 			Enabled:  mcpEnabled,

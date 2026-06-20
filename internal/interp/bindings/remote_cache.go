@@ -96,11 +96,11 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, projectPath, hash 
 	}
 	if hit, _ := resp.Data.(bool); !hit {
 		_ = os.Remove(dest)
-		return nil, nil // miss
+		return nil, nil //nolint:nilnil // remote miss: nil reader = not found
 	}
 	f, err := os.Open(dest)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil // backend reported a hit but wrote no file; treat as a miss
+		return nil, nil //nolint:nilnil // hit but no file written; treat as a miss
 	}
 	if err != nil {
 		_ = os.Remove(dest)

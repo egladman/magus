@@ -47,7 +47,7 @@ func (b *instrumentedBackend) GetArtifact(ctx context.Context, projectPath, hash
 	if rc == nil {
 		b.p.RecordRemoteOp(ctx, RemoteOp{Op: "get", Outcome: "miss", Duration: time.Since(start).Seconds()})
 		end(nil)
-		return nil, nil
+		return nil, nil //nolint:nilnil // documented miss: nil reader = not found (see GetArtifact)
 	}
 	return &countingReadCloser{ReadCloser: rc, onClose: func(n int64) {
 		b.p.RecordRemoteOp(ctx, RemoteOp{Op: "get", Outcome: "hit", Duration: time.Since(start).Seconds(), Bytes: n})

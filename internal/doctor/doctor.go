@@ -102,7 +102,6 @@ type options struct {
 	version    string
 	commit     string
 	fix        bool
-	strict     bool
 	mcpStatus  *MCPStatus
 	daemonInfo *DaemonInfo
 }
@@ -122,8 +121,6 @@ func WithCommit(c string) Option { return func(o *options) { o.commit = c } }
 // WithFix enables auto-remediation of fixable checks.
 func WithFix(v bool) Option { return func(o *options) { o.fix = v } }
 
-// WithStrict treats warnings as failures.
-func WithStrict(v bool) Option { return func(o *options) { o.strict = v } }
 
 // WithMCPStatus passes MCP availability info to the doctor check.
 func WithMCPStatus(s MCPStatus) Option { return func(o *options) { o.mcpStatus = &s } }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -54,11 +55,15 @@ func (e *wsEntry) load(_ context.Context, lim *cache.Limiter) {
 	})
 }
 
-//nolint:unparam // error return is intentional API surface (see callers)
 func loadWorkspaceCfg(root string) (config.Config, error) {
 	path := filepath.Join(root, "magus.yaml")
 	cfg, err := config.LoadFile(path, false)
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			// A malformed or unreadable magus.yaml is a real error, not a
+			// silent fallback to defaults (the callers wrap and surface it).
+			return config.Config{}, err
+		}
 		// Missing file is fine; use env-var defaults.
 		cfg = config.Defaults()
 	}

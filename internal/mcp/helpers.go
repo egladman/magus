@@ -92,6 +92,8 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 			opts = append(opts, mcplib.WithBoolean(p.Name, propOpts...))
 		case "number":
 			opts = append(opts, mcplib.WithNumber(p.Name, propOpts...))
+		default:
+			panic(fmt.Sprintf("mcp: tool %q param %q has unknown type %q", d.Name, p.Name, p.Type))
 		}
 	}
 	return mcplib.NewTool(d.Name, opts...)

@@ -566,7 +566,7 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
-			return nil //nolint:nilerr // sandbox-denied path silently skipped
+			return nil // sandbox-denied path silently skipped
 		}
 		// The callback sees paths relative to the project dir, matching the root
 		// it passed in; the sandbox check above used the absolute path.

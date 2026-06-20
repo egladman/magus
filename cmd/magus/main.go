@@ -393,6 +393,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return tailCmd(ctx, root, subArgs)
 	case "affected":
 		return affected(ctx, root, rc, subArgs)
+	case "insight":
+		return insightCmd(ctx, root, subArgs)
 	case "watch":
 		return watchCmd(ctx, root, rc, subArgs)
 	case "status":
@@ -432,7 +434,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 
 var knownSubcommands = []string{
 	"ls", "describe", "run", "x", "where", "tail",
-	"affected", "watch", "status", "doctor",
+	"affected", "insight", "watch", "status", "doctor",
 	"config", "server", "repl", "completion", "init", "self", "version",
 	"clean", "merge-driver", "buzz",
 	"help",

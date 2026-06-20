@@ -37,7 +37,6 @@ const (
 	TypeAnyMap
 	TypeFunc
 	TypeAny
-	TypeBytes
 	// TypeIndex is an int that names a position in a list. Buzz lists are
 	// 0-based, matching the Go Impl, so the index needs no offset on the way in
 	// or out (-1 means "not found"). The distinct tag is kept so a VM with a
@@ -66,8 +65,6 @@ func (t TypeTag) GoType() string {
 		return "Callback"
 	case TypeAny:
 		return "any"
-	case TypeBytes:
-		return "[]byte"
 	default:
 		return "<invalid>"
 	}

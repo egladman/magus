@@ -232,6 +232,63 @@ func (v gitVCS) History(ctx context.Context, dir string, limit int) ([]types.Com
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
 }
 
+// gitChurnFormat opens each commit's --name-only block with a NUL sentinel followed
+// by the NUL-separated hash, author, and committer date (%cI, strict ISO 8601).
+const gitChurnFormat = "%x00%H%x00%an%x00%cI"
+
+// ChangesByCommit implements types.ChurnReporter. --name-only lists each commit's
+// files, one per line. --no-merges keeps a merge's combined diff (often empty or
+// sprawling) from skewing edit-frequency attribution. The `-- .` pathspec scopes the
+// log to dir's subtree (git runs in dir), so history is contextual to the working
+// dir rather than the whole repository — both the commit limit and the listed files
+// then reflect only that subtree. since, when set, bounds the scan by commit date.
+func (gitVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
+	if commits <= 0 {
+		commits = 1
+	}
+	args := []string{"log", fmt.Sprintf("-%d", commits), "--no-merges", "--name-only", "--format=" + gitChurnFormat}
+	if since != "" {
+		args = append(args, "--since="+since) // single token: a value can't be read as a flag
+	}
+	args = append(args, "--", ".")
+	out, err := vcsOutput(ctx, dir, "git", args...)
+	if err != nil {
+		return nil, fmt.Errorf("git log: %w", err)
+	}
+	return parseChangesByCommit(out), nil
+}
+
+// parseChangesByCommit splits ChangesByCommit's output: a line starting with NUL
+// opens a new commit (the rest is hash, author, and date, NUL-separated); every
+// other non-empty line is a file path attributed to the current commit.
+func parseChangesByCommit(out string) []types.CommitChange {
+	var changes []types.CommitChange
+	cur := -1
+	for _, line := range strings.Split(out, "\n") {
+		if rest, ok := strings.CutPrefix(line, "\x00"); ok {
+			c := types.CommitChange{}
+			fields := strings.Split(rest, "\x00")
+			if len(fields) > 0 {
+				c.ID = fields[0]
+			}
+			if len(fields) > 1 {
+				c.Author = fields[1]
+			}
+			if len(fields) > 2 {
+				c.Date, _ = time.Parse(time.RFC3339, fields[2]) // zero on parse failure
+			}
+			changes = append(changes, c)
+			cur = len(changes) - 1
+			continue
+		}
+		if line == "" || cur < 0 {
+			continue
+		}
+		changes[cur].Files = append(changes[cur].Files, line)
+	}
+	return changes
+}
+
 const (
 	gitAttrsBegin  = "# BEGIN magus-generated — do not edit this section manually"
 	gitAttrsEnd    = "# END magus-generated"

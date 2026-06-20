@@ -484,7 +484,7 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (an
 			if len(ret) > 0 {
 				return ret[0], nil
 			}
-			return nil, nil
+			return nil, nil //nolint:nilnil // fn succeeded with no return value; nil is the no-value result
 		}
 		lastErr = err
 		if i < max-1 {

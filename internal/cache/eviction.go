@@ -118,7 +118,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 			return nil //nolint:nilerr // skip unreadable entries; abort would leave GC incomplete
 		}
 		total += info.Size()
-		data, e := os.ReadFile(p) //nolint:gosec // p is always under c.dir; symlink escapes are not a concern for a local cache
+		data, e := os.ReadFile(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
 		if e != nil {
 			return nil //nolint:nilerr // skip unreadable entries; abort would leave GC incomplete
 		}

@@ -85,7 +85,7 @@ func applyOp(argv []string, op types.PatchOp) ([]string, error) {
 		}
 		return slices.Insert(argv, i, v), nil
 	default:
-		return nil, fmt.Errorf("unknown op")
+		return nil, fmt.Errorf("unknown JSON Patch op %q", op.Op)
 	}
 }
 

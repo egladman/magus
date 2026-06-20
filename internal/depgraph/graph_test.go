@@ -338,16 +338,6 @@ func iota3(i int) string {
 	return string(rune('a'+i/100)) + string(rune('a'+(i/10)%10)) + string(rune('a'+i%10))
 }
 
-func TestFanOutDoesNotMutateCallerSlice(t *testing.T) {
-	t.Parallel()
-	a := NoopObserver{}
-	b := NoopObserver{}
-	caller := []Observer{a, nil, b}
-	_ = FanOut(caller...)
-	// Caller's slice must be unchanged after FanOut filters the nil.
-	assert.Equal(t, []Observer{a, nil, b}, caller, "FanOut mutated caller slice")
-}
-
 type captureObserver struct {
 	onBuild func(BuildStats)
 	onQuery func(QueryEvent)

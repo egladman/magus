@@ -26,6 +26,7 @@ func allMCPTools(opts ServerOptions) []types.SpellDriver {
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
 		&whereTool{ws: opts.Magus},
 		&affectedExplainTool{ws: opts.Magus},
+		&insightTool{ws: opts.Magus},
 		&runTargetTool{opts: opts},
 		&runAffectedTool{opts: opts},
 		&doctorTool{opts: opts},

@@ -851,7 +851,7 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		data, err := os.ReadFile(p) //nolint:gosec // p is always under c.dir; symlink escapes are not a concern for a local cache
+		data, err := os.ReadFile(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
 		if err != nil {
 			c.log.Warn("cache.warn", slog.String("msg", fmt.Sprintf("gc: read %s: %v", p, err)))
 			return nil
@@ -880,7 +880,7 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		}
 		blob := filepath.Base(p)
 		if _, ok := referenced[blob]; !ok {
-			_ = os.Remove(p) //nolint:gosec // p is always under c.dir; symlink escapes are not a concern for a local cache
+			_ = os.Remove(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
 		}
 		return nil
 	}); err != nil && !errors.Is(err, os.ErrNotExist) {

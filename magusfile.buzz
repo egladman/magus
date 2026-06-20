@@ -45,6 +45,7 @@ magus.project({
         "watch": {"skipCache": true},
         "generate": {"skipCache": true, "exclusive": true},
         "ci-shard": {"skipCache": true},
+        "postflight": {"skipCache": true},
         "image-build": {"skipCache": true},
         // coverage writes assets/coverage.svg as a side effect (not a tracked cache
         // output) and reruns the suite with -coverprofile; a cache hit would replay
@@ -182,6 +183,23 @@ export fun docs_generate(args: [str]) > void {
 export fun md_generate(args: [str]) > void {
     final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
+}
+
+// The mirror of preflight: renders the insight report (behavioral code analysis —
+// hotspots, affinity, ownership, trend) to stdout and, inside GitHub Actions, also
+// appends it to the job's step summary so every run surfaces where the codebase's
+// attention and risk concentrate. Run it as the final CI step (`magus run postflight`);
+// it never gates, so it won't fail a build.
+export fun postflight(args: [str]) > void {
+    final doc = magus.cmd(["insight", "report", "--workspace"]).stdout; // teed to stdout, like md-generate
+    final summaryPath = os.env("GITHUB_STEP_SUMMARY");
+    if (summaryPath != null and ("" + summaryPath) != "") {
+        final sp = "" + summaryPath;
+        var existing = "";
+        if (fs.exists(sp)) { existing = fs.readFile(sp); }
+        fs.writeFile(sp, existing + doc + "\n");
+        magus.info("postflight: wrote insight report to the GitHub Actions step summary");
+    }
 }
 
 // Regenerates every *-generate sibling, then gates on git drift (exclusive, scoped to cwd).

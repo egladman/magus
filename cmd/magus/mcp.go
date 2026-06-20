@@ -66,7 +66,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
 	// Capture the daemon's own socket now (set by startMultiWorkspaceDaemon)
 	// so the health handlers query this daemon, not whatever a per-request
 	// discovery scan happens to find.
-	query := daemonStatusQuerier(os.Getenv("MAGUS_DAEMON_SOCKET"))
+	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
 	go func() {
 		err := internalmcp.ServeHTTP(ctx, internalmcp.ServerOptions{
 			Magus:    m,
@@ -81,9 +81,9 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
 			// depend on warm-up state, or it would crash-loop pods. Use
 			// /readyz for the workspace-loaded readiness gate.
 			HealthRoutes: map[string]http.Handler{
-				"/livez":   healthHTTPHandler(probeLiveness, query),
-				"/readyz":  healthHTTPHandler(probeReadiness, query),
-				"/healthz": healthHTTPHandler(probeLiveness, query),
+				"/livez":   healthHTTPHandler(probeLiveness, status),
+				"/readyz":  healthHTTPHandler(probeReadiness, status),
+				"/healthz": healthHTTPHandler(probeLiveness, status),
 			},
 		})
 		if err != nil && ctx.Err() == nil {

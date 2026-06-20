@@ -43,6 +43,15 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
+		Name:        "magus_insight",
+		Description: "Behavioral code analysis from VCS history: find where a codebase's attention and risk concentrate before diving in. Lenses (the `lens` param): hotspots (per-project churn × complexity, with authors/recency/blast-radius), files (per-file churn × complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity).",
+		Params: []ParamDescriptor{
+			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend."},
+			{Name: "commits", Type: "number", Description: "Cap on how many recent commits to scan (default 500)."},
+			{Name: "since", Type: "string", Description: "Only commits within this window, e.g. \"90d\", \"12w\", \"6mo\", \"1y\"."},
+		},
+	},
+	{
 		Name:        "magus_run_target",
 		Description: "Run a build target for one or more projects. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Without projects, the cwd project (or all) is selected.",
 		Params: []ParamDescriptor{

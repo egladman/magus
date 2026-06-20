@@ -35,7 +35,7 @@ func (r *FSRemoteBackend) artifactPath(projectPath, hash string) string {
 func (r *FSRemoteBackend) GetArtifact(_ context.Context, projectPath, hash string) (io.ReadCloser, error) {
 	f, err := os.Open(r.artifactPath(projectPath, hash))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // documented miss: nil reader = not found (see GetArtifact)
 	}
 	return f, err
 }

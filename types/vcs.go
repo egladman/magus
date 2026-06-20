@@ -172,3 +172,24 @@ type MergeDriverInstaller interface {
 	InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error
 	CheckMergeDriver(ctx context.Context, root string) (bool, error)
 }
+
+// CommitChange reduces one commit to who made it, when, and the repo-relative
+// paths it touched — the input to churn attribution (no message or diff content).
+type CommitChange struct {
+	ID     string
+	Author string
+	Date   time.Time
+	Files  []string
+}
+
+// ChurnReporter is an optional capability for VCSDriver implementations that can
+// report which files recent commits touched, so churn (edit frequency) can be
+// attributed to projects. Like MergeDriverInstaller, callers type-assert for it
+// and degrade gracefully (skip the heatmap) when a backend lacks it.
+type ChurnReporter interface {
+	// ChangesByCommit returns up to commits recent non-merge commits, newest
+	// first, each reduced to its author, date, and touched repo-relative paths.
+	// since, when non-empty, is a backend-native lower bound on the commit date
+	// (a git approxidate / RFC3339); commits still caps the result.
+	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
+}

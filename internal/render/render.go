@@ -13,15 +13,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RenderableGraph is the subset of *types.Graph used by WriteTree. It is satisfied
-// by any *types.Graph returned from (*Magus).Graph or depgraph.Build.
-type RenderableGraph interface {
-	Successors(path string) []string
-	Predecessors(path string) []string
-	Nodes() []string
-	Project(path string) *types.Project
-}
-
 // RenderOption configures a WriteTree call.
 type RenderOption func(*renderConfig)
 
@@ -56,7 +47,7 @@ func WithSpell(name string) RenderOption {
 
 // WriteTree writes a deterministic ASCII dependency tree to w. Writer-first, like
 // its WriteGraph*/WriteTargetGraph* siblings.
-func WriteTree(w io.Writer, g RenderableGraph, opts ...RenderOption) error {
+func WriteTree(w io.Writer, g *types.Graph, opts ...RenderOption) error {
 	cfg := &renderConfig{}
 	for _, o := range opts {
 		o(cfg)
@@ -91,7 +82,7 @@ func WriteTree(w io.Writer, g RenderableGraph, opts ...RenderOption) error {
 	return nil
 }
 
-func resolveRoots(g RenderableGraph, cfg *renderConfig) []string {
+func resolveRoots(g *types.Graph, cfg *renderConfig) []string {
 	if cfg.spell != "" {
 		var roots []string
 		for _, path := range g.Nodes() {
@@ -146,7 +137,7 @@ func hasSpellName(p *types.Project, name string) bool {
 }
 
 func renderStringNode(w io.Writer, path string, adjFn func(string) []string,
-	g RenderableGraph, cfg *renderConfig, visited map[string]bool, prefix string, depth int,
+	g *types.Graph, cfg *renderConfig, visited map[string]bool, prefix string, depth int,
 ) error {
 	if visited[path] {
 		_, err := fmt.Fprintf(w, "%s (visited)\n", path)
@@ -220,6 +211,26 @@ func mermaidID(path string) string {
 	return b.String()
 }
 
+// mermaidIDs assigns each path a unique Mermaid-safe node id, de-duplicated with a
+// numeric suffix on collision. It sorts first so the path that keeps the bare id on
+// a sanitised-name collision is deterministic regardless of input order (the output
+// feeds the MAGUS.md drift gate).
+func mermaidIDs(paths []string) map[string]string {
+	sorted := slices.Clone(paths)
+	slices.Sort(sorted)
+	ids := make(map[string]string, len(sorted))
+	seen := make(map[string]int)
+	for _, p := range sorted {
+		id := mermaidID(p)
+		if count := seen[id]; count > 0 {
+			id = fmt.Sprintf("%s_%d", id, count)
+		}
+		seen[id]++
+		ids[p] = id
+	}
+	return ids
+}
+
 // FormatDuration formats a duration as a human-readable string.
 func FormatDuration(d time.Duration) string {
 	ms := d.Milliseconds()
@@ -256,24 +267,11 @@ func WriteGraphMermaid(w io.Writer, out types.GraphOutput) error {
 // node label, exclusive nodes become hexagons, a cross-spell edge carries the
 // dependency's spell as its label, and a project dir becomes a click handler.
 func projectGraphIR(out types.GraphOutput) renderGraph {
-	// Mermaid-safe IDs, de-duplicated with a numeric suffix on collision. Assigned
-	// in path order so which colliding path keeps the bare ID is deterministic
-	// regardless of out.Nodes ordering (the output feeds the MAGUS.md drift gate).
 	paths := make([]string, len(out.Nodes))
 	for i, n := range out.Nodes {
 		paths[i] = n.Path
 	}
-	slices.Sort(paths)
-	ids := make(map[string]string, len(out.Nodes))
-	seen := make(map[string]int)
-	for _, p := range paths {
-		id := mermaidID(p)
-		if count := seen[id]; count > 0 {
-			id = fmt.Sprintf("%s_%d", id, count)
-		}
-		seen[id]++
-		ids[p] = id
-	}
+	ids := mermaidIDs(paths)
 
 	spellOf := make(map[string]string, len(out.Nodes))
 	bucketSet := map[string]bool{}

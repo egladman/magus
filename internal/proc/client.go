@@ -80,7 +80,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
-	conn.SetDeadline(deadline) //nolint:errcheck,revive // always succeeds on unix sockets
+	conn.SetDeadline(deadline) //nolint:errcheck // always succeeds on unix sockets
 
 	req := StatusRequest{Magic: StatusMagic, Protocol: ProtocolV2}
 	if err := writeFrame(conn, typeStatus, req); err != nil {

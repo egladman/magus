@@ -77,6 +77,7 @@ graph LR
   end
   subgraph entry_cluster[" "]
     image_scan("image-scan")
+    postflight("postflight")
     release("release")
     watch("watch")
     coverage("coverage")
@@ -108,7 +109,7 @@ graph LR
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
   classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
-  class buzz_check,buzz_run,ci,ci_shard,coverage,image_scan,release,watch anchor
+  class buzz_check,buzz_run,ci,ci_shard,coverage,image_scan,postflight,release,watch anchor
   class bindings_generate,build,config_generate,docs_generate,format,generate,go_build,image_build,lint,man_generate,md_generate,preflight,spells_generate,test target
   class xt_gopherbuzz_build external
   style entry_cluster fill:transparent,stroke:transparent
@@ -173,6 +174,19 @@ magus run image-scan:rw  # mutate in place instead of checking
 
 - [`image-build`](#image-build)
 
+### `postflight`
+
+The mirror of preflight: renders the insight report (behavioral code analysis — hotspots, affinity, ownership, trend) and, inside GitHub Actions, appends it to the job's step summary so every run surfaces where the codebase's attention and risk concentrate.
+
+**Defaults**
+
+```sh
+magus run postflight    # from the project directory
+magus run postflight .  # from the workspace root
+```
+
+**Details:** uncached (always runs)
+
 ### `generate`
 
 Regenerates every *-generate sibling, then gates on git drift (exclusive, scoped to cwd).
@@ -236,6 +250,8 @@ Runs the suite with -coverprofile and writes the assets/coverage.svg badge.
 magus run coverage    # from the project directory
 magus run coverage .  # from the workspace root
 ```
+
+**Details:** uncached (always runs)
 
 ### `buzz-check`
 

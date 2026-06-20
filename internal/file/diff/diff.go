@@ -47,7 +47,7 @@ func HashContent(dirs []string) ContentSnap {
 			if err != nil || d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
 				return nil //nolint:nilerr // WalkDir: skip unreadable/dir/symlink entries, continue walking
 			}
-			f, err := os.Open(path) //nolint:gosec // G122: symlinks are filtered above; path is a regular file under the workspace root
+			f, err := os.Open(path) // symlinks are filtered above; path is a regular file under the workspace root
 			if err != nil {
 				return nil //nolint:nilerr // skip files we cannot open, continue walking
 			}

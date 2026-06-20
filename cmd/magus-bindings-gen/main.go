@@ -306,6 +306,6 @@ func buzzValConv(t std.TypeTag, src string) string {
 	case std.TypeAny:
 		return fmt.Sprintf("host.AnyVal(%s)", src)
 	default:
-		return fmt.Sprintf("host.StrVal(%s)", src)
+		panic(fmt.Sprintf("buzzValConv: unsupported type tag %s for value conversion", t.GoType()))
 	}
 }

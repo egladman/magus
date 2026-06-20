@@ -73,8 +73,8 @@ func TestHealthHTTPHandler(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			reply := makeReply(1, workspaces...)
 			// Build a handler with a fake querier instead of dialing a real socket.
-			h := healthHTTPHandler(kind, func(context.Context) (*proc.StatusReply, error) {
-				return reply, nil
+			h := healthHTTPHandler(kind, func(context.Context) (*types.StatusOutput, error) {
+				return statusOutputFromReply(reply), nil
 			})
 			url := "/"
 			if queryWS != "" {
@@ -97,7 +97,7 @@ func TestHealthHTTPHandler(t *testing.T) {
 
 // unreachable querier for testing the error path
 func TestHealthHTTPHandlerUnreachable(t *testing.T) {
-	h := healthHTTPHandler(probeLiveness, func(context.Context) (*proc.StatusReply, error) {
+	h := healthHTTPHandler(probeLiveness, func(context.Context) (*types.StatusOutput, error) {
 		return nil, errors.New("socket not found")
 	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
