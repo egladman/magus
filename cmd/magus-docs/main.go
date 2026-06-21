@@ -1,7 +1,7 @@
-// Command magus-docs-gen generates Markdown documentation for every module
+// Command magus-docs generates Markdown documentation for every module
 // registered in the host package. Run it manually to refresh the committed docs:
 //
-//	go run ./magus/cmd/magus-docs-gen -out ./magus/docs/modules
+//	go run ./magus/cmd/magus-docs -out ./magus/docs/modules
 //
 // The output under magus/docs/modules is committed; re-run this tool after
 // changing a host module's bindings to keep the docs in sync.
@@ -27,7 +27,7 @@ func main() {
 	flag.Parse()
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-docs-gen: mkdir %s: %v\n", *outDir, err)
+		fmt.Fprintf(os.Stderr, "magus-docs: mkdir %s: %v\n", *outDir, err)
 		os.Exit(1)
 	}
 
@@ -38,17 +38,17 @@ func main() {
 
 	for _, m := range modules {
 		if err := writeModule(*outDir, m); err != nil {
-			fmt.Fprintf(os.Stderr, "magus-docs-gen: %s: %v\n", m.Name, err)
+			fmt.Fprintf(os.Stderr, "magus-docs: %s: %v\n", m.Name, err)
 			os.Exit(1)
 		}
 	}
 
 	if err := writeIndex(*outDir, modules); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-docs-gen: index: %v\n", err)
+		fmt.Fprintf(os.Stderr, "magus-docs: index: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "magus-docs-gen: wrote %d module docs to %s\n", len(modules), *outDir)
+	fmt.Fprintf(os.Stderr, "magus-docs: wrote %d module docs to %s\n", len(modules), *outDir)
 }
 
 func writeModule(dir string, m std.Module) error {

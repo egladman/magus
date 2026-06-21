@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module http -lang buzz -out ../host/gen/http.go
+//go:generate go run ../cmd/magus-scribe bindings -module http -lang buzz -out ../host/gen/http.go
 
 func init() { Register(HTTP) }
 

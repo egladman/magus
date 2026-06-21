@@ -2,7 +2,7 @@ package main
 
 // Spell registration: built-in spells are authored in Buzz under
 // magus/spells/<name>/spell.buzz, compiled to bytecode and embedded at build
-// time (see cmd/magus-spells-gen), and exposed to magusfiles as the import
+// time (see cmd/magus-scribe spells), and exposed to magusfiles as the import
 // "magus/spell/<name>". No blank-import or project.RegisterSpell call is
 // required; the bindings layer discovers all spells from the embedded
 // filesystem at startup.

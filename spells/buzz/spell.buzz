@@ -14,7 +14,7 @@
 // and the host methods magus layers onto os/fs/http/…) are not resolvable by
 // either, so these ops cover standalone Buzz sources. The spells and the magusfile
 // — which import those host modules — are
-// validated instead by magus-spells-gen (compiled to bytecode at generate time)
+// validated instead by magus-scribe spells (compiled to bytecode at generate time)
 // and by magus itself at load time.
 
 import "magus/target";

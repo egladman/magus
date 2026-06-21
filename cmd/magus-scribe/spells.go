@@ -1,13 +1,13 @@
-// Command magus-spells-gen compiles each built-in spell's Buzz source
+// Subcommand `spells` compiles each built-in spell's Buzz source
 // (magus/spells/<name>/spell.buzz) to bytecode and writes magus/internal/spell/
 // gen/<name>.bo, which the spell package embeds at build time. The runtime
 // loader recovers each blob with UnmarshalChunk and runs it to extract the
-// spell's mgs_ functions — so the .buzz files are the source of truth and the committed
-// .bo blobs are a generated build artifact.
+// spell's mgs_ functions — so the .buzz files are the source of truth and the
+// committed .bo blobs are a generated build artifact.
 //
 // Only self-contained spells are compiled: a spell whose source imports a host
-// module (e.g. spells/github/actions, a function-op spell) needs bindings a bare compile
-// can't resolve, so it is not a built-in and is skipped.
+// module (e.g. spells/github/actions, a function-op spell) needs bindings a bare
+// compile can't resolve, so it is not a built-in and is skipped.
 package main
 
 import (
@@ -23,18 +23,14 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 )
 
-func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "magus-spells-gen:", err)
-		os.Exit(1)
-	}
-}
-
-func run() error {
+func runSpells(args []string) error {
 	// Defaults assume invocation from the spell package dir via go:generate.
-	spellsDir := flag.String("spells", "../../spells", "directory of <name>/spell.buzz spell sources")
-	outDir := flag.String("out", "gen", "directory to write <name>.bo bytecode into")
-	flag.Parse()
+	fs := flag.NewFlagSet("spells", flag.ExitOnError)
+	spellsDir := fs.String("spells", "../../spells", "directory of <name>/spell.buzz spell sources")
+	outDir := fs.String("out", "gen", "directory to write <name>.bo bytecode into")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
 	entries, err := os.ReadDir(*spellsDir)
 	if err != nil {
@@ -86,6 +82,6 @@ func run() error {
 		return fmt.Errorf("no built-in spells found under %s", *spellsDir)
 	}
 	sort.Strings(built)
-	fmt.Printf("magus-spells-gen: compiled %d built-ins -> %s: %s\n", len(built), *outDir, strings.Join(built, " "))
+	fmt.Printf("spells: compiled %d built-ins -> %s: %s\n", len(built), *outDir, strings.Join(built, " "))
 	return nil
 }

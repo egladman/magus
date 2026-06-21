@@ -30,7 +30,7 @@ func TestConfigFlagsNotDrifted(t *testing.T) {
 	flagsGen := filepath.Join(tmp, "config_flags.go")
 
 	cmd := exec.Command("go", "run",
-		"../../magus-config-gen",
+		"../../magus-scribe", "config",
 		"-config", "../../../internal/config/config.go",
 		"-out", flagsGen,
 	)

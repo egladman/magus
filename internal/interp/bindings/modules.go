@@ -13,7 +13,7 @@ import (
 )
 
 // magusModules builds every magus host module (os/platform/fs/vcs/env/crypto/
-// http/archive/charm/semver/yaml/…) via the magus-bindings-gen-emitted host/gen
+// http/archive/charm/semver/yaml/…) via the magus-scribe bindings-emitted host/gen
 // trampolines, keyed by the bare import name each is exposed under. The closures
 // capture sess so host callbacks (e.g. arg.index_func, os.with_env) can call back
 // into the VM.

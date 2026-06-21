@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module magus -lang buzz -out ../host/gen/magus.go
+//go:generate go run ../cmd/magus-scribe bindings -module magus -lang buzz -out ../host/gen/magus.go
 
 func init() { Register(Magus) }
 

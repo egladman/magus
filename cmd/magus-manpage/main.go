@@ -1,4 +1,4 @@
-// Command manpage-gen generates magus man pages from the CLI registry.
+// Command magus-manpage generates magus man pages from the CLI registry.
 //
 // Two modes, selected by -format:
 //
@@ -13,8 +13,8 @@
 //
 // Usage:
 //
-//	go run ./cmd/manpage-gen [-format roff] [-out manpage/gen] [-date ""] [-version dev]
-//	go run ./cmd/manpage-gen  -format md   [-out docs/manpage/gen]
+//	go run ./cmd/magus-manpage [-format roff] [-out manpage/gen] [-date ""] [-version dev]
+//	go run ./cmd/magus-manpage  -format md   [-out docs/manpage/gen]
 package main
 
 import (
@@ -66,7 +66,7 @@ func genRoff(outDir, date, ver string) {
 		}
 	}
 	total := 1 + len(imanpage.All)
-	fmt.Fprintf(os.Stderr, "manpage-gen: wrote %d .1 file(s) to %s\n", total, outDir)
+	fmt.Fprintf(os.Stderr, "magus-manpage: wrote %d .1 file(s) to %s\n", total, outDir)
 }
 
 func renderMain(date, ver string) []byte {
@@ -272,7 +272,7 @@ func genMD(outDir string) {
 		}
 	}
 	total := 1 + len(imanpage.All)
-	fmt.Fprintf(os.Stderr, "manpage-gen: wrote %d .md file(s) to %s\n", total, outDir)
+	fmt.Fprintf(os.Stderr, "magus-manpage: wrote %d .md file(s) to %s\n", total, outDir)
 }
 
 func renderMainMD() []byte {
@@ -501,6 +501,6 @@ func writeFile(dir, name string, content []byte) error {
 }
 
 func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "manpage-gen: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "magus-manpage: "+format+"\n", args...)
 	os.Exit(1)
 }

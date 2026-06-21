@@ -1,5 +1,5 @@
 // Package manpage defines the Segment and Subcommand types used by both the
-// magus CLI and the man-page generator (cmd/manpage-gen).
+// magus CLI and the man-page generator (cmd/magus-manpage).
 package manpage
 
 import "flag"

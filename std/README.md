@@ -47,7 +47,7 @@ var Os = Module{
 func init() { Register(Os) }
 ```
 
-`magus-bindings-gen` reflects over each `Impl` and emits the Buzz trampoline into
+`magus-scribe bindings` reflects over each `Impl` and emits the Buzz trampoline into
 the sibling [`../host/gen`](../host) package (`//go:generate` lives next to
 each descriptor in `std/*.go`); a drift test keeps the generated files in lockstep
 with the declarations. This is the single source of truth: declare the typed

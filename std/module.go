@@ -1,7 +1,7 @@
 // Package host is the single source of truth for host-binding APIs that
 // magusfiles call into. Each module (os, fs, vcs, …) declares its
 // Methods here as a Module value with typed args, return types, and a Go
-// Impl. The magus-bindings-gen tool consumes these declarations and emits the
+// Impl. The magus-scribe bindings tool consumes these declarations and emits the
 // Buzz trampolines into host/gen from the same Impl.
 package std
 
@@ -140,7 +140,7 @@ var (
 )
 
 // Register adds m to the global module registry. Called from each module's
-// init() so magus-bindings-gen and the runtime registration paths can look up modules
+// init() so magus-scribe bindings and the runtime registration paths can look up modules
 // by name without an import loop.
 func Register(m Module) {
 	mu.Lock()

@@ -214,7 +214,7 @@ func mergeStruct(dst, src reflect.Value) {
 // case-insensitive comparison. "true", "1", "yes" → true; "false", "0", "no"
 // → false. Any unrecognised value returns fallback unchanged.
 //
-//nolint:unused // canonical reference implementation that cmd/magus-config-gen codegen mirrors into generated config loaders.
+//nolint:unused // canonical reference implementation that cmd/magus-scribe config codegen mirrors into generated config loaders.
 func parseBoolEnv(v string, fallback bool) bool {
 	switch strings.ToLower(v) {
 	case "true", "1", "yes":

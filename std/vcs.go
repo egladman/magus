@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module vcs -lang buzz -out ../host/gen/vcs.go
+//go:generate go run ../cmd/magus-scribe bindings -module vcs -lang buzz -out ../host/gen/vcs.go
 
 func init() { Register(Vcs) }
 

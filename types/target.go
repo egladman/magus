@@ -162,7 +162,7 @@ const (
 // work-unit. A literal query is the degenerate 1→1 case; glob/regex are 1→N.
 //
 // The canonical Buzz `object TargetQuery` mirror is generated from this struct by
-// cmd/magus-types-gen (go:generate) and shipped in the magus/target module, so the
+// cmd/magus-scribe types (go:generate) and shipped in the magus/target module, so the
 // Go and Buzz shapes can never drift. Keep them in lockstep through the generator,
 // never by hand.
 type TargetQuery struct {
@@ -180,7 +180,7 @@ func (q TargetQuery) IsExternal() bool { return q.Mode == QueryLiteral && q.Proj
 // the boundary mirror of the richer internal run.ExecResult.
 //
 // The Buzz `object ExecResult` mirror is generated from this struct by
-// cmd/magus-types-gen (go:generate); keep them in lockstep through the generator.
+// cmd/magus-scribe types (go:generate); keep them in lockstep through the generator.
 type ExecResult struct {
 	Stdout string
 	Stderr string

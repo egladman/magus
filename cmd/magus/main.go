@@ -31,7 +31,7 @@
 //
 // Run any subcommand with -h/--help for its own flag list.
 //
-//go:generate go run ../magus-config-gen -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
+//go:generate go run ../magus-scribe config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
 package main
 
 import (

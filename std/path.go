@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module path -lang buzz -out ../host/gen/path.go
+//go:generate go run ../cmd/magus-scribe bindings -module path -lang buzz -out ../host/gen/path.go
 
 func init() { Register(Path) }
 

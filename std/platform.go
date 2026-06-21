@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-//go:generate go run ../cmd/magus-bindings-gen -module platform -lang buzz -out ../host/gen/platform.go
+//go:generate go run ../cmd/magus-scribe bindings -module platform -lang buzz -out ../host/gen/platform.go
 
 // HostPlatform returns the Docker/OCI platform triple (GOOS, OCI arch, ARM variant).
 // variant is "v6"/"v7"/"v8" for ARM, "" otherwise; arm reads /proc/cpuinfo on Linux.

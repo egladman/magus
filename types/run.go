@@ -3,7 +3,7 @@ package types
 // PatchOp is one RFC 6902 operation over a target's argv array. Path/From are
 // single-token JSON Pointers (RFC 6901) into the array — "/N" for an index, or
 // "/-" (add only) for the append position. Value is the string element for
-// add/replace/test; From is the source pointer for move/copy. magus-types-gen
+// add/replace/test; From is the source pointer for move/copy. magus-scribe types
 // mirrors it to the Buzz `object PatchOp`.
 type PatchOp struct {
 	Op    string `json:"op"`
@@ -19,7 +19,7 @@ type PatchOp struct {
 // Charm declares how one active charm modifies a target's argv: an ordered RFC
 // 6902 JSON Patch applied over the base. Charms are element-level — whole-document
 // (root, empty-path) replacement is rejected by ValidatePatch — so multiple active
-// charms compose without one wiping another. magus-types-gen mirrors it to the Buzz
+// charms compose without one wiping another. magus-scribe types mirrors it to the Buzz
 // `object Charm`, and the magus/charm constructors return it.
 type Charm struct {
 	Ops []PatchOp `json:"ops,omitempty"`
@@ -27,7 +27,7 @@ type Charm struct {
 
 // Run is the command a command op runs: a program (Cmd), its argument vector
 // (Args), and charm modifiers keyed by charm name. It is the single source of
-// truth shared two ways: magus-types-gen mirrors it to the Buzz `object Run` a
+// truth shared two ways: magus-scribe types mirrors it to the Buzz `object Run` a
 // command handler builds and hands to its cb callback, and the resolved spell Op
 // embeds it. An empty Run (no Cmd) is the no-op marker.
 //

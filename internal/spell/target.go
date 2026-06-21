@@ -14,14 +14,14 @@ import (
 const TargetModulePath = "magus/target"
 
 // TargetModuleSource is the generated Buzz `object Target` mirror of types.Target
-// (see cmd/magus-types-gen) — the canonical work-unit value type. It is consumed
+// (see cmd/magus-scribe types) — the canonical work-unit value type. It is consumed
 // both at runtime (as part of the magus/target source module) and at built-in
 // generation time (inlined into each built-in via SelfContainedBuiltinSource). The
 // other value types (TargetQuery/ExecResult/OpResult/TargetResult) are appended at
 // runtime registration only (see registerHostModules), since built-ins don't use
 // them.
 //
-//go:generate go run ../../cmd/magus-types-gen -type Target -out buzzlib/target.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type Target -out buzzlib/target.gen.buzz
 //go:embed buzzlib/target.gen.buzz
 var TargetModuleSource string
 
@@ -33,34 +33,34 @@ var TargetModuleSource string
 // bundle (see builtinModuleSources). Order matters in that bundle: PatchOp precedes
 // Charm (Charm.ops is [PatchOp]) precedes Run (Run.charms is {str: Charm}).
 //
-//go:generate go run ../../cmd/magus-types-gen -type PatchOp -out buzzlib/patchop.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type PatchOp -out buzzlib/patchop.gen.buzz
 //go:embed buzzlib/patchop.gen.buzz
 var PatchOpSource string
 
-//go:generate go run ../../cmd/magus-types-gen -type Charm -out buzzlib/charm.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type Charm -out buzzlib/charm.gen.buzz
 //go:embed buzzlib/charm.gen.buzz
 var CharmTypeSource string
 
-//go:generate go run ../../cmd/magus-types-gen -type Run -out buzzlib/run.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type Run -out buzzlib/run.gen.buzz
 //go:embed buzzlib/run.gen.buzz
 var RunSource string
 
 // TargetQuerySource is the generated Buzz `object TargetQuery` mirror of
-// types.TargetQuery (see cmd/magus-types-gen). It ships in the magus/target source
+// types.TargetQuery (see cmd/magus-scribe types). It ships in the magus/target source
 // module so a magusfile can annotate with or construct a TargetQuery;
 // magus.target.literal/glob/regex return the same field shape.
 //
-//go:generate go run ../../cmd/magus-types-gen -type TargetQuery -out buzzlib/targetquery.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type TargetQuery -out buzzlib/targetquery.gen.buzz
 //go:embed buzzlib/targetquery.gen.buzz
 var TargetQuerySource string
 
 // ExecResultSource is the generated Buzz `object ExecResult` mirror of
-// types.ExecResult (see cmd/magus-types-gen). It ships alongside the other value
+// types.ExecResult (see cmd/magus-scribe types). It ships alongside the other value
 // types in the magus/target module so a magusfile can annotate an os.exec /
 // magus.cmd / captured-op result as `> ExecResult`; the runtime value is the
 // matching {stdout, stderr, code, ok} record (see run.ExecResult.Record).
 //
-//go:generate go run ../../cmd/magus-types-gen -type ExecResult -out buzzlib/execresult.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type ExecResult -out buzzlib/execresult.gen.buzz
 //go:embed buzzlib/execresult.gen.buzz
 var ExecResultSource string
 
@@ -70,11 +70,11 @@ var ExecResultSource string
 // compile-checked field access. CommitAuthor must precede Commit in the module
 // source (Commit's author field is typed CommitAuthor).
 //
-//go:generate go run ../../cmd/magus-types-gen -type CommitAuthor -out buzzlib/commitauthor.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type CommitAuthor -out buzzlib/commitauthor.gen.buzz
 //go:embed buzzlib/commitauthor.gen.buzz
 var CommitAuthorSource string
 
-//go:generate go run ../../cmd/magus-types-gen -type Commit -out buzzlib/commit.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type Commit -out buzzlib/commit.gen.buzz
 //go:embed buzzlib/commit.gen.buzz
 var CommitSource string
 
@@ -83,19 +83,19 @@ var CommitSource string
 // http.*, semver.parse, encoding.parse_url), shipped in the magus/target module
 // so a magusfile can annotate those results for compile-checked field access.
 //
-//go:generate go run ../../cmd/magus-types-gen -type FileInfo -out buzzlib/fileinfo.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type FileInfo -out buzzlib/fileinfo.gen.buzz
 //go:embed buzzlib/fileinfo.gen.buzz
 var FileInfoSource string
 
-//go:generate go run ../../cmd/magus-types-gen -type HttpResponse -out buzzlib/httpresponse.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type HttpResponse -out buzzlib/httpresponse.gen.buzz
 //go:embed buzzlib/httpresponse.gen.buzz
 var HTTPResponseSource string
 
-//go:generate go run ../../cmd/magus-types-gen -type SemverVersion -out buzzlib/semverversion.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type SemverVersion -out buzzlib/semverversion.gen.buzz
 //go:embed buzzlib/semverversion.gen.buzz
 var SemverVersionSource string
 
-//go:generate go run ../../cmd/magus-types-gen -type URL -out buzzlib/url.gen.buzz
+//go:generate go run ../../cmd/magus-scribe types -type URL -out buzzlib/url.gen.buzz
 //go:embed buzzlib/url.gen.buzz
 var URLSource string
 

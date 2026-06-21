@@ -152,7 +152,7 @@ export fun image_scan(args: [str]) > void {
 export fun man_generate(args: [str]) > void {
     fs.makeDirectory(fs.join("manpage", "gen"));
     fs.makeDirectory(fs.join("cmd", "magus", "manpages"));
-    os.exec("go", ["run", "./cmd/manpage-gen", "-format", "roff", "-out", fs.join("manpage", "gen")]);
+    os.exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", fs.join("manpage", "gen")]);
     foreach (page in fs.glob(fs.join("manpage", "gen", "*.1"))) {
         fs.writeFile(fs.join("cmd", "magus", "manpages", fs.basename(page)), fs.readFile(page));
     }
@@ -175,8 +175,8 @@ export fun config_generate(args: [str]) > void {
 
 // Regenerates the committed docs Markdown (module reference + man pages).
 export fun docs_generate(args: [str]) > void {
-    os.exec("go", ["run", "./cmd/magus-docs-gen", "-out", "./docs/modules"]);
-    os.exec("go", ["run", "./cmd/manpage-gen", "-format", "md", "-out", "./docs/manpage/gen"]);
+    os.exec("go", ["run", "./cmd/magus-docs", "-out", "./docs/modules"]);
+    os.exec("go", ["run", "./cmd/magus-manpage", "-format", "md", "-out", "./docs/manpage/gen"]);
 }
 
 // Renders MAGUS.md via `magus describe graph`.

@@ -6,7 +6,7 @@ package types
 // Impl returns the struct; its Record method is the {field: value} map the
 // generated Buzz trampoline marshals (see host.Recorder), so the Buzz boundary
 // is unchanged. The Buzz `object` mirrors are generated from these structs by
-// cmd/magus-types-gen (go:generate) and shipped in the magus/target module, so the
+// cmd/magus-scribe types (go:generate) and shipped in the magus/target module, so the
 // Go struct stays the single source of truth and struct, Record, and mirror can't
 // drift.
 

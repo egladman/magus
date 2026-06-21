@@ -200,11 +200,11 @@ func TestSchemaNotDrifted(t *testing.T) {
 	bindOut := filepath.Join(tmp, "bind.go")
 	envOut := filepath.Join(tmp, "env.go")
 
-	generatorPath := filepath.Join(schemaDir, "..", "cmd", "magus-config-gen")
+	generatorPath := filepath.Join(schemaDir, "..", "cmd", "magus-scribe")
 	configPath := filepath.Join(schemaDir, "..", "internal", "config", "config.go")
 
 	cmd := exec.Command(
-		"go", "run", generatorPath,
+		"go", "run", generatorPath, "config",
 		"-config", configPath,
 		"-fields-out", fieldsOut,
 		"-bind-out", bindOut,
