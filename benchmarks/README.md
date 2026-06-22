@@ -96,65 +96,13 @@ measured once (`Daemon: off`, since they have no daemon mode).
 
 ---
 
-## Current limitations & known issues
+## Caveats
 
-This harness works, but several caveats matter when reading the numbers.
-They're documented here so the next person doesn't rediscover them  -  and they
-motivate the planned move off the procedural fixtures.
-
-### S4-S7 measure the compiler, not magus
-
-Cold/incremental builds are dominated by the real compiler (`go build`,
-`tsc`), so S4-S7 mostly measure the toolchain, with magus's planning/cache
-overhead layered on top. magus's own overhead shows up cleanest in **S1-S3**
-(startup, discovery, affected planning) and the in-process micro-benchmarks
-(`internal/...` `Benchmark*` and the `cmd/magus` `BenchmarkStartup*` set).
-
-### Apples-to-apples: same graph, same edges
-
-magus needs an explicit magusfile per project; it does not infer a build graph
-from `package.json`/`go.work` the way turbo/nx derive theirs. The fixture
-generators emit one `magusfile.buzz` per project whose edges mirror exactly what
-the other tools traverse: a project-level `depends_on` (drives the **affected**
-set, S3) plus a target-level `magus.needs(lib.build)` handle (drives build
-**ordering** and **cache-key propagation**, S5-S7). Same nodes, same edges, so
-S3's affected set and the incremental blast radius are comparable, not magus
-seeing a coarser (or finer) graph than its peers.
-
-### The `ts` fixture is not end-to-end runnable (S4–S7)
-
-The synthetic TypeScript fixture wires cross-package deps via `workspace:*`,
-but `pnpm install` in the generated tree does not reliably symlink
-`@bench/lib-*` into each app's `node_modules`, so `tsc -b` fails with
-`TS2307: Cannot find module '@bench/lib-N'`. This blocks S4–S7 for **all**
-tools on the `ts` fixture, not just magus.
-
-Build _ordering_ is not the blocker: magus honours the magusfile's
-`magus.needs` edges, so every lib finishes before its app starts. The remaining
-blocker is the fixture's package linking. Consequently:
-
-- Only **S1–S3** are trustworthy on the `ts` fixture today.
-- `bench.sh` marks magus S4–S7 on `ts` as `n/a` and runs hyperfine with
-  `--ignore-failure` so partial build failures don't abort the whole run.
-
-### What is reliable
-
-- The **`go` fixture** runs end-to-end (`magus` vs `make`); the committed
-  `BENCHMARKS.md` is this fixture, run in the CI sandbox.
-- **S1-S3** across all fixtures.
-- The multi-tool `ts`/`polyglot` rows and the `large-monorepo/` suite need the
-  JS toolchains installed and a dedicated host; they are not run in CI.
-
-### Tooling brittleness
-
-- `bazel` (via bazelisk) and `moon` installs are environment-sensitive; a row
-  may show `excluded  -  install failed` rather than fail the run.
-- `turbo` / `nx` / `lage` require the pnpm global bin dir on `PATH`.
-
-### Methodology
-
-Single host, no network; report `min`, flag `stddev`. No remote cache,
-distributed execution, watch-mode latency, cross-OS, or CI sharding.
+- **S4-S7 measure the compiler, not magus.** Cold/incremental builds are dominated by `go build`/`tsc`; magus overhead shows cleanest in S1-S3 and the in-process micro-benchmarks.
+- **Same graph, same edges.** Fixture generators emit one `magusfile.buzz` per project mirroring the edges turbo/nx derive from `package.json`/`go.work` exactly, so affected sets are comparable.
+- **`ts` fixture S4-S7 are broken.** `pnpm install` doesn't reliably symlink `@bench/lib-*`, so `tsc -b` fails for all tools. Only S1-S3 are trustworthy on `ts`; `bench.sh` marks S4-S7 as `n/a`.
+- **What's reliable:** the `go` fixture (magus vs make) runs end-to-end and is what's in CI. `ts`/`polyglot` and `large-monorepo` need JS toolchains and a dedicated host.
+- **Tooling:** `bazel`/`moon` installs are environment-sensitive (may show `excluded - install failed`). `turbo`/`nx`/`lage` require pnpm global bin on `PATH`.
 
 ---
 
@@ -173,20 +121,11 @@ Fixtures are generated on-demand (`gen.sh N`) into `fixtures/<fixture>/gen/`
 
 ## Reproducing BENCHMARKS.md
 
-The results in `BENCHMARKS.md` were generated on the hardware listed in
-that file's Environment section. To reproduce on your own machine:
-
 ```sh
 ./bench.sh go 50
 ./bench.sh ts 100
 ./bench.sh polyglot
-```
-
-Then check `BENCHMARKS.md`. Numbers will differ based on your CPU and
-available cores. Use `BENCH_RUNS=20` for lower variance:
-
-```sh
-BENCH_RUNS=20 ./bench.sh ts 100
+BENCH_RUNS=20 ./bench.sh ts 100   # lower variance
 ```
 
 ---
