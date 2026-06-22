@@ -2,6 +2,10 @@
 # rendered coverage.svg badge is committed; the profile is not.
 coverage.out
 
+# local build artifacts
+magus
+magus-utils
+magus-scribe
 
 # magus runtime cache
 .magus/

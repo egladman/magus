@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -11,220 +13,190 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Release tag to install; empty builds from source.
+  MAGUS_VERSION: ''
+  # Exercise the encoding/json/v2 codec across all jobs (shim falls back to v1).
+  GOEXPERIMENT: jsonv2
+  # PRs open the cache read-only (no local writes, no remote push) so a PR can't
+  # poison the shared cache; pushes to main publish.
+  MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
+  # Remote cache (GitHub Actions Cache v2). Running INSECURE: artifacts are shared
+  # unsigned. Acceptable here as trusted single-repo CI — PRs are read-only
+  # (MAGUS_CACHE_IMMUTABLE) and GitHub scopes a PR's cache away from main, so only
+  # main pushes write the shared entries. To switch to signed later: set
+  # MAGUS_CACHE_REMOTE_INSECURE to '', set the MAGUS_CACHE_PUBLIC_KEY variable, and
+  # set the MAGUS_CACHE_SIGNING_KEY secret. See magus/docs/remote-cache.md.
+  MAGUS_CACHE_REMOTE_INSECURE: 'true'
+  MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
+  # Cap concurrent shard runners to avoid GitHub billing overruns.
+  MAGUS_CI_MAX_SHARDS: '2'
+
 jobs:
-  # Go test suite under the race detector across linux/macOS/Windows so
-  # cross-platform code paths (adopt, watch, cmd/magus/selfupdate) get
-  # covered by every PR.
-  tests:
-    name: tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  # preflight is the pre-fan-out phase: it gates on workspace health (magus doctor)
+  # and generates the shard matrix. The fan-out (ci) runs the matrix; postflight is
+  # the fan-in that summarizes the whole run.
+  preflight:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      matrix:       ${{ steps.plan.outputs.matrix }}
+      count:        ${{ steps.plan.outputs.count }}
+      max_parallel: ${{ steps.plan.outputs.max_parallel }}
+    steps:
+      # RUNNER_TEMP: writable, wiped between jobs, cross-platform. Shared by the
+      # cache, shard artifacts, and merge job; the ~/.local/state default isn't
+      # expanded by upload-artifact. (runner context can't reach top-level env.)
+      - name: Set history path
+        run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history so affected-detection's git diff has a merge-base.
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          version: ${{ env.MAGUS_VERSION }}
+
+      - name: Preflight
+        run: magus doctor
+
+      # Restore main's run history for the forecaster (read-only here).
+      - name: Restore magus run history
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ env.MAGUS_HISTORY_PATH }}
+          key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-history-v1-
+
+      # Shape affected --plan into GitHub matrix outputs (piped to dodge the daemon).
+      - id: plan
+        name: Compute shard matrix
+        run: magus affected ci --plan | magus run ci-shard:gha
+
+  ci:
+    name: shard ${{ matrix.shard }}
+    needs: preflight
+    if: fromJSON(needs.preflight.outputs.count) > 0
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Signing seed for remote-cache pushes — the *secret*, exposed only on
+      # trusted main pushes. Fork PRs never receive it, and PR runs are read-only
+      # (MAGUS_CACHE_IMMUTABLE) so they never sign; gating here keeps it off the
+      # box on every untrusted run.
+      MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+      max-parallel: ${{ fromJSON(needs.preflight.outputs.max_parallel) }}
+      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
     steps:
+      - name: Set history path
+        run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          # Full history for `magus describe` (git diff) below.
           fetch-depth: 0
-      - name: Install LuaJIT
-        if: runner.os != 'Windows'
-        shell: bash
+
+      - uses: pnpm/action-setup@a0ea98b2dc7d387a59324835f7421c1d5f8357b4 # v6.0.5
+        with:
+          version: "10"
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          version: ${{ env.MAGUS_VERSION }}
+
+      # Expose ACTIONS_RESULTS_URL + ACTIONS_RUNTIME_TOKEN to the magus process so
+      # the remote-cache backend (magusfiles/cache.buzz) can reach the GitHub
+      # Actions Cache service — the runner doesn't pass them to `run:` steps.
+      - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
+
+      - name: Install webkit (Wails native build deps)
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Annotate affected projects
+        continue-on-error: true
         run: |
-          case "${{ runner.os }}" in
-            Linux)  sudo apt-get update -q && sudo apt-get install -y libluajit-5.1-dev pkg-config ;;
-            macOS)  brew install luajit pkg-config ;;
-          esac
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      # Windows has no LuaJIT package; use the pure-Go gopherlua backend there.
-      - name: go test -race
-        env:
-          CGO_ENABLED: ${{ runner.os == 'Windows' && '0' || '1' }}
-        run: go test -race -timeout=5m ./...
+          for p in ${{ matrix.projects }}; do
+            magus describe -o 'template=::notice title=affected::{{.Project}} (base: {{.Base}})' "$p"
+          done
 
-  # gopherbuzz is a separate module (replace directive) whose Value type has three
-  # build-tagged representations. The default (NaN-box) is exercised above via the
-  # workspace, but the safe/unsafe twins only get covered if we build and test them
-  # explicitly. The buzz_safe twin is bounds-checked and behaviourally identical to
-  # the unsafe one, so running both is what backs the "unsafe path is validated by
-  # its safe twin" guarantee.
-  gopherbuzz-reprs:
-    name: gopherbuzz (value reprs)
+      # Preload main's history so flake detection can predict, not just retry.
+      - name: Restore magus run history
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ env.MAGUS_HISTORY_PATH }}
+          key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-history-v1-
+
+      - name: Run CI for shard
+        uses: ./.github/actions/magus
+        with:
+          command:  run ci ${{ matrix.projects }}
+          shard:    ${{ matrix.shard }}
+          n-shards: ${{ needs.preflight.outputs.count }}
+
+      # Upload this shard's history for the merge job. main only; always() to
+      # capture failures/retries too.
+      - name: Upload shard history
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: magus-history-${{ matrix.shard }}
+          path: ${{ env.MAGUS_HISTORY_PATH }}
+          if-no-files-found: ignore
+
+  # Merge the per-shard histories (freshest-wins) and persist for the next run.
+  # main/push only — PRs read but never write (poisoning defense).
+  merge-history:
+    name: merge run history
+    needs: [preflight, ci]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.preflight.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: ./.github/actions/setup-magus
         with:
-          go-version-file: go.mod
-          cache: true
-      - name: test default (nanbox) + safe + unsafe
-        working-directory: gopherbuzz
-        run: |
-          go test -timeout=5m ./...
-          go test -tags buzz_safe -timeout=5m ./...
-          go test -tags buzz_unsafe -timeout=5m ./...
+          version: ${{ env.MAGUS_VERSION }}
 
-  govulncheck:
-    name: govulncheck
+      # Restore the prior history, fold in this run's shard histories, and persist.
+      - uses: ./.github/actions/magus
+        with:
+          merge-history: 'true'
+
+  # postflight is the fan-in: once the matrix joins, summarize the whole run's
+  # behavioral code analysis (hotspots, affinity, ownership, trend) into the job
+  # step summary. Reporting only — `if: always()` so it posts even on a red build,
+  # and it never gates the pipeline.
+  postflight:
+    name: insight report
+    needs: [preflight, ci]
+    if: always() && needs.preflight.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Install LuaJIT
-        run: sudo apt-get update -q && sudo apt-get install -y libluajit-5.1-dev pkg-config
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version-file: go.mod
-          cache: true
-      - name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
-
-  fuzz:
-    name: fuzz
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Install LuaJIT
-        run: sudo apt-get update -q && sudo apt-get install -y libluajit-5.1-dev pkg-config
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+          # Full history so `magus insight` can read the commit log it analyzes.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-magus
         with:
-          go-version-file: go.mod
-          cache: true
-      # Smoke fuzzers for 30s each per push. Real fuzzing happens in
-      # OSS-Fuzz / a longer scheduled job; this gate just catches
-      # regressions in the seed corpus and obvious crashes.
-      - name: fuzz config.LoadFile
-        run: go test -run=^$ -fuzz=FuzzLoadFile -fuzztime=30s ./config
-      - name: fuzz watch.ParsePattern
-        run: go test -run=^$ -fuzz=FuzzParsePattern -fuzztime=30s ./watch
-      - name: fuzz watch.IgnorePatternsMatch
-        run: go test -run=^$ -fuzz=FuzzIgnorePatternsMatch -fuzztime=30s ./watch
-      - name: fuzz ci/github.Render
-        run: go test -run=^$ -fuzz=FuzzRender -fuzztime=30s ./ci/github
-      - name: fuzz cache.FuzzHashSpec
-        run: go test -run=^$ -fuzz=FuzzHashSpec -fuzztime=30s ./cache
-      - name: fuzz cache.FuzzReadManifest
-        run: go test -run=^$ -fuzz=FuzzReadManifest -fuzztime=30s ./cache
-
-  bench:
-    name: benchmarks
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    # Non-failing: regressions are visible in the artifact but do not
-    # block PRs. Wire benchstat / a regression bot in a follow-up.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Install LuaJIT
-        run: sudo apt-get update -q && sudo apt-get install -y libluajit-5.1-dev pkg-config
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: go test -bench
-        run: go test -run=^$ -bench=. -benchmem -benchtime=2s ./cache | tee bench.txt
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: bench-${{ github.sha }}
-          path: bench.txt
-          retention-days: 30
-
-  lint:
-    name: lint
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Install LuaJIT
-        run: sudo apt-get update -q && sudo apt-get install -y libluajit-5.1-dev pkg-config
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
-      - uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6.2.0
-        with:
-          version: v1.64.8
-          args: --config .golangci.yml ./...
-
-  format:
-    name: gofumpt
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: install gofumpt
-        run: go install mvdan.cc/gofumpt@latest
-      - name: gofumpt check
-        run: gofumpt -l . | tee /dev/stderr | (! read)
-
-  tidy:
-    name: go mod tidy
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: go mod tidy
-        run: go mod tidy && git diff --exit-code go.mod go.sum
-
-  coverage:
-    name: coverage
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Install LuaJIT
-        run: sudo apt-get update -q && sudo apt-get install -y libluajit-5.1-dev pkg-config
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: coverage (threshold 80%)
-        run: go tool mage go:coverage
-      - name: coverage profile
-        run: go test -covermode=atomic -coverprofile=coverage.out ./...
-      - name: Upload to Coveralls
-        uses: shogo82148/actions-goveralls@v1
-        with:
-          path-to-profile: coverage.out
-
-  image:
-    name: container image (build smoke-test)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Install LuaJIT
-        run: sudo apt-get update -q && sudo apt-get install -y libluajit-5.1-dev pkg-config
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build image (no push)
-        run: go tool mage image:build
+          version: ${{ env.MAGUS_VERSION }}
+      - name: Postflight (insight report → step summary)
+        # Scope to the root project so this emits exactly one whole-workspace report
+        # (a bare `magus run postflight` would fan out across every project).
+        run: magus run postflight .
