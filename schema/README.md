@@ -20,7 +20,7 @@ and `MAGUS_*` env var is available as a structured `Field` for O(1) lookup.
 ## Regenerating
 
 `Fields` is code-generated from `internal/config/config.go` by
-`cmd/magus-scribe config/`. After changing a config field:
+`cmd/magus-utils config/`. After changing a config field:
 
 ```sh
 cd magus && go generate ./cmd/magus/...

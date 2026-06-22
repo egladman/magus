@@ -2,7 +2,7 @@
 
 Head-to-head comparison: magus vs turbo, nx, lage, moon, bazel, and make.
 
-Results are in [`BENCHMARKS.md`](./BENCHMARKS.md) — stamped with date,
+Results are in [`BENCHMARKS.md`](./BENCHMARKS.md)  -  stamped with date,
 hardware, and exact tool versions.
 
 ---
@@ -11,7 +11,7 @@ hardware, and exact tool versions.
 
 ### Prerequisites
 
-System packages (Debian/Ubuntu) — for building `magus` and
+System packages (Debian/Ubuntu)  -  for building `magus` and
 for fixture filesystem watches that the bench scenarios may exercise:
 
 ```sh
@@ -30,7 +30,7 @@ sudo apt install -y build-essential pkg-config hyperfine inotify-tools
 | `bazel`     | see [bazel.build/install](https://bazel.build/install)                                                           |
 
 > `inotify-tools` is optional but useful if you hit
-> `fs.inotify.max_user_watches` errors on large fixtures — bump it with
+> `fs.inotify.max_user_watches` errors on large fixtures  -  bump it with
 > `sudo sysctl fs.inotify.max_user_watches=524288`.
 
 ### Run a benchmark
@@ -48,7 +48,7 @@ sudo apt install -y build-essential pkg-config hyperfine inotify-tools
 # Polyglot fixture
 ./bench.sh polyglot
 
-# Dry run — prints hyperfine commands without executing them
+# Dry run  -  prints hyperfine commands without executing them
 BENCH_DRY_RUN=1 ./bench.sh go 8
 ```
 
@@ -99,7 +99,7 @@ measured once (`Daemon: off`, since they have no daemon mode).
 ## Current limitations & known issues
 
 This harness works, but several caveats matter when reading the numbers.
-They're documented here so the next person doesn't rediscover them — and they
+They're documented here so the next person doesn't rediscover them  -  and they
 motivate the planned move off the procedural fixtures.
 
 ### S4-S7 measure the compiler, not magus
@@ -148,7 +148,7 @@ blocker is the fixture's package linking. Consequently:
 ### Tooling brittleness
 
 - `bazel` (via bazelisk) and `moon` installs are environment-sensitive; a row
-  may show `excluded — install failed` rather than fail the run.
+  may show `excluded  -  install failed` rather than fail the run.
 - `turbo` / `nx` / `lage` require the pnpm global bin dir on `PATH`.
 
 ### Methodology

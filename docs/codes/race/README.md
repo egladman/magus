@@ -20,9 +20,9 @@ magus run build --race=watch,replay      # everything
 | `replay`       | `MGS4002`, `MGS4003`            | roughly doubles wall-clock     |
 | `watch,replay` | all four                        | watch overhead + 2× wall-clock |
 
-`MGS4002` (declared-output overlap) is always emitted — it's a static check
+`MGS4002` (declared-output overlap) is always emitted  -  it's a static check
 at graph construction time, with zero runtime cost, no flag required.
 
 `watch` is safe to leave on for every CI run. `replay` re-executes the
-affected set sequentially with the cache bypassed — intended for nightly CI
+affected set sequentially with the cache bypassed  -  intended for nightly CI
 or a manual audit, not every push.

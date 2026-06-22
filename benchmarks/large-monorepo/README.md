@@ -1,7 +1,7 @@
 # large-monorepo benchmark (magus vs turbo / nx / lage)
 
 A realistic head-to-head built on [vsavkin/large-monorepo](https://github.com/vsavkin/large-monorepo)
-— 5 Next.js apps + ~26k components — instead of the synthetic `fixtures/ts`
+ -  5 Next.js apps + ~26k components  -  instead of the synthetic `fixtures/ts`
 tree. This removes the fixture-maintenance burden and the `TS2307` linking
 failures that made `fixtures/ts` S4–S7 unrunnable (see `../README.md`).
 
@@ -101,7 +101,7 @@ from the synthetic-fixture `BENCHMARKS.md` so the two are not confused).
 ### Cost / tuning
 
 A single cold app build is ~2 min, so a full multi-run sweep across four tools
-is **hours** — run it on a dedicated host, not in CI. Defaults are modest:
+is **hours**  -  run it on a dedicated host, not in CI. Defaults are modest:
 
 | Env                 | Default       | Meaning                                 |
 | ------------------- | ------------- | --------------------------------------- |

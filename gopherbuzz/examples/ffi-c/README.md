@@ -1,7 +1,7 @@
 # C FFI example
 
 A runnable demonstration of calling C from Buzz with `zdef()` and the `ffi`
-module — no cgo, no Zig.
+module  -  no cgo, no Zig.
 
 ```sh
 go run .

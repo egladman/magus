@@ -21,14 +21,6 @@ xychart-beta
     bar [5.7, 50.5, 84.0, 424]
 ```
 
-```mermaid
-xychart-beta
-    title "LoopSum 0..1e6, warm, MB allocated (lower is better)"
-    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
-    y-axis "MB/op" 0 --> 110
-    bar [0, 15, 15, 107]
-```
-
 That 5.7 ms is the JIT engaged; the same VM with the JIT off runs the loop in
 40.6 ms, still ahead of the others, but the native-code path is the headline.
 Allocation is effectively zero either way: the NaN-boxed `[]uint64` stack has no
@@ -80,16 +72,13 @@ flowchart TD
 
 Two constraints follow, and they're why this VM exists:
 
-- **No second toolchain.** magus is a single static Go binary that
-  cross-compiles cleanly and runs anywhere `go` does: no cgo, no C library,
-  nothing to install first. A faster engine that needs a C toolchain (the
+- **No second toolchain.** magus is a single static Go binary: no cgo, no C
+  library, nothing to install. A faster engine that requires a C toolchain (the
   [extended tier](benchmarks/comparison/): LuaJIT, Umka) would forfeit that, so
-  the engine has to be **pure Go**. That makes a fast pure-Go VM the only door,
-  not a preference.
+  the engine has to be **pure Go**.
 - **It's on every task's critical path.** The VM evaluates `magusfile.buzz` and
   the host-call glue on every run, and again as the fan-out widens. A slow or
-  allocation-heavy layer pays that cost over and over, landing as latency and GC
-  pressure between you and your build.
+  allocation-heavy layer pays that cost as latency and GC pressure on every build.
 
 The bar is just this: **be invisible.** The benchmarks above are deliberately
 heavy stress loops; a real `magusfile.buzz` is orders of magnitude smaller, so
@@ -136,7 +125,7 @@ The Buzz standard library is available; magus host bindings are not (use
 ## Testing
 
 Upstream Buzz's `test "name" { … }` blocks are supported. A block runs only under
-`buzz -t` / `--test`; a normal run skips it. A block fails when its body raises —
+`buzz -t` / `--test`; a normal run skips it. A block fails when its body raises  - 
 typically a `std.assert` that did not hold:
 
 ```buzz
@@ -163,11 +152,11 @@ verified and arguments pass in written order. After label resolution,
 arguments evaluate in parameter order.
 
 **Deliberate divergence:** upstream hard-reserves `test` as a keyword; gopherbuzz
-treats it as a *contextual* soft keyword — `test` introduces a block only in the
+treats it as a *contextual* soft keyword  -  `test` introduces a block only in the
 `test "…" {` position and stays a normal identifier elsewhere. This runs every
 upstream test block verbatim while keeping `test` usable as an identifier, which
 the magus embedding needs (`export fun test` is a common target). It is therefore
-a strict superset of upstream — the same "match capabilities, diverge only where a
+a strict superset of upstream  -  the same "match capabilities, diverge only where a
 Go embedding forces it" stance taken for [FFI](docs/ffi.md).
 
 ## Build tags
@@ -193,10 +182,10 @@ go test -tags buzz_unsafe ./...
 
 ## FFI (calling C)
 
-`zdef()` binds functions — and data symbols like `kCFBooleanTrue` — from a C
+`zdef()` binds functions  -  and data symbols like `kCFBooleanTrue`  -  from a C
 shared library at runtime, accepting both upstream-Buzz Zig declarations
 (`fn sqrt(x: f64) f64;`) and C prototypes, via
-[`purego`](https://github.com/ebitengine/purego) — no cgo, no build-time
+[`purego`](https://github.com/ebitengine/purego)  -  no cgo, no build-time
 toolchain. The `ffi` module adds C-ABI type metadata and a pinned-memory API so
 scripts can drive the common patterns: scalar calls, pointer out-parameters,
 by-reference structs, and callbacks.

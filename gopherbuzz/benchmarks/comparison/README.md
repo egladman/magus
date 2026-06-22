@@ -122,22 +122,6 @@ amd64 Xeon @ 2.10 GHz; the comparison engines (gopher-lua, tengo, goja) are from
 an earlier run on an amd64 Xeon @ 2.80 GHz. Read the gopherbuzz-vs-engine gap as
 conservative - gopherbuzz is reported on the slower box.
 
-```mermaid
-xychart-beta
-    title "LoopSum 0..1e6 - warm, ms/op (lower is better)"
-    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
-    y-axis "ms/op" 0 --> 430
-    bar [5.7, 50.5, 84.0, 424]
-```
-
-```mermaid
-xychart-beta
-    title "Fib(30) - warm, ms/op (lower is better)"
-    x-axis ["gopherbuzz", "gopher-lua", "tengo", "goja"]
-    y-axis "ms/op" 0 --> 430
-    bar [187, 260, 220, 412]
-```
-
 ### Scripting microbenchmarks
 
 **Warm - steady-state execution time** on a reused VM (ms/op, lower is better):
@@ -239,12 +223,6 @@ different class throughout - and now leads every compute kernel: Mandelbrot in
 hundreds of bytes vs 93-453 MB, BinaryTrees at 18 MB vs 24-146 MB, NBody in 17 KB
 vs 25-98 MB - a tiny, GC-quiet footprint whether interpreted or JIT'd.
 
-**The fresh axis.** Re-run with `-bench='/Fresh/'` to construct a new VM every
-iteration. On these heavy workloads the *time* barely moves (per-run setup is
-noise); the difference shows in *allocations*, where Fresh exposes the per-VM
-construction that Warm amortizes away (e.g. gopherbuzz `LoopSum` goes from ~0 to
-~3 KB/op, Fib from 3.9 KB to 31 KB/op).
-
 ### Extended tier (opt-in)
 
 This tier is **off by default**, enabled with a build tag:
@@ -271,20 +249,6 @@ Indicative warm times (ms/op):
 | Mandelbrot | 4.9 | 152 | 26 (gopherbuzz JIT) | 26 / 370 |
 | MatMul | 0.9 | 37 | 55 (gopher-lua) | 82 |
 | NBody | 1.7 | 60 | 146 (tengo) | 155 |
-
-Two honest takeaways:
-
-- **LuaJIT** is 1-2 orders of magnitude ahead - exactly what a mature tracing JIT
-  backed by C buys. It's the disclosed ceiling, not the bar a pure-Go engine is
-  trying to clear.
-- **Umka**, a statically typed C interpreter, generally beats the *dynamically*
-  typed pure-Go interpreters on compute (types known at compile time) while
-  staying well behind the JIT.
-
-The axis is JIT-vs-interpreter and static-vs-dynamic, not language brand.
-gopherbuzz is the only engine here that is pure Go, `CGO_ENABLED=0`,
-cross-compilable, and GC-friendly, and it still wins the JIT-eligible loop
-(`LoopSum`) outright among the pure-Go field.
 
 These are microbenchmarks across languages with different semantics, type
 systems, and safety models - read them as order-of-magnitude, not a verdict.
