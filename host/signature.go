@@ -58,7 +58,7 @@ func returnSuffix(m std.Method) string {
 
 // CamelCase converts a snake_case descriptor name to Buzz's camelCase (a
 // single-word name is unchanged). This is the single source of truth for the
-// transform: magus-scribe bindings uses it to emit the Buzz map keys, and
+// transform: magus-utils bindings uses it to emit the Buzz map keys, and
 // BuzzSignature uses it to render those same keys, so the two cannot drift.
 // (host/gen's drift test keeps an independent copy on purpose, to verify them.)
 func CamelCase(s string) string {

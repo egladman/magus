@@ -13,10 +13,10 @@ import (
 	"github.com/egladman/magus/internal/codec"
 )
 
-//go:generate go run ../../cmd/magus-scribe spells -spells ../../spells -out gen
+//go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen
 
 // builtinFS holds the compiled bytecode of every built-in spell, one <name>.bo
-// per spell, generated from spells/<name>/spell.buzz by magus-scribe spells.
+// per spell, generated from spells/<name>/spell.buzz by magus-utils spells.
 //
 //go:embed gen/*.bo
 var builtinFS embed.FS

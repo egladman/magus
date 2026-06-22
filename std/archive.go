@@ -25,7 +25,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 )
 
-//go:generate go run ../cmd/magus-scribe bindings -module archive -lang buzz -out ../host/gen/archive.go
+//go:generate go run ../cmd/magus-utils bindings -module archive -lang buzz -out ../host/gen/archive.go
 
 func init() { Register(Archive) }
 

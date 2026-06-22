@@ -24,7 +24,7 @@ const (
 
 // The spell value types — PatchOp, Charm, Run, and the resolved SpellOp — live in
 // the neutral types package. PatchOp/Charm/Run are mirrored to Buzz objects by
-// magus-scribe types (the Go struct is the single source of truth) and must sit in
+// magus-utils types (the Go struct is the single source of truth) and must sit in
 // types so the generator can reflect them without importing this package, which
 // would form an embed/codegen cycle; SpellOp (Go-internal, no Buzz mirror) joins
 // its family there since it embeds Run. They are referenced as types.* throughout —
@@ -58,7 +58,7 @@ func ValidatePatch(ops []types.PatchOp) error {
 
 // Descriptor is a spell's static description. For built-ins it is produced by
 // compiling each spells/<name>/spell.buzz to bytecode (go:generate
-// magus-scribe spells), embedding the blob, and resolving its mgs_ functions at load
+// magus-utils spells), embedding the blob, and resolving its mgs_ functions at load
 // time.
 type Descriptor struct {
 	Name        string                   `json:"name"`

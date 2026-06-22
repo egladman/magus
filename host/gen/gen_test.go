@@ -13,7 +13,7 @@ import (
 )
 
 // camelCase mirrors the snake_case→camelCase transform the Buzz emitter applies
-// to method keys (magus-scribe bindings). A single-word name is unchanged.
+// to method keys (magus-utils bindings). A single-word name is unchanged.
 func camelCase(s string) string {
 	parts := strings.Split(s, "_")
 	if len(parts) == 1 {

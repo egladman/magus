@@ -83,7 +83,7 @@ export fun build(args: [str]) > void {
 }
 
 // TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
-// end-to-end: the magus-scribe bindings-emitted host/gen trampolines must decode a variadic
+// end-to-end: the magus-utils bindings-emitted host/gen trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
 // charm.append), with camelCase methods (Buzz's convention).
@@ -131,7 +131,7 @@ export fun verify(_opts: [str]) > void {
 
 // TestRunBuzzFmtSprintf exercises fmt.sprintf end-to-end. It is the first std
 // method with a variadic arg preceded by a fixed one (format), so it guards the
-// magus-scribe bindings lua/buzz variadic-offset decode in addition to the formatting itself.
+// magus-utils bindings lua/buzz variadic-offset decode in addition to the formatting itself.
 func TestRunBuzzFmtSprintf(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")

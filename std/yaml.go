@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-//go:generate go run ../cmd/magus-scribe bindings -module yaml -lang buzz -out ../host/gen/yaml.go
+//go:generate go run ../cmd/magus-utils bindings -module yaml -lang buzz -out ../host/gen/yaml.go
 
 func init() { Register(YAML) }
 

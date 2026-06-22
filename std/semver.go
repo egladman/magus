@@ -8,7 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-scribe bindings -module semver -lang buzz -out ../host/gen/semver.go
+//go:generate go run ../cmd/magus-utils bindings -module semver -lang buzz -out ../host/gen/semver.go
 
 func init() { Register(Semver) }
 

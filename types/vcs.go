@@ -82,7 +82,7 @@ func (c Commit) Record() map[string]any {
 
 // CommitAuthor is the boundary mirror of the {name, email} author record a
 // vcs.commit / vcs.history result carries. The Buzz `object CommitAuthor` mirror
-// is generated from this struct by cmd/magus-scribe types; keep them in lockstep.
+// is generated from this struct by cmd/magus-utils types; keep them in lockstep.
 type CommitAuthor struct {
 	Name  string
 	Email string
@@ -93,7 +93,7 @@ type CommitAuthor struct {
 // RFC3339 string, not time.Time). A magusfile annotates `> Commit` to get
 // compile-checked field access on a commit record; the runtime value is the
 // matching map (see commitToMap). The Buzz `object Commit` mirror is generated
-// from this struct by cmd/magus-scribe types (go:generate -type Commit).
+// from this struct by cmd/magus-utils types (go:generate -type Commit).
 type CommitRecord struct {
 	ID      string `buzz:"id"`
 	Short   string

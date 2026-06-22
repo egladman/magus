@@ -1,7 +1,7 @@
-# magus/std — the host-binding superset
+# magus/std  -  the host-binding superset
 
 This package is magus's **host API**: the modules a `magusfile.buzz` (or a spell)
-calls into to touch the outside world — run processes, read files, query the VCS,
+calls into to touch the outside world  -  run processes, read files, query the VCS,
 make HTTP requests, hash, (de)serialize, build charm patches. It is layered on
 top of [`gopherbuzz/std`](../gopherbuzz/std/README.md) (the Buzz language stdlib)
 to form one **superset** surface.
@@ -28,7 +28,7 @@ import "os"  in a magusfile
 - The native-equivalent cross-reference (which host method duplicates a Buzz
   stdlib call) is in [`../host/overlap.go`](../host/overlap.go).
 
-Anything magus-specific goes **here**, never in `gopherbuzz/std` — that package
+Anything magus-specific goes **here**, never in `gopherbuzz/std`  -  that package
 stays upstream-shaped so standalone Buzz programs remain portable.
 
 ## The native binding mechanism
@@ -47,7 +47,7 @@ var Os = Module{
 func init() { Register(Os) }
 ```
 
-`magus-scribe bindings` reflects over each `Impl` and emits the Buzz trampoline into
+`magus-utils bindings` reflects over each `Impl` and emits the Buzz trampoline into
 the sibling [`../host/gen`](../host) package (`//go:generate` lives next to
 each descriptor in `std/*.go`); a drift test keeps the generated files in lockstep
 with the declarations. This is the single source of truth: declare the typed
@@ -63,9 +63,7 @@ as `[int]` byte lists the `TypeTag` set can't express) are hand-written VM glue 
 
 ## Using it as a Go SDK
 
-This package lives at `github.com/egladman/magus/std` (it was moved out of
-`internal/` for exactly this) so external Go code may import the host modules
-directly:
+`Impl`s take a `context.Context` and honor whatever it carries (sandbox policy, concurrency limiter, working directory); called with a plain context they behave as thin wrappers.
 
 ```go
 import "github.com/egladman/magus/std"
@@ -73,15 +71,9 @@ import "github.com/egladman/magus/std"
 out, err := std.OsExec(ctx, "git", []string{"rev-parse", "HEAD"}, "", nil)
 ```
 
-The `Impl`s take a `context.Context` and honor whatever it carries (sandbox
-policy, concurrency limiter, working directory); called with a plain context they
-behave as thin, dependency-light wrappers. The package uses `internal/*`
-packages transitively — that's fine, it's a public facade over internal impl —
-but those internals are not themselves importable from outside the module.
-
 ## See also
 
-- [`gopherbuzz/std/README.md`](../gopherbuzz/std/README.md) — the Buzz stdlib
+- [`gopherbuzz/std/README.md`](../gopherbuzz/std/README.md)  -  the Buzz stdlib
   this package supersets, and its upstream-parity constraint.
-- [`docs/engines.md`](../docs/engines.md), [`docs/modules/`](../docs/modules) —
+- [`docs/engines.md`](../docs/engines.md), [`docs/modules/`](../docs/modules)  - 
   the user-facing module reference.

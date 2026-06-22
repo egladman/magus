@@ -21,7 +21,7 @@ func init() {
 
 // registerAllBuzz installs the magus.* host API into a Buzz session.
 //
-// These bindings (and the magus-scribe bindings-emitted ones in host/gen) are written
+// These bindings (and the magus-utils bindings-emitted ones in host/gen) are written
 // directly against the concrete magus/gopherbuzz value system — NewMap, DirectValue,
 // StrValue, and friends — rather than behind the generic engine.Value /
 // engine.Session abstraction. That is deliberate, not a layering gap:

@@ -3,9 +3,9 @@
 coverage.out
 
 # local build artifacts
-magus
-magus-utils
-magus-scribe
+/magus
+/magus-utils
+/magus-scribe
 
 # magus runtime cache
 .magus/

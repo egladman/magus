@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus/internal/codec"
 )
 
-//go:generate go run ../cmd/magus-scribe bindings -module json -lang buzz -out ../host/gen/json.go
+//go:generate go run ../cmd/magus-utils bindings -module json -lang buzz -out ../host/gen/json.go
 
 func init() { Register(JSON) }
 
