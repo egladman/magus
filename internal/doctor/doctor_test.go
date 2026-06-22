@@ -1,7 +1,6 @@
 package doctor
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/depgraph"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,11 +22,11 @@ func TestCheckLanguageCoverage(t *testing.T) {
 	})
 	t.Run("some missing", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: ""}, {Spell: "go"}})
-		assert.Equal(t, StatusWarn, got.Status, got.Message)
+		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
 	t.Run("all missing", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: ""}, {Spell: ""}})
-		assert.Equal(t, StatusWarn, got.Status, got.Message)
+		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
 	t.Run("empty list", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{})
@@ -183,14 +181,14 @@ func TestCheckTargetNameConventions(t *testing.T) {
 	})
 	t.Run("snake and camel mixed", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun go_build(_a: [str]) > void {}\nexport fun goTest(_a: [str]) > void {}\n"})
-		assert.Equal(t, StatusWarn, got.Status, got.Message)
+		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
 	t.Run("mixed across magusfiles dir", func(t *testing.T) {
 		got := run(map[string]string{
 			"magusfiles/a.buzz": "export fun go_build(_a: [str]) > void {}\n",
 			"magusfiles/b.buzz": "export fun GoTest(_a: [str]) > void {}\n",
 		})
-		assert.Equal(t, StatusWarn, got.Status, got.Message)
+		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
 }
 
@@ -261,57 +259,12 @@ func TestCheckCharmTargetCollision(t *testing.T) {
 	})
 	t.Run("body charm shares a target name", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun container(_a: [str]) > void {}\nexport fun build(_a: [str]) > void { magus.has_charm(\"container\"); }\n"})
-		assert.Equal(t, StatusWarn, got.Status, got.Message)
+		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
 	t.Run("target named like a reserved charm", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun cd(_a: [str]) > void {}\n"})
-		assert.Equal(t, StatusWarn, got.Status, got.Message)
+		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
-}
-
-func TestShellCompletionInstalled(t *testing.T) {
-	// run writes files under a fake $HOME and reports whether completion is detected.
-	run := func(shell string, files map[string]string) bool {
-		home := t.TempDir()
-		for rel, body := range files {
-			p := filepath.Join(home, rel)
-			require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-			require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-		}
-		return shellCompletionInstalled(shell, home)
-	}
-
-	t.Run("bash appended script", func(t *testing.T) {
-		assert.True(t, run("bash", map[string]string{".bashrc": "alias x=y\ncomplete -F _magus_complete magus mgs\n"}))
-	})
-	t.Run("bash source-eval", func(t *testing.T) {
-		assert.True(t, run("bash", map[string]string{".bashrc": "source <(magus completion bash)\n"}))
-	})
-	t.Run("bash absent", func(t *testing.T) {
-		assert.False(t, run("bash", map[string]string{".bashrc": "export PATH=$PATH:/x\n"}))
-	})
-	t.Run("zsh present", func(t *testing.T) {
-		assert.True(t, run("zsh", map[string]string{".zshrc": "source <(magus completion zsh)\n"}))
-	})
-	t.Run("fish completion file", func(t *testing.T) {
-		assert.True(t, run("fish", map[string]string{".config/fish/completions/magus.fish": "complete -c magus\n"}))
-	})
-	t.Run("fish absent", func(t *testing.T) {
-		assert.False(t, run("fish", map[string]string{".config/fish/config.fish": "set -g x y\n"}))
-	})
-}
-
-func TestCheckBinaryTree(t *testing.T) {
-	r := &runner{opts: options{}}
-
-	r.opts.commit = ""
-	assert.Equal(t, StatusOK, r.checkBinaryTree().Status, "empty commit")
-
-	r.opts.commit = "abc1234"
-	assert.Equal(t, StatusOK, r.checkBinaryTree().Status, "clean commit")
-
-	r.opts.commit = "abc1234-dirty"
-	assert.Equal(t, StatusWarn, r.checkBinaryTree().Status, "dirty commit")
 }
 
 func TestCheckEnvVars(t *testing.T) {
@@ -331,7 +284,7 @@ func TestCheckEnvVars(t *testing.T) {
 		t.Setenv("MAGUS_CACHE_MOD", "auto")
 		r := &runner{}
 		got := r.checkEnvVars()
-		assert.Equal(t, StatusWarn, got.Status)
+		assert.Equal(t, StatusFail, got.Status)
 		assert.Contains(t, got.Details, "MAGUS_CACHE_MOD")
 	})
 }
@@ -435,153 +388,20 @@ func TestCheckVCSBaseRef(t *testing.T) {
 		assert.Equal(t, StatusOK, got.Status, got.Details)
 	})
 
-	t.Run("bogus ref warns", func(t *testing.T) {
+	t.Run("bogus ref fails", func(t *testing.T) {
 		root := makeGitRepo(t)
 		t.Setenv("MAGUS_VCS_BASE_REF", "refs/does/not/exist")
 		got := checkVCSBaseRef(root, types.VCSOptions{})
-		assert.Equal(t, StatusWarn, got.Status)
+		assert.Equal(t, StatusFail, got.Status)
 	})
 
-	t.Run("detached HEAD warns", func(t *testing.T) {
+	t.Run("detached HEAD ok when base_ref resolves", func(t *testing.T) {
 		root := makeGitRepo(t)
 		runCmd(t, root, "git", "checkout", "--detach", "HEAD")
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
 		got := checkVCSBaseRef(root, types.VCSOptions{})
-		assert.Equal(t, StatusWarn, got.Status)
-		assert.Contains(t, got.Message, "detached")
-	})
-}
-
-func TestCheckNearCycles(t *testing.T) {
-	r := &runner{opts: options{cfg: config.Config{}}}
-
-	t.Run("no near-cycles isolated", func(t *testing.T) {
-		_, g := buildDocGraph(t, [][]string{
-			{"standalone", "go"},
-		})
-		got := r.checkNearCycles(g)
 		assert.Equal(t, StatusOK, got.Status)
 	})
-
-	t.Run("near-cycle detected", func(t *testing.T) {
-		_, g := buildDocGraph(t, [][]string{
-			{"a", "go", "b"},
-			{"b", "go"},
-		})
-		got := r.checkNearCycles(g)
-		assert.Equal(t, StatusWarn, got.Status)
-		assert.NotEmpty(t, got.Details, "expected at least one detail line")
-	})
-}
-
-func TestCheckFanOut(t *testing.T) {
-	t.Run("below threshold", func(t *testing.T) {
-		r := &runner{opts: options{cfg: config.Config{}}}
-		projects := []*types.Project{
-			{Path: "a", DependsOn: []string{"b", "c"}},
-		}
-		got := r.checkFanOut(projects)
-		assert.Equal(t, StatusOK, got.Status)
-	})
-
-	t.Run("exceeds threshold", func(t *testing.T) {
-		r := &runner{opts: options{cfg: config.Config{}}}
-		// Build 21 dependencies to exceed the hardcoded threshold of 20.
-		deps := make([]string, 21)
-		for i := range deps {
-			deps[i] = fmt.Sprintf("dep%02d", i)
-		}
-		projects := []*types.Project{
-			{Path: "kitchen-sink", DependsOn: deps},
-		}
-		got := r.checkFanOut(projects)
-		assert.Equal(t, StatusWarn, got.Status)
-		assert.NotEmpty(t, got.Details, "expected at least one detail line")
-	})
-}
-
-func TestCheckBlastRadius(t *testing.T) {
-	t.Run("below threshold", func(t *testing.T) {
-		// 6 isolated nodes: each rebuilds only itself → blast radius 1/6 ≈ 16.7% < 20%.
-		r := &runner{opts: options{cfg: config.Config{}}}
-		projects, g := buildDocGraph(t, [][]string{
-			{"a", "go"},
-			{"b", "go"},
-			{"c", "go"},
-			{"d", "go"},
-			{"e", "go"},
-			{"f", "go"},
-		})
-		got := r.checkBlastRadius(g, projects)
-		assert.Equal(t, StatusOK, got.Status, "isolated nodes")
-	})
-
-	t.Run("exceeds threshold", func(t *testing.T) {
-		// "shared" is a dependency of both a and b, giving it 100% blast radius — well above 20%.
-		r := &runner{opts: options{cfg: config.Config{}}}
-		projects, g := buildDocGraph(t, [][]string{
-			{"a", "go", "shared"},
-			{"b", "go", "shared"},
-			{"shared", "go"},
-		})
-		got := r.checkBlastRadius(g, projects)
-		assert.Equal(t, StatusWarn, got.Status, "shared rebuilds 100%")
-		assert.NotEmpty(t, got.Details, "expected at least one detail line")
-	})
-
-	t.Run("exempt suppresses warning", func(t *testing.T) {
-		// 6 projects: only "shared" exceeds 20% blast radius (3/6 = 50%).
-		// With "shared" exempt, all remaining projects are below 20% (1/6 ≈ 16.7%).
-		r := &runner{opts: options{cfg: config.Config{Health: config.Health{Exempt: []string{"shared"}}}}}
-		projects, g := buildDocGraph(t, [][]string{
-			{"a", "go", "shared"},
-			{"b", "go", "shared"},
-			{"shared", "go"},
-			{"c", "go"},
-			{"d", "go"},
-			{"e", "go"},
-		})
-		got := r.checkBlastRadius(g, projects)
-		assert.Equal(t, StatusOK, got.Status, "shared is exempt")
-	})
-}
-
-func TestCheckDependencyTangle(t *testing.T) {
-	t.Run("well-layered graph", func(t *testing.T) {
-		// Star topology: all leaves depend on one center. NCCD is well below 2.0.
-		r := &runner{opts: options{cfg: config.Config{}}}
-		_, g := buildDocGraph(t, [][]string{
-			{"center", "go"},
-			{"leaf1", "go", "center"},
-			{"leaf2", "go", "center"},
-			{"leaf3", "go", "center"},
-			{"leaf4", "go", "center"},
-		})
-		got := r.checkDependencyTangle(g)
-		assert.Equal(t, StatusOK, got.Status, "star topology (low NCCD)")
-	})
-}
-
-func buildDocGraph(t *testing.T, entries [][]string) ([]*types.Project, *types.Graph) {
-	t.Helper()
-	ws := &types.Workspace{
-		Root:     "/fake",
-		Projects: map[string]*types.Project{},
-	}
-	for _, e := range entries {
-		path := e[0]
-		lang := e[1]
-		deps := e[2:]
-		ws.Projects[path] = &types.Project{
-			Path:      path,
-			Dir:       "/fake/" + path,
-			Spell:     lang,
-			DependsOn: deps,
-		}
-	}
-	g, err := depgraph.Build(ws)
-	require.NoError(t, err, "depgraph.Build()")
-	return ws.All(), g
 }
 
 func writeFile(t *testing.T, path, content string) {

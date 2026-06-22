@@ -134,7 +134,6 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if err != nil {
 		return nil, err
 	}
-	ws.Strict = cfg.Strict
 	m := &Magus{ws: ws, cfg: cfg}
 	var o workspace.Load
 	for _, fn := range opts {

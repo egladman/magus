@@ -12,17 +12,15 @@ import (
 )
 
 func doctorCmd(ctx context.Context, root string, args []string) error {
-	var fix *bool
 	_, err := cmdParse("doctor", args, func(fs *flag.FlagSet) {
-		fix = fs.Bool("fix", false, "Apply fixable remediation in-place")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus doctor [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Validate the workspace: binary signature, config file schema,")
-			fmt.Fprintln(os.Stderr, "cache writability, discoverable projects, language coverage,")
-			fmt.Fprintln(os.Stderr, "dependency cycles, workspace-escaping symlinks, tools on PATH,")
-			fmt.Fprintln(os.Stderr, "VCS base-ref reachability, recognised env vars, and mage")
-			fmt.Fprintln(os.Stderr, "compatibility (coexistence, legacy forms, variadic targets).")
+			fmt.Fprintln(os.Stderr, "Validate the workspace: config file schema, cache writability,")
+			fmt.Fprintln(os.Stderr, "discoverable projects, language coverage, a ci target, magusfile")
+			fmt.Fprintln(os.Stderr, "syntax, spell docs, dependency cycles, workspace-escaping symlinks,")
+			fmt.Fprintln(os.Stderr, "recognised env vars, charm/target name collisions, and VCS")
+			fmt.Fprintln(os.Stderr, "base-ref reachability.")
 			fmt.Fprintln(os.Stderr, "Exits non-zero if any check fails.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -40,41 +38,20 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 
 	ws, wsErr := inspectWorkspace(ctx, root)
 
-	mcpAddr := globalCfg.MCP.Address
-	if mcpAddr == "" {
-		mcpAddr = "127.0.0.1:7391"
-	}
-	mcpEnabled := globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
-	mcpDaemonUp := false
-	if mcpIsCompiled && mcpEnabled {
-		if _, err := proc.DiscoverSocket(ctx); err == nil {
-			mcpDaemonUp = true
-		}
-	}
-
 	// Query daemon status for the daemon-related checks. Non-fatal on failure.
 	daemonInfo := buildDaemonInfo(ctx, ws)
 
 	out := doctor.Run(
 		root, ws, wsErr,
 		doctor.WithConfig(globalCfg),
-		doctor.WithVersion(version),
-		doctor.WithCommit(commit),
-		doctor.WithFix(*fix),
-		doctor.WithMCPStatus(doctor.MCPStatus{
-			Compiled: mcpIsCompiled,
-			Enabled:  mcpEnabled,
-			Address:  mcpAddr,
-			DaemonUp: mcpDaemonUp,
-		}),
 		doctor.WithDaemonInfo(daemonInfo),
 	)
 
 	if err := emitDoctor(opts, out); err != nil {
 		return err
 	}
-	if out.Summary.Fail > 0 || (globalCfg.Strict && out.Summary.Warn > 0) {
-		return fmt.Errorf("magus doctor: %d check(s) failed, %d warning(s)", out.Summary.Fail, out.Summary.Warn)
+	if out.Summary.Fail > 0 {
+		return fmt.Errorf("magus doctor: %d check(s) failed", out.Summary.Fail)
 	}
 	return nil
 }
@@ -105,19 +82,7 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 			fmt.Printf("    %s\n", d)
 		}
 	}
-	fmt.Printf("\nsummary: %d ok, %d warn, %d fail\n", out.Summary.OK, out.Summary.Warn, out.Summary.Fail)
-
-	if len(out.Fixes) > 0 {
-		fmt.Println()
-		fmt.Println("fixes applied:")
-		for _, f := range out.Fixes {
-			fmt.Printf("  [%s] %s", f.Status, f.Check)
-			if f.Detail != "" {
-				fmt.Printf(": %s", f.Detail)
-			}
-			fmt.Println()
-		}
-	}
+	fmt.Printf("\nsummary: %d ok, %d fail\n", out.Summary.OK, out.Summary.Fail)
 	return nil
 }
 
@@ -125,8 +90,6 @@ func statusGlyph(status doctor.CheckStatus) string {
 	switch status {
 	case doctor.StatusOK:
 		return "[ok]"
-	case doctor.StatusWarn:
-		return "[warn]"
 	case doctor.StatusFail:
 		return "[fail]"
 	}

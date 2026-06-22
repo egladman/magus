@@ -4,7 +4,6 @@ package depgraph
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/egladman/magus/types"
 )
@@ -146,8 +145,8 @@ func (a graphObsAdapter) OnError(err error) { a.o.OnError(err) }
 // Build constructs the dependency graph for the workspace.
 //
 // The observer from w.GraphObserver() is composed with any WithGraphObserver
-// options. Cycles fail with ErrCycle. Missing dependencies are handled per
-// w.Strict: false=warn and drop edge, true=collect and return *UnregisteredDepError.
+// options. Cycles fail with ErrCycle. An unregistered dependency fails the
+// build: every missing dep is collected and returned as *UnregisteredDepError.
 func Build(w *types.Workspace, opts ...types.GraphOption) (*types.Graph, error) {
 	var initial types.Observer = types.NoopObserver{}
 	if obs := w.GraphObserver(); obs != nil {
@@ -164,27 +163,11 @@ func Build(w *types.Workspace, opts ...types.GraphOption) (*types.Graph, error) 
 		fromID := b.AddNode(p.Path)
 		for _, dep := range p.DependsOn {
 			if w.Get(dep) == nil {
-				m := types.UnregisteredDep{
+				missing = append(missing, types.UnregisteredDep{
 					Consumer:   p.Path,
 					Dep:        dep,
 					DidYouMean: nearestProjectPath(dep, w),
-				}
-				missing = append(missing, m)
-				if !w.Strict {
-					args := []any{
-						"consumer", m.Consumer,
-						"missing_dep", m.Dep,
-						"fix", fmt.Sprintf(
-							"configure %q with magus.project(%q, {...}) in a magusfile, "+
-								"or correct the path passed to magus.WithDependsOn in %q",
-							dep, dep, p.Path,
-						),
-					}
-					if m.DidYouMean != "" {
-						args = append(args, "did_you_mean", m.DidYouMean)
-					}
-					slog.Warn("magus: dependency not registered - edge dropped from build graph", args...)
-				}
+				})
 				continue
 			}
 			toID := b.AddNode(dep)
@@ -194,7 +177,7 @@ func Build(w *types.Workspace, opts ...types.GraphOption) (*types.Graph, error) 
 		}
 	}
 
-	if w.Strict && len(missing) > 0 {
+	if len(missing) > 0 {
 		return nil, &types.UnregisteredDepError{Missing: missing}
 	}
 

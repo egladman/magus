@@ -84,16 +84,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_GRAPH_ROOTS"); v != "" {
 		cfg.Graph.Roots = v
 	}
-	if v := getenv("MAGUS_HEALTH_EXEMPT"); v != "" {
-		parts := strings.Split(v, ",")
-		out := parts[:0]
-		for _, p := range parts {
-			if p = strings.TrimSpace(p); p != "" {
-				out = append(out, p)
-			}
-		}
-		cfg.Health.Exempt = out
-	}
 	if v := getenv("MAGUS_TELEMETRY_ENABLED"); v != "" {
 		cfg.Telemetry.Enabled = parseBoolEnv(v, cfg.Telemetry.Enabled)
 	}
@@ -186,9 +176,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	}
 	if v := getenv("MAGUS_DRY_RUN"); v != "" {
 		cfg.DryRun = parseBoolEnv(v, cfg.DryRun)
-	}
-	if v := getenv("MAGUS_STRICT"); v != "" {
-		cfg.Strict = parseBoolEnv(v, cfg.Strict)
 	}
 	if v := getenv("MAGUS_ASSUME_INTERACTIVE"); v != "" {
 		cfg.AssumeInteractive = parseBoolEnv(v, cfg.AssumeInteractive)

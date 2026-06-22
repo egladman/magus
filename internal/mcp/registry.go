@@ -71,10 +71,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        "magus_doctor",
-		Description: "Validate the workspace: binary signature, config schema, cache writability, project discovery, language coverage, dependency cycles, tool availability, and VCS reachability.",
-		Params: []ParamDescriptor{
-			{Name: "strict", Type: "boolean", Description: "Treat warnings as failures."},
-		},
+		Description: "Validate the workspace: config schema, cache writability, project discovery, language coverage, dependency cycles, tool availability, and VCS reachability.",
 	},
 	{
 		Name:        "magus_status",

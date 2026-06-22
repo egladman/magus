@@ -556,32 +556,6 @@ func captureSlogWarnings(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// TestGraphWarnsOnUnresolvedDep verifies that a dep path not matching any
-// registered project emits a slog.Warn with consumer, missing_dep,
-// did_you_mean, and fix fields - and that Graph() still succeeds (skip behavior).
-func TestGraphWarnsOnUnresolvedDep(t *testing.T) {
-	// No t.Parallel() - mutates global slog default.
-	buf := captureSlogWarnings(t)
-
-	ws := buildWorkspace(t, [][]string{
-		{"api", "go", "internal/db-typo"},
-		{"internal/db", "go"},
-	})
-	g, err := depgraph.Build(ws)
-	require.NoError(t, err)
-	require.NotNil(t, g)
-
-	got := buf.String()
-	for _, want := range []string{
-		"consumer=api",
-		"missing_dep=internal/db-typo",
-		"did_you_mean=internal/db",
-		"magus.project",
-	} {
-		assert.Contains(t, got, want, "log output missing %q", want)
-	}
-}
-
 // TestGraphNoWarnWhenDepsResolve verifies that a workspace where all deps
 // resolve produces no warnings.
 func TestGraphNoWarnWhenDepsResolve(t *testing.T) {
@@ -597,42 +571,24 @@ func TestGraphNoWarnWhenDepsResolve(t *testing.T) {
 	assert.Empty(t, buf.String(), "unexpected warning output")
 }
 
-// TestGraphWarnsByDefaultOnUnregisteredDep verifies the default (non-
-// strict) behaviour: missing deps are dropped, slog records a warning,
-// Graph() still returns a usable graph.
-func TestGraphWarnsByDefaultOnUnregisteredDep(t *testing.T) {
-	// No t.Parallel() - mutates global slog default.
-	buf := captureSlogWarnings(t)
-
-	ws := buildWorkspace(t, [][]string{
-		{"api", "go", "internal/db-typo"},
-		{"internal/db", "go"},
-	})
-	// Strict defaults to false; do not set it.
-	g, err := depgraph.Build(ws)
-	require.NoError(t, err)
-	require.NotNil(t, g)
-	assert.Contains(t, buf.String(), "internal/db-typo", "warning missing dep")
-}
-
-// TestGraphStrictFailsOnUnregisteredDep verifies strict mode returns a
-// typed error that errors.Is matches against ErrUnregisteredDep.
-func TestGraphStrictFailsOnUnregisteredDep(t *testing.T) {
+// TestGraphFailsOnUnregisteredDep verifies an unregistered dependency fails the
+// build with a typed error that errors.Is matches against ErrUnregisteredDep.
+func TestGraphFailsOnUnregisteredDep(t *testing.T) {
 	t.Parallel()
 	ws := buildWorkspace(t, [][]string{
 		{"api", "go", "internal/db-typo"},
 		{"internal/db", "go"},
 	})
-	ws.Strict = true
 
 	_, err := depgraph.Build(ws)
-	require.Error(t, err, "expected error in strict mode")
+	require.Error(t, err, "expected error for unregistered dep")
 	assert.ErrorIs(t, err, types.ErrUnregisteredDep)
 	var ude *types.UnregisteredDepError
 	require.ErrorAs(t, err, &ude)
 	require.Len(t, ude.Missing, 1)
 	assert.Equal(t, "api", ude.Missing[0].Consumer)
 	assert.Equal(t, "internal/db-typo", ude.Missing[0].Dep)
+	assert.Equal(t, "internal/db", ude.Missing[0].DidYouMean)
 }
 
 // TestUnregisteredDepErrorAggregates verifies multiple missing deps
@@ -643,7 +599,6 @@ func TestUnregisteredDepErrorAggregates(t *testing.T) {
 		{"api", "go", "missing-a", "missing-b"},
 		{"svc", "go", "missing-c"},
 	})
-	ws.Strict = true
 
 	_, err := depgraph.Build(ws)
 	require.Error(t, err, "expected aggregated error")

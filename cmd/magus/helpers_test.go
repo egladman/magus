@@ -12,7 +12,6 @@ import (
 // confirms the unknown-status fallback.
 func TestStatusGlyph(t *testing.T) {
 	assert.Equal(t, "[ok]", statusGlyph(doctor.StatusOK))
-	assert.Equal(t, "[warn]", statusGlyph(doctor.StatusWarn))
 	assert.Equal(t, "[fail]", statusGlyph(doctor.StatusFail))
 	assert.Equal(t, "[?]", statusGlyph(""))
 	assert.Equal(t, "[?]", statusGlyph("unknown"))

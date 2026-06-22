@@ -15,8 +15,8 @@ var ErrSpellNotRegistered = errors.New("magus: spell not registered")
 // ErrSpellNameRequired is returned by magus.WithSpell when called with an empty name.
 var ErrSpellNameRequired = errors.New("magus: spell name required")
 
-// ErrUnregisteredDep is returned by (*Workspace).Graph in Strict mode when a
-// declared dependency path has not been registered.
+// ErrUnregisteredDep is returned by (*Workspace).Graph when a declared
+// dependency path has not been registered.
 var ErrUnregisteredDep = errors.New("magus: dependency not registered")
 
 // UnregisteredDep is one missing-dep observation found while building the graph.

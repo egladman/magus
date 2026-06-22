@@ -342,24 +342,20 @@ var doctorSegment = Segment{
 results. Checks include:
 
   - Project discoverability and language coverage
+  - A defined ci target and clean magusfile syntax
   - Dependency graph cycles
-  - Required tools on PATH
+  - Workspace-escaping symlinks
   - Recognised MAGUS_* environment variables (typo detection)
-  - Magusfile form consistency
-  - Binary provenance (signature and git-tree freshness)
+  - Charm/target name collisions
+  - Consistent target naming convention (any casing, but pick one)
+  - VCS base-ref reachability
 
-Exits non-zero if any check fails. Warnings are informational and do not
-affect the exit code.`,
+Every check is pass or fail; there are no warnings. Exits non-zero if any
+check fails.`,
 	Usage: "magus doctor [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("fix", false, "Apply fixable remediation in-place")
-		fs.Bool("strict", false, "Exit non-zero on warnings as well as failures")
-	},
 	Examples: []Example{
 		{"Run all checks", "magus doctor"},
 		{"JSON report", "magus doctor -o json"},
-		{"Apply fixable remediation in-place", "magus doctor --fix"},
-		{"Fail on warnings (useful in CI)", "magus doctor --strict"},
 	},
 }
 

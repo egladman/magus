@@ -95,7 +95,6 @@ func printConfigText(cfg config.Config) {
 	fmt.Printf("concurrency: %s\n", intOrDef(cfg.Concurrency, "(default: min(NumCPU, 8))"))
 	fmt.Printf("history_path: %s\n", strOrDef(cfg.HistoryPath, "(disabled)"))
 	fmt.Printf("dry_run:  %v\n", cfg.DryRun)
-	fmt.Printf("strict:   %v\n", cfg.Strict)
 	fmt.Println()
 	fmt.Println("cache:")
 	fmt.Printf("  dir:  %s\n", strOrDef(cfg.Cache.Dir, "(default)"))

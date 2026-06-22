@@ -17,18 +17,7 @@ type CheckStatus string
 // The CheckStatus constants enumerate the possible doctor-check outcomes.
 const (
 	StatusOK   CheckStatus = "ok"
-	StatusWarn CheckStatus = "warn"
 	StatusFail CheckStatus = "fail"
-)
-
-// FixStatus is the outcome of an auto-remediation attempt.
-type FixStatus string
-
-// The FixStatus constants enumerate the possible auto-remediation outcomes.
-const (
-	FixFixed   FixStatus = "fixed"
-	FixSkipped FixStatus = "skipped"
-	FixFailed  FixStatus = "failed"
 )
 
 // Check is one doctor check result.
@@ -42,31 +31,14 @@ type Check struct {
 // Summary counts check outcomes.
 type Summary struct {
 	OK   int `json:"ok" yaml:"ok"`
-	Warn int `json:"warn" yaml:"warn"`
 	Fail int `json:"fail" yaml:"fail"`
-}
-
-// FixResult records the result of an auto-remediation attempt.
-type FixResult struct {
-	Check  string    `json:"check" yaml:"check"`
-	Status FixStatus `json:"status" yaml:"status"`
-	Detail string    `json:"detail,omitempty" yaml:"detail,omitempty"`
 }
 
 // Report is the full doctor output.
 type Report struct {
-	Workspace string      `json:"workspace" yaml:"workspace"`
-	Checks    []Check     `json:"checks" yaml:"checks"`
-	Summary   Summary     `json:"summary" yaml:"summary"`
-	Fixes     []FixResult `json:"fixes,omitempty" yaml:"fixes,omitempty"`
-}
-
-// MCPStatus carries MCP availability information for the doctor check.
-type MCPStatus struct {
-	Compiled bool   // binary was built with -tags mcp
-	Enabled  bool   // mcp.enabled is true (or unset → defaults true)
-	Address  string // configured or default listen address
-	DaemonUp bool   // a running daemon was detected
+	Workspace string  `json:"workspace" yaml:"workspace"`
+	Checks    []Check `json:"checks" yaml:"checks"`
+	Summary   Summary `json:"summary" yaml:"summary"`
 }
 
 // DaemonInfo carries live daemon state for the daemon-related doctor checks.
@@ -99,10 +71,6 @@ type LoadedWorkspace struct {
 
 type options struct {
 	cfg        config.Config
-	version    string
-	commit     string
-	fix        bool
-	mcpStatus  *MCPStatus
 	daemonInfo *DaemonInfo
 }
 
@@ -111,19 +79,6 @@ type Option func(*options)
 
 // WithConfig sets the resolved workspace config.
 func WithConfig(c config.Config) Option { return func(o *options) { o.cfg = c } }
-
-// WithVersion sets the ldflags-injected version string (e.g. "v0.4.2").
-func WithVersion(v string) Option { return func(o *options) { o.version = v } }
-
-// WithCommit sets the ldflags-injected commit hash (e.g. "abc1234" or "abc1234-dirty").
-func WithCommit(c string) Option { return func(o *options) { o.commit = c } }
-
-// WithFix enables auto-remediation of fixable checks.
-func WithFix(v bool) Option { return func(o *options) { o.fix = v } }
-
-
-// WithMCPStatus passes MCP availability info to the doctor check.
-func WithMCPStatus(s MCPStatus) Option { return func(o *options) { o.mcpStatus = &s } }
 
 // WithDaemonInfo passes live daemon state for the daemon-related checks.
 // Pass a nil-pointer-equivalent (empty DaemonInfo with Reachable=false) when
@@ -166,8 +121,7 @@ func (r *runner) run(wsErr error) Report {
 	var out Report
 	out.Checks = append(
 		out.Checks,
-		r.checkBinarySigned(), r.checkBinaryTree(), r.checkJSONCodec(), r.checkMCPServer(),
-		r.checkDaemonReachability(), r.checkStaleSockets(),
+		r.checkJSONCodec(), r.checkStaleSockets(),
 	)
 
 	if wsErr != nil {
@@ -192,63 +146,23 @@ func (r *runner) run(wsErr error) Report {
 		out.Checks,
 		r.checkConfigFile(),
 		r.checkCacheWritable(),
-		r.checkReflinkSupport(),
 		r.checkLanguageCoverage(projects),
 		r.checkCITarget(projects),
 		r.checkMagusfileSyntax(projects),
 		r.checkSpellDocs(project.DefaultSpellRegistry().All()),
-		r.checkExplicitVCS(),
-		r.checkWatchBackend(),
 		r.checkGraphCycles(),
 		r.checkSymlinks(),
 		r.checkEnvVars(),
-		r.checkMagefileCoexistence(projects),
-		r.checkLegacyMageForms(projects),
-		r.checkMixedMageforms(projects),
-		r.checkVariadicMageTargets(projects),
 		r.checkTargetNameConventions(projects),
 		r.checkCharmTargetCollision(projects),
-		r.checkShellCompletion(),
 		r.checkVCSBaseRef(),
-		r.checkMergeDriver(),
-		r.checkConcurrencyBudget(),
 		r.checkWorkspaceRegistration(),
 	)
-
-	// Dependency health checks (warn-only). Build the graph once; skip if broken
-	// (checkGraphCycles already reported the cycle).
-	if healthG, err := r.ws.Graph(); err == nil {
-		out.Checks = append(
-			out.Checks,
-			r.checkNearCycles(healthG),
-			r.checkFanOut(projects),
-			r.checkBlastRadius(healthG, projects),
-			r.checkDependencyTangle(healthG),
-		)
-	}
-
-	// Apply auto-fixes before tallying so re-run results are reflected.
-	if r.opts.fix {
-		out.Fixes = r.applyFixes(projects)
-		// Re-scan projects from disk so the re-check reflects any renames/rewrites.
-		postFixProjects := r.ws.All()
-		// Re-run fixable checks so the summary reflects the post-fix state.
-		for i, c := range out.Checks {
-			switch c.Name {
-			case "legacy mage forms":
-				out.Checks[i] = r.checkLegacyMageForms(postFixProjects)
-			case "consistent mage forms":
-				out.Checks[i] = r.checkMixedMageforms(postFixProjects)
-			}
-		}
-	}
 
 	for _, c := range out.Checks {
 		switch c.Status {
 		case StatusOK:
 			out.Summary.OK++
-		case StatusWarn:
-			out.Summary.Warn++
 		case StatusFail:
 			out.Summary.Fail++
 		}

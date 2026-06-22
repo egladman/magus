@@ -18,7 +18,6 @@ type Config struct {
 	Flake     Flake     `yaml:"flake"`
 	Graph     Graph     `yaml:"graph"`
 	Watch     Watch     `yaml:"watch"`
-	Health    Health    `yaml:"health"`
 	Telemetry Telemetry `yaml:"telemetry"`
 	Daemon    Daemon    `yaml:"daemon"`
 	VCS       VCS       `yaml:"vcs"`
@@ -36,9 +35,6 @@ type Config struct {
 
 	// DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.
 	DryRun bool `yaml:"dry_run" cli:"short=u"`
-
-	// Strict turns correctness warnings into errors (e.g. unregistered deps → ErrUnregisteredDep). Equivalent to MAGUS_STRICT=1.
-	Strict bool `yaml:"strict"`
 
 	// AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.
 	AssumeInteractive bool `yaml:"assume_interactive"`
@@ -186,11 +182,6 @@ type Graph struct {
 	Roots     string `yaml:"roots"`                                                    // comma-separated starting nodes
 }
 
-// Health controls dependency-health checks run by magus doctor.
-type Health struct {
-	Exempt []string `yaml:"exempt"` // project paths exempt from blast-radius warnings (exact match)
-}
-
 // Telemetry holds OpenTelemetry exporter settings. OFF by default; no magus-operated backend exists.
 // When Enabled, magus connects to the OTLP collector you configure and sends data there only.
 type Telemetry struct {
@@ -231,7 +222,6 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CONCURRENCY", "concurrency", "min(NumCPU,8)", "Maximum number of concurrently running per-project build steps"},
 		{"MAGUS_HISTORY_PATH", "history_path", "$XDG_STATE_HOME/magus/history/v1.json", "Path to the runtime-history JSON shared by flake detection, the CI forecaster, graph timing, and bisect"},
 		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
-		{"MAGUS_STRICT", "strict", "false", "When 1 or true, workspace correctness warnings (e.g. unregistered dependencies) become errors that fail the run"},
 		{"MAGUS_VCS_ENABLED", "vcs.enabled", "true", "Master switch for VCS-driven affected detection; false makes affected fall back to all projects"},
 		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj"},
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
@@ -280,8 +270,7 @@ func Defaults() Config {
 			Threshold:        0.05,
 			AnnotateGHA:      true,
 		},
-		Health: Health{},
-		Hints:  Hints{Enabled: boolPtr(true)},
+		Hints: Hints{Enabled: boolPtr(true)},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",
 			ServiceName: "magus",

@@ -1,7 +1,6 @@
 package doctor
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -17,11 +16,9 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/ast"
-	"github.com/egladman/magus/internal/cache/reflink"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
-	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -40,7 +37,7 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 	slices.Sort(noLang)
 	return Check{
 		Name:    "language coverage",
-		Status:  StatusWarn,
+		Status:  StatusFail,
 		Message: fmt.Sprintf("%d project(s) without a language pack", len(noLang)),
 		Details: noLang,
 	}
@@ -51,9 +48,9 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 // key off; a workspace that defines none would run that gate as a silent no-op
 // (exit 0 having gated nothing). The run-time path enforces the same rule (it
 // returns MGS1001); this surfaces it as a workspace health check so the gap is
-// visible before CI runs. Detection reuses the magusfile source scan that
-// checkTargetNameConventions relies on — ci lives in the magusfile, never in a
-// spell. Name matching is case-insensitive because magus normalizes CI/Ci to ci.
+// visible before CI runs. Detection reuses the magusfile source scan
+// (magusfileSourcesInDir/declaredTargetNames); ci lives in the magusfile, never
+// in a spell. Name matching is case-insensitive because magus normalizes CI/Ci to ci.
 func (*runner) checkCITarget(projects []*types.Project) Check {
 	const name = "ci target"
 	if len(projects) == 0 {
@@ -111,106 +108,6 @@ func (*runner) checkSpellDocs(spells []*types.Spell) Check {
 	}
 }
 
-// checkShellCompletion warns when no magus tab-completion setup is detected for
-// the user's shell. It is best-effort — a normal magus run has no reliable signal
-// for whether completion is active in the current shell, so this scans the common
-// rc files / completion dirs for a marker. A non-standard install can therefore
-// produce a false warning, which is why it warns (never fails) and skips unknown
-// shells entirely.
-func (*runner) checkShellCompletion() Check {
-	const name = "shell completion"
-	shell := filepath.Base(os.Getenv("SHELL"))
-	home, _ := os.UserHomeDir()
-	if home == "" || (shell != "bash" && shell != "zsh" && shell != "fish") {
-		return Check{Name: name, Status: StatusOK, Message: "skipped (no supported shell detected)"}
-	}
-	if shellCompletionInstalled(shell, home) {
-		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%s tab-completion detected", shell)}
-	}
-	install := fmt.Sprintf("magus completion %s >> ~/.%src", shell, shell)
-	if shell == "fish" {
-		install = "magus completion fish > ~/.config/fish/completions/magus.fish"
-	}
-	return Check{
-		Name:    name,
-		Status:  StatusWarn,
-		Message: fmt.Sprintf("no magus tab-completion detected for %s", shell),
-		Details: []string{"enable it: " + install},
-	}
-}
-
-// shellCompletionInstalled reports whether a magus completion marker is present
-// in the standard locations for shell. Markers cover both the appended-script
-// (`_magus_complete`, `complete -c magus`) and source-eval (`magus completion`)
-// install styles.
-func shellCompletionInstalled(shell, home string) bool {
-	markers := []string{"magus completion", "_magus_complete", "complete -c magus"}
-	var files []string
-	switch shell {
-	case "bash":
-		files = []string{
-			filepath.Join(home, ".bashrc"),
-			filepath.Join(home, ".bash_profile"),
-			filepath.Join(home, ".bash_completion"),
-			filepath.Join(home, ".profile"),
-			filepath.Join(home, ".local/share/bash-completion/completions/magus"),
-			"/etc/bash_completion.d/magus",
-			"/usr/share/bash-completion/completions/magus",
-		}
-	case "zsh":
-		zdot := os.Getenv("ZDOTDIR")
-		if zdot == "" {
-			zdot = home
-		}
-		files = []string{
-			filepath.Join(zdot, ".zshrc"),
-			filepath.Join(zdot, ".zprofile"),
-			filepath.Join(home, ".zshrc"),
-		}
-	case "fish":
-		// fish auto-loads this path, so its presence alone is a strong signal.
-		if _, err := os.Stat(filepath.Join(home, ".config", "fish", "completions", "magus.fish")); err == nil {
-			return true
-		}
-		files = []string{filepath.Join(home, ".config", "fish", "config.fish")}
-	}
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		for _, m := range markers {
-			if strings.Contains(string(data), m) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (r *runner) checkExplicitVCS() Check {
-	return checkExplicitVCS(r.ws.Root(), r.ws.VCSOptions())
-}
-
-func checkExplicitVCS(root string, opts types.VCSOptions) Check {
-	res, err := vcs.Resolve(context.Background(), root, "", opts)
-	if err != nil {
-		return Check{Name: "vcs", Status: StatusFail, Message: err.Error()}
-	}
-	switch res.Source {
-	case types.VCSSourceDisabled:
-		return Check{Name: "vcs", Status: StatusOK, Message: "disabled (vcs.enabled: false); affected falls back to all"}
-	case types.VCSSourceExplicit:
-		return Check{Name: "vcs", Status: StatusOK, Message: fmt.Sprintf("pinned: %s (base_ref %s)", res.Name, res.Base)}
-	case types.VCSSourceAuto:
-		return Check{Name: "vcs", Status: StatusWarn, Message: fmt.Sprintf("auto-detected: %s (set MAGUS_VCS_NAME to pin)", res.Name)}
-	case types.VCSSourceDefault:
-		return Check{Name: "vcs", Status: StatusWarn, Message: fmt.Sprintf("no VCS marker found at %s; falling back to %s", root, res.Name)}
-	default:
-		return Check{Name: "vcs", Status: StatusWarn, Message: fmt.Sprintf("unexpected vcs source %q (%s)", res.Source, res.Name)}
-	}
-}
-
 func (r *runner) checkGraphCycles() Check {
 	if _, err := r.ws.Graph(); err != nil {
 		return Check{Name: "dependency graph", Status: StatusFail, Message: err.Error()}
@@ -249,7 +146,7 @@ func checkSymlinks(root string) Check {
 		return nil
 	})
 	if walkErr != nil {
-		return Check{Name: "symlinks", Status: StatusWarn, Message: fmt.Sprintf("could not scan for symlinks: %v", walkErr)}
+		return Check{Name: "symlinks", Status: StatusFail, Message: fmt.Sprintf("could not scan for symlinks: %v", walkErr)}
 	}
 	slices.Sort(escaping)
 	slices.Sort(inTree)
@@ -306,56 +203,6 @@ func toSlashRel(root, p string) string {
 	return filepath.ToSlash(rel)
 }
 
-func (*runner) checkMagefileCoexistence(_ []*types.Project) Check {
-	return Check{Name: "magefile coexistence", Status: StatusOK, Message: "single magusfile.buzz layout enforced"}
-}
-
-func (*runner) checkLegacyMageForms(_ []*types.Project) Check {
-	return Check{Name: "legacy mage forms", Status: StatusOK, Message: "workspace uses Buzz magusfiles"}
-}
-
-func (*runner) checkMixedMageforms(_ []*types.Project) Check {
-	return Check{Name: "consistent mage forms", Status: StatusOK, Message: "workspace uses Buzz magusfiles"}
-}
-
-func (*runner) checkVariadicMageTargets(_ []*types.Project) Check {
-	return Check{Name: "variadic mage targets", Status: StatusOK, Message: "Buzz targets receive args as a list — no variadic conflicts"}
-}
-
-func (r *runner) checkWatchBackend() Check {
-	if watch.ProbeBackend(r.ws.Root()) == watch.FsnotifyBackend {
-		return Check{Name: "watch backend", Status: StatusOK, Message: "OS-level events available (fsnotify)"}
-	}
-	return Check{
-		Name:    "watch backend",
-		Status:  StatusWarn,
-		Message: "OS-level filesystem events unavailable; magus watch will fall back to polling (1 s interval)",
-		Details: []string{"common causes: NFS, FUSE, WSL2 — pass --backend=poll to magus watch to silence this warning"},
-	}
-}
-
-func (r *runner) checkBinarySigned() Check {
-	if r.opts.version == "unknown" || r.opts.commit == "unknown" {
-		return Check{Name: "binary signature", Status: StatusWarn, Message: "binary is unsigned; it cannot be trusted"}
-	}
-	return Check{
-		Name:    "binary signature",
-		Status:  StatusOK,
-		Message: fmt.Sprintf("%s (%s)", r.opts.version, r.opts.commit),
-	}
-}
-
-func (r *runner) checkBinaryTree() Check {
-	if strings.HasSuffix(r.opts.commit, "-dirty") {
-		return Check{
-			Name:    "binary git tree",
-			Status:  StatusWarn,
-			Message: fmt.Sprintf("binary was built from a dirty git tree (%s); it cannot be trusted", r.opts.commit),
-		}
-	}
-	return Check{Name: "binary git tree", Status: StatusOK, Message: "clean"}
-}
-
 func (*runner) checkJSONCodec() Check {
 	v := codec.CodecVersion()
 	msg := "encoding/json " + v
@@ -363,39 +210,6 @@ func (*runner) checkJSONCodec() Check {
 		msg += " (GOEXPERIMENT=jsonv2; faster marshaling)"
 	}
 	return Check{Name: "json codec", Status: StatusOK, Message: msg}
-}
-
-// checkReflinkSupport verifies whether the cache directory's filesystem
-// supports CoW reflinks. Reflinks make cache replays O(1); without them
-// replayBlob falls back to hard-link then io.Copy.
-func (r *runner) checkReflinkSupport() Check {
-	cacheDir := filepath.Join(r.root, ".magus")
-	if d := r.opts.cfg.Cache.Dir; d != "" {
-		if filepath.IsAbs(d) {
-			cacheDir = filepath.Clean(d)
-		} else {
-			cacheDir = filepath.Join(r.root, d)
-		}
-	}
-	if _, err := os.Stat(cacheDir); errors.Is(err, os.ErrNotExist) {
-		return Check{
-			Name:    "reflink support",
-			Status:  StatusOK,
-			Message: "cache dir not yet created; check skipped",
-		}
-	}
-	if reflink.Probe(cacheDir) {
-		return Check{
-			Name:    "reflink support",
-			Status:  StatusOK,
-			Message: "filesystem supports CoW; cache replays are O(1)",
-		}
-	}
-	return Check{
-		Name:    "reflink support",
-		Status:  StatusWarn,
-		Message: "cache replay falls back to hardlink/copy; btrfs, xfs (reflink=1), or APFS give O(1) replays",
-	}
 }
 
 func (r *runner) checkConfigFile() Check {
@@ -529,196 +343,13 @@ func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
 	if err := cmd.Run(); err != nil {
 		return Check{
 			Name:    "vcs base ref",
-			Status:  StatusWarn,
+			Status:  StatusFail,
 			Message: fmt.Sprintf("base_ref %q not reachable (set MAGUS_VCS_BASE_REF to a reachable ref)", res.Base),
 			Details: []string{fmt.Sprintf("%s exited: %v", res.Name, err)},
 		}
 	}
 
-	if res.Name == "git" {
-		dctx, dcancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer dcancel()
-		if err := exec.CommandContext(dctx, "git", "-C", root, "symbolic-ref", "--quiet", "HEAD").Run(); err != nil {
-			return Check{
-				Name:    "vcs base ref",
-				Status:  StatusWarn,
-				Message: fmt.Sprintf("base_ref %q resolves but HEAD is detached; affected diff base may be unexpected", res.Base),
-			}
-		}
-	}
-
 	return Check{Name: "vcs base ref", Status: StatusOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
-}
-
-// Hardcoded thresholds for the graph health checks. These are tuned to be
-// sensible across most monorepos; use health.exempt to suppress individual
-// projects rather than raising the thresholds.
-const (
-	healthNearCycleDepth  = 3    // max cycle length to probe for near-cycles
-	healthFanOutWarn      = 20   // direct-dependency count that triggers a warning
-	healthBlastRadiusWarn = 0.20 // fraction of workspace above which a project warns
-	healthNCCDWarn        = 2.0  // Normalized CCD above which workspace-wide tangle warns
-)
-
-func (r *runner) checkNearCycles(g *types.Graph) Check {
-	const depth = healthNearCycleDepth
-	ncs := g.NearCycles(context.Background(), depth)
-	if len(ncs) == 0 {
-		return Check{
-			Name:    "near-cyclical edges",
-			Status:  StatusOK,
-			Message: fmt.Sprintf("no pairs within %d hops of a cycle", depth),
-		}
-	}
-	details := make([]string, 0, min(5, len(ncs)))
-	for i, nc := range ncs {
-		if i >= 5 {
-			break
-		}
-		hops := len(nc.BackPath)
-		details = append(details, fmt.Sprintf(
-			"%s -> %s would close a %d-cycle (path: %s)",
-			nc.From, nc.To, hops, strings.Join(nc.BackPath, " -> "),
-		))
-	}
-	if len(ncs) > 5 {
-		details = append(details, fmt.Sprintf("(+%d more)", len(ncs)-5))
-	}
-	return Check{
-		Name:    "near-cyclical edges",
-		Status:  StatusWarn,
-		Message: fmt.Sprintf("%d pair(s) within %d hops of forming a cycle", len(ncs), depth),
-		Details: details,
-	}
-}
-
-func (r *runner) checkFanOut(projects []*types.Project) Check {
-	const threshold = healthFanOutWarn
-
-	type offender struct {
-		path   string
-		fanOut int
-	}
-	var offenders []offender
-	maxFO, maxPath := 0, ""
-	for _, p := range projects {
-		fo := len(p.DependsOn)
-		if fo > maxFO {
-			maxFO, maxPath = fo, p.Path
-		}
-		if fo > threshold {
-			offenders = append(offenders, offender{p.Path, fo})
-		}
-	}
-	if len(offenders) == 0 {
-		msg := "all projects within threshold"
-		if maxPath != "" {
-			msg = fmt.Sprintf("max %d direct dep(s) in %s", maxFO, maxPath)
-		}
-		return Check{Name: "dependency fan-out", Status: StatusOK, Message: msg}
-	}
-
-	slices.SortFunc(offenders, func(a, b offender) int {
-		if a.fanOut != b.fanOut {
-			return cmp.Compare(b.fanOut, a.fanOut)
-		}
-		return cmp.Compare(a.path, b.path)
-	})
-	details := make([]string, 0, min(5, len(offenders)))
-	for i, o := range offenders {
-		if i >= 5 {
-			break
-		}
-		details = append(details, fmt.Sprintf("%s: %d direct dep(s) (threshold: %d)", o.path, o.fanOut, threshold))
-	}
-	if len(offenders) > 5 {
-		details = append(details, fmt.Sprintf("(+%d more)", len(offenders)-5))
-	}
-	return Check{
-		Name:    "dependency fan-out",
-		Status:  StatusWarn,
-		Message: fmt.Sprintf("%d project(s) exceed %d direct dep(s)", len(offenders), threshold),
-		Details: details,
-	}
-}
-
-func (r *runner) checkBlastRadius(g *types.Graph, projects []*types.Project) Check {
-	total := len(projects)
-	if total == 0 {
-		return Check{Name: "change blast radius", Status: StatusOK, Message: "no projects"}
-	}
-	const threshold = healthBlastRadiusWarn
-	br := g.BlastRadius()
-
-	exempt := make(map[string]struct{}, len(r.opts.cfg.Health.Exempt))
-	for _, e := range r.opts.cfg.Health.Exempt {
-		exempt[e] = struct{}{}
-	}
-
-	type offender struct {
-		path  string
-		count int
-		pct   float64
-	}
-	var offenders []offender
-	maxPct, maxPath := 0.0, ""
-	for path, count := range br {
-		if _, skip := exempt[path]; skip {
-			continue
-		}
-		pct := float64(count) / float64(total)
-		if pct > maxPct {
-			maxPct, maxPath = pct, path
-		}
-		if pct > threshold {
-			offenders = append(offenders, offender{path, count, pct})
-		}
-	}
-	if len(offenders) == 0 {
-		msg := "all projects within threshold"
-		if maxPath != "" {
-			msg = fmt.Sprintf("max %.0f%% blast radius (%s)", maxPct*100, maxPath)
-		}
-		return Check{Name: "change blast radius", Status: StatusOK, Message: msg}
-	}
-
-	slices.SortFunc(offenders, func(a, b offender) int {
-		if a.pct != b.pct {
-			return cmp.Compare(b.pct, a.pct)
-		}
-		return cmp.Compare(a.path, b.path)
-	})
-	details := make([]string, 0, min(5, len(offenders)))
-	for i, o := range offenders {
-		if i >= 5 {
-			break
-		}
-		details = append(details, fmt.Sprintf("%s: %d/%d projects (%.0f%%)", o.path, o.count, total, o.pct*100))
-	}
-	if len(offenders) > 5 {
-		details = append(details, fmt.Sprintf("(+%d more)", len(offenders)-5))
-	}
-	return Check{
-		Name:    "change blast radius",
-		Status:  StatusWarn,
-		Message: fmt.Sprintf("%d project(s) rebuild >%.0f%% of the workspace when changed", len(offenders), threshold*100),
-		Details: details,
-	}
-}
-
-func (r *runner) checkDependencyTangle(g *types.Graph) Check {
-	nccd := g.NCCD()
-	const threshold = healthNCCDWarn
-	msg := fmt.Sprintf("NCCD=%.2f (healthy: <%.1f)", nccd, threshold)
-	if nccd > threshold {
-		return Check{
-			Name:    "dependency tangle (NCCD)",
-			Status:  StatusWarn,
-			Message: msg,
-			Details: []string{"NCCD > 1.0 indicates more coupling than a balanced binary tree; > 2.0 suggests significant tangling that may slow CI"},
-		}
-	}
-	return Check{Name: "dependency tangle (NCCD)", Status: StatusOK, Message: msg}
 }
 
 func (*runner) checkEnvVars() Check {
@@ -755,18 +386,19 @@ func (*runner) checkEnvVars() Check {
 	slices.Sort(unknown)
 	return Check{
 		Name:    "environment variables",
-		Status:  StatusWarn,
+		Status:  StatusFail,
 		Message: fmt.Sprintf("%d unknown MAGUS_* variable(s); typos?", len(unknown)),
 		Details: unknown,
 	}
 }
 
-// checkTargetNameConventions warns when a workspace declares target functions
+// checkTargetNameConventions fails when a workspace declares target functions
 // using more than one naming convention (snake_case, camelCase, PascalCase).
-// magus normalizes all of them to the same canonical kebab-case target, so this
-// never breaks resolution — but a consistent source convention keeps invocations
-// greppable. Single-word, all-lowercase names (build, test) are convention-neutral
-// and ignored.
+// magus normalizes every target name, so a target can be invoked in any casing;
+// this check does not restrict which casing you use. It only requires the
+// workspace to pick ONE convention and stay consistent, which keeps invocations
+// greppable. Single-word, all-lowercase names (build, test) are
+// convention-neutral and ignored.
 func (r *runner) checkTargetNameConventions(projects []*types.Project) Check {
 	conventions := map[string]string{} // convention → first "name (file)" example
 	for _, p := range projects {
@@ -797,9 +429,9 @@ func (r *runner) checkTargetNameConventions(projects []*types.Project) Check {
 	slices.Sort(details)
 	return Check{
 		Name:   "target name conventions",
-		Status: StatusWarn,
-		Message: fmt.Sprintf("target names mix %d naming conventions; magus normalizes all to "+
-			"kebab-case so resolution still works, but pick one for greppable invocations", len(conventions)),
+		Status: StatusFail,
+		Message: fmt.Sprintf("target names mix %d naming conventions; magus normalizes any casing so they "+
+			"all resolve, but the workspace must pick one convention for consistent, greppable invocations", len(conventions)),
 		Details: details,
 	}
 }
@@ -812,7 +444,7 @@ func nameConvention(name string) string {
 		return "snake_case"
 	}
 	if strings.IndexFunc(name, unicode.IsUpper) < 0 {
-		return "" // all lowercase, no delimiter — neutral
+		return "" // all lowercase, no delimiter, neutral
 	}
 	if unicode.IsUpper(rune(name[0])) {
 		return "PascalCase"
@@ -960,7 +592,7 @@ func (r *runner) checkCharmTargetCollision(projects []*types.Project) Check {
 	slices.Sort(details)
 	return Check{
 		Name:   "charm/target name collisions",
-		Status: StatusWarn,
+		Status: StatusFail,
 		Message: fmt.Sprintf("%d charm name(s) also name a target; the `target:charm` suffix "+
 			"makes these ambiguous to read and debug — rename one side", len(details)),
 		Details: details,
@@ -981,168 +613,6 @@ func declaredCharmNames(path string) []string {
 		names = append(names, n.Charms...)
 	}
 	return names
-}
-
-// checkMergeDriver warns when one or more projects declare Outputs but the
-// VCS merge driver is not installed. This check is informational (warn, not
-// fail): conflicts in generated outputs are annoying but resolvable manually.
-func (r *runner) checkMergeDriver() Check {
-	if r.ws == nil {
-		return Check{Name: "merge driver", Status: StatusOK, Message: "workspace unavailable; skipped"}
-	}
-	// Count projects with declared outputs.
-	var withOutputs int
-	for _, p := range r.ws.All() {
-		if len(p.Outputs) > 0 {
-			withOutputs++
-		}
-	}
-	if withOutputs == 0 {
-		return Check{Name: "merge driver", Status: StatusOK, Message: "no projects declare Outputs; nothing to wire"}
-	}
-
-	res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions())
-	if err != nil || res.VCS == nil {
-		return Check{Name: "merge driver", Status: StatusOK, Message: "vcs unavailable; skipped"}
-	}
-
-	installer, ok := res.VCS.(types.MergeDriverInstaller)
-	if !ok {
-		return Check{
-			Name:    "merge driver",
-			Status:  StatusOK,
-			Message: fmt.Sprintf("%s does not support automatic merge-driver installation", res.Name),
-		}
-	}
-
-	installed, err := installer.CheckMergeDriver(context.Background(), r.root)
-	if err != nil {
-		return Check{Name: "merge driver", Status: StatusWarn, Message: fmt.Sprintf("check failed: %v", err)}
-	}
-	if !installed {
-		return Check{
-			Name:    "merge driver",
-			Status:  StatusWarn,
-			Message: fmt.Sprintf("%d project(s) declare Outputs but the merge driver is not installed", withOutputs),
-			Details: []string{
-				"run `magus init` once per clone to regenerate conflicted outputs automatically",
-			},
-		}
-	}
-	return Check{
-		Name:    "merge driver",
-		Status:  StatusOK,
-		Message: fmt.Sprintf("installed (%d project(s) with declared outputs)", withOutputs),
-	}
-}
-
-func (r *runner) checkMCPServer() Check {
-	s := r.opts.mcpStatus
-	if s == nil || !s.Compiled {
-		return Check{
-			Name:    "MCP server",
-			Status:  StatusOK,
-			Message: "not compiled in (build without -tags mcp)",
-		}
-	}
-	if !s.Enabled {
-		return Check{
-			Name:    "MCP server",
-			Status:  StatusOK,
-			Message: "disabled via mcp.enabled=false",
-		}
-	}
-	addr := s.Address
-	if addr == "" {
-		addr = "127.0.0.1:7391"
-	}
-	if !s.DaemonUp {
-		return Check{
-			Name:    "MCP server",
-			Status:  StatusWarn,
-			Message: "MCP is only served in daemon mode; run `magus server start` to enable",
-			Details: []string{
-				"once running, MCP will be available at http://" + addr + "/mcp",
-				`Claude Desktop / IDE: { "type": "streamable-http", "url": "http://` + addr + `/mcp" }`,
-			},
-		}
-	}
-	return Check{
-		Name:    "MCP server",
-		Status:  StatusOK,
-		Message: "daemon is running; MCP available at http://" + addr + "/mcp",
-	}
-}
-
-// checkDaemonReachability dials the configured daemon socket and reports
-// whether it's alive. Warns if the socket is configured but unreachable, or
-// if the daemon's version differs from this binary's version. No daemon is not
-// an error — this check is informational.
-func (r *runner) checkDaemonReachability() Check {
-	d := r.opts.daemonInfo
-	if d == nil {
-		return Check{Name: "daemon", Status: StatusOK, Message: "no daemon configured"}
-	}
-	if !d.Reachable {
-		return Check{
-			Name:    "daemon",
-			Status:  StatusWarn,
-			Message: fmt.Sprintf("daemon not responding at %s", d.SockAddr),
-		}
-	}
-	msg := fmt.Sprintf("pid %d  capacity %d  in-use %d  waiting %d", d.ParentPID, d.Capacity, d.InUse, d.Waiting)
-	if d.DaemonVersion != "" && r.opts.version != "" && d.DaemonVersion != r.opts.version {
-		return Check{
-			Name:    "daemon",
-			Status:  StatusWarn,
-			Message: msg,
-			Details: []string{
-				fmt.Sprintf("version skew: daemon %s vs CLI %s", d.DaemonVersion, r.opts.version),
-				"run `magus server stop && magus server start` to restart with the current binary",
-			},
-		}
-	}
-	return Check{Name: "daemon", Status: StatusOK, Message: msg}
-}
-
-// checkConcurrencyBudget warns when this workspace's configured concurrency
-// exceeds the daemon's effective capacity, or when the pool is currently
-// saturated. Skipped when no daemon is running.
-func (r *runner) checkConcurrencyBudget() Check {
-	d := r.opts.daemonInfo
-	if d == nil || !d.Reachable {
-		return Check{Name: "concurrency budget", Status: StatusOK, Message: "no daemon running"}
-	}
-	wsConcurrency := r.opts.cfg.Concurrency
-	if wsConcurrency <= 0 {
-		wsConcurrency = 0 // "default" — not a mismatch
-	}
-	var details []string
-	if wsConcurrency > 0 && wsConcurrency > d.Capacity {
-		details = append(details, fmt.Sprintf(
-			"workspace concurrency %d exceeds daemon capacity %d — lower concurrency in magus.yaml or restart daemon with higher --concurrency",
-			wsConcurrency, d.Capacity,
-		))
-	}
-	if d.Waiting > 0 && d.InUse >= d.Capacity {
-		details = append(details, fmt.Sprintf(
-			"%d task(s) waiting for a slot — daemon pool is saturated (capacity %d)",
-			d.Waiting, d.Capacity,
-		))
-	}
-	if len(details) > 0 {
-		return Check{
-			Name:    "concurrency budget",
-			Status:  StatusWarn,
-			Message: fmt.Sprintf("daemon capacity %d / in-use %d / waiting %d", d.Capacity, d.InUse, d.Waiting),
-			Details: details,
-		}
-	}
-	return Check{
-		Name:    "concurrency budget",
-		Status:  StatusOK,
-		Message: fmt.Sprintf("daemon capacity %d  in-use %d  waiting %d", d.Capacity, d.InUse, d.Waiting),
-	}
 }
 
 // checkWorkspaceRegistration reports whether this workspace is currently
@@ -1186,9 +656,9 @@ func (r *runner) checkWorkspaceRegistration() Check {
 	}
 }
 
-// checkStaleSockets scans the magus socket directory and warns when there are
-// stale (dead) per-process sockets alongside a running stable daemon, or when
-// multiple live daemons are detected. With --fix, removes dead sockets.
+// checkStaleSockets scans the magus socket directory. Multiple live daemons
+// fail the check; leftover dead sockets are harmless and reported only as
+// context.
 func (r *runner) checkStaleSockets() Check {
 	sockDir := r.opts.daemonInfo.sockDirOrDefault()
 	if sockDir == "" {
@@ -1200,7 +670,7 @@ func (r *runner) checkStaleSockets() Check {
 		if os.IsNotExist(err) {
 			return Check{Name: "sockets", Status: StatusOK, Message: "no socket directory"}
 		}
-		return Check{Name: "sockets", Status: StatusWarn, Message: fmt.Sprintf("scan %s: %v", sockDir, err)}
+		return Check{Name: "sockets", Status: StatusFail, Message: fmt.Sprintf("scan %s: %v", sockDir, err)}
 	}
 
 	var stale, live []string
@@ -1230,22 +700,22 @@ func (r *runner) checkStaleSockets() Check {
 		}
 	}
 
-	if r.opts.fix && len(stale) > 0 {
-		for _, p := range stale {
-			_ = os.Remove(p)
+	// Multiple live daemons is a real conflict; leftover dead sockets are
+	// harmless cruft, so stale-only no longer fails the check.
+	if len(live) > 1 {
+		return Check{
+			Name:    "sockets",
+			Status:  StatusFail,
+			Message: fmt.Sprintf("%d live daemon sockets - multiple daemons running", len(live)),
+			Details: details,
 		}
-		details = append(details, fmt.Sprintf("removed %d stale socket(s)", len(stale)))
 	}
-
-	status := StatusWarn
-	if len(live) > 1 {
-		status = StatusFail
+	return Check{
+		Name:    "sockets",
+		Status:  StatusOK,
+		Message: fmt.Sprintf("%d stale socket(s)", len(stale)),
+		Details: details,
 	}
-	msg := fmt.Sprintf("%d stale socket(s)", len(stale))
-	if len(live) > 1 {
-		msg = fmt.Sprintf("%d live daemon sockets — multiple daemons running", len(live))
-	}
-	return Check{Name: "sockets", Status: status, Message: msg, Details: details}
 }
 
 // sockDirOrDefault returns the daemon's socket directory, or "" when unset.
@@ -1268,9 +738,4 @@ func isSocketAlive(path string) bool {
 	}
 	_ = conn.Close()
 	return true
-}
-
-// applyFixes attempts to auto-remediate fixable checks.
-func (*runner) applyFixes(_ []*types.Project) []FixResult {
-	return nil
 }

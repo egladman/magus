@@ -485,7 +485,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.`
 
 	flagRoot        = `Workspace root. Default: walk up from cwd until go.mod is found. Must precede the subcommand.`
 	flagConfig      = `Config file path. Default: search for magus.yaml in CWD, workspace root, and $XDG_CONFIG_HOME/magus/. Must precede the subcommand.`
-	flagOutput      = `Output format: text (default), json, yaml, name, wide, or template=<go-template>. Honoured by subcommands that emit structured data.`
+	flagOutput      = `Output format: text (default), json, yaml, name, or template=<go-template>. Honoured by subcommands that emit structured data.`
 	flagConcurrency = `Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).`
 	flagVerbose     = `Increase log verbosity. Repeat for more detail (-v, -vv, -vvv).`
 

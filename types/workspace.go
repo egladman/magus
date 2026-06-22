@@ -28,10 +28,6 @@ type Workspace struct {
 	// VCSOptions holds explicit VCS configuration injected at construction time.
 	VCSOptions VCSOptions
 
-	// Strict gates (*Workspace).Graph: unregistered deps become ErrUnregisteredDep
-	// instead of silently dropped edges.
-	Strict bool
-
 	// graphObs is the default observer for Graph calls. Use ContextWithGraphObserver
 	// for concurrent callers (daemon) — SetGraphObserver is only safe for a sole owner.
 	graphObsMu sync.RWMutex

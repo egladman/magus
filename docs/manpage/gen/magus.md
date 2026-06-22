@@ -29,7 +29,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Config file path. Default: search for magus.yaml in CWD, workspace root, and $XDG_CONFIG_HOME/magus/. Must precede the subcommand.
 
 **--output** *fmt*, **-o** *fmt*
-: Output format: text (default), json, yaml, name, wide, or template=\<go-template\>. Honoured by subcommands that emit structured data.
+: Output format: text (default), json, yaml, name, or template=\<go-template\>. Honoured by subcommands that emit structured data.
 
 **--concurrency** *N*
 : Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).
@@ -118,9 +118,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_DRY_RUN**
 : When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: **dry_run**.
-
-**MAGUS_STRICT**
-: When 1 or true, workspace correctness warnings (e.g. unregistered dependencies) become errors that fail the run (default: false). Equivalent magus.yaml key: **strict**.
 
 **MAGUS_VCS_ENABLED**
 : Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: **vcs.enabled**.

@@ -28,7 +28,6 @@ func TestResolveOutput(t *testing.T) {
 	assertResolve("yaml", outputYAML, "")
 	assertResolve("jsonl", outputJSONL, "")
 	assertResolve("name", outputName, "")
-	assertResolve("wide", FormatWide, "")
 	assertResolve("template={{.Path}}", outputTemplate, "{{.Path}}")
 	assertResolve(
 		`template={{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`, outputTemplate,

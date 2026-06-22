@@ -50,7 +50,6 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by flake detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")
 	fs.BoolVar(&cfg.DryRun, "u", cfg.DryRun, "Short for --dry-run")
-	fs.BoolVar(&cfg.Strict, "strict", cfg.Strict, "MAGUS_STRICT: Strict turns correctness warnings into errors (e.g. unregistered deps → ErrUnregisteredDep). Equivalent to MAGUS_ST...")
 	fs.BoolVar(&cfg.AssumeInteractive, "assume-interactive", cfg.AssumeInteractive, "MAGUS_ASSUME_INTERACTIVE: AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.")
 	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED: MAGUS_SANDBOX_ENABLED")
 }

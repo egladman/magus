@@ -132,14 +132,6 @@ func init() {
 			Usage:    "MAGUS_GRAPH_ROOTS: MAGUS_GRAPH_ROOTS",
 		},
 		{
-			GoPath:   "Health.Exempt",
-			YamlPath: "health.exempt",
-			EnvVar:   "MAGUS_HEALTH_EXEMPT",
-			Flag:     FlagNames{Long: ""},
-			Kind:     KindStringSlice,
-			Usage:    "MAGUS_HEALTH_EXEMPT: MAGUS_HEALTH_EXEMPT",
-		},
-		{
 			GoPath:   "Telemetry.Enabled",
 			YamlPath: "telemetry.enabled",
 			EnvVar:   "MAGUS_TELEMETRY_ENABLED",
@@ -322,14 +314,6 @@ func init() {
 			Flag:     FlagNames{Long: "dry-run", Short: "u"},
 			Kind:     KindBool,
 			Usage:    "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.",
-		},
-		{
-			GoPath:   "Strict",
-			YamlPath: "strict",
-			EnvVar:   "MAGUS_STRICT",
-			Flag:     FlagNames{Long: "strict"},
-			Kind:     KindBool,
-			Usage:    "MAGUS_STRICT: Strict turns correctness warnings into errors (e.g. unregistered deps → ErrUnregisteredDep). Equivalent to MAGUS_ST...",
 		},
 		{
 			GoPath:   "AssumeInteractive",

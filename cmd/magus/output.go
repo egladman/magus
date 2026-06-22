@@ -174,7 +174,6 @@ const (
 	FormatYAML     Format = "yaml"
 	FormatJSONL    Format = "jsonl" // one JSON object per line; streams elements of the primary collection field
 	FormatName     Format = "name"
-	FormatWide     Format = "wide"
 	FormatTemplate Format = "template" // -o template=<go-template>
 
 	// Graph-only output formats. Not accepted by other commands.
@@ -186,7 +185,7 @@ const (
 
 // CommonFormats are the formats every structured command accepts. The
 // template= form is handled separately by ResolveOutput.
-var CommonFormats = []Format{FormatText, FormatJSON, FormatYAML, FormatJSONL, FormatName, FormatWide}
+var CommonFormats = []Format{FormatText, FormatJSON, FormatYAML, FormatJSONL, FormatName}
 
 // OutputOptions is the parsed -o value; Template is set when Format is FormatTemplate.
 // Obtain one from ResolveOutput — the zero value (empty Format) is not a valid
