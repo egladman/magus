@@ -1,6 +1,6 @@
 module github.com/egladman/magus
 
-go 1.25.10
+go 1.25
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
@@ -279,9 +279,4 @@ tool (
 	golang.org/x/vuln/cmd/govulncheck
 )
 
-// gopherbuzz is the embedded scripting-language module (Buzz VM) for magus. It is
-// a separate Go module (module github.com/egladman/gopherbuzz) developed in-tree
-// under ./gopherbuzz rather than published as an external repository, so there is
-// no upstream to sync from: the local sources ARE the source of truth and this
-// replace points the import path at them. Released tags (v0.0.0 above) are nominal.
 replace github.com/egladman/gopherbuzz => ./gopherbuzz
