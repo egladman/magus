@@ -140,7 +140,8 @@ func emitBuzz(m std.Module) ([]byte, error) {
 
 	out, err := format.Source(b.Bytes())
 	if err != nil {
-		return b.Bytes(), fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+		// Return nil on failure: the unformatted buffer is known-bad Go.
+		return nil, fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
 	}
 	return out, nil
 }

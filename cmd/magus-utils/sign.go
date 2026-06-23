@@ -41,7 +41,7 @@ func runSign(args []string) error {
 	sig := ed25519.Sign(ed25519.PrivateKey(keyBytes), data)
 
 	outPath := path + ".sig"
-	if err := os.WriteFile(outPath, sig, 0644); err != nil {
+	if err := os.WriteFile(outPath, sig, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
 	fmt.Printf("signed %s -> %s\n", path, outPath)
