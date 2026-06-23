@@ -45,6 +45,9 @@ The cache, the daemon socket, and the run log are all files on disk. Inspect the
 
 ## Install
 
+TODO
+
+<!--
 ### From a release binary
 
 Download the latest release for your platform from the [releases page](https://github.com/egladman/magus/releases), extract the archive, and run:
@@ -76,6 +79,7 @@ Once installed, update in place with:
 ```sh
 magus self update
 ```
+-->
 
 ---
 
@@ -346,49 +350,6 @@ MAGUS_CONCURRENCY=4 magus run build
 When a [daemon](#running-magus-as-a-daemon) is running, all clients share a single concurrency pool. Parallel CI steps and nested `magus` invocations all draw from the same budget.
 
 `magus status` shows the live pool state and current slot usage.
-
----
-
-## Magusfile.buzz
-
-Magusfiles are written in [Buzz](https://buzz-lang.dev/) and executed in-process
-through an embedded Buzz VM.
-
-No Go toolchain. No `go.mod`. No network access.
-
-```buzz
-import "magus";
-import "os";
-import "magus/spell/go";
-
-magus.project({
-    "spells": [go],
-});
-
-export fun build_server(args: [str]) > void {
-    os.exec("go", ["build", "-o", "bin/server", "./cmd/server"]);
-}
-```
-
-### Runtime API: three tiers
-
-Magusfiles see three distinct namespaces:
-
-| Tier                | Examples                                                                                                                | What it is                                                                              |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| **Language stdlib** | `std`, `os`, `fs`, `math` (`import "std"`, ...)                                                                          | Buzz built-ins, untouched                                                               |
-| **`magus.*`**       | `magus.project`, `magus.needs`, `magus.target.literal/glob/regex/external`, `magus.cmd` | Build DSL: the primary authoring surface; targets are declared as exported functions   |
-| **Host modules**    | `os`, `fs`, `vcs`, ... (`import "os"`, `import "fs"`, ...)                                                               | Runtime utilities: magus methods layered onto Buzz's own stdlib module names (a superset) |
-
-```buzz
-import "os";    // os.exec, os.which, … (plus Buzz's own os.sleep/env)
-import "fs";    // fs.glob, fs.readFile, …
-import "vcs";   // vcs.shortHash, vcs.describe, …
-```
-
-`os.exec` runs a command directly (no shell, injection-proof); `os.execSh` runs through the shell for pipes and globs. Both stream output live and return `ExecResult {stdout, stderr, code, ok}`, raising on non-zero exit unless called with `{allowFailure: true}`. Full module reference: **[docs/modules/index.md](docs/modules/index.md)**.
-
-Logging lives on `magus` itself: `magus.info/debug/warn/error(msg, fields?)`, `magus.hint(msg)` (deduped advisory, no exit-code effect), `magus.fatal(msg)` (logs and aborts).
 
 ---
 
