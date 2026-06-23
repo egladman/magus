@@ -1,119 +1,79 @@
-// magusfile.buzz — gopherbuzz, a standalone Go module (github.com/egladman/gopherbuzz).
+// magusfile.buzz for gopherbuzz, a standalone Go module
+// (github.com/egladman/gopherbuzz). Sets it up as its own magus project, scoped to
+// its go.mod.
 //
-// gopherbuzz is the Go reimplementation of the Buzz scripting language embedded
-// in magusfiles. It lives in its own module so it can be consumed independently
-// of the magus tree; this magusfile makes it a first-class magus project with the
-// built-in go spell, scoped to its own go.mod.
-//
-//   magus run build gopherbuzz         -- compile the package
-//   magus run test gopherbuzz          -- run the Go test suite
-//   magus run ci gopherbuzz            -- lint, build, and test (the affected anchor)
-//   magus run pgo-generate gopherbuzz  -- regenerate the VM's PGO profile
+//   magus run build gopherbuzz         compile the package
+//   magus run test gopherbuzz          run the Go test suite
+//   magus run ci gopherbuzz            lint, build, and test
+//   magus run pgo-generate gopherbuzz  regenerate the VM's PGO profile
 
 import "magus";
 
-// The go spell claims **/*.go and the module files, so editing Go sources here
-// marks this project affected for `magus affected ci`. The magusfile spell tracks
-// this file as a source and dispatches its custom export-fun targets.
+// go spell: claims **/*.go and the module files. magusfile spell: makes this file's
+// export-fun targets runnable. Both are listed because the explicit "spells" below
+// replaces the default set.
 import "magus/spell/magusfile";
 import "magus/spell/go";
 
-// magus host modules for the pgo-generate target: os.exec forks the benchmark
-// run; fs reads the captured profile and commits it. Buzz's own stdlib lacks
-// live-streaming exec and raw file read/write, so these magus methods supply them.
+// os.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
+// neither streaming exec nor raw file IO).
 import "os";
 import "fs";
 
 magus.project({
-    // The magusfile spell dispatches this file's custom export-fun targets
-    // (generate, md-generate, …); the go spell claims **/*.go and the module
-    // files. Listing spells explicitly replaces the default set, so magusfile
-    // must be named here or the custom targets won't run.
     "spells": [magusfile, go],
-    // MAGUS.md is the generated target catalog; the cache snapshots it after
-    // generate so a hit restores it without re-describing.
+    // Generated catalog; cached so a hit restores it without re-describing.
     "outputs": ["MAGUS.md"],
     "targets": {
-        // pgo-generate writes a fresh, non-deterministic profile from the live VM; a
-        // cache hit would replay a stale one instead of re-sampling, so it must run
-        // every time it's invoked.
+        // Profiles the live VM; a cache hit would replay a stale profile.
         "pgo-generate": {"skipCache": true},
-        // generate drift-gates MAGUS.md, so it inspects `git status`: run alone
-        // (exclusive) and every time (skipCache: true), mirroring the root project.
+        // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skipCache": true, "exclusive": true},
     },
 });
 
-// ── targets ──────────────────────────────────────────────────────────────────
-// Each exported function is a runnable target, delegating to the go spell's
-// tool-native ops. gopherbuzz is a pure library module, so the pipeline is the
-// Go lifecycle plus md-generate, which renders the project's MAGUS.md catalog.
+// Targets. Each delegates to the go spell's ops; gopherbuzz is a pure library, so the
+// pipeline is the Go lifecycle plus md-generate.
 
-export fun preflight(_args: [str]) > void {}
+export fun preflight(args: [str]) > void {}
 
-// generate regenerates MAGUS.md and gates on drift, mirroring the root project: a
-// cache hit would skip the check, so it runs every time. Run the `rw` charm
-// (`generate:rw gopherbuzz`) to keep the result instead of gating.
-export fun generate(_args: [str]) > void {
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"), magus.target.literal("md-generate"));
     if (magus.has_charm("rw")) { return; }
 
     final drift = os.exec("git", ["status", "--porcelain", "--", "MAGUS.md"]).stdout;
     if (drift != "") {
-        throw "generate: MAGUS.md drifted after regeneration; re-run "
-            + "`magus run generate:rw gopherbuzz` and commit:\n" + drift;
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw gopherbuzz` and commit:\n" + drift;
     }
 }
 
-// md-generate renders MAGUS.md (the target catalog + dependency graph) via
-// `magus describe graph`, parsed statically from this magusfile so it stays in
-// lockstep with the project's targets. Re-run after editing targets and commit:
-// `magus run md-generate gopherbuzz`.
-export fun md_generate(_args: [str]) > void {
+// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+export fun md_generate(args: [str]) > void {
     final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
-export fun format(_args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); }
-export fun lint(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
-export fun build(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }
-export fun test(_args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-test"](); }
+export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); }
+export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
+export fun build(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }
+export fun test(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-test"](); }
 
-// 'ci' is the conventional anchor `magus affected ci` keys off; it fans out
-// lint/build/test in parallel, each waiting on format.
-export fun ci(_args: [str]) > void {
+// The anchor `magus affected ci` keys off; fans out lint/build/test after format.
+export fun ci(args: [str]) > void {
     magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }
 
-// ── pgo ───────────────────────────────────────────────────────────────────────
-// Regenerate default.pgo — the profile-guided optimization profile for the Buzz
-// VM. Go's PGO goes stale as the VM evolves; re-run this after material changes to
-// the interpreter hot path (vm/vm.go dispatch, opcode handlers).
-//
-// How PGO is wired here:
-//   - The canonical profile lives at gopherbuzz/default.pgo (co-located with
-//     the VM it optimizes and the benchmarks that gate it).
-//   - cmd/magus/default.pgo is a symlink to it, so `go build ./cmd/magus`
-//     (-pgo=auto is the default) auto-applies the profile to the binary and its
-//     transitive deps, including the VM. A default.pgo in a *library* dir is NOT
-//     auto-detected — only main packages are — which is why the symlink exists.
-//   - Benchmark gating uses `-pgo=./default.pgo` explicitly (go test does not
-//     auto-detect default.pgo for the test binary).
-//
-// Two benchmarks (ForeachList, DirectCall) are excluded: they call range() without
-// `import "std"` and fail at setup — a pre-existing harness bug, unrelated to PGO.
-//
-// The profile is captured to a sibling temp file first, then committed to
-// default.pgo only if it's non-empty — so a run that produces nothing (every bench
-// failing at setup) can't clobber a good profile. allow_failure mirrors the shell
-// `|| true`: the excluded benches still exit the run non-zero, but the profile is
-// what matters, not the exit code.
-export fun pgo_generate(_args: [str]) > void {
-    // The interpreter-hot benches; benchtime=1s gives enough samples that VM.Exec
-    // dominates cumulative time. Keep this set in sync with the gating benches.
+// Regenerates default.pgo, the Buzz VM's PGO profile. Re-run after material changes to
+// the interpreter hot path. The canonical profile lives here; cmd/magus/default.pgo
+// symlinks to it so `go build ./cmd/magus` (-pgo=auto) applies it.
+export fun pgo_generate(args: [str]) > void {
+    // Interpreter-hot benches; 1s gives enough samples that VM.Exec dominates.
     final bench = "Fib|LoopSum|LoopEq|MethodCall|FieldAccess|Call|ForeachMap|StringInterp";
+    // Excluded: these call range() without `import "std"` and fail at setup.
     final skip = "DirectCall|ForeachList";
     final tmp = "default.pgo.tmp";
 
+    // allow_failure: excluded benches exit non-zero, but only the profile matters.
     os.exec("go", ["test", "-run=^$",
         "-bench=" + bench,
         "-skip=" + skip,
@@ -125,15 +85,11 @@ export fun pgo_generate(_args: [str]) > void {
     }
     final profile = fs.readFile(tmp);
     fs.removeAll(tmp);
+    // Commit only a non-empty profile so a failed run can't clobber a good one.
     if (profile.len() == 0) {
         throw "pgo-generate: empty profile produced";
     }
     fs.writeFile("default.pgo", profile);
     magus.info("wrote default.pgo ({profile.len()} bytes)");
-
-    // Verify the win:
-    //   go test -run='^$' -bench=Call -benchtime=300ms -count=10 -pgo=off . > /tmp/off.txt
-    //   go test -run='^$' -bench=Call -benchtime=300ms -count=10 -pgo=./default.pgo . > /tmp/on.txt
-    //   benchstat /tmp/off.txt /tmp/on.txt
     magus.info("verify: benchstat over -pgo=off vs -pgo=./default.pgo (-bench=Call -count=10)");
 }
