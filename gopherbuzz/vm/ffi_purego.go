@@ -406,8 +406,8 @@ func reflectRetToValue(r reflect.Value, kind CType) Value {
 		// A null pointer (address 0) surfaces as Buzz `null`, not 0, so
 		// `handle != null` nil-checks behave like upstream buzz (a zdef
 		// `?*anyopaque` return is a `ud?` compared against null). Non-null
-		// addresses are carried as float64 to preserve the full 64-bit pointer
-		// (the NaN-boxed int truncates above 2^47); float64 is exact ≤2^53.
+		// addresses are carried as a heap-boxed `ud` (udObj.Addr, a uintptr) to
+		// preserve the full 64-bit pointer; a NaN-boxed int truncates above 2^47.
 		addr := r.Uint()
 		if addr == 0 {
 			return Null

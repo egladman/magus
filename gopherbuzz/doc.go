@@ -18,4 +18,10 @@
 // never == even if their contents match — this avoids O(n) comparison costs
 // in the common case. Compare elements explicitly when content equality is
 // needed.
+//
+// # Heap lifetime
+//
+// Heap objects (strings, lists, maps, objects, userdata) are pinned for the process
+// lifetime: the VM never collects or compacts its heap. Fine for magus's short-lived
+// sessions; a long-running embedder should isolate workloads in separate processes.
 package buzz

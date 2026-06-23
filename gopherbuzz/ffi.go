@@ -59,7 +59,7 @@ var (
 	// CTypeLayout returns the size and alignment in bytes of a C type name.
 	CTypeLayout = vmpackage.CTypeLayout
 	// IsPointerCType reports whether a C/Zig type spelling is a pointer (carried
-	// as a float64 `ud` to preserve the full 64-bit address).
+	// as a heap-boxed `ud` to preserve the full 64-bit address).
 	IsPointerCType = vmpackage.IsPointerCType
 	// StructLayout computes size, alignment, and field offsets of a C struct.
 	StructLayout = vmpackage.StructLayout

@@ -246,8 +246,8 @@ func ReadScalar(addr uintptr, offset int, ctype string) (i int64, f float64, isF
 	}
 }
 
-// isPointerCType reports whether a C/Zig type spelling is a pointer (carried as
-// a float64 `ud`, not an int — see ReadScalar). Covers `*T`, `?*T`, `[*]T`,
+// IsPointerCType reports whether a C/Zig type spelling is a pointer (carried as
+// a heap-boxed `ud`, not an int — see ReadScalar). Covers `*T`, `?*T`, `[*]T`,
 // `[*c]T`, `[*:0]T`, `void*` and the like.
 func IsPointerCType(name string) bool {
 	s := strings.TrimSpace(name)
