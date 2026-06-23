@@ -16,8 +16,8 @@ import (
 // Run CGO_ENABLED=0 first to capture the pure-Go baseline, then
 // CGO_ENABLED=1 for the libzstd path.
 //
-//	go test -bench=BenchmarkZstdCompress -benchmem -count=10 ./magus/internal/codec/ > old.txt  # CGO=0
-//	go test -bench=BenchmarkZstdCompress -benchmem -count=10 ./magus/internal/codec/ > new.txt  # CGO=1
+//	go test -bench=BenchmarkZstdCompress -benchmem -count=10 ./internal/codec/ > old.txt  # CGO=0
+//	go test -bench=BenchmarkZstdCompress -benchmem -count=10 ./internal/codec/ > new.txt  # CGO=1
 //	benchstat old.txt new.txt
 func BenchmarkZstdCompress(b *testing.B) {
 	for _, size := range []int{256 * 1024, 1 << 20, 4 << 20} {

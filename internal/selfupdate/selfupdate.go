@@ -30,7 +30,7 @@ import (
 // Release coordinates and size caps for the self-update download.
 const (
 	ReleaseOwner = "egladman"
-	ReleaseRepo  = "tack"
+	ReleaseRepo  = "magus"
 	MaxManifest  = 64 << 10  // 64 KB
 	MaxSig       = 1 << 10   // 1 KB
 	MaxTarball   = 200 << 20 // 200 MB

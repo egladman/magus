@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magus-insight</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../index.html">Docs</a></li>
+        <li><a href="../../editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="magus-insight">magus-insight</h1>
+<p>Behavioral code analysis from VCS history</p>
+<h2 id="synopsis">Synopsis</h2>
+<p><strong>magus</strong> insight &lt;lens&gt; [flags]</p>
+<h2 id="description">Description</h2>
+<p>Read version-control history to show where a codebase's attention and
+risk concentrate. By default every lens is contextual to the working directory — run
+from inside a subtree and it reflects only that subtree's history; pass --workspace to
+analyze the whole workspace instead (the fan-in postflight uses this). The active VCS
+adapter must report per-commit files (git can).</p>
+<p>Lenses (the first argument):</p>
+<p>hotspots   Edit frequency × complexity — the prime refactoring targets. The
+project view is the dependency graph heat-coloured by churn (with
+authors, recency, blast radius, and CI duration); --files ranks
+individual files by churn × complexity.
+affinity   Projects that change together (temporal coupling). A hidden pair
+co-changes without either declaring a dependency on the other — a
+candidate architectural smell.
+ownership  Author concentration: the primary author and their share, distinct
+author count (bus factor), and abandonment (projects gone quiet).
+trend      The recent half of the window versus the earlier half: a positive
+delta is a rising hotspot, a negative one is cooling.
+report     Every lens as one whole-workspace Markdown document (the magusfile's
+postflight target writes this to the GitHub Actions step summary).</p>
+<p>--commits caps the scan; --since bounds it by date (90d, 12w, 6mo, 1y). Each lens
+accepts -o text|json|yaml|name; hotspots and affinity also render -o mermaid (the
+hotspots file view renders a churn-vs-complexity quadrant chart).</p>
+<h2 id="options">Options</h2>
+<dl>
+<dt><strong>--commits</strong> <em>int</em> (default: 500)</dt>
+<dd>Cap on how many recent commits to scan</dd>
+<dt><strong>--files</strong></dt>
+<dd>hotspots: rank individual files instead of projects</dd>
+<dt><strong>--since</strong> <em>string</em></dt>
+<dd>Only commits within this window (e.g. 90d, 12w, 6mo, 1y)</dd>
+<dt><strong>--workspace</strong></dt>
+<dd>Analyze the whole workspace instead of the current project/subtree</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<p><em>Prime refactoring targets (files)</em></p>
+<pre><code>magus insight hotspots --files
+</code></pre>
+<p><em>Churn-vs-complexity quadrant</em></p>
+<pre><code>magus insight hotspots --files -o mermaid
+</code></pre>
+<p><em>Hidden architectural coupling</em></p>
+<pre><code>magus insight affinity
+</code></pre>
+<p><em>Bus factor and abandonment</em></p>
+<pre><code>magus insight ownership
+</code></pre>
+<p><em>Rising vs cooling activity</em></p>
+<pre><code>magus insight trend --since 90d
+</code></pre>
+<p><em>Whole-workspace report (all lenses)</em></p>
+<pre><code>magus insight report --workspace
+</code></pre>
+<h2 id="see-also">See Also</h2>
+<p><a href="magus.html"><strong>magus</strong>(1)</a>, <a href="magus-ls.html"><strong>magus-ls</strong>(1)</a>, <a href="magus-describe.html"><strong>magus-describe</strong>(1)</a>, <a href="magus-run.html"><strong>magus-run</strong>(1)</a>, <a href="magus-x.html"><strong>magus-x</strong>(1)</a>, <a href="magus-where.html"><strong>magus-where</strong>(1)</a>, <a href="magus-tail.html"><strong>magus-tail</strong>(1)</a>, <a href="magus-affected.html"><strong>magus-affected</strong>(1)</a>, <a href="magus-watch.html"><strong>magus-watch</strong>(1)</a>, <a href="magus-status.html"><strong>magus-status</strong>(1)</a>, <a href="magus-doctor.html"><strong>magus-doctor</strong>(1)</a>, <a href="magus-config.html"><strong>magus-config</strong>(1)</a>, <a href="magus-server.html"><strong>magus-server</strong>(1)</a>, <a href="magus-completion.html"><strong>magus-completion</strong>(1)</a>, <a href="magus-init.html"><strong>magus-init</strong>(1)</a>, <a href="magus-self.html"><strong>magus-self</strong>(1)</a>, <a href="magus-version.html"><strong>magus-version</strong>(1)</a></p>
+    </article>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/manpage/gen/magus-insight.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-20 03:59:44 UTC from commit <a href="https://github.com/egladman/magus/commit/950dded2936d4a8fdd2720ba4a5fdffa65473b8b"><code>950dded</code></a></small>
+  </footer>
+</body>
+</html>

@@ -103,7 +103,7 @@ func (p *Policy) RecordConnect(ctx context.Context, method, rawURL string) {
 		ctx, "[MGS2009] sandbox: outbound network request",
 		"method", method,
 		"url", rawURL,
-		"see", "https://github.com/egladman/tack/blob/main/magus/docs/codes/sandbox/MGS2009.md",
+		"see", "https://github.com/egladman/magus/blob/main/docs/codes/sandbox/MGS2009.md",
 	)
 }
 

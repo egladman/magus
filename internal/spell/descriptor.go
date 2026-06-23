@@ -57,7 +57,7 @@ func ValidatePatch(ops []types.PatchOp) error {
 }
 
 // Descriptor is a spell's static description. For built-ins it is produced by
-// compiling each magus/spells/<name>/spell.buzz to bytecode (go:generate
+// compiling each spells/<name>/spell.buzz to bytecode (go:generate
 // magus-scribe spells), embedding the blob, and resolving its mgs_ functions at load
 // time.
 type Descriptor struct {

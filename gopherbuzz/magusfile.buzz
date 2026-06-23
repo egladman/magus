@@ -90,9 +90,9 @@ export fun ci(_args: [str]) > void {
 // the interpreter hot path (vm/vm.go dispatch, opcode handlers).
 //
 // How PGO is wired here:
-//   - The canonical profile lives at magus/gopherbuzz/default.pgo (co-located with
+//   - The canonical profile lives at gopherbuzz/default.pgo (co-located with
 //     the VM it optimizes and the benchmarks that gate it).
-//   - magus/cmd/magus/default.pgo is a symlink to it, so `go build ./magus/cmd/magus`
+//   - cmd/magus/default.pgo is a symlink to it, so `go build ./cmd/magus`
 //     (-pgo=auto is the default) auto-applies the profile to the binary and its
 //     transitive deps, including the VM. A default.pgo in a *library* dir is NOT
 //     auto-detected — only main packages are — which is why the symlink exists.

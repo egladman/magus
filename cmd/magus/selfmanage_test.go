@@ -64,7 +64,7 @@ func newTestFixture(t *testing.T, tag string) *testFixture {
 
 func (fx *testFixture) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/egladman/tack/releases/latest", fx.serveLatest)
+	mux.HandleFunc("/repos/egladman/magus/releases/latest", fx.serveLatest)
 	mux.HandleFunc("/tarball", fx.serveTarball)
 	mux.HandleFunc("/sums", fx.serveSums)
 	mux.HandleFunc("/sig", fx.serveSig)
@@ -204,7 +204,7 @@ func TestSelfUpdate_TamperedTarball(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/egladman/tack/releases/latest", fx.serveLatest)
+	mux.HandleFunc("/repos/egladman/magus/releases/latest", fx.serveLatest)
 	mux.HandleFunc("/tarball", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("this is not the real tarball"))
 	})

@@ -22,7 +22,7 @@
 //   - KmerCount:       slide a 6-wide window over a ~1 KB string, tally k-mers in a map.
 //   - SubstringSearch: slide over the same string counting a short pattern (no map).
 //
-// The workloads mirror the in-tree engine suite (magus/internal/interp/engine);
+// The workloads mirror the in-tree engine suite (internal/interp/engine);
 // here each is a *self-contained* program (no cross-call shared state), because
 // not every engine can persist a defined function or collection across compiled
 // units (tengo cannot) - keeping the programs self-contained is what keeps the

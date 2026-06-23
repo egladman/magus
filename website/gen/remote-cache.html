@@ -14,7 +14,7 @@
       <ul>
         <li><a href="index.html">Docs</a></li>
         <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
         <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
       </ul>
     </nav>
@@ -261,8 +261,9 @@ under their own <code>.remote</code> prefix and are never folded into the local
 <h2 id="writing-your-own-backend">Writing your own backend</h2>
 <p>Any store reachable over HTTP can be a backend. Implement the three function-ops
 (<code>enabled</code>/<code>get_artifact</code>/<code>put_artifact</code>) in a spell — read inputs from the <code>cb(io)</code>
-callback (<code>io.hash</code>, <code>io.dest</code>/<code>io.src</code>), use the <code>magus/extra/http</code> byte
-primitives and <code>magus/extra/crypto</code> for <em>request</em> signing (e.g. AWS SigV4), and
+callback (<code>io.hash</code>, <code>io.dest</code>/<code>io.src</code>), use the <code>http</code> byte primitives
+(<code>http.download</code>/<code>upload_chunked</code>/<code>byteSize</code>) and <code>crypto</code> for <em>request</em> signing
+(e.g. AWS SigV4 via <code>crypto.hmacSha256</code>), and
 return the boolean result. The two shipped backends are worked examples; start
 from whichever transport is closest.</p>
 <p>A backend is a pure byte mover: <strong>artifact signing and verification happen in
@@ -270,10 +271,10 @@ magus's core, not in the spell.</strong> A backend never sees, produces, or chec
 cache-artifact signature — it cannot weaken or bypass the trust model, and it gets
 signing for free. Just move the opaque bytes.</p>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/remote-cache.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/remote-cache.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-17 18:16:56 UTC from commit <a href="https://github.com/egladman/tack/commit/ded05d1246d459b4fa47ec0e5b80fdd1c099f0e3"><code>ded05d1</code></a></small>
+    <small>Generated 2026-06-19 00:28:50 UTC from commit <a href="https://github.com/egladman/magus/commit/636feb0cfb92129c70dcb3e87e905e1f7108ad08"><code>636feb0</code></a></small>
   </footer>
 </body>
 </html>

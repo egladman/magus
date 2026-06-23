@@ -20,7 +20,7 @@ const maxFrameBytes = 4 << 20 // 4 MiB
 // to a JSON object; any other shape (array, scalar) is a programming error
 // and returns an error.
 //
-// This mirrors the splice pattern in magus/internal/report/envelope.go.
+// This mirrors the splice pattern in internal/report/envelope.go.
 func writeFrame(w io.Writer, typeName string, body any) error {
 	raw, err := codec.Marshal(body)
 	if err != nil {

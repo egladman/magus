@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCP: driving magus from agents</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="index.html">Docs</a></li>
+        <li><a href="editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="mcp-driving-magus-from-agents">MCP: driving magus from agents</h1>
+<p>When the daemon is running, it also exposes an <strong>MCP (Model Context Protocol) server</strong> over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.</p>
+<p>Magus is built for humans first. MCP is an optional layer on top, that can be entirely omitted from the binary by setting the <code>!mcp</code> build tag.</p>
+<h2 id="starting-the-daemon-starts-mcp">Starting the daemon starts MCP</h2>
+<p>No separate process is needed. Start the daemon as usual:</p>
+<pre><code class="language-sh">magus server start
+</code></pre>
+<p>The MCP endpoint comes up alongside it:</p>
+<pre><code>http://127.0.0.1:7391/mcp
+</code></pre>
+<p><code>magus doctor</code> reports whether MCP is reachable and prints the endpoint URL.</p>
+<h2 id="available-tools">Available tools</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus_list_projects</code></td>
+<td>List all projects discovered in the workspace</td>
+</tr>
+<tr>
+<td><code>magus_list_targets</code></td>
+<td>List registered build targets for a project</td>
+</tr>
+<tr>
+<td><code>magus_where</code></td>
+<td>Resolve a fuzzy project name to its absolute path</td>
+</tr>
+<tr>
+<td><code>magus_describe_project</code></td>
+<td>Explain why a project is in the affected set</td>
+</tr>
+<tr>
+<td><code>magus_run_target</code></td>
+<td>Run a target (<code>build</code>, <code>test</code>, <code>lint</code>, …) for one or more projects</td>
+</tr>
+<tr>
+<td><code>magus_run_affected</code></td>
+<td>Run a target for all VCS-changed projects</td>
+</tr>
+<tr>
+<td><code>magus_doctor</code></td>
+<td>Validate workspace health</td>
+</tr>
+<tr>
+<td><code>magus_status</code></td>
+<td>Inspect the live concurrency pool</td>
+</tr>
+<tr>
+<td><code>magus_affected_plan</code></td>
+<td>Emit a CI shard plan for the affected set</td>
+</tr>
+<tr>
+<td><code>magus_config_get</code></td>
+<td>Read the resolved workspace config (read-only)</td>
+</tr>
+<tr>
+<td><code>magus_tail_log</code></td>
+<td>Retrieve the captured build log for a project</td>
+</tr>
+</tbody>
+</table>
+<p>Config mutation is not exposed over MCP. Use the CLI for <code>magus config set</code> and related commands.</p>
+<h2 id="enabling-and-disabling">Enabling and disabling</h2>
+<p>MCP is on by default when the binary is built with <code>-tags mcp</code> (the default). To disable it without rebuilding:</p>
+<pre><code class="language-yaml"># magus.yaml
+mcp:
+  enabled: false
+</code></pre>
+<p>Or set <code>MAGUS_MCP_ENABLED=0</code> in the environment before starting the daemon.</p>
+<p>To change the listen address:</p>
+<pre><code class="language-yaml"># magus.yaml
+mcp:
+  address: &quot;127.0.0.1:9000&quot;
+</code></pre>
+<p>Or <code>MAGUS_MCP_ADDRESS=127.0.0.1:9000</code>.</p>
+<h2 id="security-keep-this-local">Security: keep this local</h2>
+<blockquote>
+<p><strong>Warning:</strong> Reaching the MCP endpoint is equivalent to having shell access to your build workspace. Any authenticated caller can execute arbitrary build targets, which in turn invoke arbitrary toolchain commands defined in your magusfiles.</p>
+</blockquote>
+<p>The endpoint requires a <strong>bearer token</strong>. The daemon generates one on first start and stores it <code>0600</code> at <code>$XDG_CONFIG_HOME/magus/mcp_token</code>; the secret is never written to the daemon log — retrieve it with <code>magus config mcp token print</code>. Every <code>/mcp</code> request must carry <code>Authorization: Bearer &lt;token&gt;</code>; requests without it get <code>401 Unauthorized</code>. Manage the token with:</p>
+<pre><code>magus config mcp token print      # show the current token
+magus config mcp token generate   # mint a new one (--force to rotate)
+magus config mcp token revoke     # delete it (daemon mints a fresh one on next start)
+</code></pre>
+<p>Configure your client with the header, e.g.:</p>
+<pre><code class="language-json">{ &quot;type&quot;: &quot;streamable-http&quot;, &quot;url&quot;: &quot;http://127.0.0.1:7391/mcp&quot;,
+  &quot;headers&quot;: { &quot;Authorization&quot;: &quot;Bearer &lt;token&gt;&quot; } }
+</code></pre>
+<p>Auth is <strong>defense in depth</strong>, not a license to expose the port. The server still binds to <code>127.0.0.1</code> by default and validates the <code>Host</code> and <code>Origin</code> headers on every <code>/mcp</code> request, returning <code>403 Forbidden</code> for non-loopback values to block browser-based DNS-rebinding attacks. Treat the token as a local secret — anyone who reads it gains the same workspace access.</p>
+<p><strong>Do not expose it over:</strong></p>
+<ul>
+<li>Tailscale, Zerotier, or similar overlay networks where other devices can reach it</li>
+<li>ngrok, localtunnel, or other public tunnels</li>
+<li>SSH <code>-L</code> port-forwards shared with others</li>
+<li>Kubernetes <code>port-forward</code> in shared clusters</li>
+<li>Any network ACL that admits untrusted hosts</li>
+</ul>
+<p>If you need to drive magus remotely, run the CLI over SSH instead.</p>
+    </article>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/mcp.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-18 15:53:19 UTC from commit <a href="https://github.com/egladman/magus/commit/3ef6e672e22f6925587d33aa8a1782f4f8481f1c"><code>3ef6e67</code></a></small>
+  </footer>
+</body>
+</html>

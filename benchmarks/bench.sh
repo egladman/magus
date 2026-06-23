@@ -99,7 +99,7 @@ check_tools() {
     for t in "${TOOLS[@]}"; do
         local fam="${t%%-*}"
         case "$fam" in
-            magus) command -v "$MAGUS" >/dev/null 2>&1 || missing+=("magus (build: cd tack && go build -o magus ./magus/cmd/magus)") ;;
+            magus) command -v "$MAGUS" >/dev/null 2>&1 || missing+=("magus (build: cd magus && go build -o magus ./cmd/magus)") ;;
             make)  command -v make >/dev/null 2>&1  || missing+=("make") ;;
             turbo) command -v turbo >/dev/null 2>&1 || missing+=("turbo  (pnpm install -g turbo@latest)") ;;
             nx)    command -v nx    >/dev/null 2>&1 || missing+=("nx     (pnpm install -g nx@latest)") ;;

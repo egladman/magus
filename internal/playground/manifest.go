@@ -2,7 +2,7 @@ package playground
 
 // builtinSpellOps maps a built-in spell's import name (`import "magus/spell/go"`
 // binds `go`) to the operation names a magusfile invokes on it
-// (`go["go-build"]()`). It mirrors magus/internal/spell's built-in registry; the
+// (`go["go-build"]()`). It mirrors internal/spell's built-in registry; the
 // host-only TestManifestMatchesBuiltins gate keeps it from drifting out of sync
 // with the real spells. It is a hand-written manifest rather than generated
 // because the playground wasm must not pull in the spell package's embedded

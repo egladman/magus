@@ -33,7 +33,7 @@ ARG DATE=unknown
 ENV CGO_ENABLED=1
 # Enable the experimental encoding/json/v2 codec for faster JSON marshaling.
 # The build tag goexperiment.jsonv2 is set automatically by the toolchain when
-# this variable is present; the magus/internal/util JSON shim falls back to v1
+# this variable is present; the internal/util JSON shim falls back to v1
 # if GOEXPERIMENT is unset, so local builds without this variable still work.
 ENV GOEXPERIMENT=jsonv2
 

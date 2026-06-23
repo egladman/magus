@@ -14,7 +14,7 @@
       <ul>
         <li><a href="../index.html">Docs</a></li>
         <li><a href="../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
         <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
       </ul>
     </nav>
@@ -28,7 +28,7 @@
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="get"><code>get</code></h3>
-<p>Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time (seconds); retry_all_errors, retry_connrefused (bool).</p>
+<p>Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
 <p><strong>Signature:</strong> <code>http.get(url, [headers], [opts]) → map[string]any</code></p>
 <table>
 <thead>
@@ -62,7 +62,7 @@
 </table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="post"><code>post</code></h3>
-<p>Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time (seconds); retry_all_errors, retry_connrefused (bool).</p>
+<p>Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
 <p><strong>Signature:</strong> <code>http.post(url, body, [headers], [opts]) → map[string]any</code></p>
 <table>
 <thead>
@@ -102,7 +102,7 @@
 </table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="request"><code>request</code></h3>
-<p>Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time (seconds); retry_all_errors, retry_connrefused (bool).</p>
+<p>Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
 <p><strong>Signature:</strong> <code>http.request(method, url, [body], [headers], [opts]) → map[string]any</code></p>
 <table>
 <thead>
@@ -148,10 +148,10 @@
 </table>
 <p><strong>Returns:</strong> map[string]any</p>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/modules/http.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/modules/http.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-11 00:38:15 UTC from commit <a href="https://github.com/egladman/tack/commit/56e0f4debf1ec3a45a68fce4138570a6086735aa"><code>56e0f4d</code></a></small>
+    <small>Generated 2026-06-19 21:15:40 UTC from commit <a href="https://github.com/egladman/magus/commit/609273fbec42930609a68e70ce808bac231995bc"><code>609273f</code></a></small>
   </footer>
 </body>
 </html>

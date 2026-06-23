@@ -39,7 +39,7 @@ func CommandOrHandlerOps(src string) ResolveMode {
 // the embedded built-ins all read plain data uniformly.
 //
 // It takes an already-executed session so a caller whose spell body imports host
-// modules (e.g. a handler op spell using magus/std/http) can register those
+// modules (e.g. a handler op spell using std/http) can register those
 // modules and run its own Exec before resolving; Extract-style helpers in the
 // buzz engine wrap it for the bare-session case.
 //

@@ -21,7 +21,7 @@ sudo apt install -y build-essential pkg-config hyperfine inotify-tools
 | Tool        | Install                                                                  |
 | ----------- | ------------------------------------------------------------------------ |
 | `hyperfine` | `sudo apt install hyperfine` (included above)                            |
-| `magus`     | `cd tack && go build -o ~/.local/bin/magus ./magus/cmd/magus`            |
+| `magus`     | `cd magus && go build -o ~/.local/bin/magus ./cmd/magus`            |
 | `make`      | usually pre-installed                                                    |
 | `turbo`     | `pnpm install -g turbo@latest`                                                                                   |
 | `nx`        | `pnpm install -g nx@latest`                                                                                      |
@@ -108,7 +108,7 @@ Cold/incremental builds are dominated by the real compiler (`go build`,
 `tsc`), so S4-S7 mostly measure the toolchain, with magus's planning/cache
 overhead layered on top. magus's own overhead shows up cleanest in **S1-S3**
 (startup, discovery, affected planning) and the in-process micro-benchmarks
-(`magus/internal/...` `Benchmark*` and the `cmd/magus` `BenchmarkStartup*` set).
+(`internal/...` `Benchmark*` and the `cmd/magus` `BenchmarkStartup*` set).
 
 ### Apples-to-apples: same graph, same edges
 

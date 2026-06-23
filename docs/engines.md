@@ -98,7 +98,7 @@ A workspace spell lives at `spells/<name>/spell.buzz` (or flat
 ## "Built-in spell" vs language "builtins"
 
 A **built-in spell** is a spell whose bytecode is compiled from
-`magus/spells/<name>/spell.buzz` and embedded in the magus binary (`go`,
+`spells/<name>/spell.buzz` and embedded in the magus binary (`go`,
 `typescript`, `docker`, …; see [spells.md](spells.md#built-in)). This is a magus
 concept and is unrelated to Buzz's language **builtins** (`spawn`, list/map
 methods, etc.), which are part of the Buzz language itself. The docs always write

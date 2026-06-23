@@ -39,7 +39,7 @@ runs:
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ runner.tool_cache }}/magus/bin
-        key: ${{ runner.os }}-magus-${{ inputs.version }}-${{ hashFiles('magus/cmd/magus/**', 'magus/**', 'go.sum') }}
+        key: ${{ runner.os }}-magus-${{ inputs.version }}-${{ hashFiles('cmd/magus/**', '**', 'go.sum') }}
 
     - name: Install magus from release
       id: prebuilt
@@ -51,7 +51,7 @@ runs:
         VERSION="${{ inputs.version }}"
         OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
         ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-        BASE="https://github.com/egladman/tack/releases/download/${VERSION}"
+        BASE="https://github.com/egladman/magus/releases/download/${VERSION}"
         ASSET="magus_${VERSION}_${OS}_${ARCH}.tar.gz"
         TMP="$(mktemp -d)"
         trap 'rm -rf "${TMP}"' EXIT
@@ -73,7 +73,7 @@ runs:
       shell: bash
       run: |
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
-        go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./magus/cmd/magus
+        go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
         echo "magus: built from source" >&2
 
     - name: Add magus to PATH

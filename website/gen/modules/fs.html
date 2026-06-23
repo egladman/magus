@@ -14,7 +14,7 @@
       <ul>
         <li><a href="../index.html">Docs</a></li>
         <li><a href="../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
         <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
       </ul>
     </nav>
@@ -581,11 +581,60 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
+<h3 id="read-lines"><code>read_lines</code></h3>
+<p>Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.</p>
+<p><strong>Signature:</strong> <code>fs.readLines(path) → []string</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> []string</p>
+<h3 id="write-lines"><code>write_lines</code></h3>
+<p>Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.</p>
+<p><strong>Signature:</strong> <code>fs.writeLines(path, lines)</code></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>lines</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/modules/fs.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/modules/fs.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-11 00:38:15 UTC from commit <a href="https://github.com/egladman/tack/commit/56e0f4debf1ec3a45a68fce4138570a6086735aa"><code>56e0f4d</code></a></small>
+    <small>Generated 2026-06-19 00:28:50 UTC from commit <a href="https://github.com/egladman/magus/commit/636feb0cfb92129c70dcb3e87e905e1f7108ad08"><code>636feb0</code></a></small>
   </footer>
 </body>
 </html>

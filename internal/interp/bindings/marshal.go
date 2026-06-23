@@ -10,7 +10,7 @@ import "github.com/egladman/gopherbuzz/vm"
 // across dozens of call sites. These accessors centralize that boundary — the
 // same move magus/gopherbuzz's FFI layer makes with buzzToReflectArg /
 // reflectRetToValue, where one typed conversion site replaces per-call
-// hand-marshaling (see magus/gopherbuzz/doc/ffi.md). The Go→Buzz direction
+// hand-marshaling (see gopherbuzz/doc/ffi.md). The Go→Buzz direction
 // already has its counterparts here (strSliceToBuzzList, execRecordToBuzz, …).
 //
 // All accessors are deliberately lenient: an out-of-range index or wrong-typed

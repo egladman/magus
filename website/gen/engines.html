@@ -14,7 +14,7 @@
       <ul>
         <li><a href="index.html">Docs</a></li>
         <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
         <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
       </ul>
     </nav>
@@ -77,19 +77,18 @@ to the injected <code>cb</code> callback (the form the resolver also extracts st
 <code>Chunk.Doc</code> is in-memory only and not serialized to bytecode, so Buzz captures
 docs only for freshly-compiled workspace <code>.buzz</code> spells, never the embedded
 built-ins.</p>
-<h2 id="extra-is-self-complete"><code>extra</code> is self-complete</h2>
-<p>Every magus host module (including <code>json</code>, <code>crypto</code>, and the <code>fs</code>/<code>env</code> methods
-Buzz's stdlib also covers) is on the <code>extra</code> surface. This is deliberate: it was
-tempting to make <code>extra</code> a strict <em>delta</em> over Buzz's stdlib (omit the overlaps),
-but that split a single concept across two namespaces — <code>fs.exists</code> was native
-while <code>fs.join</code>/<code>glob</code> were <code>extra.fs</code>, so authors had to memorize which side each
-call lived on. Self-complete <code>extra</code> means one import covers a whole domain
-(<code>extra.fs.*</code>), and it does not shadow the stdlib (<code>extra.fs.exists</code> ≠ native
-<code>fs.exists</code>). The <code>extra</code> forms are also <strong>sandbox-aware</strong> where the bare stdlib
-is not — e.g. <code>extra.env.get</code>/<code>lookup</code> honor the env allowlist, while Buzz's
-<code>os.env</code> is raw. Methods that have a native Buzz equivalent are noted per-method
-in the <a href="modules/index.html">module reference</a>; either works. The cross-reference
-lives in <code>internal/std/buzz_overlap.go</code>.</p>
+<h2 id="host-modules-are-a-superset-of-buzzs-stdlib">Host modules are a superset of Buzz's stdlib</h2>
+<p>magus layers its host methods onto Buzz's own stdlib modules under the <strong>same bare
+names</strong>: <code>import &quot;os&quot;</code> carries both Buzz's <code>os.*</code> (sleep, env, execute) and magus's
+additions (<code>os.exec</code>, <code>os.which</code>, …); <code>import &quot;fs&quot;</code> carries Buzz's <code>fs</code> plus
+<code>fs.glob</code>/<code>readFile</code>; and magus adds whole modules Buzz lacks (<code>vcs</code>, <code>archive</code>,
+<code>http</code>, <code>charm</code>, …). One import per domain covers the union — there's no separate
+<code>extra</code> namespace to remember which side a call lives on.</p>
+<p>Where a method overlaps a Buzz stdlib call, the magus form is <strong>sandbox-aware</strong>
+while the bare stdlib is not — e.g. <code>env.get</code>/<code>lookup</code> honor the env allowlist,
+whereas Buzz's <code>os.env</code> is raw. Those overlaps are noted per-method in the
+<a href="modules/index.html">module reference</a> (either works); the cross-reference lives in
+<code>host/overlap.go</code>.</p>
 <p>A few entries are <em>not</em> treated as duplicates because the magus behavior the
 stdlib can't reproduce: magus's <code>os.exit</code> raises a lifecycle error (Buzz's
 hard-exits the process), magus's <code>os.sleep</code> is cancellable (Buzz's blocks), and
@@ -99,7 +98,7 @@ stay on the magus surface.</p>
 <code>spells/&lt;name&gt;.buzz</code>).</p>
 <h2 id="built-in-spell-vs-language-builtins">&quot;Built-in spell&quot; vs language &quot;builtins&quot;</h2>
 <p>A <strong>built-in spell</strong> is a spell whose bytecode is compiled from
-<code>magus/spells/&lt;name&gt;/spell.buzz</code> and embedded in the magus binary (<code>go</code>,
+<code>spells/&lt;name&gt;/spell.buzz</code> and embedded in the magus binary (<code>go</code>,
 <code>typescript</code>, <code>docker</code>, …; see <a href="spells.html#built-in">spells.md</a>). This is a magus
 concept and is unrelated to Buzz's language <strong>builtins</strong> (<code>spawn</code>, list/map
 methods, etc.), which are part of the Buzz language itself. The docs always write
@@ -133,10 +132,10 @@ are visible rather than surprising.</p>
 <li><a href="modules/index.html">modules/index.md</a>: the <code>magus.*</code> host module reference.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/engines.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/engines.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-16 17:28:31 UTC from commit <a href="https://github.com/egladman/tack/commit/a8396fbfd2b64e596d5481cd614ba047c98ebd85"><code>a8396fb</code></a></small>
+    <small>Generated 2026-06-19 21:15:40 UTC from commit <a href="https://github.com/egladman/magus/commit/609273fbec42930609a68e70ce808bac231995bc"><code>609273f</code></a></small>
   </footer>
 </body>
 </html>

@@ -136,7 +136,7 @@ func applyWithEvanphx(argv []string, ops []types.PatchOp) ([]string, error) {
 
 // goldenBuiltins is the original hand-maintained built-in table, frozen here as
 // a golden. The built-in registry is now produced by compiling each
-// magus/spells/<name>/spell.buzz to bytecode and running it (see loadBuiltins);
+// spells/<name>/spell.buzz to bytecode and running it (see loadBuiltins);
 // TestBuiltinsMatchGolden asserts that pipeline reproduces these exact values,
 // so an accidental change in a built-in's .buzz — or in the Buzz toolchain — is
 // caught. Update this table in lockstep with an intentional built-in change.

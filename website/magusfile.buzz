@@ -36,7 +36,7 @@ final ROOT = "..";          // the magus/ workspace dir, relative to this projec
 final DOCS = "docs";        // source docs subtree under ROOT
 final OUT  = "gen";          // generated site output, under this project
 final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
-final GH   = "https://github.com/egladman/tack";
+final GH   = "https://github.com/egladman/magus";
 
 // Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
 // magusfile load — these shell out to git, and a magusfile is parsed on every

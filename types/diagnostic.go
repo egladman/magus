@@ -10,9 +10,9 @@ import (
 
 // Base URLs for diagnostic documentation, keyed by code-prefix subdir.
 const (
-	diagnosticSandboxBase   = "https://github.com/egladman/tack/blob/main/magus/docs/codes/sandbox/"
-	diagnosticRaceBase      = "https://github.com/egladman/tack/blob/main/magus/docs/codes/race/"
-	diagnosticMagusfileBase = "https://github.com/egladman/tack/blob/main/magus/docs/codes/magusfile/"
+	diagnosticSandboxBase   = "https://github.com/egladman/magus/blob/main/docs/codes/sandbox/"
+	diagnosticRaceBase      = "https://github.com/egladman/magus/blob/main/docs/codes/race/"
+	diagnosticMagusfileBase = "https://github.com/egladman/magus/blob/main/docs/codes/magusfile/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code).

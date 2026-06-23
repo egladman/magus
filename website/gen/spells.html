@@ -14,7 +14,7 @@
       <ul>
         <li><a href="index.html">Docs</a></li>
         <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
         <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
       </ul>
     </nav>
@@ -88,9 +88,9 @@ magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); 
 
 // targets are the runnable verbs; their bodies call the spell's ops. Op keys are
 // the CLI command, so kebab names are reached by subscript (see Naming operations).
-export fun build(_args: [str]) &gt; void { go[&quot;go-build&quot;]({ &quot;cwd&quot;: &quot;.&quot; }); }
-export fun lint(_args: [str])  &gt; void { go[&quot;golangci-lint&quot;]({ &quot;cwd&quot;: &quot;.&quot; }); }
-export fun test(_args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&quot;: &quot;.&quot; }); }
+export fun build(args: [str]) &gt; void { go[&quot;go-build&quot;]({ &quot;cwd&quot;: &quot;.&quot; }); }
+export fun lint(args: [str])  &gt; void { go[&quot;golangci-lint&quot;]({ &quot;cwd&quot;: &quot;.&quot; }); }
+export fun test(args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&quot;: &quot;.&quot; }); }
 </code></pre>
 <pre><code class="language-sh">magus run lint .         # runs your `lint` target, which calls go's golangci-lint op
 </code></pre>
@@ -98,7 +98,7 @@ export fun test(_args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&q
 <ul>
 <li><strong>Reach for a target</strong> when you want a <em>runnable verb</em>: the thing a teammate or CI types (<code>magus run test api</code>). Targets are your <strong>public surface</strong>; declare one per lifecycle step you want runnable. Until you export a target for an operation, <code>magus run &lt;op&gt;</code> is a graceful no-op.</li>
 <li><strong>Reach for a spell</strong> when you want to <em>package a toolchain's operations</em> and <em>tell the cache which files matter</em>. Bind a built-in or load a spell file. Call its ops from inside target bodies.</li>
-<li><strong>Skip the spell entirely</strong> for a one-off step with arbitrary logic: write the target body directly with <code>extra.*</code> (e.g. <code>extra.os.exec(...)</code>). A spell earns its keep when an operation recurs and has cache inputs worth declaring.</li>
+<li><strong>Skip the spell entirely</strong> for a one-off step with arbitrary logic: write the target body directly with the host modules (e.g. <code>os.exec(...)</code>). A spell earns its keep when an operation recurs and has cache inputs worth declaring.</li>
 <li><strong>Use the <code>::</code> escape hatch</strong> (<code>magus run go::go-vet api</code>) only for ad-hoc runs or introspection. The everyday surface is your composed targets.</li>
 </ul>
 <p>magus deliberately does <strong>not</strong> decide what &quot;lint&quot; or &quot;format&quot; means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).</p>
@@ -139,15 +139,15 @@ export fun test(_args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&q
 <h3 id="operations-come-in-two-shapes">Operations come in two shapes</h3>
 <ol>
 <li>
-<p><strong>Forked command (declarative).</strong> The op is a <code>{cmd, args, charms}</code> record. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.</p>
+<p><strong>Forked command (declarative).</strong> The op is a <code>Run</code> — a <code>{cmd, args, charms}</code> object. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.</p>
 </li>
 <li>
-<p><strong>Typed handler.</strong> <code>mgs_listTargets</code> returns <code>{str: fun(Target, fun(any)) bool}</code>. A <strong>fork</strong> handler passes its command record to the injected <code>cb</code> callback; a <strong>function-op</strong> handler does host work in-VM (HTTP, signing, a cache backend's <code>get-entry</code>). The built-in spells use the handler form; read any <a href="../spells"><code>spells/&lt;name&gt;/spell.buzz</code></a> for a worked example.</p>
+<p><strong>Typed handler.</strong> The two handler kinds carry distinct signatures. A <strong>fork</strong> spell's <code>mgs_listTargets</code> returns <code>{str: fun(Target, fun(Run)) void}</code>: the handler builds a <code>Run</code> and passes it to the injected <code>cb</code> callback, returning nothing — the command travels through <code>cb</code>, so there is no result to return. A <strong>function-op</strong> spell (a cache backend, anything importing host modules) returns <code>{str: fun(Target, fun(any)) bool}</code>: the handler does host work in-VM (HTTP, signing, a cache backend's <code>get_artifact</code>) and its boolean <em>is</em> the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any <a href="../spells"><code>spells/&lt;name&gt;/spell.buzz</code></a> for a worked example.</p>
 </li>
 </ol>
 <p>Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.</p>
-<p>A function-op handler does host work in-VM (HTTP, signing, a cache backend's <code>get-entry</code>) instead of forking a single command, calling host modules (<code>extra.http</code>, <code>extra.crypto</code>) as needed. This is what lets a remote cache backend be authored as a spell. <code>magus doctor</code> enforces a doc comment on each function-op handler, captured by the Buzz parser at compile time.</p>
-<p>The handler's second parameter is named <strong><code>cb</code></strong> (a plain callback): the handler calls <code>cb({cmd, args, charms})</code> once to declare the command it forks. The name stays <code>cb</code> rather than <code>op</code> on purpose — <code>op</code> already means two other things here (a charm patch's <code>op</code> field, and a spell's <em>ops</em>), so reusing it would be ambiguous.</p>
+<p>A function-op handler does host work in-VM (HTTP, signing, a cache backend's <code>get-entry</code>) instead of forking a single command, calling host modules (<code>http</code>, <code>crypto</code>) as needed. This is what lets a remote cache backend be authored as a spell. <code>magus doctor</code> enforces a doc comment on each function-op handler, captured by the Buzz parser at compile time.</p>
+<p>The handler's second parameter is named <strong><code>cb</code></strong> (a plain callback): the handler calls <code>cb(Run{cmd, args, charms})</code> once to declare the command it forks. The name stays <code>cb</code> rather than <code>op</code> on purpose — <code>op</code> already means two other things here (a charm patch's <code>op</code> field, and a spell's <em>ops</em>), so reusing it would be ambiguous.</p>
 <h2 id="binding-a-spell-to-a-project">Binding a spell to a project</h2>
 <p>A spell only takes effect when its <strong>handle</strong> is passed to <code>magus.project.register</code>. Importing a spell is pure; it registers nothing on its own.</p>
 <h3 id="built-in">Built-in</h3>
@@ -169,7 +169,7 @@ magus.project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spel
 import &quot;magus/spell/docker&quot;;
 magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go, docker] }); return true; });   // co-bound
 
-export fun build(_args: [str]) &gt; void {
+export fun build(args: [str]) &gt; void {
     go[&quot;go-build&quot;]({ &quot;cwd&quot;: &quot;.&quot; });
     docker.build({ &quot;cwd&quot;: &quot;.&quot; });        // one target, ops from two spells
 }
@@ -252,8 +252,8 @@ export fun mgs_listTargets() &gt; any {
 <pre><code class="language-buzz">import &quot;spells/ruby&quot; as rb;
 magus.project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [rb] }); return true; });
 
-export fun test(_args: [str]) &gt; void { rb.rspec({ &quot;cwd&quot;: &quot;gems/&quot; }); }
-export fun lint(_args: [str]) &gt; void { rb.rubocop({ &quot;cwd&quot;: &quot;gems/&quot; }); }
+export fun test(args: [str]) &gt; void { rb.rspec({ &quot;cwd&quot;: &quot;gems/&quot; }); }
+export fun lint(args: [str]) &gt; void { rb.rubocop({ &quot;cwd&quot;: &quot;gems/&quot; }); }
 </code></pre>
 <p>For cache-correctness rules (declare every input in <code>needs</code>, declare <code>provides</code> so outputs replay, toolchain-version footguns), see <a href="../index.html#custom-spells">Spells in the README</a>.</p>
 <h2 id="lifecycle-bind--contribute--compose--run">Lifecycle: bind → contribute → compose → run</h2>
@@ -271,7 +271,7 @@ export fun &lt;name&gt;(...) &gt; void {}        → a target whose body calls s
 magus run &lt;name&gt; &lt;project&gt;             → executes the target; spell ops fork
                                           their commands (cached by needs/provides)
 </code></pre>
-<p>Key invariant: <strong>binding is not running.</strong> A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; use <code>extra.*</code>).</p>
+<p>Key invariant: <strong>binding is not running.</strong> A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; call the host modules directly).</p>
 <h2 id="glossary">Glossary</h2>
 <table>
 <thead>
@@ -307,7 +307,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 </tr>
 <tr>
 <td><strong>Fork op</strong></td>
-<td>An op that declares a <code>{cmd, args, charms}</code> command magus forks directly (no shell).</td>
+<td>An op that declares a <code>Run</code> (<code>{cmd, args, charms}</code>) command magus forks directly (no shell).</td>
 </tr>
 <tr>
 <td><strong>Function-op</strong></td>
@@ -320,7 +320,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 </tbody>
 </table>
 <h2 id="worked-examples-in-this-repo">Worked examples in this repo</h2>
-<p>Read these spells under <a href="../spells"><code>magus/spells/</code></a> when you outgrow a plain fork spell:</p>
+<p>Read these spells under <a href="../spells"><code>spells/</code></a> when you outgrow a plain fork spell:</p>
 <table>
 <thead>
 <tr>
@@ -338,12 +338,12 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <tr>
 <td><a href="../spells/github/actions/spell.buzz"><code>actions</code></a></td>
 <td>function-op</td>
-<td>A <strong>remote cache backend</strong> over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (<code>magus/extra/http</code>), wired with <code>magus.cache.remote</code>.</td>
+<td>A <strong>remote cache backend</strong> over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the <code>http</code> byte primitives), wired with <code>magus.cache.remote</code>.</td>
 </tr>
 <tr>
 <td><a href="../spells/aws/s3-cache/spell.buzz"><code>s3-cache</code></a></td>
 <td>function-op</td>
-<td>A <strong>remote cache backend</strong> for S3/MinIO/R2/B2 that signs every request with <strong>AWS SigV4</strong> via <code>magus/extra/crypto</code>.</td>
+<td>A <strong>remote cache backend</strong> for S3/MinIO/R2/B2 that signs every request with <strong>AWS SigV4</strong> via <code>crypto</code>'s keyed-hash primitives.</td>
 </tr>
 </tbody>
 </table>
@@ -357,10 +357,10 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <li><a href="modules/magus.html"><code>magus</code> module API</a>: <code>magus.project.register</code>, <code>magus.cache.remote</code>.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/tack/edit/claude/spell-support-reduction-5oaer9/magus/docs/spells.md">Suggest an edit</a></p>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/spells.md">Suggest an edit</a></p>
   </main>
   <footer class="container">
-    <small>Generated 2026-06-18 02:07:00 UTC from commit <a href="https://github.com/egladman/tack/commit/cedea5cf1a4b5c9e05f2c52885801ea7fd459e7d"><code>cedea5c</code></a></small>
+    <small>Generated 2026-06-19 00:28:50 UTC from commit <a href="https://github.com/egladman/magus/commit/636feb0cfb92129c70dcb3e87e905e1f7108ad08"><code>636feb0</code></a></small>
   </footer>
 </body>
 </html>

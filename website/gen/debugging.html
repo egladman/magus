@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debugging</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="index.html">Docs</a></li>
+        <li><a href="editor.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
+        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <article>
+<h1 id="debugging">Debugging</h1>
+<p>Magus has two entry points into an interactive debugging REPL:</p>
+<ul>
+<li><a href="#interactive-repl"><code>magus repl</code></a>: standalone shell with magusfile bindings preloaded.</li>
+<li><a href="#maguspry-breakpoint-in-a-magusfile"><code>magus.pry()</code></a>: <code>binding.pry</code>-style breakpoint, opens the same REPL mid-target with frame context attached.</li>
+</ul>
+<p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, …) on top of the base REPL surface. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
+<h2 id="interactive-repl">Interactive REPL</h2>
+<p><code>magus repl</code> opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the host modules and spell bindings) is preloaded. If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
+<p>The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).</p>
+<pre><code class="language-buzz">// example session
+&gt; os.execSh(&quot;git rev-parse --short HEAD&quot;).stdout
+abc1234
+&gt; go.name
+go
+&gt; os.exec(&quot;go&quot;, [&quot;build&quot;, &quot;./...&quot;])
+</code></pre>
+<p>Lines starting with <code>//</code> are treated as comments and skipped. Type <code>.help</code> for the meta-command list, <code>.exit</code> (or Ctrl-D) to quit.</p>
+<h3 id="--no-autoload"><code>--no-autoload</code></h3>
+<p>Skip executing the magusfile on start. Useful when you want a blank environment to experiment without side-effects from your project's startup code.</p>
+<h3 id="-c-dir"><code>-C &lt;dir&gt;</code></h3>
+<p>Set the working directory for <code>import</code> resolution (default: cwd).</p>
+<pre><code class="language-sh">magus repl -C internal/auth
+</code></pre>
+<h2 id="maguspry-breakpoint-in-a-magusfile"><code>magus.pry()</code>: breakpoint in a magusfile</h2>
+<p>Call <code>magus.pry()</code> anywhere in a magusfile target to suspend execution and drop into the REPL at that exact point. The REPL inherits the calling Runner's bindings and exposes the surrounding scope.</p>
+<pre><code class="language-buzz">export fun build(args: [str]) &gt; void {
+    const outputs = [&quot;bin/foo&quot;, &quot;bin/bar&quot;];
+    os.exec(&quot;go&quot;, [&quot;generate&quot;, &quot;./...&quot;]);
+    magus.pry();   // execution pauses here; inspect or modify state
+    os.exec(&quot;go&quot;, [&quot;build&quot;, &quot;./...&quot;]);
+}
+</code></pre>
+<pre><code class="language-sh">magus run build
+# *** magus.pry at magusfile.buzz:4 in build
+# Type .help for pry commands, .continue (or .exit) to resume.
+# pry&gt;
+</code></pre>
+<p>The prompt is <code>pry&gt;</code> at the innermost frame; <code>pry[N]&gt;</code> after <code>.up</code>/<code>.down</code> to frame N.</p>
+<p><code>magus.pry()</code> is a no-op during <code>magus ls</code> and <code>magus describe</code> so it is safe to leave in place during development. Remove it before committing.</p>
+<h2 id="meta-commands">Meta-commands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th style="text-align:center">repl</th>
+<th style="text-align:center">pry</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.help</code></td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>Print available commands</td>
+</tr>
+<tr>
+<td><code>.exit</code> / <code>.quit</code></td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>Quit the REPL (or resume execution, for pry)</td>
+</tr>
+<tr>
+<td><code>.continue</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Resume execution</td>
+</tr>
+<tr>
+<td><code>.load &lt;path&gt;</code></td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>Execute a file in the current session</td>
+</tr>
+<tr>
+<td><code>.history [N]</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Show the last N (default 50) commands across sessions</td>
+</tr>
+<tr>
+<td><code>.history!N</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Print the Nth-most-recent command for copy-paste</td>
+</tr>
+<tr>
+<td><code>.whereami</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Print source lines surrounding the call site</td>
+</tr>
+<tr>
+<td><code>.where</code> / <code>.backtrace</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Print the call stack</td>
+</tr>
+<tr>
+<td><code>.up</code> / <code>.down</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Move the inspected frame up or down</td>
+</tr>
+<tr>
+<td><code>.locals</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>List variables in scope of the selected frame</td>
+</tr>
+<tr>
+<td><code>.globals</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>List user-defined globals (host bindings filtered out)</td>
+</tr>
+<tr>
+<td><code>.pp &lt;expr&gt;</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Evaluate <code>&lt;expr&gt;</code> and pretty-print the result</td>
+</tr>
+<tr>
+<td><code>.step</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Single-step into the next line</td>
+</tr>
+<tr>
+<td><code>.next</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Step over the current line</td>
+</tr>
+<tr>
+<td><code>.finish</code></td>
+<td style="text-align:center"></td>
+<td style="text-align:center">✓</td>
+<td>Run until the current frame returns</td>
+</tr>
+</tbody>
+</table>
+<p>Pry history is persisted at <code>$XDG_STATE_HOME/magus/pry_history</code> (or <code>~/.local/state/magus/pry_history</code>) and is shared across pry sessions. The standalone <code>magus repl</code> does not record to or read from this file.</p>
+<p>Color output is enabled when stdout is a TTY; set <code>NO_COLOR=1</code> to disable. The continuation prompt (<code>&gt;&gt;</code> / <code>pry&gt;&gt;</code>) is green-tinted on color terminals.</p>
+<h2 id="multiline-input">Multiline input</h2>
+<p>Incomplete input is detected and the REPL reprompts with <code>&gt;&gt;</code> until the expression closes: the Buzz parser is reinvoked on each newline, and input that does not yet parse to a complete statement is treated as incomplete; type errors surface immediately.</p>
+<h2 id="--step"><code>--step</code></h2>
+<p>Pause before every subprocess and prompt for a keystroke. Concurrency is forced to 1 so commands execute one at a time.</p>
+<pre><code class="language-sh">magus run build --step
+magus affected build --step
+</code></pre>
+<p>At each pause, magus prints the command and working directory, then waits:</p>
+<pre><code>→ go build ./...  (cwd: /workspace/api)
+  [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort:
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s</code> / Enter</td>
+<td>Execute this command, then pause again before the next</td>
+</tr>
+<tr>
+<td><code>c</code></td>
+<td>Execute this command and stop pausing (run the rest normally)</td>
+</tr>
+<tr>
+<td><code>k</code></td>
+<td>Skip this command without executing it</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>Open a REPL in the current context, then re-prompt</td>
+</tr>
+<tr>
+<td><code>a</code> / <code>q</code> / Ctrl-C</td>
+<td>Abort the run</td>
+</tr>
+</tbody>
+</table>
+    </article>
+    <p><a href="https://github.com/egladman/magus/edit/main/docs/debugging.md">Suggest an edit</a></p>
+  </main>
+  <footer class="container">
+    <small>Generated 2026-06-19 00:28:50 UTC from commit <a href="https://github.com/egladman/magus/commit/636feb0cfb92129c70dcb3e87e905e1f7108ad08"><code>636feb0</code></a></small>
+  </footer>
+</body>
+</html>

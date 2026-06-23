@@ -40,10 +40,10 @@ graph LR
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 
-## Project: magus/website
+## Project: website
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/website</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
 
 ```text
 sources  magusfile.buzz, magusfiles/**/*.buzz

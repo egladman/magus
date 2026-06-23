@@ -57,7 +57,7 @@ func TestBuiltinsHash_Stable(t *testing.T) {
 func TestBuiltinBytecodeParity(t *testing.T) {
 	want := Builtins()
 	ctx := context.Background()
-	// spellsDir is relative to this package (magus/internal/spell).
+	// spellsDir is relative to this package (internal/spell).
 	const spellsDir = "../../spells"
 	dirs, err := os.ReadDir(spellsDir)
 	require.NoError(t, err)

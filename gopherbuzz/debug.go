@@ -4,7 +4,7 @@ import vmpackage "github.com/egladman/gopherbuzz/vm"
 
 // This file is the interpreter core's debug seam: stack introspection and
 // line-level step hooks, expressed in core types. The magus engine
-// adapter (magus/internal/interp/engine/buzz) translates these into the generic
+// adapter (internal/interp/engine/buzz) translates these into the generic
 // engine.DebugReader / engine.Stepper interfaces — the core never imports magus.
 //
 // All methods read the session's currently-executing VM (curVM), which Exec/

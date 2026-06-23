@@ -498,10 +498,10 @@ magus run preflight    # from the project directory
 magus run preflight .  # from the workspace root
 ```
 
-## Project: magus/cmd/magus/starter
+## Project: cmd/magus/starter
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/cmd/magus/starter</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>cmd/magus/starter</code></summary>
 
 ```text
 sources  cmd/magus/starter/magusfile.buzz, cmd/magus/starter/magusfiles/**/*.buzz, magusfile.buzz, magusfiles/**/*.buzz

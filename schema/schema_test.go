@@ -184,7 +184,7 @@ func TestEnvPrefix(t *testing.T) {
 // Fails if any committed file is out of date, meaning a Config change
 // requires re-running:
 //
-//	go generate ./magus/cmd/magus/...
+//	go generate ./cmd/magus/...
 func TestSchemaNotDrifted(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping drift check in short mode")
@@ -241,6 +241,6 @@ func TestSchemaNotDrifted(t *testing.T) {
 		got, err := os.ReadFile(c.generated)
 		require.NoErrorf(t, err, "read generated %s", c.name)
 		assert.Truef(t, bytes.Equal(want, got),
-			"%s is out of date — run: go generate ./magus/cmd/magus/...", c.name)
+			"%s is out of date — run: go generate ./cmd/magus/...", c.name)
 	}
 }

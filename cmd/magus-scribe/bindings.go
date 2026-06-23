@@ -84,7 +84,7 @@ func goLiteral(v any) string {
 }
 
 // emitBuzz emits the Buzz trampolines for module m into package gen
-// (magus/host/gen). It emits one Register<Module>(ctx, sess) that builds a
+// (host/gen). It emits one Register<Module>(ctx, sess) that builds a
 // buzz map of DirectValue closures; Buzz closures return (Value, error) natively,
 // so host errors propagate as a Buzz runtime error instead of a panic. Method
 // names stay snake_case to match the magusfile DSL; multi-return Impls yield a list.

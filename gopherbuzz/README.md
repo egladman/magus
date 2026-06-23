@@ -231,8 +231,8 @@ echo 'return (1 + 2) * 10;' | wasmtime buzz.wasm     # 30
 
 Both `wasip1/wasm` and `js/wasm` build. This makes gopherbuzz (to our knowledge
 the first Go implementation of Buzz) run **in the browser**: the [magus](..) docs
-site's Buzz playground ([`magus/cmd/buzz-playground`](../cmd/buzz-playground) over
-[`magus/internal/playground`](../internal/playground)) evaluates Buzz live and
+site's Buzz playground ([`cmd/buzz-playground`](../cmd/buzz-playground) over
+[`internal/playground`](../internal/playground)) evaluates Buzz live and
 dry-runs a `magusfile.buzz`, with host calls recorded.
 
 ## Architecture

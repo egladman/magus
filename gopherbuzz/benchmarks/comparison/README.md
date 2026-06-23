@@ -58,7 +58,7 @@ segment - `-bench='LoopSum/Warm'`, `-bench='/Fresh/Goja'`, etc.
 
 Each program is **self-contained** - it builds whatever data or function it
 needs inside the timed program - and every engine runs the same shape. This is
-deliberate: the in-tree engine suite (`magus/internal/interp/engine`) can lean on
+deliberate: the in-tree engine suite (`internal/interp/engine`) can lean on
 a persistent session to keep `setup` state alive across a separate `hot` chunk,
 but that doesn't port across engines (tengo can't share a defined function or
 collection between compiled units), so a setup/hot split would not be level here.

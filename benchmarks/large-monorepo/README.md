@@ -23,7 +23,7 @@ large-monorepo/
 Everything generated lives under `gen/`. That name is on magus's discovery
 ignore-list (same as the synthetic fixtures' `gen/` dirs), so the cloned repo's
 generated magusfiles are **not** picked up by the surrounding magus workspace
-when you run magus from the tack repo root.
+when you run magus from the magus repo root.
 
 ## Why no fork and no patch
 
@@ -79,7 +79,7 @@ full timed `next build` sweep needs a dedicated host; see Cost / tuning.)
 - A magus binary:
 
   ```sh
-  go build -tags mcp,selfmanage -o ~/.local/bin/magus ./magus/cmd/magus
+  go build -tags mcp,selfmanage -o ~/.local/bin/magus ./cmd/magus
   ```
 
   turbo/nx/lage are installed locally by `setup.sh` (`npm install`); no global

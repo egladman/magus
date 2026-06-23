@@ -3,8 +3,8 @@
 ## Getting started
 
 ```sh
-git clone https://github.com/egladman/tack
-cd tack/magus
+git clone https://github.com/egladman/magus
+cd magus
 go build ./cmd/magus
 go test -race ./...
 ```
@@ -129,7 +129,7 @@ Ground-truth wall-clock measurement uses
 for b in BenchmarkStartupHelp BenchmarkStartupVersion \
          BenchmarkStartupCompletionBash BenchmarkStartupLs; do
   go test -run=^$ -bench=^${b}$ -benchmem -benchtime=2s -count=10 \
-    ./magus/cmd/magus
+    ./cmd/magus
 done > /tmp/bench.before.txt
 
 # Spawn-based (true cold start — includes Go runtime init).

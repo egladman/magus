@@ -1,9 +1,9 @@
 // Command magus-docs generates Markdown documentation for every module
 // registered in the host package. Run it manually to refresh the committed docs:
 //
-//	go run ./magus/cmd/magus-docs -out ./magus/docs/modules
+//	go run ./cmd/magus-docs -out ./docs/modules
 //
-// The output under magus/docs/modules is committed; re-run this tool after
+// The output under docs/modules is committed; re-run this tool after
 // changing a host module's bindings to keep the docs in sync.
 package main
 

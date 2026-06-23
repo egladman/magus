@@ -217,7 +217,7 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 
 ## Worked examples in this repo
 
-Read these spells under [`magus/spells/`](../spells) when you outgrow a plain fork spell:
+Read these spells under [`spells/`](../spells) when you outgrow a plain fork spell:
 
 | Spell                                           | Kind            | What it demonstrates                                                                                                                                                                        |
 | ----------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

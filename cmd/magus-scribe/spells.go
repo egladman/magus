@@ -1,5 +1,5 @@
 // Subcommand `spells` compiles each built-in spell's Buzz source
-// (magus/spells/<name>/spell.buzz) to bytecode and writes magus/internal/spell/
+// (spells/<name>/spell.buzz) to bytecode and writes internal/spell/
 // gen/<name>.bo, which the spell package embeds at build time. The runtime
 // loader recovers each blob with UnmarshalChunk and runs it to extract the
 // spell's mgs_ functions — so the .buzz files are the source of truth and the

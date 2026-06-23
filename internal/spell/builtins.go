@@ -16,7 +16,7 @@ import (
 //go:generate go run ../../cmd/magus-scribe spells -spells ../../spells -out gen
 
 // builtinFS holds the compiled bytecode of every built-in spell, one <name>.bo
-// per spell, generated from magus/spells/<name>/spell.buzz by magus-scribe spells.
+// per spell, generated from spells/<name>/spell.buzz by magus-scribe spells.
 //
 //go:embed gen/*.bo
 var builtinFS embed.FS

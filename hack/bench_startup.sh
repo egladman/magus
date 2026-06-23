@@ -19,7 +19,7 @@ trap 'rm -rf "$BIN_DIR"' EXIT
 
 CGO_ENABLED="${CGO_ENABLED:-0}"
 echo "building magus into $BIN_DIR (CGO_ENABLED=$CGO_ENABLED)..." >&2
-(cd "$REPO_ROOT" && CGO_ENABLED="$CGO_ENABLED" go build -o "$BIN_DIR/magus" ./magus/cmd/magus)
+(cd "$REPO_ROOT" && CGO_ENABLED="$CGO_ENABLED" go build -o "$BIN_DIR/magus" ./cmd/magus)
 
 # Synthetic workspace so FindRoot succeeds without us depending on the
 # checkout's own magusfiles.

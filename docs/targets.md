@@ -150,7 +150,7 @@ A target string goes through three stages before any tool is invoked:
       │
       ▼
 ParseTarget(s)          → Target{Name:"test", Charms:[...]}
-      │                   magus/types/target.go
+      │                   types/target.go
       ▼
 Workspace.ExpandPath(t) → []Target (one concrete entry per matched project)
       │                   magus/select.go
@@ -169,7 +169,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 
 | Term       | Definition                                                                                                          |
 | ---------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `magus/types/target.go`.          |
+| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.          |
 | **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                       |
 | **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`. |
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                            |

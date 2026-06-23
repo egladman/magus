@@ -75,7 +75,7 @@ out, err := std.OsExec(ctx, "git", []string{"rev-parse", "HEAD"}, "", nil)
 
 The `Impl`s take a `context.Context` and honor whatever it carries (sandbox
 policy, concurrency limiter, working directory); called with a plain context they
-behave as thin, dependency-light wrappers. The package uses `magus/internal/*`
+behave as thin, dependency-light wrappers. The package uses `internal/*`
 packages transitively — that's fine, it's a public facade over internal impl —
 but those internals are not themselves importable from outside the module.
 

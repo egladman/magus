@@ -153,7 +153,7 @@
       <ul>
         <li><a href="index.html">Docs</a></li>
         <li><a href="editor.html" aria-current="page">Playground</a></li>
-        <li><a href="https://github.com/egladman/tack">Source</a></li>
+        <li><a href="https://github.com/egladman/magus">Source</a></li>
         <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
       </ul>
     </nav>
@@ -163,7 +163,7 @@
     <hgroup>
       <h1>Playground</h1>
       <p class="lede">
-        The interpreter magus embeds — <a href="https://github.com/egladman/tack/tree/main/magus/gopherbuzz">gopherbuzz</a>,
+        The interpreter magus embeds — <a href="https://github.com/egladman/magus/tree/main/gopherbuzz">gopherbuzz</a>,
         a complete <a href="https://buzz-lang.dev/">Buzz</a> implementation in Go — compiled to WebAssembly and
         running entirely in this tab. Edit the <code>magusfile.buzz</code>, then drive it from the terminal.
       </p>
@@ -224,7 +224,7 @@
   <script src="playground/wasm_exec.js"></script>
   <script>
     // Bootstrap only: instantiate the wasm module and hand control to Go, which
-    // owns the editor + terminal UI (see magus/cmd/buzz-playground). Streaming
+    // owns the editor + terminal UI (see cmd/buzz-playground). Streaming
     // instantiation with an ArrayBuffer fallback for browsers that reject the
     // wasm MIME type.
     (function () {

@@ -20,11 +20,11 @@ package main
 //
 // Capture baseline:
 //   go test -run=^$ -bench=^BenchmarkStartup$ -benchmem -benchtime=2s \
-//     -count=10 ./magus/cmd/magus > bench.before.txt
+//     -count=10 ./cmd/magus > bench.before.txt
 //
 // Compare after a change:
 //   go test -run=^$ -bench=^BenchmarkStartup$ -benchmem -benchtime=2s \
-//     -count=10 ./magus/cmd/magus > bench.after.txt
+//     -count=10 ./cmd/magus > bench.after.txt
 //   benchstat bench.before.txt bench.after.txt
 
 import (

@@ -376,7 +376,7 @@ func (s *Session) NewChild() *Session {
 }
 
 // SetIncludeDirs replaces the directories searched for file-based imports.
-// The host (e.g. magus/internal/interp) calls this to enforce workspace
+// The host (e.g. internal/interp) calls this to enforce workspace
 // sandboxing before running any user code.
 func (s *Session) SetIncludeDirs(dirs []string) { s.includeDirs = dirs }
 

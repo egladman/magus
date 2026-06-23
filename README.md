@@ -49,7 +49,7 @@ Magus borrows from Unix: everything is a file. The cache is a tree of files on d
 
 ### From a release binary
 
-Download the latest release for your platform from the [releases page](https://github.com/egladman/tack/releases), extract the archive, and run:
+Download the latest release for your platform from the [releases page](https://github.com/egladman/magus/releases), extract the archive, and run:
 
 ```sh
 ./magus self install
@@ -66,8 +66,8 @@ Use `--bin-dir` and `--man-dir` to override the target directories:
 ### From source
 
 ```sh
-git clone https://github.com/egladman/tack
-cd tack/magus
+git clone https://github.com/egladman/magus
+cd magus
 go build -tags selfmanage -o magus ./cmd/magus
 ```
 
@@ -365,7 +365,7 @@ write-mode dispatch (`format`, `generate`), magus snapshots the
 descendant trees; afterwards it diffs them and warns if anything
 crossed the boundary, attributing the violation to the project, spell,
 and target. The warning carries diagnostic code **MGS3001**; see
-[`magus/docs/codes/sandbox/MGS3001.md`](docs/codes/sandbox/MGS3001.md) for
+[`docs/codes/sandbox/MGS3001.md`](docs/codes/sandbox/MGS3001.md) for
 resolution steps. Read-only targets and projects with no descendants skip
 the audit entirely (zero cost on the hot path).
 

@@ -2,3 +2,6 @@
 # rendered coverage.svg badge is committed; the profile is not.
 coverage.out
 
+
+# magus runtime cache
+.magus/

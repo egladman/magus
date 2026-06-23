@@ -2,7 +2,7 @@
 // engine implementations must satisfy, along with the engine registry.
 //
 // Concurrency model: a Session is NOT safe for concurrent use from multiple
-// goroutines. The pool (magus/internal/interp/pool) ensures each Session is
+// goroutines. The pool (internal/interp/pool) ensures each Session is
 // owned by exactly one goroutine at a time. Parallelism is achieved by
 // maintaining N sessions across N pool workers — no session is shared.
 package engine
