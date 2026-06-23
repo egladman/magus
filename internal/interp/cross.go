@@ -79,8 +79,13 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	if e, ok := c.m[key]; ok {
 		c.mu.Unlock()
 		slog.DebugContext(ctx, "interp: cross-project dispatch (awaiting in-flight run)", "dir", dir, "target", target)
-		<-e.done
-		return e.err
+		// Share the in-flight result, but don't pin a cancelled waiter on a slow run.
+		select {
+		case <-e.done:
+			return e.err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	slog.DebugContext(ctx, "interp: cross-project dispatch", "dir", dir, "target", target)
 	e := &crossEntry{done: make(chan struct{})}

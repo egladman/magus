@@ -168,18 +168,38 @@ func (w *Watcher) loop(ctx context.Context, cfg watchConfig) {
 		}
 	}
 
+	// flushFinal delivers the last batch on shutdown, blocking (unlike flush) so it
+	// isn't dropped, bounded by a short grace so a gone consumer can't pin us open.
+	// ctx is not the escape: it's usually already cancelled at shutdown.
+	flushFinal := func() {
+		if len(pending) == 0 {
+			return
+		}
+		paths := make([]string, 0, len(pending))
+		for p := range pending {
+			paths = append(paths, p)
+		}
+		slices.Sort(paths)
+		grace := time.NewTimer(200 * time.Millisecond)
+		defer grace.Stop()
+		select {
+		case w.events <- Batch{Paths: paths, At: time.Now()}:
+		case <-grace.C:
+		}
+	}
+
 	for {
 		select {
 		case <-w.done:
 			if timer != nil {
 				timer.Stop()
 			}
-			flush()
+			flushFinal()
 			return
 
 		case ev, ok := <-w.n.Events():
 			if !ok {
-				flush()
+				flushFinal()
 				return
 			}
 			if cfg.ignore(ev.Name) {
