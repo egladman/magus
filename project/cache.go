@@ -1,11 +1,10 @@
 package project
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/codec"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,7 +30,7 @@ func loadWSCache(root string) (*wsCache, bool) {
 		return nil, false
 	}
 	var c wsCache
-	if err := codec.Unmarshal(data, &c); err != nil {
+	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, false
 	}
 	if c.SchemaVersion != cacheSchemaVersion {
@@ -68,11 +67,38 @@ func saveWSCache(root string, ws *types.Workspace, dirMtimes map[string]int64) {
 		Projects:      projects,
 		DirMtimes:     dirMtimes,
 	}
-	data, err := codec.Marshal(c)
+	data, err := json.Marshal(c)
 	if err != nil {
 		return
 	}
-	_ = file.WriteFileAtomic(filepath.Join(root, wsCacheFile), data, 0o600)
+	_ = writeFileAtomic(filepath.Join(root, wsCacheFile), data, 0o600)
+}
+
+// writeFileAtomic writes via a temp file and rename so a reader never sees a partial
+// file. Best-effort: a write failure is treated as a cache miss.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".workspace.cache-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // restoreFromCache reconstructs a *types.Workspace from c, re-binding spells from the registry.
