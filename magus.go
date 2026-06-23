@@ -5,19 +5,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/flake"
-	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/depgraph"
@@ -218,8 +215,6 @@ func (m *Magus) autobindMagusfileSpell() {
 	}
 }
 
-// Open opens a Magus orchestrator rooted at root with cache and telemetry.
-// Telemetry init failure falls back to a no-op provider. Use Inspect for read-only callers.
 // signingKeyEnv carries the base64 Ed25519 seed used to sign remote cache entries:
 // a secret, set only in trusted CI.
 const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
@@ -260,6 +255,9 @@ func remoteCacheSigningOpts(trustedB64 []string, insecure bool) ([]cache.Option,
 	return opts, nil
 }
 
+// Open opens a Magus orchestrator rooted at root with cache and telemetry. It evaluates
+// magusfiles first, so project registration and any remote-cache wiring are set up
+// before the cache is built. Use [Inspect] for read-only callers that need no cache.
 func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	m, err := inspect(ctx, root, opts...)
 	if err != nil {
@@ -360,193 +358,6 @@ func (m *Magus) AffectedFromPaths(ctx context.Context, paths []string) (*types.A
 	return project.AffectedFromPaths(ctx, m.ws, paths)
 }
 
-// insightScan defaults opts.Dir to the workspace root and runs the shared history
-// scan every insight lens aggregates from.
-func (m *Magus) insightScan(ctx context.Context, opts *types.InsightOptions) ([]project.ScannedCommit, error) {
-	if opts.Dir == "" {
-		opts.Dir = m.ws.Root
-	}
-	return project.Scan(ctx, m.ws, opts.Dir, opts.Commits, opts.Since)
-}
-
-// Hotspots is the churn × complexity lens. The project view is the dependency graph
-// heat-coloured by churn (with authors, recency, blast radius, and CI duration on each
-// node); --files ranks individual files by edit frequency weighted by complexity.
-func (m *Magus) Hotspots(ctx context.Context, opts types.InsightOptions) (types.HotspotOutput, error) {
-	scan, err := m.insightScan(ctx, &opts)
-	if err != nil {
-		return types.HotspotOutput{}, err
-	}
-	g, err := m.Graph()
-	if err != nil {
-		return types.HotspotOutput{}, err
-	}
-	// Pull per-project CI duration onto the nodes (the "× CI cost" signal) when a
-	// history file is configured; best-effort, silently skipped when unavailable.
-	compose := []ComposeOption{WithGraphInput(g)}
-	if path := m.cfg.HistoryPath; path != "" {
-		var hist forecast.History
-		if err := hist.Load(ctx, path); err == nil {
-			compose = append(compose, WithGraphHistory(&hist, "ci"))
-		}
-	}
-	out := ComposeGraph(m, compose...)
-	stats := project.ProjectStats(scan)
-	for i := range out.Nodes {
-		st, ok := stats[out.Nodes[i].Path]
-		if !ok {
-			continue
-		}
-		out.Nodes[i].Churn = st.Commits
-		out.Nodes[i].Authors = st.Authors
-		if !st.Last.IsZero() {
-			last := st.Last
-			out.Nodes[i].LastCommit = &last
-		}
-	}
-	res := types.HotspotOutput{
-		Definition: types.HotspotDefinition,
-		Commits:    opts.Commits,
-		Since:      opts.Since,
-		Nodes:      out.Nodes,
-	}
-	if opts.Files {
-		res.Files = project.FileHotspots(scan, func(rel string) int {
-			return project.Complexity(filepath.Join(m.ws.Root, rel))
-		})
-	}
-	return res, nil
-}
-
-// Affinity is the temporal-coupling lens: projects that change together, with the
-// pairs that lack any declared dependency between them flagged as hidden affinity.
-func (m *Magus) Affinity(ctx context.Context, opts types.InsightOptions) (types.AffinityOutput, error) {
-	scan, err := m.insightScan(ctx, &opts)
-	if err != nil {
-		return types.AffinityOutput{}, err
-	}
-	pairs := project.Affinity(scan)
-	declared := m.declaredDeps()
-	for i := range pairs {
-		if !declared[pairs[i].A][pairs[i].B] && !declared[pairs[i].B][pairs[i].A] {
-			pairs[i].Hidden = true
-		}
-	}
-	return types.AffinityOutput{
-		Definition: types.AffinityDefinition,
-		Commits:    opts.Commits,
-		Since:      opts.Since,
-		Pairs:      pairs,
-	}, nil
-}
-
-// declaredDeps returns each project's direct dependency set (both directions are
-// looked up by the affinity lens to decide whether a co-change pair is hidden).
-func (m *Magus) declaredDeps() map[string]map[string]bool {
-	out := make(map[string]map[string]bool, len(m.ws.Projects))
-	for _, p := range m.All() {
-		set := make(map[string]bool, len(p.DependsOn))
-		for _, d := range p.DependsOn {
-			set[d] = true
-		}
-		out[p.Path] = set
-	}
-	return out
-}
-
-// Ownership is the knowledge-risk lens: author concentration, bus factor, and
-// abandonment (projects gone quiet in the recent half of the window).
-func (m *Magus) Ownership(ctx context.Context, opts types.InsightOptions) (types.OwnershipOutput, error) {
-	scan, err := m.insightScan(ctx, &opts)
-	if err != nil {
-		return types.OwnershipOutput{}, err
-	}
-	return types.OwnershipOutput{
-		Definition: types.OwnershipDefinition,
-		Commits:    opts.Commits,
-		Since:      opts.Since,
-		Projects:   project.Ownership(scan, project.Midpoint(scan)),
-	}, nil
-}
-
-// Trend is the rising/cooling lens: each project's churn in the recent vs earlier
-// half of the window.
-func (m *Magus) Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error) {
-	scan, err := m.insightScan(ctx, &opts)
-	if err != nil {
-		return types.TrendOutput{}, err
-	}
-	return types.TrendOutput{
-		Definition: types.TrendDefinition,
-		Commits:    opts.Commits,
-		Since:      opts.Since,
-		Projects:   project.Trend(scan),
-	}, nil
-}
-
-// LogScope emits a scope header through the cache logger. No-op on Inspect workspaces.
-func (m *Magus) LogScope(label, source string) {
-	if m.cache == nil {
-		return
-	}
-	m.cache.LogScope(label, source)
-}
-
-// PruneCache removes entries older than cutoff and GC-collects orphaned blobs.
-func (m *Magus) PruneCache(ctx context.Context, cutoff time.Time, dryRun bool) (removed int, freed int64, err error) {
-	if m.cache == nil {
-		return 0, 0, ErrNoCache
-	}
-	return m.cache.Prune(ctx, cutoff, dryRun)
-}
-
-// PruneRemoteCache evicts entries from the configured remote cache backend per a
-// retention policy (age and/or newest-N count). It errors when no remote backend is
-// wired (magus.cache.remote(...)), the backend can't prune, or it's inactive here.
-//
-// The policy is taken as scalars rather than a cache.RetentionPolicy so this public
-// facade stays free of the internal cache type (which an external importer can't
-// name) — mirroring PruneCache's time.Time/bool signature; the struct is assembled
-// here, one call from where it's consumed.
-func (m *Magus) PruneRemoteCache(ctx context.Context, olderThan time.Duration, keepLast int, dryRun bool) error {
-	if m.cache == nil {
-		return ErrNoCache
-	}
-	return m.cache.PruneRemote(ctx, cache.RetentionPolicy{OlderThan: olderThan, KeepLast: keepLast, DryRun: dryRun})
-}
-
-// ExportCache writes the entire cache to w as a gzip-compressed tar archive.
-// Returns [ErrNoCache] on Inspect workspaces.
-func (m *Magus) ExportCache(ctx context.Context, w io.Writer) error {
-	if m.cache == nil {
-		return ErrNoCache
-	}
-	return m.cache.Export(ctx, w)
-}
-
-// ImportCache extracts a gzip-compressed tar archive produced by [Magus.ExportCache].
-// Returns [ErrNoCache] on Inspect workspaces.
-func (m *Magus) ImportCache(ctx context.Context, r io.Reader) error {
-	if m.cache == nil {
-		return ErrNoCache
-	}
-	return m.cache.Import(ctx, r)
-}
-
-// TailLog returns the log-file path of the most recent cache entry for projectPath,
-// optionally restricted to target. Wraps fs.ErrNotExist when not found; [ErrNoCache] on Inspect.
-func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) {
-	if m.cache == nil {
-		return "", ErrNoCache
-	}
-	if target != "" {
-		_, logPath, err = m.cache.LastEntryForTarget(projectPath, target)
-		return logPath, err
-	}
-	_, logPath, err = m.cache.LastEntry(projectPath)
-	return logPath, err
-}
-
 func (m *Magus) limiter() *cache.Limiter {
 	m.limOnce.Do(func() {
 		n := m.cfg.Concurrency
@@ -579,17 +390,10 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 
 // Close releases workspace resources (VM pools); cache and limiter are caller-owned.
 func (m *Magus) Close() error {
-	var errs []error
-	if m.buzzPoolReg != nil {
-		errs = append(errs, m.buzzPoolReg.Close())
+	if m.buzzPoolReg == nil {
+		return nil
 	}
-	var joined error
-	for _, e := range errs {
-		if e != nil {
-			joined = errors.Join(joined, e)
-		}
-	}
-	return joined
+	return m.buzzPoolReg.Close()
 }
 
 func (m *Magus) flakeConfig() flake.Config {
@@ -763,15 +567,15 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	}
 	if len(spells) == 1 {
 		if err := dispatch(ctx, 0, spells[0]); err != nil {
-			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellError{{Spell: spells[0].Name(), Err: err}}}
+			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: spells[0].Name(), Err: err}}}
 		}
 		return nil
 	}
 	if p.Exclusive {
-		var failed []types.SpellError
+		var failed []types.SpellFailure
 		for i, s := range spells {
 			if err := dispatch(ctx, i, s); err != nil {
-				failed = append(failed, types.SpellError{Spell: s.Name(), Err: err})
+				failed = append(failed, types.SpellFailure{Spell: s.Name(), Err: err})
 			}
 		}
 		if len(failed) == 0 {
@@ -818,10 +622,10 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 		fanOut()
 	}
 
-	var failed []types.SpellError
+	var failed []types.SpellFailure
 	for _, r := range results {
 		if r.err != nil {
-			failed = append(failed, types.SpellError{Spell: r.name, Err: r.err})
+			failed = append(failed, types.SpellFailure{Spell: r.name, Err: r.err})
 		}
 	}
 	if len(failed) == 0 {
@@ -843,7 +647,7 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 			pctx = types.WithEffectiveClaims(ctx, effective)
 		}
 		if err := fn(pctx, s); err != nil {
-			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellError{{Spell: s.Name(), Err: err}}}
+			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: s.Name(), Err: err}}}
 		}
 		return nil
 	}

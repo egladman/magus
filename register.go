@@ -100,11 +100,11 @@ func WithTarget(name string, opts ...TargetOption) ProjectOption {
 func WithSpell(name string, opts ...BindingOption) ProjectOption {
 	return func(p *types.Project) error {
 		if name == "" {
-			return fmt.Errorf("magus: WithSpell on %q: %w", p.Path, ErrSpellNameRequired)
+			return fmt.Errorf("magus: WithSpell on %q: %w", p.Path, types.ErrSpellNameRequired)
 		}
 		l, ok := project.DefaultSpellRegistry().Lookup(name)
 		if !ok {
-			return fmt.Errorf("magus: WithSpell(%q) on %q: %w", name, p.Path, ErrSpellNotRegistered)
+			return fmt.Errorf("magus: WithSpell(%q) on %q: %w", name, p.Path, types.ErrSpellNotRegistered)
 		}
 		return bindSpell(p, l, name, opts...)
 	}

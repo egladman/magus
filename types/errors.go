@@ -53,8 +53,8 @@ func (*UnregisteredDepError) Is(target error) bool {
 	return target == ErrUnregisteredDep
 }
 
-// SpellError records the error from a single spell during multi-spell fan-out.
-type SpellError struct {
+// SpellFailure records the error from a single spell during multi-spell fan-out.
+type SpellFailure struct {
 	Spell string
 	Err   error
 }
@@ -63,7 +63,7 @@ type SpellError struct {
 type SpellErrors struct {
 	Project string
 	Target  string
-	Failed  []SpellError
+	Failed  []SpellFailure
 }
 
 func (e *SpellErrors) Error() string {

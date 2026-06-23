@@ -30,7 +30,7 @@ func TestSpellErrors_Error(t *testing.T) {
 	err := &SpellErrors{
 		Project: "api/",
 		Target:  "build",
-		Failed: []SpellError{
+		Failed: []SpellFailure{
 			{Spell: "go", Err: errors.New("exit 1")},
 		},
 	}
@@ -43,7 +43,7 @@ func TestSpellErrors_Error(t *testing.T) {
 func TestSpellErrors_Unwrap(t *testing.T) {
 	inner := errors.New("exit 2")
 	err := &SpellErrors{
-		Failed: []SpellError{{Spell: "go", Err: inner}},
+		Failed: []SpellFailure{{Spell: "go", Err: inner}},
 	}
 	assert.ErrorIs(t, err, inner)
 }

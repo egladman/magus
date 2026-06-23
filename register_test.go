@@ -165,7 +165,7 @@ func TestWithSpellUnknownTool(t *testing.T) {
 	reg.RegisterProject(".", WithSpell("nope"))
 
 	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
-	assert.ErrorIs(t, err, ErrSpellNotRegistered, "Inspect: expected error for unknown tool")
+	assert.ErrorIs(t, err, types.ErrSpellNotRegistered, "Inspect: expected error for unknown tool")
 }
 
 // TestWithExclusiveOption verifies that WithExclusive() sets p.Exclusive.

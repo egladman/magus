@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RunOption configures a [Run], [CI], or [RunAffected] invocation.
+// RunOption configures a [Magus.Run], [Magus.RunCI], or [Magus.RunAffected] invocation.
 type RunOption func(*run)
 
 // run is the accumulated state of a Run/CI/RunAffected call.

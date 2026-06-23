@@ -232,11 +232,11 @@ func TestCacheOps_InspectReturnErrNoCache(t *testing.T) {
 	m, err := inspect(context.Background(), root)
 	require.NoError(t, err)
 	_, _, err = m.PruneCache(context.Background(), time.Now(), true)
-	assert.ErrorIs(t, err, ErrNoCache, "PruneCache on Inspect")
-	assert.ErrorIs(t, m.ExportCache(context.Background(), io.Discard), ErrNoCache, "ExportCache on Inspect")
-	assert.ErrorIs(t, m.ImportCache(context.Background(), strings.NewReader("")), ErrNoCache, "ImportCache on Inspect")
+	assert.ErrorIs(t, err, types.ErrNoCache, "PruneCache on Inspect")
+	assert.ErrorIs(t, m.ExportCache(context.Background(), io.Discard), types.ErrNoCache, "ExportCache on Inspect")
+	assert.ErrorIs(t, m.ImportCache(context.Background(), strings.NewReader("")), types.ErrNoCache, "ImportCache on Inspect")
 	_, err = m.TailLog("anything", "")
-	assert.ErrorIs(t, err, ErrNoCache, "TailLog on Inspect")
+	assert.ErrorIs(t, err, types.ErrNoCache, "TailLog on Inspect")
 }
 
 func TestLimiter_IdempotentNonNil(t *testing.T) {
@@ -558,7 +558,7 @@ func TestExpand_UnknownPath(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 	_, err := ws.ExpandPath(types.Target{Path: "does/not/exist", Name: "build"})
-	assert.ErrorIs(t, err, ErrUnknownProject, "expected ErrUnknownProject for unknown project path")
+	assert.ErrorIs(t, err, types.ErrUnknownProject, "expected ErrUnknownProject for unknown project path")
 }
 
 // TestParseTarget covers the canonical "target[:charm,...]" parsing cases.
