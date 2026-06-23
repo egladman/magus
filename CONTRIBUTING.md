@@ -14,7 +14,7 @@ go test -race ./...
 This repo distinguishes unit tests from integration tests with four layered signals.
 A test is an integration test if **any** of these are true:
 
-- It shells out (`exec.Command`, invokes `go build`, `git`, …).
+- It shells out (`exec.Command`, invokes `go build`, `git`, and so on).
 - It needs the network, a daemon, or a real binary on `$PATH` other than `go`.
 - It spins up a container, server, or other long-lived process.
 - It takes more than ~500ms in the steady state.
@@ -49,7 +49,7 @@ The project's `.golangci.yml` enforces idiomatic Go: `errcheck`, `errorlint`,
 ## House style
 
 A few decisions that aren't enforced by tooling but are expected for new code.
-Existing code that pre-dates a rule may not conform yet — don't churn it as a
+Existing code that pre-dates a rule may not conform yet. Don't churn it as a
 drive-by, but do follow these when you touch the file for another reason.
 
 ### Constructors and options
@@ -61,7 +61,7 @@ func New(opts ...Option) *T
 func Open(ctx context.Context, opts ...Option) (*T, error)  // when I/O is involved
 ```
 
-Each package owns its own `Option`/`Options` type — see `magus.Option`,
+Each package owns its own `Option`/`Options` type: see `magus.Option`,
 `cache.Option`, `types.SpellOption`. Internal packages may use a positional
 config struct (`New(opts Options)`) when the constructor is called from
 exactly one place; promoting one to public means converting to functional
@@ -69,7 +69,7 @@ options.
 
 ### Logging
 
-Library code logs via `log/slog`. Reserve `fmt.Fprintf(os.Stderr, …)` for
+Library code logs via `log/slog`. Reserve `fmt.Fprintf(os.Stderr, ...)` for
 the `cmd/magus` CLI itself, where output is part of the user contract.
 Adapter packages under `vcs/`, `internal/cache/`, etc. should log structured
 events so the daemon and CLI can route them consistently.
@@ -77,15 +77,16 @@ events so the daemon and CLI can route them consistently.
 ### File writes
 
 Files written inside a magus-managed directory go through
-`internal/util.WriteFileAtomic`, never bare `os.WriteFile` or hand-rolled
+`internal/file.WriteFileAtomic`, never bare `os.WriteFile` or hand-rolled
 temp+rename. The helper handles `fsync` so a crash mid-write doesn't leave
 a truncated cache entry.
 
 ### JSON
 
-Use `internal/util.Marshal` / `Unmarshal` / `NewEncoder` / `NewDecoder`
-instead of importing `encoding/json` directly. The wrapper exists so the
-codec can be swapped under a build tag (the v2 transition).
+Internal packages use `internal/codec.Marshal` / `Unmarshal` / `NewEncoder` /
+`NewDecoder` instead of importing `encoding/json` directly. The wrapper exists so
+the codec can be swapped under a build tag (the v2 transition). Public packages
+(`project`, `types`, ...) use `encoding/json` directly to stay off the internal tree.
 
 ### Lookups
 
@@ -102,21 +103,20 @@ Any method that may touch disk, network, or a subprocess takes a
 ### Package layout
 
 Package names are lowercase with no underscores and match their directory
-segment where practical — `bindgen`, not `bind_gen`. Place a package _under_
+segment where practical: `bindgen`, not `bind_gen`. Place a package _under_
 what it composes rather than beside it: the sandbox-policy builder lives at
 `internal/sandbox/policy` (package `policy`), next to the `sandbox/env` and
 `sandbox/filesystem` packages it draws on, not as a sibling of `sandbox`. No
 alias should ever be _required_ to disambiguate an import; two packages may
-share a short name when they are never co-imported and the names are
-accurate — `config/env` and `sandbox/env` are both `package env`
-(config-derived flag/var names vs. the sandbox env allowlist) and are left
-as-is.
+share a short name when they are never co-imported and the names are accurate.
+`config/env` and `sandbox/env` are both `package env` (config-derived flag/var
+names vs. the sandbox env allowlist), and they stay as-is.
 
 ## Performance
 
-Benchmark conventions for magus. The overarching rule: every
-performance-related change must carry a checked-in `Benchmark*` plus
-benchstat evidence — speculative micro-opts are rejected.
+Benchmark conventions for magus. Every performance-related change must carry a
+checked-in `Benchmark*` plus benchstat evidence; reviewers reject speculative
+micro-opts.
 
 ### Startup latency
 
@@ -128,7 +128,7 @@ Ground-truth wall-clock measurement uses
 #### Capture baselines
 
 ```bash
-# In-process. Run each bench in isolation — running them together pollutes
+# In-process. Run each bench in isolation; running them together pollutes
 # the first one with cache-package-init costs that fire once per `go test`
 # binary.
 for b in BenchmarkStartupHelp BenchmarkStartupVersion \
@@ -137,7 +137,7 @@ for b in BenchmarkStartupHelp BenchmarkStartupVersion \
     ./cmd/magus
 done > /tmp/bench.before.txt
 
-# Spawn-based (true cold start — includes Go runtime init).
+# Spawn-based (true cold start, includes Go runtime init).
 hack/bench_startup.sh > /tmp/spawn.before.txt
 ```
 
@@ -148,8 +148,8 @@ benchstat /tmp/bench.before.txt /tmp/bench.after.txt
 ```
 
 Paste the relevant rows into the PR description and the `optimization:`
-comment. **Do not commit** `bench.before.txt` / `bench.after.txt` —
-they belong in the commit message, not the tree.
+comment. **Do not commit** `bench.before.txt` / `bench.after.txt`.
+They belong in the commit message, not the tree.
 
 #### The `optimization:` comment
 
@@ -170,7 +170,7 @@ without re-running the bench.
 #### Platform fast-path pattern
 
 Per-OS optimizations use Go build tags as in
-[`internal/cache/reflink/`](internal/cache/reflink/) — `_linux.go`,
+[`internal/cache/reflink/`](internal/cache/reflink/): `_linux.go`,
 `_linux_other.go`, `_other.go` files with `//go:build` constraints. A
 portable fallback MUST exist; never gate functionality on a fast path.
 
@@ -178,7 +178,7 @@ portable fallback MUST exist; never gate functionality on a fast path.
 
 The `magus-bench` job in `.github/workflows/ci.yaml` runs
 `go test -bench=. -benchtime=2s` across the packages listed in the
-job — currently `internal/cache`, `internal/report`,
+job: currently `internal/cache`, `internal/report`,
 `internal/ci/forecast`, and `cmd/magus`. The job restores a baseline
 from `main` for PR comparison and surfaces the benchstat output in the
 step log. The comparison is non-blocking; GHA runners are too noisy to
@@ -188,5 +188,5 @@ gate merges on the delta alone.
 
 - One logical change per PR.
 - Add or update tests for every behaviour change.
-- Run `go test -race ./...` before pushing — the CI suite does the same.
+- Run `go test -race ./...` before pushing; the CI suite does the same.
 - Keep commit messages in the imperative mood ("Add X", "Fix Y").

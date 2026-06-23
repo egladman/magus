@@ -5,7 +5,7 @@ Magus has two entry points into an interactive debugging REPL:
 - [`magus repl`](#interactive-repl): standalone shell with magusfile bindings preloaded.
 - [`magus.pry()`](#maguspry-breakpoint-in-a-magusfile): `binding.pry`-style breakpoint, opens the same REPL mid-target with frame context attached.
 
-Both share the same evaluator. Pry adds stack-introspection commands (`.where`, `.locals`, `.up`/`.down`, `.step`, …) on top of the base REPL surface. The [meta-commands](#meta-commands) and [multiline input](#multiline-input) sections apply to both unless noted.
+Both share the same evaluator. Pry adds stack-introspection commands (`.where`, `.locals`, `.up`/`.down`, `.step`, ...) on top of the base REPL surface. The [meta-commands](#meta-commands) and [multiline input](#multiline-input) sections apply to both unless noted.
 
 ## Interactive REPL
 
@@ -22,7 +22,7 @@ go
 > os.exec("go", ["build", "./..."])
 ```
 
-Lines starting with `//` are treated as comments and skipped. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit.
+The REPL treats lines starting with `//` as comments and skips them. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit.
 
 ### `--no-autoload`
 
@@ -86,7 +86,7 @@ Color output is enabled when stdout is a TTY; set `NO_COLOR=1` to disable. The c
 
 ## Multiline input
 
-Incomplete input is detected and the REPL reprompts with `>>` until the expression closes: the Buzz parser is reinvoked on each newline, and input that does not yet parse to a complete statement is treated as incomplete; type errors surface immediately.
+The REPL detects incomplete input and reprompts with `>>` until the expression closes: it reinvokes the Buzz parser on each newline, treats anything that does not yet parse to a complete statement as incomplete, and surfaces type errors immediately.
 
 ## `--step`
 

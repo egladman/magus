@@ -61,7 +61,7 @@ The canonical serialized form of a resolved Target (what `Target.String()` emits
 | `.`                          | the project containing cwd | `.` → `web/studio`           |
 | empty or `/`                 | all projects               | n/a                          |
 
-So `../foo` behaves as a shell user expects: from `web/studio`, `magus run build ../foo` targets `web/foo`. Bare paths stay workspace-relative regardless of cwd. Two inputs are always rejected:
+So `../foo` behaves as a shell user expects: from `web/studio`, `magus run build ../foo` targets `web/foo`. Bare paths stay workspace-relative regardless of cwd. magus rejects two inputs:
 
 - **Absolute paths** (`/etc`, `C:\foo`): project paths must be repo-relative.
 - **Paths that escape the workspace root** (`../../outside`): magus never operates outside the workspace it discovered.
@@ -123,7 +123,7 @@ magus run go::go-vet                # the go-vet op of the go spell, all project
 magus run go::golangci-lint         # the golangci-lint op of the go spell
 ```
 
-This is an **escape hatch** for ad-hoc runs and introspection, not the everyday surface (compose ops into [targets](spells.md#spells-vs-targets) instead). Because it is op-direct, the name after `::` is matched against the spell's op keys verbatim (no kebab/case normalization, unlike target names — see [Naming operations](spells.md#naming-operations)):
+This is an **escape hatch** for ad-hoc runs and introspection, not the everyday surface (compose ops into [targets](spells.md#spells-vs-targets) instead). Because it is op-direct, the name after `::` is matched against the spell's op keys verbatim (no kebab/case normalization, unlike target names; see [Naming operations](spells.md#naming-operations)):
 
 - `go::golangci-lint` runs that op.
 - `go::lint` is a graceful **no-op**: the go spell has no op named `lint` (its linter op is `golangci-lint`), so nothing runs.

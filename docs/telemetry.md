@@ -1,8 +1,8 @@
 # Telemetry (OpenTelemetry)
 
 magus can export **metrics** and **traces** to any OTLP collector you run.
-Telemetry is **OFF by default** — there is no magus-operated backend; the
-collector is yours and magus connects only to the endpoint you configure.
+Telemetry is **OFF by default**: there is no magus-operated backend. The
+collector is yours, and magus connects only to the endpoint you configure.
 
 This page is the complete reference for everything magus emits. Instrument
 definitions live in
@@ -36,9 +36,9 @@ Or via the environment:
 | `MAGUS_TELEMETRY_SERVICE_NAME`  | `telemetry.service_name` | `magus` | Value of the resource attribute `service.name`                  |
 | `MAGUS_TELEMETRY_SAMPLE_RATIO`  | `telemetry.sample_ratio` | `1.0`   | Head-based trace sampling ratio in `[0,1]`                      |
 
-**Export details.** Metrics are pushed over OTLP on a periodic reader every
-**30s**. Traces are batched and sampled head-based by `sample_ratio`
-(`1.0` = every trace). Metrics are unsampled — every recorded point is exported.
+**Export details.** magus pushes metrics over OTLP on a periodic reader every
+**30s**. It batches traces and samples them head-based by `sample_ratio`
+(`1.0` = every trace). Metrics are unsampled: every recorded point is exported.
 
 ## Resource attributes
 
@@ -49,7 +49,7 @@ Every metric and span carries these resource attributes:
 | `service.name`         | `telemetry.service_name` (default `magus`)    |
 | `service.version`      | the magus build version                       |
 | `magus.workspace.root` | the workspace root, when set                  |
-| `process.*`            | detected process metadata (pid, runtime, …)   |
+| `process.*`            | detected process metadata (pid, runtime, ...)   |
 | `host.*`               | detected host metadata                        |
 
 ## Metrics
@@ -68,7 +68,7 @@ per-project attribute.
 
 ### Remote cache
 
-The [shared backend](remote-cache.md) (S3, GitHub Actions, …) — exported only
+The [shared backend](remote-cache.md) (S3, GitHub Actions, ...), exported only
 when one is wired via `magus.cache.remote(...)`. These mirror the local-cache
 vocabulary under a `.remote` prefix so a remote hit is **never** folded into the
 local counters: a remote hit is still a *local* miss, because the remote fetch
@@ -82,9 +82,9 @@ backend changes.
 | `magus.cache.remote.misses`   | counter    | `{call}` | `op=get`, `outcome=miss`                    | Remote `get` found nothing                |
 | `magus.cache.remote.errors`   | counter    | `{call}` | `op ∈ {get, put}`, `outcome=error`          | A remote operation failed                 |
 | `magus.cache.remote.duration` | histogram  | `s`      | `op ∈ {get, put}`, `outcome`                | Wall-clock of a single remote operation   |
-| `magus.cache.remote.io.size`  | histogram  | `By`     | `op ∈ {get, put}`                           | Bytes transferred — recorded on hits and puts only (egress/ingress cost) |
+| `magus.cache.remote.io.size`  | histogram  | `By`     | `op ∈ {get, put}`                           | Bytes transferred, recorded on hits and puts only (egress/ingress cost) |
 
-`outcome ∈ {hit, miss, stored, error}` — `stored` is a successful `put`.
+`outcome ∈ {hit, miss, stored, error}`; `stored` is a successful `put`.
 **Remote hit-rate** is `hits / (hits + misses)`. **Put success** is the
 `magus.cache.remote.duration` count for `op=put` minus
 `magus.cache.remote.errors` for `op=put`.
@@ -101,7 +101,7 @@ graph build.
 
 ### Target runs
 
-Per-project, per-spell. `magus.project` has unbounded cardinality — see
+Per-project, per-spell. `magus.project` has unbounded cardinality; see
 [Cardinality](#cardinality).
 
 | Metric                  | Instrument | Unit     | Attributes                                                             | Meaning                                  |
@@ -137,7 +137,7 @@ Spans are sampled head-based by `telemetry.sample_ratio`.
 | `magus.cache.remote.prune`  | —                                | A retention sweep (`magus config cache prune --remote`)          |
 
 The `magus.cache.hash` / `replay` / `snapshot` spans break a target's latency
-down by phase — hashing vs. building vs. I/O. The remote `get`/`put` spans put a
+down by phase: hashing vs. building vs. I/O. The remote `get`/`put` spans put a
 network fetch or upload inline in the build trace with its own latency, so a slow
 remote round-trip is visible instead of opaque time inside the target.
 

@@ -59,10 +59,11 @@ that one list. A spell's `mgs_` functions decode to a `Spec` for every scalar an
 list contribution (`needs`, `provides`, `claims`, `version_cmd`, `opaque`) and
 for record-shaped ops (`{cmd, args, charms}`).
 
-Spells support **function-ops** — ops whose handler does host work in-VM rather
-than forking a command — so a remote cache backend (`get_artifact`/`put_artifact`)
-can be authored and wired with `magus.cache.remote`. A handler hands its command
-to the injected `cb` callback (the form the resolver also extracts statically).
+Spells support **function-ops**, ops whose handler does host work in-VM rather
+than forking a command, so you can author a remote cache backend
+(`get_artifact`/`put_artifact`) and wire it with `magus.cache.remote`. A handler
+hands its command to the injected `cb` callback (the form the resolver also
+extracts statically).
 
 **Doc-comment capture.** Buzz captures a handler's doc comment at compile time
 (the parser binds the comment to the function node; `FunDoc` reads it back), and
@@ -75,14 +76,14 @@ built-ins.
 
 magus layers its host methods onto Buzz's own stdlib modules under the **same bare
 names**: `import "os"` carries both Buzz's `os.*` (sleep, env, execute) and magus's
-additions (`os.exec`, `os.which`, …); `import "fs"` carries Buzz's `fs` plus
+additions (`os.exec`, `os.which`, ...); `import "fs"` carries Buzz's `fs` plus
 `fs.glob`/`readFile`; and magus adds whole modules Buzz lacks (`vcs`, `archive`,
-`http`, `charm`, …). One import per domain covers the union — there's no separate
+`http`, `charm`, ...). One import per domain covers the union, with no separate
 `extra` namespace to remember which side a call lives on.
 
 Where a method overlaps a Buzz stdlib call, the magus form is **sandbox-aware**
-while the bare stdlib is not — e.g. `env.get`/`lookup` honor the env allowlist,
-whereas Buzz's `os.env` is raw. Those overlaps are noted per-method in the
+while the bare stdlib is not. For example, `env.get`/`lookup` honor the env
+allowlist, whereas Buzz's `os.env` is raw. Those overlaps are noted per-method in the
 [module reference](modules/index.md) (either works); the cross-reference lives in
 `host/overlap.go`.
 
@@ -99,7 +100,7 @@ A workspace spell lives at `spells/<name>/spell.buzz` (or flat
 
 A **built-in spell** is a spell whose bytecode is compiled from
 `spells/<name>/spell.buzz` and embedded in the magus binary (`go`,
-`typescript`, `docker`, …; see [spells.md](spells.md#built-in)). This is a magus
+`typescript`, `docker`, ...; see [spells.md](spells.md#built-in)). This is a magus
 concept and is unrelated to Buzz's language **builtins** (`spawn`, list/map
 methods, etc.), which are part of the Buzz language itself. The docs always write
 "built-in spell" when they mean the former.
@@ -108,7 +109,7 @@ methods, etc.), which are part of the Buzz language itself. The docs always writ
 
 The engine interface is the stable, clean part of the seam. Plugging in a second
 language today, however, also touches a handful of **hard-coded dispatch spots**
-above the interface — this is honest current state, not the end state:
+above the interface. This is the current state, not the end state:
 
 1. Implement `engine.Engine`/`Session` for the VM and `engine.Register` it (the
    clean part).
@@ -120,11 +121,11 @@ above the interface — this is honest current state, not the end state:
 4. Provide the per-engine host bindings (the `magus.*` surface), as
    `internal/interp/bindings/buzz.go` does today.
 
-**Future direction — registry-driven discovery.** The intent is to derive
+**Future direction: registry-driven discovery.** The intent is to derive
 extensions, magusfile filenames, and dispatch from the engine registry itself, so
 adding a language means registering a backend (with its extensions and binding
-installer) and nothing else — no edits to `source.go`, `runtime.go`, or
-switch statements. That refactor is deliberately out of scope for now; the
+installer) and nothing else, with no edits to `source.go`, `runtime.go`, or
+switch statements. That refactor is deliberately out of scope for now. The
 hard-coded spots above are the seam's known leaks, documented so they
 are visible rather than surprising.
 

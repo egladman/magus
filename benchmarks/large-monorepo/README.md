@@ -1,9 +1,9 @@
 # large-monorepo benchmark (magus vs turbo / nx / lage)
 
-A realistic head-to-head built on [vsavkin/large-monorepo](https://github.com/vsavkin/large-monorepo)
- -  5 Next.js apps + ~26k components  -  instead of the synthetic `fixtures/ts`
-tree. This removes the fixture-maintenance burden and the `TS2307` linking
-failures that made `fixtures/ts` S4–S7 unrunnable (see `../README.md`).
+A head-to-head built on [vsavkin/large-monorepo](https://github.com/vsavkin/large-monorepo),
+5 Next.js apps and ~26k components, instead of the synthetic `fixtures/ts`
+tree. Using the real repo drops the fixture-maintenance burden and the `TS2307`
+linking failures that made `fixtures/ts` S4-S7 unrunnable (see `../README.md`).
 
 Status: turbo/nx/lage baseline + magus. moon and bazel are not wired yet.
 
@@ -21,9 +21,9 @@ large-monorepo/
 ```
 
 Everything generated lives under `gen/`. That name is on magus's discovery
-ignore-list (same as the synthetic fixtures' `gen/` dirs), so the cloned repo's
-generated magusfiles are **not** picked up by the surrounding magus workspace
-when you run magus from the magus repo root.
+ignore-list (same as the synthetic fixtures' `gen/` dirs), so the surrounding
+magus workspace skips the cloned repo's generated magusfiles when you run magus
+from the magus repo root.
 
 ## Why no fork and no patch
 
@@ -64,13 +64,13 @@ match, node-for-node and edge-for-edge, what turbo/nx/lage derive from
 ### Verified behaviour
 
 - cold `next build` runs and caches `.next`;
-- a warm run is an all-hit cache **replay** (the declared `.next/**` outputs are
-  excluded from the input hash, so the build's own output never busts its key);
+- a warm run is an all-hit cache replay (the declared `.next/**` outputs stay
+  out of the input hash, so the build's own output never busts its key);
 - editing an app page busts only that app (S6);
-- editing a feature lib busts that lib **and** its app via the `magus.needs`
+- editing a feature lib busts that lib and its app via the `magus.needs`
   cache-key propagation (S7), while sibling apps stay cached.
 
-(The graph/affected/lib-cache wiring is verified against the real checkout; the
+(We verify the graph/affected/lib-cache wiring against the real checkout; the
 full timed `next build` sweep needs a dedicated host; see Cost / tuning.)
 
 ## Prerequisites
@@ -101,7 +101,7 @@ from the synthetic-fixture `BENCHMARKS.md` so the two are not confused).
 ### Cost / tuning
 
 A single cold app build is ~2 min, so a full multi-run sweep across four tools
-is **hours**  -  run it on a dedicated host, not in CI. Defaults are modest:
+takes hours. Run it on a dedicated host, not in CI. Defaults are modest:
 
 | Env                 | Default       | Meaning                                 |
 | ------------------- | ------------- | --------------------------------------- |
@@ -120,14 +120,14 @@ is **hours**  -  run it on a dedicated host, not in CI. Defaults are modest:
 | S6  | One leaf changed | edit `apps/crew/pages/index.tsx`, rebuild (only `crew` is affected)    |
 | S7  | One lib changed  | edit `packages/crew/important-feature-0`, rebuild (`crew` is affected) |
 
-Note on S7: this repo's only truly shared code is `packages/shared/*`, but those
-are not declared as dependencies in any `package.json`, so **no** tool (turbo,
-nx, lage, or magus) sees an edge to them. To keep the comparison fair, S7 edits
-an _app-specific_ feature lib that **is** in the package graph; it has exactly
-one downstream app. This differs from the original plan's "shared lib (all apps
+Note on S7: this repo's only shared code is `packages/shared/*`, but no
+`package.json` declares those as dependencies, so no tool (turbo, nx, lage, or
+magus) sees an edge to them. To keep the comparison fair, S7 edits an
+_app-specific_ feature lib that is in the package graph; it has exactly one
+downstream app. This differs from the original plan's "shared lib (all apps
 downstream)" wording.
 
-S1–S3 (startup / discovery / affected planning) from the synthetic harness are
+S1-S3 (startup / discovery / affected planning) from the synthetic harness are
 not run here; this benchmark targets the build scenarios that the realistic repo
 makes honest.
 

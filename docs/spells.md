@@ -6,7 +6,7 @@ A spell is _how_ a tool does something (the `go-vet`, `cargo-clippy` ops); a tar
 
 ## Spells vs Targets
 
-These are the two core nouns in magus, on orthogonal axes. Confusing them is the most common source of "why didn't my build do anything?".
+These are the two core nouns in magus, on orthogonal axes. Confusing them is the usual reason a build runs and does nothing.
 
 |                         | **Spell**                                                                            | **Target**                                                                              |
 | ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
@@ -61,15 +61,15 @@ Binding a spell contributes its `needs`/`claims`/`provides` to that project's ca
 
 ### Operations come in two shapes
 
-1. **Forked command (declarative).** The op is a `Run` — a `{cmd, args, charms}` object. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.
+1. **Forked command (declarative).** The op is a `Run`, a `{cmd, args, charms}` object. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.
 
-2. **Typed handler.** The two handler kinds carry distinct signatures. A **fork** spell's `mgs_listTargets` returns `{str: fun(Target, fun(Run)) void}`: the handler builds a `Run` and passes it to the injected `cb` callback, returning nothing — the command travels through `cb`, so there is no result to return. A **function-op** spell (a cache backend, anything importing host modules) returns `{str: fun(Target, fun(any)) bool}`: the handler does host work in-VM (HTTP, signing, a cache backend's `get_artifact`) and its boolean *is* the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any [`spells/<name>/spell.buzz`](../spells) for a worked example.
+2. **Typed handler.** The two handler kinds carry distinct signatures. A **fork** spell's `mgs_listTargets` returns `{str: fun(Target, fun(Run)) void}`: the handler builds a `Run` and passes it to the injected `cb` callback, returning nothing. The command travels through `cb`, so there is no result to return. A **function-op** spell (a cache backend, anything importing host modules) returns `{str: fun(Target, fun(any)) bool}`: the handler does host work in-VM (HTTP, signing, a cache backend's `get_artifact`) and its boolean *is* the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any [`spells/<name>/spell.buzz`](../spells) for a worked example.
 
 Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.
 
 A function-op handler does host work in-VM (HTTP, signing, a cache backend's `get-entry`) instead of forking a single command, calling host modules (`http`, `crypto`) as needed. This is what lets a remote cache backend be authored as a spell. `magus doctor` enforces a doc comment on each function-op handler, captured by the Buzz parser at compile time.
 
-The handler's second parameter is named **`cb`** (a plain callback): the handler calls `cb(Run{cmd, args, charms})` once to declare the command it forks. The name stays `cb` rather than `op` on purpose — `op` already means two other things here (a charm patch's `op` field, and a spell's _ops_), so reusing it would be ambiguous.
+The handler's second parameter is named **`cb`** (a plain callback): the handler calls `cb(Run{cmd, args, charms})` once to declare the command it forks. The name stays `cb` rather than `op` on purpose: `op` already means two other things here (a charm patch's `op` field, and a spell's _ops_), so reusing it would be ambiguous.
 
 ## Binding a spell to a project
 
@@ -141,11 +141,11 @@ Naming the op `golangci-lint` (not `lint`) and `go-fmt` (not `fmt`) says exactly
 
 ### Explicitness over magic (why `go::go-fmt` stutters)
 
-The full-command convention is enforced even for streamlined toolchains like Go, where `go-build`/`go-test`/`go-fmt` all start with `go`. The result reads with a stutter on the CLI — `magus run go::go-fmt` — and that is **by design**:
+The full-command convention is enforced even for streamlined toolchains like Go, where `go-build`/`go-test`/`go-fmt` all start with `go`. The result reads with a stutter on the CLI (`magus run go::go-fmt`), and that is **by design**:
 
 - **Consistency across a polyglot repo.** Most languages split work across separate binaries (typescript: `tsc`/`eslint`/`prettier`/`vitest`; rust: `cargo`/`clippy`/`rustfmt`). A rule that says "name the op after the binary, always" is one rule for every spell, instead of a special abbreviation for the few single-binary toolchains.
 - **No invented vocabulary.** `go-fmt` is `gofmt`; `golangci-lint` is `golangci-lint`. There is no magus-specific `lint`/`fmt` alias a reader has to learn or a magusfile has to map. The op name _is_ the command.
-- **The stutter is the escape hatch's, not the everyday surface's.** You only type `go::go-fmt` for an ad-hoc op-direct run (see [targets.md](targets.md#cli-extension-spell-qualified-targets)). In normal use you compose `go["go-fmt"]()` into a `format` target and run `magus run format`. magus favors explicitness over magic: the spell says exactly what it runs, and policy (which op is your "format") lives in your magusfile.
+- **The stutter shows up only in the escape hatch.** You type `go::go-fmt` for an ad-hoc op-direct run (see [targets.md](targets.md#cli-extension-spell-qualified-targets)). In normal use you compose `go["go-fmt"]()` into a `format` target and run `magus run format`. magus favors explicitness over magic: the spell says exactly what it runs, and policy (which op is your "format") lives in your magusfile.
 
 ## Authoring a custom spell
 

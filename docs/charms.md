@@ -2,7 +2,7 @@
 
 A **charm** is a named modifier that changes _how_ a target runs, not _which_ target or project. Where a Target answers "what operation, on what project" (see [targets.md](targets.md)) and a Spell answers "how a tool performs an operation" (see [spells.md](spells.md)), a charm answers **"in what manner."**
 
-Charms replace the pile of one-off boolean flags (`--write`, `--fix`, `--verbose`) that build tools accumulate. A charm is a **shared, reusable intent** applied as an **RFC 6902 JSON Patch** over the target's argument vector. There is no bespoke per-charm DSL.
+Charms replace the one-off boolean flags (`--write`, `--fix`, `--verbose`) that build tools accumulate. A charm is a **shared, reusable intent** applied as an **RFC 6902 JSON Patch** over the target's argument vector. There is no bespoke per-charm DSL.
 
 ## Design intent
 
@@ -52,7 +52,7 @@ The project is a **positional** argument, not part of the token. See the full gr
 | `generate` |                  | write generated outputs                                       |
 | `lint`     | report findings  | apply autofixes where supported (e.g. `golangci-lint --fix`)  |
 
-`rw` carries no special flag — like every other charm, you activate it with a `:rw` suffix (`magus run format:rw`). There is no `-w`/`--write` shortcut and no `--write` flag: the suffix is the one way to ask for it.
+`rw` carries no special flag. Like every other charm, you activate it with a `:rw` suffix (`magus run format:rw`). There is no `-w`/`--write` shortcut and no `--write` flag: the suffix is the one way to ask for it.
 
 **CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` is the only charm with this strip status; the other built-in (`cd`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
 
@@ -98,7 +98,7 @@ Add charms to the target ref and the `command:` line updates. Two caveats: funct
 
 ## Declaring what a charm does
 
-A charm only does something for a target that declares it. Declarations live in a spell's `charms` table, keyed by charm name. There are two charm-construction modules — pick by where the spell runs — plus the raw-data escape hatch.
+A charm only does something for a target that declares it. Declarations live in a spell's `charms` table, keyed by charm name. Two charm-construction modules exist (pick by where the spell runs), plus the raw-data escape hatch.
 
 ### 1. Built-in fork spells (`import "magus/charm"`)
 
@@ -133,11 +133,11 @@ charms = {
 };
 ```
 
-> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and `remove` would be shadowed by the built-in map `.remove()` method. This is a *constructor name only* — `charm.drop` emits the standard RFC 6902 `{"op": "remove", …}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
+> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and the built-in map `.remove()` method would shadow `remove`. This is a *constructor name only*: `charm.drop` emits the standard RFC 6902 `{"op": "remove", ...}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
 
 ### 3. Raw RFC 6902 data (the lowest level)
 
-The constructors are pure convenience: they only **build the `{ops: [...]}` record**, which is a plain RFC 6902 JSON Patch — that record _is_ the underlying type a charm declares (`Charm{Ops: []PatchOp}`, see [the patch model](#reference-the-patch-model)). A constructor doesn't do anything magic; it resolves the anchor to an index and returns the same record you could type by hand. The two forms are interchangeable — the helper used by the bundled spells and the literal it returns are the same value:
+The constructors are pure convenience: they only **build the `{ops: [...]}` record**, a plain RFC 6902 JSON Patch. That record _is_ the underlying type a charm declares (`Charm{Ops: []PatchOp}`, see [the patch model](#reference-the-patch-model)). A constructor resolves the anchor to an index and returns the same record you could type by hand. The two forms are interchangeable; the helper used by the bundled spells and the literal it returns are the same value:
 
 ```buzz
 final args = ["tool", "golangci-lint", "run", "./..."];
@@ -146,9 +146,9 @@ final args = ["tool", "golangci-lint", "run", "./..."];
 "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},   // ≡ the record it returns
 ```
 
-So you can **always declare the patch notation explicitly** — for an op no constructor covers (several edits in one charm), for full control, or just by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: `"/3"` is a counted index that silently breaks if an earlier arg moves, whereas `after(args, "run", …)` recomputes it; that index-proofing is the whole reason the bundled spells prefer the helper.
+You can **declare the patch notation explicitly** for an op no constructor covers (several edits in one charm), for full control, or just by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: `"/3"` is a counted index that silently breaks if an earlier arg moves, whereas `after(args, "run", ...)` recomputes it. That index-proofing is why the bundled spells prefer the helper.
 
-The six ops are exactly RFC 6902's (`add`/`remove`/`replace`/`move`/`copy`/`test`); see [the patch model](#reference-the-patch-model). magus adds no ops and renames none — the constructors are sugar over this vocabulary.
+The six ops are exactly RFC 6902's (`add`/`remove`/`replace`/`move`/`copy`/`test`); see [the patch model](#reference-the-patch-model). magus adds no ops and renames none; the constructors are sugar over this vocabulary.
 
 ### 4. Function targets & ops (branch in code)
 
@@ -162,7 +162,7 @@ export fun lint(args: [str]) > void {
 }
 ```
 
-A function target reads the active charm set directly with **`magus.has_charm(name)`** — including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_ — the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
+A function target reads the active charm set directly with **`magus.has_charm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
 
 ```buzz
 export fun build(args: [str]) > void {
@@ -171,7 +171,7 @@ export fun build(args: [str]) > void {
 }
 ```
 
-Because the toggled targets are reached by nested dispatch (not the top-level selection), `build:container` trips the soft typo-guard warning — expected here, since a function target legitimately reads a charm no spell declares (see [Discovery](#discovery)).
+Because the toggled targets are reached by nested dispatch (not the top-level selection), `build:container` trips the soft typo-guard warning. That is expected here, since a function target legitimately reads a charm no spell declares (see [Discovery](#discovery)).
 
 Spell op methods receive the active charm set as `opts.charms` (a lookup table: `if opts.charms.rw then`). **Charms a spell does not declare or test for are simply ignored.**
 
@@ -179,7 +179,7 @@ Spell op methods receive the active charm set as `opts.charms` (a lookup table: 
 
 Both charm modules build a charm's patch; every constructor returns `{ ops = [...] }`. The `argv`-taking constructors resolve a _value anchor_ (or predicate for the `*Func` variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.
 
-The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm.after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare — `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
+The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm.after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare, as `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
 
 | Constructor                             | Builds                                                                                       |
 | --------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -206,7 +206,7 @@ A missing anchor is a **load-time error**, not a silently wrong index.
 
 ## Use-case cookbook
 
-The examples use the host module (`charm.*`); inside a self-contained built-in spell call the bare `magus/charm` form (`append(...)`, `after(...)`, …) instead.
+The examples use the host module (`charm.*`); inside a self-contained built-in spell call the bare `magus/charm` form (`append(...)`, `after(...)`, and so on) instead.
 
 **Append a flag** (e.g. a `debug` charm adding `-v`):
 
@@ -237,7 +237,7 @@ rw = charm.drop(base, "--check");   // host; bare drop(base, "--check") in magus
 // {"ops":[{"op":"remove","path":"/3"}]}
 ```
 
-**Several edits in one charm** (remove higher indices first to avoid reshuffling) — drop to the raw form, since each constructor yields a single op:
+**Several edits in one charm** (remove higher indices first to avoid reshuffling). Drop to the raw form, since each constructor yields a single op:
 
 ```buzz
 // cargo fmt -- --check  →  cargo fmt
@@ -266,9 +266,9 @@ Conditional or per-invocation logic belongs in a **function target**, not a char
 
 ## Charm vs Target: the command boundary
 
-**A charm rewrites a target's arguments. It can never change the base command (`cmd`) or replace the whole argv.** `ValidatePatch` rejects the root pointer (`""`), so every charm op edits an _element_ of the argv — never the array as a whole.
+**A charm rewrites a target's arguments. It can never change the base command (`cmd`) or replace the whole argv.** `ValidatePatch` rejects the root pointer (`""`), so every charm op edits an _element_ of the argv, never the array as a whole.
 
-This is a deliberate, enforced boundary, not a missing feature.
+`ValidatePatch` enforces this boundary deliberately.
 
 ### Decision guide
 
@@ -282,11 +282,11 @@ This is a deliberate, enforced boundary, not a missing feature.
 ### Why the boundary exists
 
 - **Composability.** Argument edits layer cleanly across charms. Two charms each replacing the whole command is an unresolvable conflict; element-level edits have a well-defined merge.
-- **The one-intent contract.** A charm name is supposed to mean the same thing everywhere. A charm that redefines a target's command is a bespoke per-target redefinition in charm's clothing: `rw` would mean `gofmt -w` here, `terraform apply` there. The name stops carrying meaning.
+- **The one-intent contract.** A charm name is supposed to mean the same thing everywhere. A charm that redefines a target's command is a bespoke per-target redefinition wearing a charm name: `rw` would mean `gofmt -w` here, `terraform apply` there, and the name no longer carries a single meaning.
 - **Transparency.** With the boundary, the running command is the target's declared `cmd` (visible in the spell, `magus describe`, logs). Without it, the real command would depend on an invisible matrix of active charms.
 - **Abuse prevention.** Without the boundary, charms become a general-purpose override mechanism, and the shared vocabulary rots into hidden behavior per project.
 
-**Rule of thumb: charms modify, targets define.** The moment you want a different command, reach for a target.
+**Charms modify args; targets define commands.** When you want a different command, write a target.
 
 ### When you've left the charm layer
 
@@ -308,7 +308,7 @@ export fun lint(args: [str]) > void {
 
 ## Dynamic values: no interpolation, use the language
 
-Charm args are **literal** — there is no `${VAR}` interpolation, by design. The host language is the interpolation engine:
+Charm args are **literal**: there is no `${VAR}` interpolation, by design. The host language is the interpolation engine:
 
 - **Known at load time:** build the string in code and pass it to a constructor:
 
@@ -358,7 +358,7 @@ An active charm that no selected target declares (and isn't a reserved built-in 
 
 Charm names use the target-name charset: letters, digits, `-`, `_` (`types.ValidateCharmName`). By convention they are lowercase and represent **shared vocabulary** across the workspace: define a charm's meaning once and honor it everywhere. A charm useful only with one target is a smell; that is a one-off tool flag (pass it after `--`).
 
-Names are normalized the same way target names are (`types.NormalizeCharmName`, kebab-case), so matching is case- and separator-insensitive on both sides: `:Rw`, `:rw`, and `:RW` are one charm, as are `:no_cache` and `:no-cache`. A spell that tests `has_charm("noCache")` is matched by a `:no-cache` suffix and vice versa — declaration and invocation can't drift on spelling.
+Names are normalized the same way target names are (`types.NormalizeCharmName`, kebab-case), so matching is case- and separator-insensitive on both sides: `:Rw`, `:rw`, and `:RW` are one charm, as are `:no_cache` and `:no-cache`. A spell that tests `has_charm("noCache")` is matched by a `:no-cache` suffix and vice versa; declaration and invocation can't drift on spelling.
 
 ## What is not a charm
 
@@ -391,7 +391,7 @@ type Charm struct {
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                                                                                                               |
 | **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                                                                                                                 |
-| **`gha`**        | A built-in charm: opt into GitHub Actions output — swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the `ci-shard` job matrix → `$GITHUB_OUTPUT`). Set via `:gha`. A no-op where unsupported; not stripped from `ci`. |
+| **`gha`**        | A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the `ci-shard` job matrix → `$GITHUB_OUTPUT`). Set via `:gha`. A no-op where unsupported; not stripped from `ci`. |
 | **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                                                                                                               |
 | **PatchOp**      | One operation: `{op, path, value?, from?}`.                                                                                                                                                                                                                                        |
 | **Anchor**       | A value (or predicate) a `charm.*` constructor resolves to a numeric JSON Pointer at author time.                                                                                                                                                                                  |

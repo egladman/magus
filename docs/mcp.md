@@ -2,7 +2,7 @@
 
 When the daemon is running, it also exposes an **MCP (Model Context Protocol) server** over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.
 
-Magus is built for humans first. MCP is an optional layer on top, that can be entirely omitted from the binary by setting the `!mcp` build tag.
+Magus targets humans first. MCP is an optional layer you can omit from the binary with the `!mcp` build tag.
 
 ## Starting the daemon starts MCP
 
@@ -28,7 +28,7 @@ http://127.0.0.1:7391/mcp
 | `magus_list_targets`     | List registered build targets for a project                        |
 | `magus_where`            | Resolve a fuzzy project name to its absolute path                  |
 | `magus_describe_project` | Explain why a project is in the affected set                       |
-| `magus_run_target`       | Run a target (`build`, `test`, `lint`, …) for one or more projects |
+| `magus_run_target`       | Run a target (`build`, `test`, `lint`, ...) for one or more projects |
 | `magus_run_affected`     | Run a target for all VCS-changed projects                          |
 | `magus_doctor`           | Validate workspace health                                          |
 | `magus_status`           | Inspect the live concurrency pool                                  |
@@ -64,7 +64,7 @@ Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 > **Warning:** Reaching the MCP endpoint is equivalent to having shell access to your build workspace. Any authenticated caller can execute arbitrary build targets, which in turn invoke arbitrary toolchain commands defined in your magusfiles.
 
-The endpoint requires a **bearer token**. The daemon generates one on first start and stores it `0600` at `$XDG_CONFIG_HOME/magus/mcp_token`; the secret is never written to the daemon log — retrieve it with `magus config mcp token print`. Every `/mcp` request must carry `Authorization: Bearer <token>`; requests without it get `401 Unauthorized`. Manage the token with:
+The endpoint requires a **bearer token**. The daemon generates one on first start and stores it `0600` at `$XDG_CONFIG_HOME/magus/mcp_token`; the secret never reaches the daemon log, so retrieve it with `magus config mcp token print`. Every `/mcp` request must carry `Authorization: Bearer <token>`; requests without it get `401 Unauthorized`. Manage the token with:
 
 ```
 magus config mcp token print      # show the current token
@@ -79,7 +79,7 @@ Configure your client with the header, e.g.:
   "headers": { "Authorization": "Bearer <token>" } }
 ```
 
-Auth is **defense in depth**, not a license to expose the port. The server still binds to `127.0.0.1` by default and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Treat the token as a local secret — anyone who reads it gains the same workspace access.
+Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.
 
 **Do not expose it over:**
 
