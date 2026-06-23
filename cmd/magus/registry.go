@@ -29,6 +29,7 @@ type wsEntry struct {
 	root       string
 	loadedAt   time.Time
 	lastAccess atomic.Int64 // unix nanoseconds; updated on every acquire
+	inflight   int          // in-flight dispatches holding m; guarded by wsRegistry.mu
 }
 
 func (e *wsEntry) load(_ context.Context, lim *cache.Limiter) {
@@ -155,8 +156,10 @@ func (*wsRegistry) preloadAndApplySandbox(ctx context.Context, roots []string) e
 	return magus.ApplyUnionSandbox(ctx, roots)
 }
 
-// acquire returns the *magus.Magus for root, loading on first use; rejects undeclared roots in declared mode.
-func (r *wsRegistry) acquire(ctx context.Context, root string) (*magus.Magus, error) {
+// acquire loads the workspace for root and takes an in-flight lease so evictIdle/close
+// won't Close it underneath the caller. Caller must release(e) when done. Rejects
+// undeclared roots in declared mode.
+func (r *wsRegistry) acquire(ctx context.Context, root string) (*wsEntry, error) {
 	r.mu.Lock()
 	if r.declared != nil {
 		if _, ok := r.declared[root]; !ok {
@@ -183,8 +186,19 @@ func (r *wsRegistry) acquire(ctx context.Context, root string) (*magus.Magus, er
 		r.mu.Unlock()
 		return nil, e.loadErr
 	}
+	// Lease under the same lock evictIdle/close use, so it can't be torn down here.
+	r.mu.Lock()
 	e.lastAccess.Store(r.now().UnixNano())
-	return e.m, nil
+	e.inflight++
+	r.mu.Unlock()
+	return e, nil
+}
+
+// release drops one in-flight lease taken by acquire.
+func (r *wsRegistry) release(e *wsEntry) {
+	r.mu.Lock()
+	e.inflight--
+	r.mu.Unlock()
 }
 
 // warmInBackground launches warm in a goroutine tracked by the WaitGroup so close() blocks until done.
@@ -206,21 +220,25 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 			return
 		default:
 		}
-		if _, err := r.acquire(ctx, root); err != nil {
+		e, err := r.acquire(ctx, root)
+		if err != nil {
 			slog.WarnContext(ctx, "daemon: warm workspace failed (readiness probe may be delayed)",
 				"root", root, "err", err)
+			continue
 		}
+		r.release(e) // warm only triggers the load; it does not hold the workspace
 	}
 }
 
 // dispatch acquires the workspace for root, injects it into ctx, and
 // forwards the adopted command to dispatchAdopted.
 func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, args []string) error {
-	m, err := r.acquire(ctx, root)
+	e, err := r.acquire(ctx, root)
 	if err != nil {
 		return err
 	}
-	return dispatchAdopted(withMagus(ctx, m), root, rc, args)
+	defer r.release(e) // hold the lease for the whole build
+	return dispatchAdopted(withMagus(ctx, e.m), root, rc, args)
 }
 
 // status returns a snapshot of loaded workspaces for the Status RPC.
@@ -241,7 +259,9 @@ func (r *wsRegistry) status() []proc.Workspace {
 	return out
 }
 
-// close stops the janitor and closes all loaded workspaces.
+// close stops the janitor and closes all loaded workspaces. Caller must first drain
+// in-flight dispatches (proc.Server.Close waits on connWg) so no handler is using a
+// workspace when it's closed here.
 func (r *wsRegistry) close() {
 	close(r.stopCh)
 	r.wg.Wait()
@@ -277,6 +297,9 @@ func (r *wsRegistry) evictIdle() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for root, e := range r.entries {
+		if e.inflight > 0 {
+			continue // never evict a workspace with an in-flight dispatch, even past its TTL
+		}
 		if e.lastAccess.Load() < cutoff {
 			if e.m != nil {
 				_ = e.m.Close()

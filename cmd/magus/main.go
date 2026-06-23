@@ -583,6 +583,9 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	}
 	go func() {
 		<-ctx.Done()
+		// Drain in-flight handlers (srv.Close waits on connWg) before reg.close so a
+		// workspace can't be closed under an in-flight build.
+		srv.Close()
 		reg.close()
 	}()
 }
