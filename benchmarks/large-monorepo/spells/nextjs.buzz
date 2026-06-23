@@ -6,7 +6,7 @@ import "magus/target";
 
 export fun mgs_getName() > str { return "nextjs"; }
 
-export fun mgs_listRequiredGlobs(_dir: str) > [str] {
+export fun mgs_listRequiredGlobs(dir: str) > [str] {
     return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json",
             "package.json",
             "next.config.js", "next.config.mjs", "next.config.ts",
@@ -17,7 +17,7 @@ export fun mgs_listProvidedGlobs() > [str] { return [".next/**"]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 
-fun nextBuild(_t: Target, cb: fun(any)) > bool {
+fun nextBuild(t: Target, cb: fun(any)) > bool {
     cb({"cmd": "npm", "args": ["run", "build"]});
     return true;
 }

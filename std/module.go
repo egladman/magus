@@ -1,4 +1,4 @@
-// Package host is the single source of truth for host-binding APIs that
+// Package std is the single source of truth for host-binding APIs that
 // magusfiles call into. Each module (os, fs, vcs, …) declares its
 // Methods here as a Module value with typed args, return types, and a Go
 // Impl. The magus-utils bindings tool consumes these declarations and emits the

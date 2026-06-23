@@ -6,11 +6,11 @@ import "magus/target";
 
 export fun mgs_getName() > str { return "tslib"; }
 
-export fun mgs_listRequiredGlobs(_dir: str) > [str] {
+export fun mgs_listRequiredGlobs(dir: str) > [str] {
     return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json"];
 }
 
-fun noop(_t: Target, cb: fun(any)) > bool {
+fun noop(t: Target, cb: fun(any)) > bool {
     cb({"cmd": "true", "args": []});
     return true;
 }

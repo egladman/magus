@@ -1,6 +1,4 @@
-# License
-
-magus is licensed under the **GNU General Public License v3.0 or later**
+magus is licensed under the GNU General Public License v3.0 or later
 (GPL-3.0-or-later).
 
 Copyright (C) 2026 Eli Gladman
@@ -22,9 +20,7 @@ along with this program. If not, see
 The full license text follows verbatim, sourced from
 <https://www.gnu.org/licenses/gpl-3.0.txt>.
 
----
 
-```
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
@@ -699,4 +695,3 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
-```
