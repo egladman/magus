@@ -34,8 +34,13 @@ go test -tags=integration ./...                  # both
 
 ## Linting
 
+golangci-lint and govulncheck live in a separate `go.tool.mod` so their large
+dependency trees stay out of magus's library module graph. Run them via
+`-modfile` (or just `magus run lint`, which wires this up):
+
 ```sh
-golangci-lint run
+go tool -modfile=go.tool.mod golangci-lint run
+go tool -modfile=go.tool.mod govulncheck ./...
 ```
 
 The project's `.golangci.yml` enforces idiomatic Go: `errcheck`, `errorlint`,

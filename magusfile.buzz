@@ -9,7 +9,7 @@ import "crypto";
 import "serialize";
 import "io";
 import "std";
-// Value-type mirrors (ExecResult, Commit, …) for compile-checked field access.
+// Value-type mirrors (ExecResult, Commit, etc.) for compile-checked field access.
 import "magus/target";
 
 import "magus/spell/magusfile";
@@ -47,9 +47,7 @@ magus.project({
         "ci-shard": {"skipCache": true},
         "postflight": {"skipCache": true},
         "image-build": {"skipCache": true},
-        // coverage writes assets/coverage.svg as a side effect (not a tracked cache
-        // output) and reruns the suite with -coverprofile; a cache hit would replay
-        // stale stdout and skip the file write, so the badge would never refresh.
+        // coverage rewrites assets/coverage.svg; a cache hit would skip the write.
         "coverage": {"skipCache": true},
     },
 });
@@ -185,11 +183,8 @@ export fun md_generate(args: [str]) > void {
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
-// The mirror of preflight: renders the insight report (behavioral code analysis —
-// hotspots, affinity, ownership, trend) to stdout and, inside GitHub Actions, also
-// appends it to the job's step summary so every run surfaces where the codebase's
-// attention and risk concentrate. Run it as the final CI step (`magus run postflight`);
-// it never gates, so it won't fail a build.
+// Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in
+// GitHub Actions, appends it to the job step summary. The final CI step; never gates.
 export fun postflight(args: [str]) > void {
     final doc = magus.cmd(["insight", "report", "--workspace"]).stdout; // teed to stdout, like md-generate
     final summaryPath = os.env("GITHUB_STEP_SUMMARY");
@@ -321,8 +316,10 @@ export fun build(args: [str])  > void {
 }
 // Formats first, then runs the Go test suite.
 export fun test(args: [str])   > void { magus.needs(magus.target.literal("format")); go["go-test"](); }
-// Formats first, then runs golangci-lint, `go vet`, govulncheck, and markdownlint.
-export fun lint(args: [str])   > void { magus.needs(magus.target.literal("format")); go["golangci-lint"](); go["go-vet"](); go["govulncheck"](); md.markdownlint(); }
+// Formats first, then golangci-lint, go vet, govulncheck, markdownlint. golangci-lint
+// and govulncheck run via os.exec to pass -modfile=go.tool.mod (their deps live there,
+// not in the library go.mod).
+export fun lint(args: [str])   > void { magus.needs(magus.target.literal("format")); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
 // Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs.
 export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
 
