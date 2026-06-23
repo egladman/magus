@@ -91,6 +91,9 @@ func (l *Limiter) ReleaseN(n int) {
 // the semaphore. Re-acquire uses a non-cancellable context so the caller always returns
 // with the slot held (RunAll releases unconditionally; a slotless return would panic).
 // The re-acquire re-enters the FIFO queue, so a yielding goroutine goes to the back.
+//
+// Trade-off: the non-cancellable re-acquire can block a returning yield on a saturated
+// limiter even after ctx is cancelled, slowing shutdown until a peer frees a slot.
 func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 	l.Release()
 	defer func() { _ = l.Acquire(context.WithoutCancel(ctx)) }()
