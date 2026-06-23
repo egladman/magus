@@ -53,7 +53,7 @@ func Highlight(src string) []Span {
 
 		case c == '/' && i+1 < n && src[i+1] == '*':
 			j := i + 2
-			for j < n && !(src[j] == '*' && j+1 < n && src[j+1] == '/') {
+			for j < n && (src[j] != '*' || j+1 >= n || src[j+1] != '/') {
 				j++
 			}
 			if j < n {

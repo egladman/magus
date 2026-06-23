@@ -305,18 +305,12 @@ func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs
 
 // CheckMergeDriver reports whether both .gitattributes and git config driver registration are present.
 func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
-	if err != nil {
+	out, _ := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
+	if strings.TrimSpace(string(out)) == "" {
 		return false, nil // not configured; not an error
 	}
-	if strings.TrimSpace(string(out)) == "" {
-		return false, nil
-	}
 	attrsPath := filepath.Join(root, ".gitattributes")
-	data, err := os.ReadFile(attrsPath)
-	if err != nil {
-		return false, nil
-	}
+	data, _ := os.ReadFile(attrsPath)
 	return strings.Contains(string(data), gitAttrsBegin), nil
 }
 

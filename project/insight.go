@@ -298,11 +298,12 @@ func Complexity(path string) int {
 		}
 		indent := 0
 		for _, r := range line {
-			if r == ' ' {
+			switch r {
+			case ' ':
 				indent++
-			} else if r == '\t' {
+			case '\t':
 				indent += 4
-			} else {
+			default:
 				break
 			}
 		}

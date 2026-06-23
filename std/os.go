@@ -247,10 +247,7 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 // OsWhich resolves cmd against PATH. A missing command is reported as "" (not an
 // error) so a magusfile can branch on `os.which(cmd) == ""`.
 func OsWhich(_ context.Context, cmd string) (string, error) {
-	path, err := exec.LookPath(cmd)
-	if err != nil {
-		return "", nil
-	}
+	path, _ := exec.LookPath(cmd) // missing command reported as "", per the doc above
 	return path, nil
 }
 
@@ -290,7 +287,7 @@ func OsExit(ctx context.Context, code int) error {
 }
 
 // OsPlatform wraps HostPlatform for use as a Method Impl.
-func OsPlatform(ctx context.Context) (string, string, string, error) {
+func OsPlatform(_ context.Context) (string, string, string, error) {
 	osName, arch, variant := HostPlatform()
 	return osName, arch, variant, nil
 }

@@ -46,14 +46,6 @@ func pathOf(t *testing.T, g *Graph, id ID) string {
 	return p
 }
 
-func chainPaths(g *Graph, ids []ID) []string {
-	out := make([]string, len(ids))
-	for i, id := range ids {
-		out[i], _ = g.Path(id)
-	}
-	return out
-}
-
 func TestBuildCycleDetected(t *testing.T) {
 	t.Parallel()
 	b := New()

@@ -36,7 +36,7 @@ func TestBuiltinsHash_Format(t *testing.T) {
 	h := BuiltinsHash()
 	assert.Len(t, h, 64, "BuiltinsHash() should be 64 chars (SHA-256 hex)")
 	for _, c := range h {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			assert.Failf(t, "non-hex character", "BuiltinsHash() contains non-hex character %q", c)
 			break
 		}

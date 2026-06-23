@@ -14,7 +14,7 @@ import (
 // Discover walks root and returns a *types.Workspace. Only directories with a
 // magusfile are registered; explicit spell registration in the magusfile
 // is required (auto-detection via spell markers has been retired).
-func Discover(ctx context.Context, root string) (*types.Workspace, error) {
+func Discover(_ context.Context, root string) (*types.Workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("magus/project: abs %q: %w", root, err)

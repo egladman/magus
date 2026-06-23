@@ -35,7 +35,7 @@ func newValidator() *validator.Validate {
 		return n == -1 || (n >= 1 && n <= 256)
 	})
 
-	// magus_endpoint: unix:// URL; bare paths rejected here (runtime parser is more lenient for back-compat).
+	// The magus_endpoint field must be a unix:// URL; bare paths are rejected here (the runtime parser is more lenient for back-compat).
 	_ = v.RegisterValidation("magus_endpoint", func(fl validator.FieldLevel) bool {
 		s := fl.Field().String()
 		if !strings.HasPrefix(s, "unix://") {

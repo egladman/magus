@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/report"
 )
 
-func configHistoryCmd(ctx context.Context, root string, cfg config.Config, args []string) error {
+func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		fmt.Fprintln(os.Stderr, "Usage: magus config history <subcommand>")
 		fmt.Fprintln(os.Stderr, "")

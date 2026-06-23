@@ -22,7 +22,7 @@ var enginePriority = []string{"buzz"}
 // engineForExt maps a file extension to an engine name. Only .buzz is globbed
 // today, so every file routed here is Buzz; the switch is the extension point for
 // a future engine rather than dead generality.
-func engineForExt(path string) string {
+func engineForExt(path string) string { //nolint:unparam // intentional seam for a future engine (see doc)
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".buzz":
 		return "buzz"

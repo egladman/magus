@@ -126,7 +126,7 @@ func checkSymlinks(root string) Check {
 	var escaping, inTree []string
 	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip unreadable entries
+			return nil //nolint:nilerr // skip unreadable entries, continue the walk
 		}
 		if d.IsDir() {
 			if p != root && project.IsIgnoreDir(d.Name()) {

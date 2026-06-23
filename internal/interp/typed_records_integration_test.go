@@ -47,12 +47,12 @@ export fun build(args: [str]) > void {
 		c := c
 		t.Run(c.typ, func(t *testing.T) {
 			good := t.TempDir()
-			writeMagusfile(t, good, mkfile(struct{ typ, expr, good, bad, imports string }(c), c.good))
+			writeMagusfile(t, good, mkfile(c, c.good))
 			require.NoError(t, runTarget(t, good, "build"),
 				"%s: valid field %q should compile and the no-op target should run", c.typ, c.good)
 
 			bad := t.TempDir()
-			writeMagusfile(t, bad, mkfile(struct{ typ, expr, good, bad, imports string }(c), c.bad))
+			writeMagusfile(t, bad, mkfile(c, c.bad))
 			err := runTarget(t, bad, "build")
 			require.Error(t, err, "%s: typo'd field %q must fail to compile", c.typ, c.bad)
 			assert.Contains(t, strings.ToLower(err.Error()), "field",

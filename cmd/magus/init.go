@@ -121,7 +121,7 @@ func xdgConfigPath() (string, error) {
 // Gated on interactive.Enabled() so MAGUS_HINTS_ENABLED=false silences it.
 // cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.buzz
 // was stubbed (false when --global was used); isLocal is true when --local was used.
-func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal bool) {
+func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal bool) {
 	if !interactive.Enabled() {
 		return
 	}

@@ -11,7 +11,7 @@ import (
 
 const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 
-func configCacheKey(ctx context.Context, root string, args []string) error {
+func configCacheKey(_ context.Context, _ string, args []string) error {
 	fs := flag.NewFlagSet("config cache key", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache key <subcommand>")

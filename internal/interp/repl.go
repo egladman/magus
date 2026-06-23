@@ -145,7 +145,7 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 }
 
 // handleReplMeta handles a dot-command. Returns (handled, exit).
-func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, current *engine.ReplDriver, drivers []engine.ReplDriver, sess engine.Session) (handled, exit bool) {
+func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, _ *engine.ReplDriver, drivers []engine.ReplDriver, sess engine.Session) (handled, exit bool) {
 	switch {
 	case line == ".exit" || line == ".quit":
 		return true, true
@@ -161,7 +161,7 @@ func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, 
 }
 
 // loadFile reads and executes path in sess via DoString.
-func loadFile(ctx context.Context, sess engine.Session, path string, stderr io.Writer) {
+func loadFile(_ context.Context, sess engine.Session, path string, stderr io.Writer) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)

@@ -154,7 +154,7 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 	errCh := make(chan error, 1)
 	go func() {
 		err := c.exportArtifact(ctx, s.ProjectPath, hash, pw)
-		pw.CloseWithError(err)
+		_ = pw.CloseWithError(err)
 		errCh <- err
 	}()
 	putErr := c.remote.PutArtifact(ctx, s.ProjectPath, hash, pr)

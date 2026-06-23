@@ -283,9 +283,6 @@ func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []
 
 // CheckMergeDriver reports whether the magus merge driver is registered in .hg/hgrc.
 func (v hgVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
-	data, err := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
-	if err != nil {
-		return false, nil
-	}
+	data, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
 	return strings.Contains(string(data), hgRCBegin), nil
 }

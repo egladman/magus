@@ -64,7 +64,7 @@ func configureFnHint(arg vm.Value) string {
 	return ""
 }
 
-func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectOption, error) {
+func parseBuzzProjectOpts(_ context.Context, v vm.Value) ([]workspace.ProjectOption, error) {
 	if !v.IsMap() {
 		return nil, nil
 	}

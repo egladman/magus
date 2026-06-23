@@ -95,7 +95,7 @@ func SigningKeyInfo(seedB64 string) (KeyInfo, error) {
 	if err != nil {
 		return KeyInfo{}, err
 	}
-	pub := s.priv.Public().(ed25519.PublicKey)
+	pub := s.priv.Public().(ed25519.PublicKey) //nolint:forcetypeassert // always ed25519.PublicKey
 	return KeyInfo{PubB64: base64.StdEncoding.EncodeToString(pub), KeyID: s.keyid}, nil
 }
 
@@ -119,7 +119,8 @@ func newSigner(seed []byte) (*signer, error) {
 		return nil, fmt.Errorf("magus/cache: signing key must be %d bytes, got %d", ed25519.SeedSize, len(seed))
 	}
 	priv := ed25519.NewKeyFromSeed(seed)
-	return &signer{priv: priv, keyid: keyID(priv.Public().(ed25519.PublicKey))}, nil
+	pub := priv.Public().(ed25519.PublicKey) //nolint:forcetypeassert // always ed25519.PublicKey
+	return &signer{priv: priv, keyid: keyID(pub)}, nil
 }
 
 // sign returns a signature.json envelope authenticating manifestBytes.

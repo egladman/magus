@@ -61,8 +61,9 @@ func (r *WorkspaceRegistry) RegisterProject(path string, opts ...ProjectOption) 
 // to configure "this project". It lists the known projects so the caller can see
 // the right spelling.
 func registerPathHint(w types.WorkspaceRepository) string {
-	var known []string
-	for _, p := range w.All() {
+	all := w.All()
+	known := make([]string, 0, len(all))
+	for _, p := range all {
 		known = append(known, p.Path)
 	}
 	slices.Sort(known)

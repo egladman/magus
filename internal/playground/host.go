@@ -42,7 +42,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 // removed) real binding can't silently drift from this dry-run host. Members the
 // dry run doesn't meaningfully act on are stubbed; only structure-declaring members
 // (magus.project, target.*, needs) are modeled into the graph.
-func buildMagus(sess *buzz.Session, rec *Recorder) vm.Value {
+func buildMagus(_ *buzz.Session, rec *Recorder) vm.Value {
 	m := vm.NewMap()
 
 	m.MapSet("project", fn("magus.project", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -167,7 +167,7 @@ func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, ni
 // null opts value (no-op) for a malformed call.
 func captureConfigure(args []vm.Value) (string, vm.Value) {
 	path := "."
-	var opts vm.Value = vm.Null
+	var opts = vm.Null
 	if len(args) >= 1 && args[0].IsStr() {
 		path = args[0].AsString()
 		if len(args) >= 2 {

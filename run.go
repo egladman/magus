@@ -128,7 +128,7 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 		}
 	}
 
-	var stages []stage
+	stages := make([]stage, 0, len(groups))
 	for _, g := range groups {
 		projects := m.targetProjects(g.targets)
 		handler := m.makeHandler(g.name)

@@ -13,7 +13,7 @@ func newDefaultNotifier(ctx context.Context, roots []string, ignore func(string)
 	}
 	for _, root := range roots {
 		if werr := walkAndWatch(ctx, root, ignore, fsn); werr != nil {
-			fsn.Close()
+			_ = fsn.Close()
 			return nil, werr
 		}
 	}

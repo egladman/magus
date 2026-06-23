@@ -68,8 +68,8 @@ func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 	if err != nil {
 		return false // transient: don't latch, re-probe next call
 	}
-	switch {
-	case resp.Data == nil:
+	switch resp.Data {
+	case nil:
 		b.active = true // no enabled() op declared → always active
 	default:
 		v, _ := resp.Data.(bool)
