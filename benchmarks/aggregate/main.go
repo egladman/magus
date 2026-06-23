@@ -1,4 +1,4 @@
-// aggregate — reads hyperfine JSON results and emits BENCHMARKS.md,
+// aggregate reads hyperfine JSON results and emits BENCHMARKS.md,
 // results/summary.csv, and results/chart.mmd.
 //
 // Usage: go run ./aggregate/ <results-dir>
@@ -294,7 +294,7 @@ func main() {
 		if scenarioName == "" {
 			scenarioName = gk.scenario
 		}
-		md.WriteString(fmt.Sprintf("### %s — %s\n\n", gk.scenario, scenarioName))
+		md.WriteString(fmt.Sprintf("### %s: %s\n\n", gk.scenario, scenarioName))
 		md.WriteString("| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |\n")
 		md.WriteString("| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |\n")
 
@@ -398,7 +398,7 @@ func writeMermaidChart(results []*benchResult, resultsDir string) {
 	if best.size == 0 {
 		sizeStr = "fixed"
 	}
-	sb.WriteString(fmt.Sprintf("```mermaid\nxychart-beta\n    title \"S5 — Warm Cache Replay (%s, N=%s)\"\n", best.fixture, sizeStr))
+	sb.WriteString(fmt.Sprintf("```mermaid\nxychart-beta\n    title \"S5: Warm Cache Replay (%s, N=%s)\"\n", best.fixture, sizeStr))
 	var toolLabels []string
 	var vals []string
 	for _, t := range uniqTools {
