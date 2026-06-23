@@ -384,6 +384,9 @@ If no `--` is present, `args` is an empty array.
 
 ## Spells
 
+TODO
+
+<!--
 ### Built-in
 
 Built-in spells are compiled into the magus binary.
@@ -534,6 +537,8 @@ Audit any key with `magus describe build`, which lists the sources, env vars,
 and outputs that compose it.
 
 ---
+
+-->
 
 ## Project dependencies
 
@@ -733,39 +738,6 @@ Emits a provider-neutral JSON shard plan for the affected project set, keyed off
 ```sh
 magus affected --plan
 magus affected --plan --max-shards=8
-```
-
-```json
-{
-  "count": 3, "max_parallel": 3, "source": "git",
-  "matrix": [
-    { "shard": "0", "projects": "api auth" },
-    { "shard": "1", "projects": "web" },
-    { "shard": "2", "projects": "worker" }
-  ]
-}
-```
-
-A little glue adapts the output to a provider's job matrix. See the [magus github action](./.github/actions/magus):
-
-```yaml
-jobs:
-  plan:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: plan
-        run: echo "matrix=$(magus affected --plan | jq -c)" >> "$GITHUB_OUTPUT"
-  ci:
-    needs: plan
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: magus run ci --shard=${{ matrix.shard }} ${{ matrix.projects }}
 ```
 
 ### `affected --bisect`: find the regression commit
