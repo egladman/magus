@@ -3,17 +3,32 @@ package cache
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
-	"path/filepath"
+	"sort"
+	"sync"
 )
 
-// ExampleCache_Run shows the minimal round-trip: miss on first call,
-// hit on second call for the same step.
+// ExampleCache_Run shows the minimal round-trip: a miss on the first call runs
+// the work; a second call for the same step replays it as a hit without running.
+//
+// The cache's own progress logging is raised to Error level so only the example's
+// own prints reach stdout, keeping the output deterministic (the real CLI logs
+// "[cache] miss/hit (<duration>)" lines, whose durations vary run to run).
 func ExampleCache_Run() {
-	dir := filepath.Join(os.TempDir(), "magus-cache-example")
-	c, err := Open(dir)
+	// A fresh, private store so the first run is always a cold miss regardless of
+	// any earlier run or example. t.TempDir is unavailable in an Example, so this
+	// manages its own temp dir.
+	dir, err := os.MkdirTemp("", "magus-cache-example-run")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Println("setup:", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	c, err := Open(dir, WithLog("text", slog.LevelError))
+	if err != nil {
+		fmt.Println("open:", err)
 		return
 	}
 
@@ -23,29 +38,50 @@ func ExampleCache_Run() {
 		Target:        "build",
 	}
 
+	ran := 0
 	fn := func(_ context.Context) error {
-		fmt.Println("building api…")
+		ran++
 		return nil
 	}
 
-	// First run: miss → fn is called.
-	r1, _ := c.Run(context.Background(), step, fn)
-	fmt.Println("hit:", r1.Hit) // hit: false
+	// First run: cold miss → fn is called.
+	r1, err := c.Run(context.Background(), step, fn)
+	if err != nil {
+		fmt.Println("run1:", err)
+		return
+	}
+	fmt.Println("run1 hit:", r1.Hit)
 
-	// Second run with a fresh cache in read mode: hit → fn is skipped.
-	_ = os.Setenv("MAGUS_CACHE_MODE", "read")
-	c2, _ := Open(dir)
-	r2, _ := c2.Run(context.Background(), step, fn)
-	fmt.Println("hit:", r2.Hit) // hit: true
+	// Second run on the same store: hit → fn is skipped.
+	r2, err := c.Run(context.Background(), step, fn)
+	if err != nil {
+		fmt.Println("run2:", err)
+		return
+	}
+	fmt.Println("run2 hit:", r2.Hit)
+	fmt.Println("fn ran:", ran, "time(s)")
+
+	// Output:
+	// run1 hit: false
+	// run2 hit: true
+	// fn ran: 1 time(s)
 }
 
-// ExampleCache_RunAll shows fan-out across multiple steps with a shared
-// limiter, bounded concurrency, and per-result callbacks.
+// ExampleCache_RunAll shows fan-out across multiple steps with bounded
+// concurrency and per-result callbacks. RunAll schedules its steps concurrently,
+// so the order callbacks fire in is not deterministic; the example collects the
+// outcomes and sorts them before printing.
 func ExampleCache_RunAll() {
-	dir := filepath.Join(os.TempDir(), "magus-cache-example")
-	c, err := Open(dir)
+	dir, err := os.MkdirTemp("", "magus-cache-example-runall")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Println("setup:", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	c, err := Open(dir, WithLog("text", slog.LevelError))
+	if err != nil {
+		fmt.Println("open:", err)
 		return
 	}
 
@@ -54,18 +90,28 @@ func ExampleCache_RunAll() {
 		{ProjectPath: "web", WorkspaceRoot: ".", Target: "test"},
 	}
 
-	_, err = c.RunAll(
+	var mu sync.Mutex
+	var missed []string
+	results, err := c.RunAll(
 		context.Background(), steps,
-		func(_ context.Context, s Step) error {
-			fmt.Println("testing", s.ProjectPath)
-			return nil
-		},
+		func(_ context.Context, _ Step) error { return nil },
 		WithConcurrency(4),
-		OnHit(func(r *Result) {
-			fmt.Println("cached:", r.ProjectPath)
+		OnMiss(func(r *Result) {
+			mu.Lock()
+			missed = append(missed, r.ProjectPath)
+			mu.Unlock()
 		}),
 	)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Println("runall:", err)
+		return
 	}
+
+	sort.Strings(missed)
+	fmt.Println("results:", len(results))
+	fmt.Println("missed:", missed)
+
+	// Output:
+	// results: 2
+	// missed: [api web]
 }
