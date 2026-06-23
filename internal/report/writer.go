@@ -98,7 +98,7 @@ func OpenWriter(path string, opts ...Option) (*Writer, error) {
 	return newWriter(f, f, opts...), nil
 }
 
-func newWriter(f *os.File, dst io.Writer, opts ...Option) *Writer { //nolint:revive // intentional exported/unexported pair, not a typo
+func newWriter(f *os.File, dst io.Writer, opts ...Option) *Writer {
 	cfg := defaultCfg()
 	for _, o := range opts {
 		o(&cfg)

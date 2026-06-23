@@ -246,7 +246,7 @@ func (rt *Runtime) stats(projectPath, target string) forecast.Stats {
 	return targets[target]
 }
 
-func (rt *Runtime) Stats(projectPath, target string) forecast.Stats { //nolint:revive // intentional exported/unexported pair, not a typo
+func (rt *Runtime) Stats(projectPath, target string) forecast.Stats {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	return rt.stats(projectPath, target)

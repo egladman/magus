@@ -12,8 +12,6 @@ import (
 func SockDir() string { return sockDir() }
 
 // sockDir prefers $XDG_RUNTIME_DIR/magus/ and falls back to $TMPDIR/magus-$UID/.
-//
-//nolint:revive // confusing-naming: SockDir is the exported cross-platform API; sockDir is the per-platform implementation.
 func sockDir() string {
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
 		dir := filepath.Join(xdg, "magus")

@@ -122,7 +122,7 @@ func (m *Magus) finishConstruction(ctx context.Context) error {
 	return nil
 }
 
-func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) { //nolint:revive // intentional exported/unexported pair, not a typo
+func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	cfg, err := loadConfig(root, opts...)
 	if err != nil {
 		return nil, err

@@ -69,11 +69,15 @@ linters:
         # unused-receiver intentionally disabled: ~50 interface-implementation
         # methods in the interp engines legitimately ignore their receiver, and
         # renaming each to _ is churn with no correctness benefit.
-        - name: bare-return
+        # bare-return intentionally disabled: the archive/tar helpers use named
+        # returns with a deferred close-error wrap, where a bare return is the
+        # idiomatic form and explicit returns would only add churn.
         - name: early-return
           arguments:
             - preserveScope: true
-        - name: confusing-naming
+        # confusing-naming intentionally disabled: it flags idiomatic
+        # exported-wrapper/unexported-impl and build-tagged pairs (NewZstdWriter/
+        # newZstdWriter, Midpoint/midpoint, Probe/probe) that are deliberate.
 
     errcheck:
       check-blank: false
@@ -100,6 +104,8 @@ linters:
       # G703/G706: experimental taint analysis (path traversal / log injection)
       #       on trusted local config paths and filenames in a CLI — false positives
       #       (the G304 rationale above applies to the taint variant too).
+      # G122: WalkDir TOCTOU on paths under our own cache/workspace dir; not a
+      #       threat for a local build cache.
       excludes:
         - G204
         - G304
@@ -107,6 +113,7 @@ linters:
         - G115
         - G703
         - G706
+        - G122
 
     unparam:
       check-exported: false
@@ -121,10 +128,11 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # Test files — relax naming/comment/wrapping rules, plus security/perf/style
-      # checks (gosec, gocritic, prealloc) that are noise in test fixtures.
+      # Test files: relax naming/comment/wrapping rules, plus security/perf/style
+      # checks (gosec, gocritic, prealloc, bodyclose, misspell) that are noise in
+      # test fixtures (synthetic responses, deliberate typo fixtures).
       - path: _test\.go
-        linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc]
+        linters: [revive, unparam, errcheck, forcetypeassert, nilnil, gosec, gocritic, prealloc, bodyclose, misspell]
 
       # Magefile targets use exec and intentional subprocess patterns.
       - path: magefile/
