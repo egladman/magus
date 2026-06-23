@@ -21,9 +21,9 @@ Single binary. Code as configuration. Statically typed. No second toolchain.
 
 **Build model.** [Philosophy](#philosophy) · [Concepts](#concepts) · [Spells vs Targets](docs/spells.md#spells-vs-targets) · [Workspace scope](#workspace-scope) · [Project dependencies](#project-dependencies)
 
-**Running targets.** [Target syntax](#target-syntax) · [Argument forwarding](#argument-forwarding) · [Change detection](#change-detection) · [Concurrency](#concurrency) · [Recursive calls](#recursive-calls) · [CI Pipeline](#ci-pipeline)
+**Running targets.** [Target syntax](#target-syntax) · [Argument forwarding](#argument-forwarding) · [Change detection](#change-detection) · [Concurrency](#concurrency) · [Recursion](#recursion) · [CI Pipeline](#ci-pipeline)
 
-**Magusfiles.** [Magusfile.buzz](#magusfilebzz) · [Runtime API](#runtime-api-three-tiers) · [Spells](#spells)
+**Magusfiles.** [Magusfile.buzz](#magusfilebuzz) · [Runtime API](#runtime-api-three-tiers) · [Spells](#spells)
 
 **CLI.** [Tips & Tricks](#tips--tricks) · [Commands](#commands) · [x: interactive picker](#x-interactive-picker) · [repl: interactive shell](#repl-interactive-shell) · [where: project path lookup](#where-project-path-lookup) · [affected --plan / --bisect: CI sharding and bisection](#affected---plan-and---bisect-ci-sharding-and-bisection) · [Output formats](#output-formats)
 
