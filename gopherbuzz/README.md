@@ -11,7 +11,7 @@ language with JIT support.
 A pure-Go VM with a baseline JIT: no cgo, no toolchain. Its standout case is a
 tight top-level numeric loop (`LoopSum`, sum `0..1e6`), one shape the JIT
 compiles to native code (it also compiles the nested float loops of the
-Mandelbrot kernel - see [`benchmarks/`](benchmarks/)):
+Mandelbrot kernel; see [`benchmarks/`](benchmarks/)):
 
 ```mermaid
 xychart-beta
@@ -27,8 +27,8 @@ Allocation is effectively zero either way: the NaN-boxed `[]uint64` stack has no
 GC-visible pointers.
 
 **The JIT compiles top-level numeric loops to native code; everything else runs
-on the interpreter.** Its wheelhouse now covers both `LoopSum` *and* the
-`Mandelbrot` kernel - the baseline JIT learned the `and` short-circuit and
+on the interpreter.** Its wheelhouse now covers both `LoopSum` and the
+`Mandelbrot` kernel. The baseline JIT learned the `and` short-circuit and
 int→float promotion, so Mandelbrot's nested float loop compiles to native SSE and
 runs in ~26 ms, an ~9× lead over gopher-lua's 246 ms. On the interpreter
 gopherbuzz wins the lighter scripting microbenchmarks (loops, calls, `fib`,
@@ -36,7 +36,7 @@ collection iteration) and, with the float fast path in the arithmetic dispatch,
 is competitive on the heavy compute kernels: it trails gopher-lua on un-JIT'd
 MatMul, draws level with tengo on BinaryTrees and with gopher-lua on NBody, and
 string building still goes to gopher-lua. Allocation stays well under
-the dynamically typed peers throughout - "kilobytes" on lean workloads, and
+the dynamically typed peers throughout: kilobytes on lean workloads, and
 map/list iteration is allocation-free (`foreach` reuses a per-slot iterator);
 only string building reaches low single-digit MB. The full win-and-lose
 matrix (10 workloads, warm + fresh, plus an opt-in LuaJIT / Umka tier that is
@@ -56,9 +56,9 @@ cd benchmarks/comparison && GOWORK=off go test -bench=. . # cross-language
 
 ## Why this matters
 
-gopherbuzz is the interpreter behind **magus**, whose one job is to fan out
-across a workspace, run the tasks, and get out of the way. The VM sits on the
-critical path of that flow, before any real work starts:
+gopherbuzz is the interpreter behind **magus**, which fans out across a
+workspace and runs the tasks. The VM sits on the critical path of that flow,
+before any real work starts:
 
 ```mermaid
 flowchart TD
@@ -70,7 +70,7 @@ flowchart TD
     classDef hot fill:#fde68a,stroke:#b45309,color:#111
 ```
 
-Two constraints follow, and they're why this VM exists:
+Two constraints follow:
 
 - **No second toolchain.** magus is a single static Go binary: no cgo, no C
   library, nothing to install. A faster engine that requires a C toolchain (the
@@ -80,13 +80,13 @@ Two constraints follow, and they're why this VM exists:
   the host-call glue on every run, and again as the fan-out widens. A slow or
   allocation-heavy layer pays that cost as latency and GC pressure on every build.
 
-The bar is just this: **be invisible.** The benchmarks above are deliberately
+The goal is for the VM to stay invisible. The benchmarks above are deliberately
 heavy stress loops; a real `magusfile.buzz` is orders of magnitude smaller, so
-the VM's slice of any run sits well below the work it dispatches. We're into
-diminishing returns now, and the [perf design notes](#performance-design) mostly
-exist to stop a future change from regressing what's here. The point was never
-to win microbenchmarks; it was to make the interpreter cheap enough that magus
-can treat it as free, without reaching for a second toolchain to get there.
+the VM's slice of any run sits well below the work it dispatches. Returns are
+diminishing now, and the [perf design notes](#performance-design) mostly
+exist to stop a future change from regressing what's here. The aim is to make
+the interpreter cheap enough that magus can treat it as free, without reaching
+for a second toolchain to get there.
 
 ## Building
 
@@ -125,7 +125,7 @@ The Buzz standard library is available; magus host bindings are not (use
 ## Testing
 
 Upstream Buzz's `test "name" { … }` blocks are supported. A block runs only under
-`buzz -t` / `--test`; a normal run skips it. A block fails when its body raises  - 
+`buzz -t` / `--test`; a normal run skips it. A block fails when its body raises,
 typically a `std.assert` that did not hold:
 
 ```buzz
@@ -152,11 +152,11 @@ verified and arguments pass in written order. After label resolution,
 arguments evaluate in parameter order.
 
 **Deliberate divergence:** upstream hard-reserves `test` as a keyword; gopherbuzz
-treats it as a *contextual* soft keyword  -  `test` introduces a block only in the
+treats it as a *contextual* soft keyword. `test` introduces a block only in the
 `test "…" {` position and stays a normal identifier elsewhere. This runs every
 upstream test block verbatim while keeping `test` usable as an identifier, which
 the magus embedding needs (`export fun test` is a common target). It is therefore
-a strict superset of upstream  -  the same "match capabilities, diverge only where a
+a strict superset of upstream, the same "match capabilities, diverge only where a
 Go embedding forces it" stance taken for [FFI](docs/ffi.md).
 
 ## Build tags
@@ -182,10 +182,10 @@ go test -tags buzz_unsafe ./...
 
 ## FFI (calling C)
 
-`zdef()` binds functions  -  and data symbols like `kCFBooleanTrue`  -  from a C
+`zdef()` binds functions (and data symbols like `kCFBooleanTrue`) from a C
 shared library at runtime, accepting both upstream-Buzz Zig declarations
 (`fn sqrt(x: f64) f64;`) and C prototypes, via
-[`purego`](https://github.com/ebitengine/purego)  -  no cgo, no build-time
+[`purego`](https://github.com/ebitengine/purego), with no cgo and no build-time
 toolchain. The `ffi` module adds C-ABI type metadata and a pinned-memory API so
 scripts can drive the common patterns: scalar calls, pointer out-parameters,
 by-reference structs, and callbacks.

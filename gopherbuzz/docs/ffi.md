@@ -1,7 +1,7 @@
 # FFI reference
 
-gopherbuzz can call into C shared libraries at runtime — no cgo, no build-time
-toolchain, no embedded Zig compiler. It is implemented on
+gopherbuzz calls into C shared libraries at runtime with no cgo, no build-time
+toolchain, and no embedded Zig compiler. It runs on
 [purego](https://github.com/ebitengine/purego), which builds an ABI-correct call
 stub (the right registers for ints, floats, and pointers) for a symbol resolved
 with `dlopen`/`dlsym`.
@@ -13,7 +13,7 @@ A [runnable C example](../examples/ffi-c/) accompanies this reference.
 Upstream Buzz's FFI is **Zig-ABI native**: `zdef` takes Zig source and answers
 `sizeOf`/`alignOf` through the Zig compiler's comptime reflection embedded in
 the runtime. gopherbuzz is pure Go and has no Zig, so it *binds* C-ABI-natively
-through purego — but `zdef` accepts **both declaration dialects**, sniffed per
+through purego. `zdef` accepts **both declaration dialects**, sniffed per
 call:
 
 ```buzz
@@ -22,11 +22,11 @@ zdef("libm", "double sqrt(double x);");    // C prototypes
 ```
 
 The `ffi` module's type-name arguments likewise accept both spellings
-(`"i64"`/`"int64_t"`, `"f64"`/`"double"`, `"*anyopaque"`/`"void*"`, …), and
+(`"i64"`/`"int64_t"`, `"f64"`/`"double"`, `"*anyopaque"`/`"void*"`, ...), and
 `extern struct` declarations are lowered to their C layout by gopherbuzz
 itself (see below). The remaining divergence is the engine: no embedded Zig
 compiler, so comptime-sized Zig types are out of scope and binding follows
-the C ABI — see [Limitations](#limitations).
+the C ABI. See [Limitations](#limitations).
 
 ### Zig dialect mapping
 
@@ -44,11 +44,11 @@ the C ABI — see [Limitations](#limitations).
 | `var name: anyopaque;` | extern data symbol: the symbol's own address |
 | `const Name = extern struct { f: T, … };` | binds `Name` to its C layout `{size, align, offsets}` |
 
-A declared struct is usable as `*Name` parameters (by reference — upstream's
+A declared struct works as a `*Name` parameter (by reference, upstream's
 own struct-passing rule) and, when its fields are exactly two or four `f64`,
 as a by-value return (the CGPoint/CGRect register paths). A Zig `extern
 struct`'s layout *is* the C layout by definition, so the portable layout
-engine computes it — no embedded Zig compiler needed. Multiline declaration
+engine computes it without an embedded Zig compiler. Multiline declaration
 blocks read best as backtick raw strings, exactly like upstream:
 
 ```buzz
@@ -64,10 +64,10 @@ lib.rec_init(rec, 7, 9.5);
 
 `zdef`, `ffi.callback`, and the symbol-binding half of FFI work on the OS/arch
 combinations purego supports (darwin, freebsd, netbsd, and linux on
-386/amd64/arm/arm64/loong64/ppc64le/riscv64). On any other target — including
-WebAssembly — parsing still succeeds but `zdef` returns a clear "unsupported"
+386/amd64/arm/arm64/loong64/ppc64le/riscv64). On any other target, including
+WebAssembly, parsing still succeeds but `zdef` returns a clear "unsupported"
 error instead of failing to compile. The memory and layout helpers
-(`ffi.alloc`/`read`/`write`/`sizeOf`/`structLayout`, …) are pure Go and work
+(`ffi.alloc`/`read`/`write`/`sizeOf`/`structLayout`, ...) are pure Go and work
 everywhere.
 
 ## `zdef(libname, cdecl)` → map
@@ -104,13 +104,13 @@ The declared type picks the binding mode:
 |---|---|
 | `extern void *name` (any non-`char` pointer) | the pointer stored at the symbol |
 | `extern const char *name` | that pointer followed to a Buzz str |
-| `extern int name`, `extern double name`, … | the scalar, loaded at its C width |
+| `extern int name`, `extern double name`, ... | the scalar, loaded at its C width |
 | anything else (`extern struct Foo name`) | the symbol's own address (what C's `&name` is) |
 
-This exists because real C APIs hide required arguments in global constants —
-`kCFBooleanTrue` has no create function, run-loop modes and dictionary
-callbacks are exported variables — and a function-only FFI forces scripts into
-scavenging those values from other calls' results.
+Real C APIs hide required arguments in global constants. `kCFBooleanTrue` has
+no create function, and run-loop modes and dictionary callbacks are exported
+variables. With a function-only FFI, you would have to scavenge those values
+from other calls' results.
 
 ### Supported C types
 
@@ -118,7 +118,7 @@ scavenging those values from other calls' results.
 |---|---|---|
 | `void` | — | return only |
 | `bool`, `_Bool` | bool | |
-| `char`, `short`, `int`, `long`, `long long`, `intN_t`, `size_t`, … | int | passed/returned as a 64-bit int |
+| `char`, `short`, `int`, `long`, `long long`, `intN_t`, `size_t`, ... | int | passed/returned as a 64-bit int |
 | `unsigned …`, `uintN_t` | int | |
 | `float` | float | 32-bit at the boundary |
 | `double` | float | |
@@ -126,13 +126,13 @@ scavenging those values from other calls' results.
 | `void*`, `int*`, `T*`, `struct Foo*` | int | an **opaque machine address** (see below) |
 | `CGPoint`, `NSPoint`, `CGSize`, `NSSize` (return only) | [double] | a two-double struct returned by value, e.g. `CGEventGetLocation`; amd64/arm64. As a parameter, declare two `double`s instead (same registers) |
 
-Every non-`char*` pointer — `void*`, `int*`, `struct Foo*`, a function pointer —
+Every non-`char*` pointer (`void*`, `int*`, `struct Foo*`, a function pointer)
 is an opaque address represented as an int. You obtain such addresses from
 `ffi.alloc` (for memory you own) or `ffi.callback` (for a function pointer), and
 pass them straight into the call.
 
 > Note: prior to this support, a `T*` parameter was silently downgraded to the
-> pointee scalar `T` — passing a *value* where C expected an *address*. Pointer
+> pointee scalar `T`, passing a *value* where C expected an *address*. Pointer
 > parameters now always marshal as addresses.
 
 ## The `ffi` module
@@ -152,8 +152,8 @@ import "ffi";
 | `ffi.structLayout(fields: [str])` | `{ size, align, offsets: [int] }` |
 | `ffi.cstr(s: str)` | `s` (identity; Buzz strings are already valid `char*` here) |
 
-`structLayout` applies the standard C rule — each field at the next multiple of
-its alignment, total size rounded up to the struct alignment — so you can place
+`structLayout` applies the standard C rule (each field at the next multiple of
+its alignment, total size rounded up to the struct alignment) so you can place
 each field at its correct offset:
 
 ```buzz
@@ -178,8 +178,8 @@ read it back.
 
 `read`/`write` are **bounds-checked against the allocation** and only operate on
 memory `ffi.alloc` returned. Dereferencing an arbitrary address C handed back
-(e.g. a struct pointer C itself owns) is intentionally unsupported — that is the
-line between a C ABI we can keep memory-safe and one that can segfault the host.
+(e.g. a struct pointer C itself owns) is intentionally unsupported. That line
+separates a C ABI we can keep memory-safe from one that can segfault the host.
 
 #### Out-parameter example
 
@@ -223,7 +223,7 @@ lib.apply_each(xs, n, cb);
 ```
 
 The callback ABI carries **integer/pointer/bool arguments and a single
-integer/pointer/bool (or `void`) result** — `float`/`double` are rejected. This
+integer/pointer/bool (or `void`) result**; `float`/`double` are rejected. This
 covers comparators, predicates, and visitors. A C callback has nowhere to receive
 a Buzz error, so if the wrapped function raises, the callback returns its zero
 value. Callbacks are never freed (a purego constraint); at least 2000 may exist
