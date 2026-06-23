@@ -1,4 +1,4 @@
-//go:build arm64 && !buzz_safe && !buzz_unsafe
+//go:build arm64 && !windows && !buzz_safe && !buzz_unsafe
 
 package vm
 

@@ -4,7 +4,7 @@
 // calls back into Go — a C leaf call. The $16 frame lets Go save/restore LR
 // across the indirect CALL.
 
-//go:build arm64 && !buzz_safe && !buzz_unsafe
+//go:build arm64 && !windows && !buzz_safe && !buzz_unsafe
 
 #include "textflag.h"
 

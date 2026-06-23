@@ -3,7 +3,7 @@
 // never allocates, grows the stack, or calls back into Go, so entering it is a C
 // leaf call: NOSPLIT, no stack map. We save the callee-saved regs it may use.
 
-//go:build amd64 && !buzz_safe && !buzz_unsafe
+//go:build amd64 && !windows && !buzz_safe && !buzz_unsafe
 
 #include "textflag.h"
 

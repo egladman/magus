@@ -1,4 +1,4 @@
-//go:build !(amd64 || arm64) || buzz_safe || buzz_unsafe
+//go:build !(amd64 || arm64) || windows || buzz_safe || buzz_unsafe
 
 package vm
 
