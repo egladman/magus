@@ -140,6 +140,48 @@ func TestDiffCommandsGit(t *testing.T) {
 	assert.Equal(t, "git difftool origin/main..."+wantSHA, hints.GUI)
 }
 
+// TestDiffGitIncludesWorkingTree reproduces the "0 projects affected" bug: with
+// HEAD == base (changes only in the working tree, nothing committed), the old
+// base...HEAD diff was empty. Diff must surface both an uncommitted edit to a
+// tracked file and a brand-new untracked file.
+func TestDiffGitIncludesWorkingTree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not in PATH")
+	}
+
+	dir := t.TempDir()
+	mustRun := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "%v: %s", args, out)
+	}
+	mustRun("git", "init")
+	mustRun("git", "config", "user.email", "test@example.com")
+	mustRun("git", "config", "user.name", "Test")
+	mustRun("git", "config", "commit.gpgsign", "false")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ignored.log"), []byte("noise\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n"), 0o644))
+	mustRun("git", "add", "tracked.txt", ".gitignore")
+	mustRun("git", "commit", "-m", "init")
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(out)) // HEAD == base: base...HEAD would be empty
+
+	// Modify a tracked file (uncommitted) and add a new untracked file; no new commit.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new\n"), 0o644))
+
+	files, err := gitVCS{}.Diff(context.Background(), dir, base)
+	require.NoError(t, err, "Diff")
+	assert.Contains(t, files, "tracked.txt", "uncommitted edit to a tracked file must be in the diff")
+	assert.Contains(t, files, "new.txt", "untracked new file must be in the diff")
+	assert.NotContains(t, files, "ignored.log", "gitignored file must stay out of the diff")
+}
+
 func TestFindCommitAndHistoryGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not in PATH")

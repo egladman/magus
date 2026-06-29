@@ -31,17 +31,37 @@ func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// Diff lists files changed against base. It diffs the merge-base of base and HEAD
+// against the working tree, not base...HEAD. The three-dot form is commit-to-commit
+// and silently ignores uncommitted work, so editing files without committing (or
+// committing straight onto the base branch, where HEAD == base) reported an empty
+// set and "0 projects affected". Using the merge-base keeps changes that landed on
+// base after the branch point out of the set; diffing against the work tree (no
+// ...HEAD) folds in staged and unstaged edits, matching the jj and hg drivers and
+// the module's "current working tree" contract. With a clean tree this still equals
+// base...HEAD, so CI behavior is unchanged.
 func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", base+"...HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
+	mergeBase, err := vcsOutput(ctx, dir, "git", "merge-base", base, "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("git merge-base: %w", err)
+	}
+	out, err := vcsOutput(ctx, dir, "git", "diff", "--name-only", mergeBase)
 	if err != nil {
 		return nil, fmt.Errorf("git diff: %w", err)
 	}
-	return splitLines(out), nil
+	files := splitLines([]byte(out))
+	// Untracked-but-not-ignored files (new source files) are part of the working
+	// tree conceptually, but git diff omits them. List them explicitly so a brand-new
+	// file seeds its project the same way a modified one does. --exclude-standard
+	// honors .gitignore, so build artifacts stay out.
+	untracked, err := vcsOutput(ctx, dir, "git", "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	return append(files, splitLines([]byte(untracked))...), nil
 }
 
 func (v gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
