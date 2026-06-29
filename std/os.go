@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	buzzstd "github.com/egladman/gopherbuzz/std"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -49,12 +50,17 @@ func warnIfMagusBinary(cmd string) {
 type cwdKey struct{}
 
 // WithCwd returns ctx carrying dir as the default working directory for the
-// os.* exec primitives. An empty dir is a no-op.
+// os.* exec primitives. An empty dir is a no-op. It also propagates the cwd to
+// Buzz's own stdlib (gopherbuzz io/fs/os) so a magusfile that uses the language
+// built-ins — io.File, fs.list, os.execute — resolves relative paths against the
+// project dir too, not just the magus host modules. magus extends Buzz's standard
+// library; it does not replace it.
 func WithCwd(ctx context.Context, dir string) context.Context {
 	if dir == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, cwdKey{}, dir)
+	ctx = context.WithValue(ctx, cwdKey{}, dir)
+	return buzzstd.WithCwd(ctx, dir)
 }
 
 // cwdFromContext returns the context working directory, or "" when unset.
