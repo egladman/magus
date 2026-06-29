@@ -117,6 +117,7 @@ func osExecute(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	}
 	//nolint:gosec -- argv is supplied by the Buzz script; the caller controls what it executes
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = cwdFromContext(ctx) // run in the embedder-set cwd ("" inherits the process cwd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

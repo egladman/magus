@@ -22,7 +22,12 @@ func fsModule() vm.Value {
 	return m
 }
 
-func fsCurrentDirectory(_ context.Context, _ []vm.Value) (vm.Value, error) {
+func fsCurrentDirectory(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+	// The embedder-set cwd is the script's effective working directory; fall back
+	// to the process cwd when none is set.
+	if cwd := cwdFromContext(ctx); cwd != "" {
+		return vm.StrValue(cwd), nil
+	}
 	dir, err := os.Getwd()
 	if err != nil {
 		return vm.Null, fmt.Errorf("fs.currentDirectory: %w", err)
@@ -30,41 +35,41 @@ func fsCurrentDirectory(_ context.Context, _ []vm.Value) (vm.Value, error) {
 	return vm.StrValue(dir), nil
 }
 
-func fsMakeDirectory(_ context.Context, args []vm.Value) (vm.Value, error) {
+func fsMakeDirectory(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
 		return vm.Null, fmt.Errorf("fs.makeDirectory: requires a str path argument")
 	}
-	if err := os.MkdirAll(args[0].AsString(), 0o755); err != nil {
+	if err := os.MkdirAll(resolve(ctx, args[0].AsString()), 0o755); err != nil {
 		return vm.Null, fmt.Errorf("fs.makeDirectory: %w", err)
 	}
 	return vm.Null, nil
 }
 
-func fsDelete(_ context.Context, args []vm.Value) (vm.Value, error) {
+func fsDelete(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
 		return vm.Null, fmt.Errorf("fs.delete: requires a str path argument")
 	}
-	if err := os.RemoveAll(args[0].AsString()); err != nil {
+	if err := os.RemoveAll(resolve(ctx, args[0].AsString())); err != nil {
 		return vm.Null, fmt.Errorf("fs.delete: %w", err)
 	}
 	return vm.Null, nil
 }
 
-func fsMove(_ context.Context, args []vm.Value) (vm.Value, error) {
+func fsMove(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 2 || !args[0].IsStr() || !args[1].IsStr() {
 		return vm.Null, fmt.Errorf("fs.move: requires source and destination str arguments")
 	}
-	if err := os.Rename(args[0].AsString(), args[1].AsString()); err != nil {
+	if err := os.Rename(resolve(ctx, args[0].AsString()), resolve(ctx, args[1].AsString())); err != nil {
 		return vm.Null, fmt.Errorf("fs.move: %w", err)
 	}
 	return vm.Null, nil
 }
 
-func fsList(_ context.Context, args []vm.Value) (vm.Value, error) {
+func fsList(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
 		return vm.Null, fmt.Errorf("fs.list: requires a str path argument")
 	}
-	entries, err := os.ReadDir(args[0].AsString())
+	entries, err := os.ReadDir(resolve(ctx, args[0].AsString()))
 	if err != nil {
 		return vm.Null, fmt.Errorf("fs.list: %w", err)
 	}
@@ -75,11 +80,11 @@ func fsList(_ context.Context, args []vm.Value) (vm.Value, error) {
 	return vm.ListValue(items), nil
 }
 
-func fsExists(_ context.Context, args []vm.Value) (vm.Value, error) {
+func fsExists(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
 		return vm.Null, fmt.Errorf("fs.exists: requires a str path argument")
 	}
-	_, err := os.Stat(args[0].AsString())
+	_, err := os.Stat(resolve(ctx, args[0].AsString()))
 	if err == nil {
 		return vm.True, nil
 	}
@@ -93,11 +98,11 @@ func fsExists(_ context.Context, args []vm.Value) (vm.Value, error) {
 // Unix epoch, or null when the path cannot be stat'ed (missing file included).
 // Null-on-absence rather than an error makes it directly usable as a change
 // poller: watch for the value to move, including through create and delete.
-func fsModified(_ context.Context, args []vm.Value) (vm.Value, error) {
+func fsModified(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsStr() {
 		return vm.Null, fmt.Errorf("fs.modified: requires a str path argument")
 	}
-	info, err := os.Stat(args[0].AsString())
+	info, err := os.Stat(resolve(ctx, args[0].AsString()))
 	if err != nil {
 		return vm.Null, nil
 	}

@@ -24,7 +24,7 @@ func ioModule(sess *buzz.Session) vm.Value {
 		if len(args) < 1 || !args[0].IsStr() {
 			return vm.Null, fmt.Errorf("io.runFile: requires a str path argument")
 		}
-		src, err := os.ReadFile(args[0].AsString())
+		src, err := os.ReadFile(resolve(ctx, args[0].AsString()))
 		if err != nil {
 			return vm.Null, fmt.Errorf("io.runFile: %w", err)
 		}
@@ -39,7 +39,7 @@ func ioModule(sess *buzz.Session) vm.Value {
 	return m
 }
 
-func fileOpen(_ context.Context, args []vm.Value) (vm.Value, error) {
+func fileOpen(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 2 {
 		return vm.Null, fmt.Errorf("File.open: requires (str filename, FileMode mode)")
 	}
@@ -63,7 +63,7 @@ func fileOpen(_ context.Context, args []vm.Value) (vm.Value, error) {
 		flags = os.O_RDWR | os.O_CREATE
 	}
 
-	f, err := os.OpenFile(filename, flags, 0o644)
+	f, err := os.OpenFile(resolve(ctx, filename), flags, 0o644)
 	if err != nil {
 		return vm.Null, fmt.Errorf("File.open: %w", err)
 	}
