@@ -30,6 +30,14 @@ func cwdFromContext(ctx context.Context) string {
 	return d
 }
 
+// CwdFromContext returns the working directory set by WithCwd and whether one is
+// set. It is the reader counterpart to WithCwd, so an embedder that layers its own
+// cwd on top (e.g. magus) can confirm the value propagated into this stdlib.
+func CwdFromContext(ctx context.Context) (string, bool) {
+	d := cwdFromContext(ctx)
+	return d, d != ""
+}
+
 // resolve resolves a (possibly relative) path against the context working
 // directory. It is a no-op — returning path unchanged — when path is absolute or
 // no cwd is set, so a script run without an embedder-set cwd resolves against the

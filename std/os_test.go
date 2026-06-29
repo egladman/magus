@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	buzzstd "github.com/egladman/gopherbuzz/std"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/run"
 	"github.com/stretchr/testify/assert"
@@ -378,4 +379,31 @@ func TestRelToCwd(t *testing.T) {
 	})
 	want := []string{filepath.FromSlash("sub/x.go"), "y.go"}
 	assert.Equal(t, want, got)
+}
+
+// TestWithCwdPropagatesToBuzzStdlib verifies WithCwd sets the run cwd for BOTH
+// magus's exec primitives and Buzz's own stdlib (gopherbuzz io/fs/os), so a
+// magusfile using the language built-ins (io.File, fs.list, os.execute) resolves
+// relative paths against the project dir. Dropping the buzzstd.WithCwd bridge would
+// silently regress that (e.g. `magus run serve website` reading ../README.md).
+func TestWithCwdPropagatesToBuzzStdlib(t *testing.T) {
+	dir := t.TempDir()
+	ctx := WithCwd(context.Background(), dir)
+
+	got, ok := CwdFromContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, dir, got, "magus cwd")
+
+	buzzCwd, ok := buzzstd.CwdFromContext(ctx)
+	require.True(t, ok, "WithCwd must propagate to Buzz's stdlib (bridge dropped?)")
+	assert.Equal(t, dir, buzzCwd, "buzz stdlib cwd")
+
+	// An empty dir is a no-op for both surfaces.
+	base := context.Background()
+	if _, ok := CwdFromContext(WithCwd(base, "")); ok {
+		t.Fatal(`WithCwd("") set a magus cwd, want none`)
+	}
+	if _, ok := buzzstd.CwdFromContext(WithCwd(base, "")); ok {
+		t.Fatal(`WithCwd("") set a buzz cwd, want none`)
+	}
 }
