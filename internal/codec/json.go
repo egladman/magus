@@ -1,16 +1,31 @@
-// Package codec provides the serialization and compression primitives magus
-// uses for cache manifests and report streams: pluggable streaming JSON
-// encoders/decoders and zstd/xz compressors. The compressors have cgo fast
-// paths (libzstd, liblzma) selected by build tag, with pure-Go fallbacks so
-// the module builds and runs without a C toolchain.
+//go:build !goexperiment.jsonv2
+
 package codec
 
-// Encoder is the common interface for streaming JSON encoders.
-type Encoder interface {
-	Encode(v any) error
+import (
+	"encoding/json"
+	"io"
+)
+
+// RawMessage is the codec's deferred-decode JSON type (alias of encoding/json.RawMessage).
+type RawMessage = json.RawMessage
+
+// Marshal encodes v as JSON.
+func Marshal(v any) ([]byte, error) { return json.Marshal(v) }
+
+// Unmarshal decodes JSON data into v.
+func Unmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }
+
+// MarshalIndent encodes v as indented JSON using prefix and indent.
+func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
+	return json.MarshalIndent(v, prefix, indent)
 }
 
-// Decoder is the common interface for streaming JSON decoders.
-type Decoder interface {
-	Decode(v any) error
-}
+// NewEncoder returns a JSON encoder that writes to w.
+func NewEncoder(w io.Writer) Encoder { return json.NewEncoder(w) }
+
+// NewDecoder returns a JSON decoder that reads from r.
+func NewDecoder(r io.Reader) Decoder { return json.NewDecoder(r) }
+
+// CodecVersion reports the active JSON codec version ("v1").
+func CodecVersion() string { return "v1" }

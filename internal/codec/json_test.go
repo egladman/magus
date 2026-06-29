@@ -3,6 +3,7 @@ package codec
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,4 +40,19 @@ func TestEncoderDecoder(t *testing.T) {
 	var got pair
 	require.NoError(t, dec.Decode(&got))
 	assert.Equal(t, pair{K: "a", V: 1}, got)
+}
+
+// TestDurationRoundTrips checks a time.Duration survives a Marshal/Unmarshal cycle
+// under either codec. Under json/v2 it doubles as the go.dev/issue/71631 regression
+// guard: without the codec's explicit Duration handling, Marshal errors outright
+// (Duration has no default v2 representation), which broke `magus config view -o json`.
+func TestDurationRoundTrips(t *testing.T) {
+	type withDur struct {
+		TTL time.Duration `json:"ttl"`
+	}
+	b, err := Marshal(withDur{6 * time.Hour})
+	require.NoError(t, err)
+	var got withDur
+	require.NoError(t, Unmarshal(b, &got))
+	assert.Equal(t, 6*time.Hour, got.TTL)
 }
