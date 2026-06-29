@@ -632,7 +632,12 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 
 		path := s.findIncludeFile(imp.Path)
 		if path == "" {
-			continue
+			// Nothing resolved this import: not an already-bound name, a synthetic
+			// or source module, the host module resolver, or a .buzz file on the
+			// search path. Binding nothing would let the unresolved name surface
+			// later as a disconnected "undefined" error, or silently no-op if it is
+			// never referenced, so fail here at the import that is actually wrong.
+			return fmt.Errorf("buzz: import %q: module not found", imp.Path)
 		}
 		abs, err := filepath.Abs(path)
 		if err != nil {

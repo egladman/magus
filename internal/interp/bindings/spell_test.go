@@ -319,3 +319,128 @@ magus.project(".", {"spells": [parity]});`)
 	assert.Equal(t, []string{".rubocop.yml", "Gemfile"}, buzzSp.Claims(), "mgs_listClaimedGlobs must be carried")
 	assert.False(t, buzzSp.Opaque(), "opaque should be false")
 }
+
+// TestSuggestSpellName covers both suggestion paths: a known language/tool alias
+// (the common slip) and nearest-handle edit distance (a typo), plus the
+// no-suggestion floor.
+func TestSuggestSpellName(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"typescript", "ts"},
+		{"javascript", "ts"},
+		{"js", "ts"},
+		{"python", "py"},
+		{"rust", "rs"},
+		{"markdown", "md"},
+		{"golang", "go"},
+		{"TypeScript", "ts"}, // alias lookup is case-insensitive
+		{"dcoker", "docker"}, // edit distance
+		{"cosgin", "cosign"}, // edit distance
+		{"zzzzzzzzzz", ""},   // nothing within threshold
+	}
+	for _, c := range cases {
+		assert.Equalf(t, c.want, suggestSpellName(c.in), "suggestSpellName(%q)", c.in)
+	}
+}
+
+// TestCheckSpellImports verifies valid handles pass (built-in and host-registered)
+// and an unknown handle yields a did-you-mean naming the right one.
+func TestCheckSpellImports(t *testing.T) {
+	require.NoError(t, checkSpellImports(nil))
+	require.NoError(t, checkSpellImports([]string{"go", "ts", "md", "magusfile"}),
+		"built-in and host-registered handles must pass")
+
+	err := checkSpellImports([]string{"go", "typescript"})
+	require.Error(t, err)
+	msg := err.Error()
+	assert.Contains(t, msg, `"typescript"`)
+	assert.Contains(t, msg, `did you mean "ts"`)
+	assert.Contains(t, msg, `import "magus/spell/ts"`)
+}
+
+// TestSpellImportSuggestionOnParse is the end-to-end path: a magusfile importing a
+// wrong handle fails at load with the suggestion, before the handle surfaces as a
+// disconnected "undefined" error.
+func TestSpellImportSuggestionOnParse(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+import "magus/spell/typescript";
+magus.project({"spells": [typescript]});
+export fun build(args: [str]) > void {}`)
+
+	err := parseMagusfile(t, dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `did you mean "ts"`)
+	assert.Contains(t, err.Error(), "magusfile.buzz", "error must name the offending file")
+}
+
+// TestSpellImportCaughtWithTopLevelControlFlow is the regression guard for the
+// parser-mode bug: magusfiles load under ParseEmbedded, where top-level statements
+// are allowed. If the check parsed with strict buzz.Parse instead, a file with a
+// top-level `if` (the repo's own magusfile.buzz has one) would fail to parse, the
+// handle list would come back empty, and the bad handle would slip through to the
+// disconnected "undefined" error the check exists to replace.
+func TestSpellImportCaughtWithTopLevelControlFlow(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+import "magus/spell/typescript";
+if (1 > 0) {}
+magus.project({"spells": [typescript]});
+export fun build(args: [str]) > void {}`)
+
+	err := parseMagusfile(t, dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `did you mean "ts"`,
+		"a top-level statement must not make the check silently skip")
+}
+
+// TestSpellImportValidOnParse guards against false positives: a correct built-in
+// import loads cleanly.
+func TestSpellImportValidOnParse(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+import "magus/spell/go";
+magus.project({"spells": [go]});
+export fun build(args: [str]) > void { go["go-build"](); }`)
+
+	require.NoError(t, parseMagusfile(t, dir))
+}
+
+// TestProjectImportResolvesInRunMode guards the run-mode source-availability fix.
+// `import "project/<path>"` resolves via resolveProjectImport, which needs the
+// magusfile Source on the context. Run mode used to reach the import with a nil
+// Source (it was set only for target dispatch), so the cross-project handle bound
+// nothing — tolerable while imports silently no-op'd, but once an unresolved import
+// is a hard error, that silent no-op became a spurious "module not found". This
+// runs (not just parses) a target whose magusfile imports a sibling project; it
+// must load without error.
+func TestProjectImportResolvesInRunMode(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "a/magusfile.buzz", `import "magus";
+import "project/../b" as b;
+export fun go(args: [str]) > void {}`)
+	writeFile(t, root, "b/magusfile.buzz", `import "magus";
+export fun build(args: [str]) > void {}`)
+
+	src, err := interp.Find(filepath.Join(root, "a"))
+	require.NoError(t, err)
+	require.NoError(t,
+		interp.Run(context.Background(), src, "go", nil, filepath.Join(root, "a")),
+		"a project/ import must resolve when a target is run, not only parsed")
+}
+
+// TestSpellImportIgnoresComments is the payoff of reading the AST rather than the
+// raw text: a wrong handle that appears only in a comment must not be flagged.
+func TestSpellImportIgnoresComments(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+import "magus/spell/go";
+// for a TS project you would instead: import "magus/spell/typescript";
+magus.project({"spells": [go]});
+export fun build(args: [str]) > void { go["go-build"](); }`)
+
+	require.NoError(t, parseMagusfile(t, dir), "a bad handle in a comment must not be flagged")
+}

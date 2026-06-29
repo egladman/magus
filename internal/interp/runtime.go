@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	buzz "github.com/egladman/gopherbuzz"
+	"github.com/egladman/gopherbuzz/ast"
 	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
@@ -129,6 +130,53 @@ func RegisterBuzzHostBindings(fn BuzzHostBindingsFn) {
 	buzzHostBindingsFn = fn
 }
 
+// buzzSpellImportCheckFn validates the handles a magusfile imports via
+// `import "magus/spell/<handle>"`. The bindings package owns the spell registry,
+// so it supplies the check; nil until it registers one. See
+// RegisterBuzzSpellImportCheck and spellImportNames.
+var buzzSpellImportCheckFn func(handles []string) error
+
+// RegisterBuzzSpellImportCheck stores the validator for `magus/spell/*` imports.
+// Called from bindings init(), the same seam as RegisterBuzzHostBindings.
+func RegisterBuzzSpellImportCheck(fn func(handles []string) error) {
+	if buzzSpellImportCheckFn != nil {
+		panic("interp: Buzz spell-import check already registered")
+	}
+	buzzSpellImportCheckFn = fn
+}
+
+// spellImportNames returns the <handle> of every `import "magus/spell/<handle>"`
+// statement in src. It reads the parsed AST, not the raw text, so a commented-out
+// or string-literal import never counts.
+//
+// It parses with ParseEmbedded — the same lenient mode magusfiles load under
+// (Exec uses WithEmbedded). Strict buzz.Parse rejects top-level statements, which
+// real magusfiles use freely (the repo's own has a top-level `if`), so parsing
+// strict here would error and silently skip the check on exactly those files.
+// A parse error still yields nil: Exec re-parses and reports the real syntax error
+// with position. The substring gate skips the parse entirely for the common
+// magusfile that imports no spell — Exec is about to parse the source anyway.
+func spellImportNames(src string) []string {
+	if !strings.Contains(src, "magus/spell/") {
+		return nil
+	}
+	prog, err := buzz.ParseEmbedded(src)
+	if err != nil {
+		return nil
+	}
+	var handles []string
+	for _, stmt := range prog.Stmts {
+		imp, ok := stmt.(*ast.ImportStmt)
+		if !ok {
+			continue
+		}
+		if handle, ok := strings.CutPrefix(imp.Path, "magus/spell/"); ok {
+			handles = append(handles, handle)
+		}
+	}
+	return handles
+}
+
 // runBuzz executes src on a fresh Buzz session and invokes target.
 func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
 	// Carry the target's directory on the context instead of os.Chdir-ing the whole
@@ -206,6 +254,13 @@ func targetCollisionErr(prev, cur, key string) error {
 
 // execBuzzSrc creates a Buzz Session, registers bindings, and executes source files.
 func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Session, map[string]vm.Callable, error) {
+	// Carry the magusfile source on the context for the whole load, so the module
+	// resolver registered below (which captures this ctx) can resolve top-level
+	// `import "project/<path>"` cross-project handles during execution. Run mode
+	// otherwise reaches here with a nil source — runBuzz sets it only for target
+	// dispatch — and such an import would resolve to nothing. Parse mode already sets
+	// it upstream; re-setting is idempotent.
+	ctx = WithSource(ctx, src)
 	// The buzz path uses the standalone interpreter's concrete API (Exec,
 	// Targets, CallVal) directly; the engine.Session adapter is only for generic
 	// registry consumers, so there's no need to round-trip through engine.Lookup.
@@ -229,14 +284,33 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	}
 
 	for _, path := range src.Files {
+		// rel names the offending file relative to its project dir, so a magusfiles/
+		// directory (several files) is unambiguous; the project itself is already in
+		// the surrounding "preload <project>" context. path is built from src.Dir, so
+		// Rel is a pure-lexical relativize with no I/O and no symlink/escape pitfalls.
+		rel, relErr := filepath.Rel(src.Dir, path)
+		if relErr != nil {
+			rel = path
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			_ = buzzSess.Close()
-			return nil, nil, fmt.Errorf("magusfile: read %s: %w", path, err)
+			return nil, nil, fmt.Errorf("magusfile: read %s: %w", rel, err)
 		}
-		if err := buzzSess.Exec(ctx, string(data)); err != nil {
+		code := string(data)
+		// Validate spell handles before Exec: an unknown `magus/spell/<handle>`
+		// resolves to nothing (gopherbuzz skips an unresolved import) and would
+		// otherwise surface much later as a disconnected "undefined" error. Fail
+		// fast, naming the file, with a did-you-mean instead.
+		if buzzSpellImportCheckFn != nil {
+			if err := buzzSpellImportCheckFn(spellImportNames(code)); err != nil {
+				_ = buzzSess.Close()
+				return nil, nil, fmt.Errorf("magusfile: %s: %w", rel, err)
+			}
+		}
+		if err := buzzSess.Exec(ctx, code); err != nil {
 			_ = buzzSess.Close()
-			return nil, nil, fmt.Errorf("magusfile: exec %s: %w", path, err)
+			return nil, nil, fmt.Errorf("magusfile: exec %s: %w", rel, err)
 		}
 	}
 

@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/interp"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/std"
@@ -19,6 +21,8 @@ import (
 func init() {
 	// Lazy-register so fast subcommands (help, version) skip the registration loop entirely.
 	project.DefaultSpellRegistry().SetEnsureHook(ensureSpellsRegistered)
+	// Validate magus/spell/<handle> imports at magusfile load (did-you-mean for typos).
+	interp.RegisterBuzzSpellImportCheck(checkSpellImports)
 }
 
 var ensureSpellsRegistered = sync.OnceFunc(func() {
@@ -251,4 +255,130 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 func registerLocalSpell(m ispell.Descriptor) {
 	opts := append(localSpellBaseOptions(m), types.WithInvoker(newSpellInvoker(m.Ops)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(types.NewSpell(m.Name, opts...))
+}
+
+// commonSpellAliases maps the language or tool name a user is likely to type to
+// the abbreviated handle the spell actually registers under. Built-in handles are
+// deliberately short (TypeScript is ts, Python py, Rust rs, Markdown md), so
+// `import "magus/spell/typescript"` is a natural first guess; this turns that slip
+// into a precise suggestion.
+var commonSpellAliases = map[string]string{
+	"typescript": "ts",
+	"javascript": "ts",
+	"js":         "ts",
+	"node":       "ts",
+	"nodejs":     "ts",
+	"python":     "py",
+	"python3":    "py",
+	"rust":       "rs",
+	"cargo":      "rs",
+	"markdown":   "md",
+	"golang":     "go",
+}
+
+// checkSpellImports validates the handles a magusfile imports via
+// `import "magus/spell/<handle>"`. An unknown handle resolves to nothing and would
+// otherwise surface later as a disconnected "undefined" error, so we fail fast
+// here with a did-you-mean suggestion. Registered from init() via
+// interp.RegisterBuzzSpellImportCheck.
+func checkSpellImports(handles []string) error {
+	for _, h := range handles {
+		if isRegisteredSpell(h) {
+			continue
+		}
+		return errors.New(unknownSpellMessage(h))
+	}
+	return nil
+}
+
+// isRegisteredSpell reports whether name is a handle reachable as
+// `import "magus/spell/<name>"` — a compiled built-in or a host-registered spell.
+// This mirrors the synthetic modules registerAllBuzz installs, so the check can
+// never reject a handle the import would actually resolve.
+func isRegisteredSpell(name string) bool {
+	if _, ok := ispell.Builtins()[name]; ok {
+		return true
+	}
+	_, ok := project.DefaultSpellRegistry().Lookup(name)
+	return ok
+}
+
+func unknownSpellMessage(name string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "no spell %q to import as \"magus/spell/%s\"", name, name)
+	if s := suggestSpellName(name); s != "" {
+		fmt.Fprintf(&b, "; did you mean %q (import \"magus/spell/%s\")", s, s)
+	}
+	fmt.Fprintf(&b, "\nbuilt-in handles are abbreviated: %s", strings.Join(builtinSpellHandles(), ", "))
+	return b.String()
+}
+
+// suggestSpellName returns the handle a user most likely meant, or "" if nothing
+// is close. A known language/tool alias wins outright; otherwise the nearest
+// registered handle by edit distance, within a small threshold.
+func suggestSpellName(name string) string {
+	lower := strings.ToLower(name)
+	if h, ok := commonSpellAliases[lower]; ok {
+		return h
+	}
+	const threshold = 3
+	best, bestDist := "", threshold+1
+	for _, h := range builtinSpellHandles() {
+		if d := levenshtein(lower, h); d < bestDist || (d == bestDist && h < best) {
+			best, bestDist = h, d
+		}
+	}
+	if bestDist > threshold {
+		return ""
+	}
+	return best
+}
+
+// builtinSpellHandles returns the compiled-in spell handles, sorted. Used both for
+// the suggestion search and the handles listed in the error.
+func builtinSpellHandles() []string {
+	b := ispell.Builtins()
+	out := make([]string, 0, len(b))
+	for name := range b {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// levenshtein is the edit distance between a and b, for the did-you-mean search.
+func levenshtein(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+	row := make([]int, len(b)+1)
+	for j := range row {
+		row[j] = j
+	}
+	for i, ca := range a {
+		prev := i + 1
+		for j, cb := range b {
+			cost := 1
+			if ca == cb {
+				cost = 0
+			}
+			next := row[j+1] + 1
+			if d := prev + 1; d < next {
+				next = d
+			}
+			if d := row[j] + cost; d < next {
+				next = d
+			}
+			row[j] = prev
+			prev = next
+		}
+		row[len(b)] = prev
+	}
+	return row[len(b)]
 }
