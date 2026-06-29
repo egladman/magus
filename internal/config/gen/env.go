@@ -180,6 +180,16 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_ASSUME_INTERACTIVE"); v != "" {
 		cfg.AssumeInteractive = parseBoolEnv(v, cfg.AssumeInteractive)
 	}
+	if v := getenv("MAGUS_DEFAULT_CHARMS"); v != "" {
+		parts := strings.Split(v, ",")
+		out := parts[:0]
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		cfg.DefaultCharms = out
+	}
 	if v := getenv("MAGUS_SANDBOX_ENABLED"); v != "" {
 		cfg.Sandbox.Enabled = parseBoolEnv(v, cfg.Sandbox.Enabled)
 	}

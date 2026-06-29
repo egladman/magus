@@ -187,9 +187,11 @@ duplicate-insensitive), so orthogonal intents compose:
 magus run lint:rw,debug    # autofix + verbose, together
 ```
 
-The default (no `rw`) is read-only, and CI always runs read-only. Spells read
-charms from context via `HasCharm`, so workspaces can introduce their own shared
-charms. See [docs/charms.md](docs/charms.md).
+The default (no `rw`) is read-only, and CI always runs read-only. A workspace can
+flip its local baseline with `default_charms: [rw]` in `magus.yaml` (applied to
+`magus run`/`x`, not `affected`; `--no-default-charms` opts out per run). Spells
+read charms from context via `HasCharm`, so workspaces can introduce their own
+shared charms. See [docs/charms.md](docs/charms.md).
 
 ---
 

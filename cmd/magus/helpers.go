@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/egladman/magus"
@@ -12,6 +13,25 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
+
+// withDefaultCharms combines the workspace default charms (magus.yaml
+// default_charms) with the per-run charms parsed from a target's :suffix:
+// defaults first, per-run stacked on top, exact duplicates dropped. noDefault
+// (the --no-default-charms flag) skips the defaults entirely. Only `magus run`
+// and `magus x` call this; `magus affected` does not, and the ci anchor strips
+// "rw" downstream in RunCI, so a defaulted rw never makes a ci run write.
+func withDefaultCharms(perRun, defaults []string, noDefault bool) []string {
+	if noDefault || len(defaults) == 0 {
+		return perRun
+	}
+	out := slices.Clone(defaults)
+	for _, c := range perRun {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
 
 type traceCtxKey struct{}
 

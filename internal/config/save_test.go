@@ -67,6 +67,7 @@ func TestKnownKeys(t *testing.T) {
 		"daemon.address":         true, "daemon.socket": true, "daemon.workspaces": true,
 		"vcs.base_ref": true, "vcs.name": true,
 		"assume_interactive":      true,
+		"default_charms":          true,
 		"report.filter":           true,
 		"sandbox.enabled":         true,
 		"sandbox.env.passthrough": true,

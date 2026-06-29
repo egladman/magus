@@ -58,6 +58,7 @@ var ConfigFlags = []ConfigFlag{
 	{"history-path", "MAGUS_HISTORY_PATH", "string"},
 	{"dry-run", "MAGUS_DRY_RUN", "bool"},
 	{"assume-interactive", "MAGUS_ASSUME_INTERACTIVE", "bool"},
+	{"", "MAGUS_DEFAULT_CHARMS", "stringslice"},
 	{"sandbox-enabled", "MAGUS_SANDBOX_ENABLED", "bool"},
 	{"", "MAGUS_SANDBOX_ENV_PASSTHROUGH", "stringslice"},
 }

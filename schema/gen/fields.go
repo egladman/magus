@@ -324,6 +324,14 @@ func init() {
 			Usage:    "MAGUS_ASSUME_INTERACTIVE: AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.",
 		},
 		{
+			GoPath:   "DefaultCharms",
+			YamlPath: "default_charms",
+			EnvVar:   "MAGUS_DEFAULT_CHARMS",
+			Flag:     FlagNames{Long: ""},
+			Kind:     KindStringSlice,
+			Usage:    "MAGUS_DEFAULT_CHARMS: DefaultCharms are execution charms applied to every 'magus run' / 'magus x' by",
+		},
+		{
 			GoPath:   "Sandbox.Enabled",
 			YamlPath: "sandbox.enabled",
 			EnvVar:   "MAGUS_SANDBOX_ENABLED",

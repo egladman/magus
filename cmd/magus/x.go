@@ -106,6 +106,9 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	if *step {
 		xOpts = append(xOpts, magus.WithStep())
 	}
+	if charms := withDefaultCharms(nil, globalCfg.DefaultCharms, false); len(charms) > 0 {
+		xOpts = append(xOpts, magus.WithCharms(charms...))
+	}
 	return m.Run(ctx, targets, xOpts...)
 }
 

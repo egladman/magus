@@ -56,6 +56,23 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 **CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` is the only charm with this strip status; the other built-in (`cd`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
 
+## Defaulting charms per workspace (`default_charms`)
+
+Every run is read-only by default. A workspace can opt into a different baseline with `default_charms` in `magus.yaml` — charms applied to every `magus run` and `magus x` automatically, so a team that wants local autofix does not type `:rw` each time:
+
+```yaml
+# magus.yaml
+default_charms: [rw] # `magus run format` now writes; no :rw needed
+```
+
+Per-run charms stack on top, exactly as if you had typed the whole set. Three things keep it safe:
+
+- **`magus affected` does not apply them**, so CI (which runs `magus affected ci`) stays read-only regardless of the workspace default.
+- **`RunCI` still strips `rw`**, so even a local `magus run ci` verifies without writing.
+- **`--no-default-charms`** ignores the defaults for one run (`magus run format --no-default-charms` to check without rewriting).
+
+`MAGUS_DEFAULT_CHARMS` (comma-separated) is the environment equivalent. It only sets the default baseline; it never changes what a charm means, so `has_charm("rw")` in spells and targets is unaffected.
+
 ## Stacking and composition
 
 Charms are an **unordered, additive set**. When you pass several, they all apply:

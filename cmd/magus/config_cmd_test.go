@@ -106,9 +106,10 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 // `magus affected`. Each entry must cite the reason; the corresponding
 // declaration in run.go carries a matching "run-only:" comment.
 var runOnlyFlags = map[string]string{
-	"shard":          "CI matrix sharding targets an explicit project set; affected's scope is already minimal",
-	"n-shards":       "pairs with --shard",
-	"no-flake-retry": "consumed by `magus ci bisect` which dispatches through run, not affected",
+	"shard":             "CI matrix sharding targets an explicit project set; affected's scope is already minimal",
+	"n-shards":          "pairs with --shard",
+	"no-flake-retry":    "consumed by `magus ci bisect` which dispatches through run, not affected",
+	"no-default-charms": "default_charms applies to run/x only; affected never applies them, so there is nothing to opt out of",
 }
 
 // affectedOnlyFlags lists flags that intentionally exist on `magus affected`

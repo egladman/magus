@@ -39,6 +39,13 @@ type Config struct {
 	// AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.
 	AssumeInteractive bool `yaml:"assume_interactive"`
 
+	// DefaultCharms are execution charms applied to every `magus run` / `magus x` by
+	// default, e.g. ["rw"] to make targets write locally without typing :rw. Per-run
+	// :charms stack on top. The ci anchor still strips "rw" (RunCI), so a local
+	// `magus run ci` stays read-only; --no-default-charms ignores these for one run.
+	// `magus affected` does not apply them, so CI stays read-only unless explicit.
+	DefaultCharms []string `yaml:"default_charms"`
+
 	// Sandbox confines subprocesses and spells to the workspace + allowlist using Linux landlock (≥5.13)
 	// when available, with binding-level fallback. See SandboxConfig for allowlist and env knobs.
 	Sandbox SandboxConfig `yaml:"sandbox"`
@@ -222,6 +229,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CONCURRENCY", "concurrency", "min(NumCPU,8)", "Maximum number of concurrently running per-project build steps"},
 		{"MAGUS_HISTORY_PATH", "history_path", "$XDG_STATE_HOME/magus/history/v1.json", "Path to the runtime-history JSON shared by flake detection, the CI forecaster, graph timing, and bisect"},
 		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
+		{"MAGUS_DEFAULT_CHARMS", "default_charms", "", "Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run"},
 		{"MAGUS_VCS_ENABLED", "vcs.enabled", "true", "Master switch for VCS-driven affected detection; false makes affected fall back to all projects"},
 		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj"},
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
