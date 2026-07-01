@@ -41,6 +41,14 @@ final OUT  = "gen";          // generated site output, under this project
 final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
 final GH   = "https://github.com/egladman/magus";
 
+// SITE_URL is the site's public base (with trailing slash), used for the canonical
+// link, sitemap, and (later) the Atom feeds. Set non-empty to enable them; leave ""
+// to ship those surfaces dark until the host is confirmed. SITE_DESC is the
+// belt-and-suspenders page description when a page has neither a frontmatter
+// description nor a derivable first paragraph.
+final SITE_URL  = "https://eli.gladman.cc/magus/";
+final SITE_DESC = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.";
+
 final MONTHS: {str: str} = {
     "01": "January", "02": "February", "03": "March",    "04": "April",
     "05": "May",     "06": "June",     "07": "July",     "08": "August",
@@ -436,6 +444,28 @@ fun emitAliases() > void {
     }
 }
 
+// writeSeoFiles emits sitemap.xml + robots.txt from the real page URLs (sorted, so
+// byte-stable), each as an absolute SITE_URL loc — the home page's "index.html" URL
+// maps to the bare site root. Aliases are deliberately absent (only canonical pages
+// belong in a sitemap). Gated on SITE_URL so the site can ship dark until the host
+// is confirmed. robots points crawlers at the sitemap.
+fun writeSeoFiles() > void {
+    if (SITE_URL == "") { return; }
+    var urls: [str] = mut [<str>];
+    foreach (u in pageUrls.keys()) { urls.append(u); }
+    final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+    foreach (u in sorted) {
+        var loc = u;
+        if (loc == "index.html") { loc = ""; }
+        body = body + "  <url><loc>" + SITE_URL + loc + "</loc></url>\n";
+    }
+    body = body + "</urlset>\n";
+    fs.writeFile(OUT + "/sitemap.xml", body);
+    fs.writeFile(OUT + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + SITE_URL + "sitemap.xml\n");
+}
+
 // formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
 // human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
 // date library. Used as the no-JS fallback; client-side JS rewrites it to the
@@ -493,6 +523,56 @@ fun stripTags(s: str) > str {
         lt = r.indexOf("<");
     }
     return r;
+}
+
+// collapseWs turns any run of whitespace (newlines/tabs/spaces goldmark left in the
+// markup) into single spaces, so a derived description reads as one clean line.
+fun collapseWs(s: str) > str {
+    var r = s.replace("\n", " ").replace("\t", " ").replace("\r", " ");
+    while (r.indexOf("  ") != null) { r = r.replace("  ", " "); }
+    return r.trim();
+}
+
+// decodeEntities turns the HTML entities goldmark emits back into their characters
+// for a plain-text description. &amp; is decoded LAST so an entity like "&amp;lt;"
+// does not get double-decoded into "<".
+fun decodeEntities(s: str) > str {
+    return s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+        .replace("&#39;", "'").replace("&#34;", "\"").replace("&amp;", "&");
+}
+
+// truncateWords caps s at about n characters, cutting on a word boundary so the
+// description never ends mid-word. Short paragraphs (the common case) pass through.
+fun truncateWords(s: str, n: int) > str {
+    if (s.len() <= n) { return s; }
+    final head = s.sub(0, n);
+    var i = head.len() - 1;
+    while (i > 0) {
+        if (head.sub(i, i + 1) == " ") { return head.sub(0, i); }
+        i = i - 1;
+    }
+    return head;
+}
+
+// deriveDescription is the belt-and-suspenders page description: the first
+// substantive paragraph of the rendered HTML, tags stripped, whitespace collapsed,
+// entities decoded, truncated on a word boundary. A leading image-only paragraph
+// (the hero) yields empty text and is skipped. "" when no paragraph has text, so
+// the caller can fall back to SITE_DESC. Runs before escapeAttr re-encodes, so the
+// decode here avoids the double-encoding the plan's risk register flags.
+fun deriveDescription(html: str) > str {
+    var rest = html;
+    var open = rest.indexOf("<p>");
+    while (open != null) {
+        final close = rest.indexOf("</p>");
+        if (close == null) { return ""; }
+        final inner = rest.sub(open + 3, close);
+        final text = decodeEntities(collapseWs(stripTags(inner)));
+        if (text != "") { return truncateWords(text, 155); }
+        rest = rest.sub(close + 4);
+        open = rest.indexOf("<p>");
+    }
+    return "";
 }
 
 // strLess is lexicographic string ordering by byte; buzz has no `<` on str, so
@@ -703,9 +783,11 @@ fun pagerFor(rel: str) > str {
 
 // srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
 // it drives both the per-page commit footer and the "Suggest an edit" link.
-// description (from frontmatter, may be "") becomes the page's meta description.
-// pager is the prev/next nav (may be ""); the home page and lone pages pass "".
-fun page(title: str, description: str, content: str, srcRel: str, pager: str) > str {
+// description is the resolved page description (frontmatter, else derived, else the
+// site default) — always non-empty, so the meta tag always fires. canonUrl is the
+// page's clean gen-root URL ("" for home) for the canonical link. pager is the
+// prev/next nav (may be ""); the home page and lone pages pass "".
+fun page(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str) > str {
     final root = rootPrefix(srcRel);
     // Which top-nav item to mark current. Every rendered docs page hangs off the
     // Documentation hub, except the dedicated install page; the home page (README)
@@ -716,6 +798,15 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
     var descMeta = "";
     if (description != "") {
         descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
+    }
+    // Canonical URL (absolute), gated on a configured SITE_URL so the site can ship
+    // dark until the host is confirmed. SITE_URL carries the trailing slash, canonUrl
+    // is the slashed clean path ("" for home -> canonical is the site root).
+    var canon = "";
+    var sitemapLink = "";
+    if (SITE_URL != "") {
+        canon = "  <link rel=\"canonical\" href=\"" + SITE_URL + canonUrl + "\">\n";
+        sitemapLink = " &middot; <a href=\"" + root + "sitemap.xml\">Sitemap</a>";
     }
     // Preload the LCP hero image on the home page only (README's gopher), so the
     // browser fetches it in parallel with the CSS instead of discovering it after
@@ -741,6 +832,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
         + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
         + "  <title>" + title + "</title>\n"
         + descMeta
+        + canon
         + heroPreload
         // Warm the CDN connection before the render-blocking Pico <link> below, so
         // the TLS handshake overlaps HTML parsing; the same origin also serves the
@@ -777,6 +869,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
         + "  <footer class=\"site-footer container\">\n"
         + "    <small>"
         + "<a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a>"
+        + sitemapLink
         + " &middot; "
         + "<a href=\"https://buzz-lang.dev/\">Built with Buzz</a>"
         + "</small>\n"
@@ -815,9 +908,13 @@ fun renderRoot() > void {
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, "README.md"); }
-    final desc = fm.q("description").stringValue();
+    // Resolve the description: authored frontmatter, else the first real paragraph,
+    // else the site default — always non-empty so the meta tag always fires.
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
 
-    final doc = page(title, desc, html, "README.md", "");
+    final doc = page(title, desc, html, "README.md", "", "");
     final of = io.File.open(OUT + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
@@ -836,15 +933,21 @@ fun renderFile(rel: str) > void {
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
-    final desc = fm.q("description").stringValue();
 
     final html = rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel));
-    final doc = page(title, desc, html, DOCS + "/" + rel, pagerFor(rel));
+
+    // Resolve the description: authored frontmatter, else the first real paragraph,
+    // else the site default — always non-empty so the meta tag always fires.
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    final url = cleanUrl(rel);
+    final doc = page(title, desc, html, DOCS + "/" + rel, pagerFor(rel), url);
 
     // Directory-index output: every page is <cleanUrl>index.html (extensionless,
     // with the build-artifact "gen" segment flattened out). url is gen/-root-
     // relative and ends in a slash, matching what search.js/sitemap/canonical use.
-    final url = cleanUrl(rel);
     final dir = OUT + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
     fs.makeDirectory(dir);
 
@@ -916,6 +1019,7 @@ fun site_render() > void {
     // real page URL is known for the collision guard). Aliases stay out of the
     // search index/sitemap/feeds — only the real page they point to appears there.
     emitAliases();
+    writeSeoFiles();
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://eli.gladman.cc/magus/sitemap.xml
