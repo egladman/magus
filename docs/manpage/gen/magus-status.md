@@ -31,25 +31,25 @@ snapshot on its own line for log capture.
 
 *One-shot status snapshot*
 
-```
+```sh
 magus status
 ```
 
 *Live updates every second*
 
-```
+```sh
 magus status --watch=1s
 ```
 
 *Single-line snapshot for a multiplexer sidebar*
 
-```
+```sh
 magus status --compact --watch=1s
 ```
 
 *Inspect a specific running parent*
 
-```
+```sh
 magus status --socket=unix:///run/user/1000/magus/daemon.sock
 ```
 

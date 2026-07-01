@@ -1,4 +1,4 @@
-# `yaml`
+# yaml
 
 YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).
 
@@ -6,11 +6,11 @@ YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).
 
 ## Methods
 
-### `parse`
+### parse
 
 Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.
 
-**Signature:** `yaml.parse(source) → any`
+**Signature:** `yaml.parse(source) → any` · [source](https://github.com/egladman/magus/blob/main/std/yaml.go#L39)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -18,11 +18,11 @@ Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); 
 
 **Returns:** any
 
-### `stringify`
+### stringify
 
 Encode a value to a YAML string; errors on unencodable input.
 
-**Signature:** `yaml.stringify(value) → string`
+**Signature:** `yaml.stringify(value) → string` · [source](https://github.com/egladman/magus/blob/main/std/yaml.go#L48)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

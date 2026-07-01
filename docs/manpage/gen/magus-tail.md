@@ -28,37 +28,37 @@ exist yet (run a build first).
 
 *Stream last log for cwd project*
 
-```
+```sh
 magus tail
 ```
 
 *Follow (stream new output as it arrives)*
 
-```
+```sh
 magus tail -f
 ```
 
 *Show last 50 lines*
 
-```
+```sh
 magus tail -n 50
 ```
 
 *Show entire log*
 
-```
+```sh
 magus tail -n 0
 ```
 
 *Last test run for the api project*
 
-```
+```sh
 magus tail api:test
 ```
 
 *Last build run for cwd project*
 
-```
+```sh
 magus tail :build
 ```
 

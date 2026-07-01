@@ -62,55 +62,55 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 
 *Build everything*
 
-```
+```sh
 magus run build
 ```
 
 *Test one project*
 
-```
+```sh
 magus run test api/gateway
 ```
 
 *Build two specific projects*
 
-```
+```sh
 magus run build api/gateway web/studio
 ```
 
 *Dry-run: show what would run*
 
-```
+```sh
 magus run build --dry-run
 ```
 
 *Full CI pipeline*
 
-```
+```sh
 magus run ci
 ```
 
 *Show dependency graph for build target*
 
-```
+```sh
 magus run build --graph
 ```
 
 *Graph in Mermaid format*
 
-```
+```sh
 magus run build --graph -o mermaid
 ```
 
 *Graph dependents of api/gateway*
 
-```
+```sh
 magus run build api/gateway --graph --upstream
 ```
 
 *Stream JSONL target events to a file*
 
-```
+```sh
 magus run build -o jsonl --tee build.jsonl
 ```
 

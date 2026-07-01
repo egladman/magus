@@ -1,4 +1,4 @@
-# `fs`
+# fs
 
 Filesystem and path primitives.
 
@@ -6,11 +6,11 @@ Filesystem and path primitives.
 
 ## Methods
 
-### `glob`
+### glob
 
 Return paths matching pattern (doublestar-style).
 
-**Signature:** `fs.glob(pattern) → []string`
+**Signature:** `fs.glob(pattern) → []string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L219)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -18,11 +18,11 @@ Return paths matching pattern (doublestar-style).
 
 **Returns:** []string
 
-### `dirname`
+### dirname
 
 Directory portion of path.
 
-**Signature:** `fs.dirname(path) → string`
+**Signature:** `fs.dirname(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L246)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,11 +30,11 @@ Directory portion of path.
 
 **Returns:** string
 
-### `basename`
+### basename
 
 Final element of path.
 
-**Signature:** `fs.basename(path) → string`
+**Signature:** `fs.basename(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L251)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,13 +42,11 @@ Final element of path.
 
 **Returns:** string
 
-### `exists`
+### exists
 
 True iff path exists.
 
-**Signature:** `fs.exists(path) → bool`
-
-**Also in Buzz's stdlib:** `fs.exists` — the magus form is sandbox-aware.
+**Signature:** `fs.exists(path) → bool`[^buzz-stdlib-fs-exists] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L256)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -56,11 +54,11 @@ True iff path exists.
 
 **Returns:** bool
 
-### `read_file`
+### read_file
 
 Return the contents of path as a string.
 
-**Signature:** `fs.readFile(path) → string`
+**Signature:** `fs.readFile(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L270)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -68,35 +66,33 @@ Return the contents of path as a string.
 
 **Returns:** string
 
-### `write_file`
+### write_file
 
 Write content to path (mode 0644).
 
-**Signature:** `fs.writeFile(path, content)`
+**Signature:** `fs.writeFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L283)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `content` | `string` |  | |
 
-### `mkdirall`
+### mkdirall
 
 Create path and parents (default mode 0755).
 
-**Signature:** `fs.mkdirall(path, [perm])`
-
-**Also in Buzz's stdlib:** `fs.makeDirectory` — the magus form is sandbox-aware.
+**Signature:** `fs.mkdirall(path, [perm])`[^buzz-stdlib-fs-mkdirall] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L298)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `perm` | `int` | yes | |
 
-### `join`
+### join
 
 Join path elements with the OS separator.
 
-**Signature:** `fs.join(parts...) → string`
+**Signature:** `fs.join(parts...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L313)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -104,25 +100,21 @@ Join path elements with the OS separator.
 
 **Returns:** string
 
-### `remove_all`
+### remove_all
 
 Recursively remove path (no error if missing).
 
-**Signature:** `fs.removeAll(path)`
-
-**Also in Buzz's stdlib:** `fs.delete` — the magus form is sandbox-aware.
+**Signature:** `fs.removeAll(path)`[^buzz-stdlib-fs-remove_all] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L318)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 
-### `list_dir`
+### list_dir
 
 Return directory entries; empty if path does not exist.
 
-**Signature:** `fs.listDir(path) → []string`
-
-**Also in Buzz's stdlib:** `fs.list` — the magus form is sandbox-aware.
+**Signature:** `fs.listDir(path) → []string`[^buzz-stdlib-fs-list_dir] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L333)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -130,11 +122,11 @@ Return directory entries; empty if path does not exist.
 
 **Returns:** []string
 
-### `ext`
+### ext
 
 File-name extension of path, including the leading dot ("" if none).
 
-**Signature:** `fs.ext(path) → string`
+**Signature:** `fs.ext(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L353)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -142,11 +134,11 @@ File-name extension of path, including the leading dot ("" if none).
 
 **Returns:** string
 
-### `is_dir`
+### is_dir
 
 True iff path exists and is a directory (a sandbox-denied path reads as false).
 
-**Signature:** `fs.isDir(path) → bool`
+**Signature:** `fs.isDir(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L360)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -154,11 +146,11 @@ True iff path exists and is a directory (a sandbox-denied path reads as false).
 
 **Returns:** bool
 
-### `is_file`
+### is_file
 
 True iff path exists and is a regular file (a sandbox-denied path reads as false).
 
-**Signature:** `fs.isFile(path) → bool`
+**Signature:** `fs.isFile(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L371)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -166,11 +158,11 @@ True iff path exists and is a regular file (a sandbox-denied path reads as false
 
 **Returns:** bool
 
-### `stat`
+### stat
 
 Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.
 
-**Signature:** `fs.stat(path) → map[string]any`
+**Signature:** `fs.stat(path) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L383)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -178,88 +170,88 @@ Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as
 
 **Returns:** map[string]any
 
-### `copy_file`
+### copy_file
 
 Copy the file at src to dst (overwriting), preserving its permission bits.
 
-**Signature:** `fs.copyFile(src, dst)`
+**Signature:** `fs.copyFile(src, dst)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L402)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `src` | `string` |  | |
 | `dst` | `string` |  | |
 
-### `copy_dir`
+### copy_dir
 
 Recursively copy the directory tree at src to dst, preserving permission bits.
 
-**Signature:** `fs.copyDir(src, dst)`
+**Signature:** `fs.copyDir(src, dst)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L422)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `src` | `string` |  | |
 | `dst` | `string` |  | |
 
-### `watch`
+### watch
 
 Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.
 
-**Signature:** `fs.watch(paths, callback)`
+**Signature:** `fs.watch(paths, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L520)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `paths` | `[]string` |  | |
-| `callback` | `Callback` |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
 
-### `walk`
+### walk
 
 Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.
 
-**Signature:** `fs.walk(root, callback)`
+**Signature:** `fs.walk(root, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L570)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `root` | `string` |  | |
-| `callback` | `Callback` |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
 
-### `append_file`
+### append_file
 
 Append content to path (creating if absent, mode 0644).
 
-**Signature:** `fs.appendFile(path, content)`
+**Signature:** `fs.appendFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L607)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `content` | `string` |  | |
 
-### `chmod`
+### chmod
 
 Change the permission bits of path to mode (octal integer, e.g. 0755).
 
-**Signature:** `fs.chmod(path, mode)`
+**Signature:** `fs.chmod(path, mode)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L630)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `mode` | `int` |  | |
 
-### `symlink`
+### symlink
 
 Create a symbolic link at link pointing to target.
 
-**Signature:** `fs.symlink(target, link)`
+**Signature:** `fs.symlink(target, link)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L646)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `target` | `string` |  | |
 | `link` | `string` |  | |
 
-### `readlink`
+### readlink
 
 Return the target of the symbolic link at path.
 
-**Signature:** `fs.readlink(path) → string`
+**Signature:** `fs.readlink(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L664)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -267,11 +259,11 @@ Return the target of the symbolic link at path.
 
 **Returns:** string
 
-### `temp_dir`
+### temp_dir
 
 Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.
 
-**Signature:** `fs.tempDir([prefix]) → string`
+**Signature:** `fs.tempDir([prefix]) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L707)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -279,11 +271,11 @@ Create a new temporary directory (in os.TempDir()) with an optional name prefix 
 
 **Returns:** string
 
-### `read_lines`
+### read_lines
 
 Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.
 
-**Signature:** `fs.readLines(path) → []string`
+**Signature:** `fs.readLines(path) → []string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L680)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -291,14 +283,18 @@ Read path and return its lines as a list, with the line terminators stripped. A 
 
 **Returns:** []string
 
-### `write_lines`
+### write_lines
 
 Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.
 
-**Signature:** `fs.writeLines(path, lines)`
+**Signature:** `fs.writeLines(path, lines)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L694)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `lines` | `[]string` |  | |
 
+[^buzz-stdlib-fs-exists]: `fs.exists` is also in Buzz's standard library (`fs.exists`); the magus form is sandbox-aware.
+[^buzz-stdlib-fs-mkdirall]: `fs.mkdirall` is also in Buzz's standard library (`fs.makeDirectory`); the magus form is sandbox-aware.
+[^buzz-stdlib-fs-remove_all]: `fs.removeAll` is also in Buzz's standard library (`fs.delete`); the magus form is sandbox-aware.
+[^buzz-stdlib-fs-list_dir]: `fs.listDir` is also in Buzz's standard library (`fs.list`); the magus form is sandbox-aware.

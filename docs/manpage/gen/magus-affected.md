@@ -104,55 +104,55 @@ introduced a regression.
 
 *Build projects changed since the default base ref*
 
-```
+```sh
 magus affected build
 ```
 
 *Use a different base ref*
 
-```
+```sh
 magus affected build --base main
 ```
 
 *Pipe from watch for continuous builds*
 
-```
+```sh
 magus watch | magus affected --stdin build
 ```
 
 *List affected projects without building*
 
-```
+```sh
 magus affected list
 ```
 
 *Show dependency graph for the affected scope*
 
-```
+```sh
 magus affected build --graph
 ```
 
 *Graph as DOT for piping to Graphviz*
 
-```
+```sh
 magus affected build --graph -o dot | dot -Tsvg > graph.svg
 ```
 
 *Emit a CI shard plan for the affected set*
 
-```
+```sh
 magus affected --plan
 ```
 
 *Shard plan limited to four shards*
 
-```
+```sh
 magus affected --plan --max-shards 4
 ```
 
 *Bisect a regression in myapp*
 
-```
+```sh
 magus affected --bisect ./apps/myapp
 ```
 

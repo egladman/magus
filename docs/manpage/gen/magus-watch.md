@@ -37,19 +37,19 @@ trigger a full initial build in the downstream magus affected --stdin.
 
 *Continuous build pipeline*
 
-```
+```sh
 magus watch | magus affected --stdin build
 ```
 
 *Increase debounce for slow editors*
 
-```
+```sh
 magus watch --debounce 500ms | magus affected --stdin test
 ```
 
 *Polling backend (when inotify is unavailable)*
 
-```
+```sh
 magus watch --backend poll | magus affected --stdin build
 ```
 

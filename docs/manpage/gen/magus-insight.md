@@ -52,37 +52,37 @@ hotspots file view renders a churn-vs-complexity quadrant chart).
 
 *Prime refactoring targets (files)*
 
-```
+```sh
 magus insight hotspots --files
 ```
 
 *Churn-vs-complexity quadrant*
 
-```
+```sh
 magus insight hotspots --files -o mermaid
 ```
 
 *Hidden architectural coupling*
 
-```
+```sh
 magus insight affinity
 ```
 
 *Bus factor and abandonment*
 
-```
+```sh
 magus insight ownership
 ```
 
 *Rising vs cooling activity*
 
-```
+```sh
 magus insight trend --since 90d
 ```
 
 *Whole-workspace report (all lenses)*
 
-```
+```sh
 magus insight report --workspace
 ```
 

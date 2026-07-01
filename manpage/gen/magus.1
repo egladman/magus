@@ -80,7 +80,7 @@ Print a shell completion script. See \fBmagus\-completion\fR(1).
 Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver). See \fBmagus\-init\fR(1).
 .TP
 \fBself\fR
-Manage the magus binary (update/install need \-tags selfmanage). See \fBmagus\-self\fR(1).
+Manage the magus binary (update). See \fBmagus\-self\fR(1).
 .TP
 \fBversion\fR
 Print version, commit, and build date. See \fBmagus\-version\fR(1).
@@ -114,6 +114,9 @@ Path to the runtime\-history JSON shared by flake detection, the CI forecaster, 
 .TP
 \fBMAGUS_DRY_RUN\fR
 When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: \fBdry_run\fR.
+.TP
+\fBMAGUS_DEFAULT_CHARMS\fR
+Comma\-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and \-\-no\-default\-charms ignores them for one run. Equivalent magus.yaml key: \fBdefault_charms\fR.
 .TP
 \fBMAGUS_VCS_ENABLED\fR
 Master switch for VCS\-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: \fBvcs.enabled\fR.

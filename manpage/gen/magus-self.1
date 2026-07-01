@@ -1,17 +1,53 @@
 .TH MAGUS-SELF 1 "" "magus dev" "magus Manual"
 .SH NAME
-magus\-self \- Manage the magus binary (update/install need \-tags selfmanage)
+magus\-self \- Manage the magus binary (update)
 .SH SYNOPSIS
 .B magus
-.RI "self <update|install> [flags]"
+.RI "self update [flags]"
 .SH DESCRIPTION
 Subcommands for managing the magus binary.
 .PP
-This build was compiled without \-tags selfmanage, so self update and
-self install — which download and replace the binary — are not available.
-Rebuild with \-tags selfmanage to enable them.
+update is compiled in by default. Package maintainers who own the system
+binary can build with \-tags noselfupdate to disable the self\-update mechanism.
 .PP
 To bootstrap a workspace, use: magus init
+.SS self update options
+.RS
+.TP
+\fB\-\-bin\-dir\fR \fIstring\fR
+Install into this directory instead of replacing in place
+.TP
+\fB\-\-check\fR
+Print whether an update is available and exit without installing
+.TP
+\fB\-\-dry\-run\fR
+Verify everything but do not replace the running binary
+.TP
+\fB\-\-force\fR
+Allow downgrades and re\-installs of the current version
+.TP
+\fB\-\-version\fR \fIstring\fR
+Install a specific release tag (e.g. v0.4.2)
+.TP
+\fB\-y\fR
+Short for \-\-yes
+.TP
+\fB\-\-yes\fR
+Skip interactive confirmation
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBupdate\fR
+Update magus to the latest release
+.RE
+.SH EXAMPLES
+\fIUpdate the running binary\fR
+.PP
+.EX
+magus self update
+.EE
+.PP
 .SH SEE ALSO
 \fBmagus\fR(1),
 \fBmagus\-ls\fR(1),

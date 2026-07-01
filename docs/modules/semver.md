@@ -1,4 +1,4 @@
-# `semver`
+# semver
 
 Semantic version parsing and comparison (SemVer 2.0.0).
 
@@ -6,11 +6,11 @@ Semantic version parsing and comparison (SemVer 2.0.0).
 
 ## Methods
 
-### `compare`
+### compare
 
 Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" — true when the relation holds.
 
-**Signature:** `semver.compare(a, op, b) → bool`
+**Signature:** `semver.compare(a, op, b) → bool` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L43)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -20,11 +20,11 @@ Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" — true w
 
 **Returns:** bool
 
-### `parse`
+### parse
 
 Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.
 
-**Signature:** `semver.parse(v) → map[string]any`
+**Signature:** `semver.parse(v) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L56)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

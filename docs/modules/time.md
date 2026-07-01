@@ -1,4 +1,4 @@
-# `time`
+# time
 
 Timestamp formatting/parsing and duration parsing (Go time, UTC).
 
@@ -6,11 +6,11 @@ Timestamp formatting/parsing and duration parsing (Go time, UTC).
 
 ## Methods
 
-### `format`
+### format
 
 Render Unix-millis as a string using a Go reference layout (UTC).
 
-**Signature:** `time.format(layout, unix_millis) → string`
+**Signature:** `time.format(layout, unix_millis) → string` · [source](https://github.com/egladman/magus/blob/main/std/time.go#L71)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -19,11 +19,11 @@ Render Unix-millis as a string using a Go reference layout (UTC).
 
 **Returns:** string
 
-### `parse`
+### parse
 
 Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.
 
-**Signature:** `time.parse(layout, value) → float64`
+**Signature:** `time.parse(layout, value) → float64` · [source](https://github.com/egladman/magus/blob/main/std/time.go#L86)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -32,11 +32,11 @@ Parse a string with a Go reference layout into Unix-millis (UTC); errors on mism
 
 **Returns:** float64
 
-### `parse_duration`
+### parse_duration
 
 Parse a Go duration string (e.g. "168h", "1h30m") into milliseconds; errors on mismatch.
 
-**Signature:** `time.parseDuration(duration) → float64`
+**Signature:** `time.parseDuration(duration) → float64` · [source](https://github.com/egladman/magus/blob/main/std/time.go#L95)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -44,19 +44,19 @@ Parse a Go duration string (e.g. "168h", "1h30m") into milliseconds; errors on m
 
 **Returns:** float64
 
-### `now_iso`
+### now_iso
 
 Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().
 
-**Signature:** `time.nowIso() → string`
+**Signature:** `time.nowIso() → string` · [source](https://github.com/egladman/magus/blob/main/std/time.go#L79)
 
 **Returns:** string
 
-### `add`
+### add
 
 Add a Go duration string (e.g. "24h", "-1h30m") to a Unix-millis timestamp; returns the new Unix-millis timestamp.
 
-**Signature:** `time.add(unix_millis, duration) → float64`
+**Signature:** `time.add(unix_millis, duration) → float64` · [source](https://github.com/egladman/magus/blob/main/std/time.go#L105)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -65,11 +65,11 @@ Add a Go duration string (e.g. "24h", "-1h30m") to a Unix-millis timestamp; retu
 
 **Returns:** float64
 
-### `diff`
+### diff
 
 Return a minus b in milliseconds (positive when a is later than b).
 
-**Signature:** `time.diff(a, b) → float64`
+**Signature:** `time.diff(a, b) → float64` · [source](https://github.com/egladman/magus/blob/main/std/time.go#L115)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

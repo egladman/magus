@@ -1,4 +1,4 @@
-# `env`
+# env
 
 Process environment variable access.
 
@@ -6,13 +6,11 @@ Process environment variable access.
 
 ## Methods
 
-### `get`
+### get
 
 Return the value of name, or "" if unset. Use lookup to tell unset from set-but-empty.
 
-**Signature:** `env.get(name) → string`
-
-**Also in Buzz's stdlib:** `os.env` — the magus form is sandbox-aware.
+**Signature:** `env.get(name) → string`[^buzz-stdlib-env-get] · [source](https://github.com/egladman/magus/blob/main/std/env.go#L89)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -20,13 +18,11 @@ Return the value of name, or "" if unset. Use lookup to tell unset from set-but-
 
 **Returns:** string
 
-### `lookup`
+### lookup
 
 Return (value, found); found is false when name is unset or stripped by the sandbox.
 
-**Signature:** `env.lookup(name) → string, bool`
-
-**Also in Buzz's stdlib:** `os.env (returns null when unset)` — the magus form is sandbox-aware.
+**Signature:** `env.lookup(name) → string, bool`[^buzz-stdlib-env-lookup] · [source](https://github.com/egladman/magus/blob/main/std/env.go#L105)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -34,40 +30,40 @@ Return (value, found); found is false when name is unset or stripped by the sand
 
 **Returns:** string, bool
 
-### `set`
+### set
 
 Set name to value in the current process environment.
 
-**Signature:** `env.set(name, value)`
+**Signature:** `env.set(name, value)` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L114)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` |  | |
 | `value` | `string` |  | |
 
-### `list`
+### list
 
 Return all environment variables as a name→value map.
 
-**Signature:** `env.list() → map[string]string`
+**Signature:** `env.list() → map[string]string` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L196)
 
 **Returns:** map[string]string
 
-### `unset`
+### unset
 
 Remove name from the current process environment.
 
-**Signature:** `env.unset(name)`
+**Signature:** `env.unset(name)` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L132)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` |  | |
 
-### `expand`
+### expand
 
 Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to "").
 
-**Signature:** `env.expand(s) → string`
+**Signature:** `env.expand(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L147)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -75,19 +71,19 @@ Replace $VAR and ${VAR} references in s with their values (sandbox-stripped name
 
 **Returns:** string
 
-### `home`
+### home
 
 Return the current user's home directory.
 
-**Signature:** `env.home() → string`
+**Signature:** `env.home() → string` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L158)
 
 **Returns:** string
 
-### `get_or`
+### get_or
 
 Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.
 
-**Signature:** `env.getOr(name, def) → string`
+**Signature:** `env.getOr(name, def) → string` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L169)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -96,11 +92,11 @@ Return the value of name, or def when name is unset or stripped by the sandbox. 
 
 **Returns:** string
 
-### `require`
+### require
 
 Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).
 
-**Signature:** `env.require(name) → string`
+**Signature:** `env.require(name) → string` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L184)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -108,3 +104,5 @@ Return the value of name, or raise when it is unset or stripped by the sandbox. 
 
 **Returns:** string
 
+[^buzz-stdlib-env-get]: `env.get` is also in Buzz's standard library (`os.env`); the magus form is sandbox-aware.
+[^buzz-stdlib-env-lookup]: `env.lookup` is also in Buzz's standard library (`os.env (returns null when unset)`); the magus form is sandbox-aware.

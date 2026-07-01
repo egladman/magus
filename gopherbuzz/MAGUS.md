@@ -40,10 +40,10 @@ graph LR
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 
-## Project: magus/gopherbuzz
+## Project: gopherbuzz
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/gopherbuzz</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>gopherbuzz</code></summary>
 
 ```text
 sources  **/*.go, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
@@ -111,7 +111,7 @@ graph TB
 
 ### `generate`
 
-generate regenerates MAGUS.md and gates on drift, mirroring the root project: a cache hit would skip the check, so it runs every time.
+Regenerates MAGUS.md and fails on drift.
 
 **Defaults**
 
@@ -187,7 +187,7 @@ magus run test .  # from the workspace root
 
 ### `ci`
 
-'ci' is the conventional anchor `magus affected ci` keys off; it fans out lint/build/test in parallel, each waiting on format.
+The anchor `magus affected ci` keys off; fans out lint/build/test after format.
 
 **Defaults**
 
@@ -204,7 +204,7 @@ magus run ci .  # from the workspace root
 
 ### `pgo-generate`
 
-Regenerate default.pgo — the profile-guided optimization profile for the Buzz VM.
+Regenerates default.pgo, the Buzz VM's PGO profile.
 
 **Defaults**
 
@@ -226,7 +226,7 @@ magus run preflight .  # from the workspace root
 
 ### `md-generate`
 
-md-generate renders MAGUS.md (the target catalog + dependency graph) via `magus describe graph`, parsed statically from this magusfile so it stays in lockstep with the project's targets.
+Renders MAGUS.md (target catalog plus graph) from this magusfile.
 
 **Defaults**
 

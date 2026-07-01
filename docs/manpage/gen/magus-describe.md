@@ -19,13 +19,13 @@ files under the seed.
 
 *Describe why api/gateway is affected*
 
-```
+```sh
 magus describe api/gateway
 ```
 
 *JSON output*
 
-```
+```sh
 magus describe api/gateway -o json
 ```
 

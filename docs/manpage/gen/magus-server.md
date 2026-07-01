@@ -36,25 +36,25 @@ check for the file with [ -S "$socket" ] before starting one.
 
 *Start daemon in the background*
 
-```
+```sh
 magus server start &
 ```
 
 *Stop the running daemon*
 
-```
+```sh
 magus server stop
 ```
 
 *Inspect daemon pool state*
 
-```
+```sh
 magus status
 ```
 
 *Use a custom socket path*
 
-```
+```sh
 magus --daemon-address unix:///tmp/m.sock server start
 ```
 

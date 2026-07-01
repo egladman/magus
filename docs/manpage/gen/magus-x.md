@@ -28,19 +28,19 @@ humans. Scripts should call magus run directly.
 
 *Browse all projects in a picker*
 
-```
+```sh
 magus x
 ```
 
 *Resolve by leaf substring*
 
-```
+```sh
 magus x dash
 ```
 
 *AND-narrow with a second filter*
 
-```
+```sh
 magus x dash mobile
 ```
 

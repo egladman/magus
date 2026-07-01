@@ -23,19 +23,19 @@ that.
 
 *Navigate to a project*
 
-```
+```sh
 cd "$(magus where api)"
 ```
 
 *Open in editor*
 
-```
+```sh
 code "$(magus where dash)"
 ```
 
 *AND-filter: must match both tokens*
 
-```
+```sh
 magus where api gateway
 ```
 

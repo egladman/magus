@@ -20,25 +20,25 @@ against the same struct that -o json emits.
 
 *List all projects*
 
-```
+```sh
 magus ls
 ```
 
 *Pipe-friendly: one path per line*
 
-```
+```sh
 magus ls -o name
 ```
 
 *JSON output*
 
-```
+```sh
 magus ls -o json
 ```
 
 *Custom Go template*
 
-```
+```sh
 magus ls -o template='{{range .Projects}}{{.Path}}{{"\n"}}{{end}}'
 ```
 

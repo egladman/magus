@@ -1,4 +1,4 @@
-# `fmt`
+# fmt
 
 String formatting (printf-style).
 
@@ -6,11 +6,11 @@ String formatting (printf-style).
 
 ## Methods
 
-### `sprintf`
+### sprintf
 
 Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.
 
-**Signature:** `fmt.sprintf(format, args...) → string`
+**Signature:** `fmt.sprintf(format, args...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fmt.go#L32)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

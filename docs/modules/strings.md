@@ -1,4 +1,4 @@
-# `strings`
+# strings
 
 Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).
 
@@ -6,11 +6,11 @@ Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, e
 
 ## Methods
 
-### `camel_case`
+### camel_case
 
 Convert s to camelCase.
 
-**Signature:** `strings.camelCase(s) → string`
+**Signature:** `strings.camelCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L77)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -18,11 +18,11 @@ Convert s to camelCase.
 
 **Returns:** string
 
-### `snake_case`
+### snake_case
 
 Convert s to snake_case.
 
-**Signature:** `strings.snakeCase(s) → string`
+**Signature:** `strings.snakeCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L82)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,11 +30,11 @@ Convert s to snake_case.
 
 **Returns:** string
 
-### `kebab_case`
+### kebab_case
 
 Convert s to kebab-case.
 
-**Signature:** `strings.kebabCase(s) → string`
+**Signature:** `strings.kebabCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L87)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,11 +42,11 @@ Convert s to kebab-case.
 
 **Returns:** string
 
-### `pascal_case`
+### pascal_case
 
 Convert s to PascalCase.
 
-**Signature:** `strings.pascalCase(s) → string`
+**Signature:** `strings.pascalCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L92)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -54,11 +54,11 @@ Convert s to PascalCase.
 
 **Returns:** string
 
-### `capitalize`
+### capitalize
 
 Uppercase the first rune of s and lowercase the rest.
 
-**Signature:** `strings.capitalize(s) → string`
+**Signature:** `strings.capitalize(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L97)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -66,11 +66,11 @@ Uppercase the first rune of s and lowercase the rest.
 
 **Returns:** string
 
-### `words`
+### words
 
 Split s into its constituent words (splitting on case changes, digits, and separators).
 
-**Signature:** `strings.words(s) → []string`
+**Signature:** `strings.words(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L102)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -78,11 +78,11 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 
 **Returns:** []string
 
-### `ellipsis`
+### ellipsis
 
 Trim s to at most length runes, appending "..." when truncated.
 
-**Signature:** `strings.ellipsis(s, length) → string`
+**Signature:** `strings.ellipsis(s, length) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L107)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

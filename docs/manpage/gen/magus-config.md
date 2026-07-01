@@ -38,25 +38,25 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 *Show effective config*
 
-```
+```sh
 magus config view
 ```
 
 *Show config as JSON*
 
-```
+```sh
 magus config view -o json
 ```
 
 *Set cache to read-only*
 
-```
+```sh
 magus config set cache.immutable true
 ```
 
 *Initialise magus.yaml from defaults*
 
-```
+```sh
 magus config init
 ```
 

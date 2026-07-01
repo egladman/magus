@@ -14,19 +14,19 @@ Print a shell completion script to stdout and append it to your shell's startup 
 
 *Bash*
 
-```
+```sh
 magus completion bash >> ~/.bashrc
 ```
 
 *Zsh*
 
-```
+```sh
 magus completion zsh >> ~/.zshrc
 ```
 
 *Fish*
 
-```
+```sh
 magus completion fish >> ~/.config/fish/config.fish
 ```
 

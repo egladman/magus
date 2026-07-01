@@ -38,25 +38,25 @@ The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
 
 *Bootstrap the current repo*
 
-```
+```sh
 magus init
 ```
 
 *Non-interactive (CI): pick the VCS explicitly*
 
-```
+```sh
 magus init --vcs git
 ```
 
 *Write only the global config*
 
-```
+```sh
 magus init --global
 ```
 
 *Write config into the repo instead of XDG*
 
-```
+```sh
 magus init --local
 ```
 

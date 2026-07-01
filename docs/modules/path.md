@@ -1,4 +1,4 @@
-# `path`
+# path
 
 Pure path-string math: abs, rel, clean, is_abs, expand_user.
 
@@ -6,11 +6,11 @@ Pure path-string math: abs, rel, clean, is_abs, expand_user.
 
 ## Methods
 
-### `abs`
+### abs
 
 Return the absolute form of path, resolved against the current directory and lexically cleaned.
 
-**Signature:** `path.abs(path) → string`
+**Signature:** `path.abs(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L64)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -18,11 +18,11 @@ Return the absolute form of path, resolved against the current directory and lex
 
 **Returns:** string
 
-### `rel`
+### rel
 
 Return a relative path from base to target; errors if no relative path exists.
 
-**Signature:** `path.rel(base, target) → string`
+**Signature:** `path.rel(base, target) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L73)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -31,11 +31,11 @@ Return a relative path from base to target; errors if no relative path exists.
 
 **Returns:** string
 
-### `clean`
+### clean
 
 Return the shortest lexically-equivalent path (resolves . and .., collapses separators).
 
-**Signature:** `path.clean(path) → string`
+**Signature:** `path.clean(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L82)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -43,11 +43,11 @@ Return the shortest lexically-equivalent path (resolves . and .., collapses sepa
 
 **Returns:** string
 
-### `is_abs`
+### is_abs
 
 Report whether path is absolute.
 
-**Signature:** `path.isAbs(path) → bool`
+**Signature:** `path.isAbs(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L87)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -55,11 +55,11 @@ Report whether path is absolute.
 
 **Returns:** bool
 
-### `expand_user`
+### expand_user
 
 Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.
 
-**Signature:** `path.expandUser(path) → string`
+**Signature:** `path.expandUser(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L94)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

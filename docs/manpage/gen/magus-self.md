@@ -1,20 +1,55 @@
 # magus-self
 
-Manage the magus binary (update/install need -tags selfmanage)
+Manage the magus binary (update)
 
 ## Synopsis
 
-**magus** self \<update|install\> [flags]
+**magus** self update [flags]
 
 ## Description
 
 Subcommands for managing the magus binary.
 
-This build was compiled without -tags selfmanage, so self update and
-self install — which download and replace the binary — are not available.
-Rebuild with -tags selfmanage to enable them.
+update is compiled in by default. Package maintainers who own the system
+binary can build with -tags noselfupdate to disable the self-update mechanism.
 
 To bootstrap a workspace, use: magus init
+
+### self update options
+
+**--bin-dir** *string*
+: Install into this directory instead of replacing in place
+
+**--check**
+: Print whether an update is available and exit without installing
+
+**--dry-run**
+: Verify everything but do not replace the running binary
+
+**--force**
+: Allow downgrades and re-installs of the current version
+
+**--version** *string*
+: Install a specific release tag (e.g. v0.4.2)
+
+**-y**
+: Short for --yes
+
+**--yes**
+: Skip interactive confirmation
+
+## Subcommands
+
+**update**
+: Update magus to the latest release
+
+## Examples
+
+*Update the running binary*
+
+```sh
+magus self update
+```
 
 ## See Also
 

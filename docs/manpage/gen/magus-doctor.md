@@ -27,13 +27,13 @@ check fails.
 
 *Run all checks*
 
-```
+```sh
 magus doctor
 ```
 
 *JSON report*
 
-```
+```sh
 magus doctor -o json
 ```
 

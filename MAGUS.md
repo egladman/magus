@@ -47,7 +47,7 @@ graph LR
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
-outputs  host/gen/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, cmd/magus/manpages/*.1, MAGUS.md, dist/*
+outputs  host/gen/*.go, docs/modules/*.md, docs/manpage/gen/*.md, manpage/gen/*.1, MAGUS.md, dist/*
 spells   magusfile, go, buzz, md (claims: **/*.md, **/*.mdx)
 ```
 
@@ -145,7 +145,7 @@ graph TB
   t_buzz_check -->|"buzz-check"| sp_buzz
   t_buzz_run -->|"magus-buzz"| sp_buzz
   t_test -->|"go-test"| sp_go
-  t_lint -->|"golangci-lint, go-vet, govulncheck"| sp_go
+  t_lint -->|"go-vet"| sp_go
   t_lint -->|"markdownlint"| sp_md
   t_format -->|"go-fmt, go-mod-tidy"| sp_go
   t_format -->|"prettier"| sp_md
@@ -176,7 +176,7 @@ magus run image-scan:rw  # mutate in place instead of checking
 
 ### `postflight`
 
-The mirror of preflight: renders the insight report (behavioral code analysis — hotspots, affinity, ownership, trend) and, inside GitHub Actions, appends it to the job's step summary so every run surfaces where the codebase's attention and risk concentrate.
+Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary.
 
 **Defaults**
 
@@ -189,7 +189,7 @@ magus run postflight .  # from the workspace root
 
 ### `generate`
 
-Regenerates every *-generate sibling, then gates on git drift (exclusive, scoped to cwd).
+Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).
 
 **Defaults**
 
@@ -321,7 +321,7 @@ magus run test .  # from the workspace root
 
 ### `lint`
 
-Formats first, then runs golangci-lint, `go vet`, govulncheck, and markdownlint.
+Formats first, then golangci-lint, go vet, govulncheck, markdownlint.
 
 **Defaults**
 
@@ -423,7 +423,7 @@ magus run image-build:cd  # apply the cd charm
 
 ### `man-generate`
 
-Renders man pages and mirrors them into the embed dir for `magus self install`.
+Renders the man pages (roff) into manpage/gen.
 
 **Defaults**
 
@@ -632,10 +632,10 @@ magus run preflight                    # from the project directory
 magus run preflight cmd/magus/starter  # from the workspace root
 ```
 
-## Project: magus/gopherbuzz
+## Project: gopherbuzz
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/gopherbuzz</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>gopherbuzz</code></summary>
 
 ```text
 sources  gopherbuzz/**/*.go, gopherbuzz/go.mod, gopherbuzz/go.sum, gopherbuzz/go.work, gopherbuzz/go.work.sum, gopherbuzz/magusfile.buzz, gopherbuzz/magusfiles/**/*.buzz, magusfile.buzz, magusfiles/**/*.buzz
@@ -703,7 +703,7 @@ graph TB
 
 ### `generate`
 
-generate regenerates MAGUS.md and gates on drift, mirroring the root project: a cache hit would skip the check, so it runs every time.
+Regenerates MAGUS.md and fails on drift.
 
 **Defaults**
 
@@ -779,7 +779,7 @@ magus run test gopherbuzz  # from the workspace root
 
 ### `ci`
 
-'ci' is the conventional anchor `magus affected ci` keys off; it fans out lint/build/test in parallel, each waiting on format.
+The anchor `magus affected ci` keys off; fans out lint/build/test after format.
 
 **Defaults**
 
@@ -796,7 +796,7 @@ magus run ci gopherbuzz  # from the workspace root
 
 ### `pgo-generate`
 
-Regenerate default.pgo — the profile-guided optimization profile for the Buzz VM.
+Regenerates default.pgo, the Buzz VM's PGO profile.
 
 **Defaults**
 
@@ -818,7 +818,7 @@ magus run preflight gopherbuzz  # from the workspace root
 
 ### `md-generate`
 
-md-generate renders MAGUS.md (the target catalog + dependency graph) via `magus describe graph`, parsed statically from this magusfile so it stays in lockstep with the project's targets.
+Renders MAGUS.md (target catalog plus graph) from this magusfile.
 
 **Defaults**
 
@@ -827,10 +827,10 @@ magus run md-generate             # from the project directory
 magus run md-generate gopherbuzz  # from the workspace root
 ```
 
-## Project: magus/website
+## Project: website
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus/website</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
 
 ```text
 sources  magusfile.buzz, magusfiles/**/*.buzz, website/magusfile.buzz, website/magusfiles/**/*.buzz

@@ -85,7 +85,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver). See [**magus-init**(1)](magus-init.md).
 
 **self**
-: Manage the magus binary (update/install need -tags selfmanage). See [**magus-self**(1)](magus-self.md).
+: Manage the magus binary (update). See [**magus-self**(1)](magus-self.md).
 
 **version**
 : Print version, commit, and build date. See [**magus-version**(1)](magus-version.md).
@@ -118,6 +118,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_DRY_RUN**
 : When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: **dry_run**.
+
+**MAGUS_DEFAULT_CHARMS**
+: Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run. Equivalent magus.yaml key: **default_charms**.
 
 **MAGUS_VCS_ENABLED**
 : Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: **vcs.enabled**.
