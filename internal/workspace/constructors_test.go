@@ -59,12 +59,12 @@ func TestWithTarget_TrackFlake(t *testing.T) {
 	assert.True(t, pol.RetryOnFlake)
 }
 
-func TestWithTarget_Weight(t *testing.T) {
+func TestWithTarget_Slots(t *testing.T) {
 	p := &types.Project{Path: "."}
-	opt := WithTarget("lint", Weight(4))
+	opt := WithTarget("lint", Slots(4))
 	require.NoError(t, opt(p))
 	pol := p.TargetPolicies["lint"]
-	assert.Equal(t, 4, pol.Weight)
+	assert.Equal(t, 4, pol.Slots)
 }
 
 func TestIgnorePatternConstructors(t *testing.T) {

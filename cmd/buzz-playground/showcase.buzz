@@ -20,10 +20,10 @@ final IMAGE: str = "ghcr.io/example/api";
 
 // eslint is CPU- and memory-hungry, so we size it once as an N-core job and feed
 // that number to BOTH levers below: magus reserves this many scheduler slots for
-// the js-lint target (the `weight` policy), and eslint is told to use this many
+// the js-lint target (the `slots` policy), and eslint is told to use this many
 // worker threads (--concurrency). Reserving slots without telling the tool to use
 // them wastes the reservation; telling the tool to use more than we reserved
-// oversubscribes the machine. Keeping them equal makes the two agree. Weight is a
+// oversubscribes the machine. Keeping them equal makes the two agree. slots is a
 // per-target policy (a target is the unit the scheduler acquires slots for), so
 // eslint runs in its own js-lint target rather than riding the broader lint stage.
 final LINT_SLOTS: int = 4;
@@ -38,7 +38,7 @@ magus.project({
     "spells": [buf, go, ts, docker],
     "outputs": ["gen/**", "bin/**"],
     "targets": {
-        "js-lint": {"weight": LINT_SLOTS},
+        "js-lint": {"slots": LINT_SLOTS},
         "release": {"exclusive": true},
     },
 });
@@ -97,9 +97,9 @@ export fun format(args: [str]) > void {
 
 // Linting is a `*-lint` set too, one target per toolchain, so `lint` can glob
 // them the same way `generate` globs its generators. js-lint is split out on its
-// own because it carries the weight: eslint is the heavy one, so this target holds
+// own because it carries the load: eslint is the heavy one, so this target holds
 // LINT_SLOTS slots and runs eslint with a matching --concurrency (the cheap buf/go
-// checks stay at the default weight of 1). `magus run lint:rw` applies the
+// checks stay at the default of 1 slot). `magus run lint:rw` applies the
 // auto-fixable findings where a tool supports it (e.g. golangci-lint --fix).
 export fun proto_lint(args: [str]) > void {
     magus.needs(magus.target.literal("format"));

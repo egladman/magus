@@ -263,11 +263,11 @@ func (r *Recorder) recordProject(path string, opts vm.Value) {
 					p.NoCache = append(p.NoCache, name)
 				}
 				if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
-					p.Isolated = append(p.Isolated, name)
+					p.ExclusiveTargets = append(p.ExclusiveTargets, name)
 				}
-				if wv, ok := pv.MapGet("weight"); ok {
-					if n := wv.AsInt(); n > 0 {
-						p.Weighted = append(p.Weighted, name+"="+strconv.FormatInt(n, 10))
+				if sv, ok := pv.MapGet("slots"); ok && sv.IsInt() {
+					if n := sv.AsInt(); n > 0 {
+						p.Slots = append(p.Slots, name+"="+strconv.FormatInt(n, 10))
 					}
 				}
 			}

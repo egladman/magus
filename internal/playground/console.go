@@ -343,8 +343,8 @@ func (s *Console) graph() []Line {
 		line += muted("depends_on", p.DependsOn)
 		line += muted("outputs", p.Outputs)
 		line += muted("no-cache", p.NoCache)
-		line += muted("exclusive", p.Isolated)
-		line += muted("weight", p.Weighted)
+		line += muted("exclusive", p.ExclusiveTargets)
+		line += muted("slots", p.Slots)
 		if p.Exclusive {
 			line += ` <span class="muted">exclusive</span>`
 		}

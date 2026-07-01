@@ -186,7 +186,7 @@ import "magus/spell/go";
 magus.project({
     "spells": [go],
     "outputs": ["bin/**"],
-    "targets": {"regen-pgo": {"skipCache": true}, "lint": {"weight": 4}},
+    "targets": {"regen-pgo": {"skipCache": true}, "lint": {"slots": 4}},
 });
 
 export fun format(args: [str]) > void { go["go-fmt"](); }
@@ -201,7 +201,7 @@ func TestLoadMagusfile_graph(t *testing.T) {
 	require.Len(t, g.Projects, 1)
 	assert.Equal(t, ".", g.Projects[0].Path)
 	assert.Equal(t, []string{"regen-pgo"}, g.Projects[0].NoCache)
-	assert.Equal(t, []string{"lint=4"}, g.Projects[0].Weighted)
+	assert.Equal(t, []string{"lint=4"}, g.Projects[0].Slots)
 	assert.Equal(t, []string{"go"}, g.Projects[0].Spells)
 
 	gotTargets := map[string]bool{}

@@ -28,7 +28,7 @@ func (l *Limiter) SetHooks(onAcquire func(waitNs int64, n int), onRelease func(n
 	l.onRelease.Store(&onRelease)
 }
 
-// NewLimiter returns a Limiter with capacity n. n ≤ 0 means unlimited
+// NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited
 // (Acquire and AcquireN always succeed immediately).
 func NewLimiter(n int) *Limiter {
 	l := &Limiter{cap: n}
@@ -44,17 +44,22 @@ func (l *Limiter) Acquire(ctx context.Context) error {
 	return l.AcquireN(ctx, 1)
 }
 
-// AcquireN acquires n slots under FIFO fairness. Returns an error immediately if
-// n exceeds capacity (would deadlock). Returns ctx.Err() on cancellation.
+// AcquireN acquires n slots under FIFO fairness. n < 1 is floored to 1 (a defensive
+// guard; every real caller already passes >= 1). A request above capacity can never
+// be satisfied by any wait, so it fails immediately rather than blocking forever;
+// callers decide whether to clamp first (RunAll, where a slot count is a coarse
+// throttle) or surface the error (os.with_slots/archive, where reserving more slots
+// than exist would desync the reservation from the tool's own worker count). Returns
+// ctx.Err() on cancellation.
 func (l *Limiter) AcquireN(ctx context.Context, n int) error {
 	if l.sem == nil {
 		return nil
 	}
-	if n <= 0 {
+	if n < 1 {
 		n = 1
 	}
 	if n > l.cap {
-		return fmt.Errorf("limiter: requested %d slots but capacity is %d", n, l.cap)
+		return fmt.Errorf("limiter: acquire %d exceeds capacity %d", n, l.cap)
 	}
 	l.waiting.Add(int64(n))
 	defer l.waiting.Add(-int64(n))

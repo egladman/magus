@@ -20,10 +20,10 @@ func atomicStoreMax(dst *atomic.Int32, v int32) {
 	}
 }
 
-// TestRunAllWeightThrottles verifies that a step whose Weight equals the whole
+// TestRunAllSlotsThrottles verifies that a step whose Slots equals the whole
 // slot budget runs alone: while it holds every slot no other step can be in fn,
 // yet lighter steps still saturate the budget when the heavy one is idle.
-func TestRunAllWeightThrottles(t *testing.T) {
+func TestRunAllSlotsThrottles(t *testing.T) {
 	root, c := openCache(t)
 
 	var running atomic.Int32
@@ -32,7 +32,7 @@ func TestRunAllWeightThrottles(t *testing.T) {
 
 	heavy := depStep(root, "heavy")
 	heavy.NoCache = true
-	heavy.Weight = 2 // == WithConcurrency below, so it holds every slot
+	heavy.Slots = 2 // == WithConcurrency below, so it holds every slot
 
 	steps := []Step{heavy}
 	for _, p := range []string{"l1", "l2", "l3"} {
@@ -57,6 +57,6 @@ func TestRunAllWeightThrottles(t *testing.T) {
 	_, err := c.RunAll(context.Background(), steps, fn, WithConcurrency(2))
 	require.NoError(t, err, "RunAll")
 
-	assert.Equal(t, int32(1), duringHeavy.Load(), "no step may run while a weight==budget step holds every slot")
+	assert.Equal(t, int32(1), duringHeavy.Load(), "no step may run while a slots==budget step holds every slot")
 	assert.Equal(t, int32(2), lightPeak.Load(), "light steps should saturate the 2-slot budget when the heavy step is idle")
 }

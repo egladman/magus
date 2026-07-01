@@ -457,8 +457,8 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.Exclusive {
 					fmt.Printf("  exclusive")
 				}
-				if pol.Weight > 0 {
-					fmt.Printf("  weight=%d", pol.Weight)
+				if pol.Slots > 0 {
+					fmt.Printf("  slots=%d", pol.Slots)
 				}
 				fmt.Println()
 			}
@@ -606,8 +606,8 @@ func describeTarget(ctx context.Context, root string, pos []string) error {
 			if e.Policy.Exclusive {
 				fmt.Printf("  exclusive")
 			}
-			if e.Policy.Weight > 0 {
-				fmt.Printf("  weight=%d", e.Policy.Weight)
+			if e.Policy.Slots > 0 {
+				fmt.Printf("  slots=%d", e.Policy.Slots)
 			}
 			fmt.Println()
 		}

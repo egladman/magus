@@ -106,12 +106,12 @@ type Target struct {
 	Files  []string // changed files within project; populated by affected expansion
 
 	// Per-target execution policy (formerly the TargetPolicy struct, inlined here).
-	// SkipCache, Exclusive, and Weight are author-facing — serialized into the Buzz
+	// SkipCache, Exclusive, and Slots are author-facing — serialized into the Buzz
 	// object Target. FailOnDrift and RetryOnFlake are CI-only hooks set via the Go
 	// registration API, excluded from the Buzz object (buzz:"-").
 	SkipCache    bool `json:"skipCache,omitempty"`             // opt out of the cache: always run, never replay/snapshot
 	Exclusive    bool `json:"exclusive,omitempty"`             // run alone — no other target runs concurrently while this one does
-	Weight       int  `json:"weight,omitempty"`                // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
+	Slots        int  `json:"slots,omitempty"`                 // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
 	FailOnDrift  bool `json:"failOnDrift,omitempty" buzz:"-"`  // fail the run if the working tree is dirty after this target (drift gate)
 	RetryOnFlake bool `json:"retryOnFlake,omitempty" buzz:"-"` // route through flake detection + auto-retry
 }

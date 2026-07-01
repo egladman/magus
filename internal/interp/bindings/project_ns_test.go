@@ -33,16 +33,25 @@ func targetsOpts(name string, policy vm.Value) vm.Value {
 	return opts
 }
 
-func TestParseBuzzProjectOpts_TargetWeight(t *testing.T) {
+func TestParseBuzzProjectOpts_TargetSlots(t *testing.T) {
 	pol := vm.NewMap()
-	pol.MapSet("weight", vm.IntValue(4))
+	pol.MapSet("slots", vm.IntValue(4))
 	p := applyOpts(t, targetsOpts("lint", pol))
-	assert.Equal(t, 4, p.TargetPolicies["lint"].Weight)
+	assert.Equal(t, 4, p.TargetPolicies["lint"].Slots)
 }
 
-func TestParseBuzzProjectOpts_TargetWeightNonPositiveIgnored(t *testing.T) {
+func TestParseBuzzProjectOpts_TargetSlotsNonPositiveIgnored(t *testing.T) {
 	pol := vm.NewMap()
-	pol.MapSet("weight", vm.IntValue(0))
+	pol.MapSet("slots", vm.IntValue(0))
 	p := applyOpts(t, targetsOpts("lint", pol))
-	assert.Equal(t, 0, p.TargetPolicies["lint"].Weight, "weight <= 0 sets no policy")
+	assert.Equal(t, 0, p.TargetPolicies["lint"].Slots, "slots <= 0 sets no policy")
+}
+
+// A non-int slots value must be ignored, not reinterpreted: AsInt reads a float's
+// raw bits as an int, which would otherwise flow a garbage value into the policy.
+func TestParseBuzzProjectOpts_TargetSlotsNonIntIgnored(t *testing.T) {
+	pol := vm.NewMap()
+	pol.MapSet("slots", vm.FloatValue(2.5))
+	p := applyOpts(t, targetsOpts("lint", pol))
+	assert.Equal(t, 0, p.TargetPolicies["lint"].Slots, "non-int slots sets no policy")
 }

@@ -213,7 +213,7 @@ const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved 
 	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
 	"output globs that feed the cache key, the spells that will fire (with " +
 	"target-specific sources and effective claims after weight/add/remove resolution), " +
-	"and any behavioural policy (CheckClean, TrackFlake, Isolated)."
+	"and any behavioural policy (CheckClean, TrackFlake, Exclusive)."
 
 // EvaluatedSpellEntry is one spell's contribution to an evaluated target.
 type EvaluatedSpellEntry struct {

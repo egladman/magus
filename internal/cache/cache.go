@@ -78,8 +78,8 @@ type Step struct {
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	NoCache         bool     // when true, always run fn — never replay or snapshot (long-running targets)
-	Isolated        bool     // RunAll only: when true, runs alone — no other step in the batch runs concurrently with it (ignored by Run, which has no batch)
-	Weight          int      // RunAll only: concurrency slots this step holds while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	Exclusive       bool     // RunAll only: when true, runs alone; no other step in the batch runs concurrently with it (ignored by Run, which has no batch)
+	Slots           int      // RunAll only: concurrency slots this step holds while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 }
 
@@ -423,22 +423,22 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	var keysMu sync.Mutex
 	resolvedKeys := make(map[string]string, len(steps))
 
-	// isolationMu serializes Step.Isolated steps against the whole batch: an
-	// isolated step takes the write lock (runs alone); every other step takes the
-	// read lock (runs in parallel with peers but never alongside an isolated step).
+	// isolationMu serializes Step.Exclusive steps against the whole batch: an
+	// exclusive step takes the write lock (runs alone); every other step takes the
+	// read lock (runs in parallel with peers but never alongside an exclusive step).
 	//
-	// Ordering is load-bearing: the lock is taken *after* waitForDeps (so an isolated
+	// Ordering is load-bearing: the lock is taken *after* waitForDeps (so an exclusive
 	// step's own deps aren't blocked by its own writer intent) and *before* the
-	// limiter slot (so a pending writer never holds a slot — which would let it
+	// limiter slot (so a pending writer never holds a slot, which would let it
 	// starve a dependent of the slot it needs). That ordering is also why the lock
 	// necessarily spans the *whole* c.Run below, not just fn: moving it inside
 	// c.Run would put it after the slot and reintroduce the starvation it avoids.
-	// The cost is that an isolated *cache hit* also serializes its replay, which is
-	// fine — isolated targets are rare and typically NoCache. A batch with no
-	// isolated steps only ever takes uncontended read locks.
+	// The cost is that an exclusive *cache hit* also serializes its replay, which is
+	// fine: exclusive targets are rare and typically NoCache. A batch with no
+	// exclusive steps only ever takes uncontended read locks.
 	var isolationMu sync.RWMutex
-	acquireIsolation := func(isolated bool) func() {
-		if isolated {
+	acquireIsolation := func(exclusive bool) func() {
+		if exclusive {
 			isolationMu.Lock()
 			return isolationMu.Unlock
 		}
@@ -477,7 +477,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := barrier.waitForDeps(gctx, s); err != nil {
 				return err
 			}
-			defer acquireIsolation(s.Isolated)()
+			defer acquireIsolation(s.Exclusive)()
 			// acquireIsolation's Lock/RLock is not ctx-aware, so a goroutine can
 			// park there uninterruptibly while a sibling fails. Re-check after it
 			// returns and bail before running fn — lim.Acquire below would catch a
@@ -486,16 +486,20 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return err
 			}
-			// A heavy step can request extra slots (Step.Weight) so it throttles
-			// parallel work around itself. Clamp to [1, capacity]: 0 means one slot,
-			// and a weight above the whole budget would exceed capacity and error, so
-			// cap it at the budget (a weight >= capacity behaves like Isolated).
-			slots := s.Weight
+			// A heavy step can request extra slots (Step.Slots) so it throttles
+			// parallel work around itself. Clamp to [1, budget]: 0 means one slot,
+			// and a request above the whole budget would exceed capacity and error, so
+			// cap it at the budget. A request >= the budget holds every slot, so no
+			// peer can enter fn while it runs (it does not take the isolation lock, so
+			// unlike an exclusive step it does not also serialize replays). On an unlimited
+			// limiter (budget <= 0) there is nothing to throttle against, so the
+			// request is a no-op: AcquireN returns immediately.
+			slots := s.Slots
 			if slots < 1 {
 				slots = 1
 			}
-			if cap := lim.Capacity(); cap > 0 && slots > cap {
-				slots = cap
+			if budget := lim.Capacity(); budget > 0 && slots > budget {
+				slots = budget
 			}
 			if err := lim.AcquireN(gctx, slots); err != nil {
 				return err
@@ -504,7 +508,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if slog.Default().Enabled(gctx, levelTrace) {
 				slog.LogAttrs(gctx, levelTrace, "schedule.run",
 					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
-					slog.Bool("isolated", s.Isolated), slog.Int("slots", slots))
+					slog.Bool("exclusive", s.Exclusive), slog.Int("slots", slots))
 			}
 
 			// Fold upstream keys into Deps for transitive cache-key propagation.

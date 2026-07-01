@@ -238,15 +238,15 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 	assert.True(t, ran, "self-dependent step deadlocked instead of running")
 }
 
-// TestRunAllIsolatedRunsAlone verifies the Step.Isolated contract: an isolated
-// step never executes concurrently with any other step, while non-isolated steps
+// TestRunAllExclusiveRunsAlone verifies the Step.Exclusive contract: an exclusive
+// step never executes concurrently with any other step, while non-exclusive steps
 // still overlap with each other. The sleeps widen the windows so a broken lock
-// would let a reader land inside the isolated step's span and trip the assertion.
-func TestRunAllIsolatedRunsAlone(t *testing.T) {
+// would let a reader land inside the exclusive step's span and trip the assertion.
+func TestRunAllExclusiveRunsAlone(t *testing.T) {
 	root, c := openCache(t)
 
 	steps := []Step{
-		{ProjectPath: "isolated", WorkspaceRoot: root, Target: "gen", Isolated: true},
+		{ProjectPath: "exclusive", WorkspaceRoot: root, Target: "gen", Exclusive: true},
 	}
 	for i := range 6 {
 		steps = append(steps, Step{
@@ -257,25 +257,25 @@ func TestRunAllIsolatedRunsAlone(t *testing.T) {
 	var (
 		mu         sync.Mutex
 		inFlight   int
-		peak       int // max concurrent non-isolated steps — proves readers overlap
+		peak       int // max concurrent non-exclusive steps; proves readers overlap
 		violations []string
 	)
 	enter := func(s Step) {
 		mu.Lock()
 		defer mu.Unlock()
 		inFlight++
-		if s.Isolated && inFlight != 1 {
-			violations = append(violations, "isolated step started while another was in flight")
+		if s.Exclusive && inFlight != 1 {
+			violations = append(violations, "exclusive step started while another was in flight")
 		}
-		if !s.Isolated && inFlight > peak {
+		if !s.Exclusive && inFlight > peak {
 			peak = inFlight
 		}
 	}
 	leave := func(s Step) {
 		mu.Lock()
 		defer mu.Unlock()
-		if s.Isolated && inFlight != 1 {
-			violations = append(violations, "another step entered during isolated run")
+		if s.Exclusive && inFlight != 1 {
+			violations = append(violations, "another step entered during exclusive run")
 		}
 		inFlight--
 	}
@@ -287,8 +287,8 @@ func TestRunAllIsolatedRunsAlone(t *testing.T) {
 		return nil
 	}, WithConcurrency(8))
 	require.NoError(t, err, "RunAll")
-	assert.Empty(t, violations, "isolated step overlapped with others")
-	assert.GreaterOrEqual(t, peak, 2, "non-isolated steps never overlapped; the read lock is over-serializing")
+	assert.Empty(t, violations, "exclusive step overlapped with others")
+	assert.GreaterOrEqual(t, peak, 2, "non-exclusive steps never overlapped; the read lock is over-serializing")
 }
 
 // TestRunAllDependencyFailureCancelsDependents verifies that when an upstream

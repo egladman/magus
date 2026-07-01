@@ -263,8 +263,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step.DependsOn = p.DependsOn
 	pol := p.TargetPolicies[target]
 	step.NoCache = pol.SkipCache
-	step.Isolated = pol.Exclusive
-	step.Weight = pol.Weight
+	step.Exclusive = pol.Exclusive
+	step.Slots = pol.Slots
 	return step
 }
 
