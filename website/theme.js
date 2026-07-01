@@ -37,11 +37,21 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     var btn = document.getElementById("theme-toggle");
-    if (!btn) return;
-    set(get()); // refresh the icon now that the button exists
-    btn.addEventListener("click", function () {
-      var order = ["auto", "light", "dark"];
-      set(order[(order.indexOf(get()) + 1) % order.length]);
+    if (btn) {
+      set(get());
+      btn.addEventListener("click", function () {
+        var order = ["auto", "light", "dark"];
+        set(order[(order.indexOf(get()) + 1) % order.length]);
+      });
+    }
+
+    document.querySelectorAll("time[datetime]").forEach(function (el) {
+      var d = new Date(el.getAttribute("datetime"));
+      if (isNaN(d)) return;
+      el.textContent = new Intl.DateTimeFormat(undefined, {
+        month: "long", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit",
+      }).format(d);
     });
   });
 })();

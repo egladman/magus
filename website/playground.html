@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playground — magus</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="site.css">
+  <script src="theme.js"></script>
+  <style>
+    :root { --pad: clamp(0.75rem, 2vw, 1.25rem); }
+    /* Keep the prose (title, callout, About) to a readable measure; the editor
+       panel itself sits in a .container-fluid below, so it runs full width. */
+    .lede { color: var(--pico-muted-color); margin-top: -0.4rem; }
+
+    /* The playground is one panel: the editor on top, an integrated console
+       attached beneath it (like the Go Playground's output strip, or an IDE's
+       bottom panel). Everything uses Pico's stock light/dark color scheme; the
+       console is set apart by its header bar and border, not a custom color. */
+    .panel {
+      display: flex; flex-direction: column; position: relative;
+      /* Fill the viewport below the nav + title (so the editor uses the full
+         height, not an arbitrary cap); the panes scroll in below. */
+      height: calc(100svh - 9rem);
+      min-height: 480px;
+      border: 1px solid var(--pico-muted-border-color);
+      /* Match the rest of the site's corner radius (Pico's), not a rounder custom one. */
+      border-radius: var(--pico-border-radius); overflow: hidden;
+      background: var(--pico-card-background-color);
+      box-shadow: var(--pico-card-box-shadow);
+    }
+
+    /* The file label strip above the editor. */
+    .file-bar {
+      flex: 0 0 auto;
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.55rem 0.8rem; margin: 0;
+      background: var(--pico-card-sectioning-background-color);
+      border-bottom: 1px solid var(--pico-muted-border-color);
+      font-size: 0.8rem;
+    }
+    .file-bar .name { font-family: var(--pico-font-family-monospace); color: var(--pico-muted-color); }
+    .file-bar .badge { margin-left: auto; font-size: 0.72rem; }
+    .badge.ok { color: var(--pico-ins-color); }
+    .badge.err { color: var(--pico-del-color); }
+    /* Compact action buttons (Download, Share) at the right of the bar. The
+       badge's margin-left:auto already pushes this group right; these just trim
+       Pico's full-width default to fit inline. */
+    .file-bar button {
+      width: auto; margin: 0; padding: 0.2rem 0.7rem;
+      font-size: 0.72rem; line-height: 1.3;
+    }
+
+    /* Editor: a textarea with a syntax-highlight overlay and a line gutter.
+       The textarea (transparent text, visible caret) sits over a <pre> that Go
+       repaints with classified spans; both share identical metrics so they
+       align character-for-character. Only the textarea scrolls — the overlay
+       and gutter are kept in step with a transform. */
+    :root {
+      --code-size: 0.84rem; --code-lh: 1.65; --code-pad: clamp(0.75rem, 2vw, 1.1rem);
+      --hl-kw:#a626a4; --hl-str:#50a14f; --hl-num:#b76b01; --hl-com:#a0a1a7;
+    }
+    /* Syntax-highlight palette (One Light / One Dark). Pico has no
+       syntax-highlighting theme, so these are necessarily custom; they still
+       follow the page's light/dark mode like everything else. */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --hl-kw:#c678dd; --hl-str:#98c379; --hl-num:#d19a66; --hl-com:#7f848e; }
+    }
+    [data-theme="dark"]  { --hl-kw:#c678dd; --hl-str:#98c379; --hl-num:#d19a66; --hl-com:#7f848e; }
+    [data-theme="light"] { --hl-kw:#a626a4; --hl-str:#50a14f; --hl-num:#b76b01; --hl-com:#a0a1a7; }
+
+    .editor { flex: 1 1 auto; display: flex; min-height: 120px; }
+    .gutter-wrap {
+      flex: 0 0 auto; overflow: hidden;
+      padding: var(--code-pad) 0.5rem var(--code-pad) 0.85rem;
+      background: var(--pico-card-sectioning-background-color);
+      border-right: 1px solid var(--pico-muted-border-color); user-select: none;
+    }
+    .gutter {
+      margin: 0; min-width: 1.6em; text-align: right; color: var(--pico-muted-color);
+      font-family: var(--pico-font-family-monospace); font-size: var(--code-size);
+      line-height: var(--code-lh); white-space: pre; will-change: transform;
+    }
+    .editor-area { position: relative; flex: 1; min-height: 0; }
+    .code-layer {
+      position: absolute; inset: 0; margin: 0; border: 0; padding: var(--code-pad);
+      font-family: var(--pico-font-family-monospace); font-size: var(--code-size);
+      line-height: var(--code-lh); tab-size: 4; white-space: pre; word-break: normal;
+    }
+    #highlight { overflow: hidden; background: transparent; pointer-events: none; }
+    /* The overlay's inner <code> must share the textarea's exact metrics or the
+       colored text drifts out of alignment line by line: Pico's `code` styling
+       otherwise imposes its own line-height (1.5 vs the editor's 1.65), plus a
+       muted color, background, and padding. Pin them to the code-layer values. */
+    #highlight-code {
+      display: block; will-change: transform;
+      font-family: var(--pico-font-family-monospace); font-size: var(--code-size);
+      line-height: var(--code-lh); color: var(--pico-color);
+      background: none; padding: 0; margin: 0;
+    }
+    #src {
+      overflow: auto; resize: none; z-index: 1; background: transparent;
+      color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--pico-color);
+    }
+    #src:focus { box-shadow: none; outline: none; }
+    .hl-kw  { color: var(--hl-kw); }
+    .hl-str { color: var(--hl-str); }
+    .hl-num { color: var(--hl-num); }
+    .hl-com { color: var(--hl-com); font-style: italic; }
+    .hl-punct { color: var(--pico-muted-color); }
+
+    /* Console: styled with Pico's own theme variables, so it follows the page's
+       light/dark mode. It reads as a distinct console via its header bar and the
+       border above it (like an IDE's bottom panel), not a custom color. */
+    .term-bar {
+      flex: 0 0 auto;
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.42rem 0.8rem;
+      background: var(--pico-card-sectioning-background-color); color: var(--pico-muted-color);
+      border-top: 1px solid var(--pico-muted-border-color);
+      font-family: var(--pico-font-family-monospace); font-size: 0.74rem;
+    }
+    .term-bar .term-title { color: var(--pico-color); font-weight: 600; letter-spacing: 0.03em; }
+    .term-bar .term-hint { margin-left: auto; }
+    .term-bar .local-tag {
+      font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.32rem;
+      padding: 0.02rem 0.5rem; border-radius: 1rem; cursor: help;
+      border: 1px solid var(--pico-muted-border-color);
+    }
+    .term-bar .local-tag::before {
+      content: ""; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--pico-ins-color);
+    }
+
+    .term { flex: 0 0 auto; display: flex; flex-direction: column; cursor: text; }
+    .term-out {
+      flex: 0 0 auto; height: clamp(160px, 26vh, 300px); overflow-y: auto; padding: var(--pad);
+      font-family: var(--pico-font-family-monospace); font-size: 0.8rem; line-height: 1.6;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .term-out .cmd   { color: var(--pico-primary); }
+    .term-out .err   { color: var(--pico-del-color); }
+    .term-out .ok    { color: var(--pico-ins-color); }
+    .term-out .muted { color: var(--pico-muted-color); }
+    .term-out .res   { font-weight: 600; }
+    .term-prompt {
+      flex: 0 0 auto;
+      display: flex; align-items: baseline; gap: 0.5rem;
+      padding: 0.5rem var(--pad); border-top: 1px solid var(--pico-muted-border-color);
+      font-family: var(--pico-font-family-monospace); font-size: 0.8rem;
+    }
+    .term-prompt .ps1 { color: var(--pico-muted-color); font-weight: 500; white-space: nowrap; }
+    .term-prompt .ps1 .chevron { color: var(--pico-primary); }
+    .term-prompt input {
+      flex: 1; border: 0; margin: 0; padding: 0; background: transparent;
+      font-family: inherit; font-size: inherit; color: var(--pico-color);
+    }
+    .term-prompt input::placeholder { color: var(--pico-muted-color); }
+    .term-prompt input:focus { box-shadow: none; outline: none; }
+
+    .loading-overlay {
+      position: absolute; inset: 0; display: grid; place-items: center; z-index: 2;
+      background: color-mix(in srgb, var(--pico-card-background-color) 80%, transparent);
+      font-size: 0.85rem; color: var(--pico-muted-color);
+    }
+    kbd { font-size: 0.72rem; }
+
+    /* The page title above the editor. */
+    .pg-title { margin-bottom: var(--pad); }
+
+    /* Explanatory panes below the editor + console: a responsive grid of cards
+       that fills the full width and stacks on narrow screens. Same width as the
+       editor (everything sits in one container-fluid), so nothing looks squished. */
+    .pg-panes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+      gap: var(--pad);
+      margin-top: var(--pad);
+    }
+    .pg-panes article { margin: 0; }
+    .pg-panes h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+    .pg-panes p { margin: 0 0 0.6rem; color: var(--pico-muted-color); }
+    .pg-panes p:last-child { margin-bottom: 0; }
+    .pg-panes ul { margin: 0; padding-left: 1.1rem; color: var(--pico-muted-color); }
+    .pg-panes li { margin: 0.2rem 0; }
+    .pg-panes strong { color: var(--pico-color); font-weight: 600; }
+    .pg-panes code { font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html" aria-current="page">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container-fluid">
+    <h1 class="pg-title">Playground</h1>
+
+    <section class="panel">
+      <header class="file-bar">
+        <span class="name">magusfile.buzz</span>
+        <span id="parse-status" class="badge"></span>
+        <button id="download-btn" class="outline" type="button" title="Save this magusfile to your machine">Download</button>
+        <button id="share-btn" class="outline" type="button" title="Copy a link that reopens this code">Share</button>
+      </header>
+
+      <div class="editor">
+        <div class="gutter-wrap"><div class="gutter" id="gutter">1</div></div>
+        <div class="editor-area">
+          <pre id="highlight" class="code-layer" aria-hidden="true"><code id="highlight-code"></code></pre>
+          <textarea id="src" class="code-layer" aria-label="magusfile.buzz source" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea>
+        </div>
+      </div>
+
+      <div class="term-bar">
+        <span class="term-title">console</span>
+        <span class="local-tag" title="Runs entirely in your browser. No server, no network, no shell - build tools are not executed here.">in-browser</span>
+        <span class="term-hint">tab to complete · ↑↓ history</span>
+      </div>
+      <div class="term" id="term">
+        <div class="term-out" id="term-out"></div>
+        <div class="term-prompt">
+          <span class="ps1">magus <span class="chevron">❯</span></span>
+          <input id="term-in" type="text" aria-label="Console input" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
+                 placeholder="try: run ci · ls · graph · buzz fibo(20)" disabled>
+        </div>
+      </div>
+
+      <div class="loading-overlay" id="loading" role="status">loading WebAssembly…</div>
+    </section>
+
+    <section class="pg-panes">
+      <article>
+        <h2>About this interpreter</h2>
+        <p>
+          This is <a href="https://github.com/egladman/magus/tree/main/gopherbuzz">gopherbuzz</a>, the
+          <a href="https://buzz-lang.dev/">Buzz</a> interpreter magus uses to read magusfiles, compiled to
+          WebAssembly. It runs entirely in your browser: no server, no network, nothing leaves this tab.
+        </p>
+        <p>
+          Installed on your machine, <code>magus</code> runs these targets for real. See the
+          <a href="documentation.html">documentation</a> or how to <a href="install.html">install</a>.
+        </p>
+      </article>
+
+      <article>
+        <h2>What runs, what doesn't</h2>
+        <ul>
+          <li><strong>Build tools don't run.</strong> A browser has no shell or filesystem, so <code>run</code>
+            shows a target's plan (like <code>magus run --dry-run</code>) instead of invoking
+            <code>go-build</code>, <code>git</code>, and friends.</li>
+          <li><strong>Buzz is real.</strong> The magusfile is parsed and evaluated, so
+            <code>buzz fibo(20)</code> computes <code>6765</code>.</li>
+          <li><strong>It stays local.</strong> Your edits never leave the tab; reload to start over.</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <footer class="container site-footer">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="https://github.com/egladman/magus">Source code</a></li>
+      </ul>
+    </nav>
+    <small class="muted">
+      Compiled with TinyGo to WebAssembly · the interpreter and your magusfile run entirely client-side.
+    </small>
+  </footer>
+
+  <!-- TinyGo runtime glue. Defines globalThis.Go. Committed alongside buzz.wasm. -->
+  <script src="playground/wasm_exec.js"></script>
+  <script>
+    // Bootstrap only: instantiate the wasm module and hand control to Go, which
+    // owns the editor + console UI (see cmd/buzz-playground). Streaming
+    // instantiation with an ArrayBuffer fallback for browsers that reject the
+    // wasm MIME type.
+    (function () {
+      const go = new Go();
+      const start = (r) => go.run(r.instance);
+      WebAssembly.instantiateStreaming(fetch("playground/buzz.wasm"), go.importObject)
+        .then(start)
+        .catch(async () => {
+          const bytes = await (await fetch("playground/buzz.wasm")).arrayBuffer();
+          start(await WebAssembly.instantiate(bytes, go.importObject));
+        });
+    })();
+  </script>
+  <!-- The syntax-highlight overlay (<pre id="highlight">) is absolutely positioned,
+       but its flex ancestors hand it an indefinite height, so inset:0 / height:100%
+       collapse it to a single line - only the first line of code shows, the rest is
+       clipped (the textarea fills fine, being a replaced element). Give the overlay
+       a definite height that tracks the editor area so the whole file renders. -->
+  <script>
+    (function () {
+      var hl = document.getElementById("highlight");
+      var area = hl && hl.parentElement; // .editor-area
+      if (!hl || !area) return;
+      var sync = function () { hl.style.height = area.clientHeight + "px"; };
+      if (window.ResizeObserver) {
+        new ResizeObserver(sync).observe(area);
+      } else {
+        window.addEventListener("resize", sync);
+      }
+      sync();
+    })();
+  </script>
+  <!-- Copy-to-clipboard buttons on code blocks (shared with the generated pages). -->
+  <script src="copy.js"></script>
+</body>
+</html>

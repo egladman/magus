@@ -7,6 +7,9 @@ import "fs";
 import "io";
 import "os";
 import "std";
+import "serialize";
+import "vcs";
+import "http";
 // The playground embeds the gopherbuzz Buzz VM, so build-playground depends on
 // gopherbuzz's build. Importing it by path binds its targets as cross-project
 // handles (gopherbuzz.build), referenced from build_playground below.
@@ -38,6 +41,24 @@ final OUT  = "gen";          // generated site output, under this project
 final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
 final GH   = "https://github.com/egladman/magus";
 
+final MONTHS: {str: str} = {
+    "01": "January", "02": "February", "03": "March",    "04": "April",
+    "05": "May",     "06": "June",     "07": "July",     "08": "August",
+    "09": "September", "10": "October", "11": "November", "12": "December",
+};
+final HOUR12: {str: str} = {
+    "00": "12", "01": "1",  "02": "2",  "03": "3",  "04": "4",  "05": "5",
+    "06": "6",  "07": "7",  "08": "8",  "09": "9",  "10": "10", "11": "11",
+    "12": "12", "13": "1",  "14": "2",  "15": "3",  "16": "4",  "17": "5",
+    "18": "6",  "19": "7",  "20": "8",  "21": "9",  "22": "10", "23": "11",
+};
+final AMPM: {str: str} = {
+    "00": "AM", "01": "AM", "02": "AM", "03": "AM", "04": "AM", "05": "AM",
+    "06": "AM", "07": "AM", "08": "AM", "09": "AM", "10": "AM", "11": "AM",
+    "12": "PM", "13": "PM", "14": "PM", "15": "PM", "16": "PM", "17": "PM",
+    "18": "PM", "19": "PM", "20": "PM", "21": "PM", "22": "PM", "23": "PM",
+};
+
 // Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
 // magusfile load — these shell out to git, and a magusfile is parsed on every
 // `magus ls`). Buzz lets a function reassign a typed global, so the render
@@ -49,6 +70,12 @@ var metaShort: str = "";
 var metaStamp: str = "";
 var metaCommits: {str: str} = {};
 var metaLoaded: bool = false;
+
+// Each entry is one rendered page's search record, already JSON-encoded; the
+// list is joined into gen/search-index.json at the end of a render. Built fresh
+// per site_render() (reset there), in fs.list's sorted walk order, so the index
+// is deterministic and the drift gate stays stable.
+var searchRecords: [str] = mut [];
 
 fun capture(cmd: str) > str {
     final tmp = os.tmpFilename("sitegen");
@@ -79,7 +106,7 @@ fun gitBranch() > str {
 fun buildCommits() > {str: str} {
     var m: {str: str} = mut {};
     final log = capture("TZ=UTC git -C " + ROOT + " log --first-parent --diff-merges=first-parent --name-only "
-        + "--date=format-local:'%Y-%m-%d %H:%M:%S UTC' "
+        + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
         + "--format='>>>%H|%h|%cd' -- README.md docs");
     var cur = "";
     foreach (line in log.split("\n")) {
@@ -104,21 +131,68 @@ fun loadMeta() > void {
     metaBranch = gitBranch();
     metaFull = capture("git -C " + ROOT + " rev-parse HEAD");
     metaShort = capture("git -C " + ROOT + " rev-parse --short HEAD");
-    metaStamp = capture("TZ=UTC git -C " + ROOT + " show -s --date=format-local:'%Y-%m-%d %H:%M:%S UTC' --format=%cd HEAD");
+    metaStamp = capture("TZ=UTC git -C " + ROOT + " show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd HEAD");
     metaCommits = buildCommits();
     metaLoaded = true;
 }
 
+// titleOf reads a page title from the first H1, stripping the code backticks a
+// markdown heading like `# `fs`` carries so the title reads cleanly as plain text
+// in <title>, the breadcrumb, the pager, and the search index. (Frontmatter
+// titles bypass this and are used verbatim.)
 fun titleOf(md: str, rel: str) > str {
     foreach (line in md.split("\n")) {
-        if (line.startsWith("# ")) { return line.sub(2).trim(); }
+        if (line.startsWith("# ")) { return $"`".replaceAll(line.sub(2).trim(), ""); }
     }
     return rel;
+}
+
+// escapeAttr makes s safe to drop inside a double-quoted HTML attribute.
+fun escapeAttr(s: str) > str {
+    return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
+}
+
+// addRecord appends one page's search record (url, title, body text, frontmatter
+// tags, optional description) to searchRecords as a JSON object. url is the
+// page's path relative to gen/'s root (what search.js fetches against); md is the
+// raw source, so the body text and tags are read here from the same frontmatter
+// the page render used. tags come from the YAML frontmatter (markdown.frontmatter
+// returns it as JSON; serialize navigates it), letting authors tag a page to
+// surface it under search terms the prose never mentions.
+fun addRecord(url: str, title: str, desc: str, md: str) > void {
+    final rec = mut {<str: any>};
+    rec["url"] = url;
+    rec["title"] = title;
+    rec["text"] = markdown.stripFrontmatter(md);
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final tags = mut [];
+    foreach (t in fm.q("tags").listValue()) { tags.append(t.stringValue()); }
+    rec["tags"] = tags;
+
+    if (desc != "") { rec["description"] = desc; }
+    searchRecords.append(serialize.jsonEncode(serialize.Boxed.init(rec)));
 }
 
 fun outName(base: str) > str {
     if (base == "README.md") { return "index.html"; }
     return base.sub(0, base.len() - 3) + ".html";
+}
+
+// formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
+// human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
+// date library. Used as the no-JS fallback; client-side JS rewrites it to the
+// viewer's local timezone via Intl.DateTimeFormat.
+fun formatISO(iso: str) > str {
+    final dt    = iso.split("T");
+    final date  = dt[0].split("-");        // ["2026", "06", "29"]
+    final time  = dt[1].replace("Z", "").split(":"); // ["01", "41", "51"]
+    final month = date[1];
+    final hour  = time[0];
+    var   day   = date[2];
+    if (day.startsWith("0")) { day = day.sub(1); }
+    return MONTHS[month] + " " + day + ", " + date[0]
+        + ", " + HOUR12[hour] + ":" + time[1] + " " + AMPM[hour] + " UTC";
 }
 
 // Footer crediting the last commit that touched a page's source (a magus/-relative
@@ -135,8 +209,8 @@ fun commitFooter(path: str) > str {
         cShort = parts[1];
         cStamp = parts[2];
     }
-    return "Generated " + cStamp + " from commit "
-        + "<a href=\"" + GH + "/commit/" + cFull + "\"><code>" + cShort + "</code></a>";
+    return "Last updated: <time datetime=\"" + cStamp + "\">" + formatISO(cStamp) + "</time>"
+        + " (<a href=\"" + GH + "/commit/" + cFull + "\">" + cShort + "</a>)";
 }
 
 // rootPrefix returns the relative path from a generated page back up to gen/'s
@@ -153,40 +227,284 @@ fun rootPrefix(srcRel: str) > str {
     return rel;
 }
 
+// stripTags removes HTML tags from a fragment, leaving its text. The text keeps
+// the HTML-encoded entities goldmark emitted, so it drops straight into a
+// double-quoted attribute (TOC link tooltips) without re-escaping.
+fun stripTags(s: str) > str {
+    var r = s;
+    var lt = r.indexOf("<");
+    while (lt != null) {
+        final gt = r.indexOf(">");
+        if (gt == null) { return r; }
+        r = r.sub(0, lt) + r.sub(gt + 1);
+        lt = r.indexOf("<");
+    }
+    return r;
+}
+
+// strLess is lexicographic string ordering by byte; buzz has no `<` on str, so
+// the sibling pager spells it out to sort filenames deterministically.
+fun strLess(a: str, b: str) > bool {
+    final n = a.len();
+    final m = b.len();
+    var i = 0;
+    while (i < n and i < m) {
+        if (a.byte(i) != b.byte(i)) { return a.byte(i) < b.byte(i); }
+        i = i + 1;
+    }
+    return n < m;
+}
+
+// tocOf builds the "On this page" sidebar from a rendered page's h2/h3 headings
+// (goldmark emits each on its own line with a slug id); h3s nest under their h2.
+// Returns "" with fewer than three headings — too little to warrant a sidebar (a
+// module page with one "Methods" h2 over many h3 methods still qualifies) — so
+// page() falls back to a full-width article. toc.js layers scroll-spy + the
+// collapse toggle onto this markup, so the list must already exist for it to find.
+fun tocOf(content: str) > str {
+    final lines = content.split("\n");
+    var nHead = 0;
+    foreach (line in lines) {
+        if (line.startsWith("<h2 id=\"") or line.startsWith("<h3 id=\"")) { nHead = nHead + 1; }
+    }
+    if (nHead < 3) { return ""; }
+
+    var ul = "<ul>";
+    var haveLi = false;   // an h2 <li> is open, awaiting its </li>
+    var inSub = false;    // an h3 sublist <ul> is open
+    foreach (line in lines) {
+        var lvl = 0;
+        if (line.startsWith("<h2 id=\"")) { lvl = 2; }
+        if (line.startsWith("<h3 id=\"")) { lvl = 3; }
+        if (lvl != 0) {
+            final after = line.sub(8);                 // past `<hN id="`
+            final q = after.indexOf("\"");
+            final gt = line.indexOf(">");
+            if (q != null) {
+                if (gt != null) {
+                    final id = after.sub(0, q);
+                    final inner = line.sub(gt + 1);
+                    final end = inner.indexOf("</h");
+                    var label = inner;
+                    if (end != null) { label = inner.sub(0, end); }
+                    final link = "<a href=\"#" + id + "\" title=\"" + stripTags(label) + "\">" + label + "</a>";
+                    if (lvl == 2) {
+                        if (inSub) { ul = ul + "</ul>"; inSub = false; }
+                        if (haveLi) { ul = ul + "</li>"; }
+                        ul = ul + "<li>" + link;
+                        haveLi = true;
+                    } else {
+                        if (haveLi == false) {
+                            ul = ul + "<li>" + link + "</li>";
+                        } else {
+                            if (inSub == false) { ul = ul + "<ul>"; inSub = true; }
+                            ul = ul + "<li>" + link + "</li>";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (inSub) { ul = ul + "</ul>"; }
+    if (haveLi) { ul = ul + "</li>"; }
+    ul = ul + "</ul>";
+    return "    <aside class=\"toc\">\n      <nav>\n        <p class=\"toc-title\">On this page</p>\n        "
+        + ul + "\n      </nav>\n    </aside>\n";
+}
+
+// dirLabel maps a docs subdirectory name to its breadcrumb label.
+// cap upper-cases the first character of a slug for a breadcrumb label.
+fun cap(s: str) > str {
+    if (s == "") { return s; }
+    return s.sub(0, 1).upper() + s.sub(1);
+}
+
+// navLink renders one top-nav item, marking it aria-current when it is the page
+// the visitor is currently on (key == active).
+fun navLink(href: str, label: str, key: str, active: str) > str {
+    var attr = "";
+    if (key == active) { attr = " aria-current=\"page\""; }
+    return "        <li><a href=\"" + href + "\"" + attr + ">" + label + "</a></li>\n";
+}
+
+// hasIndexSource is true when a docs subdirectory (docs-relative) carries its own
+// landing-page source, so a breadcrumb crumb for it can link rather than sit as
+// plain text.
+fun hasIndexSource(dirRel: str) > bool {
+    if (os.execute(["test", "-f", ROOT + "/" + DOCS + "/" + dirRel + "/index.md"]) == 0) { return true; }
+    if (os.execute(["test", "-f", ROOT + "/" + DOCS + "/" + dirRel + "/README.md"]) == 0) { return true; }
+    return false;
+}
+
+// breadcrumbOf renders the trail above the article: Home / Documentation / <dirs>
+// / current. Every docs page hangs off the Documentation hub. A directory crumb
+// links to its landing page when one exists; a landing page (a directory's own
+// index/README) becomes the leaf under its parent rather than showing as an
+// "index" crumb. "" for the home page. Hrefs are root-relative (root + path) so
+// they resolve at any page depth.
+fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
+    if (srcRel == "README.md") { return ""; }
+    var rel = srcRel;
+    if (rel.startsWith(DOCS + "/")) { rel = rel.sub((DOCS + "/").len()); }
+    final segs = rel.split("/");
+    final base = segs[segs.len() - 1];
+
+    var li = "<li><a href=\"" + root + "index.html\">Home</a></li>";
+
+    // The Documentation hub roots every docs trail; on the hub page itself it is
+    // the current leaf rather than a link back to where you already are.
+    if (rel == "documentation.md") {
+        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+            + li + "<li aria-current=\"page\">Documentation</li></ul>\n    </nav>\n";
+    }
+    li = li + "<li><a href=\"" + root + "documentation.html\">Documentation</a></li>";
+
+    final landing = (base == "index.md" or base == "README.md");
+    var dirCount = segs.len() - 1;                              // directory segments before the file
+    if (landing and dirCount > 0) { dirCount = dirCount - 1; }  // a landing's own dir is the leaf
+
+    var acc = "";
+    var i = 0;
+    while (i < dirCount) {
+        final seg = segs[i];
+        if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
+        if (hasIndexSource(acc)) {
+            li = li + "<li><a href=\"" + root + acc + "/index.html\">" + cap(seg) + "</a></li>";
+        } else {
+            li = li + "<li>" + cap(seg) + "</li>";
+        }
+        i = i + 1;
+    }
+
+    var leaf = title;
+    if (landing and segs.len() >= 2) { leaf = cap(segs[segs.len() - 2]); }
+    li = li + "<li aria-current=\"page\">" + leaf + "</li>";
+    return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+}
+
+// pagerLink renders one prev/next card, reading the sibling's source so it credits
+// the same title (frontmatter title, else first H1) the sibling page renders with.
+fun pagerLink(srcDir: str, name: str, dir: str, cls: str) > str {
+    final f = io.File.open(srcDir + "/" + name, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = titleOf(md, name); }
+    return "      <a class=\"" + cls + "\" href=\"" + outName(name) + "\">"
+        + "<span class=\"page-nav-dir\">" + dir + "</span>"
+        + "<span class=\"page-nav-title\">" + title + "</span></a>\n";
+}
+
+// pagerFor renders the previous/next links among a page's siblings — the other
+// rendered docs in the same source directory, ordered by filename (README/index
+// and underscore-prefixed fixtures excluded). Links are bare basenames, since a
+// sibling lives in the same output directory. "" when there is no sibling on
+// either side. rel is docs-relative (e.g. "modules/fs.md").
+fun pagerFor(rel: str) > str {
+    final parts = rel.split("/");
+    final base = parts[parts.len() - 1];
+    var srcDir = ROOT + "/" + DOCS;
+    if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
+
+    var sibs: [str] = mut [<str>];
+    foreach (name in fs.list(srcDir)) {
+        if (name.endsWith(".md") and name != "README.md" and name.startsWith("_") == false) {
+            sibs.append(name);
+        }
+    }
+    if (sibs.len() < 2) { return ""; }
+    final ordered = sibs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+
+    var pos = -1;
+    var i = 0;
+    while (i < ordered.len()) {
+        if (ordered[i] == base) { pos = i; }
+        i = i + 1;
+    }
+    if (pos < 0) { return ""; }
+
+    var body = "";
+    if (pos > 0) { body = body + pagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev"); }
+    if (pos < ordered.len() - 1) { body = body + pagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next"); }
+    if (body == "") { return ""; }
+    return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
+}
+
 // srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
 // it drives both the per-page commit footer and the "Suggest an edit" link.
-fun page(title: str, content: str, srcRel: str) > str {
+// description (from frontmatter, may be "") becomes the page's meta description.
+// pager is the prev/next nav (may be ""); the home page and lone pages pass "".
+fun page(title: str, description: str, content: str, srcRel: str, pager: str) > str {
     final root = rootPrefix(srcRel);
+    // Which top-nav item to mark current. Every rendered docs page hangs off the
+    // Documentation hub, except the dedicated install page; the home page (README)
+    // highlights nothing (its wordmark is the home link).
+    var active = "documentation";
+    if (srcRel == "README.md") { active = ""; }
+    if (srcRel == DOCS + "/install.md") { active = "install"; }
+    var descMeta = "";
+    if (description != "") {
+        descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
+    }
+    // Headings drive the TOC sidebar; without enough of them the article goes
+    // full-width (no .with-toc grid) and toc.js simply finds nothing to enhance.
+    final toc = tocOf(content);
+    var contentBlock = "    <article>\n" + content + "    </article>\n";
+    if (toc != "") {
+        contentBlock = "    <div class=\"with-toc\">\n" + toc
+            + "    <article>\n" + content + "    </article>\n"
+            + "    </div>\n";
+    }
+    final edit = "<a class=\"page-tools-edit\" href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a>";
     return "<!DOCTYPE html>\n"
         + "<html lang=\"en\">\n"
         + "<head>\n"
         + "  <meta charset=\"utf-8\">\n"
         + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
         + "  <title>" + title + "</title>\n"
+        + descMeta
         + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + root + "site.css\">\n"
         + "  <script src=\"" + root + "theme.js\"></script>\n"
         + "</head>\n"
         + "<body>\n"
-        + "  <header class=\"container\">\n"
-        + "    <nav>\n"
-        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><strong>magus</strong></a></li></ul>\n"
+        + "  <header class=\"site-header\">\n"
+        + "    <nav class=\"container\">\n"
+        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" alt=\"\"> <strong>magus</strong></a></li></ul>\n"
         + "      <ul>\n"
-        + "        <li><a href=\"" + root + "index.html\">Docs</a></li>\n"
-        + "        <li><a href=\"" + root + "editor.html\">Playground</a></li>\n"
-        + "        <li><a href=\"" + GH + "\">Source</a></li>\n"
-        + "        <li><button id=\"theme-toggle\" class=\"outline\" style=\"padding:0.2rem 0.7rem\">◐</button></li>\n"
+        + navLink(root + "documentation.html", "Documentation", "documentation", active)
+        + navLink(root + "install.html", "Install", "install", active)
+        + navLink(root + "playground.html", "Playground", "playground", active)
+        + "        <li><a href=\"" + GH + "\">GitHub</a></li>\n"
+        + "        <li><button id=\"theme-toggle\" class=\"outline\">◐</button></li>\n"
         + "      </ul>\n"
         + "    </nav>\n"
         + "  </header>\n"
         + "  <main class=\"container\">\n"
-        + "    <article>\n"
-        + content
-        + "    </article>\n"
-        + "    <p><a href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a></p>\n"
+        + breadcrumbOf(srcRel, title, root)
+        + "    <div class=\"page-tools\">" + edit + "</div>\n"
+        + contentBlock
+        + pager
         + "  </main>\n"
-        + "  <footer class=\"container\">\n"
+        + "  <footer class=\"site-footer container\">\n"
+        + "    <nav class=\"footer-links\">\n"
+        + "      <ul>\n"
+        + "        <li><a href=\"" + root + "documentation.html\">Documentation</a></li>\n"
+        + "        <li><a href=\"" + root + "install.html\">Install</a></li>\n"
+        + "        <li><a href=\"" + root + "playground.html\">Playground</a></li>\n"
+        + "        <li><a href=\"" + GH + "\">GitHub</a></li>\n"
+        + "      </ul>\n"
+        + "    </nav>\n"
         + "    <small>" + commitFooter(srcRel) + "</small>\n"
         + "  </footer>\n"
+        + "  <script defer src=\"" + root + "clipboard.js\"></script>\n"
+        + "  <script defer src=\"" + root + "toc.js\"></script>\n"
+        + "  <script defer src=\"" + root + "anchors.js\"></script>\n"
+        + "  <script defer src=\"" + root + "copy.js\"></script>\n"
+        + "  <script src=\"" + root + "search.js\"></script>\n"
+        + "  <script defer src=\"" + root + "mermaid-init.js\"></script>\n"
+        + "  <script defer src=\"" + root + "home-heading.js\"></script>\n"
         + "</body>\n"
         + "</html>\n";
 }
@@ -204,10 +522,16 @@ fun renderRoot() > void {
         html = html.replace("href=\"docs/", "href=\"");
     }
 
-    final doc = page(titleOf(md, "README.md"), html, "README.md");
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = titleOf(md, "README.md"); }
+    final desc = fm.q("description").stringValue();
+
+    final doc = page(title, desc, html, "README.md", "");
     final of = io.File.open(OUT + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
+    addRecord("index.html", title, desc, md);
     std.print("  README.md -> " + OUT + "/index.html");
 }
 
@@ -218,8 +542,13 @@ fun renderFile(rel: str) > void {
     final md = f.readAll();
     f.close();
 
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = titleOf(md, rel); }
+    final desc = fm.q("description").stringValue();
+
     final html = markdown.toHtml(md);
-    final doc = page(titleOf(md, rel), html, DOCS + "/" + rel);
+    final doc = page(title, desc, html, DOCS + "/" + rel, pagerFor(rel));
 
     final parts = rel.split("/");
     final base = parts[parts.len() - 1];
@@ -230,6 +559,13 @@ fun renderFile(rel: str) > void {
     final of = io.File.open(dir + "/" + outName(base), io.FileMode.write);
     of.write(doc);
     of.close();
+
+    // url is gen/-root-relative (e.g. "codes/race/MGS4001.html"), matching the
+    // links search.js resolves against gen/'s root.
+    var url = outName(base);
+    if (parts.len() > 1) { url = parts.sub(0, parts.len() - 1).join("/") + "/" + url; }
+    addRecord(url, title, desc, md);
+
     std.print("  " + rel + " -> " + dir + "/" + outName(base));
 }
 
@@ -259,6 +595,7 @@ fun walk(rel: str) > void {
 // git history (footers) and the source tree — reproducible and gate-stable.
 fun site_render() > void {
     loadMeta();
+    searchRecords = mut [];
     fs.delete(OUT);
     fs.makeDirectory(OUT);
     std.print("generating site from " + ROOT + "/" + DOCS + "/ -> " + OUT + "/");
@@ -266,16 +603,28 @@ fun site_render() > void {
     // Copy static assets referenced by the root README (images, badges).
     os.execute(["sh", "-c", "[ -d " + ROOT + "/assets ] && cp -r " + ROOT + "/assets " + OUT + "/ || true"]);
 
+    // Copy the client-side enhancement assets the page template loads (search box,
+    // styles, TOC scroll-spy/collapse, heading anchors, code-copy buttons, mermaid
+    // theming); the search index they read is written below, after the walk.
+    os.execute(["sh", "-c", "[ -f site.css ] && cp site.css " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "for j in search.js toc.js anchors.js copy.js mermaid-init.js clipboard.js home-heading.js; do [ -f \"$j\" ] && cp \"$j\" " + OUT + "/; done; true"]);
+
     // Copy the WebAssembly playground — the editor page plus the committed
     // buzz.wasm and its TinyGo glue. These are source artifacts of this project
     // (rebuilt by the build-playground target), not rendered from docs, so the
     // render only copies them; that keeps the drift gate stable.
-    os.execute(["sh", "-c", "[ -f editor.html ] && cp editor.html " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -f playground.html ] && cp playground.html " + OUT + "/ || true"]);
     os.execute(["sh", "-c", "[ -f theme.js ] && cp theme.js " + OUT + "/ || true"]);
     os.execute(["sh", "-c", "[ -d playground ] && cp -r playground " + OUT + "/ || true"]);
 
     renderRoot();
     walk("");
+
+    // Flat {url, title, text, tags, description?} record per page; search.js
+    // fetches this lazily on first focus. Keys are sorted by serialize, and the
+    // walk order is fs.list's (sorted), so the file is byte-stable across runs.
+    fs.writeFile(OUT + "/search-index.json", "[" + searchRecords.join(",") + "]");
+
     std.print("done");
 }
 
@@ -286,7 +635,7 @@ export fun preflight(args: [str]) > void {}
 // lockstep with the project's targets. Re-run after editing targets and commit:
 // `magus run md-generate site`.
 export fun md_generate(args: [str]) > void {
-    final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
+    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
@@ -295,13 +644,14 @@ export fun md_generate(args: [str]) > void {
 // or target change wasn't re-rendered and committed). Run the `rw` charm
 // (`generate:rw`) to keep the result instead of gating.
 export fun generate(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"), magus.target.literal("md-generate"));
+    magus.needs(magus.target.literal("preflight"));
+    final clean_before = vcs.isDirty([OUT, "MAGUS.md"]) == false;
+    magus.needs(magus.target.literal("md-generate"));
     site_render();
     if (magus.has_charm("rw")) { return; }
 
-    final drift = os.exec("git", ["status", "--porcelain", "--", OUT, "MAGUS.md"]).stdout;
-    if (drift != "") {
-        throw "generate: " + OUT + " or MAGUS.md drifted; re-run `magus run generate:rw site` and commit:\n" + drift;
+    if (clean_before and vcs.isDirty([OUT, "MAGUS.md"])) {
+        throw "generate: " + OUT + " or MAGUS.md drifted; re-run `magus run generate:rw site` and commit";
     }
 }
 
@@ -350,6 +700,12 @@ export fun build_playground(args: [str]) > void {
 // try/catch keeps a bad render from ending the watch; returning false keeps watching.
 export fun serve(args: [str]) > void {
     site_render();
+    // Serve the generated site over HTTP (background goroutine; fs.watch below
+    // keeps the process alive). With no port, http.server scans from 8080 for the
+    // first free port and returns it, so the printed URL is always correct even if
+    // 8080 is busy.
+    final port = http.server(OUT);
+    magus.info("serving " + OUT + " at http://localhost:{port}");
     magus.info("watching " + ROOT + "/" + DOCS + " — re-rendering " + OUT + " on change (Ctrl-C to stop)");
     fs.watch([ROOT + "/" + DOCS], fun(changed: [str]) > bool {
         magus.info("change detected — re-rendering");
