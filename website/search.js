@@ -31,13 +31,20 @@
   }
   var edit = tools.querySelector(".page-tools-edit");
 
+  // Detect the platform once: it drives both the visual hint badge and the
+  // input's tooltip/aria label, so all three name the same modifier key.
+  var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  var isMac = /mac/i.test(platform);
+  var modKey = isMac ? "⌘K" : "Ctrl+K";        // the compact hint badge
+  var modName = isMac ? "Cmd-K" : "Ctrl-K";    // spoken/tooltip form
+
   var input = document.createElement("input");
   input.type = "text"; // not type=search: avoids Pico's pill shape; the magnifier is a CSS bg
   input.className = "search-input";
   input.placeholder = "Search docs...";
   input.autocomplete = "off";
-  input.setAttribute("aria-label", "Search the documentation");
-  input.title = "Press / or Cmd-K to search";
+  input.setAttribute("aria-label", "Search the documentation (press / or " + modName + ")");
+  input.title = "Press / or " + modName + " to search";
   // Combobox semantics so a screen reader announces the results list and the
   // arrow-key-highlighted option (aria-activedescendant, set in highlight()).
   input.setAttribute("role", "combobox");
@@ -51,9 +58,30 @@
   results.setAttribute("role", "listbox");
   results.hidden = true;
 
-  if (edit) tools.insertBefore(input, edit);
-  else tools.appendChild(input);
+  // Polite live region announcing the result count as the query changes. The
+  // combobox's aria-activedescendant announces the focused option while arrowing,
+  // but a screen-reader user still needs the "N results" summary after typing.
+  var live = document.createElement("div");
+  live.className = "sr-only";
+  live.setAttribute("role", "status");
+  live.setAttribute("aria-live", "polite");
+
+  // Wrap input + keybinding hint together so the hint can be positioned inside
+  // the input's visual boundary. Screen readers skip the hint (aria-hidden).
+  var wrap = document.createElement("div");
+  wrap.className = "search-wrap";
+  wrap.appendChild(input);
+
+  var hint = document.createElement("span");
+  hint.className = "search-hint";
+  hint.setAttribute("aria-hidden", "true");
+  hint.innerHTML = "<kbd>/</kbd> <kbd>" + modKey + "</kbd>";
+  wrap.appendChild(hint);
+
+  if (edit) tools.insertBefore(wrap, edit);
+  else tools.appendChild(wrap);
   tools.appendChild(results);
+  tools.appendChild(live);
 
   var index = null, loading = false;
   function loadIndex() {
@@ -194,19 +222,22 @@
     results.appendChild(li);
     results.hidden = false;
     setExpanded(true);
+    live.textContent = text;
   }
 
   function render(raw) {
     results.innerHTML = "";
     sel = -1;
     var query = (raw || "").trim();
-    if (!query) { results.hidden = true; setExpanded(false); return; }
+    if (!query) { results.hidden = true; setExpanded(false); live.textContent = ""; return; }
     if (!index) { loadIndex(); results.hidden = true; setExpanded(false); return; } // re-renders once loaded
     results.hidden = false;
     setExpanded(true);
 
     var res = runSearch(query);
     if (!res.length) { showMessage("No matches"); return; }
+    var shown = Math.min(res.length, 8);
+    live.textContent = shown + (shown === 1 ? " result" : " results");
     res.slice(0, 8).forEach(function (r, i) {
       var li = document.createElement("li");
       li.setAttribute("role", "presentation"); // the <a> is the listbox option, not the <li>

@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>fmt</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="site-header">
     <nav class="container">
       <ul><li><a href="../index.html" class="contrast"><img class="brand-mark" src="../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
@@ -17,11 +19,11 @@
         <li><a href="../install.html">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
         <li><a href="https://github.com/egladman/magus">GitHub</a></li>
-        <li><button id="theme-toggle" class="outline">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
       </ul>
     </nav>
   </header>
-  <main class="container">
+  <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
       <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation.html">Documentation</a></li><li><a href="../modules/index.html">Modules</a></li><li aria-current="page">fmt</li></ul>
     </nav>
@@ -67,22 +69,18 @@
       <a class="page-nav-next" href="fs.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">fs</span></a>
     </nav>
   </main>
-  <footer class="site-footer container">
-    <nav class="footer-links">
-      <ul>
-        <li><a href="../documentation.html">Documentation</a></li>
-        <li><a href="../install.html">Install</a></li>
-        <li><a href="../playground.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
-      </ul>
-    </nav>
+  <div class="page-provenance container">
     <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script defer src="../clipboard.js"></script>
   <script defer src="../toc.js"></script>
   <script defer src="../anchors.js"></script>
   <script defer src="../copy.js"></script>
   <script src="../search.js"></script>
+  <script type="module" src="../hljs-init.js"></script>
   <script defer src="../mermaid-init.js"></script>
   <script defer src="../home-heading.js"></script>
 </body>
