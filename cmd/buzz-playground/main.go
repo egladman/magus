@@ -6,7 +6,7 @@
 // history, rendering — and the editor's live parse, manipulating the DOM through
 // syscall/js. The page's JavaScript is reduced to a ~10-line bootstrap that
 // instantiates this module; all behavior lives here and in
-// internal/playground.Shell (which is pure Go and host-tested).
+// internal/playground.Console (which is pure Go and host-tested).
 //
 // The page provides the static structure (see magus/website/editor.html). This
 // program grabs the elements by id, wires event handlers, and renders into them.
@@ -77,7 +77,7 @@ type ui struct {
 	out    js.Value // terminal scrollback
 	in     js.Value // terminal input
 	badge  js.Value // editor parse-status
-	shell  *playground.Shell
+	shell  *playground.Console
 }
 
 func main() {
@@ -90,7 +90,7 @@ func main() {
 		out:    doc.Call("getElementById", "term-out"),
 		in:     doc.Call("getElementById", "term-in"),
 		badge:  doc.Call("getElementById", "parse-status"),
-		shell:  playground.NewShell(buildInfo()),
+		shell:  playground.NewConsole(buildInfo()),
 	}
 
 	u.in.Call("addEventListener", "keydown", js.FuncOf(u.onTerminalKey))

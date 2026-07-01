@@ -103,16 +103,19 @@ func buildMagus(_ *buzz.Session, rec *Recorder) vm.Value {
 		}))
 	}
 
-	// magus.cmd(...) returns a captured-command result on the real module; stub it as
-	// an empty success so `magus.cmd(...).stdout` doesn't blow up in a dry run.
-	m.MapSet("cmd", fn("magus.cmd", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("stdout", vm.StrValue(""))
-		res.MapSet("stderr", vm.StrValue(""))
-		res.MapSet("code", vm.IntValue(0))
-		res.MapSet("success", vm.BoolValue(true))
-		return res, nil
-	}))
+	// magus.cmd/run/describe/insight/doctor return a captured-command result on the
+	// real module; stub each as an empty success so `magus.describe(...).stdout` and
+	// the like don't blow up in a dry run.
+	for _, name := range []string{"cmd", "run", "describe", "insight", "doctor"} {
+		m.MapSet(name, fn("magus."+name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+			res := vm.NewMap()
+			res.MapSet("stdout", vm.StrValue(""))
+			res.MapSet("stderr", vm.StrValue(""))
+			res.MapSet("code", vm.IntValue(0))
+			res.MapSet("success", vm.BoolValue(true))
+			return res, nil
+		}))
+	}
 
 	// magus.modules()/magus.module(name) are pure introspection on the real host
 	// module registry, which the sandbox doesn't wire (pulling host/std in would

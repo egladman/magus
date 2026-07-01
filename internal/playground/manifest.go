@@ -12,12 +12,12 @@ package playground
 // most likely to bind), not the full set; add a row here when the playground
 // needs another spell.
 var builtinSpellOps = map[string][]string{
-	"go":      {"go-build", "go-test", "go-vet", "go-fmt", "go-mod-tidy", "go-generate", "go-clean", "golangci-lint", "govulncheck"},
-	"rs":      {"cargo-build", "cargo-test", "cargo-clippy", "cargo-fmt", "cargo-clean"},
-	"py":      {"pytest", "ruff-check", "ruff-format", "uv-build", "uv-clean"},
-	"ts":      {"tsc", "eslint", "prettier", "vitest", "preflight"},
-	"docker":  {"docker-build", "docker-build-check", "hadolint"},
-	"buf":     {"buf-build", "buf-lint", "buf-format", "buf-generate"},
-	"buzz":    {"buzz-check", "buzz-test", "magus-buzz"},
-	"md":      {"markdownlint", "prettier"},
+	"go":     {"go-build", "go-test", "go-vet", "go-fmt", "go-mod-tidy", "go-generate", "go-clean", "golangci-lint", "govulncheck"},
+	"rs":     {"cargo-build", "cargo-test", "cargo-clippy", "cargo-fmt", "cargo-clean"},
+	"py":     {"pytest", "ruff-check", "ruff-format", "uv-build", "uv-clean"},
+	"ts":     {"tsc", "eslint", "prettier", "vitest", "preflight"},
+	"docker": {"docker-build", "docker-build-check", "hadolint"},
+	"buf":    {"buf-build", "buf-lint", "buf-format", "buf-generate"},
+	"buzz":   {"buzz-check", "buzz-test", "magus-buzz"},
+	"md":     {"markdownlint", "prettier"},
 }

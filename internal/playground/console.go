@@ -103,11 +103,11 @@ type BuildInfo struct {
 	GoVersion string // the Go release the compiler is based on, e.g. "go1.24.7"
 }
 
-// Shell is the playground terminal's brain: it holds the build info, the current
+// Console is the playground terminal's brain: it holds the build info, the current
 // magusfile source, its last parse, and command history, and turns a typed line
 // into rendered output. Output is returned as []Line (pre-escaped HTML + a CSS
 // class), so the Go side owns formatting and the glue only appends nodes.
-type Shell struct {
+type Console struct {
 	info   BuildInfo
 	src    string
 	parsed Graph
@@ -132,26 +132,26 @@ type ExecResult struct {
 // commands is the completable command set (also the `help` ordering source).
 var commands = []string{"help", "ls", "targets", "graph", "run", "eval", "version", "clear", "about"}
 
-func NewShell(info BuildInfo) *Shell { return &Shell{info: info} }
+func NewConsole(info BuildInfo) *Console { return &Console{info: info} }
 
 // SetSource updates the editor content, re-parses it, and returns the editor
 // header badge: ok plus a short status string.
-func (s *Shell) SetSource(ctx context.Context, src string) (ok bool, status string) {
+func (s *Console) SetSource(ctx context.Context, src string) (ok bool, status string) {
 	s.src = src
 	s.parsed = LoadMagusfile(ctx, src)
 	if s.parsed.OK {
 		n := len(s.parsed.Targets)
-		return true, "✓ " + strconv.Itoa(n) + " target" + plural(n)
+		return true, "[pass] " + strconv.Itoa(n) + " target" + plural(n)
 	}
 	if d := s.parsed.Diag; d != nil && d.Line > 0 {
-		return false, "✗ line " + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col)
+		return false, "[fail] line " + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col)
 	}
-	return false, "✗ parse error"
+	return false, "[fail] parse error"
 }
 
 // Exec runs one input line and returns the rows to render (including the echoed
 // prompt). A blank line echoes only; `clear` requests a wipe.
-func (s *Shell) Exec(ctx context.Context, line string) ExecResult {
+func (s *Console) Exec(ctx context.Context, line string) ExecResult {
 	trimmed := strings.TrimSpace(line)
 	if trimmed != "" {
 		s.hist = append(s.hist, line)
@@ -192,7 +192,7 @@ func (s *Shell) Exec(ctx context.Context, line string) ExecResult {
 
 // Complete returns the input line after tab-completion plus any listing rows to
 // print (when the completion is ambiguous).
-func (s *Shell) Complete(line string) (replacement string, listing []Line) {
+func (s *Console) Complete(line string) (replacement string, listing []Line) {
 	line = strings.TrimLeft(line, " ") // tolerate leading/extra spaces
 	sp := strings.IndexByte(line, ' ')
 	var prefix, base string
@@ -234,7 +234,7 @@ func (s *Shell) Complete(line string) (replacement string, listing []Line) {
 // returned line. At either end of the history they return ("", false), so
 // pressing ↓ at the newest entry leaves the in-progress line untouched rather
 // than clearing it.
-func (s *Shell) HistPrev() (string, bool) {
+func (s *Console) HistPrev() (string, bool) {
 	if s.hpos > 0 {
 		s.hpos--
 		return s.hist[s.hpos], true
@@ -242,7 +242,7 @@ func (s *Shell) HistPrev() (string, bool) {
 	return "", false
 }
 
-func (s *Shell) HistNext() (string, bool) {
+func (s *Console) HistNext() (string, bool) {
 	if s.hpos < len(s.hist)-1 {
 		s.hpos++
 		return s.hist[s.hpos], true
@@ -251,7 +251,7 @@ func (s *Shell) HistNext() (string, bool) {
 	return "", false
 }
 
-func (s *Shell) help() []Line {
+func (s *Console) help() []Line {
 	return []Line{{HTML: strings.Join([]string{
 		`<span class="muted">commands</span>`,
 		`  <b>ls</b>            list targets in the magusfile`,
@@ -270,7 +270,7 @@ func (s *Shell) help() []Line {
 // (like a REPL's startup banner) followed by an unmissable note that the
 // playground is a sandbox where nothing actually executes. The `about` command
 // reprints it; `status` prints the full build detail.
-func (s *Shell) Banner() []Line {
+func (s *Console) Banner() []Line {
 	dot := `<span class="muted"> · </span>`
 	head := `<span class="ok">●</span> <b>gopherbuzz</b>` + dot + `Buzz ` + buzzLangVersion
 	if s.info.Compiler != "" {
@@ -292,11 +292,11 @@ func (s *Shell) Banner() []Line {
 	}
 }
 
-func (s *Shell) about() []Line { return s.Banner() }
+func (s *Console) about() []Line { return s.Banner() }
 
 // version prints the build/runtime detail, the in-browser analog of the upstream
 // Buzz REPL's startup banner.
-func (s *Shell) version() []Line {
+func (s *Console) version() []Line {
 	row := func(key, val string) Line {
 		if val == "" {
 			val = "—"
@@ -313,7 +313,7 @@ func (s *Shell) version() []Line {
 	}
 }
 
-func (s *Shell) ls() []Line {
+func (s *Console) ls() []Line {
 	if !s.parsed.OK {
 		return []Line{{HTML: "magusfile does not parse — fix it in the editor.", Class: "err"}}
 	}
@@ -331,7 +331,7 @@ func (s *Shell) ls() []Line {
 	return out
 }
 
-func (s *Shell) graph() []Line {
+func (s *Console) graph() []Line {
 	if !s.parsed.OK {
 		return []Line{{HTML: "magusfile does not parse — fix it in the editor.", Class: "err"}}
 	}
@@ -365,7 +365,7 @@ func (s *Shell) graph() []Line {
 	return out
 }
 
-func (s *Shell) run(ctx context.Context, target string) []Line {
+func (s *Console) run(ctx context.Context, target string) []Line {
 	if target == "" {
 		return append([]Line{{HTML: `usage: <b>run &lt;target&gt;</b>`, Class: "muted"}}, s.ls()...)
 	}
@@ -401,12 +401,12 @@ func (s *Shell) run(ctx context.Context, target string) []Line {
 		}
 	}
 	n := len(r.Trace)
-	out = append(out, Line{HTML: "✓ dry-run of " + esc(target) + " — " + strconv.Itoa(n) +
+	out = append(out, Line{HTML: "[pass] dry-run of " + esc(target) + " - " + strconv.Itoa(n) +
 		" step" + plural(n) + " recorded, <b>nothing executed</b>", Class: "ok"})
 	return out
 }
 
-func (s *Shell) eval(ctx context.Context, src string) []Line {
+func (s *Console) eval(ctx context.Context, src string) []Line {
 	if strings.TrimSpace(src) == "" {
 		return nil
 	}
@@ -429,7 +429,7 @@ func (s *Shell) eval(ctx context.Context, src string) []Line {
 	return out
 }
 
-func (s *Shell) depsOf(key string) []string {
+func (s *Console) depsOf(key string) []string {
 	var out []string
 	for _, e := range s.parsed.Edges {
 		if e.From == key {

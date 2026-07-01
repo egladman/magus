@@ -18,14 +18,14 @@ var testInfo = BuildInfo{
 }
 
 func TestBanner_conveysSandbox(t *testing.T) {
-	got := joinHTML(NewShell(testInfo).Banner())
+	got := joinHTML(NewConsole(testInfo).Banner())
 	for _, want := range []string{"sandbox", "WebAssembly", "executed", "tinygo 0.40.0", "js/wasm"} {
 		assert.Contains(t, got, want, "banner should mention %q", want)
 	}
 }
 
-func TestShell_versionCommand(t *testing.T) {
-	got := joinHTML(exec(newTestShell(t), "version").Lines)
+func TestConsole_versionCommand(t *testing.T) {
+	got := joinHTML(exec(newTestConsole(t), "version").Lines)
 	for _, want := range []string{"tinygo 0.40.0", "js/wasm", "asyncify", "go1.24.7"} {
 		assert.Contains(t, got, want, "version should report %q", want)
 	}
@@ -50,16 +50,16 @@ func TestEvalBuzz_errorPosition(t *testing.T) {
 	assert.NotZero(t, r.Diag.Line, "expected a positioned diag, got %+v", r.Diag)
 }
 
-func newTestShell(t *testing.T) *Shell {
+func newTestConsole(t *testing.T) *Console {
 	t.Helper()
-	s := NewShell(testInfo)
+	s := NewConsole(testInfo)
 	ok, status := s.SetSource(context.Background(), sampleMagusfile)
 	require.True(t, ok, "sample magusfile did not parse: %s", status)
 	return s
 }
 
 // exec is a test shorthand for s.Exec with a background context.
-func exec(s *Shell, line string) ExecResult {
+func exec(s *Console, line string) ExecResult {
 	return s.Exec(context.Background(), line)
 }
 
@@ -72,19 +72,19 @@ func joinHTML(lines []Line) string {
 	return b.String()
 }
 
-func TestShell_status(t *testing.T) {
-	s := NewShell(testInfo)
+func TestConsole_status(t *testing.T) {
+	s := NewConsole(testInfo)
 	ok, status := s.SetSource(context.Background(), sampleMagusfile)
 	require.True(t, ok)
 	assert.Contains(t, status, "target")
 
 	ok, status = s.SetSource(context.Background(), "export fun x(_a: [str]) > void { let ; }")
 	require.False(t, ok, "expected parse error badge")
-	assert.True(t, strings.HasPrefix(status, "✗"), "expected parse error badge, got %q", status)
+	assert.True(t, strings.HasPrefix(status, "[fail]"), "expected parse error badge, got %q", status)
 }
 
-func TestShell_ls(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_ls(t *testing.T) {
+	s := newTestConsole(t)
 	res := exec(s, "ls")
 	out := joinHTML(res.Lines)
 	for _, want := range []string{"format", "lint", "build", "ci"} {
@@ -95,8 +95,8 @@ func TestShell_ls(t *testing.T) {
 	assert.Contains(t, res.Lines[0].HTML, "ls", "ls did not echo the command with the magus prompt")
 }
 
-func TestShell_run(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_run(t *testing.T) {
+	s := newTestConsole(t)
 	out := joinHTML(exec(s, "run ci").Lines)
 	// deps appear before ci in the order line, and ops are recorded.
 	assert.Contains(t, out, "order:", "run ci output:\n%s", out)
@@ -105,14 +105,14 @@ func TestShell_run(t *testing.T) {
 	assert.Contains(t, out, "recorded", "run ci should mark ops as recorded")
 }
 
-func TestShell_evalBareExpression(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_evalBareExpression(t *testing.T) {
+	s := newTestConsole(t)
 	out := joinHTML(exec(s, "return 6 * 7;").Lines)
 	assert.Contains(t, out, "⇒ 42", "bare eval output:\n%s", out)
 }
 
-func TestShell_evalSeesMagusfileDefs(t *testing.T) {
-	s := NewShell(testInfo)
+func TestConsole_evalSeesMagusfileDefs(t *testing.T) {
+	s := NewConsole(testInfo)
 	s.SetSource(context.Background(), `import "magus";
 fun triple(n: int) > int { return n * 3; }
 export fun build(_a: [str]) > void {}`)
@@ -120,15 +120,15 @@ export fun build(_a: [str]) > void {}`)
 	assert.Contains(t, out, "⇒ 42", "expression should see the magusfile's functions:\n%s", out)
 }
 
-func TestShell_clear(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_clear(t *testing.T) {
+	s := newTestConsole(t)
 	res := exec(s, "clear")
 	assert.True(t, res.Clear, "clear should signal Clear")
 	assert.Empty(t, res.Lines, "clear should produce no lines")
 }
 
-func TestShell_completeCommands(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_completeCommands(t *testing.T) {
+	s := newTestConsole(t)
 	got, _ := s.Complete("ru")
 	assert.Equal(t, "run ", got)
 	// ambiguous prefix lists candidates and completes the common prefix.
@@ -136,8 +136,8 @@ func TestShell_completeCommands(t *testing.T) {
 	assert.NotEmpty(t, listing, "empty completion should list commands")
 }
 
-func TestShell_completeTargets(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_completeTargets(t *testing.T) {
+	s := newTestConsole(t)
 	got, _ := s.Complete("run b")
 	assert.Equal(t, "run build ", got)
 	repl, listing := s.Complete("run ")
@@ -148,8 +148,8 @@ func TestShell_completeTargets(t *testing.T) {
 	}
 }
 
-func TestShell_history(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_history(t *testing.T) {
+	s := newTestConsole(t)
 	exec(s, "ls")
 	exec(s, "graph")
 	got, ok := s.HistPrev()
@@ -162,8 +162,8 @@ func TestShell_history(t *testing.T) {
 	assert.Equal(t, "graph", got)
 }
 
-func TestShell_historyBottomDoesNotClobber(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_historyBottomDoesNotClobber(t *testing.T) {
+	s := newTestConsole(t)
 	exec(s, "ls")
 	// At the newest entry, ↓ must report "no change" so the caller leaves an
 	// in-progress (non-history) line alone instead of clearing it.
@@ -171,8 +171,8 @@ func TestShell_historyBottomDoesNotClobber(t *testing.T) {
 	assert.False(t, ok, "HistNext at the bottom should return ok=false")
 }
 
-func TestShell_completeToleratesWhitespace(t *testing.T) {
-	s := newTestShell(t)
+func TestConsole_completeToleratesWhitespace(t *testing.T) {
+	s := newTestConsole(t)
 	got, _ := s.Complete("  ru")
 	assert.Equal(t, "run ", got)
 	got, _ = s.Complete("run  b")
