@@ -52,3 +52,31 @@ Put the benchstat rows in the commit message, not the tree. Leave an inline
 so the trade-off is reviewable without re-running the bench. Per-OS fast paths
 (see [`internal/cache/reflink/`](internal/cache/reflink/)) always keep a portable
 fallback; never gate behavior on a fast path.
+
+## Docs site
+
+The docs site under `website/` is generated into the committed `website/gen/`
+tree; regenerate and commit it after any doc change:
+
+```sh
+magus run generate:rw website   # re-render, keep the output
+# review `git status website/gen`, then commit gen/ alongside your source edit
+```
+
+A plain `magus run generate website` gates on drift and fails if `gen/` was not
+re-rendered, so CI catches a forgotten regen.
+
+Pages use extensionless URLs (`/magus/documentation/`, served from
+`documentation/index.html`). If you rename or move a page, keep the old URL alive
+by listing it under `aliases:` in the page's frontmatter, so external links do
+not die:
+
+```yaml
+---
+title: Download
+aliases: [install]      # clean, gen-root-relative old paths
+---
+```
+
+The build emits a redirect stub at each alias and fails if an alias collides with
+a real page or is claimed twice.

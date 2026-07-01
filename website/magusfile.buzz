@@ -77,6 +77,14 @@ var metaLoaded: bool = false;
 // is deterministic and the drift gate stays stable.
 var searchRecords: [str] = mut [];
 
+// URL-alias bookkeeping, reset per site_render(). aliasTarget maps a declared old
+// path (frontmatter `aliases:`) to the clean URL of the page that owns it; pageUrls
+// is the set of real emitted page URLs. Both feed the alias pass after the walk,
+// which emits a redirect stub per alias and throws on a collision (an alias claimed
+// by two pages, or shadowing a real page) rather than silently overwriting.
+var aliasTarget: {str: str} = mut {};
+var pageUrls: {str: bool} = mut {};
+
 fun capture(cmd: str) > str {
     final tmp = os.tmpFilename("sitegen");
     final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
@@ -160,6 +168,7 @@ fun escapeAttr(s: str) > str {
 // returns it as JSON; serialize navigates it), letting authors tag a page to
 // surface it under search terms the prose never mentions.
 fun addRecord(url: str, title: str, desc: str, md: str) > void {
+    pageUrls[url] = true;   // record the real page URL for alias collision checks
     final rec = mut {<str: any>};
     rec["url"] = url;
     rec["title"] = title;
@@ -378,6 +387,53 @@ fun newCleanDir(rel: str) > str {
     final u = cleanUrl(rel);
     if (u == "") { return ""; }
     return u.sub(0, u.len() - 1);
+}
+
+// collectAlias records that `alias` (a clean, gen-root-relative old path from a
+// page's frontmatter) should redirect to `target` (the owning page's clean URL).
+// It throws if two pages claim the same alias, so a rename can never silently
+// shadow another page's redirect. Leading/trailing slashes are normalized away.
+fun collectAlias(alias: str, target: str) > void {
+    var a = alias;
+    while (a.startsWith("/")) { a = a.sub(1); }
+    while (a.endsWith("/")) { a = a.sub(0, a.len() - 1); }
+    if (a == "") { return; }
+    final owner = aliasTarget[a];
+    if (owner != null and owner != target) {
+        throw "alias \"" + a + "\" is claimed by two pages (" + owner + " and " + target + ")";
+    }
+    aliasTarget[a] = target;
+}
+
+// aliasStub is the tiny redirect page emitted at each alias location. Static hosts
+// (GitHub Pages) can't do server redirects, so this uses the standard HTML stub:
+// an instant meta-refresh + a canonical link back to the real page + a scripted
+// location.replace, and a plain <a> so it still works with JavaScript disabled.
+// rel is the target's path relative to the alias's own directory.
+fun aliasStub(rel: str) > str {
+    return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+        + "<meta http-equiv=\"refresh\" content=\"0; url=" + rel + "\">\n"
+        + "<link rel=\"canonical\" href=\"" + rel + "\">\n"
+        + "<title>Redirecting</title>\n"
+        + "<script>location.replace(\"" + rel + "\");</script>\n"
+        + "</head>\n<body>\n"
+        + "<p>This page moved. <a href=\"" + rel + "\">Continue to its new location</a>.</p>\n"
+        + "</body>\n</html>\n";
+}
+
+// emitAliases writes one redirect stub per collected alias (after the walk, so the
+// full set of real page URLs is known). It throws if an alias would shadow a real
+// generated page rather than overwrite it. Each stub is an independent file, so the
+// emission order does not affect output; aliases are deliberately NOT added to the
+// search index, sitemap, or feeds (only the real page they point to appears there).
+fun emitAliases() > void {
+    foreach (a in aliasTarget.keys()) {
+        if (pageUrls[a + "/"] != null or pageUrls[a] != null) {
+            throw "alias \"" + a + "\" collides with a real page at the same path";
+        }
+        fs.makeDirectory(OUT + "/" + a);
+        fs.writeFile(OUT + "/" + a + "/index.html", aliasStub(relativize(a, aliasTarget[a])));
+    }
 }
 
 // formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
@@ -766,6 +822,7 @@ fun renderRoot() > void {
     of.write(doc);
     of.close();
     addRecord("index.html", title, desc, md);
+    foreach (a in fm.q("aliases").listValue()) { collectAlias(a.stringValue(), "index.html"); }
     std.print("  README.md -> " + OUT + "/index.html");
 }
 
@@ -796,6 +853,8 @@ fun renderFile(rel: str) > void {
     of.close();
 
     addRecord(url, title, desc, md);
+    // Redirect stubs for any old paths this page declares (frontmatter aliases:).
+    foreach (a in fm.q("aliases").listValue()) { collectAlias(a.stringValue(), url); }
 
     std.print("  " + rel + " -> " + dir + "/index.html");
 }
@@ -827,6 +886,8 @@ fun walk(rel: str) > void {
 fun site_render() > void {
     loadMeta();
     searchRecords = mut [];
+    aliasTarget = mut {};
+    pageUrls = mut {};
     fs.delete(OUT);
     fs.makeDirectory(OUT);
     std.print("generating site from " + ROOT + "/" + DOCS + "/ -> " + OUT + "/");
@@ -850,6 +911,11 @@ fun site_render() > void {
 
     renderRoot();
     walk("");
+
+    // Emit a redirect stub per declared frontmatter alias (after the walk, so every
+    // real page URL is known for the collision guard). Aliases stay out of the
+    // search index/sitemap/feeds — only the real page they point to appears there.
+    emitAliases();
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the
