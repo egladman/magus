@@ -5,21 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Engines: how magus runs a magusfile</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="site.css">
   <script src="theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="index.html">Docs</a></li>
-        <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="index.html">Home</a></li><li><a href="documentation.html">Documentation</a></li><li aria-current="page">Engines: how magus runs a magusfile</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/engines.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#the-engine-interface" title="The engine interface">The engine interface</a></li><li><a href="#the-spell-contract" title="The spell contract">The spell contract</a></li><li><a href="#host-modules-are-a-superset-of-buzzs-stdlib" title="Host modules are a superset of Buzz's stdlib">Host modules are a superset of Buzz's stdlib</a></li><li><a href="#built-in-spell-vs-language-builtins" title="&quot;Built-in spell&quot; vs language &quot;builtins&quot;">&quot;Built-in spell&quot; vs language &quot;builtins&quot;</a></li><li><a href="#adding-a-new-language" title="Adding a new language">Adding a new language</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+      </nav>
+    </aside>
     <article>
 <h1 id="engines-how-magus-runs-a-magusfile">Engines: how magus runs a magusfile</h1>
 <p>A <strong>magusfile</strong> is written in <a href="https://buzz-lang.dev/">Buzz</a> and runs on the
@@ -67,10 +80,11 @@ and the decoder keys they map to is <strong>single-sourced</strong> in
 that one list. A spell's <code>mgs_</code> functions decode to a <code>Spec</code> for every scalar and
 list contribution (<code>needs</code>, <code>provides</code>, <code>claims</code>, <code>version_cmd</code>, <code>opaque</code>) and
 for record-shaped ops (<code>{cmd, args, charms}</code>).</p>
-<p>Spells support <strong>function-ops</strong> — ops whose handler does host work in-VM rather
-than forking a command — so a remote cache backend (<code>get_artifact</code>/<code>put_artifact</code>)
-can be authored and wired with <code>magus.cache.remote</code>. A handler hands its command
-to the injected <code>cb</code> callback (the form the resolver also extracts statically).</p>
+<p>Spells support <strong>function-ops</strong>, ops whose handler does host work in-VM rather
+than forking a command, so you can author a remote cache backend
+(<code>get_artifact</code>/<code>put_artifact</code>) and wire it with <code>magus.cache.remote</code>. A handler
+hands its command to the injected <code>cb</code> callback (the form the resolver also
+extracts statically).</p>
 <p><strong>Doc-comment capture.</strong> Buzz captures a handler's doc comment at compile time
 (the parser binds the comment to the function node; <code>FunDoc</code> reads it back), and
 <code>magus doctor</code> enforces one on each function-handler target. Note Buzz's
@@ -80,13 +94,13 @@ built-ins.</p>
 <h2 id="host-modules-are-a-superset-of-buzzs-stdlib">Host modules are a superset of Buzz's stdlib</h2>
 <p>magus layers its host methods onto Buzz's own stdlib modules under the <strong>same bare
 names</strong>: <code>import &quot;os&quot;</code> carries both Buzz's <code>os.*</code> (sleep, env, execute) and magus's
-additions (<code>os.exec</code>, <code>os.which</code>, …); <code>import &quot;fs&quot;</code> carries Buzz's <code>fs</code> plus
+additions (<code>os.exec</code>, <code>os.which</code>, ...); <code>import &quot;fs&quot;</code> carries Buzz's <code>fs</code> plus
 <code>fs.glob</code>/<code>readFile</code>; and magus adds whole modules Buzz lacks (<code>vcs</code>, <code>archive</code>,
-<code>http</code>, <code>charm</code>, …). One import per domain covers the union — there's no separate
+<code>http</code>, <code>charm</code>, ...). One import per domain covers the union, with no separate
 <code>extra</code> namespace to remember which side a call lives on.</p>
 <p>Where a method overlaps a Buzz stdlib call, the magus form is <strong>sandbox-aware</strong>
-while the bare stdlib is not — e.g. <code>env.get</code>/<code>lookup</code> honor the env allowlist,
-whereas Buzz's <code>os.env</code> is raw. Those overlaps are noted per-method in the
+while the bare stdlib is not. For example, <code>env.get</code>/<code>lookup</code> honor the env
+allowlist, whereas Buzz's <code>os.env</code> is raw. Those overlaps are noted per-method in the
 <a href="modules/index.html">module reference</a> (either works); the cross-reference lives in
 <code>host/overlap.go</code>.</p>
 <p>A few entries are <em>not</em> treated as duplicates because the magus behavior the
@@ -99,14 +113,14 @@ stay on the magus surface.</p>
 <h2 id="built-in-spell-vs-language-builtins">&quot;Built-in spell&quot; vs language &quot;builtins&quot;</h2>
 <p>A <strong>built-in spell</strong> is a spell whose bytecode is compiled from
 <code>spells/&lt;name&gt;/spell.buzz</code> and embedded in the magus binary (<code>go</code>,
-<code>typescript</code>, <code>docker</code>, …; see <a href="spells.html#built-in">spells.md</a>). This is a magus
+<code>typescript</code>, <code>docker</code>, ...; see <a href="spells.html#built-in">spells.md</a>). This is a magus
 concept and is unrelated to Buzz's language <strong>builtins</strong> (<code>spawn</code>, list/map
 methods, etc.), which are part of the Buzz language itself. The docs always write
 &quot;built-in spell&quot; when they mean the former.</p>
 <h2 id="adding-a-new-language">Adding a new language</h2>
 <p>The engine interface is the stable, clean part of the seam. Plugging in a second
 language today, however, also touches a handful of <strong>hard-coded dispatch spots</strong>
-above the interface — this is honest current state, not the end state:</p>
+above the interface. This is the current state, not the end state:</p>
 <ol>
 <li>Implement <code>engine.Engine</code>/<code>Session</code> for the VM and <code>engine.Register</code> it (the
 clean part).</li>
@@ -118,11 +132,11 @@ the <code>magusfile.&lt;ext&gt;</code> lists.</li>
 <li>Provide the per-engine host bindings (the <code>magus.*</code> surface), as
 <code>internal/interp/bindings/buzz.go</code> does today.</li>
 </ol>
-<p><strong>Future direction — registry-driven discovery.</strong> The intent is to derive
+<p><strong>Future direction: registry-driven discovery.</strong> The intent is to derive
 extensions, magusfile filenames, and dispatch from the engine registry itself, so
 adding a language means registering a backend (with its extensions and binding
-installer) and nothing else — no edits to <code>source.go</code>, <code>runtime.go</code>, or
-switch statements. That refactor is deliberately out of scope for now; the
+installer) and nothing else, with no edits to <code>source.go</code>, <code>runtime.go</code>, or
+switch statements. That refactor is deliberately out of scope for now. The
 hard-coded spots above are the seam's known leaks, documented so they
 are visible rather than surprising.</p>
 <h2 id="see-also">See also</h2>
@@ -132,10 +146,29 @@ are visible rather than surprising.</p>
 <li><a href="modules/index.html">modules/index.md</a>: the <code>magus.*</code> host module reference.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/engines.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="documentation.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Documentation</span></a>
+      <a class="page-nav-next" href="install.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">Install</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-19 21:15:40 UTC from commit <a href="https://github.com/egladman/magus/commit/609273fbec42930609a68e70ce808bac231995bc"><code>609273f</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a>)</small>
   </footer>
+  <script defer src="clipboard.js"></script>
+  <script defer src="toc.js"></script>
+  <script defer src="anchors.js"></script>
+  <script defer src="copy.js"></script>
+  <script src="search.js"></script>
+  <script defer src="mermaid-init.js"></script>
+  <script defer src="home-heading.js"></script>
 </body>
 </html>

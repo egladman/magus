@@ -5,27 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Anatomy of a magus Spell</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="site.css">
   <script src="theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="index.html">Docs</a></li>
-        <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="index.html">Home</a></li><li><a href="documentation.html">Documentation</a></li><li aria-current="page">Anatomy of a magus Spell</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/spells.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#spells-vs-targets" title="Spells vs Targets">Spells vs Targets</a><ul><li><a href="#when-to-use-which" title="When to use which">When to use which</a></li></ul></li><li><a href="#what-a-spell-provides" title="What a spell provides">What a spell provides</a><ul><li><a href="#operations-come-in-two-shapes" title="Operations come in two shapes">Operations come in two shapes</a></li></ul></li><li><a href="#binding-a-spell-to-a-project" title="Binding a spell to a project">Binding a spell to a project</a><ul><li><a href="#built-in" title="Built-in">Built-in</a></li><li><a href="#file-spell" title="File spell">File spell</a></li></ul></li><li><a href="#composing-spells" title="Composing spells">Composing spells</a></li><li><a href="#naming-operations" title="Naming operations">Naming operations</a><ul><li><a href="#explicitness-over-magic-why-gogo-fmt-stutters" title="Explicitness over magic (why go::go-fmt stutters)">Explicitness over magic (why <code>go::go-fmt</code> stutters)</a></li></ul></li><li><a href="#authoring-a-custom-spell" title="Authoring a custom spell">Authoring a custom spell</a></li><li><a href="#lifecycle-bind--contribute--compose--run" title="Lifecycle: bind → contribute → compose → run">Lifecycle: bind → contribute → compose → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#worked-examples-in-this-repo" title="Worked examples in this repo">Worked examples in this repo</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+      </nav>
+    </aside>
     <article>
 <h1 id="anatomy-of-a-magus-spell">Anatomy of a magus Spell</h1>
 <p>A <strong>Spell</strong> is a <em>library of tool-native operations</em> for one toolchain, plus the cache and affected-set metadata that toolchain needs. The <code>go</code> spell exposes <code>go-build</code>/<code>go-test</code>/<code>go-vet</code>/<code>go-fmt</code>/<code>golangci-lint</code>/...; the <code>rust</code> spell exposes <code>cargo-build</code>/<code>cargo-test</code>/<code>cargo-clippy</code>/<code>cargo-fmt</code>/.... Each op is named after the CLI command it runs (see <a href="#naming-operations">Naming operations</a>). A spell is <strong>bound to a project</strong> and <strong>runs nothing on its own</strong>: it contributes operations your magusfile composes into <a href="targets.html">targets</a>, and it tells the cache which files are inputs and outputs.</p>
 <p>A spell is <em>how</em> a tool does something (the <code>go-vet</code>, <code>cargo-clippy</code> ops); a target is <em>what</em> you run (<code>magus run lint</code>). You <strong>bind</strong> spells and <strong>invoke</strong> targets. See <a href="#spells-vs-targets">Spells vs Targets</a>.</p>
 <h2 id="spells-vs-targets">Spells vs Targets</h2>
-<p>These are the two core nouns in magus, on orthogonal axes. Confusing them is the most common source of &quot;why didn't my build do anything?&quot;.</p>
+<p>These are the two core nouns in magus, on orthogonal axes. Confusing them is the usual reason a build runs and does nothing.</p>
 <table>
 <thead>
 <tr>
@@ -139,15 +152,15 @@ export fun test(args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&qu
 <h3 id="operations-come-in-two-shapes">Operations come in two shapes</h3>
 <ol>
 <li>
-<p><strong>Forked command (declarative).</strong> The op is a <code>Run</code> — a <code>{cmd, args, charms}</code> object. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.</p>
+<p><strong>Forked command (declarative).</strong> The op is a <code>Run</code>, a <code>{cmd, args, charms}</code> object. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.</p>
 </li>
 <li>
-<p><strong>Typed handler.</strong> The two handler kinds carry distinct signatures. A <strong>fork</strong> spell's <code>mgs_listTargets</code> returns <code>{str: fun(Target, fun(Run)) void}</code>: the handler builds a <code>Run</code> and passes it to the injected <code>cb</code> callback, returning nothing — the command travels through <code>cb</code>, so there is no result to return. A <strong>function-op</strong> spell (a cache backend, anything importing host modules) returns <code>{str: fun(Target, fun(any)) bool}</code>: the handler does host work in-VM (HTTP, signing, a cache backend's <code>get_artifact</code>) and its boolean <em>is</em> the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any <a href="../spells"><code>spells/&lt;name&gt;/spell.buzz</code></a> for a worked example.</p>
+<p><strong>Typed handler.</strong> The two handler kinds carry distinct signatures. A <strong>fork</strong> spell's <code>mgs_listTargets</code> returns <code>{str: fun(Target, fun(Run)) void}</code>: the handler builds a <code>Run</code> and passes it to the injected <code>cb</code> callback, returning nothing. The command travels through <code>cb</code>, so there is no result to return. A <strong>function-op</strong> spell (a cache backend, anything importing host modules) returns <code>{str: fun(Target, fun(any)) bool}</code>: the handler does host work in-VM (HTTP, signing, a cache backend's <code>get_artifact</code>) and its boolean <em>is</em> the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any <a href="../spells"><code>spells/&lt;name&gt;/spell.buzz</code></a> for a worked example.</p>
 </li>
 </ol>
 <p>Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.</p>
 <p>A function-op handler does host work in-VM (HTTP, signing, a cache backend's <code>get-entry</code>) instead of forking a single command, calling host modules (<code>http</code>, <code>crypto</code>) as needed. This is what lets a remote cache backend be authored as a spell. <code>magus doctor</code> enforces a doc comment on each function-op handler, captured by the Buzz parser at compile time.</p>
-<p>The handler's second parameter is named <strong><code>cb</code></strong> (a plain callback): the handler calls <code>cb(Run{cmd, args, charms})</code> once to declare the command it forks. The name stays <code>cb</code> rather than <code>op</code> on purpose — <code>op</code> already means two other things here (a charm patch's <code>op</code> field, and a spell's <em>ops</em>), so reusing it would be ambiguous.</p>
+<p>The handler's second parameter is named <strong><code>cb</code></strong> (a plain callback): the handler calls <code>cb(Run{cmd, args, charms})</code> once to declare the command it forks. The name stays <code>cb</code> rather than <code>op</code> on purpose: <code>op</code> already means two other things here (a charm patch's <code>op</code> field, and a spell's <em>ops</em>), so reusing it would be ambiguous.</p>
 <h2 id="binding-a-spell-to-a-project">Binding a spell to a project</h2>
 <p>A spell only takes effect when its <strong>handle</strong> is passed to <code>magus.project.register</code>. Importing a spell is pure; it registers nothing on its own.</p>
 <h3 id="built-in">Built-in</h3>
@@ -225,11 +238,11 @@ export fun build(args: [str]) &gt; void {
 <p><strong>Not every op is a CLI command.</strong> A no-op marker (typescript's <code>preflight</code>) or a cache-backend verb (github/s3 <code>get-entry</code>) is not a tool invocation, so keep a descriptive name.</p>
 <p><strong>Op keys are matched verbatim</strong> (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: <code>go[&quot;go-build&quot;]()</code>, not <code>go.build()</code>. An op whose key is a valid identifier (<code>pytest</code>, <code>eslint</code>) can use dot: <code>py.pytest()</code>.</p>
 <h3 id="explicitness-over-magic-why-gogo-fmt-stutters">Explicitness over magic (why <code>go::go-fmt</code> stutters)</h3>
-<p>The full-command convention is enforced even for streamlined toolchains like Go, where <code>go-build</code>/<code>go-test</code>/<code>go-fmt</code> all start with <code>go</code>. The result reads with a stutter on the CLI — <code>magus run go::go-fmt</code> — and that is <strong>by design</strong>:</p>
+<p>The full-command convention is enforced even for streamlined toolchains like Go, where <code>go-build</code>/<code>go-test</code>/<code>go-fmt</code> all start with <code>go</code>. The result reads with a stutter on the CLI (<code>magus run go::go-fmt</code>), and that is <strong>by design</strong>:</p>
 <ul>
 <li><strong>Consistency across a polyglot repo.</strong> Most languages split work across separate binaries (typescript: <code>tsc</code>/<code>eslint</code>/<code>prettier</code>/<code>vitest</code>; rust: <code>cargo</code>/<code>clippy</code>/<code>rustfmt</code>). A rule that says &quot;name the op after the binary, always&quot; is one rule for every spell, instead of a special abbreviation for the few single-binary toolchains.</li>
 <li><strong>No invented vocabulary.</strong> <code>go-fmt</code> is <code>gofmt</code>; <code>golangci-lint</code> is <code>golangci-lint</code>. There is no magus-specific <code>lint</code>/<code>fmt</code> alias a reader has to learn or a magusfile has to map. The op name <em>is</em> the command.</li>
-<li><strong>The stutter is the escape hatch's, not the everyday surface's.</strong> You only type <code>go::go-fmt</code> for an ad-hoc op-direct run (see <a href="targets.html#cli-extension-spell-qualified-targets">targets.md</a>). In normal use you compose <code>go[&quot;go-fmt&quot;]()</code> into a <code>format</code> target and run <code>magus run format</code>. magus favors explicitness over magic: the spell says exactly what it runs, and policy (which op is your &quot;format&quot;) lives in your magusfile.</li>
+<li><strong>The stutter shows up only in the escape hatch.</strong> You type <code>go::go-fmt</code> for an ad-hoc op-direct run (see <a href="targets.html#cli-extension-spell-qualified-targets">targets.md</a>). In normal use you compose <code>go[&quot;go-fmt&quot;]()</code> into a <code>format</code> target and run <code>magus run format</code>. magus favors explicitness over magic: the spell says exactly what it runs, and policy (which op is your &quot;format&quot;) lives in your magusfile.</li>
 </ul>
 <h2 id="authoring-a-custom-spell">Authoring a custom spell</h2>
 <p>A spell file exposes the spell contract as <code>mgs_</code>-prefixed functions: the required <code>mgs_getName</code>, plus optional <code>mgs_listRequiredGlobs</code>, <code>mgs_listProvidedGlobs</code>, <code>mgs_listClaimedGlobs</code>, <code>mgs_getVersionCommand</code>, <code>mgs_isOpaque</code>, and <code>mgs_listTargets</code>.</p>
@@ -257,7 +270,7 @@ export fun lint(args: [str]) &gt; void { rb.rubocop({ &quot;cwd&quot;: &quot;gem
 </code></pre>
 <p>For cache-correctness rules (declare every input in <code>needs</code>, declare <code>provides</code> so outputs replay, toolchain-version footguns), see <a href="../index.html#custom-spells">Spells in the README</a>.</p>
 <h2 id="lifecycle-bind--contribute--compose--run">Lifecycle: bind → contribute → compose → run</h2>
-<pre><code>import &quot;magus/spell/&lt;name&gt;&quot; or &quot;spells/&lt;name&gt;&quot;  → a Spell handle (registers nothing)
+<pre><code class="language-text">import &quot;magus/spell/&lt;name&gt;&quot; or &quot;spells/&lt;name&gt;&quot;  → a Spell handle (registers nothing)
       │
       ▼
 register(fun(p, cb){ cb({spells}) })   → the spell is bound to the project;
@@ -357,10 +370,29 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <li><a href="modules/magus.html"><code>magus</code> module API</a>: <code>magus.project.register</code>, <code>magus.cache.remote</code>.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/spells.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="remote-cache.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Remote caching</span></a>
+      <a class="page-nav-next" href="targets.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">Anatomy of a magus Target</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-19 00:28:50 UTC from commit <a href="https://github.com/egladman/magus/commit/636feb0cfb92129c70dcb3e87e905e1f7108ad08"><code>636feb0</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>)</small>
   </footer>
+  <script defer src="clipboard.js"></script>
+  <script defer src="toc.js"></script>
+  <script defer src="anchors.js"></script>
+  <script defer src="copy.js"></script>
+  <script src="search.js"></script>
+  <script defer src="mermaid-init.js"></script>
+  <script defer src="home-heading.js"></script>
 </body>
 </html>

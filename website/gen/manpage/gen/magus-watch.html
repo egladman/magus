@@ -5,21 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>magus-watch</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../site.css">
   <script src="../../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><img class="brand-mark" src="../../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../../index.html">Docs</a></li>
-        <li><a href="../../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../../install.html">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation.html">Documentation</a></li><li>Manpage</li><li>Gen</li><li aria-current="page">magus-watch</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/manpage/gen/magus-watch.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a></li><li><a href="#options" title="Options">Options</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
+      </nav>
+    </aside>
     <article>
 <h1 id="magus-watch">magus-watch</h1>
 <p>Emit changed file paths to stdout</p>
@@ -47,21 +60,40 @@ trigger a full initial build in the downstream magus affected --stdin.</p>
 </dl>
 <h2 id="examples">Examples</h2>
 <p><em>Continuous build pipeline</em></p>
-<pre><code>magus watch | magus affected --stdin build
+<pre><code class="language-sh">magus watch | magus affected --stdin build
 </code></pre>
 <p><em>Increase debounce for slow editors</em></p>
-<pre><code>magus watch --debounce 500ms | magus affected --stdin test
+<pre><code class="language-sh">magus watch --debounce 500ms | magus affected --stdin test
 </code></pre>
 <p><em>Polling backend (when inotify is unavailable)</em></p>
-<pre><code>magus watch --backend poll | magus affected --stdin build
+<pre><code class="language-sh">magus watch --backend poll | magus affected --stdin build
 </code></pre>
 <h2 id="see-also">See Also</h2>
 <p><a href="magus.html"><strong>magus</strong>(1)</a>, <a href="magus-ls.html"><strong>magus-ls</strong>(1)</a>, <a href="magus-describe.html"><strong>magus-describe</strong>(1)</a>, <a href="magus-run.html"><strong>magus-run</strong>(1)</a>, <a href="magus-x.html"><strong>magus-x</strong>(1)</a>, <a href="magus-where.html"><strong>magus-where</strong>(1)</a>, <a href="magus-tail.html"><strong>magus-tail</strong>(1)</a>, <a href="magus-affected.html"><strong>magus-affected</strong>(1)</a>, <a href="magus-insight.html"><strong>magus-insight</strong>(1)</a>, <a href="magus-status.html"><strong>magus-status</strong>(1)</a>, <a href="magus-doctor.html"><strong>magus-doctor</strong>(1)</a>, <a href="magus-config.html"><strong>magus-config</strong>(1)</a>, <a href="magus-server.html"><strong>magus-server</strong>(1)</a>, <a href="magus-completion.html"><strong>magus-completion</strong>(1)</a>, <a href="magus-init.html"><strong>magus-init</strong>(1)</a>, <a href="magus-self.html"><strong>magus-self</strong>(1)</a>, <a href="magus-version.html"><strong>magus-version</strong>(1)</a></p>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/manpage/gen/magus-watch.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="magus-version.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus-version</span></a>
+      <a class="page-nav-next" href="magus-where.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus-where</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-20 03:59:44 UTC from commit <a href="https://github.com/egladman/magus/commit/950dded2936d4a8fdd2720ba4a5fdffa65473b8b"><code>950dded</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../../documentation.html">Documentation</a></li>
+        <li><a href="../../install.html">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
   </footer>
+  <script defer src="../../clipboard.js"></script>
+  <script defer src="../../toc.js"></script>
+  <script defer src="../../anchors.js"></script>
+  <script defer src="../../copy.js"></script>
+  <script src="../../search.js"></script>
+  <script defer src="../../mermaid-init.js"></script>
+  <script defer src="../../home-heading.js"></script>
 </body>
 </html>

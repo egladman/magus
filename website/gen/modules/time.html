@@ -3,33 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>`time`</title>
+  <title>time</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><img class="brand-mark" src="../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../index.html">Docs</a></li>
-        <li><a href="../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation.html">Documentation</a></li><li><a href="../modules/index.html">Modules</a></li><li aria-current="page">time</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/modules/time.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#format" title="format">format</a></li><li><a href="#parse" title="parse">parse</a></li><li><a href="#parse-duration" title="parse_duration">parse_duration</a></li><li><a href="#now-iso" title="now_iso">now_iso</a></li><li><a href="#add" title="add">add</a></li><li><a href="#diff" title="diff">diff</a></li></ul></li></ul>
+      </nav>
+    </aside>
     <article>
-<h1 id="time"><code>time</code></h1>
+<h1 id="time">time</h1>
 <p>Timestamp formatting/parsing and duration parsing (Go time, UTC).</p>
 <blockquote>
 <p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;time&quot;</code>) and call methods in <code>camelCase</code> (<code>time.someMethod</code>).</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="format"><code>format</code></h3>
+<h3 id="format">format</h3>
 <p>Render Unix-millis as a string using a Go reference layout (UTC).</p>
-<p><strong>Signature:</strong> <code>time.format(layout, unix_millis) → string</code></p>
+<p><strong>Signature:</strong> <code>time.format(layout, unix_millis) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L71">source</a></p>
 <table>
 <thead>
 <tr>
@@ -55,9 +68,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
-<h3 id="parse"><code>parse</code></h3>
+<h3 id="parse">parse</h3>
 <p>Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.</p>
-<p><strong>Signature:</strong> <code>time.parse(layout, value) → float64</code></p>
+<p><strong>Signature:</strong> <code>time.parse(layout, value) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L86">source</a></p>
 <table>
 <thead>
 <tr>
@@ -83,9 +96,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> float64</p>
-<h3 id="parse-duration"><code>parse_duration</code></h3>
+<h3 id="parse-duration">parse_duration</h3>
 <p>Parse a Go duration string (e.g. &quot;168h&quot;, &quot;1h30m&quot;) into milliseconds; errors on mismatch.</p>
-<p><strong>Signature:</strong> <code>time.parseDuration(duration) → float64</code></p>
+<p><strong>Signature:</strong> <code>time.parseDuration(duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L95">source</a></p>
 <table>
 <thead>
 <tr>
@@ -105,13 +118,13 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> float64</p>
-<h3 id="now-iso"><code>now_iso</code></h3>
+<h3 id="now-iso">now_iso</h3>
 <p>Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().</p>
-<p><strong>Signature:</strong> <code>time.nowIso() → string</code></p>
+<p><strong>Signature:</strong> <code>time.nowIso() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L79">source</a></p>
 <p><strong>Returns:</strong> string</p>
-<h3 id="add"><code>add</code></h3>
+<h3 id="add">add</h3>
 <p>Add a Go duration string (e.g. &quot;24h&quot;, &quot;-1h30m&quot;) to a Unix-millis timestamp; returns the new Unix-millis timestamp.</p>
-<p><strong>Signature:</strong> <code>time.add(unix_millis, duration) → float64</code></p>
+<p><strong>Signature:</strong> <code>time.add(unix_millis, duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L105">source</a></p>
 <table>
 <thead>
 <tr>
@@ -137,9 +150,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> float64</p>
-<h3 id="diff"><code>diff</code></h3>
+<h3 id="diff">diff</h3>
 <p>Return a minus b in milliseconds (positive when a is later than b).</p>
-<p><strong>Signature:</strong> <code>time.diff(a, b) → float64</code></p>
+<p><strong>Signature:</strong> <code>time.diff(a, b) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L115">source</a></p>
 <table>
 <thead>
 <tr>
@@ -166,10 +179,29 @@
 </table>
 <p><strong>Returns:</strong> float64</p>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/modules/time.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="strings.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">strings</span></a>
+      <a class="page-nav-next" href="vcs.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">vcs</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-12 11:51:34 UTC from commit <a href="https://github.com/egladman/magus/commit/3704fce93aa0abed68f2bb7fa9845a8b952105b6"><code>3704fce</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../documentation.html">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
   </footer>
+  <script defer src="../clipboard.js"></script>
+  <script defer src="../toc.js"></script>
+  <script defer src="../anchors.js"></script>
+  <script defer src="../copy.js"></script>
+  <script src="../search.js"></script>
+  <script defer src="../mermaid-init.js"></script>
+  <script defer src="../home-heading.js"></script>
 </body>
 </html>

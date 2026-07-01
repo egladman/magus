@@ -5,26 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Magusfile authoring diagnostics</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../site.css">
   <script src="../../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><img class="brand-mark" src="../../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../../index.html">Docs</a></li>
-        <li><a href="../../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../../install.html">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation.html">Documentation</a></li><li>Codes</li><li aria-current="page">Magusfile</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/codes/magusfile/README.md">Suggest an edit</a></div>
     <article>
 <h1 id="magusfile-authoring-diagnostics">Magusfile authoring diagnostics</h1>
 <p>Codes in the <code>MGS1xxx</code> range flag problems with how a workspace's magusfile(s)
-are authored — targets that must exist but don't, declarations that won't
-resolve, and similar. They are raised both at run time (as a typed
+are authored: targets that must exist but don't, declarations that won't
+resolve, and similar. Magus raises them at run time (as a typed
 <code>DiagnosticError</code>) and, where applicable, as a <code>magus doctor</code> health check so the
 gap is visible before CI runs.</p>
 <table>
@@ -42,10 +48,24 @@ gap is visible before CI runs.</p>
 </tbody>
 </table>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/codes/magusfile/README.md">Suggest an edit</a></p>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-09 20:14:58 UTC from commit <a href="https://github.com/egladman/magus/commit/ceb740797feedf827499be9e5c0fbf5ef6c91f85"><code>ceb7407</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../../documentation.html">Documentation</a></li>
+        <li><a href="../../install.html">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-06-23T03:26:53Z">June 23, 2026, 3:26 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/9ee3dce1b3c7ab7473778d3bc86398a929467ebf">9ee3dce</a>)</small>
   </footer>
+  <script defer src="../../clipboard.js"></script>
+  <script defer src="../../toc.js"></script>
+  <script defer src="../../anchors.js"></script>
+  <script defer src="../../copy.js"></script>
+  <script src="../../search.js"></script>
+  <script defer src="../../mermaid-init.js"></script>
+  <script defer src="../../home-heading.js"></script>
 </body>
 </html>

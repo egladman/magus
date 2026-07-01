@@ -1,0 +1,484 @@
+/* site.css - shared layout for the magus docs site (homepage + docs pages).
+   Layout only: a sticky top bar and a table-of-contents sidebar, neither of
+   which Pico ships as a component. Every color here is a Pico CSS variable, so
+   light/dark stay 100% stock Pico - there are no theme overrides in this file.
+   (The playground page carries its own component styles.) */
+
+/* Pico v2 scales the root font-size UP at each breakpoint - 100% (16px) at the
+   base, climbing to 125% (20px) >=1280px and 131.25% >=1536px - which makes the
+   whole UI read noticeably larger than a typical 16px site (e.g. github.com).
+   Pin it to 100% so 1rem == 16px at every width; spacing is rem-based, so the
+   entire layout tightens proportionally to match. */
+:root {
+  --pico-font-size: 100%;
+}
+
+/* Distinguishable, sticky top bar. The header spans the full width with a
+   card-shade background and a bottom border so it reads as a distinct bar; the
+   nav inside is a normal Pico .container, so it lines up with page content. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-block: 0.3rem; /* compact bar; overrides Pico's tall <header> padding */
+  background: var(--pico-card-background-color);
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* subtle lift so it reads as a bar */
+}
+/* Trim Pico's generous nav spacing so the bar stays compact. */
+.site-header nav {
+  --pico-nav-element-spacing-vertical: 0.4rem;
+}
+/* Compact the theme-toggle button so it sits neatly in the nav bar (also used on
+   the standalone playground page, which carries its own copy of this rule). */
+#theme-toggle {
+  padding: 0.2rem 0.7rem;
+}
+/* Active top-nav item ("you are here"). Pico recolors aria-current links but
+   also resets nav underlines (nav li a:not(:hover){text-decoration:none}), so
+   the underline never shows on its own; restore it here at higher specificity. */
+.site-header nav a[aria-current]:not([aria-current="false"]) {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* Small hat mark beside the "magus" wordmark in the nav. */
+.brand-mark {
+  height: 1.5em;
+  width: auto;
+  vertical-align: -0.35em;
+}
+
+/* Centered hero image on the home page (the README gopher). */
+.hero {
+  text-align: center;
+  margin: 0.5rem 0 1.75rem;
+}
+.hero img {
+  height: clamp(180px, 28vw, 300px);
+  width: auto;
+}
+
+/* Docs/home layout: a table-of-contents sidebar beside the article. One column
+   by default (mobile); two columns once there's room for the sidebar. */
+.with-toc {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* minmax(0,..) so wide tables/code can't blow out the column */
+  gap: var(--pico-spacing);
+}
+@media (min-width: 1024px) {
+  .with-toc {
+    grid-template-columns: 16rem minmax(0, 1fr);
+    gap: calc(var(--pico-spacing) * 2);
+  }
+}
+
+/* The table of contents itself. The <nav> is sticky within the sidebar column
+   and scrolls independently when the list is long. Pico lays nav/ul out as a
+   horizontal flex row; reset to a vertical block list for a sidebar. */
+.toc nav {
+  display: block;
+  position: sticky;
+  top: 4.5rem; /* clear the sticky header */
+  max-height: calc(100vh - 5.5rem);
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+.toc nav ul {
+  display: block;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.toc nav li {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+.toc nav ul ul {
+  padding-left: 0.85rem; /* indent h3 under its h2 */
+}
+.toc nav a {
+  display: block;
+  /* Pull left by the same amount as the horizontal padding so the text stays
+     flush with the list while the hover highlight gets breathing room. */
+  margin: 0 -0.4rem;
+  padding: 0.2rem 0.4rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+  line-height: 1.4;
+  border-radius: var(--pico-border-radius);
+  /* Keep each entry to one line; truncate anything too wide with an ellipsis.
+     The full text is carried in each link's title attribute, so hovering shows
+     it as a tooltip and screen readers read the untruncated text. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toc nav a:hover,
+.toc nav a:focus-visible {
+  color: var(--pico-primary);
+  background: var(--pico-card-sectioning-background-color);
+}
+/* Active section (set by toc.js scroll-spy). Mirrors the top-nav "you are here"
+   indicator: primary color + a flush-left accent so the eye can track position.
+   Needed explicitly because .toc nav a above pins color/decoration, overriding
+   Pico's stock aria-current styling. */
+.toc nav a[aria-current]:not([aria-current="false"]) {
+  color: var(--pico-primary);
+  font-weight: 600;
+}
+
+/* Small "On this page" label above the TOC list. */
+.toc-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+}
+
+/* Toolbar above the content holding the doc controls: the TOC toggle and the
+   search button, sitting side by side (added by toc.js / search.js). */
+.page-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  position: relative; /* anchors the search results dropdown */
+  margin: 0 0 1rem;
+}
+
+/* Square outline icon button in the toolbar: the TOC toggle (a list icon to
+   reveal the sidebar, an X to hide it). Collapsing the TOC reflows the article to
+   the full container width (.toc-collapsed). */
+.toc-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
+  padding: 0.4rem;
+  line-height: 0;
+}
+/* Active state: when the TOC is shown (aria-expanded=true) the toggle fills with
+   the primary color, like a pressed toolbar button; hidden, it stays an outline.
+   That on/off contrast is clearer than swapping the icon. */
+/* !important is needed because Pico's .outline forces a transparent background
+   with !important; without it the filled active state can't take. */
+.toc-toggle[aria-expanded="false"] {
+  background-color: transparent !important;
+  border-color: var(--pico-primary);
+  color: var(--pico-primary);
+}
+.toc-toggle[aria-expanded="true"] {
+  background-color: var(--pico-primary) !important;
+  border-color: var(--pico-primary);
+  color: var(--pico-primary-inverse, #fff);
+}
+.toc-toggle[aria-expanded="true"]:hover {
+  background-color: var(--pico-primary-hover, var(--pico-primary)) !important;
+  border-color: var(--pico-primary-hover, var(--pico-primary));
+}
+
+/* The "Suggest an edit" link floats to the right end of the toolbar. */
+.page-tools-edit {
+  margin-left: auto;
+  font-size: 0.875rem;
+}
+
+/* Always-visible search field - the page's single search affordance (no separate
+   button). type=text (not search) so it gets the buttons' tight corners, not
+   Pico's pill; the magnifier is drawn as a left background image. A modest fixed
+   width keeps it from squashing the right-aligned edit link. Scoped under
+   .page-tools to outrank Pico's input rules without !important. */
+.page-tools .search-input {
+  flex: 0 1 22rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.32rem 0.6rem 0.32rem 1.9rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  height: auto;
+  border-radius: var(--pico-border-radius);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238891a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0.55rem center;
+  background-size: 1rem 1rem;
+}
+
+/* Results dropdown anchored under the toolbar - the one piece that overlays
+   content, kept minimal and dismissed on Escape / click-away. */
+.search-results {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  z-index: 20;
+  width: min(30rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+.search-results[hidden] {
+  display: none;
+}
+.search-results li {
+  margin: 0;
+  padding: 0;
+}
+.search-results a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--pico-border-radius);
+  text-decoration: none;
+}
+.search-results a:hover,
+.search-results a:focus-visible,
+.search-results a[aria-selected="true"] {
+  background: var(--pico-card-sectioning-background-color);
+}
+.search-title {
+  color: var(--pico-color);
+  font-weight: 600;
+}
+.search-url {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+.search-empty {
+  padding: 0.4rem 0.5rem;
+  color: var(--pico-muted-color);
+}
+
+/* Collapsed: drop the sidebar entirely and give its grid column back to the
+   article so the whole page content goes wider. */
+.with-toc.toc-collapsed .toc {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .with-toc.toc-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* On narrow screens the sidebar stacks above the article rather than sticking. */
+@media (max-width: 1023px) {
+  .toc nav {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* Offset in-page anchor jumps so a targeted heading clears the sticky header
+   instead of hiding behind it. */
+article :is(h2, h3, h4, h5, h6) {
+  scroll-margin-top: 4.5rem;
+}
+
+/* Page footer: a top border sets it apart from the article, with the off-page
+   links in a compact inline row above the commit-provenance line. */
+.site-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.footer-links {
+  margin-bottom: 0.25rem;
+}
+.footer-links ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.footer-links li {
+  padding: 0;
+}
+.footer-links a {
+  font-size: 0.875rem;
+}
+
+/* Copy-to-clipboard button on code blocks (added by copy.js, which wraps each
+   <pre> in a positioned .code-block). The button sits in the top-right corner,
+   fades in on hover/focus, and turns the Pico primary color once it has copied. */
+.code-block {
+  position: relative;
+}
+.code-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
+  padding: 0.3rem;
+  line-height: 0;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+/* Size the icon here (the idle and the shared check icon carry no width/height). */
+.code-copy svg {
+  width: 16px;
+  height: 16px;
+}
+.code-block:hover .code-copy,
+.code-copy:focus-visible {
+  opacity: 1;
+}
+.code-copy:hover {
+  color: var(--pico-primary);
+}
+.code-copy.copied {
+  color: var(--pico-primary);
+  opacity: 1;
+}
+/* Touch devices have no hover; keep the button visible but subtle there. */
+@media (hover: none) {
+  .code-copy {
+    opacity: 0.6;
+  }
+}
+
+/* Shareable link icon beside each section heading (added by anchors.js). It
+   fades in when its heading is hovered, sizes itself to the heading via em
+   units, copies the section URL on click, and turns the Pico primary color
+   once copied. */
+.heading-anchor {
+  margin-left: 0.4rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.heading-anchor svg {
+  width: 0.7em;
+  height: 0.7em;
+  vertical-align: middle;
+}
+article :is(h2, h3, h4, h5, h6):hover .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+}
+.heading-anchor:hover {
+  color: var(--pico-primary);
+}
+.heading-anchor.copied {
+  color: var(--pico-primary);
+  opacity: 1;
+}
+/* Touch devices have no hover; keep the icon visible but subtle there. */
+@media (hover: none) {
+  .heading-anchor {
+    opacity: 0.6;
+  }
+}
+
+/* Inline code that is itself a link - e.g. a type name linking to its source
+   definition, or a module name in a reference table - should read unmistakably
+   as a link. Pico colors links with the primary color but inline <code> sets its
+   own muted color, which hides the link affordance; restore the link color so a
+   linked code span looks clickable (the underline already comes from the <a>). */
+a code {
+  color: var(--pico-primary);
+}
+
+/* Breadcrumb trail above the article (e.g. Home / Documentation / Modules / fs).
+   A muted inline list with "/" separators inserted via ::before; the current page
+   is the last crumb, unlinked and in the body color. */
+.breadcrumb {
+  margin-bottom: 1.25rem;
+  font-size: 0.8125rem;
+}
+.breadcrumb ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.breadcrumb li {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  color: var(--pico-muted-color);
+}
+.breadcrumb li:not(:first-child)::before {
+  content: "/";
+  margin: 0 0.5rem;
+  color: var(--pico-muted-border-color);
+}
+.breadcrumb a {
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+.breadcrumb a:hover,
+.breadcrumb a:focus-visible {
+  color: var(--pico-primary);
+  text-decoration: underline;
+}
+.breadcrumb [aria-current="page"] {
+  color: var(--pico-color);
+}
+
+/* Previous/next pager at the foot of the article, stepping through sibling pages
+   (e.g. module to module). Two bordered cards split the row; a lone card keeps to
+   its own side. The card label is muted, the page title takes the primary color. */
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pico-spacing);
+  margin-top: 2.5rem;
+}
+.page-nav a {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.page-nav a:hover {
+  border-color: var(--pico-primary);
+}
+.page-nav-next {
+  text-align: right;
+}
+/* When only one of prev/next exists, keep it on its side at half width rather
+   than stretching across the whole row. */
+.page-nav a:only-child {
+  flex: 0 1 50%;
+}
+.page-nav-next:only-child {
+  margin-left: auto;
+}
+.page-nav-dir {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+}
+.page-nav-title {
+  color: var(--pico-primary);
+  font-weight: 600;
+}

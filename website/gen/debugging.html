@@ -5,21 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Debugging</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="site.css">
   <script src="theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="index.html">Docs</a></li>
-        <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="index.html">Home</a></li><li><a href="documentation.html">Documentation</a></li><li aria-current="page">Debugging</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/debugging.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#interactive-repl" title="Interactive REPL">Interactive REPL</a><ul><li><a href="#--no-autoload" title="--no-autoload"><code>--no-autoload</code></a></li><li><a href="#-c-dir" title="-C &lt;dir&gt;"><code>-C &lt;dir&gt;</code></a></li></ul></li><li><a href="#maguspry-breakpoint-in-a-magusfile" title="magus.pry(): breakpoint in a magusfile"><code>magus.pry()</code>: breakpoint in a magusfile</a></li><li><a href="#meta-commands" title="Meta-commands">Meta-commands</a></li><li><a href="#multiline-input" title="Multiline input">Multiline input</a></li><li><a href="#--step" title="--step"><code>--step</code></a></li></ul>
+      </nav>
+    </aside>
     <article>
 <h1 id="debugging">Debugging</h1>
 <p>Magus has two entry points into an interactive debugging REPL:</p>
@@ -27,7 +40,7 @@
 <li><a href="#interactive-repl"><code>magus repl</code></a>: standalone shell with magusfile bindings preloaded.</li>
 <li><a href="#maguspry-breakpoint-in-a-magusfile"><code>magus.pry()</code></a>: <code>binding.pry</code>-style breakpoint, opens the same REPL mid-target with frame context attached.</li>
 </ul>
-<p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, …) on top of the base REPL surface. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
+<p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...) on top of the base REPL surface. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
 <h2 id="interactive-repl">Interactive REPL</h2>
 <p><code>magus repl</code> opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the host modules and spell bindings) is preloaded. If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
 <p>The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).</p>
@@ -38,7 +51,7 @@ abc1234
 go
 &gt; os.exec(&quot;go&quot;, [&quot;build&quot;, &quot;./...&quot;])
 </code></pre>
-<p>Lines starting with <code>//</code> are treated as comments and skipped. Type <code>.help</code> for the meta-command list, <code>.exit</code> (or Ctrl-D) to quit.</p>
+<p>The REPL treats lines starting with <code>//</code> as comments and skips them. Type <code>.help</code> for the meta-command list, <code>.exit</code> (or Ctrl-D) to quit.</p>
 <h3 id="--no-autoload"><code>--no-autoload</code></h3>
 <p>Skip executing the magusfile on start. Useful when you want a blank environment to experiment without side-effects from your project's startup code.</p>
 <h3 id="-c-dir"><code>-C &lt;dir&gt;</code></h3>
@@ -167,14 +180,14 @@ go
 <p>Pry history is persisted at <code>$XDG_STATE_HOME/magus/pry_history</code> (or <code>~/.local/state/magus/pry_history</code>) and is shared across pry sessions. The standalone <code>magus repl</code> does not record to or read from this file.</p>
 <p>Color output is enabled when stdout is a TTY; set <code>NO_COLOR=1</code> to disable. The continuation prompt (<code>&gt;&gt;</code> / <code>pry&gt;&gt;</code>) is green-tinted on color terminals.</p>
 <h2 id="multiline-input">Multiline input</h2>
-<p>Incomplete input is detected and the REPL reprompts with <code>&gt;&gt;</code> until the expression closes: the Buzz parser is reinvoked on each newline, and input that does not yet parse to a complete statement is treated as incomplete; type errors surface immediately.</p>
+<p>The REPL detects incomplete input and reprompts with <code>&gt;&gt;</code> until the expression closes: it reinvokes the Buzz parser on each newline, treats anything that does not yet parse to a complete statement as incomplete, and surfaces type errors immediately.</p>
 <h2 id="--step"><code>--step</code></h2>
 <p>Pause before every subprocess and prompt for a keystroke. Concurrency is forced to 1 so commands execute one at a time.</p>
 <pre><code class="language-sh">magus run build --step
 magus affected build --step
 </code></pre>
 <p>At each pause, magus prints the command and working directory, then waits:</p>
-<pre><code>→ go build ./...  (cwd: /workspace/api)
+<pre><code class="language-text">→ go build ./...  (cwd: /workspace/api)
   [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort:
 </code></pre>
 <table>
@@ -208,10 +221,29 @@ magus affected build --step
 </tbody>
 </table>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/debugging.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="charms.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Anatomy of a magus Charm</span></a>
+      <a class="page-nav-next" href="documentation.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">Documentation</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-19 00:28:50 UTC from commit <a href="https://github.com/egladman/magus/commit/636feb0cfb92129c70dcb3e87e905e1f7108ad08"><code>636feb0</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>)</small>
   </footer>
+  <script defer src="clipboard.js"></script>
+  <script defer src="toc.js"></script>
+  <script defer src="anchors.js"></script>
+  <script defer src="copy.js"></script>
+  <script src="search.js"></script>
+  <script defer src="mermaid-init.js"></script>
+  <script defer src="home-heading.js"></script>
 </body>
 </html>

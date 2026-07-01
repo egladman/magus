@@ -3,33 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>`yaml`</title>
+  <title>yaml</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><img class="brand-mark" src="../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../index.html">Docs</a></li>
-        <li><a href="../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation.html">Documentation</a></li><li><a href="../modules/index.html">Modules</a></li><li aria-current="page">yaml</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/modules/yaml.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#parse" title="parse">parse</a></li><li><a href="#stringify" title="stringify">stringify</a></li></ul></li></ul>
+      </nav>
+    </aside>
     <article>
-<h1 id="yaml"><code>yaml</code></h1>
+<h1 id="yaml">yaml</h1>
 <p>YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).</p>
 <blockquote>
 <p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;yaml&quot;</code>) and call methods in <code>camelCase</code> (<code>yaml.someMethod</code>).</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="parse"><code>parse</code></h3>
+<h3 id="parse">parse</h3>
 <p>Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.</p>
-<p><strong>Signature:</strong> <code>yaml.parse(source) → any</code></p>
+<p><strong>Signature:</strong> <code>yaml.parse(source) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/yaml.go#L39">source</a></p>
 <table>
 <thead>
 <tr>
@@ -49,9 +62,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> any</p>
-<h3 id="stringify"><code>stringify</code></h3>
+<h3 id="stringify">stringify</h3>
 <p>Encode a value to a YAML string; errors on unencodable input.</p>
-<p><strong>Signature:</strong> <code>yaml.stringify(value) → string</code></p>
+<p><strong>Signature:</strong> <code>yaml.stringify(value) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/yaml.go#L48">source</a></p>
 <table>
 <thead>
 <tr>
@@ -72,10 +85,28 @@
 </table>
 <p><strong>Returns:</strong> string</p>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/modules/yaml.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="vcs.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">vcs</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-12 11:51:34 UTC from commit <a href="https://github.com/egladman/magus/commit/3704fce93aa0abed68f2bb7fa9845a8b952105b6"><code>3704fce</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../documentation.html">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
   </footer>
+  <script defer src="../clipboard.js"></script>
+  <script defer src="../toc.js"></script>
+  <script defer src="../anchors.js"></script>
+  <script defer src="../copy.js"></script>
+  <script src="../search.js"></script>
+  <script defer src="../mermaid-init.js"></script>
+  <script defer src="../home-heading.js"></script>
 </body>
 </html>

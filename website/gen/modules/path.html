@@ -3,33 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>`path`</title>
+  <title>path</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><img class="brand-mark" src="../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../index.html">Docs</a></li>
-        <li><a href="../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation.html">Documentation</a></li><li><a href="../modules/index.html">Modules</a></li><li aria-current="page">path</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/modules/path.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#abs" title="abs">abs</a></li><li><a href="#rel" title="rel">rel</a></li><li><a href="#clean" title="clean">clean</a></li><li><a href="#is-abs" title="is_abs">is_abs</a></li><li><a href="#expand-user" title="expand_user">expand_user</a></li></ul></li></ul>
+      </nav>
+    </aside>
     <article>
-<h1 id="path"><code>path</code></h1>
+<h1 id="path">path</h1>
 <p>Pure path-string math: abs, rel, clean, is_abs, expand_user.</p>
 <blockquote>
 <p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;path&quot;</code>) and call methods in <code>camelCase</code> (<code>path.someMethod</code>).</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="abs"><code>abs</code></h3>
+<h3 id="abs">abs</h3>
 <p>Return the absolute form of path, resolved against the current directory and lexically cleaned.</p>
-<p><strong>Signature:</strong> <code>path.abs(path) → string</code></p>
+<p><strong>Signature:</strong> <code>path.abs(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L64">source</a></p>
 <table>
 <thead>
 <tr>
@@ -49,9 +62,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
-<h3 id="rel"><code>rel</code></h3>
+<h3 id="rel">rel</h3>
 <p>Return a relative path from base to target; errors if no relative path exists.</p>
-<p><strong>Signature:</strong> <code>path.rel(base, target) → string</code></p>
+<p><strong>Signature:</strong> <code>path.rel(base, target) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L73">source</a></p>
 <table>
 <thead>
 <tr>
@@ -77,9 +90,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
-<h3 id="clean"><code>clean</code></h3>
+<h3 id="clean">clean</h3>
 <p>Return the shortest lexically-equivalent path (resolves . and .., collapses separators).</p>
-<p><strong>Signature:</strong> <code>path.clean(path) → string</code></p>
+<p><strong>Signature:</strong> <code>path.clean(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L82">source</a></p>
 <table>
 <thead>
 <tr>
@@ -99,9 +112,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
-<h3 id="is-abs"><code>is_abs</code></h3>
+<h3 id="is-abs">is_abs</h3>
 <p>Report whether path is absolute.</p>
-<p><strong>Signature:</strong> <code>path.isAbs(path) → bool</code></p>
+<p><strong>Signature:</strong> <code>path.isAbs(path) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L87">source</a></p>
 <table>
 <thead>
 <tr>
@@ -121,9 +134,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> bool</p>
-<h3 id="expand-user"><code>expand_user</code></h3>
+<h3 id="expand-user">expand_user</h3>
 <p>Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.</p>
-<p><strong>Signature:</strong> <code>path.expandUser(path) → string</code></p>
+<p><strong>Signature:</strong> <code>path.expandUser(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L94">source</a></p>
 <table>
 <thead>
 <tr>
@@ -144,10 +157,29 @@
 </table>
 <p><strong>Returns:</strong> string</p>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/modules/path.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="os.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">os</span></a>
+      <a class="page-nav-next" href="platform.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">platform</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-12 11:51:34 UTC from commit <a href="https://github.com/egladman/magus/commit/3704fce93aa0abed68f2bb7fa9845a8b952105b6"><code>3704fce</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../documentation.html">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
   </footer>
+  <script defer src="../clipboard.js"></script>
+  <script defer src="../toc.js"></script>
+  <script defer src="../anchors.js"></script>
+  <script defer src="../copy.js"></script>
+  <script src="../search.js"></script>
+  <script defer src="../mermaid-init.js"></script>
+  <script defer src="../home-heading.js"></script>
 </body>
 </html>

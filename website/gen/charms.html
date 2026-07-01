@@ -5,25 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Anatomy of a magus Charm</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="site.css">
   <script src="theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="index.html">Docs</a></li>
-        <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="index.html">Home</a></li><li><a href="documentation.html">Documentation</a></li><li aria-current="page">Anatomy of a magus Charm</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/charms.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#design-intent" title="Design intent">Design intent</a></li><li><a href="#the-mechanism-a-json-patch-over-the-argv" title="The mechanism: a JSON Patch over the argv">The mechanism: a JSON Patch over the argv</a></li><li><a href="#applying-charms-on-the-cli" title="Applying charms on the CLI">Applying charms on the CLI</a></li><li><a href="#the-rw-charm" title="The rw charm">The <code>rw</code> charm</a></li><li><a href="#defaulting-charms-per-workspace-default-charms" title="Defaulting charms per workspace (default_charms)">Defaulting charms per workspace (<code>default_charms</code>)</a></li><li><a href="#stacking-and-composition" title="Stacking and composition">Stacking and composition</a></li><li><a href="#previewing-the-rendered-command" title="Previewing the rendered command">Previewing the rendered command</a></li><li><a href="#declaring-what-a-charm-does" title="Declaring what a charm does">Declaring what a charm does</a><ul><li><a href="#1-built-in-fork-spells-import-maguscharm" title="1. Built-in fork spells (import &quot;magus/charm&quot;)">1. Built-in fork spells (<code>import &quot;magus/charm&quot;</code>)</a></li><li><a href="#2-workspace-spells--magusfiles-import-charm" title="2. Workspace spells &amp; magusfiles (import &quot;charm&quot;)">2. Workspace spells &amp; magusfiles (<code>import &quot;charm&quot;</code>)</a></li><li><a href="#3-raw-rfc-6902-data-the-lowest-level" title="3. Raw RFC 6902 data (the lowest level)">3. Raw RFC 6902 data (the lowest level)</a></li><li><a href="#4-function-targets--ops-branch-in-code" title="4. Function targets &amp; ops (branch in code)">4. Function targets &amp; ops (branch in code)</a></li></ul></li><li><a href="#the-charm-constructor-reference" title="The charm constructor reference">The <code>charm</code> constructor reference</a></li><li><a href="#use-case-cookbook" title="Use-case cookbook">Use-case cookbook</a></li><li><a href="#charm-vs-target-the-command-boundary" title="Charm vs Target: the command boundary">Charm vs Target: the command boundary</a><ul><li><a href="#decision-guide" title="Decision guide">Decision guide</a></li><li><a href="#why-the-boundary-exists" title="Why the boundary exists">Why the boundary exists</a></li><li><a href="#when-youve-left-the-charm-layer" title="When you've left the charm layer">When you've left the charm layer</a></li></ul></li><li><a href="#dynamic-values-no-interpolation-use-the-language" title="Dynamic values: no interpolation, use the language">Dynamic values: no interpolation, use the language</a></li><li><a href="#how-a-charm-reaches-a-spell" title="How a charm reaches a spell">How a charm reaches a spell</a></li><li><a href="#discovery" title="Discovery">Discovery</a></li><li><a href="#naming" title="Naming">Naming</a></li><li><a href="#what-is-not-a-charm" title="What is not a charm">What is not a charm</a></li><li><a href="#reference-the-patch-model" title="Reference: the patch model">Reference: the patch model</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+      </nav>
+    </aside>
     <article>
 <h1 id="anatomy-of-a-magus-charm">Anatomy of a magus Charm</h1>
 <p>A <strong>charm</strong> is a named modifier that changes <em>how</em> a target runs, not <em>which</em> target or project. Where a Target answers &quot;what operation, on what project&quot; (see <a href="targets.html">targets.md</a>) and a Spell answers &quot;how a tool performs an operation&quot; (see <a href="spells.html">spells.md</a>), a charm answers <strong>&quot;in what manner.&quot;</strong></p>
-<p>Charms replace the pile of one-off boolean flags (<code>--write</code>, <code>--fix</code>, <code>--verbose</code>) that build tools accumulate. A charm is a <strong>shared, reusable intent</strong> applied as an <strong>RFC 6902 JSON Patch</strong> over the target's argument vector. There is no bespoke per-charm DSL.</p>
+<p>Charms replace the one-off boolean flags (<code>--write</code>, <code>--fix</code>, <code>--verbose</code>) that build tools accumulate. A charm is a <strong>shared, reusable intent</strong> applied as an <strong>RFC 6902 JSON Patch</strong> over the target's argument vector. There is no bespoke per-charm DSL.</p>
 <h2 id="design-intent">Design intent</h2>
 <ul>
 <li><strong>Shared.</strong> A charm name means the same thing everywhere: <code>rw</code> means &quot;mutate in place&quot; for <code>format</code>, <code>generate</code>, or <code>lint</code>. A charm useful only with one target is a smell; that is a one-off tool flag, not a charm.</li>
@@ -112,8 +125,20 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 </tr>
 </tbody>
 </table>
-<p><code>rw</code> carries no special flag — like every other charm, you activate it with a <code>:rw</code> suffix (<code>magus run format:rw</code>). There is no <code>-w</code>/<code>--write</code> shortcut and no <code>--write</code> flag: the suffix is the one way to ask for it.</p>
+<p><code>rw</code> carries no special flag. Like every other charm, you activate it with a <code>:rw</code> suffix (<code>magus run format:rw</code>). There is no <code>-w</code>/<code>--write</code> shortcut and no <code>--write</code> flag: the suffix is the one way to ask for it.</p>
 <p><strong>CI is always read-only.</strong> <code>Magus.RunCI</code> strips the <code>rw</code> charm before dispatch, so the composite <code>ci</code> pipeline can never mutate the tree even if a caller requests it (e.g. <code>ci:rw</code>). <code>rw</code> is the only charm with this strip status; the other built-in (<code>cd</code>) and every workspace charm you define are ordinary vocabulary that survive into <code>ci</code>.</p>
+<h2 id="defaulting-charms-per-workspace-default-charms">Defaulting charms per workspace (<code>default_charms</code>)</h2>
+<p>Every run is read-only by default. A workspace can opt into a different baseline with <code>default_charms</code> in <code>magus.yaml</code> — charms applied to every <code>magus run</code> and <code>magus x</code> automatically, so a team that wants local autofix does not type <code>:rw</code> each time:</p>
+<pre><code class="language-yaml"># magus.yaml
+default_charms: [rw] # `magus run format` now writes; no :rw needed
+</code></pre>
+<p>Per-run charms stack on top, exactly as if you had typed the whole set. Three things keep it safe:</p>
+<ul>
+<li><strong><code>magus affected</code> does not apply them</strong>, so CI (which runs <code>magus affected ci</code>) stays read-only regardless of the workspace default.</li>
+<li><strong><code>RunCI</code> still strips <code>rw</code></strong>, so even a local <code>magus run ci</code> verifies without writing.</li>
+<li><strong><code>--no-default-charms</code></strong> ignores the defaults for one run (<code>magus run format --no-default-charms</code> to check without rewriting).</li>
+</ul>
+<p><code>MAGUS_DEFAULT_CHARMS</code> (comma-separated) is the environment equivalent. It only sets the default baseline; it never changes what a charm means, so <code>has_charm(&quot;rw&quot;)</code> in spells and targets is unaffected.</p>
 <h2 id="stacking-and-composition">Stacking and composition</h2>
 <p>Charms are an <strong>unordered, additive set</strong>. When you pass several, they all apply:</p>
 <pre><code class="language-sh">magus run lint:rw,debug
@@ -126,7 +151,7 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 <li><strong>Composable.</strong> Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the <em>same</em> position resolve by sorted charm-name order.</li>
 </ul>
 <p>Example with base <code>go tool golangci-lint run ./...</code>:</p>
-<pre><code>rw    : add &quot;--fix&quot; at /3      → go tool golangci-lint run --fix ./...
+<pre><code class="language-text">rw    : add &quot;--fix&quot; at /3      → go tool golangci-lint run --fix ./...
 debug : add &quot;-v&quot;   at /-       → ... -v
 </code></pre>
 <pre><code class="language-sh">magus run go::golangci-lint:rw,debug    # → go tool golangci-lint run --fix ./... -v
@@ -141,7 +166,7 @@ project: .  target: lint
 </code></pre>
 <p>Add charms to the target ref and the <code>command:</code> line updates. Two caveats: function-op and magusfile-function targets compute their argv at runtime, so no static command is shown; and <code>describe</code> never executes or writes files even for <code>:rw</code>. (<code>--dry-run</code> reports at the target level; use <code>describe</code> to see the command itself.)</p>
 <h2 id="declaring-what-a-charm-does">Declaring what a charm does</h2>
-<p>A charm only does something for a target that declares it. Declarations live in a spell's <code>charms</code> table, keyed by charm name. There are two charm-construction modules — pick by where the spell runs — plus the raw-data escape hatch.</p>
+<p>A charm only does something for a target that declares it. Declarations live in a spell's <code>charms</code> table, keyed by charm name. Two charm-construction modules exist (pick by where the spell runs), plus the raw-data escape hatch.</p>
 <h3 id="1-built-in-fork-spells-import-maguscharm">1. Built-in fork spells (<code>import &quot;magus/charm&quot;</code>)</h3>
 <p>A built-in fork spell is <strong>self-contained</strong>: it imports only the pure-Buzz modules <code>magus/target</code> and <code>magus/charm</code>, so it compiles to bare bytecode with no host bindings. <code>magus/charm</code> exports the core constructors as <strong>bare functions</strong> (the same flat-import idiom <code>magus/target</code> uses for <code>Target</code>), each resolving a <em>value anchor</em> to an index so you never count positions:</p>
 <pre><code class="language-buzz">import &quot;magus/target&quot;;
@@ -167,17 +192,17 @@ charms = {
 };
 </code></pre>
 <blockquote>
-<p>The argument-removing constructor is named <strong><code>drop</code></strong> (<code>charm.drop</code>), not <code>remove</code>: a charm module is a Buzz map, and <code>remove</code> would be shadowed by the built-in map <code>.remove()</code> method. This is a <em>constructor name only</em> — <code>charm.drop</code> emits the standard RFC 6902 <code>{&quot;op&quot;: &quot;remove&quot;, …}</code> op. The patch vocabulary does not change; magus never deviates from RFC 6902.</p>
+<p>The argument-removing constructor is named <strong><code>drop</code></strong> (<code>charm.drop</code>), not <code>remove</code>: a charm module is a Buzz map, and the built-in map <code>.remove()</code> method would shadow <code>remove</code>. This is a <em>constructor name only</em>: <code>charm.drop</code> emits the standard RFC 6902 <code>{&quot;op&quot;: &quot;remove&quot;, ...}</code> op. The patch vocabulary does not change; magus never deviates from RFC 6902.</p>
 </blockquote>
 <h3 id="3-raw-rfc-6902-data-the-lowest-level">3. Raw RFC 6902 data (the lowest level)</h3>
-<p>The constructors are pure convenience: they only <strong>build the <code>{ops: [...]}</code> record</strong>, which is a plain RFC 6902 JSON Patch — that record <em>is</em> the underlying type a charm declares (<code>Charm{Ops: []PatchOp}</code>, see <a href="#reference-the-patch-model">the patch model</a>). A constructor doesn't do anything magic; it resolves the anchor to an index and returns the same record you could type by hand. The two forms are interchangeable — the helper used by the bundled spells and the literal it returns are the same value:</p>
+<p>The constructors are pure convenience: they only <strong>build the <code>{ops: [...]}</code> record</strong>, a plain RFC 6902 JSON Patch. That record <em>is</em> the underlying type a charm declares (<code>Charm{Ops: []PatchOp}</code>, see <a href="#reference-the-patch-model">the patch model</a>). A constructor resolves the anchor to an index and returns the same record you could type by hand. The two forms are interchangeable; the helper used by the bundled spells and the literal it returns are the same value:</p>
 <pre><code class="language-buzz">final args = [&quot;tool&quot;, &quot;golangci-lint&quot;, &quot;run&quot;, &quot;./...&quot;];
 
 &quot;rw&quot;: after(args, &quot;run&quot;, [&quot;--fix&quot;]),                       // helper: anchors on &quot;run&quot;
 &quot;rw&quot;: {&quot;ops&quot;: [{&quot;op&quot;: &quot;add&quot;, &quot;path&quot;: &quot;/3&quot;, &quot;value&quot;: &quot;--fix&quot;}]},   // ≡ the record it returns
 </code></pre>
-<p>So you can <strong>always declare the patch notation explicitly</strong> — for an op no constructor covers (several edits in one charm), for full control, or just by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: <code>&quot;/3&quot;</code> is a counted index that silently breaks if an earlier arg moves, whereas <code>after(args, &quot;run&quot;, …)</code> recomputes it; that index-proofing is the whole reason the bundled spells prefer the helper.</p>
-<p>The six ops are exactly RFC 6902's (<code>add</code>/<code>remove</code>/<code>replace</code>/<code>move</code>/<code>copy</code>/<code>test</code>); see <a href="#reference-the-patch-model">the patch model</a>. magus adds no ops and renames none — the constructors are sugar over this vocabulary.</p>
+<p>You can <strong>declare the patch notation explicitly</strong> for an op no constructor covers (several edits in one charm), for full control, or just by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: <code>&quot;/3&quot;</code> is a counted index that silently breaks if an earlier arg moves, whereas <code>after(args, &quot;run&quot;, ...)</code> recomputes it. That index-proofing is why the bundled spells prefer the helper.</p>
+<p>The six ops are exactly RFC 6902's (<code>add</code>/<code>remove</code>/<code>replace</code>/<code>move</code>/<code>copy</code>/<code>test</code>); see <a href="#reference-the-patch-model">the patch model</a>. magus adds no ops and renames none; the constructors are sugar over this vocabulary.</p>
 <h3 id="4-function-targets--ops-branch-in-code">4. Function targets &amp; ops (branch in code)</h3>
 <p>When the argv needs to be computed, branch in code. A magusfile function target receives the forwarded CLI args:</p>
 <pre><code class="language-buzz">export fun lint(args: [str]) &gt; void {
@@ -186,17 +211,17 @@ charms = {
     os.exec(&quot;golangci-lint&quot;, if (fix) [&quot;run&quot;, &quot;--fix&quot;] else [&quot;run&quot;]);
 }
 </code></pre>
-<p>A function target reads the active charm set directly with <strong><code>magus.has_charm(name)</code></strong> — including the built-in read→write toggle, <code>has_charm(&quot;rw&quot;)</code>. This is how a function target <em>selects which command to run</em> — the one thing a charm itself cannot do (see <a href="#charm-vs-target-the-command-boundary">the boundary</a>). For example, a <code>build</code> target can compile the host binary by default and switch to the container image under a <code>container</code> charm:</p>
+<p>A function target reads the active charm set directly with <strong><code>magus.has_charm(name)</code></strong>, including the built-in read→write toggle, <code>has_charm(&quot;rw&quot;)</code>. This is how a function target <em>selects which command to run</em>, the one thing a charm itself cannot do (see <a href="#charm-vs-target-the-command-boundary">the boundary</a>). For example, a <code>build</code> target can compile the host binary by default and switch to the container image under a <code>container</code> charm:</p>
 <pre><code class="language-buzz">export fun build(args: [str]) &gt; void {
     if (magus.has_charm(&quot;container&quot;)) { magus.needs(magus.target.literal(&quot;image-build&quot;)); }
     else { magus.needs(magus.target.literal(&quot;go-build&quot;)); }
 }
 </code></pre>
-<p>Because the toggled targets are reached by nested dispatch (not the top-level selection), <code>build:container</code> trips the soft typo-guard warning — expected here, since a function target legitimately reads a charm no spell declares (see <a href="#discovery">Discovery</a>).</p>
+<p>Because the toggled targets are reached by nested dispatch (not the top-level selection), <code>build:container</code> trips the soft typo-guard warning. That is expected here, since a function target legitimately reads a charm no spell declares (see <a href="#discovery">Discovery</a>).</p>
 <p>Spell op methods receive the active charm set as <code>opts.charms</code> (a lookup table: <code>if opts.charms.rw then</code>). <strong>Charms a spell does not declare or test for are simply ignored.</strong></p>
 <h2 id="the-charm-constructor-reference">The <code>charm</code> constructor reference</h2>
 <p>Both charm modules build a charm's patch; every constructor returns <code>{ ops = [...] }</code>. The <code>argv</code>-taking constructors resolve a <em>value anchor</em> (or predicate for the <code>*Func</code> variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.</p>
-<p>The table is the <strong>full</strong> set, available on the host <code>charm</code> module (<code>import &quot;charm&quot;</code>, called <code>charm.after(...)</code>). The pure-Buzz <code>magus/charm</code> module (<code>import &quot;magus/charm&quot;</code>, called bare — <code>after(...)</code>) exports the <strong>core</strong> rows (append, prepend, after, before, set, drop) for self-contained built-in spells.</p>
+<p>The table is the <strong>full</strong> set, available on the host <code>charm</code> module (<code>import &quot;charm&quot;</code>, called <code>charm.after(...)</code>). The pure-Buzz <code>magus/charm</code> module (<code>import &quot;magus/charm&quot;</code>, called bare, as <code>after(...)</code>) exports the <strong>core</strong> rows (append, prepend, after, before, set, drop) for self-contained built-in spells.</p>
 <table>
 <thead>
 <tr>
@@ -274,7 +299,7 @@ charms = {
 <p>Method names are camelCase (<code>charm.afterFunc</code>, <code>charm.pathFunc</code>), following Buzz's convention.</p>
 <p>A missing anchor is a <strong>load-time error</strong>, not a silently wrong index.</p>
 <h2 id="use-case-cookbook">Use-case cookbook</h2>
-<p>The examples use the host module (<code>charm.*</code>); inside a self-contained built-in spell call the bare <code>magus/charm</code> form (<code>append(...)</code>, <code>after(...)</code>, …) instead.</p>
+<p>The examples use the host module (<code>charm.*</code>); inside a self-contained built-in spell call the bare <code>magus/charm</code> form (<code>append(...)</code>, <code>after(...)</code>, and so on) instead.</p>
 <p><strong>Append a flag</strong> (e.g. a <code>debug</code> charm adding <code>-v</code>):</p>
 <pre><code class="language-buzz">debug = charm.append([&quot;-v&quot;]);
 // {&quot;ops&quot;:[{&quot;op&quot;:&quot;add&quot;,&quot;path&quot;:&quot;/-&quot;,&quot;value&quot;:&quot;-v&quot;}]}
@@ -292,7 +317,7 @@ race = charm.after([&quot;test&quot;, &quot;./...&quot;], &quot;test&quot;, [&qu
 <pre><code class="language-buzz">rw = charm.drop(base, &quot;--check&quot;);   // host; bare drop(base, &quot;--check&quot;) in magus/charm
 // {&quot;ops&quot;:[{&quot;op&quot;:&quot;remove&quot;,&quot;path&quot;:&quot;/3&quot;}]}
 </code></pre>
-<p><strong>Several edits in one charm</strong> (remove higher indices first to avoid reshuffling) — drop to the raw form, since each constructor yields a single op:</p>
+<p><strong>Several edits in one charm</strong> (remove higher indices first to avoid reshuffling). Drop to the raw form, since each constructor yields a single op:</p>
 <pre><code class="language-buzz">// cargo fmt -- --check  →  cargo fmt
 rw = { &quot;ops&quot;: [
     {&quot;op&quot;: &quot;remove&quot;, &quot;path&quot;: &quot;/2&quot;},   // &quot;--check&quot;
@@ -310,8 +335,8 @@ guard   = charm.test(base, &quot;run&quot;);
 </code></pre>
 <p>Conditional or per-invocation logic belongs in a <strong>function target</strong>, not a charm. Charms are static data resolved at author time.</p>
 <h2 id="charm-vs-target-the-command-boundary">Charm vs Target: the command boundary</h2>
-<p><strong>A charm rewrites a target's arguments. It can never change the base command (<code>cmd</code>) or replace the whole argv.</strong> <code>ValidatePatch</code> rejects the root pointer (<code>&quot;&quot;</code>), so every charm op edits an <em>element</em> of the argv — never the array as a whole.</p>
-<p>This is a deliberate, enforced boundary, not a missing feature.</p>
+<p><strong>A charm rewrites a target's arguments. It can never change the base command (<code>cmd</code>) or replace the whole argv.</strong> <code>ValidatePatch</code> rejects the root pointer (<code>&quot;&quot;</code>), so every charm op edits an <em>element</em> of the argv, never the array as a whole.</p>
+<p><code>ValidatePatch</code> enforces this boundary deliberately.</p>
 <h3 id="decision-guide">Decision guide</h3>
 <table>
 <thead>
@@ -347,11 +372,11 @@ guard   = charm.test(base, &quot;run&quot;);
 <h3 id="why-the-boundary-exists">Why the boundary exists</h3>
 <ul>
 <li><strong>Composability.</strong> Argument edits layer cleanly across charms. Two charms each replacing the whole command is an unresolvable conflict; element-level edits have a well-defined merge.</li>
-<li><strong>The one-intent contract.</strong> A charm name is supposed to mean the same thing everywhere. A charm that redefines a target's command is a bespoke per-target redefinition in charm's clothing: <code>rw</code> would mean <code>gofmt -w</code> here, <code>terraform apply</code> there. The name stops carrying meaning.</li>
+<li><strong>The one-intent contract.</strong> A charm name is supposed to mean the same thing everywhere. A charm that redefines a target's command is a bespoke per-target redefinition wearing a charm name: <code>rw</code> would mean <code>gofmt -w</code> here, <code>terraform apply</code> there, and the name no longer carries a single meaning.</li>
 <li><strong>Transparency.</strong> With the boundary, the running command is the target's declared <code>cmd</code> (visible in the spell, <code>magus describe</code>, logs). Without it, the real command would depend on an invisible matrix of active charms.</li>
 <li><strong>Abuse prevention.</strong> Without the boundary, charms become a general-purpose override mechanism, and the shared vocabulary rots into hidden behavior per project.</li>
 </ul>
-<p><strong>Rule of thumb: charms modify, targets define.</strong> The moment you want a different command, reach for a target.</p>
+<p><strong>Charms modify args; targets define commands.</strong> When you want a different command, write a target.</p>
 <h3 id="when-youve-left-the-charm-layer">When you've left the charm layer</h3>
 <p><strong>Function target</strong> (most common): write an exported function and call the tool via <code>os.exec</code>:</p>
 <pre><code class="language-buzz">// magusfile.buzz
@@ -365,7 +390,7 @@ export fun lint(args: [str]) &gt; void {
 <p><strong>Workspace spell</strong>: author a <code>spells/&lt;name&gt;.buzz</code> spell (imported by path) with an <code>ops</code> entry and wire per-project charms there. The spell owns the <em>command</em>; charms tune its <em>args</em>.</p>
 <p><strong><code>::</code> hatch</strong>: <code>magus run go::go-vet api</code> reaches a single spell op directly. It is an escape hatch, not the everyday surface.</p>
 <h2 id="dynamic-values-no-interpolation-use-the-language">Dynamic values: no interpolation, use the language</h2>
-<p>Charm args are <strong>literal</strong> — there is no <code>${VAR}</code> interpolation, by design. The host language is the interpolation engine:</p>
+<p>Charm args are <strong>literal</strong>: there is no <code>${VAR}</code> interpolation, by design. The host language is the interpolation engine:</p>
 <ul>
 <li>
 <p><strong>Known at load time:</strong> build the string in code and pass it to a constructor:</p>
@@ -379,7 +404,7 @@ charms = { &quot;rw&quot;: charm.after(base, &quot;run&quot;, [&quot;--config={e
 </li>
 </ul>
 <h2 id="how-a-charm-reaches-a-spell">How a charm reaches a spell</h2>
-<pre><code>magus run lint:rw,debug
+<pre><code class="language-text">magus run lint:rw,debug
       │
       ▼
 ParseTarget       → Target{Name:&quot;lint&quot;, Charms:[&quot;rw&quot;,&quot;debug&quot;]}
@@ -405,7 +430,7 @@ resolveCharmArgs  → concatenate active charms' patches (sorted name),
 <p>An active charm that no selected target declares (and isn't a reserved built-in like <code>rw</code>) prints a soft warning as a typo guard. It is only a warning, not an error, because a function target may legitimately read a charm it never declares.</p>
 <h2 id="naming">Naming</h2>
 <p>Charm names use the target-name charset: letters, digits, <code>-</code>, <code>_</code> (<code>types.ValidateCharmName</code>). By convention they are lowercase and represent <strong>shared vocabulary</strong> across the workspace: define a charm's meaning once and honor it everywhere. A charm useful only with one target is a smell; that is a one-off tool flag (pass it after <code>--</code>).</p>
-<p>Names are normalized the same way target names are (<code>types.NormalizeCharmName</code>, kebab-case), so matching is case- and separator-insensitive on both sides: <code>:Rw</code>, <code>:rw</code>, and <code>:RW</code> are one charm, as are <code>:no_cache</code> and <code>:no-cache</code>. A spell that tests <code>has_charm(&quot;noCache&quot;)</code> is matched by a <code>:no-cache</code> suffix and vice versa — declaration and invocation can't drift on spelling.</p>
+<p>Names are normalized the same way target names are (<code>types.NormalizeCharmName</code>, kebab-case), so matching is case- and separator-insensitive on both sides: <code>:Rw</code>, <code>:rw</code>, and <code>:RW</code> are one charm, as are <code>:no_cache</code> and <code>:no-cache</code>. A spell that tests <code>has_charm(&quot;noCache&quot;)</code> is matched by a <code>:no-cache</code> suffix and vice versa; declaration and invocation can't drift on spelling.</p>
 <h2 id="what-is-not-a-charm">What is not a charm</h2>
 <ul>
 <li><strong>A different command.</strong> Charms rewrite args, never <code>cmd</code>; see <a href="#charm-vs-target-the-command-boundary">the boundary</a>.</li>
@@ -446,7 +471,7 @@ type Charm struct {
 </tr>
 <tr>
 <td><strong><code>gha</code></strong></td>
-<td>A built-in charm: opt into GitHub Actions output — swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the <code>ci-shard</code> job matrix → <code>$GITHUB_OUTPUT</code>). Set via <code>:gha</code>. A no-op where unsupported; not stripped from <code>ci</code>.</td>
+<td>A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the <code>ci-shard</code> job matrix → <code>$GITHUB_OUTPUT</code>). Set via <code>:gha</code>. A no-op where unsupported; not stripped from <code>ci</code>.</td>
 </tr>
 <tr>
 <td><strong>JSON Patch</strong></td>
@@ -482,10 +507,28 @@ type Charm struct {
 <li><a href="modules/charm.html">modules/charm.md</a>: the generated <code>charm</code> module API reference.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/charms.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-next" href="debugging.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">Debugging</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-19 00:28:50 UTC from commit <a href="https://github.com/egladman/magus/commit/636feb0cfb92129c70dcb3e87e905e1f7108ad08"><code>636feb0</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>)</small>
   </footer>
+  <script defer src="clipboard.js"></script>
+  <script defer src="toc.js"></script>
+  <script defer src="anchors.js"></script>
+  <script defer src="copy.js"></script>
+  <script src="search.js"></script>
+  <script defer src="mermaid-init.js"></script>
+  <script defer src="home-heading.js"></script>
 </body>
 </html>

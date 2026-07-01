@@ -3,33 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>`fmt`</title>
+  <title>fmt</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><img class="brand-mark" src="../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../index.html">Docs</a></li>
-        <li><a href="../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation.html">Documentation</a></li><li><a href="../modules/index.html">Modules</a></li><li aria-current="page">fmt</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/modules/fmt.md">Suggest an edit</a></div>
     <article>
-<h1 id="fmt"><code>fmt</code></h1>
+<h1 id="fmt">fmt</h1>
 <p>String formatting (printf-style).</p>
 <blockquote>
 <p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;fmt&quot;</code>) and call methods in <code>camelCase</code> (<code>fmt.someMethod</code>).</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="sprintf"><code>sprintf</code></h3>
+<h3 id="sprintf">sprintf</h3>
 <p>Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.</p>
-<p><strong>Signature:</strong> <code>fmt.sprintf(format, args...) → string</code></p>
+<p><strong>Signature:</strong> <code>fmt.sprintf(format, args...) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fmt.go#L32">source</a></p>
 <table>
 <thead>
 <tr>
@@ -56,10 +62,28 @@
 </table>
 <p><strong>Returns:</strong> string</p>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/modules/fmt.md">Suggest an edit</a></p>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="env.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">env</span></a>
+      <a class="page-nav-next" href="fs.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">fs</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-12 11:51:34 UTC from commit <a href="https://github.com/egladman/magus/commit/3704fce93aa0abed68f2bb7fa9845a8b952105b6"><code>3704fce</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../documentation.html">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
   </footer>
+  <script defer src="../clipboard.js"></script>
+  <script defer src="../toc.js"></script>
+  <script defer src="../anchors.js"></script>
+  <script defer src="../copy.js"></script>
+  <script src="../search.js"></script>
+  <script defer src="../mermaid-init.js"></script>
+  <script defer src="../home-heading.js"></script>
 </body>
 </html>

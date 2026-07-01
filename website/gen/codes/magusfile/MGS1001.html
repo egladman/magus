@@ -3,45 +3,58 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MGS1001 — no ci target defined</title>
+  <title>MGS1001: no ci target defined</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../site.css">
   <script src="../../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><img class="brand-mark" src="../../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../../index.html">Docs</a></li>
-        <li><a href="../../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../../install.html">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation.html">Documentation</a></li><li>Codes</li><li><a href="../../codes/magusfile/index.html">Magusfile</a></li><li aria-current="page">MGS1001: no ci target defined</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/codes/magusfile/MGS1001.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+      </nav>
+    </aside>
     <article>
-<h1 id="mgs1001--no-ci-target-defined">MGS1001 — no ci target defined</h1>
+<h1 id="mgs1001-no-ci-target-defined">MGS1001: no ci target defined</h1>
 <p><code>magus ci</code> (or <code>magus affected ci</code>, <code>magus affected --plan</code>, <code>magus x</code> ci) was
 asked to run the <code>ci</code> target, but no project in the selected scope declares one.</p>
-<pre><code>[MGS1001] no &quot;ci&quot; target defined in the selected project(s); it is the anchor
+<pre><code class="language-text">[MGS1001] no &quot;ci&quot; target defined in the selected project(s); it is the anchor
 &quot;magus affected ci&quot; and &quot;magus affected --plan&quot; key off, so this run would do nothing
   see: …/MGS1001.md
 </code></pre>
 <h2 id="why">Why</h2>
-<p><code>ci</code> is an ordinary magusfile target — magus does <strong>not</strong> hardcode a CI chain.
+<p><code>ci</code> is an ordinary magusfile target. Magus does not hardcode a CI chain.
 You compose the gate yourself with <code>magus.needs</code>, ordering the stages your
-workspace needs (build, test, lint, …).</p>
-<p>It is, however, the one target magus treats as the <strong>CI anchor</strong>: <code>magus affected ci</code> and <code>magus affected --plan</code> key off it to decide what the affected
+workspace needs (build, test, lint, ...).</p>
+<p>It is the one target magus treats as the CI anchor: <code>magus affected ci</code> and <code>magus affected --plan</code> key off it to decide what the affected
 set should build and gate. Every other target fans out and silently skips
-projects that don't declare it — a reasonable default for <code>build</code>/<code>test</code>/<code>lint</code>,
-but the wrong default for <code>ci</code>. A workspace with no <code>ci</code> target anywhere would
-let <code>magus ci</code> exit <code>0</code> having run nothing: a green check that checked nothing.</p>
-<p>So magus fails fast instead. Both paths enforce the same rule:</p>
+projects that don't declare it. That default suits <code>build</code>/<code>test</code>/<code>lint</code>, but
+for <code>ci</code> it means a workspace with no <code>ci</code> target anywhere would let <code>magus ci</code>
+exit <code>0</code> having run nothing, reporting a green check that checked nothing.</p>
+<p>Magus fails fast instead. Both paths enforce the same rule:</p>
 <ul>
 <li><strong>Run time.</strong> <code>Magus.RunCI</code> returns this diagnostic before executing anything
-when the scope has projects but none declare <code>ci</code>. (An empty scope — e.g.
-<code>magus affected ci</code> with no changes — stays a legitimate no-op and is left
+when the scope has projects but none declare <code>ci</code>. (An empty scope, such as
+<code>magus affected ci</code> with no changes, stays a legitimate no-op and is left
 alone.)</li>
 <li><strong><code>magus doctor</code>.</strong> The <code>ci target</code> check fails when no project in the
 workspace declares <code>ci</code>, surfacing the gap before CI ever runs it.</li>
@@ -56,28 +69,43 @@ workspace declares <code>ci</code>, surfacing the gap before CI ever runs it.</l
 <p>Run <code>magus describe targets</code> to see the stages available to compose. The name
 matches case- and delimiter-insensitively (magus normalizes <code>CI</code>/<code>Ci</code> to <code>ci</code>),
 so any casing of the declaration is detected.</p>
-<p>In a multi-project workspace the target only needs to exist in <strong>one</strong> project
-for the anchor to resolve — declare it wherever you compose the workspace gate.</p>
+<p>In a multi-project workspace the target only needs to exist in one project
+for the anchor to resolve. Declare it wherever you compose the workspace gate.</p>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
 <li><strong>Not a missing-spell error.</strong> <code>ci</code> is never a spell op; it lives in the
 magusfile and composes spell-backed targets via <code>magus.needs</code>. Adding a
 spell will not satisfy this check.</li>
 <li><strong>Not triggered by an empty affected set.</strong> <code>magus affected ci</code> with no
-changed projects is a real no-op and does not raise MGS1001 — the diagnostic
+changed projects is a real no-op and does not raise MGS1001. The diagnostic
 fires only when the scope has projects yet none declare <code>ci</code>.</li>
 </ul>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><a href="../../targets.html">targets.md</a> — the anatomy of a magus target.</li>
-<li><a href="../../spells.html">spells.md</a> § Spells vs Targets — why <code>ci</code> is a target, not a spell.</li>
-<li><code>magus describe targets</code> — lists the stages you can compose into <code>ci</code>.</li>
+<li><a href="../../targets.html">targets.md</a>: the anatomy of a magus target.</li>
+<li><a href="../../spells.html">spells.md</a> § Spells vs Targets: why <code>ci</code> is a target, not a spell.</li>
+<li><code>magus describe targets</code>: lists the stages you can compose into <code>ci</code>.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/codes/magusfile/MGS1001.md">Suggest an edit</a></p>
+    </div>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-17 03:09:53 UTC from commit <a href="https://github.com/egladman/magus/commit/dbcb6ae3778baf76642c95247334c4c9278c67cb"><code>dbcb6ae</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../../documentation.html">Documentation</a></li>
+        <li><a href="../../install.html">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>)</small>
   </footer>
+  <script defer src="../../clipboard.js"></script>
+  <script defer src="../../toc.js"></script>
+  <script defer src="../../anchors.js"></script>
+  <script defer src="../../copy.js"></script>
+  <script src="../../search.js"></script>
+  <script defer src="../../mermaid-init.js"></script>
+  <script defer src="../../home-heading.js"></script>
 </body>
 </html>

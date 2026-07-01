@@ -3,33 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>`os`</title>
+  <title>os</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="../index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><img class="brand-mark" src="../assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../index.html">Docs</a></li>
-        <li><a href="../editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="../documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation.html">Documentation</a></li><li><a href="../modules/index.html">Modules</a></li><li aria-current="page">os</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/modules/os.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#exec" title="exec">exec</a></li><li><a href="#exec-sh" title="exec_sh">exec_sh</a></li><li><a href="#with-env" title="with_env">with_env</a></li><li><a href="#with-slots" title="with_slots">with_slots</a></li><li><a href="#platform" title="platform">platform</a></li><li><a href="#exit" title="exit">exit</a></li><li><a href="#sleep" title="sleep">sleep</a></li><li><a href="#which" title="which">which</a></li><li><a href="#stdin-is-terminal" title="stdin_is_terminal">stdin_is_terminal</a></li><li><a href="#num-cpu" title="num_cpu">num_cpu</a></li><li><a href="#hostname" title="hostname">hostname</a></li><li><a href="#retry" title="retry">retry</a></li></ul></li></ul>
+      </nav>
+    </aside>
     <article>
-<h1 id="os"><code>os</code></h1>
+<h1 id="os">os</h1>
 <p>Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a line through the shell. Both stream output live and return a result {stdout, stderr, code, ok}.</p>
 <blockquote>
 <p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;os&quot;</code>) and call methods in <code>camelCase</code> (<code>os.someMethod</code>).</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="exec"><code>exec</code></h3>
+<h3 id="exec">exec</h3>
 <p>Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input — pipe by passing a prior call's stdout.</p>
-<p><strong>Signature:</strong> <code>os.exec(cmd, [args], [dir], [opts]) → map[string]any</code></p>
+<p><strong>Signature:</strong> <code>os.exec(cmd, [args], [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L389">source</a></p>
 <table>
 <thead>
 <tr>
@@ -67,9 +80,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="exec-sh"><code>exec_sh</code></h3>
+<h3 id="exec-sh">exec_sh</h3>
 <p>Run line through a shell — for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. &quot;bash&quot;) to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes — for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.</p>
-<p><strong>Signature:</strong> <code>os.execSh(line, [dir], [opts]) → map[string]any</code></p>
+<p><strong>Signature:</strong> <code>os.execSh(line, [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L403">source</a></p>
 <table>
 <thead>
 <tr>
@@ -101,9 +114,9 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="with-env"><code>with_env</code></h3>
+<h3 id="with-env">with_env</h3>
 <p>Set env vars for the duration of callback; restore after.</p>
-<p><strong>Signature:</strong> <code>os.withEnv(env, callback)</code></p>
+<p><strong>Signature:</strong> <code>os.withEnv(env, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L449">source</a></p>
 <table>
 <thead>
 <tr>
@@ -122,15 +135,15 @@
 </tr>
 <tr>
 <td><code>callback</code></td>
-<td><code>Callback</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
 <td></td>
 <td></td>
 </tr>
 </tbody>
 </table>
-<h3 id="with-slots"><code>with_slots</code></h3>
+<h3 id="with-slots">with_slots</h3>
 <p>Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.</p>
-<p><strong>Signature:</strong> <code>os.withSlots(n, callback)</code></p>
+<p><strong>Signature:</strong> <code>os.withSlots(n, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L529">source</a></p>
 <table>
 <thead>
 <tr>
@@ -149,19 +162,19 @@
 </tr>
 <tr>
 <td><code>callback</code></td>
-<td><code>Callback</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
 <td></td>
 <td></td>
 </tr>
 </tbody>
 </table>
-<h3 id="platform"><code>platform</code></h3>
+<h3 id="platform">platform</h3>
 <p>Return the Docker/OCI platform triple: (os, arch, variant).</p>
-<p><strong>Signature:</strong> <code>os.platform() → string, string, string</code></p>
+<p><strong>Signature:</strong> <code>os.platform() → string, string, string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L298">source</a></p>
 <p><strong>Returns:</strong> string, string, string</p>
-<h3 id="exit"><code>exit</code></h3>
+<h3 id="exit">exit</h3>
 <p>Abort the current run with the given exit code — typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.</p>
-<p><strong>Signature:</strong> <code>os.exit(code)</code></p>
+<p><strong>Signature:</strong> <code>os.exit(code)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L290">source</a></p>
 <table>
 <thead>
 <tr>
@@ -180,9 +193,9 @@
 </tr>
 </tbody>
 </table>
-<h3 id="sleep"><code>sleep</code></h3>
+<h3 id="sleep">sleep</h3>
 <p>Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.</p>
-<p><strong>Signature:</strong> <code>os.sleep(ms)</code></p>
+<p><strong>Signature:</strong> <code>os.sleep(ms)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L265">source</a></p>
 <table>
 <thead>
 <tr>
@@ -201,9 +214,9 @@
 </tr>
 </tbody>
 </table>
-<h3 id="which"><code>which</code></h3>
+<h3 id="which">which</h3>
 <p>Resolve cmd against PATH and return its absolute path, or &quot;&quot; if it is not found. Use it to check a tool is installed before running it (and emit a clear hint/error instead of a cryptic exec failure).</p>
-<p><strong>Signature:</strong> <code>os.which(cmd) → string</code></p>
+<p><strong>Signature:</strong> <code>os.which(cmd) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L255">source</a></p>
 <table>
 <thead>
 <tr>
@@ -223,21 +236,21 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
-<h3 id="stdin-is-terminal"><code>stdin_is_terminal</code></h3>
+<h3 id="stdin-is-terminal">stdin_is_terminal</h3>
 <p>Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.</p>
-<p><strong>Signature:</strong> <code>os.stdinIsTerminal() → bool</code></p>
+<p><strong>Signature:</strong> <code>os.stdinIsTerminal() → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L249">source</a></p>
 <p><strong>Returns:</strong> bool</p>
-<h3 id="num-cpu"><code>num_cpu</code></h3>
+<h3 id="num-cpu">num_cpu</h3>
 <p>Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).</p>
-<p><strong>Signature:</strong> <code>os.numCpu() → int</code></p>
+<p><strong>Signature:</strong> <code>os.numCpu() → int</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L234">source</a></p>
 <p><strong>Returns:</strong> int</p>
-<h3 id="hostname"><code>hostname</code></h3>
+<h3 id="hostname">hostname</h3>
 <p>Return the host machine's name.</p>
-<p><strong>Signature:</strong> <code>os.hostname() → string</code></p>
+<p><strong>Signature:</strong> <code>os.hostname() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L239">source</a></p>
 <p><strong>Returns:</strong> string</p>
-<h3 id="retry"><code>retry</code></h3>
+<h3 id="retry">retry</h3>
 <p>Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.</p>
-<p><strong>Signature:</strong> <code>os.retry(max, fn, [opts]) → any</code></p>
+<p><strong>Signature:</strong> <code>os.retry(max, fn, [opts]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L465">source</a></p>
 <table>
 <thead>
 <tr>
@@ -256,7 +269,7 @@
 </tr>
 <tr>
 <td><code>fn</code></td>
-<td><code>Callback</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
 <td></td>
 <td></td>
 </tr>
@@ -270,10 +283,29 @@
 </table>
 <p><strong>Returns:</strong> any</p>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/modules/os.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="markdown.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">markdown</span></a>
+      <a class="page-nav-next" href="path.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">path</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-12 11:51:34 UTC from commit <a href="https://github.com/egladman/magus/commit/3704fce93aa0abed68f2bb7fa9845a8b952105b6"><code>3704fce</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="../documentation.html">Documentation</a></li>
+        <li><a href="../install.html">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
   </footer>
+  <script defer src="../clipboard.js"></script>
+  <script defer src="../toc.js"></script>
+  <script defer src="../anchors.js"></script>
+  <script defer src="../copy.js"></script>
+  <script src="../search.js"></script>
+  <script defer src="../mermaid-init.js"></script>
+  <script defer src="../home-heading.js"></script>
 </body>
 </html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentation</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="site.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="index.html">Home</a></li><li aria-current="page">Documentation</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/documentation.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#core-concepts" title="Core concepts">Core concepts</a></li><li><a href="#going-further" title="Going further">Going further</a></li><li><a href="#command-line-reference" title="Command-line reference">Command-line reference</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
+      </nav>
+    </aside>
+    <article>
+<h1 id="documentation">Documentation</h1>
+<p>magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. It computes the projects affected by a change, caches their results, and runs only the minimum rebuild set - all from a single, statically typed binary configured as code.</p>
+<p>New to magus? <a href="install.html"><strong>Install it</strong></a>, skim the two core ideas below (<a href="targets.html">Targets</a> and <a href="spells.html">Spells</a>), or <a href="playground.html">try it live in the playground</a> without installing anything.</p>
+<h2 id="getting-started">Getting started</h2>
+<p><strong>1. <a href="install.html">Install magus</a>.</strong> It is a single self-contained binary: download a build from the <a href="https://github.com/egladman/magus/releases">releases page</a> and move it onto your <code>PATH</code>, or build from source. The <a href="install.html">installation guide</a> covers both, plus keeping up to date.</p>
+<p><strong>2. Initialize your workspace.</strong> From the root of your repo:</p>
+<pre><code class="language-sh">magus init
+</code></pre>
+<p>This writes <code>magus.yaml</code>, stubs a starter <code>magusfile.buzz</code>, and wires the VCS merge driver.</p>
+<p><strong>3. Declare targets and run them.</strong> Targets are exported functions in <code>magusfile.buzz</code> - no registration call needed. Each one composes operations from the spells you bind.</p>
+<pre><code class="language-buzz">import &quot;magus&quot;;
+import &quot;spells/hello&quot;;          // ./spells/hello/spell.buzz
+
+magus.project({ &quot;spells&quot;: [hello] });
+
+// Each exported function becomes a runnable target.
+export fun build(args: [str]) &gt; void { hello.build(); }
+export fun test(args: [str]) &gt; void {}
+
+// 'ci' is the conventional anchor `magus affected ci` keys off.
+export fun ci(args: [str]) &gt; void {
+    magus.needs(magus.target.literal(&quot;build&quot;), magus.target.literal(&quot;test&quot;));
+}
+</code></pre>
+<pre><code class="language-sh">magus ls            # list registered projects and their targets
+magus run build     # run a single target
+magus affected ci   # run ci only for the projects your changes touched
+</code></pre>
+<h2 id="core-concepts">Core concepts</h2>
+<p>Start here to understand the model magus is built on.</p>
+<ul>
+<li><a href="targets.html">Targets</a> - the named operations you run (<code>build</code>, <code>test</code>, <code>lint</code>), declared as exported functions in a magusfile.</li>
+<li><a href="spells.html">Spells</a> - language/toolchain adapters that provide tool-native operations (<code>go-build</code>, <code>go-test</code>, ...) for your targets to compose. See <a href="spells.html#spells-vs-targets">Spells vs Targets</a> for where the line falls.</li>
+<li><a href="charms.html">Charms</a> - execution modifiers attached with <code>:</code> (for example <code>lint:rw</code> to let a read-only target write).</li>
+<li><a href="operations.html">Operations and the work hierarchy</a> - how a run is scheduled and parallelized across projects.</li>
+<li><a href="engines.html">Engines</a> - how magus loads and evaluates a magusfile.</li>
+</ul>
+<h2 id="going-further">Going further</h2>
+<p>Once the basics click, these cover running magus at scale and in CI.</p>
+<ul>
+<li><a href="remote-cache.html">Remote caching</a> - share the build cache across machines and CI, with a signing-based trust model.</li>
+<li><a href="debugging.html">Debugging</a> - the interactive REPL, <code>magus.pry()</code> breakpoints, and stepping through a target.</li>
+<li><a href="mcp.html">MCP</a> - drive magus from agents over the Model Context Protocol.</li>
+<li><a href="telemetry.html">Telemetry</a> - OpenTelemetry traces and metrics.</li>
+</ul>
+<h2 id="command-line-reference">Command-line reference</h2>
+<p>Generated man pages for every command:</p>
+<ul>
+<li><a href="manpage/gen/magus.html"><code>magus</code></a> - the umbrella page: global flags, environment variables, and the full subcommand list.</li>
+<li><a href="manpage/gen/magus-run.html"><code>magus run</code></a> - run a target; the everyday command.</li>
+<li><a href="manpage/gen/magus-affected.html"><code>magus affected</code></a> - run targets only for projects a change touched, with sharding and bisection for CI.</li>
+<li><a href="manpage/gen/magus-ls.html"><code>magus ls</code></a> and <a href="manpage/gen/magus-describe.html"><code>magus describe</code></a> - inspect projects, targets, and the dependency graph.</li>
+<li><a href="manpage/gen/magus-watch.html"><code>magus watch</code></a> and <a href="manpage/gen/magus-x.html"><code>magus x</code></a> - re-run on change, and the interactive target picker.</li>
+</ul>
+<h2 id="reference">Reference</h2>
+<ul>
+<li><a href="modules/index.html">Standard library modules</a> - <code>fs</code>, <code>os</code>, <code>http</code>, <code>json</code>, <code>crypto</code>, and the rest of the magusfile API.</li>
+<li>Diagnostic codes - <a href="codes/magusfile/index.html">magusfile</a>, <a href="codes/race/index.html">race</a>, and <a href="codes/sandbox/index.html">sandbox</a> error explanations.</li>
+</ul>
+    </article>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="debugging.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Debugging</span></a>
+      <a class="page-nav-next" href="engines.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">Engines: how magus runs a magusfile</span></a>
+    </nav>
+  </main>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be">72a3537</a>)</small>
+  </footer>
+  <script defer src="clipboard.js"></script>
+  <script defer src="toc.js"></script>
+  <script defer src="anchors.js"></script>
+  <script defer src="copy.js"></script>
+  <script src="search.js"></script>
+  <script defer src="mermaid-init.js"></script>
+  <script defer src="home-heading.js"></script>
+</body>
+</html>

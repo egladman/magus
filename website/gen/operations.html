@@ -5,25 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Operations and the magus work hierarchy</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="site.css">
   <script src="theme.js"></script>
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul><li><a href="index.html" class="contrast"><strong>magus</strong></a></li></ul>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="index.html">Docs</a></li>
-        <li><a href="editor.html">Playground</a></li>
-        <li><a href="https://github.com/egladman/magus">Source</a></li>
-        <li><button id="theme-toggle" class="outline" style="padding:0.2rem 0.7rem">◐</button></li>
+        <li><a href="documentation.html" aria-current="page">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
       </ul>
     </nav>
   </header>
   <main class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="index.html">Home</a></li><li><a href="documentation.html">Documentation</a></li><li aria-current="page">Operations and the magus work hierarchy</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/operations.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#what-an-operation-is" title="What an Operation is">What an Operation is</a></li><li><a href="#the-work-hierarchy" title="The work hierarchy">The work hierarchy</a></li><li><a href="#results-what-each-layer-produces" title="Results: what each layer produces">Results: what each layer produces</a></li><li><a href="#disambiguating-op-and-target" title="Disambiguating &quot;op&quot; and &quot;Target&quot;">Disambiguating &quot;op&quot; and &quot;Target&quot;</a><ul><li><a href="#naming-decision-done-ispelltarget--ispellop" title="Naming decision (done): ispell.Target → ispell.Op">Naming decision (done): <code>ispell.Target</code> → <code>ispell.Op</code></a></li></ul></li><li><a href="#relationship-to-the-value-types" title="Relationship to the value types">Relationship to the value types</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+      </nav>
+    </aside>
     <article>
 <h1 id="operations-and-the-magus-work-hierarchy">Operations and the magus work hierarchy</h1>
-<p>This document formally defines an <strong>Operation</strong> — magus's smallest named unit of
-tool work — and fixes its place in the hierarchy between <a href="spells.html">Spells</a>,
+<p>This document defines an <strong>Operation</strong>, magus's smallest named unit of
+tool work, and fixes its place in the hierarchy between <a href="spells.html">Spells</a>,
 <a href="targets.html">Targets</a>, and the result a run produces. It also disambiguates the
 two words magus overloads, <em>op</em> and <em>Target</em>.</p>
 <blockquote>
@@ -36,23 +49,23 @@ model, marked <strong>(not built)</strong>.</p>
 </blockquote>
 <h2 id="what-an-operation-is">What an Operation is</h2>
 <p>An <strong>Operation</strong> (op) is one tool-native action a <a href="spells.html">Spell</a> exposes,
-named after the CLI command it runs — <code>go-build</code>, <code>go-vet</code>, <code>golangci-lint</code>,
+named after the CLI command it runs: <code>go-build</code>, <code>go-vet</code>, <code>golangci-lint</code>,
 <code>cargo-clippy</code>, <code>eslint</code>. It is the unit a <a href="targets.html">Target</a> <em>composes</em>: a
 target body calls ops, ops do the tool work.</p>
 <p>An Operation is declared in one of two shapes, which decode to the same thing
 (see <a href="spells.html#operations-come-in-two-shapes">Operations come in two shapes</a>):</p>
 <ul>
-<li><strong>Fork op</strong> — a <code>{cmd, args, charms}</code> record. magus forks the command directly
+<li><strong>Fork op</strong>: a <code>{cmd, args, charms}</code> record. magus forks the command directly
 (no shell), so one fork op runs exactly <strong>one process</strong>.</li>
-<li><strong>Function op</strong> — an exported handler dispatched in-VM (HTTP, signing, a cache
+<li><strong>Function op</strong>: an exported handler dispatched in-VM (HTTP, signing, a cache
 backend's <code>get-entry</code>). It may run zero or many processes, or none.</li>
 </ul>
 <p>An Operation is <em>how</em> a tool performs an action; a <a href="targets.html">Target</a> is <em>what</em>
 you run. You <strong>bind</strong> spells (which contribute ops) and <strong>invoke</strong> targets (which
-call ops). A target with no ops of its own — like <code>ci</code> — is pure composition: it
+call ops). A target with no ops of its own, like <code>ci</code>, is pure composition: it
 only <code>needs</code> other targets.</p>
 <h2 id="the-work-hierarchy">The work hierarchy</h2>
-<pre><code>Spell ──exposes──▶ Operation (op)              go-build, eslint, golangci-lint
+<pre><code class="language-text">Spell ──exposes──▶ Operation (op)              go-build, eslint, golangci-lint
   │                   │  fork op    → one process
   │                   │  function op → arbitrary in-VM work
   │                   ▼ runs
@@ -117,7 +130,7 @@ Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own
 <td><strong><code>ExecResult</code></strong></td>
 <td>Process</td>
 <td><code>{stdout, stderr, code, ok}</code></td>
-<td><strong>returned</strong> by <code>os.exec</code>, <code>magus.cmd</code>, a fork op</td>
+<td><strong>returned</strong> by <code>os.exec</code>, <code>magus.cmd</code>/<code>run</code>/<code>describe</code>/<code>insight</code>/<code>doctor</code>, a fork op</td>
 <td>exists</td>
 </tr>
 <tr>
@@ -139,16 +152,16 @@ Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own
 <ul>
 <li>
 <p><strong><code>ExecResult</code> exists in both worlds.</strong> It is the Go <code>run.ExecResult</code> and the
-spell-op <strong>capture record</strong> a <code>Capture: true</code> op returns &quot;instead of void&quot; — the
+spell-op <strong>capture record</strong> a <code>Capture: true</code> op returns &quot;instead of void&quot;: the
 same <code>{stdout, stderr, code, ok}</code> shape <code>os.exec</code> returns.</p>
 </li>
 <li>
 <p><strong>The target result is emitted, not returned.</strong> A target is cacheable, and on a
-<strong>cache hit the body never runs</strong> — outputs are replayed without executing the
+<strong>cache hit the body never runs</strong>: outputs are replayed without executing the
 <code>export fun</code>. A return value cannot exist on a hit, yet a cache hit is exactly
 what you most want to report. So the dispatcher assembles and emits a
 <code>target.result</code> event from <code>cache.OnResult</code>, which fires for both the ran and the
-cached case. It reports at the <strong>target</strong> level — a per-op <code>[OpResult]</code> breakdown
+cached case. It reports at the <strong>target</strong> level; a per-op <code>[OpResult]</code> breakdown
 was prototyped and removed as speculative (no consumer, and it misattributed ops
 across the cross-project boundary).</p>
 </li>
@@ -187,14 +200,14 @@ latent misnaming in the second.</p>
 </tr>
 </tbody>
 </table>
-<p><code>PatchOp</code> and <code>RemoteOp</code> keep their names — they are genuinely different
+<p><code>PatchOp</code> and <code>RemoteOp</code> keep their names; they are genuinely different
 operations. The handler callback parameter is named <code>cb</code>, not <code>op</code>, for exactly
 this reason (<a href="spells.html#operations-come-in-two-shapes">spells.md</a>).</p>
 <p><strong>Two &quot;Target&quot;s.</strong> These are distinct and must not be conflated:</p>
 <ul>
-<li><strong><code>types.Target</code></strong> — the addressable <strong>work-unit</strong>: <code>Path + Name</code>, plus charms
+<li><strong><code>types.Target</code></strong>: the addressable <strong>work-unit</strong> <code>Path + Name</code>, plus charms
 and changed files. This is <em>the</em> Target (<a href="targets.html">targets.md</a>).</li>
-<li><strong><code>ispell.Op</code></strong> (formerly <code>ispell.Target</code>) — &quot;a single dispatchable surface of a
+<li><strong><code>ispell.Op</code></strong> (formerly <code>ispell.Target</code>): &quot;a single dispatchable surface of a
 spell,&quot; i.e. an <strong>Operation</strong>. It was named <code>Target</code>, colliding with the
 work-unit above; renamed to <code>Op</code> to formalize this vocabulary.</li>
 </ul>
@@ -217,7 +230,7 @@ protected <code>ispell.Target</code>, which was the actual offender.</p>
 <tbody>
 <tr>
 <td><strong><code>Target</code></strong></td>
-<td>a resolved work-unit (<code>Path + Name + charms + files</code>) plus its per-target policy (<code>skipCache</code>, <code>exclusive</code>, …)</td>
+<td>a resolved work-unit (<code>Path + Name + charms + files</code>) plus its per-target policy (<code>skipCache</code>, <code>exclusive</code>, ...)</td>
 <td>Target</td>
 </tr>
 <tr>
@@ -271,15 +284,34 @@ each <code>Operation</code> yields an <code>ExecResult</code>.</p>
 </table>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><a href="spells.html">spells.md</a> — anatomy of a spell, the two op shapes, naming operations.</li>
-<li><a href="targets.html">targets.md</a> — the work-unit Target, <code>Path + Name</code>, the seven lifecycle names.</li>
-<li><a href="charms.html">charms.md</a> — how a charm patches an Operation's argv.</li>
+<li><a href="spells.html">spells.md</a>: anatomy of a spell, the two op shapes, naming operations.</li>
+<li><a href="targets.html">targets.md</a>: the work-unit Target, <code>Path + Name</code>, the seven lifecycle names.</li>
+<li><a href="charms.html">charms.md</a>: how a charm patches an Operation's argv.</li>
 </ul>
     </article>
-    <p><a href="https://github.com/egladman/magus/edit/main/docs/operations.md">Suggest an edit</a></p>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="mcp.html"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MCP: driving magus from agents</span></a>
+      <a class="page-nav-next" href="remote-cache.html"><span class="page-nav-dir">Next</span><span class="page-nav-title">Remote caching</span></a>
+    </nav>
   </main>
-  <footer class="container">
-    <small>Generated 2026-06-18 15:53:19 UTC from commit <a href="https://github.com/egladman/magus/commit/3ef6e672e22f6925587d33aa8a1782f4f8481f1c"><code>3ef6e67</code></a></small>
+  <footer class="site-footer container">
+    <nav class="footer-links">
+      <ul>
+        <li><a href="documentation.html">Documentation</a></li>
+        <li><a href="install.html">Install</a></li>
+        <li><a href="playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+      </ul>
+    </nav>
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>)</small>
   </footer>
+  <script defer src="clipboard.js"></script>
+  <script defer src="toc.js"></script>
+  <script defer src="anchors.js"></script>
+  <script defer src="copy.js"></script>
+  <script src="search.js"></script>
+  <script defer src="mermaid-init.js"></script>
+  <script defer src="home-heading.js"></script>
 </body>
 </html>
