@@ -1,5 +1,11 @@
 # magus workspace config. Most settings use built-in defaults; only what this
 # repo overrides is listed here.
+
+# Charms applied to every `magus run` / `magus x` by default. The ci anchor
+# still strips rw, and `--no-default-charms` ignores them for a single run.
+default_charms:
+  - rw
+
 cache:
   remote:
     # Trust set for the shared remote cache (wired via magus.cache.remote in the

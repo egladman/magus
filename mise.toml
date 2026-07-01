@@ -1,0 +1,12 @@
+[tools]
+go = "1.26.4"
+# node + prettier + markdownlint-cli back the markdown spell (md.prettier /
+# md.markdownlint), so the format/lint gates resolve them from mise, not a stray global.
+node = "24"
+"npm:markdownlint-cli" = "0.49.0"
+"npm:prettier" = "3.9.4"
+# tinygo + binaryen (wasm-opt) back the website's build-playground target, which
+# compiles cmd/buzz-playground to website/playground/buzz.wasm. TinyGo >= 0.40 is
+# required; wasm-opt runs as tinygo's post-link optimization step.
+tinygo = "0.41.1"
+"aqua:WebAssembly/binaryen" = "129"

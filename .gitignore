@@ -9,3 +9,6 @@ coverage.out
 
 # magus runtime cache
 .magus/
+
+/magus-docs
+/buzz-playground

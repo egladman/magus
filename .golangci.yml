@@ -91,7 +91,6 @@ linters:
         - diagnostic
       disabled-checks:
         - appendAssign
-        - unnamedResult
         - ifElseChain
 
     gosec:

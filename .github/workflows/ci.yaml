@@ -75,7 +75,7 @@ jobs:
       # Shape affected --plan into GitHub matrix outputs (piped to dodge the daemon).
       - id: plan
         name: Compute shard matrix
-        run: magus affected ci --plan | magus run ci-shard:gha
+        run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
 
   ci:
     name: shard ${{ matrix.shard }}
@@ -143,7 +143,7 @@ jobs:
       - name: Run CI for shard
         uses: ./.github/actions/magus
         with:
-          command:  run ci ${{ matrix.projects }}
+          command:  run ci --no-default-charms ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.preflight.outputs.count }}
 
@@ -199,4 +199,4 @@ jobs:
       - name: Postflight (insight report → step summary)
         # Scope to the root project so this emits exactly one whole-workspace report
         # (a bare `magus run postflight` would fan out across every project).
-        run: magus run postflight .
+        run: magus run postflight --no-default-charms .

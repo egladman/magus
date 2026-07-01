@@ -28,7 +28,7 @@ jobs:
       # is zero chance of replaying a cached (unsigned) artifact into a release.
       # Cross-compiles all 5 targets into dist/ and writes SHA256SUMS.
       - name: Build release artifacts
-        run: magus run release
+        run: magus run release --no-default-charms
 
       - name: Sign SHA256SUMS
         env:
@@ -79,4 +79,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build, push, and sign images
-        run: magus run image-build:cd
+        run: magus run image-build:cd --no-default-charms
