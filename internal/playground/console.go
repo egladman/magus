@@ -59,7 +59,8 @@ func EvalInContext(ctx context.Context, magusfileSrc, expr string) EvalResult {
 	_ = sess.Exec(ctx, magusfileSrc) // best effort: bind whatever compiles
 
 	// Compile the expression form first so a bare expression prints its value
-	// (fib(20) → 6765), falling back to the statement form (var x = 1;). This
+	// (ldflags(VERSION) → a string), falling back to the statement form
+	// (var x = 1;). This
 	// mirrors the real Buzz REPL driver and avoids running side effects twice.
 	chunk, err := sess.Compile("return " + expr)
 	if err != nil {
@@ -284,11 +285,11 @@ func (s *Console) Banner() []Line {
 	return []Line{
 		{HTML: head},
 		{HTML: ``},
-		{HTML: `<span class="muted">  The interpreter is compiled to <b>WebAssembly</b> and runs in this browser tab —</span>`},
+		{HTML: `<span class="muted">  The interpreter is compiled to <b>WebAssembly</b> and runs in this browser tab:</span>`},
 		{HTML: `<span class="muted">  no server, no shell, no filesystem. A magusfile is </span><b>planned, not run</b><span class="muted">:</span>`},
 		{HTML: `<span class="muted">  build steps are recorded so you can read the plan, but </span><b>no command is executed.</b>`},
 		{HTML: ``},
-		{HTML: `<span class="muted">  Try </span><b>ls</b><span class="muted"> · </span><b>graph</b><span class="muted"> · </span><b>run ci</b><span class="muted"> · </span><b>version</b><span class="muted"> · or an expression like </span><b>fib(20)</b><span class="muted">.</span>`},
+		{HTML: `<span class="muted">  New here? Type </span><b>help</b><span class="muted"> to see the commands, or </span><b>ls</b><span class="muted"> to list this file's targets.</span>`},
 	}
 }
 
@@ -299,12 +300,12 @@ func (s *Console) about() []Line { return s.Banner() }
 func (s *Console) version() []Line {
 	row := func(key, val string) Line {
 		if val == "" {
-			val = "—"
+			val = "n/a"
 		}
 		return Line{HTML: `  <span class="muted">` + key + `</span>  ` + esc(val)}
 	}
 	return []Line{
-		{HTML: `<b>gopherbuzz</b> — a Buzz ` + buzzLangVersion + ` interpreter, written in Go`},
+		{HTML: `<b>gopherbuzz</b>: a Buzz ` + buzzLangVersion + ` interpreter, written in Go`},
 		row("compiler ", s.info.Compiler),
 		row("target   ", s.info.Target),
 		row("scheduler", s.info.Scheduler),
@@ -315,7 +316,7 @@ func (s *Console) version() []Line {
 
 func (s *Console) ls() []Line {
 	if !s.parsed.OK {
-		return []Line{{HTML: "magusfile does not parse — fix it in the editor.", Class: "err"}}
+		return []Line{{HTML: "magusfile does not parse; fix it in the editor.", Class: "err"}}
 	}
 	if len(s.parsed.Targets) == 0 {
 		return []Line{{HTML: "no targets defined.", Class: "muted"}}
@@ -333,7 +334,7 @@ func (s *Console) ls() []Line {
 
 func (s *Console) graph() []Line {
 	if !s.parsed.OK {
-		return []Line{{HTML: "magusfile does not parse — fix it in the editor.", Class: "err"}}
+		return []Line{{HTML: "magusfile does not parse; fix it in the editor.", Class: "err"}}
 	}
 	var out []Line
 	for _, p := range s.parsed.Projects {
@@ -342,7 +343,8 @@ func (s *Console) graph() []Line {
 		line += muted("depends_on", p.DependsOn)
 		line += muted("outputs", p.Outputs)
 		line += muted("no-cache", p.NoCache)
-		line += muted("isolated", p.Isolated)
+		line += muted("exclusive", p.Isolated)
+		line += muted("weight", p.Weighted)
 		if p.Exclusive {
 			line += ` <span class="muted">exclusive</span>`
 		}
@@ -369,7 +371,8 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 	if target == "" {
 		return append([]Line{{HTML: `usage: <b>run &lt;target&gt;</b>`, Class: "muted"}}, s.ls()...)
 	}
-	r := DryRun(ctx, s.src, target)
+	key, charms := splitCharms(target)
+	r := DryRun(ctx, s.src, key, charms)
 	if !r.OK {
 		return []Line{{HTML: esc(diagMsg(r.Diag, "dry-run failed")), Class: "err"}}
 	}
@@ -392,6 +395,12 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 				out = append(out, Line{HTML: "  " + tag + `<span class="` + cls + `">` + esc(op.Detail) + `</span>`})
 				continue
 			}
+			if op.Kind == "run" {
+				// A magus.run(...) recursive target invocation, not a tool call.
+				out = append(out, Line{HTML: "  " + tag + `<span class="muted">magus run</span> <b>` +
+					esc(op.Name) + `</b>  <span class="muted">recursive invocation · recorded</span>`})
+				continue
+			}
 			detail := ""
 			if op.Detail != "" {
 				detail = " " + esc(op.Detail)
@@ -401,7 +410,7 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 		}
 	}
 	n := len(r.Trace)
-	out = append(out, Line{HTML: "[pass] dry-run of " + esc(target) + " - " + strconv.Itoa(n) +
+	out = append(out, Line{HTML: "[pass] dry-run of " + esc(target) + ": " + strconv.Itoa(n) +
 		" step" + plural(n) + " recorded, <b>nothing executed</b>", Class: "ok"})
 	return out
 }
@@ -411,7 +420,7 @@ func (s *Console) eval(ctx context.Context, src string) []Line {
 		return nil
 	}
 	// Evaluate against the editor's magusfile so an expression can call the
-	// functions and name the types defined there (e.g. fib(20)).
+	// functions and name the types defined there (e.g. ldflags(VERSION)).
 	r := EvalInContext(ctx, s.src, src)
 	var out []Line
 	if r.Output != "" {
@@ -467,6 +476,23 @@ func muted(label string, vals []string) string {
 		return ""
 	}
 	return `  <span class="muted">` + label + ": " + esc(strings.Join(vals, ", ")) + `</span>`
+}
+
+// splitCharms splits a "target:charm,charm" run reference into the target key
+// and its active charms (mirroring the CLI's `magus run target:charm` suffix).
+// No colon means no charms.
+func splitCharms(ref string) (target string, charms []string) {
+	i := strings.IndexByte(ref, ':')
+	if i < 0 {
+		return ref, nil
+	}
+	target = ref[:i]
+	for _, c := range strings.Split(ref[i+1:], ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			charms = append(charms, c)
+		}
+	}
+	return target, charms
 }
 
 func splitFirst(s string) (head, rest string) {

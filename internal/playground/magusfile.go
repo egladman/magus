@@ -41,8 +41,9 @@ type targetInfo struct {
 // targets from exported functions, then probes each target body once under the
 // recording host to capture its depends_on edges and host ops. Host effects are
 // inert, so probing a target never cascades into running its dependencies.
-func evalAndProbe(ctx context.Context, src string) (*Recorder, []targetInfo, *Diag) {
+func evalAndProbe(ctx context.Context, src string, charms []string) (*Recorder, []targetInfo, *Diag) {
 	rec := newRecorder()
+	rec.charms = charms
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	installHost(sess, rec)
 
@@ -51,6 +52,11 @@ func evalAndProbe(ctx context.Context, src string) (*Recorder, []targetInfo, *Di
 	}
 
 	targets := discoverTargets(sess)
+	// Publish the full target set before probing so a magus.needs(glob/regex) in a
+	// body can expand its pattern against it.
+	for _, t := range targets {
+		rec.targetKeys = append(rec.targetKeys, t.key)
+	}
 	for _, t := range targets {
 		rec.cur = t.key
 		// A failing body still yields the ops recorded up to the failure; the
@@ -88,9 +94,10 @@ func discoverTargets(sess *buzz.Session) []targetInfo {
 	return out
 }
 
-// LoadMagusfile evaluates src to its project/target/edge graph.
+// LoadMagusfile evaluates src to its project/target/edge graph. Charms are off
+// (empty) for a structural load — the graph is charm-independent.
 func LoadMagusfile(ctx context.Context, src string) Graph {
-	rec, targets, diag := evalAndProbe(ctx, src)
+	rec, targets, diag := evalAndProbe(ctx, src, nil)
 	if diag != nil {
 		return Graph{Output: rec.out.String(), Diag: diag}
 	}
@@ -109,12 +116,17 @@ func LoadMagusfile(ctx context.Context, src string) Graph {
 
 // DryRun evaluates src, then returns the ordered execution plan for targetKey:
 // its dependency closure in run order, followed by the concatenated host-op
-// trace of each target in that order.
-func DryRun(ctx context.Context, src, targetKey string) DryRunResult {
-	rec, targets, diag := evalAndProbe(ctx, src)
+// trace of each target in that order. charms is the active charm set (from a
+// `run t:charm` invocation), so charm-gated branches (has_charm) resolve.
+func DryRun(ctx context.Context, src, targetKey string, charms []string) DryRunResult {
+	rec, targets, diag := evalAndProbe(ctx, src, charms)
 	if diag != nil {
 		return DryRunResult{Output: rec.out.String(), Diag: diag}
 	}
+	// Normalize the requested name the same way registration does, so any casing or
+	// separator resolves: `run goBuild`, `run go_build`, and `run go-build` all hit
+	// the go-build target.
+	targetKey = normalizeTarget(targetKey)
 	known := map[string]bool{}
 	for _, t := range targets {
 		known[t.key] = true

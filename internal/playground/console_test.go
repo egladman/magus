@@ -2,6 +2,7 @@ package playground
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 
@@ -185,7 +186,7 @@ import "magus/spell/go";
 magus.project({
     "spells": [go],
     "outputs": ["bin/**"],
-    "targets": {"regen-pgo": {"cachable": false}},
+    "targets": {"regen-pgo": {"skipCache": true}, "lint": {"weight": 4}},
 });
 
 export fun format(args: [str]) > void { go["go-fmt"](); }
@@ -200,6 +201,7 @@ func TestLoadMagusfile_graph(t *testing.T) {
 	require.Len(t, g.Projects, 1)
 	assert.Equal(t, ".", g.Projects[0].Path)
 	assert.Equal(t, []string{"regen-pgo"}, g.Projects[0].NoCache)
+	assert.Equal(t, []string{"lint=4"}, g.Projects[0].Weighted)
 	assert.Equal(t, []string{"go"}, g.Projects[0].Spells)
 
 	gotTargets := map[string]bool{}
@@ -217,7 +219,7 @@ func TestLoadMagusfile_graph(t *testing.T) {
 }
 
 func TestDryRun_orderAndTrace(t *testing.T) {
-	r := DryRun(context.Background(), sampleMagusfile, "ci")
+	r := DryRun(context.Background(), sampleMagusfile, "ci", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
 	// format must precede lint and build; everything precedes ci.
 	pos := map[string]int{}
@@ -238,8 +240,91 @@ func TestDryRun_orderAndTrace(t *testing.T) {
 	}
 }
 
+func TestDryRun_charmBranch(t *testing.T) {
+	const src = `
+import "magus/spell/docker";
+magus.project({"spells": [docker]});
+export fun image_build(args: [str]) > void {
+    if (magus.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
+    else { docker["docker-build"]({"args": ["--load"]}); }
+}
+`
+	detail := func(r DryRunResult) string {
+		var b strings.Builder
+		for _, op := range r.Trace {
+			b.WriteString(op.Detail)
+			b.WriteByte(' ')
+		}
+		return b.String()
+	}
+
+	plain := DryRun(context.Background(), src, "image-build", nil)
+	require.True(t, plain.OK, "plain: %+v", plain.Diag)
+	assert.Contains(t, detail(plain), "--load", "no charm should take the else branch")
+	assert.NotContains(t, detail(plain), "--push")
+
+	cd := DryRun(context.Background(), src, "image-build", []string{"cd"})
+	require.True(t, cd.OK, "cd: %+v", cd.Diag)
+	assert.Contains(t, detail(cd), "--push", "cd charm should take the has_charm branch")
+	assert.NotContains(t, detail(cd), "--load")
+}
+
+func TestLoadMagusfile_patternNeeds(t *testing.T) {
+	const src = `
+export fun proto_generate(args: [str]) > void {}
+export fun mock_generate(args: [str]) > void {}
+export fun generate(args: [str]) > void { magus.needs(magus.target.glob("*-generate")); }
+export fun regen(args: [str]) > void { magus.needs(magus.target.regex("^(proto|mock)-generate$")); }
+`
+	g := LoadMagusfile(context.Background(), src)
+	require.True(t, g.OK, "load failed: %+v", g.Diag)
+
+	depsOf := func(from string) []string {
+		var out []string
+		for _, e := range g.Edges {
+			if e.From == from {
+				out = append(out, e.To)
+			}
+		}
+		sort.Strings(out)
+		return out
+	}
+	assert.Equal(t, []string{"mock-generate", "proto-generate"}, depsOf("generate"), "glob should match both -generate targets")
+	assert.Equal(t, []string{"mock-generate", "proto-generate"}, depsOf("regen"), "regex should match both -generate targets")
+}
+
+func TestDryRun_magusRunInvocation(t *testing.T) {
+	const src = `
+export fun image_build(args: [str]) > void {}
+export fun release(args: [str]) > void { magus.run(["image-build:cd"]); }
+`
+	g := LoadMagusfile(context.Background(), src)
+	require.True(t, g.OK, "load failed: %+v", g.Diag)
+	for _, e := range g.Edges {
+		assert.NotEqual(t, "release", e.From, "magus.run is imperative and must not create a static DAG edge")
+	}
+
+	r := DryRun(context.Background(), src, "release", nil)
+	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
+	require.Len(t, r.Trace, 1, "release should record exactly the recursive invocation")
+	assert.Equal(t, "run", r.Trace[0].Kind)
+	assert.Equal(t, "image-build:cd", r.Trace[0].Name, "the recorded invocation keeps the :charm suffix")
+}
+
+func TestDryRun_targetNameCasing(t *testing.T) {
+	const src = `
+export fun mock_generate(args: [str]) > void {}
+export fun image_build(args: [str]) > void {}
+`
+	for _, name := range []string{"mock-generate", "mockGenerate", "mock_generate", "MOCK_GENERATE", "MockGenerate", "image-build", "imageBuild"} {
+		r := DryRun(context.Background(), src, name, nil)
+		assert.True(t, r.OK, "casing %q should resolve to a known target", name)
+	}
+	assert.False(t, DryRun(context.Background(), src, "nope", nil).OK, "a genuinely unknown name still fails")
+}
+
 func TestDryRun_unknownTarget(t *testing.T) {
-	r := DryRun(context.Background(), sampleMagusfile, "nope")
+	r := DryRun(context.Background(), sampleMagusfile, "nope", nil)
 	require.False(t, r.OK, "expected an unknown-target diag")
 	assert.NotNil(t, r.Diag, "expected an unknown-target diag")
 }

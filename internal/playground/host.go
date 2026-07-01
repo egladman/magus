@@ -2,11 +2,16 @@ package playground
 
 import (
 	"context"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	buzz "github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
 	"github.com/egladman/gopherbuzz/vm"
+
+	"github.com/egladman/magus/types"
 )
 
 // installHost wires a session for magusfile evaluation: the std library (with
@@ -64,20 +69,37 @@ func buildMagus(_ *buzz.Session, rec *Recorder) vm.Value {
 	}))
 	m.MapSet("target", target)
 
-	// magus.needs(handle, ...): record an exact same-project edge per literal handle;
-	// glob/regex aren't expanded in the dry run (no project target set to match
-	// against) — recorded as nothing.
+	// magus.needs(handle, ...): record a same-project edge per handle. A literal
+	// handle is one exact edge; a glob/regex handle expands against the discovered
+	// target set (rec.targetKeys) and records an edge to each match, mirroring the
+	// real binding's resolveTargetQuery. Cross-project (external) handles aren't
+	// modeled in the single-file dry run.
 	m.MapSet("needs", fn("magus.needs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		for _, a := range args {
 			if !a.IsMap() {
 				continue
 			}
-			mode, _ := a.MapGet("mode")
-			if !mode.IsStr() || mode.AsString() != "literal" {
+			modeV, _ := a.MapGet("mode")
+			if !modeV.IsStr() {
 				continue
 			}
-			if t := mapStr(a, "pattern").AsString(); t != "" {
-				rec.addEdge(normalizeTarget(t))
+			pattern := mapStr(a, "pattern").AsString()
+			if pattern == "" {
+				continue
+			}
+			switch modeV.AsString() {
+			case "literal":
+				rec.addEdge(normalizeTarget(pattern))
+			case "glob":
+				for _, name := range rec.matchTargets(globToRegexp(pattern)) {
+					rec.addEdge(name)
+				}
+			case "regex":
+				if re, err := regexp.Compile(pattern); err == nil {
+					for _, name := range rec.matchTargets(re) {
+						rec.addEdge(name)
+					}
+				}
 			}
 		}
 		return vm.Null, nil
@@ -89,7 +111,16 @@ func buildMagus(_ *buzz.Session, rec *Recorder) vm.Value {
 	cache.MapSet("remote", fn("magus.cache.remote", retNull))
 	m.MapSet("cache", cache)
 
-	m.MapSet("has_charm", fn("magus.has_charm", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	// has_charm(name) reports whether name is in the evaluation's active charm set
+	// (rec.charms), so a `run t:charm` dry-run takes charm-gated branches. For a
+	// plain graph/ls load the set is empty, so every branch reads as un-charmed.
+	m.MapSet("has_charm", fn("magus.has_charm", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		name := strArg(args, 0, "")
+		for _, c := range rec.charms {
+			if c == name {
+				return vm.BoolValue(true), nil
+			}
+		}
 		return vm.BoolValue(false), nil
 	}))
 
@@ -103,17 +134,28 @@ func buildMagus(_ *buzz.Session, rec *Recorder) vm.Value {
 		}))
 	}
 
-	// magus.cmd/run/describe/insight/doctor return a captured-command result on the
-	// real module; stub each as an empty success so `magus.describe(...).stdout` and
-	// the like don't blow up in a dry run.
-	for _, name := range []string{"cmd", "run", "describe", "insight", "doctor"} {
+	// magus.run(argv, opts?) recursively invokes `magus run <argv>`. The dry run
+	// can't re-enter the runner, but it records the invocation (the target and any
+	// :charm suffix from argv[0]) as an op so a trace shows the recursive call —
+	// this is the one imperative alternative to a magus.needs() DAG edge.
+	m.MapSet("run", fn("magus.run", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if ref := firstListStr(args); ref != "" {
+			target, charms := splitTargetRef(ref)
+			display := target
+			if len(charms) > 0 {
+				display = target + ":" + strings.Join(charms, ",")
+			}
+			rec.addOp("run", display, "")
+		}
+		return emptyExecResult(), nil
+	}))
+
+	// magus.cmd/describe/insight/doctor return a captured-command result on the real
+	// module; stub each as an empty success so `magus.describe(...).stdout` and the
+	// like don't blow up in a dry run.
+	for _, name := range []string{"cmd", "describe", "insight", "doctor"} {
 		m.MapSet(name, fn("magus."+name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-			res := vm.NewMap()
-			res.MapSet("stdout", vm.StrValue(""))
-			res.MapSet("stderr", vm.StrValue(""))
-			res.MapSet("code", vm.IntValue(0))
-			res.MapSet("success", vm.BoolValue(true))
-			return res, nil
+			return emptyExecResult(), nil
 		}))
 	}
 
@@ -214,11 +256,19 @@ func (r *Recorder) recordProject(path string, opts vm.Value) {
 				if !ok || !pv.IsMap() {
 					continue
 				}
-				if cv, ok := pv.MapGet("cachable"); ok && !cv.Bool() {
+				// Per-target policy mirrors the real binding (project_ns.go):
+				// skipCache opts the target out of the cache; exclusive runs it
+				// alone against the batch.
+				if sv, ok := pv.MapGet("skipCache"); ok && sv.Bool() {
 					p.NoCache = append(p.NoCache, name)
 				}
-				if iv, ok := pv.MapGet("isolated"); ok && iv.Bool() {
+				if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 					p.Isolated = append(p.Isolated, name)
+				}
+				if wv, ok := pv.MapGet("weight"); ok {
+					if n := wv.AsInt(); n > 0 {
+						p.Weighted = append(p.Weighted, name+"="+strconv.FormatInt(n, 10))
+					}
 				}
 			}
 		}
@@ -348,22 +398,75 @@ func execDetail(args []vm.Value) string {
 	return ""
 }
 
-// normalizeTarget maps an export name (or a depends_on argument) to its
-// canonical kebab-case target key: regen_pgo -> regen-pgo, goBuild -> go-build.
-func normalizeTarget(name string) string {
-	var b strings.Builder
-	for i, r := range name {
-		switch {
-		case r == '_' || r == ' ':
-			b.WriteByte('-')
-		case r >= 'A' && r <= 'Z':
-			if i > 0 {
-				b.WriteByte('-')
-			}
-			b.WriteRune(r - 'A' + 'a')
-		default:
-			b.WriteRune(r)
+// emptyExecResult is the {stdout, stderr, code, success} record the captured-command
+// magus.* members return; a dry-run stub reports an empty success.
+func emptyExecResult() vm.Value {
+	res := vm.NewMap()
+	res.MapSet("stdout", vm.StrValue(""))
+	res.MapSet("stderr", vm.StrValue(""))
+	res.MapSet("code", vm.IntValue(0))
+	res.MapSet("success", vm.BoolValue(true))
+	return res
+}
+
+// firstListStr returns the first string element of the first argument when it is a
+// list (magus.run's argv), else "".
+func firstListStr(args []vm.Value) string {
+	if len(args) == 0 || !args[0].IsList() {
+		return ""
+	}
+	items := args[0].ListItems()
+	if len(items) == 0 || !items[0].IsStr() {
+		return ""
+	}
+	return items[0].AsString()
+}
+
+// splitTargetRef splits a "target:charm,charm" reference into the normalized target
+// key and its charms, mirroring the CLI's `magus run target:charm` suffix.
+func splitTargetRef(ref string) (target string, charms []string) {
+	i := strings.IndexByte(ref, ':')
+	if i < 0 {
+		return normalizeTarget(ref), nil
+	}
+	target = normalizeTarget(ref[:i])
+	for _, c := range strings.Split(ref[i+1:], ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			charms = append(charms, c)
 		}
 	}
-	return strings.ToLower(b.String())
+	return target, charms
+}
+
+// globToRegexp compiles a target glob into a regexp, mirroring the real binding's
+// compileTargetPatterns: a pattern with no `*` matches any target ending in
+// `-<pattern>` (^.*-<pattern>$); a pattern with `*` treats each `*` as `.*`,
+// anchored end to end.
+func globToRegexp(pattern string) *regexp.Regexp {
+	if !strings.Contains(pattern, "*") {
+		return regexp.MustCompile(`^.*-` + regexp.QuoteMeta(pattern) + `$`)
+	}
+	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`) + "$")
+}
+
+// matchTargets returns the discovered target keys matching re, sorted for a
+// deterministic edge order.
+func (r *Recorder) matchTargets(re *regexp.Regexp) []string {
+	var out []string
+	for _, name := range r.targetKeys {
+		if re.MatchString(name) {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// normalizeTarget maps an export name, a depends_on argument, or a name typed at
+// the console to its canonical kebab-case target key (regen_pgo -> regen-pgo,
+// goBuild -> go-build, HTTPServer -> http-server). It delegates to the real magus
+// normalizer so the sandbox resolves names exactly like `magus run` does — any
+// casing or separator lands on the same target.
+func normalizeTarget(name string) string {
+	return types.DefaultTargetNameNormalizer.NormalizeTargetName(name)
 }

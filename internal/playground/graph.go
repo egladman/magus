@@ -25,8 +25,9 @@ type Project struct {
 	Outputs   []string `json:"outputs"`
 	Spells    []string `json:"spells"`
 	Exclusive bool     `json:"exclusive"`
-	NoCache   []string `json:"noCache"`  // target names opted out of caching
-	Isolated  []string `json:"isolated"` // target names that run isolated
+	NoCache   []string `json:"noCache"`  // target names opted out of caching (skipCache)
+	Isolated  []string `json:"isolated"` // target names that run alone (exclusive)
+	Weighted  []string `json:"weighted"` // "name=N" for targets that hold N concurrency slots (weight)
 }
 
 // Target is an exported function discovered as a runnable target.
@@ -60,6 +61,16 @@ type Recorder struct {
 	// cur is the target whose body is currently executing, so depends_on edges
 	// and host ops attribute to the right node. Empty at top level.
 	cur string
+
+	// charms is the active charm set for this evaluation (from a `run t:charm`
+	// invocation), so magus.has_charm(name) reports true for a dry-run under a
+	// charm — e.g. `run release:cd` takes the cd branch. Empty for graph/ls.
+	charms []string
+
+	// targetKeys is every discovered target's canonical key, set before probing so
+	// a magus.needs(glob/regex) can expand its pattern against the real target set
+	// (a literal edge needs no set; a pattern does).
+	targetKeys []string
 }
 
 func newRecorder() *Recorder {
