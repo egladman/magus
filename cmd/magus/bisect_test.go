@@ -64,7 +64,7 @@ func parseBisectLog(out []byte) (string, error) {
 }
 
 // TestSelfCmdSignatureCompat is a compile-time check: both
-// selfmanage.go (selfmanage) and selfmanage_stub.go (!selfmanage)
+// selfupdate.go (!noselfupdate) and selfupdate_stub.go (noselfupdate)
 // must expose `func selfCmd(context.Context, string, []string) error`
 // (the string is the workspace root, threaded through for `self init`).
 // If the signatures differ the package simply won't compile under one of

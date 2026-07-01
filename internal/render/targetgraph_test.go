@@ -25,7 +25,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"# Targets",
 		"## Quick start",
-		"## Project: .",
+		"## Project: (workspace root)",        // bare "." is never used as a heading
 		"### `build`",                         // per-target heading
 		"Build the binary.",                   // doc line
 		"**Defaults**",                        // base invocation block label

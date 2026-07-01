@@ -73,7 +73,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 		require.ErrorIs(t, err, want)
 	})
 
-	assert.Contains(t, out, "── svc/api (failed) ──")
+	assert.Contains(t, out, "-- svc/api (failed) --")
 	assert.Contains(t, out, "earlier line(s) omitted; full log: "+lp)
 	assert.Contains(t, out, fmt.Sprintf("line %d", maxFailTailLines+9)) // last line present
 	assert.NotContains(t, out, "line 0\n")                              // earliest line trimmed

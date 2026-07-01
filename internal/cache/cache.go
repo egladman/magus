@@ -35,6 +35,7 @@ type Cache struct {
 	log            *slog.Logger
 	logLevel       slog.Level // effective minimum level; used by captureRun
 	silent         bool       // silent output mode: bounded failure dumps + bubbled important lines
+	collapse       bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
 	hits           atomic.Int64
 	misses         atomic.Int64
 	errs           atomic.Int64
@@ -78,6 +79,7 @@ type Step struct {
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	NoCache         bool     // when true, always run fn — never replay or snapshot (long-running targets)
 	Isolated        bool     // RunAll only: when true, runs alone — no other step in the batch runs concurrently with it (ignored by Run, which has no batch)
+	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 }
 
 // Result is the outcome of a Cache.Run call.
@@ -290,6 +292,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				c.log.Info(
 					event,
 					slog.String("project", s.ProjectPath),
+					slog.String("label", s.Label),
 					slog.String("target", reproTarget(s)),
 					slog.Int64("duration", int64(result.Duration)),
 					slog.String("hash", shortHash(hash)),
@@ -322,6 +325,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		c.log.Error(
 			"cache.error",
 			slog.String("project", s.ProjectPath),
+			slog.String("label", s.Label),
 			slog.String("target", reproTarget(s)),
 			slog.Int64("duration", int64(result.Duration)),
 			slog.String("error", runErr.Error()),
@@ -364,6 +368,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	c.log.Info(
 		"cache.miss",
 		slog.String("project", s.ProjectPath),
+		slog.String("label", s.Label),
 		slog.String("target", reproTarget(s)),
 		slog.Int64("duration", int64(result.Duration)),
 	)
@@ -800,6 +805,12 @@ func (c *Cache) logPath(projectPath, hash string) string {
 // resolves.
 func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn func(context.Context) error) error {
 	quiet := c.logLevel >= slog.LevelError
+	// Collapse withholds live output the same way quiet does, but at default
+	// verbosity: a passing project shows only its status line; a failing one has its
+	// captured output replayed below (see the failure handling). Silent has its own
+	// stricter rules, so it takes precedence and collapse stays off under it.
+	collapse := c.collapse && !c.silent && !quiet
+	withhold := quiet || collapse
 
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
 		return fn(ctx)
@@ -810,7 +821,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn 
 	}
 
 	var captureCtx context.Context
-	if quiet {
+	if withhold {
 		captureCtx = runPkg.WithOutputWriters(ctx, logF, logF)
 	} else {
 		stdout := io.MultiWriter(os.Stdout, logF)
@@ -837,16 +848,28 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn 
 			// Bound the dump to the log's tail and keep the full log so its path resolves.
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				tail, omitted := tailLines(data, maxFailTailLines)
-				_, _ = fmt.Fprintf(os.Stderr, "\n── %s (failed) ──\n", projectPath)
+				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				if omitted > 0 {
-					_, _ = fmt.Fprintf(os.Stderr, "… %d earlier line(s) omitted; full log: %s\n", omitted, logPath)
+					_, _ = fmt.Fprintf(os.Stderr, "... %d earlier line(s) omitted; full log: %s\n", omitted, logPath)
 				}
 				_, _ = os.Stderr.Write(tail)
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
+		case collapse:
+			// The live view (status + indented stage lines) went to stderr while the
+			// project ran. On failure replay the raw, unindented subprocess output to
+			// stdout, so it stays copy/paste and pipe friendly (2>/dev/null yields just
+			// the failures). The header is part of the live view, hence stderr.
+			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
+				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
+				_, _ = os.Stdout.Write(data)
+				if data[len(data)-1] != '\n' {
+					_, _ = fmt.Fprintln(os.Stdout)
+				}
+			}
 		case quiet:
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
-				_, _ = fmt.Fprintf(os.Stderr, "\n── %s (failed) ──\n", projectPath)
+				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				_, _ = os.Stderr.Write(data)
 				_, _ = fmt.Fprintln(os.Stderr)
 			}

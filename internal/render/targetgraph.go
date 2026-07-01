@@ -76,12 +76,18 @@ func EvalKey(path, target string) string { return path + "\x00" + target }
 // projectLabel is the heading shown for a project: its path relative to the repo
 // root (so a project at the workspace root reads as e.g. `magus`, not the
 // ambiguous `.`), falling back to the workspace-relative path outside a repo. The
-// `magus run <target> <path>` examples still use the workspace-relative Path.
+// `magus run <target> <path>` examples still use the workspace-relative Path. The
+// bare `.` is never used as a heading — a root project with no better label reads
+// as "(workspace root)".
 func projectLabel(p types.TargetGraphProject) string {
-	if p.RelPath != "" {
+	// Prefer the repo-relative path (describe pre-computes it, collapsing the root to
+	// the workspace dir name); fall back to the workspace path. types.ProjectLabel is
+	// the shared "never render '.'/''" rule. Dir is unknown here, so a bare root falls
+	// back to "(workspace root)".
+	if p.RelPath != "" && p.RelPath != "." {
 		return p.RelPath
 	}
-	return p.Path
+	return types.ProjectLabel(p.Path, "")
 }
 
 // catalogOrder lists a project's targets primary-first: the targets you invoke

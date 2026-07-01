@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
+	"golang.org/x/term"
 )
 
 func doctorCmd(ctx context.Context, root string, args []string) error {
@@ -69,11 +70,16 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 		return nil
 	}
 
+	// Doctor's report stays on stdout (it is the command's primary output, meant to be
+	// piped/grepped) but shares the cache's coloured [pass]/[fail] status glyphs so the
+	// whole tool reads consistently. Colour only when stdout is a TTY and NO_COLOR is unset.
+	color := term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("NO_COLOR") == ""
+
 	if out.Workspace != "" {
 		fmt.Printf("workspace: %s\n\n", out.Workspace)
 	}
 	for _, c := range out.Checks {
-		fmt.Printf("%s %s", statusGlyph(c.Status), c.Name)
+		fmt.Printf("%s %s", statusGlyph(c.Status, color), c.Name)
 		if c.Message != "" {
 			fmt.Printf(": %s", c.Message)
 		}
@@ -86,14 +92,21 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 	return nil
 }
 
-func statusGlyph(status doctor.CheckStatus) string {
+// statusGlyph renders a doctor check's status with the shared [pass]/[fail] glyphs,
+// coloured (green/red) when color is true. Mirrors the cache handler's glyphs so a
+// failed check and a failed build look identical across the tool.
+func statusGlyph(status doctor.CheckStatus, color bool) string {
+	label, code := "[?]", "0"
 	switch status {
 	case doctor.StatusOK:
-		return "[ok]"
+		label, code = "[pass]", "32" // green
 	case doctor.StatusFail:
-		return "[fail]"
+		label, code = "[fail]", "31" // red
 	}
-	return "[?]"
+	if color {
+		return "\x1b[" + code + "m" + label + "\x1b[0m"
+	}
+	return label
 }
 
 // buildDaemonInfo queries the running daemon (if any) and returns a

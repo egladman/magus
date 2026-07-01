@@ -113,7 +113,7 @@ type statusReport struct {
 
 // buildStatus reports optional features compiled into this binary via build tags.
 type buildStatus struct {
-	SelfManage bool `json:"selfmanage" yaml:"selfmanage"`
+	SelfUpdate bool `json:"selfupdate" yaml:"selfupdate"`
 	MCP        bool `json:"mcp" yaml:"mcp"`
 }
 
@@ -160,7 +160,7 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Build: buildStatus{
-			SelfManage: selfManageCompiled,
+			SelfUpdate: selfUpdateCompiled,
 			MCP:        mcpIsCompiled,
 		},
 	}
@@ -262,7 +262,7 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 	if global.verbose >= 1 {
 		fmt.Fprintln(tw, "")
 		fmt.Fprintln(tw, "build")
-		fmt.Fprintf(tw, "  selfmanage\t%t\n", r.Build.SelfManage)
+		fmt.Fprintf(tw, "  selfupdate\t%t\n", r.Build.SelfUpdate)
 		fmt.Fprintf(tw, "  mcp\t%t\n", r.Build.MCP)
 		fmt.Fprintf(tw, "  engine\tbuzz\n")
 	}

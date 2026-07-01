@@ -64,6 +64,16 @@ func WithSilent(silent bool) Option {
 	return func(c *Cache) { c.silent = silent }
 }
 
+// WithCollapse enables collapse-on-success output: a project's subprocess output is
+// captured rather than streamed live, so a passing project shows only its one-line
+// status. On failure the captured output is replayed in full under the project so the
+// error is not lost. Intended for interactive (TTY) pretty runs at default verbosity;
+// callers should leave it off for non-TTY/CI so logs stay complete, and -v streams
+// live instead. See captureRun.
+func WithCollapse(collapse bool) Option {
+	return func(c *Cache) { c.collapse = collapse }
+}
+
 // RunOption configures a single Cache.Run (or RunAll) invocation.
 type RunOption func(*runCtx)
 

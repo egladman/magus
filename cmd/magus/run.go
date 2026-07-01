@@ -213,6 +213,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rw != nil && *shardID != "" && *nShards > 0 {
 		_ = rw.RecordShardTotal(*shardID, *nShards, time.Since(startedAt))
 	}
+	if reportedRunErr(err) {
+		return errSilent{exitCode: 1}
+	}
 	return err
 }
 

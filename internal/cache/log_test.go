@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.String("project", "api"),
 			slog.Int64("duration", int64(42*time.Millisecond)),
 			slog.String("hash", "abc123"),
-		), "[cache] hit  api")
+		), "[pass] api (cached,")
 	})
 
 	t.Run("cache.miss", func(t *testing.T) {
@@ -55,7 +56,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			"cache.miss",
 			slog.String("project", "web/studio"),
 			slog.Int64("duration", int64(80*time.Millisecond)),
-		), "[cache] miss web/studio")
+		), "[pass] web/studio (ran,")
 	})
 
 	t.Run("cache.error", func(t *testing.T) {
@@ -65,7 +66,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.String("project", "api"),
 			slog.Int64("duration", int64(5*time.Millisecond)),
 			slog.String("error", "build failed"),
-		), "[cache] error api")
+		), "[fail] api (ran,")
 	})
 
 	t.Run("cache.summary", func(t *testing.T) {
@@ -76,7 +77,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.Int("misses", 1),
 			slog.Int("errors", 0),
 			slog.Int64("elapsed", int64(2*time.Second)),
-		), "3 hit, 1 miss, 0 error")
+		), "3 cached, 1 ran, 0 failed")
 	})
 
 	t.Run("cache.scope", func(t *testing.T) {
@@ -88,6 +89,27 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		), "[scope] api (cwd)")
 	})
 
+	t.Run("cache.stage ok", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"cache.stage",
+			slog.String("label", "magus"), // normalized: root reads as the workspace name, never "."
+			slog.String("target", "lint"),
+			slog.Int64("duration", int64(3100*time.Millisecond)),
+		), "  [pass] magus lint (")
+	})
+
+	t.Run("cache.stage fail", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"cache.stage",
+			slog.String("label", "magus"),
+			slog.String("target", "test"),
+			slog.Int64("duration", int64(5*time.Second)),
+			slog.String("error", "go test: exit 1"),
+		), "  [fail] magus test (")
+	})
+
 	t.Run("cache.warn", func(t *testing.T) {
 		t.Parallel()
 		assertPlain(t, buildRecord(
@@ -95,17 +117,103 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.String("msg", "gc: corrupt manifest foo.json: unexpected EOF"),
 		), "gc: corrupt manifest foo.json")
 	})
+
+	t.Run("cache.dry.banner", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord("cache.dry.banner"), "dry run - commands shown, not executed")
+	})
+
+	t.Run("cache.dry", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"cache.dry",
+			slog.String("label", "magus"),
+			slog.String("target", "ci"),
+		), "[dry] magus ci")
+	})
+
+	t.Run("run.exec", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"run.exec",
+			slog.String("cmd", "go"),
+			slog.Any("args", []string{"test", "./..."}),
+		), "  $ go test ./...")
+	})
 }
 
-// TestPrettyHandlerUnknownMsgSilent verifies that an unrecognised message
-// produces no output and no error.
-func TestPrettyHandlerUnknownMsgSilent(t *testing.T) {
+// TestPrettyHandlerUsesLabelForDisplay verifies a root project (path ".") renders by
+// its normalized label on the status line, while the repro command keeps the real
+// path so it stays runnable.
+func TestPrettyHandlerUsesLabelForDisplay(t *testing.T) {
+	rec := buildRecord(
+		"cache.miss",
+		slog.String("project", "."),   // real path -> repro
+		slog.String("label", "magus"), // display name -> status line
+		slog.String("target", "ci"),
+		slog.Int64("duration", int64(12*time.Second)),
+	)
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	require.NoError(t, h.Handle(context.Background(), rec), "Handle")
+	out := buf.String()
+	assert.Contains(t, out, "[pass] magus (ran,", "status line should use the normalized label")
+	assert.NotContains(t, out, "[pass] . (ran", "status line must not show the bare '.'")
+	assert.Contains(t, out, "magus run ci .", "repro must keep the real runnable path")
+}
+
+// TestPrettyHandlerGenericMessage verifies that a non-cache message renders in the
+// compact generic style: a level tag, the message, and trailing key=value attrs,
+// with no timestamp or level= boilerplate.
+func TestPrettyHandlerGenericMessage(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
-	r := buildRecord("some.other.event", slog.String("key", "val"))
+	r := buildRecord("magus: something happened", slog.String("key", "val"))
 	require.NoError(t, h.Handle(context.Background(), r), "Handle")
-	assert.Zero(t, buf.Len(), "expected no output for unknown message, got %q", buf.String())
+	out := buf.String()
+	assert.Contains(t, out, "[info] magus: something happened")
+	assert.Contains(t, out, "key=val")
+	assert.NotContains(t, out, "time=", "generic pretty output must not carry a timestamp")
+	assert.NotContains(t, out, "level=", "generic pretty output must not carry a level= field")
+}
+
+// TestPrettyHandlerGenericLevels verifies the level-to-tag mapping for generic records.
+func TestPrettyHandlerGenericLevels(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		level slog.Level
+		tag   string
+	}{
+		{slog.LevelError, "[error]"},
+		{slog.LevelWarn, "[warn]"},
+		{slog.LevelInfo, "[info]"},
+		{slog.LevelDebug, "[debug]"},
+	}
+	for _, tc := range cases {
+		var buf bytes.Buffer
+		h := newTestHandler(&buf)
+		r := slog.NewRecord(time.Now(), tc.level, "msg", 0)
+		require.NoError(t, h.Handle(context.Background(), r), "Handle")
+		assert.Truef(t, strings.HasPrefix(buf.String(), tc.tag+" "), "level %s: want prefix %q, got %q", tc.level, tc.tag, buf.String())
+	}
+}
+
+// TestPrettyHandlerSkipsDirAttr verifies the noisy "dir" correlation attr is hidden
+// above debug level but shown at debug level.
+func TestPrettyHandlerSkipsDirAttr(t *testing.T) {
+	t.Parallel()
+	var info bytes.Buffer
+	hi := newTestHandler(&info)
+	require.NoError(t, hi.Handle(context.Background(), buildRecord("msg", slog.String("dir", "/repo"))), "Handle")
+	assert.NotContains(t, info.String(), "dir=/repo", "dir attr should be hidden at info level")
+
+	var dbg bytes.Buffer
+	hd := newTestHandler(&dbg)
+	rec := slog.NewRecord(time.Now(), slog.LevelDebug, "msg", 0)
+	rec.AddAttrs(slog.String("dir", "/repo"))
+	require.NoError(t, hd.Handle(context.Background(), rec), "Handle")
+	assert.Contains(t, dbg.String(), "dir=/repo", "dir attr should be shown at debug level")
 }
 
 // TestPrettyHandlerReproLine verifies that a per-project result prints the

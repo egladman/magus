@@ -8,14 +8,17 @@ import (
 	"github.com/egladman/magus/internal/doctor"
 )
 
-// TestStatusGlyph maps every documented status to its glyph and
+// TestStatusGlyph maps every documented status to its plain (uncoloured) marker and
 // confirms the unknown-status fallback.
 func TestStatusGlyph(t *testing.T) {
-	assert.Equal(t, "[ok]", statusGlyph(doctor.StatusOK))
-	assert.Equal(t, "[fail]", statusGlyph(doctor.StatusFail))
-	assert.Equal(t, "[?]", statusGlyph(""))
-	assert.Equal(t, "[?]", statusGlyph("unknown"))
-	assert.Equal(t, "[?]", statusGlyph("OK")) // case-sensitive by design
+	assert.Equal(t, "[pass]", statusGlyph(doctor.StatusOK, false))
+	assert.Equal(t, "[fail]", statusGlyph(doctor.StatusFail, false))
+	assert.Equal(t, "[?]", statusGlyph("", false))
+	assert.Equal(t, "[?]", statusGlyph("unknown", false))
+	assert.Equal(t, "[?]", statusGlyph("OK", false)) // case-sensitive by design
+	// Coloured variant wraps the marker in ANSI but preserves the label.
+	assert.Contains(t, statusGlyph(doctor.StatusFail, true), "[fail]")
+	assert.Contains(t, statusGlyph(doctor.StatusFail, true), "\x1b[31m")
 }
 
 // TestCanonicalTarget covers the short-alias expansions and the passthrough.

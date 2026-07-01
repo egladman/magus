@@ -88,7 +88,7 @@ func TestStateSuite(t *testing.T) {
 
 func (s *StateSuite) TestSaveAndLoadState() {
 	want := State{
-		LastTarget:     map[string]string{"/path/to/proj": "build"},
+		LastTarget: map[string]string{"/path/to/proj": "build"},
 	}
 	require.NoError(s.T(), SaveState(want))
 

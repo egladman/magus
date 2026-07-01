@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/std"
 )
@@ -114,10 +115,16 @@ func applyDisplay() {
 
 	opts := &slog.HandlerOptions{Level: lvl, AddSource: addSource}
 	var h slog.Handler
-	if globalCfg.Log.Format == "json" {
+	switch globalCfg.Log.Format {
+	case "json":
 		h = slog.NewJSONHandler(os.Stderr, opts)
-	} else {
+	case "text":
 		h = slog.NewTextHandler(os.Stderr, opts)
+	default: // pretty, plain
+		// Render general diagnostics through the same compact handler as cache
+		// events so they share one style and stop interleaving as raw
+		// "time=... level=..." lines with the pretty output.
+		h = cache.NewPrettyHandler(os.Stderr, lvl)
 	}
 	slog.SetDefault(slog.New(dirHandler{h}))
 }

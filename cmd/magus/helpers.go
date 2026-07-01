@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -154,6 +155,15 @@ func listTargets(scope string, targets []types.Target, source string) {
 type errSilent struct{ exitCode int }
 
 func (errSilent) Error() string { return "silent exit" }
+
+// reportedRunErr reports whether err was already surfaced to the user, per project,
+// by the cache's pretty handler as a "[xx] <project> (error): ..." line — i.e. a
+// spell/run failure during a fan-out. When true the top-level handler should exit
+// non-zero via errSilent rather than reprinting the same text as a "[error] ..." line.
+func reportedRunErr(err error) bool {
+	var se *types.SpellErrors
+	return errors.As(err, &se)
+}
 
 // canonicalTarget expands short target aliases at the CLI edge.
 func canonicalTarget(name string) string {

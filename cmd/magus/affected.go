@@ -257,6 +257,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if *timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, *timeout)
 	}
+	if reportedRunErr(err) {
+		return errSilent{exitCode: 1}
+	}
 	return err
 }
 

@@ -1,0 +1,84 @@
+package cache
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"testing"
+
+	runPkg "github.com/egladman/magus/internal/run"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// collapseCache builds a Cache in collapse-on-success mode at default verbosity.
+func collapseCache(t *testing.T) *Cache {
+	t.Helper()
+	return &Cache{dir: t.TempDir(), log: slog.Default(), logLevel: slog.LevelInfo, collapse: true}
+}
+
+// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	orig := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	fn()
+	require.NoError(t, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(out)
+}
+
+// TestCaptureRunCollapseSuppressesOutputOnSuccess verifies that a passing project's
+// subprocess output is withheld (collapsed) rather than streamed to stderr.
+func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
+	c := collapseCache(t)
+	lp := c.logPath("svc/api", "deadbeef")
+
+	out := captureStderr(t, func() {
+		err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "compiling lots of noisy output...")
+			return nil
+		})
+		require.NoError(t, err)
+	})
+
+	assert.Empty(t, out, "collapse mode should withhold subprocess output on success")
+}
+
+// TestCaptureRunCollapseReplaysOnFailure verifies that on failure the withheld output
+// is replayed raw on stdout (copy/paste friendly) with an attributing header on the
+// stderr live view, so the error is not lost to the collapse.
+func TestCaptureRunCollapseReplaysOnFailure(t *testing.T) {
+	c := collapseCache(t)
+	lp := c.logPath("svc/api", "cafef00d")
+	want := errors.New("boom")
+
+	var stdoutBuf string
+	stderrOut := captureStderr(t, func() {
+		stdoutBuf = captureStdout(t, func() {
+			err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+				stdout, _ := runPkg.OutputWriters(ctx)
+				fmt.Fprintln(stdout, "lint: undefined symbol foo")
+				return want
+			})
+			require.ErrorIs(t, err, want)
+		})
+	})
+
+	// Header (attribution) on the stderr live view; raw body on stdout.
+	assert.Contains(t, stderrOut, "-- svc/api (failed) --")
+	assert.Contains(t, stdoutBuf, "lint: undefined symbol foo")
+	assert.NotContains(t, stdoutBuf, "-- svc/api (failed) --", "stdout body must stay raw (no header)")
+	// Ephemeral log removed after a collapsed failure dump (not retained like silent).
+	_, statErr := os.Stat(lp)
+	assert.True(t, os.IsNotExist(statErr), "collapse failure log should be removed after replay")
+}
