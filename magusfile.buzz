@@ -37,7 +37,6 @@ magus.project({
         "docs/modules/*.md",
         "docs/manpage/gen/*.md",
         "manpage/gen/*.1",
-        "cmd/magus/manpages/*.1",
         "MAGUS.md",
         "dist/*",
     ],
@@ -85,7 +84,7 @@ export fun go_build(args: [str]) > void {
         "env": {"GOEXPERIMENT": "jsonv2"},
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
-            "-tags", "mcp,selfmanage",
+            "-tags", "mcp",
             "-o", "magus",
             "./cmd/magus"],
     });
@@ -146,14 +145,10 @@ export fun image_scan(args: [str]) > void {
     }
 }
 
-// Renders man pages and mirrors them into the embed dir for `magus self install`.
+// Renders the man pages (roff) into manpage/gen.
 export fun man_generate(args: [str]) > void {
     fs.makeDirectory(fs.join("manpage", "gen"));
-    fs.makeDirectory(fs.join("cmd", "magus", "manpages"));
     os.exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", fs.join("manpage", "gen")]);
-    foreach (page in fs.glob(fs.join("manpage", "gen", "*.1"))) {
-        fs.writeFile(fs.join("cmd", "magus", "manpages", fs.basename(page)), fs.readFile(page));
-    }
 }
 
 // Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
@@ -179,14 +174,14 @@ export fun docs_generate(args: [str]) > void {
 
 // Renders MAGUS.md via `magus describe graph`.
 export fun md_generate(args: [str]) > void {
-    final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
+    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in
 // GitHub Actions, appends it to the job step summary. The final CI step; never gates.
 export fun postflight(args: [str]) > void {
-    final doc = magus.cmd(["insight", "report", "--workspace"]).stdout; // teed to stdout, like md-generate
+    final doc = magus.insight(["report", "--workspace"]).stdout; // teed to stdout, like md-generate
     final summaryPath = os.env("GITHUB_STEP_SUMMARY");
     if (summaryPath != null and ("" + summaryPath) != "") {
         final sp = "" + summaryPath;
@@ -197,16 +192,20 @@ export fun postflight(args: [str]) > void {
     }
 }
 
-// Regenerates every *-generate sibling, then gates on git drift (exclusive, scoped to cwd).
+// Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to
+// cwd). Drift = regeneration dirtied a previously-clean tree, via vcs.isDirty (not
+// a raw git/porcelain shell-out), so uncommitted-but-current generated files pass;
+// only a regeneration that changes a clean file fails (a generator input changed
+// but its output was not re-run and committed).
 export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
+    final clean_before = vcs.isDirty() == false;
     magus.needs(magus.target.glob("*-generate"));
     if (magus.has_charm("rw")) { return; }
 
-    final drift = os.exec("git", ["status", "--porcelain", "--", "."]).stdout;
-    if (drift != "") {
-        throw "generate: working tree is dirty after regeneration; if generated "
-            + "files drifted, re-run `magus run generate:rw` and commit:\n" + drift;
+    if (clean_before and vcs.isDirty()) {
+        throw "generate: regeneration changed generated files; re-run "
+            + "`magus run generate:rw` and commit";
     }
 }
 
@@ -303,7 +302,7 @@ export fun buzz_run(args: [str]) > void {
 }
 
 // Gates the build on workspace health by running `magus doctor`.
-export fun preflight(args: [str]) > void { magus.cmd(["doctor"]); }
+export fun preflight(args: [str]) > void { magus.doctor([]); }
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(args: [str])  > void {
@@ -370,12 +369,12 @@ export fun ci_shard(args: [str]) > void {
             + plan.q("max_parallel").integerValue() + "\n\n"
             + "| shard | projects |\n| --- | --- |\n";
         // Scope the graph to the workspace root ($GITHUB_WORKSPACE), not the nested magus workspace.
-        var graphArgs = mut [];
+        var graphArgs = mut ["graph", "-o", "mermaid"];
+        var graphOpts = mut {<str: str>};
         final root = os.env("GITHUB_WORKSPACE");
         if (root != null and ("" + root) != "") {
-            graphArgs.append("--root"); graphArgs.append("" + root);
+            graphOpts["root"] = "" + root;
         }
-        graphArgs.append("describe"); graphArgs.append("graph"); graphArgs.append("-o"); graphArgs.append("mermaid");
         var nproj = 0;
         foreach (row in plan.q("matrix").listValue()) {
             final projects = row.q("projects").stringValue();
@@ -386,7 +385,7 @@ export fun ci_shard(args: [str]) > void {
         }
         if (nproj > 0) {
             md = md + "\n## Dependency graph (affected)\n\n```mermaid\n"
-                + magus.cmd(graphArgs).stdout
+                + magus.describe(graphArgs, graphOpts).stdout
                 + "\n```\n";
         }
         var existingSummary = "";

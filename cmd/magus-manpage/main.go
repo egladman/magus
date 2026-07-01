@@ -445,7 +445,9 @@ func (m *mdBuf) p(s string)  { m.b.WriteString(s + "\n\n") }
 func (m *mdBuf) def(term, body string) { fmt.Fprintf(&m.b, "%s\n: %s\n\n", term, body) }
 
 func (m *mdBuf) code(lines ...string) {
-	m.b.WriteString("```\n")
+	// Example blocks are shell command lines; tag them so MD040 (fenced-code
+	// language) is satisfied and renderers can highlight them.
+	m.b.WriteString("```sh\n")
 	for _, l := range lines {
 		m.b.WriteString(l + "\n")
 	}
