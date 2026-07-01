@@ -32,12 +32,11 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#core-concepts" title="Core concepts">Core concepts</a></li><li><a href="#going-further" title="Going further">Going further</a></li><li><a href="#command-line-reference" title="Command-line reference">Command-line reference</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
+        <ul><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#core-concepts" title="Core concepts">Core concepts</a></li><li><a href="#going-further" title="Going further">Going further</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
       </nav>
     </aside>
     <article>
 <h1 id="documentation">Documentation</h1>
-<p>magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. It computes the projects affected by a change, caches their results, and runs only the minimum rebuild set - all from a single, statically typed binary configured as code.</p>
 <p>New to magus? <a href="install.html"><strong>Install it</strong></a>, skim the two core ideas below (<a href="targets.html">Targets</a> and <a href="spells.html">Spells</a>), or <a href="playground.html">try it live in the playground</a> without installing anything.</p>
 <h2 id="getting-started">Getting started</h2>
 <p><strong>1. <a href="install.html">Install magus</a>.</strong> It is a single self-contained binary: download a build from the <a href="https://github.com/egladman/magus/releases">releases page</a> and move it onto your <code>PATH</code>, or build from source. The <a href="install.html">installation guide</a> covers both, plus keeping up to date.</p>
@@ -81,7 +80,7 @@ magus affected ci   # run ci only for the projects your changes touched
 <li><a href="mcp.html">MCP</a> - drive magus from agents over the Model Context Protocol.</li>
 <li><a href="telemetry.html">Telemetry</a> - OpenTelemetry traces and metrics.</li>
 </ul>
-<h2 id="command-line-reference">Command-line reference</h2>
+<h2 id="reference">Reference</h2>
 <p>Generated man pages for every command:</p>
 <ul>
 <li><a href="manpage/gen/magus.html"><code>magus</code></a> - the umbrella page: global flags, environment variables, and the full subcommand list.</li>
@@ -90,7 +89,7 @@ magus affected ci   # run ci only for the projects your changes touched
 <li><a href="manpage/gen/magus-ls.html"><code>magus ls</code></a> and <a href="manpage/gen/magus-describe.html"><code>magus describe</code></a> - inspect projects, targets, and the dependency graph.</li>
 <li><a href="manpage/gen/magus-watch.html"><code>magus watch</code></a> and <a href="manpage/gen/magus-x.html"><code>magus x</code></a> - re-run on change, and the interactive target picker.</li>
 </ul>
-<h2 id="reference">Reference</h2>
+<p>The magusfile API and diagnostics:</p>
 <ul>
 <li><a href="modules/index.html">Standard library modules</a> - <code>fs</code>, <code>os</code>, <code>http</code>, <code>json</code>, <code>crypto</code>, and the rest of the magusfile API.</li>
 <li>Diagnostic codes - <a href="codes/magusfile/index.html">magusfile</a>, <a href="codes/race/index.html">race</a>, and <a href="codes/sandbox/index.html">sandbox</a> error explanations.</li>
