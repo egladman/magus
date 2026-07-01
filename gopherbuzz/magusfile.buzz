@@ -16,9 +16,10 @@ import "magus/spell/magusfile";
 import "magus/spell/go";
 
 // os.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
-// neither streaming exec nor raw file IO).
+// neither streaming exec nor raw file IO). vcs.isDirty gates regenerated outputs.
 import "os";
 import "fs";
+import "vcs";
 
 magus.project({
     "spells": [magusfile, go],
@@ -38,19 +39,23 @@ magus.project({
 export fun preflight(args: [str]) > void {}
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+// Drift = regeneration dirtied a file that was clean, via vcs.isDirty (not a raw
+// git/porcelain shell-out), so a locally-regenerated MAGUS.md passes whether or
+// not it is committed; only a regeneration that changes a clean file fails.
 export fun generate(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"), magus.target.literal("md-generate"));
+    magus.needs(magus.target.literal("preflight"));
+    final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
+    magus.needs(magus.target.literal("md-generate"));
     if (magus.has_charm("rw")) { return; }
 
-    final drift = os.exec("git", ["status", "--porcelain", "--", "MAGUS.md"]).stdout;
-    if (drift != "") {
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw gopherbuzz` and commit:\n" + drift;
+    if (clean_before and vcs.isDirty(["MAGUS.md"])) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw gopherbuzz` and commit";
     }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
 export fun md_generate(args: [str]) > void {
-    final doc = magus.cmd(["describe", "graph", "-o", "markdown"]).stdout;
+    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); }

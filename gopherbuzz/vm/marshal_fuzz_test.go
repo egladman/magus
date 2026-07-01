@@ -41,9 +41,9 @@ func FuzzUnmarshalChunk(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte("not bytecode"))
 	f.Add([]byte("BZBC"))                                   // magic only, no version
-	f.Add([]byte{'B', 'Z', 'B', 'C', 0x08, 0x00})          // magic + version, no body
-	f.Add([]byte{'B', 'Z', 'B', 'C', 0xff, 0xff})          // magic + wrong version
-	f.Add([]byte{'B', 'Z', 'D', 'B', 0x08, 0x00})          // .bdb magic, wrong for chunk
+	f.Add([]byte{'B', 'Z', 'B', 'C', 0x08, 0x00})           // magic + version, no body
+	f.Add([]byte{'B', 'Z', 'B', 'C', 0xff, 0xff})           // magic + wrong version
+	f.Add([]byte{'B', 'Z', 'D', 'B', 0x08, 0x00})           // .bdb magic, wrong for chunk
 	f.Add([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06}) // garbage
 	if len(valid) > 8 {
 		f.Add(valid[:len(valid)/2]) // valid header, truncated mid-body

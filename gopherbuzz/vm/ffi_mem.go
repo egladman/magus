@@ -30,7 +30,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"runtime"
 	"strings"
 	"sync"
 	"unsafe"
@@ -129,7 +128,7 @@ func roundUp(n, to int) int {
 
 type pinnedBuf struct {
 	data []byte
-	pin  runtime.Pinner
+	pin  memPin // runtime.Pinner on native; a no-op on TinyGo (see ffi_pin*.go)
 }
 
 // memRegistry maps the base address of a live ffi.alloc block to its pinned

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"sync"
+	"time"
 
 	vmpackage "github.com/egladman/gopherbuzz/vm"
 )
@@ -310,6 +311,12 @@ func (p *Pool) execute(ctx context.Context, name string, ancestors []string) err
 	}
 	if fn == nil {
 		return nil // parse mode stub
+	}
+	if obs := observerFrom(ctx); obs != nil {
+		start := time.Now()
+		_, err = fn(ctx, nil)
+		obs.TargetEnd(ctx, name, time.Since(start), err)
+		return err
 	}
 	_, err = fn(ctx, nil)
 	return err
