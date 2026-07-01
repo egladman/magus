@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MGS4004: potential undeclared dependency</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../install/">Install</a></li>
+        <li><a href="../../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/race/">Race</a></li><li aria-current="page">MGS4004: potential undeclared dependency</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/codes/race/MGS4004.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a><ul><li><a href="#1-add-the-missing-graph-edge" title="1. Add the missing graph edge">1. Add the missing graph edge</a></li><li><a href="#2-if-the-consumer-should-not-consume-the-producers-output" title="2. If the consumer should not consume the producer's output">2. If the consumer should not consume the producer's output</a></li><li><a href="#3-if-the-producers-output-isnt-really-an-output" title="3. If the producer's &quot;output&quot; isn't really an output">3. If the producer's &quot;output&quot; isn't really an output</a></li></ul></li><li><a href="#false-positives" title="False positives">False positives</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+      </nav>
+    </aside>
+    <article>
+<h1 id="mgs4004-potential-undeclared-dependency">MGS4004: potential undeclared dependency</h1>
+<p>A project that did not run in this dispatch consumes a file written by a project
+that did run. The dependency graph is likely missing an edge. The build works
+today because of accidental ordering, but a future parallelism increase or
+scheduling reorder could expose a real race.</p>
+<pre><code class="language-text">[MGS4004] potential undeclared dependency (see …/MGS4004.md)
+  consumer=worker producer=api path=api/dist/schema.json target=build
+</code></pre>
+<h2 id="why">Why</h2>
+<p>The dependency graph defines what depends on what: project <code>worker</code> depends on
+<code>api</code> <em>only</em> if <code>worker.dependsOn</code> contains <code>api</code> or <code>api</code> appears in <code>worker</code>'s
+inferred sources (a glob that matches a path inside <code>api/</code>).</p>
+<p>When the graph is correct, <code>magus run build</code> schedules <code>api</code> strictly before
+<code>worker</code> because of the edge. When the graph is missing an edge but <code>worker</code>
+still happens to consume <code>api</code>'s output, three things are simultaneously true:</p>
+<ol>
+<li><code>worker.Sources</code> matches a path inside <code>api/dist/</code>.</li>
+<li><code>api</code> wrote that path during this run (recorded by the Phase-3 attribution
+diff).</li>
+<li><code>worker</code> itself was NOT in this dispatch's project set (the missing edge
+means <code>magus affected</code> didn't pull it in).</li>
+</ol>
+<p>This is the same hazard that Ninja's <code>missingdeps</code> subcommand catches:
+&quot;targets had depfile dependencies on generated inputs without a non-depfile
+dep path to the generator.&quot; The build is correct by accident, and the
+graph cannot defend it against a scheduling change.</p>
+<p>Detection happens post-build, behind <code>--race</code>, because it consumes the
+Phase-3 per-project write attribution. It is observational: magus does
+not block or fail the build.</p>
+<h2 id="resolution">Resolution</h2>
+<h3 id="1-add-the-missing-graph-edge">1. Add the missing graph edge</h3>
+<p>The fix is usually to declare the dependency the build relies on. In
+<code>magusfile.go</code>:</p>
+<pre><code class="language-go">boosterpack.Bind(pack.Go, specWorker.Build).DependsOn(specAPI.Build)
+</code></pre>
+<p>Or via the consumer project's sources, if the consumer's sources should pull
+the producer in automatically:</p>
+<pre><code class="language-yaml"># worker/magus.yaml
+sources:
+  - ../api/dist/schema.json # explicit dep
+</code></pre>
+<p>Either way, after the edit, <code>magus affected</code> will correctly include both
+producer and consumer when either changes.</p>
+<h3 id="2-if-the-consumer-should-not-consume-the-producers-output">2. If the consumer should not consume the producer's output</h3>
+<p>Sometimes MGS4004 fires because the consumer's source glob is too broad and
+sweeps in a path it shouldn't. Tighten the glob:</p>
+<pre><code class="language-yaml"># Before: matches every file under api/, including dist/
+sources:
+  - &quot;../api/**&quot;
+
+# After: matches only api source files
+sources:
+  - &quot;../api/**/*.go&quot;
+  - &quot;!../api/dist/**&quot;
+</code></pre>
+<h3 id="3-if-the-producers-output-isnt-really-an-output">3. If the producer's &quot;output&quot; isn't really an output</h3>
+<p>If <code>api</code> happens to write <code>api/dist/schema.json</code> only as a side-effect (e.g. a
+formatter touched it), and the file isn't meant to be a build artifact, remove
+it from <code>api</code>'s declared <code>outputs</code> and from any consumer's <code>sources</code>. Or
+suppress the spell's side-effect in <code>api</code> so it stops writing the path.</p>
+<h2 id="false-positives">False positives</h2>
+<p>MGS4004 is the lowest-confidence finding in the MGS4xxx family. Known sources
+of false positives:</p>
+<ul>
+<li><strong>The consumer was correctly excluded from the dispatch</strong> (e.g. <code>--scope</code>
+was set; the consumer isn't broken, it just wasn't asked to run). Magus
+cannot tell the difference between &quot;consumer was excluded on purpose&quot; and
+&quot;consumer wasn't included because the edge is missing.&quot;</li>
+<li><strong>The path is a transitive workspace-level file</strong> (e.g. <code>go.work.sum</code>) that
+technically lives under one project but is logically shared.</li>
+<li><strong>Glob matches that don't represent real consumption</strong>: e.g. <code>worker</code>
+declares <code>**/*.md</code> as sources but reads no markdown.</li>
+</ul>
+<p>When in doubt, run with <code>--race</code> and consult
+<code>MGS4001</code> findings as well. A real race usually fires both.</p>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><code>MGS4001.md</code>: runtime race detector that this check builds on.</li>
+<li><a href="https://ninja-build.org/manual.html">Ninja's <code>missingdeps</code></a>: the
+inspiration for this audit. Same problem, same shape of fix.</li>
+<li><code>magus describe project &lt;path&gt;</code>: shows the project's declared
+<code>sources</code>/<code>outputs</code> and inferred <code>dependsOn</code> edges.</li>
+</ul>
+    </article>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../MGS4003/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS4003: non-deterministic output</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script defer src="../../../clipboard.js"></script>
+  <script defer src="../../../toc.js"></script>
+  <script defer src="../../../anchors.js"></script>
+  <script defer src="../../../copy.js"></script>
+  <script src="../../../search.js"></script>
+  <script type="module" src="../../../hljs-init.js"></script>
+  <script defer src="../../../mermaid-init.js"></script>
+  <script defer src="../../../home-heading.js"></script>
+</body>
+</html>

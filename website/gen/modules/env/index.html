@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>env</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../install/">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">env</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/env.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#get" title="get">get</a></li><li><a href="#lookup" title="lookup">lookup</a></li><li><a href="#set" title="set">set</a></li><li><a href="#list" title="list">list</a></li><li><a href="#unset" title="unset">unset</a></li><li><a href="#expand" title="expand">expand</a></li><li><a href="#home" title="home">home</a></li><li><a href="#get-or" title="get_or">get_or</a></li><li><a href="#require" title="require">require</a></li></ul></li></ul>
+      </nav>
+    </aside>
+    <article>
+<h1 id="env">env</h1>
+<p>Process environment variable access.</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;env&quot;</code>) and call methods in <code>camelCase</code> (<code>env.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="get">get</h3>
+<p>Return the value of name, or &quot;&quot; if unset. Use lookup to tell unset from set-but-empty.</p>
+<p><strong>Signature:</strong> <code>env.get(name) → string</code>[^buzz-stdlib-env-get] · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L89">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="lookup">lookup</h3>
+<p>Return (value, found); found is false when name is unset or stripped by the sandbox.</p>
+<p><strong>Signature:</strong> <code>env.lookup(name) → string, bool</code>[^buzz-stdlib-env-lookup] · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L105">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string, bool</p>
+<h3 id="set">set</h3>
+<p>Set name to value in the current process environment.</p>
+<p><strong>Signature:</strong> <code>env.set(name, value)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L114">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="list">list</h3>
+<p>Return all environment variables as a name→value map.</p>
+<p><strong>Signature:</strong> <code>env.list() → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L196">source</a></p>
+<p><strong>Returns:</strong> map[string]string</p>
+<h3 id="unset">unset</h3>
+<p>Remove name from the current process environment.</p>
+<p><strong>Signature:</strong> <code>env.unset(name)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L132">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="expand">expand</h3>
+<p>Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to &quot;&quot;).</p>
+<p><strong>Signature:</strong> <code>env.expand(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L147">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="home">home</h3>
+<p>Return the current user's home directory.</p>
+<p><strong>Signature:</strong> <code>env.home() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L158">source</a></p>
+<p><strong>Returns:</strong> string</p>
+<h3 id="get-or">get_or</h3>
+<p>Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.</p>
+<p><strong>Signature:</strong> <code>env.getOr(name, def) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L169">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>def</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="require">require</h3>
+<p>Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).</p>
+<p><strong>Signature:</strong> <code>env.require(name) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L184">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<p>[^buzz-stdlib-env-get]: <code>env.get</code> is also in Buzz's standard library (<code>os.env</code>); the magus form is sandbox-aware.
+[^buzz-stdlib-env-lookup]: <code>env.lookup</code> is also in Buzz's standard library (<code>os.env (returns null when unset)</code>); the magus form is sandbox-aware.</p>
+    </article>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../encoding/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">encoding</span></a>
+      <a class="page-nav-next" href="../fmt/"><span class="page-nav-dir">Next</span><span class="page-nav-title">fmt</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script defer src="../../clipboard.js"></script>
+  <script defer src="../../toc.js"></script>
+  <script defer src="../../anchors.js"></script>
+  <script defer src="../../copy.js"></script>
+  <script src="../../search.js"></script>
+  <script type="module" src="../../hljs-init.js"></script>
+  <script defer src="../../mermaid-init.js"></script>
+  <script defer src="../../home-heading.js"></script>
+</body>
+</html>

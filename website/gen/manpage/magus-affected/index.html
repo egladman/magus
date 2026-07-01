@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magus-affected</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../install/">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Manpage</li><li aria-current="page">magus-affected</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/manpage/gen/magus-affected.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a></li><li><a href="#options" title="Options">Options</a></li><li><a href="#targets" title="Targets">Targets</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
+      </nav>
+    </aside>
+    <article>
+<h1 id="magus-affected">magus-affected</h1>
+<p>Run a target for VCS-diff affected projects</p>
+<h2 id="synopsis">Synopsis</h2>
+<p><strong>magus</strong> affected &lt;target&gt; [flags]</p>
+<h2 id="description">Description</h2>
+<p>Run a named target for every project that is affected by changes in
+version control. The active VCS adapter is picked by autodetect from .git, .hg,
+or .jj at the workspace root, or pinned with MAGUS_VCS_COMMAND_NAME /
+vcs.command_name. MAGUS_VCS_COMMAND overrides the command entirely. When
+MAGUS_VCS_ENABLED=false (or vcs.enabled: false) affected detection
+short-circuits and falls back to the full project set with the source label
+&quot;vcs disabled&quot;.</p>
+<p>A project is affected if any of its source files changed directly, or if a
+project it depends on is affected (transitive closure over the dependency graph).</p>
+<p>Use --stdin to read changed paths from a pipe instead of running a VCS diff.
+This pairs with magus watch for continuous-build workflows:</p>
+<p>magus watch | magus affected --stdin build</p>
+<p>Forensic modes reason about the affected set instead of executing a target.
+--explain shows why a project is in the set. --plan emits a provider-neutral
+JSON CI shard plan for the affected set (for CI fan-out; always keys off the ci
+anchor). --bisect drives VCS bisect using run history to find the commit that
+introduced a regression.</p>
+<h2 id="options">Options</h2>
+<dl>
+<dt><strong>--base</strong> <em>string</em></dt>
+<dd>Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)</dd>
+<dt><strong>--bisect</strong> <em>string</em></dt>
+<dd>Drive VCS bisect to find the commit that broke &lt;project&gt;</dd>
+<dt><strong>--depth</strong> <em>int</em></dt>
+<dd>With --graph: cap displayed depth (0 = unlimited)</dd>
+<dt><strong>--dry-run</strong></dt>
+<dd>Print what would run without executing</dd>
+<dt><strong>--explain</strong> <em>string</em></dt>
+<dd>Show why &lt;project&gt; is in the affected set instead of executing</dd>
+<dt><strong>--good</strong> <em>string</em></dt>
+<dd>With --bisect: known-good commit SHA (auto-detected from history when empty)</dd>
+<dt><strong>--graph</strong></dt>
+<dd>Render the dependency graph for the affected scope instead of executing</dd>
+<dt><strong>--max-parallel-budget</strong> <em>int</em></dt>
+<dd>With --plan: cross-shard concurrency cap; 0 = unlimited</dd>
+<dt><strong>--max-shards</strong> <em>int</em> (default: 8)</dt>
+<dd>With --plan: maximum CI shards (-1 = unlimited)</dd>
+<dt><strong>--null</strong></dt>
+<dd>With --stdin: expect NUL-separated paths and double-NUL between batches</dd>
+<dt><strong>--plan</strong></dt>
+<dd>Emit a provider-neutral JSON CI shard plan for the affected set</dd>
+<dt><strong>--stdin</strong></dt>
+<dd>Read changed file paths from stdin instead of running a VCS diff</dd>
+<dt><strong>--target</strong> <em>string</em> (default: test)</dt>
+<dd>With --bisect: magus target to bisect</dd>
+<dt><strong>--upstream</strong></dt>
+<dd>With --graph: show dependents instead of dependencies</dd>
+</dl>
+<h2 id="targets">Targets</h2>
+<dl>
+<dt><strong>ls</strong></dt>
+<dd>Print selected projects without executing anything</dd>
+<dt><strong>build</strong></dt>
+<dd>Build selected projects</dd>
+<dt><strong>test</strong></dt>
+<dd>Test selected projects</dd>
+<dt><strong>lint</strong></dt>
+<dd>Lint selected projects (read-only)</dd>
+<dt><strong>format</strong></dt>
+<dd>Format source files in selected projects</dd>
+<dt><strong>clean</strong></dt>
+<dd>Remove build artefacts from selected projects</dd>
+<dt><strong>generate</strong></dt>
+<dd>Run code generation for selected projects</dd>
+<dt><strong>ci</strong></dt>
+<dd>Run the magusfile's ci target read-only (affected-set anchor)</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<p><em>Build projects changed since the default base ref</em></p>
+<pre><code class="language-sh">magus affected build
+</code></pre>
+<p><em>Use a different base ref</em></p>
+<pre><code class="language-sh">magus affected build --base main
+</code></pre>
+<p><em>Pipe from watch for continuous builds</em></p>
+<pre><code class="language-sh">magus watch | magus affected --stdin build
+</code></pre>
+<p><em>List affected projects without building</em></p>
+<pre><code class="language-sh">magus affected list
+</code></pre>
+<p><em>Show dependency graph for the affected scope</em></p>
+<pre><code class="language-sh">magus affected build --graph
+</code></pre>
+<p><em>Graph as DOT for piping to Graphviz</em></p>
+<pre><code class="language-sh">magus affected build --graph -o dot | dot -Tsvg &gt; graph.svg
+</code></pre>
+<p><em>Emit a CI shard plan for the affected set</em></p>
+<pre><code class="language-sh">magus affected --plan
+</code></pre>
+<p><em>Shard plan limited to four shards</em></p>
+<pre><code class="language-sh">magus affected --plan --max-shards 4
+</code></pre>
+<p><em>Bisect a regression in myapp</em></p>
+<pre><code class="language-sh">magus affected --bisect ./apps/myapp
+</code></pre>
+<h2 id="see-also">See Also</h2>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+    </article>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-next" href="../magus-completion/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus-completion</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script defer src="../../clipboard.js"></script>
+  <script defer src="../../toc.js"></script>
+  <script defer src="../../anchors.js"></script>
+  <script defer src="../../copy.js"></script>
+  <script src="../../search.js"></script>
+  <script type="module" src="../../hljs-init.js"></script>
+  <script defer src="../../mermaid-init.js"></script>
+  <script defer src="../../home-heading.js"></script>
+</body>
+</html>

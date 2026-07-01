@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magus-insight</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../install/">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Manpage</li><li aria-current="page">magus-insight</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/manpage/gen/magus-insight.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a></li><li><a href="#options" title="Options">Options</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
+      </nav>
+    </aside>
+    <article>
+<h1 id="magus-insight">magus-insight</h1>
+<p>Behavioral code analysis from VCS history</p>
+<h2 id="synopsis">Synopsis</h2>
+<p><strong>magus</strong> insight &lt;lens&gt; [flags]</p>
+<h2 id="description">Description</h2>
+<p>Read version-control history to show where a codebase's attention and
+risk concentrate. By default every lens is contextual to the working directory — run
+from inside a subtree and it reflects only that subtree's history; pass --workspace to
+analyze the whole workspace instead (the fan-in postflight uses this). The active VCS
+adapter must report per-commit files (git can).</p>
+<p>Lenses (the first argument):</p>
+<p>hotspots   Edit frequency × complexity — the prime refactoring targets. The
+project view is the dependency graph heat-coloured by churn (with
+authors, recency, blast radius, and CI duration); --files ranks
+individual files by churn × complexity.
+affinity   Projects that change together (temporal coupling). A hidden pair
+co-changes without either declaring a dependency on the other — a
+candidate architectural smell.
+ownership  Author concentration: the primary author and their share, distinct
+author count (bus factor), and abandonment (projects gone quiet).
+trend      The recent half of the window versus the earlier half: a positive
+delta is a rising hotspot, a negative one is cooling.
+report     Every lens as one whole-workspace Markdown document (the magusfile's
+postflight target writes this to the GitHub Actions step summary).</p>
+<p>--commits caps the scan; --since bounds it by date (90d, 12w, 6mo, 1y). Each lens
+accepts -o text|json|yaml|name; hotspots and affinity also render -o mermaid (the
+hotspots file view renders a churn-vs-complexity quadrant chart).</p>
+<h2 id="options">Options</h2>
+<dl>
+<dt><strong>--commits</strong> <em>int</em> (default: 500)</dt>
+<dd>Cap on how many recent commits to scan</dd>
+<dt><strong>--files</strong></dt>
+<dd>hotspots: rank individual files instead of projects</dd>
+<dt><strong>--since</strong> <em>string</em></dt>
+<dd>Only commits within this window (e.g. 90d, 12w, 6mo, 1y)</dd>
+<dt><strong>--workspace</strong></dt>
+<dd>Analyze the whole workspace instead of the current project/subtree</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<p><em>Prime refactoring targets (files)</em></p>
+<pre><code class="language-sh">magus insight hotspots --files
+</code></pre>
+<p><em>Churn-vs-complexity quadrant</em></p>
+<pre><code class="language-sh">magus insight hotspots --files -o mermaid
+</code></pre>
+<p><em>Hidden architectural coupling</em></p>
+<pre><code class="language-sh">magus insight affinity
+</code></pre>
+<p><em>Bus factor and abandonment</em></p>
+<pre><code class="language-sh">magus insight ownership
+</code></pre>
+<p><em>Rising vs cooling activity</em></p>
+<pre><code class="language-sh">magus insight trend --since 90d
+</code></pre>
+<p><em>Whole-workspace report (all lenses)</em></p>
+<pre><code class="language-sh">magus insight report --workspace
+</code></pre>
+<h2 id="see-also">See Also</h2>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+    </article>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../magus-init/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus-init</span></a>
+      <a class="page-nav-next" href="../magus-ls/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus-ls</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script defer src="../../clipboard.js"></script>
+  <script defer src="../../toc.js"></script>
+  <script defer src="../../anchors.js"></script>
+  <script defer src="../../copy.js"></script>
+  <script src="../../search.js"></script>
+  <script type="module" src="../../hljs-init.js"></script>
+  <script defer src="../../mermaid-init.js"></script>
+  <script defer src="../../home-heading.js"></script>
+</body>
+</html>

@@ -179,6 +179,207 @@ fun outName(base: str) > str {
     return base.sub(0, base.len() - 3) + ".html";
 }
 
+// cleanUrl maps a docs-relative source path to its clean, extensionless gen-root
+// URL: drop the .md, drop a trailing index/README landing basename, drop any
+// build-artifact "gen" segment (so docs/manpage/gen/magus-run.md surfaces at
+// manpage/magus-run/, not manpage/gen/magus-run/), and end with a trailing slash.
+// "" for the home page (README.md). Every emitted page becomes <cleanUrl>index.html.
+//   "documentation.md"          -> "documentation/"
+//   "modules/fs.md"             -> "modules/fs/"
+//   "codes/race/README.md"      -> "codes/race/"
+//   "manpage/gen/magus-run.md"  -> "manpage/magus-run/"
+fun cleanUrl(rel: str) > str {
+    var base = rel;
+    if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
+    final parts = base.split("/");
+    var segs: [str] = mut [<str>];
+    var i = 0;
+    while (i < parts.len()) {
+        final p = parts[i];
+        final isLast = (i == parts.len() - 1);
+        if (p != "gen") {
+            if (isLast and (p == "index" or p == "README")) {
+                // a landing basename becomes its directory's URL; drop it
+            } else {
+                segs.append(p);
+            }
+        }
+        i = i + 1;
+    }
+    if (segs.len() == 0) { return ""; }
+    return segs.join("/") + "/";
+}
+
+// cleanDepth is the number of path segments in a page's clean URL — its directory
+// depth below gen/'s root, i.e. how many "../" reach the root from it.
+fun cleanDepth(rel: str) > int {
+    final u = cleanUrl(rel);
+    if (u == "") { return 0; }
+    return u.split("/").len() - 1;   // "modules/fs/" -> ["modules","fs",""] -> 2
+}
+
+// climb builds n repetitions of "../".
+fun climb(n: int) > str {
+    var s = "";
+    var i = 0;
+    while (i < n) { s = s + "../"; i = i + 1; }
+    return s;
+}
+
+// rewriteHref transforms one in-content link href for the directory-index layout.
+// Every page moved into its own directory, so a relative link needs `addDepth`
+// extra "../" to climb back out, and every internal .html target became a directory
+// (drop .html, drop a trailing index/README, drop the "gen" build segment, add a
+// trailing slash). External/anchor/asset links pass through untouched; a #fragment
+// is preserved. playground.html is a hand-authored static page (WS M migrates it to
+// /playground/) so it keeps its .html — only its depth is adjusted.
+// splitPath splits a gen-root-relative path into its non-empty segments, dropping
+// "." segments (a trailing slash yields no empty tail segment).
+fun splitPath(p: str) > [str] {
+    var segs: [str] = mut [<str>];
+    foreach (s in p.split("/")) {
+        if (s != "" and s != ".") { segs.append(s); }
+    }
+    return segs;
+}
+
+// resolvePath resolves a relative link against a gen-root-relative directory,
+// returning the normalized gen-root-relative target path ("" for the root). ".."
+// pops a segment; "." and empty segments are ignored.
+fun resolvePath(fromDir: str, link: str) > str {
+    var segs = splitPath(fromDir);
+    foreach (part in link.split("/")) {
+        if (part != "" and part != ".") {
+            if (part == "..") {
+                if (segs.len() > 0) {
+                    var nw: [str] = mut [<str>];
+                    var i = 0;
+                    while (i < segs.len() - 1) { nw.append(segs[i]); i = i + 1; }
+                    segs = nw;
+                }
+            } else {
+                segs.append(part);
+            }
+        }
+    }
+    return segs.join("/");
+}
+
+// cleanTarget maps an OLD flat gen-root path (e.g. "manpage/gen/magus-ls.html",
+// "codes/race/index.html", "install.html", "index.html") to its NEW clean URL
+// ("manpage/magus-ls/", "codes/race/", "install/", ""): drop .html, drop a trailing
+// index/README landing, drop the "gen" build segment, add a trailing slash.
+// playground.html is a hand-authored static page (WS M migrates it) so it is kept.
+fun cleanTarget(oldPath: str) > str {
+    final segs = splitPath(oldPath);
+    if (segs.len() == 0) { return ""; }
+    if (segs[segs.len() - 1] == "playground.html") { return oldPath; }
+    var keep: [str] = mut [<str>];
+    var i = 0;
+    while (i < segs.len()) {
+        var p = segs[i];
+        final isLast = (i == segs.len() - 1);
+        if (isLast and p.endsWith(".html")) { p = p.sub(0, p.len() - 5); }
+        if (p != "gen") {
+            if (isLast and (p == "index" or p == "README")) {
+                // landing basename -> its directory
+            } else {
+                keep.append(p);
+            }
+        }
+        i = i + 1;
+    }
+    if (keep.len() == 0) { return ""; }
+    return keep.join("/") + "/";
+}
+
+// relativize returns the relative link from fromDir (gen-root-relative) to toUrl
+// (gen-root-relative). A toUrl ending in "/" — or "" for the home page — is a
+// directory (its link keeps the trailing slash); anything else is a file
+// (playground.html, an asset). "./" when they resolve to the same place.
+fun relativize(fromDir: str, toUrl: str) > str {
+    final fromSegs = splitPath(fromDir);
+    final toSegs = splitPath(toUrl);
+    final dirLike = (toUrl == "" or toUrl.endsWith("/"));
+    var i = 0;
+    while (i < fromSegs.len() and i < toSegs.len() and fromSegs[i] == toSegs[i]) { i = i + 1; }
+    var rel = "";
+    var j = i;
+    while (j < fromSegs.len()) { rel = rel + "../"; j = j + 1; }
+    var k = i;
+    while (k < toSegs.len()) {
+        rel = rel + toSegs[k];
+        if (k < toSegs.len() - 1 or dirLike) { rel = rel + "/"; }
+        k = k + 1;
+    }
+    if (rel == "") { rel = "./"; }
+    return rel;
+}
+
+// rewriteHref transforms one in-content link for the directory-index layout by full
+// path resolution: resolve it against the page's OLD flat directory to the old
+// target, map that target to its NEW clean URL, then re-express it relative to the
+// page's NEW directory. This is correct for siblings, cross-level links, landing
+// pages, and the gen-flatten uniformly (a naive fixed "../" count is not, because
+// the flatten changes depth). External/anchor/mailto links pass through; a
+// #fragment is preserved; asset (non-.html) links are re-based but not cleaned.
+fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
+    if (h.startsWith("http://") or h.startsWith("https://") or h.startsWith("//")
+        or h.startsWith("#") or h.startsWith("mailto:")) { return h; }
+    var path = h;
+    var frag = "";
+    final hash = h.indexOf("#");
+    if (hash != null) { path = h.sub(0, hash); frag = h.sub(hash); }
+    if (path == "") { return h; }   // pure fragment already handled; be safe
+
+    final oldTarget = resolvePath(oldDir, path);
+    if (path.endsWith(".html")) {
+        return relativize(newDir, cleanTarget(oldTarget)) + frag;
+    }
+    // Non-page (asset) link: keep the file as-is, only re-base for the moved page.
+    return relativize(newDir, oldTarget) + frag;
+}
+
+// rewriteLinks applies rewriteHref to every href="..." in a rendered content
+// fragment. It runs on the markdown-rendered body only (before the page template
+// wraps it), so the nav/breadcrumb/pager hrefs — built separately with clean URLs —
+// are never double-processed. oldDir/newDir are the page's old flat directory and
+// new clean directory (both gen-root-relative, "" for the home page).
+fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("href=\"");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx + 6);   // through the opening href="
+        rest = rest.sub(idx + 6);
+        final end = rest.indexOf("\"");
+        if (end == null) {
+            buf = buf + rest;
+            rest = "";
+            idx = null;
+        } else {
+            buf = buf + rewriteHref(rest.sub(0, end), oldDir, newDir) + "\"";
+            rest = rest.sub(end + 1);
+            idx = rest.indexOf("href=\"");
+        }
+    }
+    return buf + rest;
+}
+
+// oldFlatDir / newCleanDir give a docs page's directory before and after the
+// directory-index move, for rewriteLinks. Old: the source subdir (one .html per
+// dir). New: the clean URL without its trailing slash.
+fun oldFlatDir(rel: str) > str {
+    final parts = rel.split("/");
+    if (parts.len() <= 1) { return ""; }
+    return parts.sub(0, parts.len() - 1).join("/");
+}
+fun newCleanDir(rel: str) > str {
+    final u = cleanUrl(rel);
+    if (u == "") { return ""; }
+    return u.sub(0, u.len() - 1);
+}
+
 // formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
 // human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
 // date library. Used as the no-JS fallback; client-side JS rewrites it to the
@@ -220,11 +421,7 @@ fun commitFooter(path: str) > str {
 fun rootPrefix(srcRel: str) > str {
     var rel = srcRel;
     if (rel.startsWith(DOCS + "/")) { rel = rel.sub((DOCS + "/").len()); }
-    final depth = rel.split("/").len() - 1;
-    var rel = "";
-    var i = 0;
-    while (i < depth) { rel = rel + "../"; i = i + 1; }
-    return rel;
+    return climb(cleanDepth(rel));
 }
 
 // stripTags removes HTML tags from a fragment, leaving its text. The text keeps
@@ -346,8 +543,7 @@ fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
     if (srcRel == "README.md") { return ""; }
     var rel = srcRel;
     if (rel.startsWith(DOCS + "/")) { rel = rel.sub((DOCS + "/").len()); }
-    final segs = rel.split("/");
-    final base = segs[segs.len() - 1];
+    final segsRaw = rel.split("/");
 
     var li = "<li><a href=\"" + root + "index.html\">Home</a></li>";
 
@@ -357,7 +553,13 @@ fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
         return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
             + li + "<li aria-current=\"page\">Documentation</li></ul>\n    </nav>\n";
     }
-    li = li + "<li><a href=\"" + root + "documentation.html\">Documentation</a></li>";
+    li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
+
+    // Drop the build-artifact "gen" segment so a manpage trail reads
+    // Documentation / Manpage / <cmd>, not / Gen / <cmd> (matches the flattened URL).
+    var segs: [str] = mut [<str>];
+    foreach (s in segsRaw) { if (s != "gen") { segs.append(s); } }
+    final base = segs[segs.len() - 1];
 
     final landing = (base == "index.md" or base == "README.md");
     var dirCount = segs.len() - 1;                              // directory segments before the file
@@ -369,7 +571,7 @@ fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
         final seg = segs[i];
         if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
         if (hasIndexSource(acc)) {
-            li = li + "<li><a href=\"" + root + acc + "/index.html\">" + cap(seg) + "</a></li>";
+            li = li + "<li><a href=\"" + root + acc + "/\">" + cap(seg) + "</a></li>";
         } else {
             li = li + "<li>" + cap(seg) + "</li>";
         }
@@ -384,14 +586,18 @@ fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
 
 // pagerLink renders one prev/next card, reading the sibling's source so it credits
 // the same title (frontmatter title, else first H1) the sibling page renders with.
-fun pagerLink(srcDir: str, name: str, dir: str, cls: str) > str {
+fun pagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str {
     final f = io.File.open(srcDir + "/" + name, io.FileMode.read);
     final md = f.readAll();
     f.close();
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, name); }
-    return "      <a class=\"" + cls + "\" href=\"" + outName(name) + "\">"
+    // Siblings are directory-index pages under the same parent dir. A regular page
+    // lives in its own <slug>/ subdir, so it climbs one level to reach a sibling
+    // (../<slug>/); an index.md landing sits directly in the parent, so it does not.
+    final slug = name.sub(0, name.len() - 3);   // drop ".md"
+    return "      <a class=\"" + cls + "\" href=\"" + climbPrefix + slug + "/\">"
         + "<span class=\"page-nav-dir\">" + dir + "</span>"
         + "<span class=\"page-nav-title\">" + title + "</span></a>\n";
 }
@@ -409,7 +615,11 @@ fun pagerFor(rel: str) > str {
 
     var sibs: [str] = mut [<str>];
     foreach (name in fs.list(srcDir)) {
-        if (name.endsWith(".md") and name != "README.md" and name.startsWith("_") == false) {
+        // README.md/index.md are the directory's landing hub, reached via the
+        // breadcrumb and nav — not a prev/next peer — so they stay out of the pager
+        // (and their clean URL is the parent dir, which a sibling link can't express).
+        if (name.endsWith(".md") and name != "README.md" and name != "index.md"
+            and name.startsWith("_") == false) {
             sibs.append(name);
         }
     }
@@ -424,9 +634,13 @@ fun pagerFor(rel: str) > str {
     }
     if (pos < 0) { return ""; }
 
+    // Every pageable sibling now lives in its own <slug>/ subdir, so a page climbs
+    // one level to reach a peer (../<slug>/). Landings are excluded above.
+    final climbPrefix = "../";
+
     var body = "";
-    if (pos > 0) { body = body + pagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev"); }
-    if (pos < ordered.len() - 1) { body = body + pagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next"); }
+    if (pos > 0) { body = body + pagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
+    if (pos < ordered.len() - 1) { body = body + pagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
     if (body == "") { return ""; }
     return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
 }
@@ -487,8 +701,8 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
         + "    <nav class=\"container\">\n"
         + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><picture><source srcset=\"" + root + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
         + "      <ul>\n"
-        + navLink(root + "documentation.html", "Documentation", "documentation", active)
-        + navLink(root + "install.html", "Install", "install", active)
+        + navLink(root + "documentation/", "Documentation", "documentation", active)
+        + navLink(root + "install/", "Install", "install", active)
         + navLink(root + "playground.html", "Playground", "playground", active)
         + "        <li><a href=\"" + GH + "\">GitHub</a></li>\n"
         + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\">◐</button></li>\n"
@@ -532,9 +746,15 @@ fun renderRoot() > void {
     f.close();
 
     var html = markdown.toHtml(md);
+    while (html.indexOf("href=\"./docs/") != null) {
+        html = html.replace("href=\"./docs/", "href=\"");
+    }
     while (html.indexOf("href=\"docs/") != null) {
         html = html.replace("href=\"docs/", "href=\"");
     }
+    // The home page stays at gen/index.html (gen root), so its in-content links are
+    // rewritten from the root directory to the root directory.
+    html = rewriteLinks(html, "", "");
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     var title = fm.q("title").stringValue();
@@ -561,26 +781,23 @@ fun renderFile(rel: str) > void {
     if (title == "") { title = titleOf(md, rel); }
     final desc = fm.q("description").stringValue();
 
-    final html = markdown.toHtml(md);
+    final html = rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel));
     final doc = page(title, desc, html, DOCS + "/" + rel, pagerFor(rel));
 
-    final parts = rel.split("/");
-    final base = parts[parts.len() - 1];
-    var dir = OUT;
-    if (parts.len() > 1) { dir = OUT + "/" + parts.sub(0, parts.len() - 1).join("/"); }
+    // Directory-index output: every page is <cleanUrl>index.html (extensionless,
+    // with the build-artifact "gen" segment flattened out). url is gen/-root-
+    // relative and ends in a slash, matching what search.js/sitemap/canonical use.
+    final url = cleanUrl(rel);
+    final dir = OUT + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
     fs.makeDirectory(dir);
 
-    final of = io.File.open(dir + "/" + outName(base), io.FileMode.write);
+    final of = io.File.open(dir + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
 
-    // url is gen/-root-relative (e.g. "codes/race/MGS4001.html"), matching the
-    // links search.js resolves against gen/'s root.
-    var url = outName(base);
-    if (parts.len() > 1) { url = parts.sub(0, parts.len() - 1).join("/") + "/" + url; }
     addRecord(url, title, desc, md);
 
-    std.print("  " + rel + " -> " + dir + "/" + outName(base));
+    std.print("  " + rel + " -> " + dir + "/index.html");
 }
 
 // True if path is a directory.

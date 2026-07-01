@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>charm</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../install/">Install</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">charm</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/charm.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#append" title="append">append</a></li><li><a href="#prepend" title="prepend">prepend</a></li><li><a href="#after" title="after">after</a></li><li><a href="#before" title="before">before</a></li><li><a href="#set" title="set">set</a></li><li><a href="#drop" title="drop">drop</a></li><li><a href="#after-func" title="after_func">after_func</a></li><li><a href="#before-func" title="before_func">before_func</a></li><li><a href="#set-func" title="set_func">set_func</a></li><li><a href="#drop-func" title="drop_func">drop_func</a></li><li><a href="#path" title="path">path</a></li><li><a href="#path-func" title="path_func">path_func</a></li><li><a href="#move" title="move">move</a></li><li><a href="#move-func" title="move_func">move_func</a></li><li><a href="#copy" title="copy">copy</a></li><li><a href="#copy-func" title="copy_func">copy_func</a></li><li><a href="#test" title="test">test</a></li><li><a href="#test-func" title="test_func">test_func</a></li></ul></li></ul>
+      </nav>
+    </aside>
+    <article>
+<h1 id="charm">charm</h1>
+<p>Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;charm&quot;</code>) and call methods in <code>camelCase</code> (<code>charm.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="append">append</h3>
+<p>Append vals to the end of the argv.</p>
+<p><strong>Signature:</strong> <code>charm.append(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L198">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vals</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="prepend">prepend</h3>
+<p>Insert vals at the front of the argv, in order.</p>
+<p><strong>Signature:</strong> <code>charm.prepend(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L207">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vals</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="after">after</h3>
+<p>Insert vals immediately after the first argv element equal to anchor.</p>
+<p><strong>Signature:</strong> <code>charm.after(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L212">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>vals</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="before">before</h3>
+<p>Insert vals immediately before the first argv element equal to anchor.</p>
+<p><strong>Signature:</strong> <code>charm.before(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L221">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>vals</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="set">set</h3>
+<p>Replace the first argv element equal to anchor with val.</p>
+<p><strong>Signature:</strong> <code>charm.set(argv, anchor, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L230">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>val</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="drop">drop</h3>
+<p>Drop (remove) the first argv element equal to anchor.</p>
+<p><strong>Signature:</strong> <code>charm.drop(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L239">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="after-func">after_func</h3>
+<p>Insert vals after the first argv element for which fn(s) is truthy.</p>
+<p><strong>Signature:</strong> <code>charm.afterFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L248">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>vals</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="before-func">before_func</h3>
+<p>Insert vals before the first argv element for which fn(s) is truthy.</p>
+<p><strong>Signature:</strong> <code>charm.beforeFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L257">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>vals</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="set-func">set_func</h3>
+<p>Replace the first argv element for which fn(s) is truthy with val.</p>
+<p><strong>Signature:</strong> <code>charm.setFunc(argv, fn, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L266">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>val</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="drop-func">drop_func</h3>
+<p>Drop (remove) the first argv element for which fn(s) is truthy.</p>
+<p><strong>Signature:</strong> <code>charm.dropFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L275">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="path">path</h3>
+<p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element equal to anchor — the index, auto-calculated, for hand-built move/copy/test ops.</p>
+<p><strong>Signature:</strong> <code>charm.path(argv, anchor) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L284">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="path-func">path_func</h3>
+<p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element for which fn(s) is truthy.</p>
+<p><strong>Signature:</strong> <code>charm.pathFunc(argv, fn) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L293">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+<h3 id="move">move</h3>
+<p>Move the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
+<p><strong>Signature:</strong> <code>charm.move(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L311">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="move-func">move_func</h3>
+<p>Move the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
+<p><strong>Signature:</strong> <code>charm.moveFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L323">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="copy">copy</h3>
+<p>Copy the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
+<p><strong>Signature:</strong> <code>charm.copy(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L335">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="copy-func">copy_func</h3>
+<p>Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
+<p><strong>Signature:</strong> <code>charm.copyFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L347">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="test">test</h3>
+<p>Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).</p>
+<p><strong>Signature:</strong> <code>charm.test(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L360">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="test-func">test_func</h3>
+<p>Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.</p>
+<p><strong>Signature:</strong> <code>charm.testFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L369">source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argv</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>fn</code></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18"><code>Callback</code></a></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> map[string]any</p>
+    </article>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../archive/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">archive</span></a>
+      <a class="page-nav-next" href="../crypto/"><span class="page-nav-dir">Next</span><span class="page-nav-title">crypto</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script defer src="../../clipboard.js"></script>
+  <script defer src="../../toc.js"></script>
+  <script defer src="../../anchors.js"></script>
+  <script defer src="../../copy.js"></script>
+  <script src="../../search.js"></script>
+  <script type="module" src="../../hljs-init.js"></script>
+  <script defer src="../../mermaid-init.js"></script>
+  <script defer src="../../home-heading.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Install</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../documentation/">Documentation</a></li>
+        <li><a href="../install/" aria-current="page">Install</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="https://github.com/egladman/magus">GitHub</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Install</li></ul>
+    </nav>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/install.md">Suggest an edit</a></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#from-a-release-binary" title="From a release binary">From a release binary</a></li><li><a href="#from-source" title="From source">From source</a></li><li><a href="#keeping-up-to-date" title="Keeping up to date">Keeping up to date</a></li></ul>
+      </nav>
+    </aside>
+    <article>
+<h1 id="install">Install</h1>
+<p>magus is a single self-contained binary. Install a prebuilt release, or build it from source.</p>
+<h2 id="from-a-release-binary">From a release binary</h2>
+<p>Download the latest release for your platform from the <a href="https://github.com/egladman/magus/releases">releases page</a>, extract the archive, and move the binary onto your <code>PATH</code>:</p>
+<pre><code class="language-sh">mv magus ~/.local/bin/magus
+</code></pre>
+<p>Make sure the destination directory is on your <code>PATH</code> (for example, add <code>export PATH=&quot;$HOME/.local/bin:$PATH&quot;</code> to your shell profile). Enable tab completion with <code>magus completion &lt;shell&gt;</code>.</p>
+<h2 id="from-source">From source</h2>
+<p>With a recent Go toolchain:</p>
+<pre><code class="language-sh">git clone https://github.com/egladman/magus
+cd magus
+go build -o magus ./cmd/magus
+</code></pre>
+<p><code>magus self update</code> is compiled in by default. Build with <code>-tags noselfupdate</code>
+to disable the self-update mechanism (e.g. for package-manager-owned binaries).</p>
+<h2 id="keeping-up-to-date">Keeping up to date</h2>
+<p>Once installed, update in place with:</p>
+<pre><code class="language-sh">magus self update
+</code></pre>
+    </article>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../engines/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Engines: how magus runs a magusfile</span></a>
+      <a class="page-nav-next" href="../mcp/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MCP: driving magus from agents</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be">72a3537</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script defer src="../clipboard.js"></script>
+  <script defer src="../toc.js"></script>
+  <script defer src="../anchors.js"></script>
+  <script defer src="../copy.js"></script>
+  <script src="../search.js"></script>
+  <script type="module" src="../hljs-init.js"></script>
+  <script defer src="../mermaid-init.js"></script>
+  <script defer src="../home-heading.js"></script>
+</body>
+</html>
