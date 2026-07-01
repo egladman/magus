@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>magus</title>
+  <link rel="preload" as="image" href="assets/gopher.webp" type="image/webp" fetchpriority="high">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="site.css">
@@ -13,7 +15,7 @@
   <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="site-header">
     <nav class="container">
-      <ul><li><a href="index.html" class="contrast"><img class="brand-mark" src="assets/hat.png" alt=""> <strong>magus</strong></a></li></ul>
+      <ul><li><a href="index.html" class="contrast"><picture><source srcset="assets/hat.webp" type="image/webp"><img class="brand-mark" src="assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <ul>
         <li><a href="documentation.html">Documentation</a></li>
         <li><a href="install.html">Install</a></li>
@@ -35,10 +37,13 @@
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
-  <img alt="magus gopher mascot" width=auto height="300" src="./assets/gopher.png">
+  <picture>
+    <source srcset="./assets/gopher.webp" type="image/webp">
+    <img alt="magus gopher mascot" width="400" height="300" fetchpriority="high" src="./assets/gopher.png">
+  </picture>
 </p>
 <!-- Generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
-<p><img src="./assets/coverage.svg" alt="Coverage"></p>
+<img alt="Coverage" width="113" height="20" src="./assets/coverage.svg">
 <p>A fast cross-platform task orchestrator for polyglot (mono)repos.</p>
 <p>Magus computes affected projects from your changes, caches the results, and runs the minimum rebuild set after a change.</p>
 <p>Single binary. Code as configuration. Statically typed. No second toolchain.</p>

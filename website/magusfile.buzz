@@ -447,6 +447,13 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
     if (description != "") {
         descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
     }
+    // Preload the LCP hero image on the home page only (README's gopher), so the
+    // browser fetches it in parallel with the CSS instead of discovering it after
+    // layout. Modern browsers take the WebP; the <picture> PNG fallback still works.
+    var heroPreload = "";
+    if (srcRel == "README.md") {
+        heroPreload = "  <link rel=\"preload\" as=\"image\" href=\"" + root + "assets/gopher.webp\" type=\"image/webp\" fetchpriority=\"high\">\n";
+    }
     // Headings drive the TOC sidebar; without enough of them the article goes
     // full-width (no .with-toc grid) and toc.js simply finds nothing to enhance.
     final toc = tocOf(content);
@@ -464,6 +471,11 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
         + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
         + "  <title>" + title + "</title>\n"
         + descMeta
+        + heroPreload
+        // Warm the CDN connection before the render-blocking Pico <link> below, so
+        // the TLS handshake overlaps HTML parsing; the same origin also serves the
+        // lazily-imported hljs/mermaid, so this preconnect covers them too.
+        + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
         + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + root + "theme.css\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + root + "site.css\">\n"
@@ -473,7 +485,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
         + "  <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>\n"
         + "  <header class=\"site-header\">\n"
         + "    <nav class=\"container\">\n"
-        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" alt=\"\"> <strong>magus</strong></a></li></ul>\n"
+        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><picture><source srcset=\"" + root + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
         + "      <ul>\n"
         + navLink(root + "documentation.html", "Documentation", "documentation", active)
         + navLink(root + "install.html", "Install", "install", active)

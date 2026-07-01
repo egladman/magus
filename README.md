@@ -1,11 +1,14 @@
 # magus
 
 <p align="center">
-  <img alt="magus gopher mascot" width=auto height="300" src="./assets/gopher.png">
+  <picture>
+    <source srcset="./assets/gopher.webp" type="image/webp">
+    <img alt="magus gopher mascot" width="400" height="300" fetchpriority="high" src="./assets/gopher.png">
+  </picture>
 </p>
 
 <!-- Generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
-![Coverage](./assets/coverage.svg)
+<img alt="Coverage" width="113" height="20" src="./assets/coverage.svg">
 
 A fast cross-platform task orchestrator for polyglot (mono)repos.
 
