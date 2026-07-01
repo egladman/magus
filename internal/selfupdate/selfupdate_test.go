@@ -1,4 +1,4 @@
-//go:build !noselfmanage
+//go:build !noselfupdate
 
 package selfupdate
 

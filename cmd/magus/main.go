@@ -25,7 +25,6 @@
 //	magus completion <shell>            print a shell completion script
 //	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
 //	magus self update [flags]           update magus to the latest release
-//	magus self install [flags]          install magus to ~/.local/bin
 //	magus version                       print version info
 //	magus help                          show this message
 //

@@ -1,4 +1,4 @@
-//go:build selfmanage
+//go:build !noselfupdate
 
 package main
 
@@ -332,75 +332,4 @@ func TestCompare(t *testing.T) {
 	assertCompare("v0.9.0", "v1.0.0", -1)
 	assertCompare("unknown", "v1.0.0", 0)
 	assertCompare("v1.0.0", "unknown", 0)
-}
-
-func TestSelfInstall_FreshInstall(t *testing.T) {
-	fx := newTestFixture(t, "v0.4.0")
-	fx.activate(t)
-	setVersion(t, "unknown") // bootstrap binary has no version
-
-	binDir := t.TempDir()
-	manDir := t.TempDir()
-
-	err := selfInstallCmd(context.Background(), []string{
-		"--dry-run", "--yes",
-		"--bin-dir", binDir,
-		"--man-dir", manDir,
-	})
-	assert.NoError(t, err)
-}
-
-func TestSelfInstall_SkipsVersionGate(t *testing.T) {
-	// install should succeed even when the running version == the target version,
-	// because the version gate is intentionally absent from self install.
-	fx := newTestFixture(t, "v0.4.0")
-	fx.activate(t)
-	setVersion(t, "v0.4.0") // same version — would fail self update
-
-	binDir := t.TempDir()
-	err := selfInstallCmd(context.Background(), []string{
-		"--dry-run", "--yes",
-		"--bin-dir", binDir,
-	})
-	assert.NoError(t, err, "expected success (no version gate)")
-}
-
-func TestSelfInstall_BinDirCreated(t *testing.T) {
-	fx := newTestFixture(t, "v0.4.0")
-	fx.activate(t)
-
-	// Use a subdirectory that doesn't exist yet; EnsureDir should create it.
-	base := t.TempDir()
-	binDir := filepath.Join(base, "new", "bin")
-
-	err := selfInstallCmd(context.Background(), []string{
-		"--dry-run", "--yes",
-		"--bin-dir", binDir,
-	})
-	assert.NoError(t, err, "expected success with non-existent --bin-dir")
-}
-
-func TestSelfInstall_ManpagesWritten(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping manpage write in short mode")
-	}
-	manDir := t.TempDir()
-	require.NoError(t, installManpages(manDir))
-	entries, err := os.ReadDir(manDir)
-	require.NoError(t, err)
-	require.NotEmpty(t, entries, "expected at least one man page to be written")
-	for _, e := range entries {
-		assert.True(t, strings.HasSuffix(e.Name(), ".1"), "unexpected file in man dir: %s", e.Name())
-	}
-}
-
-func TestSelfInstall_DefaultDirs(t *testing.T) {
-	// Smoke-test that the XDG helpers return non-empty paths and don't panic.
-	binDir := selfupdate.DefaultUserBinDir()
-	assert.NotEmpty(t, binDir, "DefaultUserBinDir returned empty string")
-	manDir := selfupdate.DefaultUserManDir()
-	assert.NotEmpty(t, manDir, "DefaultUserManDir returned empty string")
-	// They should both land under the same ~/.local prefix by default.
-	t.Logf("DefaultUserBinDir = %s", binDir)
-	t.Logf("DefaultUserManDir = %s", manDir)
 }

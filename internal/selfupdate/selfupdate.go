@@ -1,4 +1,4 @@
-//go:build !noselfmanage
+//go:build !noselfupdate
 
 // Package selfupdate downloads, verifies, and installs magus release binaries.
 package selfupdate
