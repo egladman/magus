@@ -25,5 +25,21 @@ func RegisterMarkdown(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.StrVal(ret0), nil
 	}))
+	m.MapSet("frontmatter", vm.DirectValue("markdown.frontmatter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		source := host.Str(bzArgs, 0)
+		ret0, err := std.MarkdownFrontmatter(ctx, source)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.StrVal(ret0), nil
+	}))
+	m.MapSet("stripFrontmatter", vm.DirectValue("markdown.stripFrontmatter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		source := host.Str(bzArgs, 0)
+		ret0, err := std.MarkdownStripFrontmatter(ctx, source)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.StrVal(ret0), nil
+	}))
 	return m
 }
