@@ -341,13 +341,38 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // afterTarget edges keep each project's CI steps sequential.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) error {
 	if opts.DryRun {
+		// Deep dry run: evaluate each target body under a recording context, so
+		// effectful host ops (exec, fs writes, network, env) record their intent and
+		// skip instead of running. The commands surface as `$ cmd` echoes (run.Exec logs
+		// them at info under record). Sequential, so each project's commands stay grouped
+		// under its [dry] line. Reads still work, so the plan reflects real conditionals.
+		recCtx := types.WithRecord(ctx)
+		if m.cache != nil {
+			m.cache.LogDryBanner()
+		} else {
+			fmt.Println("dry run - commands shown, not executed")
+		}
 		for _, st := range stages {
 			for _, p := range st.projects {
-				fmt.Printf("[dry-run] would run %s for %s\n", st.target, p.Path)
+				label := types.ProjectLabel(p.Path, p.Dir)
+				if m.cache != nil {
+					m.cache.LogDry(label, st.target)
+				} else {
+					fmt.Printf("[dry] %s %s\n", label, st.target)
+				}
+				// Fresh memo per target so a shared dependency (e.g. format -> generate)
+				// records once, mirroring the real run's pool dedup.
+				stepCtx := buzz.WithTargetMemo(recCtx, buzz.NewTargetMemo())
+				if err := st.handler(stepCtx, p); err != nil {
+					slog.WarnContext(ctx, "dry-run: target evaluation stopped early",
+						slog.String("project", label), slog.String("target", st.target), slog.String("error", err.Error()))
+				}
 			}
 		}
 		return nil
 	}
+
+	start := time.Now()
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})
@@ -512,6 +537,12 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			observability.Attr{Key: "magus.project", Value: s.ProjectPath},
 			observability.Attr{Key: "magus.target", Value: s.Target},
 		)
+		// In collapse mode the project's subprocess output is withheld, so attach a
+		// stage observer: it prints a progress line as each magus.needs sub-target
+		// completes, giving the reader a checklist of what ran in place of the wall.
+		if m.cache.Collapsing() {
+			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label})
+		}
 		var err error
 		if raceRT != nil {
 			outDirs := diff.GlobBaseDirs(p.Dir, p.Outputs)
@@ -545,7 +576,26 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		checkMissingDependencies(m.ws.All(), byPath, writtenByProject, scopeLabel, opts.Report)
 	}
 
+	// Footer summary for a fan-out: a single line tallying the per-project results.
+	// Skipped for a single project, where the per-project status line already says it all.
+	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
+		m.cache.LogSummary(time.Since(start))
+	}
+
 	return runErr
+}
+
+// stageObserver bridges the Buzz pool's per-target notifications to the cache logger:
+// as each magus.needs sub-target finishes, it emits a stage progress line for the
+// owning project. Attached only in collapse mode (see executeStages), where the
+// project's own subprocess output is withheld. It implements buzz.TargetObserver.
+type stageObserver struct {
+	cache *cache.Cache
+	label string // normalized project display name (never "" or "."); see types.ProjectLabel
+}
+
+func (o stageObserver) TargetEnd(_ context.Context, name string, elapsed time.Duration, err error) {
+	o.cache.LogStage(o.label, name, elapsed, err)
 }
 
 // dedupeByProject returns one step per ProjectPath (first seen).

@@ -25,7 +25,26 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
+	"golang.org/x/term"
 )
+
+// collapseOnSuccess decides whether per-project subprocess output is withheld until a
+// failure (showing only a status line on success). It is enabled only for interactive
+// pretty runs at default verbosity: a non-TTY/CI stdout keeps full streaming so logs
+// stay complete, -v (level below Info) streams live, --silent has its own stricter
+// handling, and json/text formats are never collapsed.
+func collapseOnSuccess(l config.Log) bool {
+	switch strings.ToLower(l.Format) {
+	case "pretty", "plain", "":
+		// human formats can collapse
+	default:
+		return false
+	}
+	if l.IsSilent() || l.SlogLevel() < slog.LevelInfo {
+		return false
+	}
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
 
 // Magus is the high-level orchestrator. Not safe for concurrent use. Inspect-constructed workspaces have no cache.
 type Magus struct {
@@ -290,6 +309,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 	cfgOpts = append(cfgOpts, cache.WithLog(m.cfg.Log.Format, m.cfg.Log.SlogLevel()))
 	cfgOpts = append(cfgOpts, cache.WithSilent(m.cfg.Log.IsSilent()))
+	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can
 	// be instrumented as it is attached. Init failure falls back to a no-op.
 	tel, err := observability.New(ctx, observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root))
@@ -425,6 +445,7 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
 		SpellDefVersion: ispell.BuiltinsHash(),
+		Label:           types.ProjectLabel(p.Path, p.Dir),
 	}
 }
 

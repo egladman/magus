@@ -6,6 +6,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestProjectLabel(t *testing.T) {
+	t.Parallel()
+	// Non-root paths pass through unchanged.
+	assert.Equal(t, "api", ProjectLabel("api", "/repo/api"))
+	assert.Equal(t, "web/studio", ProjectLabel("web/studio", "/repo/web/studio"))
+	// Root project (path "" or ".") collapses to the workspace dir's base name.
+	assert.Equal(t, "magus", ProjectLabel(".", "/home/user/magus"))
+	assert.Equal(t, "magus", ProjectLabel("", "/home/user/magus"))
+	// No usable dir falls back to a readable placeholder, never "" or ".".
+	assert.Equal(t, "(workspace root)", ProjectLabel(".", ""))
+	assert.Equal(t, "(workspace root)", ProjectLabel("", "."))
+}
+
 func TestProject_AttachSpell(t *testing.T) {
 	goSpell := NewSpell("go",
 		WithSources("**/*.go"),

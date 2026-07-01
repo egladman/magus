@@ -281,6 +281,9 @@ func FsReadFile(ctx context.Context, path string) (string, error) {
 
 // FsWriteFile writes content to path (mode 0644), subject to the sandbox write policy.
 func FsWriteFile(ctx context.Context, path string, content string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
@@ -293,6 +296,9 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 
 // FsMkdirAll creates path and any missing parents with the given mode, subject to the sandbox write policy.
 func FsMkdirAll(ctx context.Context, path string, perm int) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
@@ -310,6 +316,9 @@ func FsJoin(_ context.Context, parts ...string) (string, error) {
 
 // FsRemoveAll recursively removes path (no error if missing), subject to the sandbox write policy.
 func FsRemoveAll(ctx context.Context, path string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
@@ -391,6 +400,9 @@ func FsStat(ctx context.Context, path string) (types.FileInfo, error) {
 // FsCopyFile copies src to dst (overwriting), preserving src's permission bits.
 // Both ends are subject to the sandbox policy: src must be readable, dst writable.
 func FsCopyFile(ctx context.Context, src, dst string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
 	if err := checkRead(ctx, src); err != nil {
 		return err
@@ -408,6 +420,9 @@ func FsCopyFile(ctx context.Context, src, dst string) error {
 // permission bits. Each source entry is checked for read and each destination
 // for write, so a sandbox-denied path stops the copy with a diag error.
 func FsCopyDir(ctx context.Context, src, dst string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
 	walkErr := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -590,6 +605,9 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 // FsAppendFile appends content to path (creating the file if absent, mode 0644),
 // subject to the sandbox write policy.
 func FsAppendFile(ctx context.Context, path, content string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
@@ -610,6 +628,9 @@ func FsAppendFile(ctx context.Context, path, content string) error {
 
 // FsChmod changes the permission bits of path, subject to the sandbox write policy.
 func FsChmod(ctx context.Context, path string, mode int) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
 		return err
@@ -623,6 +644,9 @@ func FsChmod(ctx context.Context, path string, mode int) error {
 // FsSymlink creates a symbolic link at link pointing to target, subject to the
 // sandbox write policy on link.
 func FsSymlink(ctx context.Context, target, link string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	// Only link (the path being created) is resolved against the project dir;
 	// target is the link's stored contents, interpreted relative to the link.
 	link = resolvePath(ctx, link)
@@ -668,6 +692,9 @@ func FsReadLines(ctx context.Context, path string) ([]string, error) {
 // subject to the sandbox write policy. An empty list writes an empty file, so
 // write_lines(p, read_lines(p)) round-trips a newline-terminated file.
 func FsWriteLines(ctx context.Context, path string, lines []string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	content := ""
 	if len(lines) > 0 {
 		content = strings.Join(lines, "\n") + "\n"
@@ -677,7 +704,12 @@ func FsWriteLines(ctx context.Context, path string, lines []string) error {
 
 // FsTempDir creates a new temporary directory in os.TempDir() with an optional
 // name prefix and returns its path.
-func FsTempDir(_ context.Context, prefix string) (string, error) {
+func FsTempDir(ctx context.Context, prefix string) (string, error) {
+	if types.Recording(ctx) {
+		// Dry run: return a plausible, non-empty path without creating it. Writes into
+		// it are themselves recorded (skipped), so the directory never needs to exist.
+		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
+	}
 	dir, err := os.MkdirTemp("", prefix)
 	if err != nil {
 		return "", fmt.Errorf("fs.temp_dir: %w", err)

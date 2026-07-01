@@ -205,6 +205,10 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 					entry.RelPath = filepath.ToSlash(rel)
 				}
 			}
+			// The workspace-root project's path is ".", which would render as the
+			// ambiguous "## Project: ." heading; types.ProjectLabel collapses it to the
+			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
+			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
 			if src.Engine == "buzz" {
 				nodes := describe.Extract(concatSource(src))
 				resolveCrossDependencies(nodes, p.Path)

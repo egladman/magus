@@ -50,5 +50,14 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.AnyMapVal(ret0.Record()), nil
 	}))
+	m.MapSet("server", vm.DirectValue("http.server", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		dir := host.Str(bzArgs, 0)
+		port := host.Int(bzArgs, 1, 0)
+		ret0, err := std.HTTPServer(ctx, dir, port)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.IntVal(ret0), nil
+	}))
 	return m
 }

@@ -19,7 +19,44 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("cmd", vm.DirectValue("magus.cmd", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := host.StrSlice(bzArgs, 0)
-		ret0, err := std.MagusCmd(ctx, args)
+		opts := host.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusCmd(ctx, args, opts)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.Record()), nil
+	}))
+	m.MapSet("run", vm.DirectValue("magus.run", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		args := host.StrSlice(bzArgs, 0)
+		opts := host.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusRun(ctx, args, opts)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.Record()), nil
+	}))
+	m.MapSet("describe", vm.DirectValue("magus.describe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		args := host.StrSlice(bzArgs, 0)
+		opts := host.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusDescribe(ctx, args, opts)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.Record()), nil
+	}))
+	m.MapSet("insight", vm.DirectValue("magus.insight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		args := host.StrSlice(bzArgs, 0)
+		opts := host.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusInsight(ctx, args, opts)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.Record()), nil
+	}))
+	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		args := host.StrSlice(bzArgs, 0)
+		opts := host.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusDoctor(ctx, args, opts)
 		if err != nil {
 			return vm.Null, err
 		}

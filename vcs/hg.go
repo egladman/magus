@@ -118,6 +118,21 @@ func (v hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 	}, nil
 }
 
+// Dirty reports whether the working directory (optionally scoped to paths) has
+// changes, via `hg status`. Non-empty output = dirty.
+func (v hgVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {
+	args := []string{"status"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutput(ctx, dir, "hg", args...)
+	if err != nil {
+		return false, fmt.Errorf("hg status: %w", err)
+	}
+	return out != "", nil
+}
+
 // Describe returns the working revision's latest reachable tag (Mercurial's
 // {latesttag}), with a -dirty suffix for a modified tree. A repo with no tags
 // reports "" (Mercurial's "null" sentinel is normalized away), matching the

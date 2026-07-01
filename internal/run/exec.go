@@ -36,6 +36,11 @@ type ExecOptions struct {
 	// Capture also buffers stdout/stderr into the result, in addition to
 	// streaming through the ctx OutputWriters. Captured text is not trimmed.
 	Capture bool
+	// Quiet suppresses live streaming to the ctx OutputWriters. Pair it with
+	// Capture to read the output without echoing it to the console (e.g. a command
+	// whose stdout is captured into a variable and written to a file); without
+	// Capture the output is discarded entirely.
+	Quiet bool
 }
 
 // ExecResult is the outcome of Exec.
@@ -68,6 +73,13 @@ func (r ExecResult) Record() map[string]any {
 // error is the raw subprocess error (joined with ctx.Err on cancellation);
 // callers format their own "exit N" / start-failure messages from ExecResult.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
+	if types.Recording(ctx) {
+		// Dry run: record the command (at info, so it shows without -v) and skip
+		// execution, returning a benign success. In a normal run the command is logged
+		// at debug below, after the sandbox check, then actually executed.
+		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
+		return ExecResult{Started: true, Code: 0}, nil
+	}
 	c := exec.CommandContext(ctx, name, args...)
 	c.Dir = opts.Dir
 	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
@@ -90,6 +102,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	}
 
 	outW, errW := OutputWriters(ctx)
+	if opts.Quiet {
+		outW, errW = io.Discard, io.Discard // capture-only / no live streaming
+	}
 	var outBuf, errBuf bytes.Buffer
 	if opts.Capture {
 		c.Stdout = io.MultiWriter(outW, &outBuf)

@@ -52,7 +52,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	magus.MapSet("needs", vm.DirectValue("magus.needs", buildBuzzNeeds(targets)))
 	magus.MapSet("pry", vm.DirectValue("magus.pry", buildBuzzPry(sess, parseMode)))
 
-	// The host-declarable subset (magus.cmd, magus.bust_cache) is generated from
+	// The host-declarable subset (magus.cmd/run/describe/insight/doctor, magus.bust_cache) is generated from
 	// the std.Magus descriptor like every other module, so the two can't drift and
 	// a declared method can't be silently left unbound. Merged onto the hand-built
 	// magus map above (which carries only the VM-infra members — needs/target/

@@ -210,6 +210,21 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 	}, nil
 }
 
+// Dirty reports whether the working tree (optionally scoped to paths) has
+// uncommitted changes, via `git status --porcelain`. Non-empty output = dirty.
+func (v gitVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {
+	args := []string{"status", "--porcelain"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutput(ctx, dir, "git", args...)
+	if err != nil {
+		return false, fmt.Errorf("git status: %w", err)
+	}
+	return out != "", nil
+}
+
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
 // short hash when no tag is reachable), with a -dirty suffix for a modified tree.
 func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {

@@ -1,5 +1,27 @@
 package types
 
+import "path/filepath"
+
+// ProjectLabel is the human-facing display name for a project, used in logs and
+// generated docs so a project at the workspace root never renders as the ambiguous
+// "" or ".". A non-root path is shown as-is; the root project falls back to the
+// workspace directory's base name (e.g. "magus"), then to "(workspace root)" when
+// even that is unavailable. dir is the project's absolute directory ("" if unknown).
+//
+// This is the single normalization point for the "never print '.'" rule; callers in
+// the run/cache logging path, describe, and MAGUS.md rendering all route through it.
+func ProjectLabel(path, dir string) string {
+	if path != "" && path != "." {
+		return path
+	}
+	if dir != "" {
+		if base := filepath.Base(dir); base != "" && base != "." && base != string(filepath.Separator) {
+			return base
+		}
+	}
+	return "(workspace root)"
+}
+
 // Binding is the per-spell registration state attached to a project.
 // One Binding is created per WithSpell call.
 type Binding struct {

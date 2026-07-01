@@ -19,6 +19,11 @@ type VCSDriver interface {
 	Bisect(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 	DiffCommands(ctx context.Context, dir, base string) (DiffCommandHints, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
+	// Dirty reports whether the working tree has uncommitted changes. When paths
+	// is non-empty the probe is scoped to those pathspecs (interpreted relative to
+	// dir, the same as the VCS's own CLI); empty checks the whole repository. It is
+	// the path-scoped counterpart to Metadata's repo-wide IsDirty.
+	Dirty(ctx context.Context, dir string, paths []string) (bool, error)
 	// FindCommit looks up a revision (a VCS-native rev expression; empty means
 	// the current revision) and returns its normalized Commit.
 	FindCommit(ctx context.Context, dir, rev string) (Commit, error)

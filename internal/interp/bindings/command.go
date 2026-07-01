@@ -80,7 +80,7 @@ func resolveCharmArgs(ctx context.Context, base []string, charms map[string]type
 	return ispell.ApplyPatch(base, ops)
 }
 
-// directMagusBinaryWarnOnce is process-global so the "use magus.cmd" hint fires
+// directMagusBinaryWarnOnce is process-global so the "use magus.cmd/..." hint fires
 // at most once per process, not once per command — avoids log spam in a wide run.
 var directMagusBinaryWarnOnce sync.Once
 
@@ -91,7 +91,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 	if filepath.Base(cmd) == "magus" {
 		directMagusBinaryWarnOnce.Do(func() {
 			slog.Warn("magus: command spell target called with 'magus' binary",
-				"hint", "use magus.cmd({...}) instead — in-process, version-pinned, no arg-quoting issues")
+				"hint", "use magus.cmd(...) or a typed magus.run/describe/insight/doctor(...) instead — contextual cwd, version-pinned, no arg-quoting issues")
 		})
 	}
 	// Sort the per-call env overrides so the subprocess environment is deterministic

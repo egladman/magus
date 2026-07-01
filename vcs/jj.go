@@ -129,3 +129,18 @@ func (v jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 		IsDirty:    dirtyOut != "",
 	}, nil
 }
+
+// Dirty reports whether the working copy (optionally scoped to paths) has
+// changes, via `jj diff --name-only`. Non-empty output = dirty.
+func (v jjVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {
+	args := []string{"diff", "--name-only"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutput(ctx, dir, "jj", args...)
+	if err != nil {
+		return false, fmt.Errorf("jj diff: %w", err)
+	}
+	return out != "", nil
+}

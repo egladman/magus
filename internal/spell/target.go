@@ -57,7 +57,7 @@ var TargetQuerySource string
 // ExecResultSource is the generated Buzz `object ExecResult` mirror of
 // types.ExecResult (see cmd/magus-utils types). It ships alongside the other value
 // types in the magus/target module so a magusfile can annotate an os.exec /
-// magus.cmd / captured-op result as `> ExecResult`; the runtime value is the
+// magus.describe / captured-op result as `> ExecResult`; the runtime value is the
 // matching {stdout, stderr, code, ok} record (see run.ExecResult.Record).
 //
 //go:generate go run ../../cmd/magus-utils types -type ExecResult -out buzzlib/execresult.gen.buzz

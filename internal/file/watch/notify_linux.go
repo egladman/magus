@@ -33,8 +33,8 @@ const inotifyBufSize = 4096 * unix.SizeofInotifyEvent
 
 // inotifyNotifier implements notifier via a direct inotify(7) fd (Linux default backend).
 type inotifyNotifier struct {
-	fd     int
-	pipe   [2]int // pipe[0]=read, pipe[1]=write; used to unblock Poll on Close
+	fd       int
+	pipe     [2]int // pipe[0]=read, pipe[1]=write; used to unblock Poll on Close
 	mu       sync.RWMutex
 	wds      map[int32]string // wd → abs-dir-path
 	paths    map[string]int32 // abs-dir-path → wd

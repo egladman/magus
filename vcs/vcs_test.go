@@ -105,6 +105,58 @@ func TestVCSClaims(t *testing.T) {
 	t.Run("jj", func(t *testing.T) { assertClaims(t, "jj", []string{".jj"}) })
 }
 
+func TestDirtyGitPathScoped(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not in PATH")
+	}
+
+	dir := t.TempDir()
+	mustRun := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "%v: %s", args, out)
+	}
+	write := func(rel, content string) {
+		t.Helper()
+		p := filepath.Join(dir, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+	}
+	mustRun("git", "init")
+	mustRun("git", "config", "user.email", "test@example.com")
+	mustRun("git", "config", "user.name", "Test")
+	mustRun("git", "config", "commit.gpgsign", "false")
+	write("a.txt", "alpha\n")
+	write("sub/b.txt", "beta\n")
+	mustRun("git", "add", "-A")
+	mustRun("git", "commit", "-m", "init")
+
+	t.Setenv("MAGUS_VCS_NAME", "git")
+	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{})
+	require.NoError(t, err)
+	v := res.VCS
+
+	dirty := func(paths ...string) bool {
+		t.Helper()
+		d, err := v.Dirty(context.Background(), dir, paths)
+		require.NoError(t, err)
+		return d
+	}
+
+	// Clean tree: nothing dirty, repo-wide or path-scoped.
+	assert.False(t, dirty(), "clean repo should not be dirty")
+	assert.False(t, dirty("a.txt"), "clean path should not be dirty")
+
+	// Modify only a.txt.
+	write("a.txt", "alpha changed\n")
+	assert.True(t, dirty(), "modified tree should be dirty repo-wide")
+	assert.True(t, dirty("a.txt"), "modified path should be dirty")
+	assert.False(t, dirty("sub/b.txt"), "unmodified path must not report dirty (scoping)")
+	assert.True(t, dirty("sub/b.txt", "a.txt"), "any matching path dirty -> dirty")
+}
+
 func TestDiffCommandsGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not in PATH")

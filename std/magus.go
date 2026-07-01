@@ -29,12 +29,53 @@ var Magus = Module{
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Run the magus binary with args. Output streams live and is captured; returns {stdout, stderr, code, ok}. Raises if the invocation exits non-zero (catch it for non-fatal use).",
+			Doc:  "Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists — magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap}},
 			Impl:    MagusCmd,
+		},
+		{
+			Name: "run",
+			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    MagusRun,
+		},
+		{
+			Name: "describe",
+			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    MagusDescribe,
+		},
+		{
+			Name: "insight",
+			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    MagusInsight,
+		},
+		{
+			Name: "doctor",
+			Doc:  "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    MagusDoctor,
 		},
 		{
 			Name: "bust_cache",
@@ -81,18 +122,86 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 	return c.Clean(ctx, projectPath)
 }
 
-// MagusCmd runs a nested magus invocation with args, yielding the caller's
-// concurrency slot for the duration so the child can run. Output streams live and
-// is captured: on success it returns the same {stdout, stderr, code, ok} record as
-// os.exec, so a magusfile can read a subcommand's output (e.g. `magus describe
-// graph -o markdown` to generate MAGUS.md). It raises (non-nil error, nil record)
-// when the child can't launch or exits non-zero, mirroring os.exec — scripts that
-// want non-fatal behavior catch it.
-func MagusCmd(ctx context.Context, args []string) (types.ExecResult, error) {
+// typedMagusSubcommands are the magus subcommands that have a dedicated,
+// typed magus.<name>(...) method. magus.cmd warns when its first arg names one,
+// nudging authors toward the clearer, signature-stable wrapper.
+var typedMagusSubcommands = map[string]bool{
+	"run": true, "describe": true, "insight": true, "doctor": true,
+}
+
+// MagusCmd is the escape hatch: it runs `magus <args>` for any subcommand. It
+// stays for subcommands without a dedicated wrapper (status, affected, ...), but
+// warns when args[0] names one that does, so the typed method is preferred. Like
+// the typed methods it runs in the contextual project dir; see runMagus.
+func MagusCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+	warnIfTypedSubcommand(ctx, args)
+	return runMagus(ctx, "cmd", args, opts)
+}
+
+// warnIfTypedSubcommand emits a warning when args[0] names a subcommand that has
+// a dedicated magus.<name>(...) method, nudging authors off the escape hatch. It
+// is the pure decision half of MagusCmd, split out so it can be tested without
+// the nested exec.
+func warnIfTypedSubcommand(ctx context.Context, args []string) {
+	if len(args) > 0 && typedMagusSubcommands[args[0]] {
+		slog.WarnContext(ctx, "magus.cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
+			"subcommand", args[0],
+			"hint", fmt.Sprintf("use magus.%s([...]) instead of magus.cmd([%q, ...])", args[0], args[0]))
+	}
+}
+
+// MagusRun runs `magus run <args>` recursively; see runMagus.
+func MagusRun(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+	return runMagusSub(ctx, "run", args, opts)
+}
+
+// MagusDescribe runs `magus describe <args>`; see runMagus.
+func MagusDescribe(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+	return runMagusSub(ctx, "describe", args, opts)
+}
+
+// MagusInsight runs `magus insight <args>`; see runMagus.
+func MagusInsight(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+	return runMagusSub(ctx, "insight", args, opts)
+}
+
+// MagusDoctor runs `magus doctor <args>`; see runMagus.
+func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+	return runMagusSub(ctx, "doctor", args, opts)
+}
+
+// runMagusSub runs a nested magus invocation for subcommand sub: it prepends sub
+// to args (so the subcommand name is fixed by the caller, not user-supplied) and
+// hands off to runMagus.
+func runMagusSub(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
+	return runMagus(ctx, sub, append([]string{sub}, args...), opts)
+}
+
+// runMagus runs a nested magus invocation with the full arg vector, yielding the
+// caller's concurrency slot for the duration so the child can run. Output streams
+// live and is captured: on success it returns the same {stdout, stderr, code, ok}
+// record as os.exec, so a magusfile can read a subcommand's output (e.g. `magus
+// describe graph -o markdown` to generate MAGUS.md). It raises (non-nil error, nil
+// record) when the child can't launch or exits non-zero, mirroring os.exec. label
+// names the calling method for error messages.
+//
+// The child runs in the working directory carried by ctx (WithCwd), so a nested
+// project describes/insights its own project rather than the root workspace — the
+// same contextual-cwd contract every other magus stdlib primitive honors. opts may
+// carry "root" (string), emitted as the global --root flag (which must precede the
+// subcommand).
+func runMagus(ctx context.Context, label string, args []string, opts map[string]any) (types.ExecResult, error) {
 	self, err := os.Executable()
 	if err != nil {
-		return types.ExecResult{}, fmt.Errorf("magus.cmd: executable: %w", err)
+		return types.ExecResult{}, fmt.Errorf("magus.%s: executable: %w", label, err)
 	}
+
+	// Global flags (e.g. --root) precede the subcommand and its args.
+	var full []string
+	if root, ok := opts["root"].(string); ok && root != "" {
+		full = append(full, "--root", root)
+	}
+	full = append(full, args...)
 
 	// Re-inject the daemon socket vars: childEnv withholds them from subprocesses
 	// (the socket is unauthenticated — MGS2008), but a nested magus is a legitimate
@@ -102,16 +211,27 @@ func MagusCmd(ctx context.Context, args []string) (types.ExecResult, error) {
 	for _, k := range []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"} {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
-			slog.InfoContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
+			// Debug, not Info: this fires on every recursive magus invocation (and a
+			// fan-out can spawn many), so at default verbosity it is pure noise. It is
+			// an internal correctness note, not user-actionable; surface it only at -v.
+			slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
 				"daemon socket injected into recursive magus invocation"), "var", k)
 		}
 	}
+
+	// Run in the contextual project dir; "" inherits the process cwd (the
+	// behavior for magusfile targets that run under a process chdir).
+	dir, _ := CwdFromContext(ctx)
+
+	// opts.quiet captures the output without echoing it to the console — for a
+	// command whose stdout is consumed (e.g. written to a file), not displayed.
+	quiet, _ := opts["quiet"].(bool)
 
 	lim := cache.LimiterFromContext(ctx)
 	var rec types.ExecResult
 	var cmdErr error
 	runFn := func() error {
-		res, err := run.Exec(ctx, self, args, run.ExecOptions{Env: env, Capture: true})
+		res, err := run.Exec(ctx, self, full, run.ExecOptions{Dir: dir, Env: env, Capture: true, Quiet: quiet})
 		switch {
 		case err != nil && errors.Is(err, &types.DiagnosticError{Code: types.ExecDenied}):
 			cmdErr = err
@@ -119,9 +239,9 @@ func MagusCmd(ctx context.Context, args []string) (types.ExecResult, error) {
 			// The child never launched (binary not found, permission, ctx cancelled
 			// before exec) — surface the real cause, not a fabricated "code -1".
 			// Mirrors os.exec's runResult.
-			cmdErr = fmt.Errorf("magus.cmd: %s: %w", strings.Join(args, " "), err)
+			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
 		case res.Code != 0:
-			cmdErr = fmt.Errorf("magus.cmd: %s exited with code %d", strings.Join(args, " "), res.Code)
+			cmdErr = fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
 		default:
 			rec = types.ExecResult{
 				Stdout: strings.TrimSpace(res.Stdout),
@@ -133,7 +253,7 @@ func MagusCmd(ctx context.Context, args []string) (types.ExecResult, error) {
 		return nil
 	}
 	if err := proc.RunChildSync(ctx, lim, runFn); err != nil {
-		return types.ExecResult{}, fmt.Errorf("magus.cmd: %w", err)
+		return types.ExecResult{}, fmt.Errorf("magus.%s: %w", label, err)
 	}
 	return rec, cmdErr
 }

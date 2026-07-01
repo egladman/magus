@@ -78,6 +78,19 @@ var HTTP = Module{
 			Returns: []Ret{{Type: TypeAnyMap}},
 			Impl:    HTTPRequest,
 		},
+		{
+			Name: "server",
+			Doc: "Start a static file server for dir in the background and return the bound port. " +
+				"With no port (or 0) it scans upward from 8080 and binds the first available port. " +
+				"Serves localhost only and runs until the process exits, so pair it with a blocking " +
+				"call like fs.watch.",
+			Args: []Arg{
+				{Name: "dir", Type: TypeString},
+				{Name: "port", Type: TypeInt, Optional: true, Default: int(0)},
+			},
+			Returns: []Ret{{Type: TypeInt}},
+			Impl:    HTTPServer,
+		},
 	},
 }
 
@@ -106,7 +119,53 @@ func HTTPRequest(ctx context.Context, method, url, body string, headers map[stri
 	return doRequest(ctx, method, url, body, headers, opts)
 }
 
+// HTTPServer starts a static file server rooted at dir, serving on localhost in a
+// background goroutine, and returns the bound TCP port. A port of 0 (the default
+// when the caller omits it) scans upward from httpServerBasePort and binds the
+// first available port. The server runs until the process exits, so callers pair
+// it with a blocking call such as fs.watch to keep serving.
+func HTTPServer(ctx context.Context, dir string, port int) (int, error) {
+	ln, err := httpListen(port)
+	if err != nil {
+		return 0, err
+	}
+	// Resolve dir against the run's working directory (the project dir), the same
+	// way fs/io/os do, since the magusfile runner sets a context cwd instead of
+	// chdir-ing the process.
+	srv := &http.Server{Handler: http.FileServer(http.Dir(resolvePath(ctx, dir)))}
+	go func() { _ = srv.Serve(ln) }()
+	return ln.Addr().(*net.TCPAddr).Port, nil
+}
+
+// httpServerBasePort is where http.server starts scanning when the caller does
+// not request a specific port. 8080 is the conventional local web port.
+const httpServerBasePort = 8080
+
+// httpListen binds a localhost TCP listener. A specific (non-zero) port binds
+// exactly and errors if it is taken; port 0 scans upward from httpServerBasePort
+// and returns the first bindable port, so an unspecified port never collides with
+// a server already running.
+func httpListen(port int) (net.Listener, error) {
+	if port != 0 {
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			return nil, fmt.Errorf("http.server: listen on port %d: %w", port, err)
+		}
+		return ln, nil
+	}
+	for p := httpServerBasePort; p < httpServerBasePort+100; p++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+		if err == nil {
+			return ln, nil
+		}
+	}
+	return nil, fmt.Errorf("http.server: no bindable port in %d-%d", httpServerBasePort, httpServerBasePort+99)
+}
+
 func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts map[string]any) (types.HTTPResponse, error) {
+	if types.Recording(ctx) {
+		return types.HTTPResponse{}, nil
+	}
 	// Outbound egress is AUDITED BUT NOT BLOCKED: when the sandbox is active the
 	// request is logged, but every URL is still fetched — including localhost,
 	// RFC1918 ranges, and the cloud metadata endpoint (169.254.169.254). There is

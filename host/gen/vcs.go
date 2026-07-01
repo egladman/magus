@@ -67,7 +67,8 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		return host.StrVal(ret0), nil
 	}))
 	m.MapSet("isDirty", vm.DirectValue("vcs.isDirty", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.VcsIsDirty(ctx)
+		paths := host.StrSlice(bzArgs, 0)
+		ret0, err := std.VcsIsDirty(ctx, paths)
 		if err != nil {
 			return vm.Null, err
 		}

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module env -lang buzz -out ../host/gen/env.go
@@ -111,6 +112,9 @@ func EnvLookup(ctx context.Context, name string) (string, bool, error) {
 
 // EnvSet sets name to value in the current process environment, unless the sandbox policy strips name.
 func EnvSet(ctx context.Context, name, value string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	slog.Debug("env.set", "name", name)
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
 		// Refuse re-introduction of names the policy strips. Without this
@@ -126,6 +130,9 @@ func EnvSet(ctx context.Context, name, value string) error {
 // policy strips name (in which case it is already invisible and the call is a
 // no-op, mirroring EnvSet's refusal to touch stripped names).
 func EnvUnset(ctx context.Context, name string) error {
+	if types.Recording(ctx) {
+		return nil
+	}
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
 		slog.Warn("env.unset blocked by the sandbox", "name", name)
 		return nil

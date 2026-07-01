@@ -23,6 +23,7 @@ import (
 	codec "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module archive -lang buzz -out ../host/gen/archive.go
@@ -108,6 +109,9 @@ func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
 }
 
 func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
+	if types.Recording(ctx) {
+		return map[string]any{}, nil
+	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
 	strip := archiveOptInt(opts, "strip", 0)
 	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
@@ -175,6 +179,9 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 }
 
 func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
+	if types.Recording(ctx) {
+		return map[string]any{}, nil
+	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
 	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
 	level := archiveOptInt(opts, "level", -1)

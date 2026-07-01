@@ -95,4 +95,3 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 		}
 	})
 }
-

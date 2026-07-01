@@ -29,7 +29,7 @@ export fun foo_bar(args: [str]) > void {
 
 // separated by a blank line, so it must NOT attach
 
-export fun baz(args: [str]) > void { magus.cmd(["noop"]); }
+export fun baz(args: [str]) > void { magus.doctor([]); }
 
 export fun gen_all(args: [str]) > void {
     magus.needs(magus.target.glob("*-gen"));
@@ -171,7 +171,7 @@ export fun ci(args: [str]) > void { magus.needs(magus.target.literal("goBuild"))
 // truncate the body and drop the depends_on that follows it.
 func TestBraceInString(t *testing.T) {
 	g := Extract(`export fun build(args: [str]) > void {
-    magus.cmd(["sh", "-c", "echo }"]);
+    os.exec("sh", ["-c", "echo }"]);
     magus.needs(magus.target.literal("fmt"));
 }
 export fun fmt(args: [str]) > void { go["x"](); }

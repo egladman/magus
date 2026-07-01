@@ -63,8 +63,11 @@ var Vcs = Module{
 			Impl:    VcsCommitDate,
 		},
 		{
-			Name:    "is_dirty",
-			Doc:     "True if the working tree has uncommitted changes.",
+			Name: "is_dirty",
+			Doc:  "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) — the right way to gate generated outputs without shelling out to git or parsing porcelain.",
+			Args: []Arg{
+				{Name: "paths", Type: TypeStringSlice, Optional: true},
+			},
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    VcsIsDirty,
 		},
@@ -240,16 +243,23 @@ func VcsCommitDate(ctx context.Context) (string, error) {
 }
 
 // VcsIsDirty reports whether the working tree has uncommitted changes.
-func VcsIsDirty(ctx context.Context) (bool, error) {
+func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return false, nil
 	}
-	meta, err := v.Metadata(ctx, "")
+	// Run the probe in the project's working directory (set via WithCwd for spell
+	// targets, the process cwd for magusfile targets) so pathspecs resolve against
+	// the project, not wherever the process happens to be.
+	dir, err := EffectiveCwd(ctx)
 	if err != nil {
-		return false, nil //nolint:nilerr // VCS metadata unavailable: report not-dirty rather than erroring
+		dir = ""
 	}
-	return meta.IsDirty, nil
+	dirty, err := v.Dirty(ctx, dir, paths)
+	if err != nil {
+		return false, nil //nolint:nilerr // VCS status unavailable: report not-dirty rather than erroring
+	}
+	return dirty, nil
 }
 
 // VcsMetadata returns the full metadata map: short_hash, hash, branch, commit_date, is_dirty.
