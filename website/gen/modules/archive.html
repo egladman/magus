@@ -27,7 +27,7 @@
     <nav class="breadcrumb" aria-label="Breadcrumb">
       <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation.html">Documentation</a></li><li><a href="../modules/index.html">Modules</a></li><li aria-current="page">archive</li></ul>
     </nav>
-    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/main/docs/modules/archive.md">Suggest an edit</a></div>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/archive.md">Suggest an edit</a></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -78,7 +78,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="compress">compress</h3>
 <p>Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts keys: format (string, override format detection), threads (int, parallel encode workers; 0 or omitted = auto), level (int, compression level; -1 = format default), follow_symlinks (bool, default false), max_size (int, output byte cap, default 10 GiB).</p>
-<p><strong>Signature:</strong> <code>archive.compress(src, dest, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/archive.go#L181">source</a></p>
+<p><strong>Signature:</strong> <code>archive.compress(src, dest, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/archive.go#L183">source</a></p>
 <table>
 <thead>
 <tr>
@@ -117,10 +117,10 @@
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>)</small>
+    <small>Last updated: <time datetime="2026-07-01T05:29:18Z">July 1, 2026, 5:29 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/3f57c284460f1d388ab4b2fdf9c28c6c77317fc7">3f57c28</a>)</small>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script defer src="../clipboard.js"></script>
   <script defer src="../toc.js"></script>
