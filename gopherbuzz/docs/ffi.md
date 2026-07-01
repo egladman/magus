@@ -12,7 +12,7 @@ A [runnable C example](../examples/ffi-c/) accompanies this reference.
 
 Upstream Buzz's FFI is **Zig-ABI native**: `zdef` takes Zig source and answers
 `sizeOf`/`alignOf` through the Zig compiler's comptime reflection embedded in
-the runtime. gopherbuzz is pure Go and has no Zig, so it *binds* C-ABI-natively
+the runtime. gopherbuzz is pure Go and has no Zig, so it _binds_ C-ABI-natively
 through purego. `zdef` accepts **both declaration dialects**, sniffed per
 call:
 
@@ -30,24 +30,24 @@ the C ABI. See [Limitations](#limitations).
 
 ### Zig dialect mapping
 
-| Zig type | FFI kind |
-|---|---|
-| `bool`, `void` | bool / return-only void |
-| `i8…i64`, `isize`, `c_int`, `c_long`, … | int |
-| `u8…u64`, `usize`, `c_uint`, … | int (unsigned) |
-| `f32`, `f64` | float |
-| `[*:0]const u8` | str |
-| `*T`, `?*T`, `[*]T`, `**T` | opaque address (int) |
-| `CGPoint`/`NSPoint`/`CGSize` (return) | [double] of [x, y] |
-| `CGRect`/`NSRect` (return) | [double] of [x, y, w, h] |
-| `var name: *anyopaque;` | extern data symbol: the loaded pointer |
-| `var name: anyopaque;` | extern data symbol: the symbol's own address |
+| Zig type                                  | FFI kind                                              |
+| ----------------------------------------- | ----------------------------------------------------- |
+| `bool`, `void`                            | bool / return-only void                               |
+| `i8…i64`, `isize`, `c_int`, `c_long`, …   | int                                                   |
+| `u8…u64`, `usize`, `c_uint`, …            | int (unsigned)                                        |
+| `f32`, `f64`                              | float                                                 |
+| `[*:0]const u8`                           | str                                                   |
+| `*T`, `?*T`, `[*]T`, `**T`                | opaque address (int)                                  |
+| `CGPoint`/`NSPoint`/`CGSize` (return)     | [double] of [x, y]                                    |
+| `CGRect`/`NSRect` (return)                | [double] of [x, y, w, h]                              |
+| `var name: *anyopaque;`                   | extern data symbol: the loaded pointer                |
+| `var name: anyopaque;`                    | extern data symbol: the symbol's own address          |
 | `const Name = extern struct { f: T, … };` | binds `Name` to its C layout `{size, align, offsets}` |
 
 A declared struct works as a `*Name` parameter (by reference, upstream's
 own struct-passing rule) and, when its fields are exactly two or four `f64`,
 as a by-value return (the CGPoint/CGRect register paths). A Zig `extern
-struct`'s layout *is* the C layout by definition, so the portable layout
+struct`'s layout _is_ the C layout by definition, so the portable layout
 engine computes it without an embedded Zig compiler. Multiline declaration
 blocks read best as backtick raw strings, exactly like upstream:
 
@@ -100,12 +100,12 @@ cf.kCFTypeDictionaryKeyCallBacks; // the *address of* the struct, for &-style ar
 
 The declared type picks the binding mode:
 
-| Declared as | Bound value |
-|---|---|
-| `extern void *name` (any non-`char` pointer) | the pointer stored at the symbol |
-| `extern const char *name` | that pointer followed to a Buzz str |
-| `extern int name`, `extern double name`, ... | the scalar, loaded at its C width |
-| anything else (`extern struct Foo name`) | the symbol's own address (what C's `&name` is) |
+| Declared as                                  | Bound value                                    |
+| -------------------------------------------- | ---------------------------------------------- |
+| `extern void *name` (any non-`char` pointer) | the pointer stored at the symbol               |
+| `extern const char *name`                    | that pointer followed to a Buzz str            |
+| `extern int name`, `extern double name`, ... | the scalar, loaded at its C width              |
+| anything else (`extern struct Foo name`)     | the symbol's own address (what C's `&name` is) |
 
 Real C APIs hide required arguments in global constants. `kCFBooleanTrue` has
 no create function, and run-loop modes and dictionary callbacks are exported
@@ -114,17 +114,17 @@ from other calls' results.
 
 ### Supported C types
 
-| C type(s) | Buzz value | Notes |
-|---|---|---|
-| `void` | — | return only |
-| `bool`, `_Bool` | bool | |
-| `char`, `short`, `int`, `long`, `long long`, `intN_t`, `size_t`, ... | int | passed/returned as a 64-bit int |
-| `unsigned …`, `uintN_t` | int | |
-| `float` | float | 32-bit at the boundary |
-| `double` | float | |
-| `char*`, `const char*` | str | auto null-terminated; a returned `char*` is copied to a Buzz str |
-| `void*`, `int*`, `T*`, `struct Foo*` | int | an **opaque machine address** (see below) |
-| `CGPoint`, `NSPoint`, `CGSize`, `NSSize` (return only) | [double] | a two-double struct returned by value, e.g. `CGEventGetLocation`; amd64/arm64. As a parameter, declare two `double`s instead (same registers) |
+| C type(s)                                                            | Buzz value | Notes                                                                                                                                         |
+| -------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `void`                                                               | —          | return only                                                                                                                                   |
+| `bool`, `_Bool`                                                      | bool       |                                                                                                                                               |
+| `char`, `short`, `int`, `long`, `long long`, `intN_t`, `size_t`, ... | int        | passed/returned as a 64-bit int                                                                                                               |
+| `unsigned …`, `uintN_t`                                              | int        |                                                                                                                                               |
+| `float`                                                              | float      | 32-bit at the boundary                                                                                                                        |
+| `double`                                                             | float      |                                                                                                                                               |
+| `char*`, `const char*`                                               | str        | auto null-terminated; a returned `char*` is copied to a Buzz str                                                                              |
+| `void*`, `int*`, `T*`, `struct Foo*`                                 | int        | an **opaque machine address** (see below)                                                                                                     |
+| `CGPoint`, `NSPoint`, `CGSize`, `NSSize` (return only)               | [double]   | a two-double struct returned by value, e.g. `CGEventGetLocation`; amd64/arm64. As a parameter, declare two `double`s instead (same registers) |
 
 Every non-`char*` pointer (`void*`, `int*`, `struct Foo*`, a function pointer)
 is an opaque address represented as an int. You obtain such addresses from
@@ -132,7 +132,7 @@ is an opaque address represented as an int. You obtain such addresses from
 pass them straight into the call.
 
 > Note: prior to this support, a `T*` parameter was silently downgraded to the
-> pointee scalar `T`, passing a *value* where C expected an *address*. Pointer
+> pointee scalar `T`, passing a _value_ where C expected an _address_. Pointer
 > parameters now always marshal as addresses.
 
 ## The `ffi` module
@@ -143,14 +143,14 @@ import "ffi";
 
 ### Type metadata
 
-| Function | Returns |
-|---|---|
-| `ffi.sizeOf(ctype: str)` | size of a C type, in bytes |
-| `ffi.alignOf(ctype: str)` | alignment of a C type, in bytes |
-| `ffi.sizeOfStruct(fields: [str])` | size of a C struct with those field types |
-| `ffi.alignOfStruct(fields: [str])` | alignment of that struct |
-| `ffi.structLayout(fields: [str])` | `{ size, align, offsets: [int] }` |
-| `ffi.cstr(s: str)` | `s` (identity; Buzz strings are already valid `char*` here) |
+| Function                           | Returns                                                     |
+| ---------------------------------- | ----------------------------------------------------------- |
+| `ffi.sizeOf(ctype: str)`           | size of a C type, in bytes                                  |
+| `ffi.alignOf(ctype: str)`          | alignment of a C type, in bytes                             |
+| `ffi.sizeOfStruct(fields: [str])`  | size of a C struct with those field types                   |
+| `ffi.alignOfStruct(fields: [str])` | alignment of that struct                                    |
+| `ffi.structLayout(fields: [str])`  | `{ size, align, offsets: [int] }`                           |
+| `ffi.cstr(s: str)`                 | `s` (identity; Buzz strings are already valid `char*` here) |
 
 `structLayout` applies the standard C rule (each field at the next multiple of
 its alignment, total size rounded up to the struct alignment) so you can place
@@ -169,12 +169,12 @@ to write through. `ffi.alloc` provides one by pinning a Go buffer (via
 buffer and the C side are the same bytes, whatever C writes is visible when you
 read it back.
 
-| Function | Effect |
-|---|---|
-| `ffi.alloc(size: int)` | reserve `size` zeroed bytes, return their address |
-| `ffi.free(addr: int)` | release a block from `ffi.alloc` |
+| Function                                | Effect                                                           |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| `ffi.alloc(size: int)`                  | reserve `size` zeroed bytes, return their address                |
+| `ffi.free(addr: int)`                   | release a block from `ffi.alloc`                                 |
 | `ffi.write(addr, offset, ctype, value)` | store a scalar (`value` is float for `float`/`double`, else int) |
-| `ffi.read(addr, offset, ctype)` | load a scalar (float for `float`/`double`, else int) |
+| `ffi.read(addr, offset, ctype)`         | load a scalar (float for `float`/`double`, else int)             |
 
 `read`/`write` are **bounds-checked against the allocation** and only operate on
 memory `ffi.alloc` returned. Dereferencing an arbitrary address C handed back
@@ -243,7 +243,7 @@ per process.
   narrower; size it explicitly with `int32_t`/`int64_t` if it matters.
 - **C faults are fatal.** A bad pointer or signature mismatch can crash the host
   process; a C segfault is not a recoverable Go panic. Bind-time errors from a
-  malformed prototype *are* surfaced as ordinary Buzz errors.
+  malformed prototype _are_ surfaced as ordinary Buzz errors.
 
 ## Embedding on an unsupported platform
 

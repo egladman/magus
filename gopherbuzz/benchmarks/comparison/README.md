@@ -79,7 +79,7 @@ Sizes are picked so the intended operation dominates construction.
 - **StringInterp** - build an interpolated/concatenated `"item {i}"` string in a
   1e5-iteration loop.
 
-And four heavier **compute kernels**, to show the whole stack's time *and*
+And four heavier **compute kernels**, to show the whole stack's time _and_
 allocation footprint under sustained work:
 
 - **Mandelbrot** - 150×150 escape-time grid, max 100 iterations. Float-heavy
@@ -108,12 +108,12 @@ collections, and strings aren't compiled), so gopherbuzz is reported as a single
 
 ## Engines
 
-| Bench engine | Library | Language |
-|---|---|---|
-| `Gopherbuzz*` | this repo | Buzz |
-| `Lua` | [`yuin/gopher-lua`](https://github.com/yuin/gopher-lua) | Lua 5.1 |
-| `Tengo` | [`d5/tengo`](https://github.com/d5/tengo) | Tengo |
-| `Goja` | [`dop251/goja`](https://github.com/dop251/goja) | JavaScript (ES5.1+) |
+| Bench engine  | Library                                                 | Language            |
+| ------------- | ------------------------------------------------------- | ------------------- |
+| `Gopherbuzz*` | this repo                                               | Buzz                |
+| `Lua`         | [`yuin/gopher-lua`](https://github.com/yuin/gopher-lua) | Lua 5.1             |
+| `Tengo`       | [`d5/tengo`](https://github.com/d5/tengo)               | Tengo               |
+| `Goja`        | [`dop251/goja`](https://github.com/dop251/goja)         | JavaScript (ES5.1+) |
 
 ## Representative results
 
@@ -126,13 +126,13 @@ conservative - gopherbuzz is reported on the slower box.
 
 **Warm - steady-state execution time** on a reused VM (ms/op, lower is better):
 
-| Engine | LoopSum | Fib(30) | Call | ForeachList | ForeachMap | StringInterp |
-|---|--:|--:|--:|--:|--:|--:|
-| gopherbuzz (JIT) | **5.7** | - | - | - | - | - |
-| gopherbuzz | 40.6 | **187** | **126** | **39** | **51** | 38 |
-| gopher-lua | 50.5 | 260 | 130 | 148 | 179 | **25** |
-| tengo | 84.0 | 220 | 139 | 60 | 139 | 28 |
-| goja (JS) | 424 | 412 | 576 | 561 | 941 | 53 |
+| Engine           | LoopSum | Fib(30) |    Call | ForeachList | ForeachMap | StringInterp |
+| ---------------- | ------: | ------: | ------: | ----------: | ---------: | -----------: |
+| gopherbuzz (JIT) | **5.7** |       - |       - |           - |          - |            - |
+| gopherbuzz       |    40.6 | **187** | **126** |      **39** |     **51** |           38 |
+| gopher-lua       |    50.5 |     260 |     130 |         148 |        179 |       **25** |
+| tengo            |    84.0 |     220 |     139 |          60 |        139 |           28 |
+| goja (JS)        |     424 |     412 |     576 |         561 |        941 |           53 |
 
 The `gopherbuzz (JIT)` row exists only for `LoopSum`, the sole JIT-eligible
 workload; everywhere else gopherbuzz runs the interpreter (the `gopherbuzz` row).
@@ -141,12 +141,12 @@ gopher-lua's and tengo's string handling edge it out - disclosed, not hidden.
 
 **Warm - allocation** (B/op, lower is better):
 
-| Engine | LoopSum | Fib(30) | Call | ForeachList | ForeachMap | StringInterp |
-|---|--:|--:|--:|--:|--:|--:|
-| gopherbuzz | ~0 | 3.9 KB | 2.4 KB | ~90 KB | ~2.4 KB | ~4 MB |
-| gopher-lua | 15 MB | 88 KB | 31 MB | 23 MB | 9.2 MB | 5.3 MB |
-| tengo | 15 MB | 27 MB | 23 MB | 7.9 MB | 60 MB | 14 MB |
-| goja (JS) | 107 MB | 40 KB | 114 MB | 118 MB | 394 MB | 15 MB |
+| Engine     | LoopSum | Fib(30) |   Call | ForeachList | ForeachMap | StringInterp |
+| ---------- | ------: | ------: | -----: | ----------: | ---------: | -----------: |
+| gopherbuzz |      ~0 |  3.9 KB | 2.4 KB |      ~90 KB |    ~2.4 KB |        ~4 MB |
+| gopher-lua |   15 MB |   88 KB |  31 MB |       23 MB |     9.2 MB |       5.3 MB |
+| tengo      |   15 MB |   27 MB |  23 MB |      7.9 MB |      60 MB |        14 MB |
+| goja (JS)  |  107 MB |   40 KB | 114 MB |      118 MB |     394 MB |        15 MB |
 
 gopherbuzz's NaN-boxed `[]uint64` stack keeps the numeric/call paths at KB (or,
 for warm `LoopSum`, effectively zero), and `foreach` reuses a per-slot iterator
@@ -168,14 +168,14 @@ guarded by a cross-engine agreement test (`extra_test.go`).
 
 **Warm - execution time** (ms/op) | **allocation** (B/op), lower is better:
 
-| Engine | KmerCount | KmerCount B/op | SubstringSearch | SubstringSearch B/op |
-|---|--:|--:|--:|--:|
-| gopherbuzz | 15.2 | **553 KB** | **16.6** | **1 KB** |
-| gopher-lua | 18.1 | 2.7 MB | 19.9 | 3.7 MB |
-| tengo | **13.8** | 4.4 MB | 18.4 | 7.2 MB |
-| goja (JS) | 66 | 13 MB | 74 | 12 MB |
+| Engine     | KmerCount | KmerCount B/op | SubstringSearch | SubstringSearch B/op |
+| ---------- | --------: | -------------: | --------------: | -------------------: |
+| gopherbuzz |      15.2 |     **553 KB** |        **16.6** |             **1 KB** |
+| gopher-lua |      18.1 |         2.7 MB |            19.9 |               3.7 MB |
+| tengo      |  **13.8** |         4.4 MB |            18.4 |               7.2 MB |
+| goja (JS)  |        66 |          13 MB |              74 |                12 MB |
 
-These started ~10-18x *behind* gopher-lua and tengo - and profiling that gap was
+These started ~10-18x _behind_ gopher-lua and tengo - and profiling that gap was
 the point. It turned up two real bugs and one structural cost, all since fixed:
 `str.sub` rebuilt a `[]rune` of the whole string on every call (O(n) per call,
 O(n²) over a sliding window); each `s.sub(...)` allocated a fresh bound-method
@@ -191,22 +191,22 @@ its strings are all unique, so interning can never amortize them.
 
 **Warm - execution time** (ms/op, lower is better):
 
-| Engine | Mandelbrot | MatMul | BinaryTrees | NBody |
-|---|--:|--:|--:|--:|
-| gopherbuzz (JIT) | **26** | - | - | - |
-| gopherbuzz | 370 | 82 | 116 | 155 |
-| gopher-lua | 246 | **55** | 163 | 155 |
-| tengo | 406 | 80 | **114** | **146** |
-| goja (JS) | 2276 | 417 | 269 | 726 |
+| Engine           | Mandelbrot | MatMul | BinaryTrees |   NBody |
+| ---------------- | ---------: | -----: | ----------: | ------: |
+| gopherbuzz (JIT) |     **26** |      - |           - |       - |
+| gopherbuzz       |        370 |     82 |         116 |     155 |
+| gopher-lua       |        246 | **55** |         163 |     155 |
+| tengo            |        406 |     80 |     **114** | **146** |
+| goja (JS)        |       2276 |    417 |         269 |     726 |
 
 **Warm - allocation** (lower is better):
 
-| Engine | Mandelbrot | MatMul | BinaryTrees | NBody |
-|---|--:|--:|--:|--:|
-| gopherbuzz | **~770 B** | **1.2 MB** | **18 MB** | **17 KB** |
-| gopher-lua | 93 MB | 8.5 MB | 45 MB | 25 MB |
-| tengo | 103 MB | 13 MB | 24 MB | 27 MB |
-| goja (JS) | 453 MB | 56 MB | 146 MB | 98 MB |
+| Engine     | Mandelbrot |     MatMul | BinaryTrees |     NBody |
+| ---------- | ---------: | ---------: | ----------: | --------: |
+| gopherbuzz | **~770 B** | **1.2 MB** |   **18 MB** | **17 KB** |
+| gopher-lua |      93 MB |     8.5 MB |       45 MB |     25 MB |
+| tengo      |     103 MB |      13 MB |       24 MB |     27 MB |
+| goja (JS)  |     453 MB |      56 MB |      146 MB |     98 MB |
 
 The compute kernels are where the field is most honest. **On Mandelbrot the JIT
 changes the game outright: 26 ms vs gopher-lua's 246 - an ~9× lead** - because
@@ -218,7 +218,7 @@ off the polymorphic `arith→asNumeric→floatArith` fallback, so `GopherbuzzInt
 lands at 370 ms - behind gopher-lua on Mandelbrot but, on the un-JIT'd kernels,
 level with gopher-lua on NBody (155 vs 155, a whisker behind tengo's 146) and now
 tied with tengo on BinaryTrees (116 vs 114, well ahead of gopher-lua's 163);
-gopher-lua keeps MatMul (55 vs 82). And gopherbuzz's *allocation* is in a
+gopher-lua keeps MatMul (55 vs 82). And gopherbuzz's _allocation_ is in a
 different class throughout - and now leads every compute kernel: Mandelbrot in
 hundreds of bytes vs 93-453 MB, BinaryTrees at 18 MB vs 24-146 MB, NBody in 17 KB
 vs 25-98 MB - a tiny, GC-quiet footprint whether interpreted or JIT'd.
@@ -237,18 +237,18 @@ GOWORK=off CGO_ENABLED=1 go test -tags cgo_engines -run='^$' -bench=. -benchmem 
 - **Umka** (cgo) - a statically typed C interpreter (its own dialect; `workload.umka`).
 
 **Memory:** Go's `-benchmem` counts only Go-heap allocation, so LuaJIT's and
-Umka's C-heap usage reads ~0 and is *not* comparable - read their times only.
+Umka's C-heap usage reads ~0 and is _not_ comparable - read their times only.
 
 Indicative warm times (ms/op):
 
-| Workload | LuaJIT | Umka | best pure-Go | gopherbuzz |
-|---|--:|--:|--:|--:|
-| LoopSum | 1.5 | 35 | 5.7 (gopherbuzz JIT) | 5.7 / 40.6 |
-| Fib(30) | 24 | 140 | 187 (gopherbuzz) | 187 |
-| Call | 1.2 | 70 | 126 (gopherbuzz) | 126 |
-| Mandelbrot | 4.9 | 152 | 26 (gopherbuzz JIT) | 26 / 370 |
-| MatMul | 0.9 | 37 | 55 (gopher-lua) | 82 |
-| NBody | 1.7 | 60 | 146 (tengo) | 155 |
+| Workload   | LuaJIT | Umka |         best pure-Go | gopherbuzz |
+| ---------- | -----: | ---: | -------------------: | ---------: |
+| LoopSum    |    1.5 |   35 | 5.7 (gopherbuzz JIT) | 5.7 / 40.6 |
+| Fib(30)    |     24 |  140 |     187 (gopherbuzz) |        187 |
+| Call       |    1.2 |   70 |     126 (gopherbuzz) |        126 |
+| Mandelbrot |    4.9 |  152 |  26 (gopherbuzz JIT) |   26 / 370 |
+| MatMul     |    0.9 |   37 |      55 (gopher-lua) |         82 |
+| NBody      |    1.7 |   60 |          146 (tengo) |        155 |
 
 These are microbenchmarks across languages with different semantics, type
 systems, and safety models - read them as order-of-magnitude, not a verdict.

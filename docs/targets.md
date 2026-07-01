@@ -19,7 +19,7 @@ type Target struct {
 
 ## CLI grammar
 
-```
+```text
 [spell::]op-or-name[:charm,...]  [project ...]
    │       │           │              │
    │       │           │              └── projects, positional (omit = cwd/all)
@@ -32,13 +32,13 @@ The project is a **positional** argument, not embedded in the target token. `:` 
 
 Examples:
 
-| Command                        | Project(s) | Name           | Charms           | Spell |
-| ------------------------------ | ---------- | -------------- | ---------------- | ----- |
-| `magus run build`              | cwd / all  | `build`        | -                | -     |
-| `magus run test api`           | `api`      | `test`         | -                | -     |
-| `magus run format:rw api`      | `api`      | `format`       | `rw`             | -     |
-| `magus run lint:rw,debug /`    | all        | `lint`         | `rw`, `debug`    | -     |
-| `magus run go::go-test`        | all        | `go-test` (op) | -                | `go`  |
+| Command                     | Project(s) | Name           | Charms        | Spell |
+| --------------------------- | ---------- | -------------- | ------------- | ----- |
+| `magus run build`           | cwd / all  | `build`        | -             | -     |
+| `magus run test api`        | `api`      | `test`         | -             | -     |
+| `magus run format:rw api`   | `api`      | `format`       | `rw`          | -     |
+| `magus run lint:rw,debug /` | all        | `lint`         | `rw`, `debug` | -     |
+| `magus run go::go-test`     | all        | `go-test` (op) | -             | `go`  |
 
 Invalid forms:
 
@@ -134,18 +134,18 @@ The prefix is **not** stored in `Target`. The CLI strips it via `parseTarget` an
 
 These modify execution but are **not** durable identity. Charms parse into `Target.Charms` but propagate via context; the rest travel as `RunOption` values alongside the target list.
 
-| Input                    | Purpose                                                           |
-| ------------------------ | ----------------------------------------------------------------- |
-| `:charm,...`             | shared execution modifiers (see [charms.md](charms.md))           |
-| `--shard` / `--n-shards` | CI matrix sharding (distributes projects across runners)          |
-| `--dry-run`              | prints what would run without executing                           |
-| extra args after `--`    | forwarded to the underlying tool via `WithExtraArgs`              |
+| Input                    | Purpose                                                  |
+| ------------------------ | -------------------------------------------------------- |
+| `:charm,...`             | shared execution modifiers (see [charms.md](charms.md))  |
+| `--shard` / `--n-shards` | CI matrix sharding (distributes projects across runners) |
+| `--dry-run`              | prints what would run without executing                  |
+| extra args after `--`    | forwarded to the underlying tool via `WithExtraArgs`     |
 
 ## Lifecycle: parse → expand → run
 
 A target string goes through three stages before any tool is invoked:
 
-```
+```text
 "web/studio:test"  (or: name token + positional projects)
       │
       ▼
@@ -169,7 +169,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 
 | Term       | Definition                                                                                                          |
 | ---------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.          |
+| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.                |
 | **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                       |
 | **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`. |
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                            |

@@ -13,7 +13,7 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 | **What it is**          | a library of tool-native operations (+ cache metadata)                               | an addressable unit of work you run                                                     |
 | **Answers**             | _how_ a tool performs an operation                                                   | _what_ operation runs on _which_ project                                                |
 | **Vocabulary**          | the tool's own CLI command (`go-vet`, `cargo-clippy`, `tsc`, `eslint`, `ruff-check`) | magus's lifecycle (`build`, `test`, `lint`, `format`, `clean`, `generate`, `preflight`) |
-| **Who declares it**     | a built-in or a spell file (`spells/*.buzz`)                                          | an exported function in your magusfile                                                  |
+| **Who declares it**     | a built-in or a spell file (`spells/*.buzz`)                                         | an exported function in your magusfile                                                  |
 | **How it enters a run** | **bound** to a project via `magus.project.register`                                  | **invoked** via `magus run <name>`                                                      |
 | **Runs on its own?**    | **No**: it only contributes ops + cache inputs                                       | **Yes**: it is the entry point                                                          |
 | **Cardinality**         | many ops per spell; many spells per project                                          | one function per target name per project                                                |
@@ -63,7 +63,7 @@ Binding a spell contributes its `needs`/`claims`/`provides` to that project's ca
 
 1. **Forked command (declarative).** The op is a `Run`, a `{cmd, args, charms}` object. magus forks the command directly (no shell, no variable expansion), so invocations are deterministic and injection-safe. This is the shape custom spells use most.
 
-2. **Typed handler.** The two handler kinds carry distinct signatures. A **fork** spell's `mgs_listTargets` returns `{str: fun(Target, fun(Run)) void}`: the handler builds a `Run` and passes it to the injected `cb` callback, returning nothing. The command travels through `cb`, so there is no result to return. A **function-op** spell (a cache backend, anything importing host modules) returns `{str: fun(Target, fun(any)) bool}`: the handler does host work in-VM (HTTP, signing, a cache backend's `get_artifact`) and its boolean *is* the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any [`spells/<name>/spell.buzz`](../spells) for a worked example.
+2. **Typed handler.** The two handler kinds carry distinct signatures. A **fork** spell's `mgs_listTargets` returns `{str: fun(Target, fun(Run)) void}`: the handler builds a `Run` and passes it to the injected `cb` callback, returning nothing. The command travels through `cb`, so there is no result to return. A **function-op** spell (a cache backend, anything importing host modules) returns `{str: fun(Target, fun(any)) bool}`: the handler does host work in-VM (HTTP, signing, a cache backend's `get_artifact`) and its boolean _is_ the result core reads (hit/miss, enabled, swept). The built-in spells use the fork form; read any [`spells/<name>/spell.buzz`](../spells) for a worked example.
 
 Both shapes decode to the same thing, so a declarative record and a typed handler that declares the same command behave identically.
 
@@ -183,7 +183,7 @@ For cache-correctness rules (declare every input in `needs`, declare `provides` 
 
 ## Lifecycle: bind → contribute → compose → run
 
-```
+```text
 import "magus/spell/<name>" or "spells/<name>"  → a Spell handle (registers nothing)
       │
       ▼
@@ -207,23 +207,23 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Spell**          | A library of tool-native operations for one toolchain, plus its cache/affected metadata. Bound to a project; runs nothing on its own.                                                                                              |
 | **Op (operation)** | One tool-native action a spell exposes, named after its CLI command (`go-vet`, `golangci-lint`). Reached by subscript on the handle (`go["go-vet"]()`) or via `spell::op` on the CLI. See [Naming operations](#naming-operations). |
-| **Handle**         | The value bound by importing a spell (`import "magus/spell/<name>"` for a built-in, `import "spells/<name>"` for a workspace-local one). Inert until passed to `magus.project.register`.                                            |
+| **Handle**         | The value bound by importing a spell (`import "magus/spell/<name>"` for a built-in, `import "spells/<name>"` for a workspace-local one). Inert until passed to `magus.project.register`.                                           |
 | **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                      |
 | **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                             |
 | **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`), for affected-set attribution.                                                                                                                                                         |
-| **Fork op**        | An op that declares a `Run` (`{cmd, args, charms}`) command magus forks directly (no shell).                                                                                                                                |
-| **Function-op**    | An op whose handler does host work in-VM (e.g. a cache backend) rather than forking a single command.                                                                                                                             |
+| **Fork op**        | An op that declares a `Run` (`{cmd, args, charms}`) command magus forks directly (no shell).                                                                                                                                       |
+| **Function-op**    | An op whose handler does host work in-VM (e.g. a cache backend) rather than forking a single command.                                                                                                                              |
 | **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                   |
 
 ## Worked examples in this repo
 
 Read these spells under [`spells/`](../spells) when you outgrow a plain fork spell:
 
-| Spell                                           | Kind            | What it demonstrates                                                                                                                                                                        |
-| ----------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`buf`](../spells/buf/spell.buzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files. |
-| [`actions`](../spells/github/actions/spell.buzz) | function-op     | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the `http` byte primitives), wired with `magus.cache.remote`.  |
-| [`s3-cache`](../spells/aws/s3-cache/spell.buzz)  | function-op     | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                         |
+| Spell                                            | Kind            | What it demonstrates                                                                                                                                                                               |
+| ------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`buf`](../spells/buf/spell.buzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files.        |
+| [`actions`](../spells/github/actions/spell.buzz) | function-op     | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the `http` byte primitives), wired with `magus.cache.remote`. |
+| [`s3-cache`](../spells/aws/s3-cache/spell.buzz)  | function-op     | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                    |
 
 ## See also
 

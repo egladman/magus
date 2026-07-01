@@ -1,13 +1,13 @@
 # C FFI example
 
 A runnable demonstration of calling C from Buzz with `zdef()` and the `ffi`
-module  -  no cgo, no Zig.
+module - no cgo, no Zig.
 
 ```sh
 go run .
 ```
 
-```
+```text
 add(40, 2) = 42
 divmod(17, 5) = 3 rem 2
 sum of squares 1..4 = 30
@@ -20,10 +20,10 @@ compiles [`clib/mathx.c`](clib/mathx.c) into a shared library and runs
 
 ## What it shows
 
-| Pattern | C signature | Buzz |
-|---|---|---|
-| Scalar call | `int add(int, int)` | `lib.add(40, 2)` |
-| Out-parameters | `void divmod(int, int, int*, int*)` | `ffi.alloc` → call → `ffi.read` |
+| Pattern                  | C signature                              | Buzz                                   |
+| ------------------------ | ---------------------------------------- | -------------------------------------- |
+| Scalar call              | `int add(int, int)`                      | `lib.add(40, 2)`                       |
+| Out-parameters           | `void divmod(int, int, int*, int*)`      | `ffi.alloc` → call → `ffi.read`        |
 | Callback + pointer array | `int apply_each(int*, int, int(*)(int))` | `ffi.callback(square, "int", ["int"])` |
 
 Pointer parameters (`int *q`, `int (*f)(int)`) are declared in the `zdef` string

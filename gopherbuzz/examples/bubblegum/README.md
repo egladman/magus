@@ -1,6 +1,6 @@
 # bubblegum 🪟💨
 
-> **bubblegum** *(portmanteau)*, yeet + tile: to throw windows into a grid
+> **bubblegum** _(portmanteau)_, yeet + tile: to throw windows into a grid
 > with great force and zero regard for consequences.
 
 A tiling window manager for macOS that yeets your windows into place,
@@ -18,7 +18,7 @@ Needs macOS and exactly one permission: the Accessibility checkbox. No SIP
 changes, no root, no private frameworks; bubblegum triggers the native prompt,
 opens the right System Settings pane, and waits for the toggle.
 
-### Start at login
+## Start at login
 
 Install a LaunchAgent so bubblegum comes up with your session:
 
@@ -31,13 +31,13 @@ It tiles the script next to itself and runs the `buzz` interpreter on your PATH
 (`BUZZ=/path/to/buzz ...` otherwise). Logs land in `~/Library/Logs/bubblegum.log`.
 The buzz binary needs Accessibility, already granted from your first run.
 
-### Session restore
+## Session restore
 
 Each tiled window's workspace is remembered across restarts and crashes
 (`~/.config/bubblegum/session`, rewritten only when it changes). On launch the
 already-open windows are sent back to the workspaces they were on, matched by app
 name. Split ratios aren't saved (the tiler re-derives those), so this restores
-*which workspace*, the part macOS forgets. Delete the file to start clean.
+_which workspace_, the part macOS forgets. Delete the file to start clean.
 
 ## What it does
 
@@ -75,8 +75,8 @@ when you want, inspect the live state any time):
   terminals to workspace 2 when four windows are up"), multiple commands, or
   direct calls into the WM. Live-reloaded on save; `rules apply` re-runs it
   over existing windows.
-- And it goes full circle: `layout export` writes the *live arrangement back
-  as window rules*, runnable and editable Buzz in `rules.generated.buzz`, loaded
+- And it goes full circle: `layout export` writes the _live arrangement back
+  as window rules_, runnable and editable Buzz in `rules.generated.buzz`, loaded
   alongside your hand-written hooks (which run last and get the final word).
   Arrange windows by hand, export, and every app is pinned to its workspace,
   with no bespoke values to tweak in a data file. The generated source is verified
@@ -84,7 +84,7 @@ when you want, inspect the live state any time):
 
 ## Layout
 
-```
+```text
 bubblegum.buzz             entrypoint: imports + the run loop (213 lines)
 state/state.buzz           shared WM state object + singleton getter
 core/
@@ -129,10 +129,10 @@ current Zig). Three structural reasons:
 
 1. **Named arguments.** Closed: gopherbuzz now accepts upstream's labeled
    calls (`assert(ok, message: "…")`, any order, resolved at check time)
-   alongside positional ones. This program still *writes* positional calls,
+   alongside positional ones. This program still _writes_ positional calls,
    valid gopherbuzz, but upstream mandates the labels, so running these
    sources upstream means adding them (mechanical).
-2. **FFI engines.** All bindings here are upstream-style *Zig declarations*
+2. **FFI engines.** All bindings here are upstream-style _Zig declarations_
    in backtick blocks, `extern struct`s included; gopherbuzz lowers them to
    the C ABI itself (a Zig extern struct's layout is the C layout), no
    embedded Zig compiler ([docs](../../docs/ffi.md#zig-dialect-mapping)).
@@ -140,11 +140,11 @@ current Zig). Three structural reasons:
 3. **gopherbuzz std extensions.** Closed for this program: rules compile
    regexes with [`regex.buzz`](regex.buzz), a backtracking matcher written
    in pure Buzz (anchors, classes, repetition, alternation, `(?i)`). And
-   live reload watches file *content* instead of mtimes, so neither
+   live reload watches file _content_ instead of mtimes, so neither
    `std\pattern` nor `fs\modified` is used anymore. (Both remain available
    as gopherbuzz std extensions for other scripts.)
 
-Portable today: the core *language* surface. Objects, enums, optionals,
+Portable today: the core _language_ surface. Objects, enums, optionals,
 `mut`, methods, fibers, test blocks, and string interpolation all check clean
 under the upstream binary (verified), and this program now uses the
 upstream spellings throughout: `std\print` namespacing, `fun main(args:
@@ -159,7 +159,7 @@ call `wm\configure(config\Config{…})`, `wm\bind(…)`, `wm\rule(…)`. See
 
 The config runs in its own isolated scope, records its settings to a JSON artifact
 (via the `wm` package), and the WM replays that artifact onto its live config. How the
-config is *run* is one code path, picked by an env var rather than by detecting the runtime:
+config is _run_ is one code path, picked by an env var rather than by detecting the runtime:
 
 - **Default: in-process (`io\runFile`).** Self-contained, no external `buzz` needed,
   so a magus-compiled standalone binary loads a config with no CLI around. This is the
@@ -186,7 +186,7 @@ BUBBLEGUM_LOG=debug buzz bubblegum.buzz   # milestones: startup phases, config l
 BUBBLEGUM_LOG=trace buzz bubblegum.buzz   # debug + fine detail: every recorded config op, serialized fields
 ```
 
-`debug` lines tell you *how far* startup got and *what* the config applied;
+`debug` lines tell you _how far_ startup got and _what_ the config applied;
 `trace` adds the per-op breadcrumb (config recording → artifact → replay). The
 facility is [`log.buzz`](log.buzz) (`log\debug` / `log\trace`); it's plain
 `std`/`os`, identical on gopherbuzz and upstream, and meant to stay. Reach for

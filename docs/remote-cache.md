@@ -24,11 +24,11 @@ any machine will replay.
 magus itself knows nothing about S3 or GitHub. A backend is an ordinary
 [spell](spells.md) exposing three [function-ops](spells.md#operations-come-in-two-shapes):
 
-| op                      | when                          | does                                           |
-| ----------------------- | ----------------------------- | ---------------------------------------------- |
-| `enabled(target, cb)`   | once, before fetch/push       | is the backend active here? (gates everything) |
-| `get_artifact(target, cb)` | on a local cache miss         | download the artifact into `dest`; `true` = hit   |
-| `put_artifact(target, cb)` | after building a missed artifact | upload the artifact at `src`; `true` = stored     |
+| op                         | when                             | does                                            |
+| -------------------------- | -------------------------------- | ----------------------------------------------- |
+| `enabled(target, cb)`      | once, before fetch/push          | is the backend active here? (gates everything)  |
+| `get_artifact(target, cb)` | on a local cache miss            | download the artifact into `dest`; `true` = hit |
+| `put_artifact(target, cb)` | after building a missed artifact | upload the artifact at `src`; `true` = stored   |
 
 Everything backend-specific (auth, transport) stays in the spell, in pure Buzz.
 See [spells.md](spells.md) and [engines.md](engines.md).
@@ -98,13 +98,13 @@ magus.cache.remote(s3);
 
 Configuration comes from the environment (standard AWS variables plus a bucket):
 
-| variable                | required | purpose                                                                                                      |
-| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `MAGUS_S3_BUCKET`       | yes      | bucket name (gates the backend)                                                                              |
-| `AWS_ACCESS_KEY_ID`     | yes      | access key (gates the backend)                                                                               |
-| `AWS_SECRET_ACCESS_KEY` | yes      | secret key                                                                                                   |
-| `AWS_SESSION_TOKEN`     | no       | for temporary credentials                                                                                    |
-| `AWS_REGION`            | no       | region (falls back to `AWS_DEFAULT_REGION`, then us-east-1)                                                  |
+| variable                | required | purpose                                                                                                     |
+| ----------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `MAGUS_S3_BUCKET`       | yes      | bucket name (gates the backend)                                                                             |
+| `AWS_ACCESS_KEY_ID`     | yes      | access key (gates the backend)                                                                              |
+| `AWS_SECRET_ACCESS_KEY` | yes      | secret key                                                                                                  |
+| `AWS_SESSION_TOKEN`     | no       | for temporary credentials                                                                                   |
+| `AWS_REGION`            | no       | region (falls back to `AWS_DEFAULT_REGION`, then us-east-1)                                                 |
 | `MAGUS_S3_ENDPOINT`     | no       | base URL incl. scheme, no trailing slash; set for MinIO/R2/B2 (default `https://s3.<region>.amazonaws.com`) |
 
 Unlike the GitHub backend, S3 has no automatic eviction. Prune it on a schedule:
@@ -136,8 +136,8 @@ who bypasses magus entirely and writes poisoned bytes straight into the bucket:
 with no valid signature, every consumer rejects them.
 
 **Wiring a remote backend without a trust set is a hard error**, on every machine,
-so a shared cache can never come up unverified. *Upgrading an existing remote
-cache:* add `cache.remote.trusted_keys` to `magus.yaml` and set `MAGUS_CACHE_SIGNING_KEY`
+so a shared cache can never come up unverified. _Upgrading an existing remote
+cache:_ add `cache.remote.trusted_keys` to `magus.yaml` and set `MAGUS_CACHE_SIGNING_KEY`
 on trusted pushes, or the run fails at load with a message saying so.
 
 ### Insecure mode (no signing)

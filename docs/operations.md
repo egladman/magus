@@ -34,7 +34,7 @@ only `needs` other targets.
 
 ## The work hierarchy
 
-```
+```text
 Spell ──exposes──▶ Operation (op)              go-build, eslint, golangci-lint
   │                   │  fork op    → one process
   │                   │  function op → arbitrary in-VM work
@@ -47,23 +47,23 @@ Target (export fun) ──composes──▶ Operations  +  ──needs──▶ 
 target.result event   (per target; no per-op breakdown)
 ```
 
-| Layer         | Entity                        | Cardinality                          | Identity                          |
-| ------------- | ----------------------------- | ------------------------------------ | --------------------------------- |
-| **Spell**     | a library of operations       | many spells per project              | `name` + its ops                  |
-| **Operation** | one tool-native action        | many ops per spell                   | `spell` + op name                 |
-| **Process**   | one forked command            | 0..N per op (1 for a fork op)        | argv                              |
-| **Target**    | a runnable `export fun`       | one per name per project             | `Path + Name` ([Target](targets.md)) |
+| Layer         | Entity                  | Cardinality                   | Identity                             |
+| ------------- | ----------------------- | ----------------------------- | ------------------------------------ |
+| **Spell**     | a library of operations | many spells per project       | `name` + its ops                     |
+| **Operation** | one tool-native action  | many ops per spell            | `spell` + op name                    |
+| **Process**   | one forked command      | 0..N per op (1 for a fork op) | argv                                 |
+| **Target**    | a runnable `export fun` | one per name per project      | `Path + Name` ([Target](targets.md)) |
 
 Charms ([charms.md](charms.md)) sit orthogonal to this stack: a charm rewrites an
 Operation's argv (_in what manner_ it runs), it is not a layer of its own.
 
 ## Results: what each layer produces
 
-| Result                | Layer   | Shape                                              | Returned or emitted                               | Status        |
-| --------------------- | ------- | -------------------------------------------------- | ------------------------------------------------- | ------------- |
-| **`ExecResult`**      | Process | `{stdout, stderr, code, ok}`                       | **returned** by `os.exec`, `magus.cmd`, a fork op | exists        |
-| `OpResult`            | Operation | `ExecResult` + op identity (`spell`, `op`)       | would be returned by the op handler               | **(not built)** |
-| **`target.result`**   | Target  | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`) | exists        |
+| Result              | Layer     | Shape                                               | Returned or emitted                                                                   | Status          |
+| ------------------- | --------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------- |
+| **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `os.exec`, `magus.cmd`/`run`/`describe`/`insight`/`doctor`, a fork op | exists          |
+| `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                   | **(not built)** |
+| **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                     | exists          |
 
 - **`ExecResult` exists in both worlds.** It is the Go `run.ExecResult` and the
   spell-op **capture record** a `Capture: true` op returns "instead of void": the
@@ -85,11 +85,11 @@ latent misnaming in the second.
 
 **Three unrelated "op"s.** Only the first is the Operation defined here:
 
-| Term            | Type        | Shape                          | Domain                              |
-| --------------- | ----------- | ------------------------------ | ----------------------------------- |
-| **Operation**   | `Operation` | `spell` + op name + impl       | the spell op defined in this doc    |
-| **PatchOp**     | `PatchOp`   | `{op, path, value, from}`      | RFC 6902 charm patch ([charms.md](charms.md)) |
-| **RemoteOp**    | `RemoteOp`  | `{op, outcome, duration, bytes}` | remote-cache backend call (telemetry) |
+| Term          | Type        | Shape                            | Domain                                        |
+| ------------- | ----------- | -------------------------------- | --------------------------------------------- |
+| **Operation** | `Operation` | `spell` + op name + impl         | the spell op defined in this doc              |
+| **PatchOp**   | `PatchOp`   | `{op, path, value, from}`        | RFC 6902 charm patch ([charms.md](charms.md)) |
+| **RemoteOp**  | `RemoteOp`  | `{op, outcome, duration, bytes}` | remote-cache backend call (telemetry)         |
 
 `PatchOp` and `RemoteOp` keep their names; they are genuinely different
 operations. The handler callback parameter is named `cb`, not `op`, for exactly
@@ -115,25 +115,25 @@ protected `ispell.Target`, which was the actual offender.
 
 The serializable Buzz value types model the _nouns_ around this hierarchy:
 
-| Value type        | Models                                                                    | Layer it touches            |
-| ----------------- | ------------------------------------------------------------------------- | --------------------------- |
-| **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skipCache`, `exclusive`, ...) | Target |
-| **`TargetQuery`** | an unresolved dependency edge (a query → 0..N Targets)                     | Target (`magus.needs` edge) |
-| **`ExecResult`**  | the `{stdout, stderr, code, ok}` outcome of one process                   | Process                     |
+| Value type        | Models                                                                                                           | Layer it touches            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skipCache`, `exclusive`, ...) | Target                      |
+| **`TargetQuery`** | an unresolved dependency edge (a query → 0..N Targets)                                                           | Target (`magus.needs` edge) |
+| **`ExecResult`**  | the `{stdout, stderr, code, ok}` outcome of one process                                                          | Process                     |
 
 `TargetQuery` _produces_ `Target`s; a `Target` is run as a set of `Operation`s;
 each `Operation` yields an `ExecResult`.
 
 ## Glossary
 
-| Term             | Meaning                                                                                                  |
-| ---------------- | -------------------------------------------------------------------------------------------------------- |
-| **Spell**        | A library of tool-native Operations for one toolchain ([spells.md](spells.md)).                          |
-| **Operation (op)** | One tool-native action a spell exposes, named after its CLI command. The unit a target composes.       |
-| **Target**       | A runnable `export fun`; the work-unit `Path + Name` you invoke ([targets.md](targets.md)).              |
-| **Charm**        | A named modifier of an Operation's argv ([charms.md](charms.md)).                                        |
-| **ExecResult**   | The result of one process: `{stdout, stderr, code, ok}`.                                                 |
-| **target.result** | The dispatcher-emitted report event for one target run: project, target, status, cache hit, duration.   |
+| Term               | Meaning                                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| **Spell**          | A library of tool-native Operations for one toolchain ([spells.md](spells.md)).                       |
+| **Operation (op)** | One tool-native action a spell exposes, named after its CLI command. The unit a target composes.      |
+| **Target**         | A runnable `export fun`; the work-unit `Path + Name` you invoke ([targets.md](targets.md)).           |
+| **Charm**          | A named modifier of an Operation's argv ([charms.md](charms.md)).                                     |
+| **ExecResult**     | The result of one process: `{stdout, stderr, code, ok}`.                                              |
+| **target.result**  | The dispatcher-emitted report event for one target run: project, target, status, cache hit, duration. |
 
 ## See also
 

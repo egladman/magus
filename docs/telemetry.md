@@ -27,14 +27,14 @@ telemetry:
 
 Or via the environment:
 
-| Env var                         | YAML key                 | Default | Purpose                                                          |
-| ------------------------------- | ------------------------ | ------- | --------------------------------------------------------------- |
-| `MAGUS_TELEMETRY_ENABLED`       | `telemetry.enabled`      | `false` | Turn OTLP export on; magus connects to the endpoint when true   |
-| `MAGUS_TELEMETRY_ENDPOINT`      | `telemetry.endpoint`     | —       | OTLP collector address as `host:port` (no scheme); required     |
-| `MAGUS_TELEMETRY_PROTOCOL`      | `telemetry.protocol`     | `grpc`  | OTLP wire protocol: `grpc` or `http`                            |
-| `MAGUS_TELEMETRY_INSECURE`      | `telemetry.insecure`     | `false` | Disable TLS for the OTLP exporter (plaintext local collectors)  |
-| `MAGUS_TELEMETRY_SERVICE_NAME`  | `telemetry.service_name` | `magus` | Value of the resource attribute `service.name`                  |
-| `MAGUS_TELEMETRY_SAMPLE_RATIO`  | `telemetry.sample_ratio` | `1.0`   | Head-based trace sampling ratio in `[0,1]`                      |
+| Env var                        | YAML key                 | Default | Purpose                                                        |
+| ------------------------------ | ------------------------ | ------- | -------------------------------------------------------------- |
+| `MAGUS_TELEMETRY_ENABLED`      | `telemetry.enabled`      | `false` | Turn OTLP export on; magus connects to the endpoint when true  |
+| `MAGUS_TELEMETRY_ENDPOINT`     | `telemetry.endpoint`     | —       | OTLP collector address as `host:port` (no scheme); required    |
+| `MAGUS_TELEMETRY_PROTOCOL`     | `telemetry.protocol`     | `grpc`  | OTLP wire protocol: `grpc` or `http`                           |
+| `MAGUS_TELEMETRY_INSECURE`     | `telemetry.insecure`     | `false` | Disable TLS for the OTLP exporter (plaintext local collectors) |
+| `MAGUS_TELEMETRY_SERVICE_NAME` | `telemetry.service_name` | `magus` | Value of the resource attribute `service.name`                 |
+| `MAGUS_TELEMETRY_SAMPLE_RATIO` | `telemetry.sample_ratio` | `1.0`   | Head-based trace sampling ratio in `[0,1]`                     |
 
 **Export details.** magus pushes metrics over OTLP on a periodic reader every
 **30s**. It batches traces and samples them head-based by `sample_ratio`
@@ -49,7 +49,7 @@ Every metric and span carries these resource attributes:
 | `service.name`         | `telemetry.service_name` (default `magus`)    |
 | `service.version`      | the magus build version                       |
 | `magus.workspace.root` | the workspace root, when set                  |
-| `process.*`            | detected process metadata (pid, runtime, ...)   |
+| `process.*`            | detected process metadata (pid, runtime, ...) |
 | `host.*`               | detected host metadata                        |
 
 ## Metrics
@@ -59,30 +59,30 @@ Every metric and span carries these resource attributes:
 Low-cardinality aggregate view of the on-disk content-addressed cache; no
 per-project attribute.
 
-| Metric                 | Instrument | Unit     | Attributes                  | Meaning                                       |
-| ---------------------- | ---------- | -------- | --------------------------- | --------------------------------------------- |
-| `magus.cache.hits`     | counter    | `{call}` | `outcome=hit`               | Cache replays (a `Cache.Run` served from disk) |
-| `magus.cache.misses`   | counter    | `{call}` | `outcome=miss`              | Genuine builds (no entry found)                |
-| `magus.cache.errors`   | counter    | `{call}` | `outcome=error`             | Build steps that failed                        |
-| `magus.cache.duration` | histogram  | `s`      | `outcome ∈ {hit, miss}`     | Wall-clock of a single `Cache.Run`             |
+| Metric                 | Instrument | Unit     | Attributes              | Meaning                                        |
+| ---------------------- | ---------- | -------- | ----------------------- | ---------------------------------------------- |
+| `magus.cache.hits`     | counter    | `{call}` | `outcome=hit`           | Cache replays (a `Cache.Run` served from disk) |
+| `magus.cache.misses`   | counter    | `{call}` | `outcome=miss`          | Genuine builds (no entry found)                |
+| `magus.cache.errors`   | counter    | `{call}` | `outcome=error`         | Build steps that failed                        |
+| `magus.cache.duration` | histogram  | `s`      | `outcome ∈ {hit, miss}` | Wall-clock of a single `Cache.Run`             |
 
 ### Remote cache
 
 The [shared backend](remote-cache.md) (S3, GitHub Actions, ...), exported only
 when one is wired via `magus.cache.remote(...)`. These mirror the local-cache
 vocabulary under a `.remote` prefix so a remote hit is **never** folded into the
-local counters: a remote hit is still a *local* miss, because the remote fetch
+local counters: a remote hit is still a _local_ miss, because the remote fetch
 only runs after the local store misses. Instrumentation wraps the backend
 interface, so it applies to every backend (including ones you write) with no
 backend changes.
 
-| Metric                        | Instrument | Unit     | Attributes                                  | Meaning                                  |
-| ----------------------------- | ---------- | -------- | ------------------------------------------- | ---------------------------------------- |
-| `magus.cache.remote.hits`     | counter    | `{call}` | `op=get`, `outcome=hit`                     | Remote `get` returned an entry            |
-| `magus.cache.remote.misses`   | counter    | `{call}` | `op=get`, `outcome=miss`                    | Remote `get` found nothing                |
-| `magus.cache.remote.errors`   | counter    | `{call}` | `op ∈ {get, put}`, `outcome=error`          | A remote operation failed                 |
-| `magus.cache.remote.duration` | histogram  | `s`      | `op ∈ {get, put}`, `outcome`                | Wall-clock of a single remote operation   |
-| `magus.cache.remote.io.size`  | histogram  | `By`     | `op ∈ {get, put}`                           | Bytes transferred, recorded on hits and puts only (egress/ingress cost) |
+| Metric                        | Instrument | Unit     | Attributes                         | Meaning                                                                 |
+| ----------------------------- | ---------- | -------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| `magus.cache.remote.hits`     | counter    | `{call}` | `op=get`, `outcome=hit`            | Remote `get` returned an entry                                          |
+| `magus.cache.remote.misses`   | counter    | `{call}` | `op=get`, `outcome=miss`           | Remote `get` found nothing                                              |
+| `magus.cache.remote.errors`   | counter    | `{call}` | `op ∈ {get, put}`, `outcome=error` | A remote operation failed                                               |
+| `magus.cache.remote.duration` | histogram  | `s`      | `op ∈ {get, put}`, `outcome`       | Wall-clock of a single remote operation                                 |
+| `magus.cache.remote.io.size`  | histogram  | `By`     | `op ∈ {get, put}`                  | Bytes transferred, recorded on hits and puts only (egress/ingress cost) |
 
 `outcome ∈ {hit, miss, stored, error}`; `stored` is a successful `put`.
 **Remote hit-rate** is `hits / (hits + misses)`. **Put success** is the
@@ -91,10 +91,10 @@ backend changes.
 
 ### Graph
 
-| Metric                       | Instrument | Unit     | Attributes              | Meaning                          |
-| ---------------------------- | ---------- | -------- | ----------------------- | -------------------------------- |
-| `magus.graph.queries`        | counter    | `{call}` | `op`, `strategy`        | Number of graph query operations |
-| `magus.graph.query.duration` | histogram  | `s`      | `op`, `strategy`        | Wall-clock of a single graph query |
+| Metric                       | Instrument | Unit     | Attributes       | Meaning                            |
+| ---------------------------- | ---------- | -------- | ---------------- | ---------------------------------- |
+| `magus.graph.queries`        | counter    | `{call}` | `op`, `strategy` | Number of graph query operations   |
+| `magus.graph.query.duration` | histogram  | `s`      | `op`, `strategy` | Wall-clock of a single graph query |
 
 `strategy` is present only when the query reports one. `op=build` is the full
 graph build.
@@ -104,8 +104,8 @@ graph build.
 Per-project, per-spell. `magus.project` has unbounded cardinality; see
 [Cardinality](#cardinality).
 
-| Metric                  | Instrument | Unit     | Attributes                                                             | Meaning                                  |
-| ----------------------- | ---------- | -------- | --------------------------------------------------------------------- | ---------------------------------------- |
+| Metric                  | Instrument | Unit     | Attributes                                                             | Meaning                                    |
+| ----------------------- | ---------- | -------- | ---------------------------------------------------------------------- | ------------------------------------------ |
 | `magus.target.runs`     | counter    | `{call}` | `magus.project`, `magus.spell`, `magus.target`, `outcome`, `cache.hit` | Target executions, including cache replays |
 | `magus.target.duration` | histogram  | `s`      | same                                                                   | Wall-clock of a single target execution    |
 
@@ -114,9 +114,9 @@ per resolved spell per project.
 
 ### Concurrency pool
 
-| Metric                      | Instrument      | Unit     | Attributes | Meaning                          |
-| --------------------------- | --------------- | -------- | ---------- | -------------------------------- |
-| `magus.pool.wait.duration`  | histogram       | `s`      | —          | Time a target waited for a slot  |
+| Metric                      | Instrument      | Unit     | Attributes | Meaning                                         |
+| --------------------------- | --------------- | -------- | ---------- | ----------------------------------------------- |
+| `magus.pool.wait.duration`  | histogram       | `s`      | —          | Time a target waited for a slot                 |
 | `magus.pool.slots.inflight` | up-down counter | `{slot}` | —          | Concurrency slots currently in use (gauge-like) |
 
 `magus.pool.slots.inflight` is an up-down counter: it rises as targets acquire
@@ -126,15 +126,15 @@ slots and falls as they release, so its value reads as the live in-use depth.
 
 Spans are sampled head-based by `telemetry.sample_ratio`.
 
-| Span                        | Attributes                       | When                                                              |
-| --------------------------- | -------------------------------- | ---------------------------------------------------------------- |
-| `magus.target.run`          | `magus.project`, `magus.target`  | One per target execution (miss path)                             |
-| `magus.cache.hash`          | —                                | Hashing a target's inputs (every `Cache.Run`)                    |
-| `magus.cache.replay`        | —                                | Restoring outputs from a cache hit                               |
-| `magus.cache.snapshot`      | —                                | Capturing outputs after a build (miss path, writable cache)      |
-| `magus.cache.remote.get`    | `magus.project`                  | A remote fetch; spans the network round-trip and the import      |
-| `magus.cache.remote.put`    | `magus.project`                  | A remote upload                                                  |
-| `magus.cache.remote.prune`  | —                                | A retention sweep (`magus config cache prune --remote`)          |
+| Span                       | Attributes                      | When                                                        |
+| -------------------------- | ------------------------------- | ----------------------------------------------------------- |
+| `magus.target.run`         | `magus.project`, `magus.target` | One per target execution (miss path)                        |
+| `magus.cache.hash`         | —                               | Hashing a target's inputs (every `Cache.Run`)               |
+| `magus.cache.replay`       | —                               | Restoring outputs from a cache hit                          |
+| `magus.cache.snapshot`     | —                               | Capturing outputs after a build (miss path, writable cache) |
+| `magus.cache.remote.get`   | `magus.project`                 | A remote fetch; spans the network round-trip and the import |
+| `magus.cache.remote.put`   | `magus.project`                 | A remote upload                                             |
+| `magus.cache.remote.prune` | —                               | A retention sweep (`magus config cache prune --remote`)     |
 
 The `magus.cache.hash` / `replay` / `snapshot` spans break a target's latency
 down by phase: hashing vs. building vs. I/O. The remote `get`/`put` spans put a

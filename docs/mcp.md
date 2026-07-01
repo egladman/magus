@@ -14,7 +14,7 @@ magus server start
 
 The MCP endpoint comes up alongside it:
 
-```
+```text
 http://127.0.0.1:7391/mcp
 ```
 
@@ -22,19 +22,19 @@ http://127.0.0.1:7391/mcp
 
 ## Available tools
 
-| Tool                     | Purpose                                                            |
-| ------------------------ | ------------------------------------------------------------------ |
-| `magus_list_projects`    | List all projects discovered in the workspace                      |
-| `magus_list_targets`     | List registered build targets for a project                        |
-| `magus_where`            | Resolve a fuzzy project name to its absolute path                  |
-| `magus_describe_project` | Explain why a project is in the affected set                       |
+| Tool                     | Purpose                                                              |
+| ------------------------ | -------------------------------------------------------------------- |
+| `magus_list_projects`    | List all projects discovered in the workspace                        |
+| `magus_list_targets`     | List registered build targets for a project                          |
+| `magus_where`            | Resolve a fuzzy project name to its absolute path                    |
+| `magus_describe_project` | Explain why a project is in the affected set                         |
 | `magus_run_target`       | Run a target (`build`, `test`, `lint`, ...) for one or more projects |
-| `magus_run_affected`     | Run a target for all VCS-changed projects                          |
-| `magus_doctor`           | Validate workspace health                                          |
-| `magus_status`           | Inspect the live concurrency pool                                  |
-| `magus_affected_plan`    | Emit a CI shard plan for the affected set                          |
-| `magus_config_get`       | Read the resolved workspace config (read-only)                     |
-| `magus_tail_log`         | Retrieve the captured build log for a project                      |
+| `magus_run_affected`     | Run a target for all VCS-changed projects                            |
+| `magus_doctor`           | Validate workspace health                                            |
+| `magus_status`           | Inspect the live concurrency pool                                    |
+| `magus_affected_plan`    | Emit a CI shard plan for the affected set                            |
+| `magus_config_get`       | Read the resolved workspace config (read-only)                       |
+| `magus_tail_log`         | Retrieve the captured build log for a project                        |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 
@@ -66,7 +66,7 @@ Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 The endpoint requires a **bearer token**. The daemon generates one on first start and stores it `0600` at `$XDG_CONFIG_HOME/magus/mcp_token`; the secret never reaches the daemon log, so retrieve it with `magus config mcp token print`. Every `/mcp` request must carry `Authorization: Bearer <token>`; requests without it get `401 Unauthorized`. Manage the token with:
 
-```
+```text
 magus config mcp token print      # show the current token
 magus config mcp token generate   # mint a new one (--force to rotate)
 magus config mcp token revoke     # delete it (daemon mints a fresh one on next start)
@@ -75,8 +75,11 @@ magus config mcp token revoke     # delete it (daemon mints a fresh one on next 
 Configure your client with the header, e.g.:
 
 ```json
-{ "type": "streamable-http", "url": "http://127.0.0.1:7391/mcp",
-  "headers": { "Authorization": "Bearer <token>" } }
+{
+  "type": "streamable-http",
+  "url": "http://127.0.0.1:7391/mcp",
+  "headers": { "Authorization": "Bearer <token>" }
+}
 ```
 
 Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.

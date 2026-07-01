@@ -6,7 +6,7 @@ Enable with `magus run <target> --race`.
 The `--race` flag follows the `--output` pattern: an enumerated mode value.
 Modes are **orthogonal** and can be combined with a comma:
 
-```
+```text
 magus run build                          # no race diagnostics
 magus run build --race=watch             # cheap: fsnotify + static checks
 magus run build --race=replay            # determinism only

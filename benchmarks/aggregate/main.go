@@ -263,13 +263,13 @@ func main() {
 	var md strings.Builder
 	md.WriteString("# magus benchmarks\n\n")
 	md.WriteString("Head-to-head: magus vs turbo, nx, lage, moon, bazel, make.\n\n")
-	md.WriteString("## Environment\n\n```\n")
+	md.WriteString("## Environment\n\n```text\n")
 	md.WriteString(sysInfo())
 	md.WriteString("```\n\n")
 
 	vl := readVersionsLock(resultsDir)
 	if vl != "" {
-		md.WriteString("### Tool versions\n\n```\n")
+		md.WriteString("### Tool versions\n\n```text\n")
 		md.WriteString(vl)
 		md.WriteString("```\n\n")
 	}

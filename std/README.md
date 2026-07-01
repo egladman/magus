@@ -1,7 +1,7 @@
-# magus/std  -  the host-binding superset
+# magus/std - the host-binding superset
 
 This package is magus's **host API**: the modules a `magusfile.buzz` (or a spell)
-calls into to touch the outside world  -  run processes, read files, query the VCS,
+calls into to touch the outside world - run processes, read files, query the VCS,
 make HTTP requests, hash, (de)serialize, build charm patches. It is layered on
 top of [`gopherbuzz/std`](../gopherbuzz/std/README.md) (the Buzz language stdlib)
 to form one **superset** surface.
@@ -11,7 +11,7 @@ to form one **superset** surface.
 `gopherbuzz/std` is the portable Buzz standard library and must match upstream
 Buzz. `magus/std` is everything magus adds on top:
 
-```
+```text
 import "os"  in a magusfile
   ├── os.sleep / os.time / os.env / os.execute / …   ← gopherbuzz/std (the language)
   └── os.exec / os.which / os.retry / os.with_env / …← magus/std (this package)
@@ -28,7 +28,7 @@ import "os"  in a magusfile
 - The native-equivalent cross-reference (which host method duplicates a Buzz
   stdlib call) is in [`../host/overlap.go`](../host/overlap.go).
 
-Anything magus-specific goes **here**, never in `gopherbuzz/std`  -  that package
+Anything magus-specific goes **here**, never in `gopherbuzz/std` - that package
 stays upstream-shaped so standalone Buzz programs remain portable.
 
 ## The native binding mechanism
@@ -73,7 +73,7 @@ out, err := std.OsExec(ctx, "git", []string{"rev-parse", "HEAD"}, "", nil)
 
 ## See also
 
-- [`gopherbuzz/std/README.md`](../gopherbuzz/std/README.md)  -  the Buzz stdlib
+- [`gopherbuzz/std/README.md`](../gopherbuzz/std/README.md) - the Buzz stdlib
   this package supersets, and its upstream-parity constraint.
-- [`docs/engines.md`](../docs/engines.md), [`docs/modules/`](../docs/modules)  - 
+- [`docs/engines.md`](../docs/engines.md), [`docs/modules/`](../docs/modules) -
   the user-facing module reference.

@@ -18,16 +18,16 @@ filesystem watches that the bench scenarios may exercise:
 sudo apt install -y build-essential pkg-config hyperfine inotify-tools
 ```
 
-| Tool        | Install                                                                  |
-| ----------- | ------------------------------------------------------------------------ |
-| `hyperfine` | `sudo apt install hyperfine` (included above)                            |
-| `magus`     | `cd magus && go build -o ~/.local/bin/magus ./cmd/magus`            |
-| `make`      | usually pre-installed                                                    |
-| `turbo`     | `pnpm install -g turbo@latest`                                                                                   |
-| `nx`        | `pnpm install -g nx@latest`                                                                                      |
-| `lage`      | `pnpm install -g @microsoft/lage@latest`                                                                         |
-| `moon`      | `curl -fsSL https://moonrepo.dev/install/moon.sh \| bash`                                                        |
-| `bazel`     | see [bazel.build/install](https://bazel.build/install)                                                           |
+| Tool        | Install                                                   |
+| ----------- | --------------------------------------------------------- |
+| `hyperfine` | `sudo apt install hyperfine` (included above)             |
+| `magus`     | `cd magus && go build -o ~/.local/bin/magus ./cmd/magus`  |
+| `make`      | usually pre-installed                                     |
+| `turbo`     | `pnpm install -g turbo@latest`                            |
+| `nx`        | `pnpm install -g nx@latest`                               |
+| `lage`      | `pnpm install -g @microsoft/lage@latest`                  |
+| `moon`      | `curl -fsSL https://moonrepo.dev/install/moon.sh \| bash` |
+| `bazel`     | see [bazel.build/install](https://bazel.build/install)    |
 
 > `inotify-tools` is optional but useful if you hit
 > `fs.inotify.max_user_watches` errors on large fixtures. Bump it with

@@ -90,7 +90,7 @@ The patches of all active charms are **concatenated in sorted charm-name order a
 
 Example with base `go tool golangci-lint run ./...`:
 
-```
+```text
 rw    : add "--fix" at /3      → go tool golangci-lint run --fix ./...
 debug : add "-v"   at /-       → ... -v
 ```
@@ -150,7 +150,7 @@ charms = {
 };
 ```
 
-> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and the built-in map `.remove()` method would shadow `remove`. This is a *constructor name only*: `charm.drop` emits the standard RFC 6902 `{"op": "remove", ...}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
+> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and the built-in map `.remove()` method would shadow `remove`. This is a _constructor name only_: `charm.drop` emits the standard RFC 6902 `{"op": "remove", ...}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
 
 ### 3. Raw RFC 6902 data (the lowest level)
 
@@ -198,24 +198,24 @@ Both charm modules build a charm's patch; every constructor returns `{ ops = [..
 
 The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm.after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare, as `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
 
-| Constructor                             | Builds                                                                                       |
-| --------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `append(vals)`                          | add each of `vals` at the end (`/-`)                                                         |
-| `prepend(vals)`                         | insert `vals` at the front, in order                                                         |
-| `after(argv, anchor, vals)`             | insert `vals` just after the first element equal to `anchor`                                 |
-| `before(argv, anchor, vals)`            | insert `vals` just before `anchor`                                                           |
-| `set(argv, anchor, val)`                | replace the element equal to `anchor` with `val`                                             |
-| `drop(argv, anchor)`                    | remove the element equal to `anchor`                                                         |
-| `afterFunc(argv, fn, vals)`             | `after`, but match by predicate                                                              |
-| `beforeFunc(argv, fn, vals)`            | `before`, by predicate                                                                       |
-| `setFunc(argv, fn, val)`                | `set`, by predicate                                                                          |
-| `dropFunc(argv, fn)`                    | `drop`, by predicate                                                                         |
-| `move(argv, anchor, to)`                | move the `anchor` element to pointer `to` (`"/-"` end, `"/0"` front, or `path(...)`)         |
-| `copy(argv, anchor, to)`                | copy the `anchor` element to pointer `to`                                                    |
-| `test(argv, anchor)`                    | guard: assert `anchor` is still at its position when the patch applies (else the run errors) |
-| `moveFunc` / `copyFunc` / `testFunc`    | the above, matching by predicate                                                             |
-| `path(argv, anchor)`                    | the JSON Pointer (`"/N"`) of `anchor`, for use as a `to` destination or in a hand-written op |
-| `pathFunc(argv, fn)`                    | `path`, by predicate                                                                         |
+| Constructor                          | Builds                                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `append(vals)`                       | add each of `vals` at the end (`/-`)                                                         |
+| `prepend(vals)`                      | insert `vals` at the front, in order                                                         |
+| `after(argv, anchor, vals)`          | insert `vals` just after the first element equal to `anchor`                                 |
+| `before(argv, anchor, vals)`         | insert `vals` just before `anchor`                                                           |
+| `set(argv, anchor, val)`             | replace the element equal to `anchor` with `val`                                             |
+| `drop(argv, anchor)`                 | remove the element equal to `anchor`                                                         |
+| `afterFunc(argv, fn, vals)`          | `after`, but match by predicate                                                              |
+| `beforeFunc(argv, fn, vals)`         | `before`, by predicate                                                                       |
+| `setFunc(argv, fn, val)`             | `set`, by predicate                                                                          |
+| `dropFunc(argv, fn)`                 | `drop`, by predicate                                                                         |
+| `move(argv, anchor, to)`             | move the `anchor` element to pointer `to` (`"/-"` end, `"/0"` front, or `path(...)`)         |
+| `copy(argv, anchor, to)`             | copy the `anchor` element to pointer `to`                                                    |
+| `test(argv, anchor)`                 | guard: assert `anchor` is still at its position when the patch applies (else the run errors) |
+| `moveFunc` / `copyFunc` / `testFunc` | the above, matching by predicate                                                             |
+| `path(argv, anchor)`                 | the JSON Pointer (`"/N"`) of `anchor`, for use as a `to` destination or in a hand-written op |
+| `pathFunc(argv, fn)`                 | `path`, by predicate                                                                         |
 
 Method names are camelCase (`charm.afterFunc`, `charm.pathFunc`), following Buzz's convention.
 
@@ -339,7 +339,7 @@ Charm args are **literal**: there is no `${VAR}` interpolation, by design. The h
 
 ## How a charm reaches a spell
 
-```
+```text
 magus run lint:rw,debug
       │
       ▼
@@ -404,17 +404,17 @@ type Charm struct {
 
 ## Glossary
 
-| Term             | Definition                                                                                                                                                                                                                                                                         |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                                                                                                               |
-| **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                                                                                                                 |
+| Term             | Definition                                                                                                                                                                                                                                                                        |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                                                                                                              |
+| **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                                                                                                                |
 | **`gha`**        | A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the `ci-shard` job matrix → `$GITHUB_OUTPUT`). Set via `:gha`. A no-op where unsupported; not stripped from `ci`. |
-| **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                                                                                                               |
-| **PatchOp**      | One operation: `{op, path, value?, from?}`.                                                                                                                                                                                                                                        |
-| **Anchor**       | A value (or predicate) a `charm.*` constructor resolves to a numeric JSON Pointer at author time.                                                                                                                                                                                  |
-| **Stacking**     | Multiple charms apply together: patches concatenate in sorted-name order and apply as one sequential patch.                                                                                                                                                                        |
-| **The boundary** | Charms edit argv elements only (never `cmd`, never the whole argv). Enforced by `ValidatePatch`.                                                                                                                                                                                   |
-| **`HasCharm`**   | The set-membership query a spell uses to react to a charm; unknown charms are ignored.                                                                                                                                                                                             |
+| **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                                                                                                              |
+| **PatchOp**      | One operation: `{op, path, value?, from?}`.                                                                                                                                                                                                                                       |
+| **Anchor**       | A value (or predicate) a `charm.*` constructor resolves to a numeric JSON Pointer at author time.                                                                                                                                                                                 |
+| **Stacking**     | Multiple charms apply together: patches concatenate in sorted-name order and apply as one sequential patch.                                                                                                                                                                       |
+| **The boundary** | Charms edit argv elements only (never `cmd`, never the whole argv). Enforced by `ValidatePatch`.                                                                                                                                                                                  |
+| **`HasCharm`**   | The set-membership query a spell uses to react to a charm; unknown charms are ignored.                                                                                                                                                                                            |
 
 ## See also
 

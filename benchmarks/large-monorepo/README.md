@@ -9,7 +9,7 @@ Status: turbo/nx/lage baseline + magus. moon and bazel are not wired yet.
 
 ## Layout
 
-```
+```text
 large-monorepo/
   setup.sh          clone upstream @ pinned SHA into gen/repo, write magus config, npm install
   bench.sh          run the scenarios, emit results/, write BENCHMARKS-large-monorepo.md
@@ -79,7 +79,7 @@ full timed `next build` sweep needs a dedicated host; see Cost / tuning.)
 - A magus binary:
 
   ```sh
-  go build -tags mcp,selfmanage -o ~/.local/bin/magus ./cmd/magus
+  go build -tags mcp -o ~/.local/bin/magus ./cmd/magus
   ```
 
   turbo/nx/lage are installed locally by `setup.sh` (`npm install`); no global

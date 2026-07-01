@@ -99,7 +99,7 @@ magus affected build --step
 
 At each pause, magus prints the command and working directory, then waits:
 
-```
+```text
 → go build ./...  (cwd: /workspace/api)
   [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort:
 ```

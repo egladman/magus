@@ -152,7 +152,7 @@ verified and arguments pass in written order. After label resolution,
 arguments evaluate in parameter order.
 
 **Deliberate divergence:** upstream hard-reserves `test` as a keyword; gopherbuzz
-treats it as a *contextual* soft keyword. `test` introduces a block only in the
+treats it as a _contextual_ soft keyword. `test` introduces a block only in the
 `test "…" {` position and stays a normal identifier elsewhere. This runs every
 upstream test block verbatim while keeping `test` usable as an identifier, which
 the magus embedding needs (`export fun test` is a common target). It is therefore
@@ -163,11 +163,11 @@ Go embedding forces it" stance taken for [FFI](docs/ffi.md).
 
 Three mutually exclusive `Value` representations; one is compiled at a time.
 
-| Tag | `Value` | Use |
-|---|---|---|
-| _(none)_ | 8-byte NaN-box + handle table | **default production build** |
-| `buzz_safe` | 24-byte interface + assertion, bounds-checked | CI / differential testing |
-| `buzz_unsafe` | 24-byte pointer struct | legacy baseline |
+| Tag           | `Value`                                       | Use                          |
+| ------------- | --------------------------------------------- | ---------------------------- |
+| _(none)_      | 8-byte NaN-box + handle table                 | **default production build** |
+| `buzz_safe`   | 24-byte interface + assertion, bounds-checked | CI / differential testing    |
+| `buzz_unsafe` | 24-byte pointer struct                        | legacy baseline              |
 
 The default build has **zero GC write barriers** on the push/arith/pop path (the
 operand stack is `[]uint64`). `buzz_safe` is behaviorally identical and slower,
@@ -262,7 +262,7 @@ the hot path, baseline with `benchstat` over `-bench=. -count=10` and re-check
 under `buzz_safe`.
 
 - **`Exec` is I-cache-bound** (~50 KB single `switch`). Adding a new full `case`
-  regresses *all* benchmarks 25-55%. Add small branches inside existing handlers,
+  regresses _all_ benchmarks 25-55%. Add small branches inside existing handlers,
   or move cold code to `//go:noinline` helpers, never a new case body.
 - **Superinstructions** (`FusePeephole`): `OpBinLC`, `OpBinLL`,
   `OpCmpLC` fuse the dominant `GetLocal/LoadConst/<op>/JumpFalse` patterns.
