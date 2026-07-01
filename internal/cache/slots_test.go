@@ -60,3 +60,49 @@ func TestRunAllSlotsThrottles(t *testing.T) {
 	assert.Equal(t, int32(1), duringHeavy.Load(), "no step may run while a slots==budget step holds every slot")
 	assert.Equal(t, int32(2), lightPeak.Load(), "light steps should saturate the 2-slot budget when the heavy step is idle")
 }
+
+// TestRunAllSlotsHandbackNoDeadlock guards against a multi-slot step self-deadlocking
+// when its fn hands back its build slot to reserve internally-parallel slots
+// (the os.with_slots / archive.* pattern). A step holding N slots must hand back
+// *all* N, not one, or an AcquireN inside fn blocks forever on slots the step
+// itself is pinning.
+func TestRunAllSlotsHandbackNoDeadlock(t *testing.T) {
+	root, c := openCache(t)
+
+	heavy := depStep(root, "heavy")
+	heavy.NoCache = true
+	heavy.Slots = 2 // holds the whole 2-slot budget
+
+	fn := func(ctx context.Context, _ Step) error {
+		lim := LimiterFromContext(ctx)
+		if lim == nil {
+			return nil
+		}
+		// Mirror OsWithSlots: hand back the slots we hold, then reserve `threads`.
+		// With the whole budget held, reserving 2 can only succeed if the handback
+		// released both of our slots.
+		held := SlotsHeld(ctx)
+		if held > 0 {
+			lim.ReleaseN(held)
+			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
+		}
+		if err := lim.AcquireN(ctx, 2); err != nil {
+			return err
+		}
+		defer lim.ReleaseN(2)
+		return nil
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.RunAll(context.Background(), []Step{heavy}, fn, WithConcurrency(2))
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err, "RunAll")
+	case <-time.After(5 * time.Second):
+		t.Fatal("weighted step deadlocked handing back its slot to reserve more")
+	}
+}

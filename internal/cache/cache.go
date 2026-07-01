@@ -529,7 +529,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 			r, err := c.Run(gctx, s, func(ctx context.Context) error {
 				ctx = ContextWithLimiter(ctx, lim)
-				ctx = WithSlotHeld(ctx)
+				ctx = WithSlotsHeld(ctx, slots)
 				return fn(ctx, s)
 			}, opts...)
 			// Write key before markDone; the markDone→waitForDeps happens-before edge

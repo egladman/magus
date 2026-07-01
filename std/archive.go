@@ -129,12 +129,14 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	threads := resolveThreads(opts, lim)
 
 	if lim != nil {
-		// If we hold a build slot, give it back while we hold `threads` slots
+		// If we hold build slots, give them all back while we hold `threads` slots
 		// so peak in-flight stays within the budget (cap) rather than
-		// cap+threads-1. Reclaim it uncancellably after the work completes.
-		if cache.SlotHeld(ctx) {
-			lim.Release()
-			defer func() { _ = lim.Acquire(context.WithoutCancel(ctx)) }()
+		// cap+threads-1. A weighted step holds more than one, and giving back only
+		// one would deadlock the AcquireN below on slots we pin ourselves. Reclaim
+		// them uncancellably after the work completes.
+		if held := cache.SlotsHeld(ctx); held > 0 {
+			lim.ReleaseN(held)
+			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
 		}
 		if err := lim.AcquireN(ctx, threads); err != nil {
 			return nil, fmt.Errorf("archive.uncompress: %w", err)
@@ -210,12 +212,14 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 	threads := resolveThreads(opts, lim)
 
 	if lim != nil {
-		// If we hold a build slot, give it back while we hold `threads` slots
+		// If we hold build slots, give them all back while we hold `threads` slots
 		// so peak in-flight stays within the budget (cap) rather than
-		// cap+threads-1. Reclaim it uncancellably after the work completes.
-		if cache.SlotHeld(ctx) {
-			lim.Release()
-			defer func() { _ = lim.Acquire(context.WithoutCancel(ctx)) }()
+		// cap+threads-1. A weighted step holds more than one, and giving back only
+		// one would deadlock the AcquireN below on slots we pin ourselves. Reclaim
+		// them uncancellably after the work completes.
+		if held := cache.SlotsHeld(ctx); held > 0 {
+			lim.ReleaseN(held)
+			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
 		}
 		if err := lim.AcquireN(ctx, threads); err != nil {
 			return nil, fmt.Errorf("archive.compress: %w", err)

@@ -24,7 +24,7 @@ Extract the archive at src into dest. Returns a table with fields: files (extrac
 
 Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts keys: format (string, override format detection), threads (int, parallel encode workers; 0 or omitted = auto), level (int, compression level; -1 = format default), follow_symlinks (bool, default false), max_size (int, output byte cap, default 10 GiB).
 
-**Signature:** `archive.compress(src, dest, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/archive.go#L181)
+**Signature:** `archive.compress(src, dest, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/archive.go#L183)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

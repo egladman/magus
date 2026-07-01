@@ -528,9 +528,11 @@ func retryFloat(v any) (float64, bool) {
 // stays within the cap rather than cap+n.
 func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
-		if cache.SlotHeld(ctx) {
-			lim.Release()
-			defer func() { _ = lim.Acquire(context.WithoutCancel(ctx)) }()
+		// Hand back every slot we hold (a weighted step holds more than one) so
+		// reserving n cannot deadlock on slots we are pinning ourselves.
+		if held := cache.SlotsHeld(ctx); held > 0 {
+			lim.ReleaseN(held)
+			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
 		}
 		if err := lim.AcquireN(ctx, n); err != nil {
 			return fmt.Errorf("os.with_slots: %w", err)

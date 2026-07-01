@@ -91,17 +91,24 @@ func (l *Limiter) ReleaseN(n int) {
 	}
 }
 
-// Yield releases the caller's slot for the duration of fn, then re-acquires it
-// before returning. The caller MUST hold a slot; a slotless caller would over-release
-// the semaphore. Re-acquire uses a non-cancellable context so the caller always returns
-// with the slot held (RunAll releases unconditionally; a slotless return would panic).
-// The re-acquire re-enters the FIFO queue, so a yielding goroutine goes to the back.
+// Yield releases the caller's slots for the duration of fn, then re-acquires them
+// before returning. It releases every slot the caller holds (SlotsHeld(ctx), at
+// least 1): a weighted step holds more than one, and releasing only one would leave
+// it pinning slots that fn's own AcquireN then blocks on forever. The caller MUST
+// hold a slot; a slotless caller would over-release the semaphore. Re-acquire uses a
+// non-cancellable context so the caller always returns with its slots held (RunAll
+// releases unconditionally; a slotless return would panic). The re-acquire re-enters
+// the FIFO queue, so a yielding goroutine goes to the back.
 //
 // Trade-off: the non-cancellable re-acquire can block a returning yield on a saturated
-// limiter even after ctx is cancelled, slowing shutdown until a peer frees a slot.
+// limiter even after ctx is cancelled, slowing shutdown until peers free the slots.
 func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
-	l.Release()
-	defer func() { _ = l.Acquire(context.WithoutCancel(ctx)) }()
+	n := SlotsHeld(ctx)
+	if n < 1 {
+		n = 1
+	}
+	l.ReleaseN(n)
+	defer func() { _ = l.AcquireN(context.WithoutCancel(ctx), n) }()
 	return fn()
 }
 
