@@ -1,0 +1,39 @@
+// Buzz, running in your browser. gopherbuzz (the interpreter magus embeds to read
+// magusfiles) is compiled to WebAssembly and runs entirely in this tab: no server,
+// no network, nothing leaves the page. The console below evaluates real Buzz
+// against these definitions, so try `buzz fibo(30)`, `buzz fact(10)`, or
+// `buzz sum([2, 4, 6, 8])`. `run demo` prints the same values, computed live.
+
+import "magus";
+
+// Recursion, the classic. `buzz fibo(30)` computes 832040 in a real bytecode VM.
+fun fibo(n: int) > int {
+    if (n < 2) { return n; }
+    return fibo(n - 1) + fibo(n - 2);
+}
+
+// Recursion again, building a product. `buzz fact(10)` -> 3628800.
+fun fact(n: int) > int {
+    if (n < 2) { return 1; }
+    return n * fact(n - 1);
+}
+
+// Higher-order: a function that takes a function, invoked with an inline closure.
+// `buzz sum([2, 4, 6, 8])` -> 20.
+fun reduce(items: [int], seed: int, step: fun(int, int) int) > int {
+    var acc = seed;
+    foreach (x in items) { acc = step(acc, x); }
+    return acc;
+}
+fun sum(items: [int]) > int {
+    return reduce(items, 0, fun(a: int, b: int) > int { return a + b; });
+}
+
+// The one target: it prints values the functions above compute. `run demo`
+// evaluates them for real (the calls run inside the string interpolation), so the
+// trace shows the actual numbers, not placeholders.
+export fun demo(args: [str]) > void {
+    magus.info("fibo(20)  = {fibo(20)}");
+    magus.info("fact(10) = {fact(10)}");
+    magus.info("sum      = {sum([2, 4, 6, 8])}");
+}

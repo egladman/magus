@@ -465,10 +465,12 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
         + "  <title>" + title + "</title>\n"
         + descMeta
         + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + root + "theme.css\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + root + "site.css\">\n"
         + "  <script src=\"" + root + "theme.js\"></script>\n"
         + "</head>\n"
         + "<body>\n"
+        + "  <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>\n"
         + "  <header class=\"site-header\">\n"
         + "    <nav class=\"container\">\n"
         + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" alt=\"\"> <strong>magus</strong></a></li></ul>\n"
@@ -477,32 +479,32 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str) > 
         + navLink(root + "install.html", "Install", "install", active)
         + navLink(root + "playground.html", "Playground", "playground", active)
         + "        <li><a href=\"" + GH + "\">GitHub</a></li>\n"
-        + "        <li><button id=\"theme-toggle\" class=\"outline\">◐</button></li>\n"
+        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\">◐</button></li>\n"
         + "      </ul>\n"
         + "    </nav>\n"
         + "  </header>\n"
-        + "  <main class=\"container\">\n"
+        + "  <main id=\"main-content\" class=\"container\" tabindex=\"-1\">\n"
         + breadcrumbOf(srcRel, title, root)
         + "    <div class=\"page-tools\">" + edit + "</div>\n"
         + contentBlock
         + pager
         + "  </main>\n"
-        + "  <footer class=\"site-footer container\">\n"
-        + "    <nav class=\"footer-links\">\n"
-        + "      <ul>\n"
-        + "        <li><a href=\"" + root + "documentation.html\">Documentation</a></li>\n"
-        + "        <li><a href=\"" + root + "install.html\">Install</a></li>\n"
-        + "        <li><a href=\"" + root + "playground.html\">Playground</a></li>\n"
-        + "        <li><a href=\"" + GH + "\">GitHub</a></li>\n"
-        + "      </ul>\n"
-        + "    </nav>\n"
+        + "  <div class=\"page-provenance container\">\n"
         + "    <small>" + commitFooter(srcRel) + "</small>\n"
+        + "  </div>\n"
+        + "  <footer class=\"site-footer container\">\n"
+        + "    <small>"
+        + "<a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a>"
+        + " &middot; "
+        + "<a href=\"https://buzz-lang.dev/\">Built with Buzz</a>"
+        + "</small>\n"
         + "  </footer>\n"
         + "  <script defer src=\"" + root + "clipboard.js\"></script>\n"
         + "  <script defer src=\"" + root + "toc.js\"></script>\n"
         + "  <script defer src=\"" + root + "anchors.js\"></script>\n"
         + "  <script defer src=\"" + root + "copy.js\"></script>\n"
         + "  <script src=\"" + root + "search.js\"></script>\n"
+        + "  <script type=\"module\" src=\"" + root + "hljs-init.js\"></script>\n"
         + "  <script defer src=\"" + root + "mermaid-init.js\"></script>\n"
         + "  <script defer src=\"" + root + "home-heading.js\"></script>\n"
         + "</body>\n"
@@ -606,8 +608,8 @@ fun site_render() > void {
     // Copy the client-side enhancement assets the page template loads (search box,
     // styles, TOC scroll-spy/collapse, heading anchors, code-copy buttons, mermaid
     // theming); the search index they read is written below, after the walk.
-    os.execute(["sh", "-c", "[ -f site.css ] && cp site.css " + OUT + "/ || true"]);
-    os.execute(["sh", "-c", "for j in search.js toc.js anchors.js copy.js mermaid-init.js clipboard.js home-heading.js; do [ -f \"$j\" ] && cp \"$j\" " + OUT + "/; done; true"]);
+    os.execute(["sh", "-c", "for c in site.css theme.css; do [ -f \"$c\" ] && cp \"$c\" " + OUT + "/; done; true"]);
+    os.execute(["sh", "-c", "for j in search.js toc.js anchors.js copy.js mermaid-init.js hljs-init.js clipboard.js home-heading.js; do [ -f \"$j\" ] && cp \"$j\" " + OUT + "/; done; true"]);
 
     // Copy the WebAssembly playground — the editor page plus the committed
     // buzz.wasm and its TinyGo glue. These are source artifacts of this project
@@ -681,7 +683,7 @@ export fun build_playground(args: [str]) > void {
     magus.needs(gopherbuzz.build);
     // Run from the magus module root (..) so TinyGo resolves the go.mod there.
     // -stack-size lifts TinyGo's small default goroutine stack so the embedded
-    // interpreter has room to recurse (e.g. fib in the showcase magusfile).
+    // interpreter has ample room for deep magusfile evaluation and recursion.
     // -scheduler=asyncify is the wasm default, pinned so the status banner's
     // reported scheduler is guaranteed to match the build.
     os.exec("tinygo",
