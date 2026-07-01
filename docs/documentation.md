@@ -1,7 +1,5 @@
 # Documentation
 
-magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. It computes the projects affected by a change, caches their results, and runs only the minimum rebuild set - all from a single, statically typed binary configured as code.
-
 New to magus? [**Install it**](install.md), skim the two core ideas below ([Targets](targets.md) and [Spells](spells.md)), or [try it live in the playground](playground.html) without installing anything.
 
 ## Getting started
@@ -59,7 +57,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [MCP](mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Telemetry](telemetry.md) - OpenTelemetry traces and metrics.
 
-## Command-line reference
+## Reference
 
 Generated man pages for every command:
 
@@ -69,7 +67,7 @@ Generated man pages for every command:
 - [`magus ls`](manpage/gen/magus-ls.md) and [`magus describe`](manpage/gen/magus-describe.md) - inspect projects, targets, and the dependency graph.
 - [`magus watch`](manpage/gen/magus-watch.md) and [`magus x`](manpage/gen/magus-x.md) - re-run on change, and the interactive target picker.
 
-## Reference
+The magusfile API and diagnostics:
 
 - [Standard library modules](modules/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
 - Diagnostic codes - [magusfile](codes/magusfile/README.md), [race](codes/race/README.md), and [sandbox](codes/sandbox/README.md) error explanations.
