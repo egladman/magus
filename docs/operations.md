@@ -117,7 +117,7 @@ The serializable Buzz value types model the _nouns_ around this hierarchy:
 
 | Value type        | Models                                                                                                           | Layer it touches            |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skipCache`, `exclusive`, ...) | Target                      |
+| **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skipCache`, `exclusive`, `weight`, ...) | Target                      |
 | **`TargetQuery`** | an unresolved dependency edge (a query → 0..N Targets)                                                           | Target (`magus.needs` edge) |
 | **`ExecResult`**  | the `{stdout, stderr, code, ok}` outcome of one process                                                          | Process                     |
 

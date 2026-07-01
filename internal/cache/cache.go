@@ -79,6 +79,7 @@ type Step struct {
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	NoCache         bool     // when true, always run fn — never replay or snapshot (long-running targets)
 	Isolated        bool     // RunAll only: when true, runs alone — no other step in the batch runs concurrently with it (ignored by Run, which has no batch)
+	Weight          int      // RunAll only: concurrency slots this step holds while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 }
 
@@ -485,14 +486,25 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return err
 			}
-			if err := lim.Acquire(gctx); err != nil {
+			// A heavy step can request extra slots (Step.Weight) so it throttles
+			// parallel work around itself. Clamp to [1, capacity]: 0 means one slot,
+			// and a weight above the whole budget would exceed capacity and error, so
+			// cap it at the budget (a weight >= capacity behaves like Isolated).
+			slots := s.Weight
+			if slots < 1 {
+				slots = 1
+			}
+			if cap := lim.Capacity(); cap > 0 && slots > cap {
+				slots = cap
+			}
+			if err := lim.AcquireN(gctx, slots); err != nil {
 				return err
 			}
-			defer lim.Release()
+			defer lim.ReleaseN(slots)
 			if slog.Default().Enabled(gctx, levelTrace) {
 				slog.LogAttrs(gctx, levelTrace, "schedule.run",
 					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
-					slog.Bool("isolated", s.Isolated))
+					slog.Bool("isolated", s.Isolated), slog.Int("slots", slots))
 			}
 
 			// Fold upstream keys into Deps for transitive cache-key propagation.

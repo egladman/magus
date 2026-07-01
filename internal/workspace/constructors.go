@@ -155,3 +155,11 @@ func SkipCache() TargetOption {
 func Exclusive() TargetOption {
 	return func(t *types.Target) { t.Exclusive = true }
 }
+
+// Weight returns a TargetOption that makes the target hold n concurrency slots
+// while it runs, throttling parallel work around a resource-heavy step. n is
+// clamped to the run's total slot budget at schedule time; n >= the budget
+// behaves like Exclusive.
+func Weight(n int) TargetOption {
+	return func(t *types.Target) { t.Weight = n }
+}

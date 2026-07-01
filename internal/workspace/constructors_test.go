@@ -59,6 +59,14 @@ func TestWithTarget_TrackFlake(t *testing.T) {
 	assert.True(t, pol.RetryOnFlake)
 }
 
+func TestWithTarget_Weight(t *testing.T) {
+	p := &types.Project{Path: "."}
+	opt := WithTarget("lint", Weight(4))
+	require.NoError(t, opt(p))
+	pol := p.TargetPolicies["lint"]
+	assert.Equal(t, 4, pol.Weight)
+}
+
 func TestIgnorePatternConstructors(t *testing.T) {
 	glob := IgnoreGlob("**/*.tmp")
 	assert.Equal(t, "**/*.tmp", glob.Pattern)

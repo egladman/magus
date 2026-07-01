@@ -10,4 +10,5 @@ export object Target {
     files: [str] = [],
     skipCache: bool = false,
     exclusive: bool = false,
+    weight: int = 0,
 }

@@ -130,7 +130,8 @@ func parseBuzzProjectOpts(_ context.Context, v vm.Value) ([]workspace.ProjectOpt
 		}
 	}
 	// targets maps a target name to a per-target policy table: skipCache=true opts
-	// the target out of the cache; exclusive=true runs it alone against the batch.
+	// the target out of the cache; exclusive=true runs it alone against the batch;
+	// weight=N holds N concurrency slots while the target runs.
 	if tv, ok := v.MapGet("targets"); ok && tv.IsMap() {
 		for _, name := range tv.MapKeys() {
 			pv, ok := tv.MapGet(name)
@@ -142,6 +143,11 @@ func parseBuzzProjectOpts(_ context.Context, v vm.Value) ([]workspace.ProjectOpt
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
+			}
+			if wv, ok := pv.MapGet("weight"); ok {
+				if n := int(wv.AsInt()); n > 0 {
+					opts = append(opts, workspace.WithTarget(name, workspace.Weight(n)))
+				}
 			}
 		}
 	}

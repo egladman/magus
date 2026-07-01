@@ -457,6 +457,9 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.Exclusive {
 					fmt.Printf("  exclusive")
 				}
+				if pol.Weight > 0 {
+					fmt.Printf("  weight=%d", pol.Weight)
+				}
 				fmt.Println()
 			}
 			fmt.Println()
@@ -602,6 +605,9 @@ func describeTarget(ctx context.Context, root string, pos []string) error {
 			}
 			if e.Policy.Exclusive {
 				fmt.Printf("  exclusive")
+			}
+			if e.Policy.Weight > 0 {
+				fmt.Printf("  weight=%d", e.Policy.Weight)
 			}
 			fmt.Println()
 		}
