@@ -85,6 +85,11 @@ var metaFull: str = "";
 var metaShort: str = "";
 var metaStamp: str = "";
 var metaCommits: {str: str} = {};
+// Per-source-file history: repo-relative path -> JSON array of the last N commits
+// that touched it. Each element is "full|short|stamp|subject". Populated in
+// loadMeta from ONE git log pass to avoid a spawn per file. Empty for
+// synthesized pages that have no source file (blog index, /public/*).
+var metaHistory: {str: [str]} = mut {};
 var metaLoaded: bool = false;
 
 // Each entry is one rendered page's search record, already JSON-encoded; the
@@ -142,19 +147,42 @@ fun gitBranch() > str {
 // so it cleanly marks each commit header; the file names follow until the next.
 // Run with `git -C ..` so the pathspecs (README.md, docs) and emitted paths are
 // magus/-relative, matching metaPrefix.
+// HISTORY_MAX caps the per-file history depth in the "History" disclosure. The
+// full log is one git spawn, so pushing this higher is cheap; a low cap keeps
+// the rendered <details> panel from bloating on hot-edit files.
+final HISTORY_MAX = 8;
+
+// buildCommits parses one git-log pass:
+//   - metaCommits: path -> "full|short|stamp" of the FIRST (newest) sighting.
+//     Drives the always-visible "Last updated" footer line.
+//   - metaHistory: path -> list of up to HISTORY_MAX "full|short|stamp|subject"
+//     entries in newest-first order. Drives the collapsed WS R history panel.
+// The log emits "SUBJ:<one-line subject>" after each ">>>" header so the two
+// fields ride together without a second git spawn.
 fun buildCommits() > {str: str} {
     var m: {str: str} = mut {};
+    metaHistory = mut {};
     final log = capture("TZ=UTC git -C " + ROOT + " log --first-parent --diff-merges=first-parent --name-only "
         + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
-        + "--format='>>>%H|%h|%cd' -- README.md docs blog CHANGELOG.md");
-    var cur = "";
+        + "--format='>>>%H|%h|%cd%nSUBJ:%s' -- README.md docs blog CHANGELOG.md");
+    var curHeader = "";
+    var curSubject = "";
     foreach (line in log.split("\n")) {
         if (line.startsWith(">>>")) {
-            cur = line.sub(3);
-        } else {
-            if (line != "" and cur != "") {
-                if (m[line] == null) { m[line] = cur; }
+            curHeader = line.sub(3);
+            curSubject = "";
+        } else if (line.startsWith("SUBJ:")) {
+            curSubject = line.sub(5);
+        } else if (line != "" and curHeader != "") {
+            // Newest sighting wins for the "last updated" line.
+            if (m[line] == null) { m[line] = curHeader; }
+            // Append to per-file history (newest-first) until HISTORY_MAX.
+            var hist = metaHistory[line];
+            if (hist == null) { hist = mut [<str>]; }
+            if (hist.len() < HISTORY_MAX) {
+                hist.append(curHeader + "|" + curSubject);
             }
+            metaHistory[line] = hist;
         }
     }
     return m;
@@ -1172,8 +1200,41 @@ fun commitFooter(path: str) > str {
         cShort = parts[1];
         cStamp = parts[2];
     }
-    return "Last updated: <time datetime=\"" + cStamp + "\">" + formatISO(cStamp) + "</time>"
+    var line = "Last updated: <time datetime=\"" + cStamp + "\">" + formatISO(cStamp) + "</time>"
         + " (<a href=\"" + GH + "/commit/" + cFull + "\">" + cShort + "</a>)";
+
+    // WS R: History / Blame deep-links + a <details> panel listing the last N
+    // commits that touched this source file. The panel is server-rendered so it
+    // works without JS (native <details>/<summary>). Gated on the file having a
+    // real history entry - synthesized pages (blog index) fall back to the
+    // "Last updated" line alone.
+    final histKey = metaPrefix + path;
+    final hist = metaHistory[histKey];
+    if (hist != null and hist.len() > 0) {
+        line = line
+            + " &middot; <a href=\"" + GH + "/commits/" + metaBranch + "/" + histKey + "\">History</a>"
+            + " &middot; <a href=\"" + GH + "/blame/" + metaBranch + "/" + histKey + "\">Blame</a>";
+        // <details> disclosure. Rendering to a fresh <ul> lets the CSS style
+        // rows independently of the surrounding <small>.
+        line = line + "<details class=\"page-history\"><summary>Recent history</summary><ul>";
+        foreach (row in hist) {
+            final parts = row.split("|");
+            if (parts.len() >= 3) {
+                final rowFull = parts[0];
+                final rowShort = parts[1];
+                final rowStamp = parts[2];
+                var rowSubj = "";
+                if (parts.len() >= 4) { rowSubj = parts[3]; }
+                line = line + "<li>"
+                    + "<a href=\"" + GH + "/commit/" + rowFull + "\">" + rowShort + "</a>"
+                    + " <time datetime=\"" + rowStamp + "\">" + formatISO(rowStamp) + "</time>"
+                    + " " + escapeAttr(rowSubj)
+                    + "</li>";
+            }
+        }
+        line = line + "</ul></details>";
+    }
+    return line;
 }
 
 // rootPrefix returns the relative path from a generated page back up to gen/'s
