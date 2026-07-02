@@ -374,12 +374,11 @@
   }
 }
 @media (max-width: 1023px) {
-  /* Toolbar reflows: the search field takes its own full-width row, and "Suggest
-     an edit" already sits on its own secondary row below (page-tools-secondary),
-     so the toolbar just needs to let the search field take its own full-width
-     row and keep search results anchored via position:relative. */
-  .page-tools { flex-wrap: wrap; }
-  .search-wrap { flex: 1 1 100%; }
+  /* Toolbar stays a single row: the TOC toggle keeps its inline slot next to
+     the search input rather than stacking above (visually tighter, and the row
+     is cheap - the toggle is a small icon button). Search grows to fill the
+     remainder. "Suggest an edit" already lives on the secondary row below. */
+  .search-wrap { flex: 1 1 auto; }
 
   /* No-JS / default: the TOC stacks statically above the article (nothing to
      toggle, so it must stay visible). */
