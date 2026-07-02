@@ -10,3 +10,5 @@ import "./code-copy.js";
 import "./syntax-highlight.js";
 import "./mermaid.js";
 import "./home-heading.js";
+import "./back-to-top.js";
+import "./prefetch.js";

@@ -682,3 +682,111 @@ a code {
   font-size: 0.85rem;
   margin-top: 0.25rem;
 }
+
+/* Reading-time chip next to the breadcrumb / provenance: small muted label with
+   a clock glyph. Deterministic (a word count of the source markdown). */
+.reading-time {
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+  margin-left: 0.75rem;
+  white-space: nowrap;
+}
+
+/* Floating back-to-top button (JS-injected by back-to-top.js). Hidden until
+   scroll passes ~400px; smooth-scrolls (respects prefers-reduced-motion). Sits
+   in the bottom-right safe area so it stays clear of the mobile TOC sheet. */
+.back-to-top {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 40;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pico-card-background-color);
+  color: var(--pico-primary);
+  border: 1px solid var(--pico-muted-border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: translateY(0.5rem);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.back-to-top.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top { transition: none; }
+}
+
+/* Print stylesheet - text-only "save as PDF" output. Hides every JS/nav
+   affordance (header, page-tools, TOC toggle, back-to-top, footer chrome) and
+   collapses the layout to a single readable column. In-content links get their
+   URL spelled out in parentheses so a printed page still self-documents. */
+@media print {
+  /* Hide chrome: nav, breadcrumb, page-tools, TOC (sidebar & sheet), backdrop,
+     provenance, footer, back-to-top, search results dropdown, skip-link, and any
+     announcement bar (WS Q). */
+  .site-header,
+  .breadcrumb,
+  .page-tools,
+  .toc,
+  .toc-backdrop,
+  .page-nav,
+  .page-provenance,
+  .site-footer,
+  .back-to-top,
+  .search-results,
+  .skip-link,
+  #announcement-bar {
+    display: none !important;
+  }
+
+  /* One column, full width; drop container padding so the print margin is the
+     page margin. */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  main.container,
+  .container {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .with-toc {
+    display: block !important;
+    grid-template-columns: none !important;
+  }
+  article {
+    color: #000 !important;
+  }
+
+  /* In-content link URLs alongside the link text (skip anchor-only fragments).
+     Keeps a printed page self-documenting. */
+  article a[href]:not([href^="#"])::after {
+    content: " (" attr(href) ")";
+    color: #555;
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+
+  /* Keep code blocks readable: allow long lines to wrap instead of clipping. */
+  pre,
+  code {
+    white-space: pre-wrap !important;
+    word-break: break-word;
+  }
+  pre {
+    border: 1px solid #ddd;
+    page-break-inside: avoid;
+  }
+  h1, h2, h3, h4 { page-break-after: avoid; }
+  img { max-width: 100% !important; height: auto !important; }
+}

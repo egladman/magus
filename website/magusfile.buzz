@@ -101,6 +101,12 @@ var pageUrls: {str: bool} = mut {};
 // list. Each entry is {slug, title, date, description, url}. Reset per site_render().
 var blogPosts: [{str: str}] = mut [<{str: str}>];
 
+// Per-page reading-time chip ("6 min read"), set by each render*() before calling
+// page() and read into the page-tools row. "" for pages whose source is too short
+// (autoindex pages, blog index, etc.). Cleared after page() reads it so a page
+// that forgets to set it doesn't inherit the previous page's value.
+var pageReading: str = "";
+
 fun capture(cmd: str) > str {
     final tmp = os.tmpFilename("sitegen");
     final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
@@ -728,6 +734,78 @@ fun renderPublic() > void {
     autoindex("public", hubEntries, "../");
 }
 
+// render404 writes gen/404.html - the themed "warped off the map" page GitHub
+// Pages serves for any unmatched path. GitHub Pages keeps the deep 404 URL in
+// the address bar, so the site's ordinary relative paths would break here; this
+// page therefore uses root-absolute paths (/<basePath>/site.css, /<basePath>/
+// main.js, etc.) - the ONE deliberate exception to the relative-link scheme in
+// WS0b. basePath is derived from SITE_URL (e.g. https://eli.gladman.cc/magus/
+// -> "/magus/"); when SITE_URL is empty, fall back to "/" so the page still
+// renders locally with absolute paths from the server root.
+fun render404() > void {
+    // Extract the path component of SITE_URL: after "://<host>", everything
+    // from the first "/" onwards. e.g. https://eli.gladman.cc/magus/ -> /magus/
+    var basePath = "/";
+    if (SITE_URL != "") {
+        final noScheme = SITE_URL.split("://");
+        if (noScheme.len() > 1) {
+            final rest = noScheme[1];
+            final firstSlash = rest.indexOf("/");
+            if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+        }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final title = "Page not found - magus";
+    final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
+    // Duplicate the head + nav template (rather than call page()) because every
+    // asset/link here must be root-absolute, not relative.
+    final doc = "<!DOCTYPE html>\n"
+        + "<html lang=\"en\" class=\"no-js\">\n"
+        + "<head>\n"
+        + "  <meta charset=\"utf-8\">\n"
+        + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        + "  <title>" + title + "</title>\n"
+        + "  <meta name=\"description\" content=\"" + escapeAttr(desc) + "\">\n"
+        + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
+        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + basePath + "theme.css\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + basePath + "site.css\">\n"
+        + "  <script src=\"" + basePath + "theme.js\"></script>\n"
+        + "</head>\n"
+        + "<body>\n"
+        + "  <header class=\"site-header\">\n"
+        + "    <nav class=\"container\">\n"
+        + "      <ul><li><a href=\"" + basePath + "\" class=\"contrast\"><picture><source srcset=\"" + basePath + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + basePath + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
+        + "      <ul>\n"
+        + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
+        + "        <li><a href=\"" + basePath + "blog/\">Blog</a></li>\n"
+        + "        <li><a href=\"" + basePath + "install/\">Install</a></li>\n"
+        + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
+        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\">◐</button></li>\n"
+        + "      </ul>\n"
+        + "    </nav>\n"
+        + "  </header>\n"
+        + "  <main class=\"container\">\n"
+        + "    <article>\n"
+        + "      <h1>You have warped off the map.</h1>\n"
+        + "      <p><em>No such target.</em> Let us get you back:</p>\n"
+        + "      <ul>\n"
+        + "        <li><a href=\"" + basePath + "\">Home</a></li>\n"
+        + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
+        + "        <li><a href=\"" + basePath + "install/\">Install</a></li>\n"
+        + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
+        + "      </ul>\n"
+        + "    </article>\n"
+        + "  </main>\n"
+        + "  <footer class=\"site-footer container\">\n"
+        + "    <small><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a> &middot; <a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
+        + "  </footer>\n"
+        + "  <script type=\"module\" src=\"" + basePath + "main.js\"></script>\n"
+        + "</body>\n"
+        + "</html>\n";
+    fs.writeFile(OUT + "/404.html", doc);
+}
+
 // formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
 // human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
 // date library. Used as the no-JS fallback; client-side JS rewrites it to the
@@ -814,6 +892,34 @@ fun truncateWords(s: str, n: int) > str {
         i = i - 1;
     }
     return head;
+}
+
+// readingTime estimates minutes-to-read from a word count of the source markdown
+// (frontmatter stripped so YAML doesn't skew it). 220 wpm is a common average for
+// technical prose. Returns "" when the source is too short to be worth labeling.
+// Deterministic: pure function of the committed source.
+fun readingTime(md: str) > str {
+    final text = markdown.stripFrontmatter(md);
+    // Count runs of non-whitespace. Buzz's split with " " coalesces empties poorly,
+    // so scan bytes explicitly.
+    var words = 0;
+    var inWord = false;
+    var i = 0;
+    while (i < text.len()) {
+        final b = text.byte(i);
+        final isSpace = (b == 32 or b == 9 or b == 10 or b == 13);
+        if (isSpace) {
+            inWord = false;
+        } else {
+            if (inWord == false) { words = words + 1; }
+            inWord = true;
+        }
+        i = i + 1;
+    }
+    if (words < 200) { return ""; }   // don't chip pages under ~1 min
+    var mins = words / 220;
+    if (mins < 1) { mins = 1; }
+    return "{mins} min read";
 }
 
 // deriveDescription is the belt-and-suspenders page description: the first
@@ -1124,6 +1230,13 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
             + "    </div>\n";
     }
     final edit = "<a class=\"page-tools-edit\" href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a>";
+    // Reading-time chip (module var, set by the renderX() caller). Consume-and-
+    // clear so a page that forgets to set it doesn't inherit the previous value.
+    var readingHtml = "";
+    if (pageReading != "") {
+        readingHtml = "<span class=\"reading-time\" title=\"Estimated reading time\">" + pageReading + "</span>";
+    }
+    pageReading = "";
     return "<!DOCTYPE html>\n"
         + "<html lang=\"en\" class=\"no-js\">\n"
         + "<head>\n"
@@ -1159,7 +1272,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "  </header>\n"
         + "  <main id=\"main-content\" class=\"container\" tabindex=\"-1\">\n"
         + breadcrumbOf(srcRel, title, root)
-        + "    <div class=\"page-tools\">" + edit + "</div>\n"
+        + "    <div class=\"page-tools\">" + readingHtml + edit + "</div>\n"
         + contentBlock
         + pager
         + "  </main>\n"
@@ -1213,6 +1326,7 @@ fun renderRoot() > void {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = SITE_DESC; }
 
+    pageReading = readingTime(md);
     final doc = page(title, desc, html, "README.md", "", "");
     final of = io.File.open(OUT + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -1242,6 +1356,7 @@ fun renderFile(rel: str) > void {
     if (desc == "") { desc = SITE_DESC; }
 
     final url = cleanUrl(rel);
+    pageReading = readingTime(md);
     final doc = page(title, desc, html, DOCS + "/" + rel, pagerFor(rel), url);
 
     // Directory-index output: every page is <cleanUrl>index.html (extensionless,
@@ -1315,6 +1430,7 @@ fun renderBlogPost(base: str) > void {
     // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
     final pager = blogPagerFor(base);
 
+    pageReading = readingTime(md);
     final doc = page(title, desc, html, rel, pager, url);
     fs.makeDirectory(OUT + "/" + BLOG + "/" + slug);
     final of = io.File.open(OUT + "/" + BLOG + "/" + slug + "/index.html", io.FileMode.write);
@@ -1532,6 +1648,7 @@ fun site_render() > void {
     renderBlogAtom();
     renderReleasesAtom();
     renderPublic();
+    render404();
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the
