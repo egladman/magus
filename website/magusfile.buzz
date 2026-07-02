@@ -131,7 +131,7 @@ fun buildCommits() > {str: str} {
     var m: {str: str} = mut {};
     final log = capture("TZ=UTC git -C " + ROOT + " log --first-parent --diff-merges=first-parent --name-only "
         + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
-        + "--format='>>>%H|%h|%cd' -- README.md docs");
+        + "--format='>>>%H|%h|%cd' -- README.md docs blog");
     var cur = "";
     foreach (line in log.split("\n")) {
         if (line.startsWith(">>>")) {
@@ -1151,10 +1151,15 @@ fun renderBlogIndex() > void {
     final title = "Blog";
     final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
     final url = BLOG + "/";
-    // srcRel for the index page: blog/index.md marker so page() picks the "blog"
-    // active-nav key even though there is no source file. Provenance keys off it
-    // too; a missing entry in metaCommits falls back to HEAD, so the footer stays
-    // valid regardless of whether an authored blog/index.md exists.
+    // srcRel for the index page: a blog/index.md marker so page() picks the "blog"
+    // active-nav key and the breadcrumb roots correctly, even though there is no
+    // source file. Alias the marker's commit-footer key to the newest post's own
+    // commit so the "Last updated" line is a stable snapshot instead of tracking
+    // HEAD (which would drift every commit and break the drift gate).
+    if (sorted.len() > 0) {
+        final rec = metaCommits[metaPrefix + BLOG + "/" + sorted[0]["base"]];
+        if (rec != null) { metaCommits[metaPrefix + BLOG + "/index.md"] = rec; }
+    }
     final doc = page(title, desc, body, BLOG + "/index.md", "", url);
     fs.makeDirectory(OUT + "/" + BLOG);
     final of = io.File.open(OUT + "/" + BLOG + "/index.html", io.FileMode.write);
