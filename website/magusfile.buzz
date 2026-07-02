@@ -934,8 +934,12 @@ fun render404() > void {
         + "<head>\n"
         + "  <meta charset=\"utf-8\">\n"
         + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        + "  <meta name=\"color-scheme\" content=\"light dark\">\n"
+        + "  <meta name=\"generator\" content=\"magus\">\n"
         + "  <title>" + title + "</title>\n"
         + "  <meta name=\"description\" content=\"" + escapeAttr(desc) + "\">\n"
+        + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + basePath + "assets/favicon-32.png\">\n"
+        + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + basePath + "assets/apple-touch-icon.png\">\n"
         + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
         + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + basePath + "theme.css\">\n"
@@ -1434,6 +1438,10 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // edit" on the right. Rendered even when reading time is empty so the edit
     // link keeps its own row (and doesn't squash next to the search input).
     final secondaryRow = "    <div class=\"page-tools-secondary\">" + readingHtml + edit + "</div>\n";
+    // Consistent "<page title> - magus" suffix everywhere. Home just says
+    // "magus" (its H1-derived title is the wordmark, no need to duplicate).
+    var fullTitle = title + " — magus";
+    if (srcRel == "README.md") { fullTitle = "magus"; }
     // Body class marks pages that want the stripped-down "server directory
     // listing" chrome: nav on top and a minimal footer only; no breadcrumb, no
     // page-tools row, no per-page provenance, and the article runs full viewport
@@ -1445,11 +1453,17 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "<head>\n"
         + "  <meta charset=\"utf-8\">\n"
         + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-        + "  <title>" + title + "</title>\n"
+        + "  <meta name=\"color-scheme\" content=\"light dark\">\n"
+        + "  <meta name=\"generator\" content=\"magus\">\n"
+        + "  <title>" + fullTitle + "</title>\n"
         + descMeta
         + canon
         + feedDiscovery
         + heroPreload
+        // Favicon set - reuses the optimized hat mark (WS A). SVG isn't emitted
+        // yet; the PNG icons + apple-touch cover every real client.
+        + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + root + "assets/favicon-32.png\">\n"
+        + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + root + "assets/apple-touch-icon.png\">\n"
         // Warm the CDN connection before the render-blocking Pico <link> below, so
         // the TLS handshake overlaps HTML parsing; the same origin also serves the
         // lazily-imported hljs/mermaid, so this preconnect covers them too.
