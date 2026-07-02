@@ -131,7 +131,7 @@ fun buildCommits() > {str: str} {
     var m: {str: str} = mut {};
     final log = capture("TZ=UTC git -C " + ROOT + " log --first-parent --diff-merges=first-parent --name-only "
         + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
-        + "--format='>>>%H|%h|%cd' -- README.md docs blog");
+        + "--format='>>>%H|%h|%cd' -- README.md docs blog CHANGELOG.md");
     var cur = "";
     foreach (line in log.split("\n")) {
         if (line.startsWith(">>>")) {
@@ -664,8 +664,17 @@ fun autoindex(path: str, entries: [{str: str}], parentHref: str) > void {
     // srcMarker matches the emitted directory depth so rootPrefix computes the
     // right "../" climb (public/x.md -> "../", public/atom/x.md -> "../../").
     final srcMarker = path + "/_index.md";
-    // Alias the marker's commit footer to HEAD (no source file) so it stays stable.
-    metaCommits[metaPrefix + srcMarker] = metaFull + "|" + metaShort + "|" + metaStamp;
+    // Alias the marker's commit footer to a real content source so it stays stable
+    // (not HEAD, which advances every commit and would break the drift gate). Use
+    // CHANGELOG.md, which the /public/ tree derives from. If not yet committed,
+    // fall back to HEAD - not a drift-gate failure, just a stale footer once, then
+    // stable.
+    final chLog = metaCommits[metaPrefix + "CHANGELOG.md"];
+    if (chLog != null) {
+        metaCommits[metaPrefix + srcMarker] = chLog;
+    } else {
+        metaCommits[metaPrefix + srcMarker] = metaFull + "|" + metaShort + "|" + metaStamp;
+    }
     final doc = page("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/");
     final of = io.File.open(OUT + "/" + path + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -706,12 +715,16 @@ fun renderPublic() > void {
 
     // /public/ hub.
     var hubEntries: [{str: str}] = mut [<{str: str}>];
+    // Modified timestamps: content-derived where possible (a feed's newest entry
+    // stamp), "-" otherwise (release matrix is deferred; robots/sitemap are
+    // deterministic outputs whose only "mod time" would be build time, which would
+    // drift on every commit and break the drift gate).
     if (atomEntries.len() > 0) {
         hubEntries.append(mut {"name": "atom/", "href": "atom/", "size": "-", "modified": atomDate(blogPosts[0]["date"]), "desc": "Atom feeds"});
     }
-    hubEntries.append(mut {"name": "release/", "href": "release/", "size": "-", "modified": metaStamp, "desc": "Release artifacts"});
-    hubEntries.append(mut {"name": "sitemap.xml", "href": "../sitemap.xml", "size": "-", "modified": metaStamp, "desc": "XML sitemap"});
-    hubEntries.append(mut {"name": "robots.txt", "href": "../robots.txt", "size": "-", "modified": metaStamp, "desc": "Robots policy"});
+    hubEntries.append(mut {"name": "release/", "href": "release/", "size": "-", "modified": "-", "desc": "Release artifacts"});
+    hubEntries.append(mut {"name": "sitemap.xml", "href": "../sitemap.xml", "size": "-", "modified": "-", "desc": "XML sitemap"});
+    hubEntries.append(mut {"name": "robots.txt", "href": "../robots.txt", "size": "-", "modified": "-", "desc": "Robots policy"});
     autoindex("public", hubEntries, "../");
 }
 
