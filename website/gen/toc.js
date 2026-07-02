@@ -41,20 +41,75 @@
   // (filled) vs inactive (outline) styling in CSS - a clearer on/off signal than
   // swapping the icon. aria-label/title still spell out the action for hover and
   // screen readers.
-  function apply() {
-    grid.classList.toggle("toc-collapsed", collapsed);
-    var label = collapsed ? "Show table of contents" : "Hide table of contents";
+  // Two modes, chosen by viewport. Desktop: the toggle collapses the sidebar and
+  // the article reflows to full width (persisted). Mobile: the toggle slides a
+  // bottom-sheet tray up over a dimming backdrop.
+  var mq = window.matchMedia("(max-width: 1023px)");
+  var tocAside = grid.querySelector(".toc");
+  var backdrop = null;
+
+  function setLabel(open) {
+    var label = open ? "Hide table of contents" : "Show table of contents";
     btn.setAttribute("aria-label", label);
     btn.setAttribute("title", label);
-    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
   }
-  apply();
+  function applyDesktop() {
+    grid.classList.toggle("toc-collapsed", collapsed);
+    setLabel(!collapsed);
+  }
+  function openSheet() {
+    if (!tocAside) return;
+    tocAside.classList.add("toc-sheet-open");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.className = "toc-backdrop";
+      backdrop.addEventListener("click", closeSheet);
+      document.body.appendChild(backdrop);
+    }
+    setLabel(true);
+  }
+  function closeSheet() {
+    if (tocAside) tocAside.classList.remove("toc-sheet-open");
+    if (backdrop) { backdrop.remove(); backdrop = null; }
+    setLabel(false);
+  }
+  // Reconcile state for the current breakpoint: on mobile the TOC is a closed
+  // bottom sheet (never desktop-collapsed, which would display:none it); on
+  // desktop the sheet is closed and the persisted collapse state applies.
+  function syncMode() {
+    closeSheet();
+    if (mq.matches) {
+      grid.classList.remove("toc-collapsed");
+      setLabel(false);
+    } else {
+      applyDesktop();
+    }
+  }
+  syncMode();
 
   btn.addEventListener("click", function () {
-    collapsed = !collapsed;
-    try { localStorage.setItem(KEY, collapsed ? "1" : "0"); } catch (e) {}
-    apply();
+    if (mq.matches) {
+      if (tocAside && tocAside.classList.contains("toc-sheet-open")) closeSheet();
+      else openSheet();
+    } else {
+      collapsed = !collapsed;
+      try { localStorage.setItem(KEY, collapsed ? "1" : "0"); } catch (e) {}
+      applyDesktop();
+    }
   });
+
+  // Close the sheet on Escape and when a TOC link is tapped (the page navigates).
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeSheet();
+  });
+  if (tocAside) {
+    tocAside.addEventListener("click", function (e) {
+      if (mq.matches && e.target.closest("a")) closeSheet();
+    });
+  }
+  // Reset cleanly when crossing the breakpoint.
+  mq.addEventListener("change", syncMode);
 })();
 
 // Table-of-contents scroll-spy. Highlights the TOC link for the section

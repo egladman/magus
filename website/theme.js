@@ -8,6 +8,13 @@
 (function () {
   "use strict";
   var root = document.documentElement;
+
+  // Flip the <html class="no-js"> marker to "js" before paint (no flash, no layout
+  // shift), so CSS can gate JS-only affordances — the mobile TOC bottom-sheet, and
+  // later the dead theme-toggle etc. under .no-js — without stranding no-JS users.
+  root.classList.remove("no-js");
+  root.classList.add("js");
+
   var ICON = { auto: "◐", light: "☀", dark: "☾" };
 
   function get() {

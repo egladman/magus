@@ -363,12 +363,62 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-/* On narrow screens the sidebar stacks above the article rather than sticking. */
 @media (max-width: 1023px) {
-  .toc nav {
-    position: static;
-    max-height: none;
+  /* Toolbar reflows: the search field takes its own full-width row, and "Suggest
+     an edit" drops onto the next row, right-aligned, instead of squashing beside
+     the search box. The toolbar stays position:relative so the absolute search
+     results dropdown remains anchored to it. */
+  .page-tools { flex-wrap: wrap; }
+  .search-wrap { flex: 1 1 100%; }
+  .page-tools-edit { margin-left: 0; flex: 1 1 100%; text-align: right; }
+
+  /* No-JS / default: the TOC stacks statically above the article (nothing to
+     toggle, so it must stay visible). */
+  .toc nav { position: static; max-height: none; }
+
+  /* With JS, the TOC becomes a slide-up bottom-sheet tray toggled by toc.js: a
+     fixed panel off the bottom edge that animates into view, over a dimming
+     backdrop. Gated under .js so no-JS users keep the static stacked list above
+     and are never stranded with an off-canvas panel they can't open. */
+  .js .toc {
+    display: block; /* override the desktop .toc-collapsed { display:none } here */
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 1rem var(--pico-spacing) calc(1rem + env(safe-area-inset-bottom));
+    background: var(--pico-card-background-color);
+    border-top: 1px solid var(--pico-muted-border-color);
+    border-top-left-radius: var(--pico-border-radius);
+    border-top-right-radius: var(--pico-border-radius);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.25);
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
   }
+  .js .toc nav { position: static; max-height: none; } /* not sticky inside the sheet */
+  .js .toc.toc-sheet-open { transform: translateY(0); }
+
+  /* Dimming layer behind an open sheet; toc.js inserts/removes it and closes the
+     sheet on a tap. */
+  .toc-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Center mermaid diagrams within their container (mermaid-init.js wraps each in
+   <div class="mermaid">); let the inline max-width scale the SVG cleanly. */
+.mermaid {
+  display: flex;
+  justify-content: center;
+}
+.mermaid > svg {
+  height: auto;
 }
 
 /* Offset in-page anchor jumps so a targeted heading clears the sticky header

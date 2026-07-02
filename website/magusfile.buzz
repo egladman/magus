@@ -826,7 +826,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     }
     final edit = "<a class=\"page-tools-edit\" href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a>";
     return "<!DOCTYPE html>\n"
-        + "<html lang=\"en\">\n"
+        + "<html lang=\"en\" class=\"no-js\">\n"
         + "<head>\n"
         + "  <meta charset=\"utf-8\">\n"
         + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
@@ -852,7 +852,6 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + navLink(root + "documentation/", "Documentation", "documentation", active)
         + navLink(root + "install/", "Install", "install", active)
         + navLink(root + "playground.html", "Playground", "playground", active)
-        + "        <li><a href=\"" + GH + "\">GitHub</a></li>\n"
         + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\">◐</button></li>\n"
         + "      </ul>\n"
         + "    </nav>\n"
@@ -869,6 +868,9 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "  <footer class=\"site-footer container\">\n"
         + "    <small>"
         + "<a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a>"
+        // "Source Code" (not "GitHub") describes purpose over platform and survives a
+        // repo move; relocating it here also de-crowds the mobile nav.
+        + " &middot; <a href=\"" + GH + "\">Source Code</a>"
         + sitemapLink
         + " &middot; "
         + "<a href=\"https://buzz-lang.dev/\">Built with Buzz</a>"
