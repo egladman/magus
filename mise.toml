@@ -10,6 +10,13 @@ node = "24"
 # Pinned EXACTLY: a version bump silently rewrites every gen/*.js|css byte and trips
 # the drift gate, so bumping means "regen + commit gen/" in the same change.
 "npm:esbuild" = "0.25.5"
+
+# typos is the docs prose spell-checker (md.typos / md.typos:rw), wired into the
+# markdown spell. Corrections-based: it flags only known misspellings from its
+# curated typo->fix map, so domain terms like gopherbuzz/magusfile/TinyGo never
+# trip it and there's essentially nothing to maintain. See _typos.toml for the
+# minimal exclude list.
+"aqua:crate-ci/typos" = "1.28.4"
 # tinygo + binaryen (wasm-opt) back the website's build-playground target, which
 # compiles cmd/buzz-playground to website/playground/buzz.wasm. TinyGo >= 0.40 is
 # required; wasm-opt runs as tinygo's post-link optimization step.

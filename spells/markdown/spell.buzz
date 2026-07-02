@@ -24,7 +24,20 @@ fun prettier(target: Target, cb: fun(Run)) > void {
         "rw": set(args, "--check", "--write"),
     }});
 }
+fun typos(target: Target, cb: fun(Run)) > void {
+    // Corrections-based prose checker: `typos` walks the tree, matches only known
+    // misspellings from its curated typo->fix map (never unknown words), and
+    // exits non-zero when any are found. Config comes from ./_typos.toml at the
+    // repo root - an [files.extend-exclude] for generated/vendored trees, empty
+    // by default so domain terms (gopherbuzz/magusfile/TinyGo) never trip it.
+    // The `rw` charm swaps the read-only check for typos' safe autofix so
+    // `md.typos:rw` writes corrections in place.
+    final args = ["--format", "brief"];
+    cb(Run{cmd = "typos", args = args, charms = {
+        "rw": append(["-w"]),
+    }});
+}
 
 export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
-    return {"markdownlint": markdownlint, "prettier": prettier};
+    return {"markdownlint": markdownlint, "prettier": prettier, "typos": typos};
 }

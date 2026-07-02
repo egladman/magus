@@ -1,0 +1,26 @@
+# typos config: corrections-based prose spell-check, wired into the md spell as
+# `md.typos` / `md.typos:rw` (the -w charm autofixes in place).
+#
+# This is NOT a dictionary. `typos` only flags KNOWN misspellings from its curated
+# typo->fix map, so domain terms (gopherbuzz, magusfile, TinyGo, ...) never trip
+# it and there is essentially nothing to babysit here. Keep this file lean.
+
+[files]
+# Skip generated / vendored trees and lockfiles - nothing to fix inside them, and
+# they carry byte-identical text `typos` would otherwise re-scan every run.
+extend-exclude = [
+  "website/gen/**",
+  "website/playground/**",
+  "docs/manpage/gen/**",
+  "gopherbuzz/testdata/**",
+  "**/*.min.*",
+  "**/*.wasm",
+  "go.sum",
+  "go.tool.sum",
+  "pnpm-lock.yaml",
+  "package-lock.json",
+]
+
+# extend-words / extend-identifiers are deliberately empty - add an entry only
+# when `typos` false-flags a real word (e.g. a deliberate abbreviation), never
+# for domain jargon that isn't in typos' typo->fix map to begin with.
