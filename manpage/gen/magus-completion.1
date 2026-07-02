@@ -3,7 +3,7 @@
 magus\-completion \- Print a shell completion script
 .SH SYNOPSIS
 .B magus
-.RI "completion <bash|zsh|fish>"
+.RI "completion <bash|zsh|fish|powershell>"
 .SH DESCRIPTION
 Print a shell completion script to stdout and append it to your shell's startup file.
 .SH EXAMPLES
@@ -23,6 +23,12 @@ magus completion zsh >> ~/.zshrc
 .PP
 .EX
 magus completion fish >> ~/.config/fish/config.fish
+.EE
+.PP
+\fIPowerShell\fR
+.PP
+.EX
+magus completion powershell >> $PROFILE
 .EE
 .PP
 .SH SEE ALSO

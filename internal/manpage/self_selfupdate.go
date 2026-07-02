@@ -8,8 +8,10 @@ import "flag"
 // It is omitted from binaries built with -tags noselfupdate, so it is part of
 // the man pages only for the default build.
 var selfSegment = Segment{
-	Name:  "self",
-	Short: "Manage the magus binary (update)",
+	Name:        "self",
+	Short:       "Manage the magus binary (update)",
+	Description: "Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.",
+	Tags:        []string{"cli", "magus self", "self update", "updates", "versioning", "install"},
 	Long: `Subcommands for managing the magus binary.
 
 update is compiled in by default. Package maintainers who own the system

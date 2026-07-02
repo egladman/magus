@@ -41,8 +41,10 @@ var CommonSubcommands = []Subcommand{
 }
 
 var listSegment = Segment{
-	Name:  "ls",
-	Short: "List all discovered projects",
+	Name:        "ls",
+	Short:       "List all discovered projects",
+	Description: "List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.",
+	Tags:        []string{"cli", "magus ls", "list", "projects", "discovery", "workspace"},
 	Long: `Print every discovered project in the workspace along with its language
 pack, source files, outputs, dependencies, and tool requirements.
 
@@ -60,8 +62,10 @@ against the same struct that -o json emits.`,
 }
 
 var describeSegment = Segment{
-	Name:  "describe",
-	Short: "Explain why a project is in the affected set",
+	Name:        "describe",
+	Short:       "Explain why a project is in the affected set",
+	Description: "Show the changed files and dependency chains that cause a given project to appear in the affected set computed by magus affected.",
+	Tags:        []string{"cli", "magus describe", "affected", "dependency graph", "explain", "debugging"},
 	Long: `Show the changed files and dependency chains that cause a given project
 to appear in the affected set computed by magus affected.
 
@@ -76,8 +80,10 @@ files under the seed.`,
 }
 
 var runSegment = Segment{
-	Name:  "run",
-	Short: "Run a target for selected projects",
+	Name:        "run",
+	Short:       "Run a target for selected projects",
+	Description: "Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.",
+	Tags:        []string{"cli", "magus run", "run", "target", "build", "test", "ci"},
 	Long: `Run a named target for the selected projects. With no project
 arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
@@ -109,8 +115,10 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 }
 
 var whereSegment = Segment{
-	Name:  "where",
-	Short: "Print the absolute path of a project",
+	Name:        "where",
+	Short:       "Print the absolute path of a project",
+	Description: `Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd "$(magus where api)".`,
+	Tags:        []string{"cli", "magus where", "where", "project", "path", "fuzzy match", "navigation"},
 	Long: `Fuzzy-match a project by leaf-anchored substring and print its
 absolute path to stdout. Designed for shell substitution:
 
@@ -130,8 +138,10 @@ that.`,
 }
 
 var tailSegment = Segment{
-	Name:  "tail",
-	Short: "Stream the most recent cached log (interactive only)",
+	Name:        "tail",
+	Short:       "Stream the most recent cached log (interactive only)",
+	Description: "Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.",
+	Tags:        []string{"cli", "magus tail", "tail", "logs", "cache", "interactive"},
 	Long: `Stream the captured build log of the most recent cache entry for a
 project. The log was written during a cache miss (when the build actually
 ran). Subsequent cache hits replay the same log without re-running the build.
@@ -159,8 +169,10 @@ exist yet (run a build first).`,
 }
 
 var xSegment = Segment{
-	Name:  "x",
-	Short: "Interactive shorthand: pick project + target",
+	Name:        "x",
+	Short:       "Interactive shorthand: pick project + target",
+	Description: "Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.",
+	Tags:        []string{"cli", "magus x", "interactive", "picker", "shorthand", "run", "tty"},
 	Long: `Interactive shorthand for magus run. Filters are AND-combined
 substrings matched against project paths; ranking is leaf-anchored
 longest-match-wins, so "magus x dash" prefers a project named "dashboard"
@@ -185,8 +197,10 @@ humans. Scripts should call magus run directly.`,
 }
 
 var affectedSegment = Segment{
-	Name:  "affected",
-	Short: "Run a target for VCS-diff affected projects",
+	Name:        "affected",
+	Short:       "Run a target for VCS-diff affected projects",
+	Description: "Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.",
+	Tags:        []string{"cli", "magus affected", "affected", "changed files", "vcs", "git", "bisect", "ci"},
 	Long: `Run a named target for every project that is affected by changes in
 version control. The active VCS adapter is picked by autodetect from .git, .hg,
 or .jj at the workspace root, or pinned with MAGUS_VCS_COMMAND_NAME /
@@ -240,8 +254,10 @@ introduced a regression.`,
 }
 
 var insightSegment = Segment{
-	Name:  "insight",
-	Short: "Behavioral code analysis from VCS history",
+	Name:        "insight",
+	Short:       "Behavioral code analysis from VCS history",
+	Description: "Read VCS history to surface hotspots, temporal coupling, ownership, and trends, showing where a codebase's attention and risk concentrate.",
+	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs"},
 	Long: `Read version-control history to show where a codebase's attention and
 risk concentrate. By default every lens is contextual to the working directory — run
 from inside a subtree and it reflects only that subtree's history; pass --workspace to
@@ -285,8 +301,10 @@ hotspots file view renders a churn-vs-complexity quadrant chart).`,
 }
 
 var watchSegment = Segment{
-	Name:  "watch",
-	Short: "Emit changed file paths to stdout",
+	Name:        "watch",
+	Short:       "Emit changed file paths to stdout",
+	Description: "Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.",
+	Tags:        []string{"cli", "magus watch", "watch", "filesystem", "fsnotify", "continuous build"},
 	Long: `Watch the workspace for file-system changes and emit batches of changed
 repo-relative paths to stdout. Each path is on its own line; a blank line
 separates batches. This output format is compatible with git diff --name-only
@@ -312,8 +330,10 @@ trigger a full initial build in the downstream magus affected --stdin.`,
 }
 
 var statusSegment = Segment{
-	Name:  "status",
-	Short: "Inspect concurrency pool and configuration",
+	Name:        "status",
+	Short:       "Inspect concurrency pool and configuration",
+	Description: "Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.",
+	Tags:        []string{"cli", "magus status", "status", "concurrency", "pool", "daemon", "monitoring"},
 	Long: `Show the magus configuration that affects this process — telemetry, cache
 settings — and, when a parent magus process is running, the live state of its
 concurrency pool (current slot usage, queued waiters).
@@ -336,8 +356,10 @@ snapshot on its own line for log capture.`,
 }
 
 var doctorSegment = Segment{
-	Name:  "doctor",
-	Short: "Validate the workspace",
+	Name:        "doctor",
+	Short:       "Validate the workspace",
+	Description: "Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.",
+	Tags:        []string{"cli", "magus doctor", "diagnostics", "troubleshooting", "validation", "workspace"},
 	Long: `Run a suite of diagnostic checks against the workspace and report the
 results. Checks include:
 
@@ -360,8 +382,10 @@ check fails.`,
 }
 
 var configSegment = Segment{
-	Name:  "config",
-	Short: "View or update magus configuration",
+	Name:        "config",
+	Short:       "View or update magus configuration",
+	Description: "Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.",
+	Tags:        []string{"cli", "magus config", "configuration", "magus.yaml", "settings", "cache"},
 	Long: `Inspect or modify the magus configuration. Configuration is loaded in
 priority order: built-in defaults → user-global file → workspace file →
 project-local file → MAGUS_* environment variables → CLI flags.
@@ -389,8 +413,10 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 }
 
 var serverSegment = Segment{
-	Name:  "server",
-	Short: "Manage the persistent magus daemon",
+	Name:        "server",
+	Short:       "Manage the persistent magus daemon",
+	Description: "Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.",
+	Tags:        []string{"cli", "magus server", "daemon", "server", "socket", "persistent"},
 	Long: `Start, stop, or check the liveness of a persistent magus daemon.
 
 By default every magus invocation starts a short-lived proc server that dies
@@ -420,22 +446,27 @@ check for the file with [ -S "$socket" ] before starting one.`,
 }
 
 var completionSegment = Segment{
-	Name:  "completion",
-	Short: "Print a shell completion script",
-	Long:  `Print a shell completion script to stdout and append it to your shell's startup file.`,
-	Usage: "magus completion <bash|zsh|fish>",
+	Name:        "completion",
+	Short:       "Print a shell completion script",
+	Description: "Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.",
+	Tags:        []string{"cli", "magus completion", "completion", "bash", "zsh", "fish", "powershell", "shell"},
+	Long:        `Print a shell completion script to stdout and append it to your shell's startup file.`,
+	Usage:       "magus completion <bash|zsh|fish|powershell>",
 	Examples: []Example{
 		{"Bash", "magus completion bash >> ~/.bashrc"},
 		{"Zsh", "magus completion zsh >> ~/.zshrc"},
 		{"Fish", "magus completion fish >> ~/.config/fish/config.fish"},
+		{"PowerShell", "magus completion powershell >> $PROFILE"},
 	},
 }
 
 // initSegment documents `magus init`. Defined here (untagged) so it can be
 // embedded in the registry's All list regardless of build tags.
 var initSegment = Segment{
-	Name:  "init",
-	Short: "Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)",
+	Name:        "init",
+	Short:       "Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)",
+	Description: "Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.",
+	Tags:        []string{"cli", "magus init", "bootstrap", "setup", "magus.yaml", "magusfile", "workspace"},
 	Long: `Bootstrap a magus workspace in the current directory.
 
 By default, magus.yaml is written to $XDG_CONFIG_HOME/magus/ (the global user
@@ -462,8 +493,10 @@ The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.`,
 }
 
 var versionSegment = Segment{
-	Name:  "version",
-	Short: "Print version, commit, and build date",
-	Long:  `Print the magus version string, git commit hash, and build date.`,
-	Usage: "magus version",
+	Name:        "version",
+	Short:       "Print version, commit, and build date",
+	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary.",
+	Tags:        []string{"cli", "magus version", "version", "build info", "commit"},
+	Long:        `Print the magus version string, git commit hash, and build date.`,
+	Usage:       "magus version",
 }

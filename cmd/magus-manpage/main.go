@@ -277,6 +277,11 @@ func genMD(outDir string) {
 
 func renderMainMD() []byte {
 	var m mdBuf
+	m.frontmatter(
+		"magus command",
+		"Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.",
+		[]string{"cli", "magus", "build", "monorepo", "orchestrator", "cache", "workspace"},
+	)
 	m.h1("magus")
 	m.p("magus - workspace-aware build orchestrator and content-addressed cache")
 
@@ -311,6 +316,15 @@ func renderMainMD() []byte {
 
 func renderSegmentMD(seg imanpage.Segment) []byte {
 	var m mdBuf
+	desc := seg.Description
+	if desc == "" {
+		desc = seg.Short
+	}
+	tags := seg.Tags
+	if len(tags) == 0 {
+		tags = []string{"cli", "magus " + seg.Name, seg.Name}
+	}
+	m.frontmatter("magus "+seg.Name, desc, tags)
 	pageName := "magus-" + seg.Name
 	m.h1(pageName)
 	m.p(mdEsc(seg.Short))
@@ -434,6 +448,34 @@ func flagLabelMD(name, typeName, defValue string) string {
 // mdBuf accumulates Markdown. Each block method leaves a trailing blank line so
 // the next block (heading, paragraph, definition item) is parsed independently.
 type mdBuf struct{ b bytes.Buffer }
+
+// frontmatter writes the site's YAML frontmatter block. Values are quoted only
+// when they contain a colon (YAML would otherwise parse them as a nested
+// mapping). Tags render as a flow sequence.
+func (m *mdBuf) frontmatter(title, description string, tags []string) {
+	m.b.WriteString("---\n")
+	fmt.Fprintf(&m.b, "title: %s\n", yamlScalar(title))
+	fmt.Fprintf(&m.b, "description: %s\n", yamlScalar(description))
+	m.b.WriteString("tags: [")
+	for i, t := range tags {
+		if i > 0 {
+			m.b.WriteString(", ")
+		}
+		m.b.WriteString(yamlScalar(t))
+	}
+	m.b.WriteString("]\n---\n\n")
+}
+
+// yamlScalar quotes a value only when needed (colon, leading/trailing space,
+// or a quote character). Bare scalars stay unquoted to match the rest of the
+// site's frontmatter style.
+func yamlScalar(s string) string {
+	needsQuote := strings.ContainsAny(s, ":\"'") || (len(s) > 0 && (s[0] == ' ' || s[len(s)-1] == ' '))
+	if !needsQuote {
+		return s
+	}
+	return "\"" + strings.ReplaceAll(s, "\"", "\\\"") + "\""
+}
 
 func (m *mdBuf) h1(s string) { fmt.Fprintf(&m.b, "# %s\n\n", s) }
 func (m *mdBuf) h2(s string) { fmt.Fprintf(&m.b, "## %s\n\n", s) }

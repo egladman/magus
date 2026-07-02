@@ -11,6 +11,14 @@ type Segment struct {
 	Long  string // multi-paragraph DESCRIPTION body; plain text, no roff markup
 	Usage string // SYNOPSIS line, e.g. "magus run <target> [flags] [project...]"
 
+	// Description is the ~120-155 char meta-description emitted into the
+	// generated docs page's YAML frontmatter (used for search index + <meta
+	// name="description">). Falls back to Short if empty.
+	Description string
+	// Tags list keywords for the docs page's YAML frontmatter (search index).
+	// Auto-augmented with the canonical "cli, magus <name>, <name>" if empty.
+	Tags []string
+
 	// BuildFlags is called with a fresh FlagSet to register segment-specific flags.
 	// Do NOT register global flags here (--output, -v, --concurrency, --root, --config).
 	BuildFlags func(fs *flag.FlagSet)
