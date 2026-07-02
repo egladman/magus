@@ -1601,17 +1601,35 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "  <div class=\"page-provenance container\">\n"
         + "    <small>" + commitFooter(srcRel) + "</small>\n"
         + "  </div>\n"
+        // Multi-column footer (WS Z). Groups links added across the plan
+        // (feeds, changelog, sitemap, Source Code) instead of crowding them onto
+        // one row. Stacks on mobile via the grid CSS in site.css.
         + "  <footer class=\"site-footer container\">\n"
-        + "    <small>"
-        + "<a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a>"
-        // "Source Code" (not "GitHub") describes purpose over platform and survives a
-        // repo move; relocating it here also de-crowds the mobile nav.
-        + " &middot; <a href=\"" + GH + "\">Source Code</a>"
-        + publicLink
-        + sitemapLink
-        + " &middot; "
-        + "<a href=\"https://buzz-lang.dev/\">Built with Buzz</a>"
-        + "</small>\n"
+        + "    <nav aria-label=\"Site\" class=\"footer-columns\">\n"
+        + "      <div><h4>Project</h4><ul>"
+        + "<li><a href=\"" + GH + "\">Source Code</a></li>"
+        + "<li><a href=\"" + GH + "/blob/" + metaBranch + "/CHANGELOG.md\">Changelog</a></li>"
+        + "<li><a href=\"" + GH + "/releases\">Releases</a></li>"
+        + "<li><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a></li>"
+        + "</ul></div>\n"
+        + "      <div><h4>Docs</h4><ul>"
+        + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>"
+        + "<li><a href=\"" + root + "install/\">Download</a></li>"
+        + "<li><a href=\"" + root + "playground.html\">Playground</a></li>"
+        + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
+        + "</ul></div>\n"
+        + "      <div><h4>Community</h4><ul>"
+        + "<li><a href=\"" + GH + "/discussions\">Discussions</a></li>"
+        + "<li><a href=\"" + GH + "/issues\">Issues</a></li>"
+        + "<li><a href=\"" + GH + "/blob/" + metaBranch + "/CONTRIBUTING.md\">Contributing</a></li>"
+        + "</ul></div>\n"
+        + "      <div><h4>Meta</h4><ul>"
+        + "<li><a href=\"" + root + "public/\">public</a></li>"
+        + "<li><a href=\"" + root + "sitemap.xml\">Sitemap</a></li>"
+        + "<li><a href=\"" + root + ".well-known/security.txt\">security.txt</a></li>"
+        + "</ul></div>\n"
+        + "    </nav>\n"
+        + "    <p class=\"footer-bottom\"><small>Built with <a href=\"https://buzz-lang.dev/\">Buzz</a> &middot; no cookies, no tracking.</small></p>\n"
         + "  </footer>\n"
         // One deferred module bundle (esbuild) replaces the nine flat scripts; the
         // head-critical theme.js stays separate above. type=module defers by spec.

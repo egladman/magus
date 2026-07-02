@@ -1104,3 +1104,42 @@ article a[data-external]::after {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+/* Multi-column footer (WS Z). Auto-fit grid: four columns on wide screens,
+   two on tablets, one on mobile. Muted heading + tight list per column. */
+.footer-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1.25rem 2rem;
+  margin: 1.5rem 0 0.75rem;
+}
+.footer-columns h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--pico-muted-color);
+}
+.footer-columns ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+.footer-columns li {
+  display: block;
+  margin: 0.15rem 0;
+  font-size: 0.875rem;
+}
+.footer-columns a {
+  color: var(--pico-color);
+  text-decoration: none;
+}
+.footer-columns a:hover { color: var(--pico-primary); text-decoration: underline; }
+.footer-bottom {
+  margin: 0.5rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  color: var(--pico-muted-color);
+}
