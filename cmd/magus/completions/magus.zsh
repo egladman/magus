@@ -87,7 +87,7 @@ _magus() {
                     ;;
                 completion)
                     if (( CURRENT == 2 )); then
-                        local -a shells=(bash zsh fish)
+                        local -a shells=(bash zsh fish powershell)
                         _describe 'shell' shells
                     fi
                     ;;

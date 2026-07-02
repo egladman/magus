@@ -49,5 +49,5 @@ for _cmd in magus mgs
     complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l explain -d 'show why a project is affected'
     complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l plan -d 'emit a CI shard plan for the affected set'
     complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l bisect -d 'find the commit that broke a project'
-    complete -c $_cmd -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
+    complete -c $_cmd -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
 end

@@ -10,7 +10,7 @@ _magus_complete() {
 
     local subcommands="ls graph describe run x affected mage version help completion doctor"
     local verbs="ls build test lint format clean generate ci"
-    local shells="bash zsh fish"
+    local shells="bash zsh fish powershell"
     local affected_flags="--explain --plan --bisect --base --stdin --graph"
 
     if [[ "$COMP_CWORD" -eq 1 ]]; then
