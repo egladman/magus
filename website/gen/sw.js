@@ -1,0 +1,58 @@
+// Auto-generated at build time (gen/sw.js). Template lives at website/sw.js.tmpl;
+// the render substitutes magus-7059765 and /magus/ before copying into gen/.
+const VERSION = "magus-7059765";
+const BASE = "/magus/";
+
+const PRECACHE = [
+  BASE + "search-index.json",
+  BASE + "playground/wasm_exec.js",
+  BASE + "playground/buzz.wasm",
+  BASE + "main.js",
+  BASE + "theme.js",
+  BASE + "site.css",
+  BASE + "theme.css",
+];
+
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(PRECACHE)).catch(() => {}));
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (e) => {
+  const req = e.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  const accept = req.headers.get("accept") || "";
+  const isDoc = accept.indexOf("text/html") >= 0;
+
+  if (isDoc) {
+    // Network-first for HTML so clients never get stuck on stale docs.
+    e.respondWith(
+      fetch(req).then((r) => {
+        const copy = r.clone();
+        caches.open(VERSION).then((c) => c.put(req, copy));
+        return r;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Cache-first for everything else (assets/wasm/json).
+  e.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req).then((r) => {
+      const copy = r.clone();
+      caches.open(VERSION).then((c) => c.put(req, copy));
+      return r;
+    }))
+  );
+});

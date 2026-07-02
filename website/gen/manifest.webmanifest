@@ -1,0 +1,14 @@
+{
+  "name": "magus",
+  "short_name": "magus",
+  "description": "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.",
+  "start_url": "/magus/",
+  "scope": "/magus/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3178c6",
+  "icons": [
+    { "src": "/magus/assets/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/magus/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

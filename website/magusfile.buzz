@@ -1078,6 +1078,69 @@ fun writeSecurityTxt() > void {
     fs.writeFile(OUT + "/.well-known/security.txt", body);
 }
 
+// writeManifest emits gen/manifest.webmanifest - the PWA metadata browsers
+// (mostly on Android and Windows) read to allow "install this site". Icons
+// reuse the hat mark (WS A/V); scope/start_url match the deploy base so a
+// nested install stays inside /magus/. Gated on SITE_URL so a same-origin
+// scope is well-defined; without it we'd default to "/" and mis-scope.
+fun writeManifest() > void {
+    if (SITE_URL == "") { return; }
+    // basePath extraction mirrors render404's derivation.
+    var basePath = "/";
+    final noScheme = SITE_URL.split("://");
+    if (noScheme.len() > 1) {
+        final rest = noScheme[1];
+        final firstSlash = rest.indexOf("/");
+        if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
+    // (see gopherbuzz/testdata/54_raw_string.buzz).
+    final body = "\{\n"
+        + "  \"name\": \"magus\",\n"
+        + "  \"short_name\": \"magus\",\n"
+        + "  \"description\": \"" + escapeAttr(SITE_DESC) + "\",\n"
+        + "  \"start_url\": \"" + basePath + "\",\n"
+        + "  \"scope\": \"" + basePath + "\",\n"
+        + "  \"display\": \"standalone\",\n"
+        + "  \"background_color\": \"#ffffff\",\n"
+        + "  \"theme_color\": \"#3178c6\",\n"
+        + "  \"icons\": [\n"
+        + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \}\n"
+        + "  ]\n"
+        + "\}\n";
+    fs.writeFile(OUT + "/manifest.webmanifest", body);
+}
+
+// writeServiceWorker emits gen/sw.js - a conservative worker that keeps HTML
+// network-first (never stale docs) and static hashed assets cache-first, and
+// precaches the search index + playground WASM so those two heavy features
+// survive an offline reload. The source lives in website/sw.js.tmpl (Buzz
+// interpolates { ... } inside strings, so embedding JS with arrow functions
+// as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
+// short commit hash so a new build purges old caches on activate) and
+// __BASE__ (SITE_URL's path prefix).
+fun writeServiceWorker() > void {
+    if (SITE_URL == "") { return; }
+    var basePath = "/";
+    final noScheme = SITE_URL.split("://");
+    if (noScheme.len() > 1) {
+        final rest = noScheme[1];
+        final firstSlash = rest.indexOf("/");
+        if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
+    var body = tmplFile.readAll();
+    tmplFile.close();
+    // .replace only touches the first match; the markers appear both in the file
+    // header comment and in the code, so replaceAll it is.
+    body = $"__VERSION__".replaceAll(body, "magus-" + metaShort);
+    body = $"__BASE__".replaceAll(body, basePath);
+    fs.writeFile(OUT + "/sw.js", body);
+}
+
 
 // formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
 // human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
@@ -1563,6 +1626,8 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         // yet; the PNG icons + apple-touch cover every real client.
         + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + root + "assets/favicon-32.png\">\n"
         + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + root + "assets/apple-touch-icon.png\">\n"
+        + "  <link rel=\"manifest\" href=\"" + root + "manifest.webmanifest\">\n"
+        + "  <meta name=\"theme-color\" content=\"#3178c6\">\n"
         // Warm the CDN connection before the render-blocking Pico <link> below, so
         // the TLS handshake overlaps HTML parsing; the same origin also serves the
         // lazily-imported hljs/mermaid, so this preconnect covers them too.
@@ -2016,6 +2081,8 @@ fun site_render() > void {
     renderPublic();
     render404();
     writeSecurityTxt();
+    writeManifest();
+    writeServiceWorker();
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the

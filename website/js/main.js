@@ -14,3 +14,4 @@ import "./back-to-top.js";
 import "./prefetch.js";
 import "./run-example.js";
 import "./keyboard-help.js";
+import "./service-worker-register.js";
