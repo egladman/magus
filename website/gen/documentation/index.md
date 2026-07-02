@@ -1,3 +1,9 @@
+---
+title: magus Documentation
+description: The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.
+tags: [documentation, docs, getting-started, magus, guide, index, overview]
+---
+
 # Documentation
 
 New to magus? [**Install it**](install.md), skim the two core ideas below ([Targets](targets.md) and [Spells](spells.md)), or [try it live in the playground](playground.html) without installing anything.

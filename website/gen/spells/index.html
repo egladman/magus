@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Anatomy of a magus Spell — magus</title>
-  <meta name="description" content="A Spell is a library of tool-native operations for one toolchain, plus the cache and affected-set metadata that toolchain needs. The go spell exposes">
+  <title>Spells — magus</title>
+  <meta name="description" content="A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/spells/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Anatomy of a magus Spell</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Spells</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">11 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/spells.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/spells.md&body=Page%3A%20docs/spells.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 11 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/spells.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -52,7 +52,7 @@
 <p>A spell is <em>how</em> a tool does something (the <code>go-vet</code>, <code>cargo-clippy</code> ops); a target is <em>what</em> you run (<code>magus run lint</code>). You <strong>bind</strong> spells and <strong>invoke</strong> targets. See <a href="#spells-vs-targets">Spells vs Targets</a>.</p>
 <h2 id="spells-vs-targets">Spells vs Targets</h2>
 <p>These are the two core nouns in magus, on orthogonal axes. Confusing them is the usual reason a build runs and does nothing.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th></th>
@@ -107,7 +107,7 @@
 <td><code>Path + Name</code> (see <a href="../targets/">targets.md</a>)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>The relationship is <strong>compositional</strong>: a target's body calls spell ops.</p>
 <pre><code class="language-buzz">import &quot;magus/spell/go&quot;;
 magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); return true; });   // bind the spell (runs nothing)
@@ -130,7 +130,7 @@ export fun test(args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&qu
 <p>magus deliberately does <strong>not</strong> decide what &quot;lint&quot; or &quot;format&quot; means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).</p>
 <h2 id="what-a-spell-provides">What a spell provides</h2>
 <p>A bound spell contributes three things to its project. Only operations are &quot;runnable&quot;; the other two are metadata that make caching and the affected set correct.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Contribution</th>
@@ -160,7 +160,7 @@ export fun test(args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&qu
 <td>files this spell owns for affected-set attribution</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>Binding a spell contributes its <code>needs</code>/<code>claims</code>/<code>provides</code> to that project's cache key and affected set even before you wire any target; it executes nothing until a target calls one of its ops.</p>
 <h3 id="operations-come-in-two-shapes">Operations come in two shapes</h3>
 <ol>
@@ -205,7 +205,7 @@ export fun build(args: [str]) &gt; void {
 <h2 id="naming-operations">Naming operations</h2>
 <p>An op's public name is the <strong>map key</strong> in <code>mgs_listTargets</code> (or the <code>ops</code> table). That key is what a magusfile calls and what <code>magus run spell::op</code> invokes. The implementation function is private. Name both after the CLI command, not after a magus lifecycle verb, so the spell is self-documenting and a developer who knows the toolchain can invoke an op without reading the magusfile.</p>
 <p><strong>Op key: the CLI command, kebab-case, lowercase, no flags.</strong> Write the command as you type it and replace spaces with hyphens. The golang spell:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>runs</th>
@@ -245,7 +245,7 @@ export fun build(args: [str]) &gt; void {
 <td><code>golangCILint</code></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>Naming the op <code>golangci-lint</code> (not <code>lint</code>) and <code>go-fmt</code> (not <code>fmt</code>) says exactly which tool runs: there is no <code>go lint</code>, and <code>fmt</code> here is the <code>gofmt</code> binary. Multi-tool spells already work this way: typescript exposes <code>tsc</code>/<code>eslint</code>/<code>prettier</code>/<code>vitest</code>, one op per tool.</p>
 <p><strong>Handler: the same command in lowerCamelCase, with Go-style initialisms</strong> (<code>go-fmt</code> → <code>goFmt</code>, <code>golangci-lint</code> → <code>golangCILint</code>, <code>ruff-check</code> → <code>ruffCheck</code>). The handler name is invisible to magus for fork ops; it exists to tell the reader the exact binary.</p>
 <p><strong>Not every op is a CLI command.</strong> A no-op marker (typescript's <code>preflight</code>) or a cache-backend verb (github/s3 <code>get-entry</code>) is not a tool invocation, so keep a descriptive name.</p>
@@ -299,7 +299,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 </code></pre>
 <p>Key invariant: <strong>binding is not running.</strong> A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; call the host modules directly).</p>
 <h2 id="glossary">Glossary</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Term</th>
@@ -344,10 +344,10 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <td>The runnable unit a spell op is composed into. A separate concept; see <a href="../targets/">targets.md</a>.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="worked-examples-in-this-repo">Worked examples in this repo</h2>
 <p>Read these spells under <a href="./"><code>spells/</code></a> when you outgrow a plain fork spell:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Spell</th>
@@ -372,7 +372,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <td>A <strong>remote cache backend</strong> for S3/MinIO/R2/B2 that signs every request with <strong>AWS SigV4</strong> via <code>crypto</code>'s keyed-hash primitives.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../operations/">Operations</a>: the formal definition of an op and the Spell → Operation → Target work hierarchy.</li>
@@ -386,20 +386,14 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../remote-cache/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Remote caching</span></a>
-      <a class="page-nav-next" href="../targets/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Anatomy of a magus Target</span></a>
+      <a class="page-nav-next" href="../targets/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Targets</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/spells.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/spells.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a> <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a> <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/8b19368e64e9efb550bdefc5374423420bfa4ece">8b19368</a> <time datetime="2026-06-23T02:31:00Z">June 23, 2026, 2:31 AM UTC</time> rehome to github.com/egladman/magus; self-update + doc links point here; drop stray agent files; regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489">1d36f07</a> <time datetime="2026-06-19T00:28:50Z">June 19, 2026, 12:28 AM UTC</time> pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c">1a9364b</a> <time datetime="2026-06-18T23:20:00Z">June 18, 2026, 11:20 PM UTC</time> formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/6357c6e8bcad45bfa2550cb6e0e6b0ec64126448">6357c6e</a> <time datetime="2026-06-16T23:42:00Z">June 16, 2026, 11:42 PM UTC</time> settle on the .buzz extension; in-package tests; bubblegum parity pass</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0">b446235</a> <time datetime="2026-06-10T23:51:00Z">June 10, 2026, 11:51 PM UTC</time> zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f">b60e99b</a> <time datetime="2026-05-22T01:07:00Z">May 22, 2026, 1:07 AM UTC</time> drop the lua/teal interpreter; buzz is the only magusfile language now</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/8b19368e64e9efb550bdefc5374423420bfa4ece"><code>8b19368</code></a> <small><time datetime="2026-06-23T02:31:00Z">Jun 23, 2026</time></small> - rehome to github.com/egladman/magus; self-update + doc links point here; drop stray agent files; regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/6357c6e8bcad45bfa2550cb6e0e6b0ec64126448"><code>6357c6e</code></a> <small><time datetime="2026-06-16T23:42:00Z">Jun 16, 2026</time></small> - settle on the .buzz extension; in-package tests; bubblegum parity pass</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

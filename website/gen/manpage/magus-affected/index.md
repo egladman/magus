@@ -1,3 +1,9 @@
+---
+title: magus affected
+description: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.
+tags: [cli, magus affected, affected, changed files, vcs, git, bisect, ci]
+---
+
 # magus-affected
 
 Run a target for VCS-diff affected projects

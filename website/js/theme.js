@@ -56,8 +56,7 @@
       var d = new Date(el.getAttribute("datetime"));
       if (isNaN(d)) return;
       el.textContent = new Intl.DateTimeFormat(undefined, {
-        month: "long", day: "numeric", year: "numeric",
-        hour: "numeric", minute: "2-digit",
+        month: "short", day: "numeric", year: "numeric",
       }).format(d);
     });
   });

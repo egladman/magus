@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>encoding — magus</title>
-  <meta name="description" content="Base64/hex/URL text codecs.">
+  <title>encoding module — magus</title>
+  <meta name="description" content="Text codecs for magusfiles - base64 (standard and URL-safe), hex, URL percent-encoding, and parse/build URLs into structured parts.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/modules/encoding/">
   <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../../blog/">Blog</a></li>
         <li><a href="../../install/">Install</a></li>
         <li><a href="../../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">encoding</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">encoding module</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">1 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/encoding.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/modules/encoding.md&body=Page%3A%20docs/modules/encoding.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 1 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/modules/encoding.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -56,7 +56,7 @@
 <h3 id="base64-encode">base64_encode</h3>
 <p>Encode data as standard (padded) base64.</p>
 <p><strong>Signature:</strong> <code>encoding.base64Encode(data) → string</code>[^buzz-stdlib-encoding-base64_encode] · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L102" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -73,12 +73,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="base64-decode">base64_decode</h3>
 <p>Decode a standard (padded) base64 string; errors on malformed input.</p>
 <p><strong>Signature:</strong> <code>encoding.base64Decode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -95,12 +95,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="base64url-encode">base64url_encode</h3>
 <p>Encode data as URL-safe (padded) base64.</p>
 <p><strong>Signature:</strong> <code>encoding.base64urlEncode(data) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L116" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -117,12 +117,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="base64url-decode">base64url_decode</h3>
 <p>Decode a URL-safe (padded) base64 string; errors on malformed input.</p>
 <p><strong>Signature:</strong> <code>encoding.base64urlDecode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L121" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -139,12 +139,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="hex-encode">hex_encode</h3>
 <p>Encode data as lowercase hex.</p>
 <p><strong>Signature:</strong> <code>encoding.hexEncode(data) → string</code>[^buzz-stdlib-encoding-hex_encode] · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L130" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -161,12 +161,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="hex-decode">hex_decode</h3>
 <p>Decode a hex string; errors on malformed input.</p>
 <p><strong>Signature:</strong> <code>encoding.hexDecode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L135" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -183,12 +183,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="url-encode">url_encode</h3>
 <p>Percent-encode s for use in a URL query component.</p>
 <p><strong>Signature:</strong> <code>encoding.urlEncode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L144" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -205,12 +205,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="url-decode">url_decode</h3>
 <p>Decode a percent-encoded URL query component; errors on malformed input.</p>
 <p><strong>Signature:</strong> <code>encoding.urlDecode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L149" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -227,12 +227,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="parse-url">parse_url</h3>
 <p>Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.</p>
 <p><strong>Signature:</strong> <code>encoding.parseUrl(raw_url) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L158" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -249,12 +249,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="build-url">build_url</h3>
 <p>Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.</p>
 <p><strong>Signature:</strong> <code>encoding.buildUrl(parts) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L175" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -271,28 +271,22 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <p>[^buzz-stdlib-encoding-base64_encode]: <code>encoding.base64Encode</code> is also in Buzz's standard library (<code>str.encodeBase64 (built-in string method)</code>); the magus form is sandbox-aware.
 [^buzz-stdlib-encoding-hex_encode]: <code>encoding.hexEncode</code> is also in Buzz's standard library (<code>str.hex (built-in string method)</code>); the magus form is sandbox-aware.</p>
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../crypto/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">crypto</span></a>
-      <a class="page-nav-next" href="../env/"><span class="page-nav-dir">Next</span><span class="page-nav-title">env</span></a>
+      <a class="page-nav-prev" href="../crypto/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">crypto module</span></a>
+      <a class="page-nav-next" href="../env/"><span class="page-nav-dir">Next</span><span class="page-nav-title">env module</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/modules/encoding.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/modules/encoding.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a> <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0">b446235</a> <time datetime="2026-06-10T23:51:00Z">June 10, 2026, 11:51 PM UTC</time> zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf">76aa6d3</a> <time datetime="2026-06-03T23:47:00Z">June 3, 2026, 11:47 PM UTC</time> cross-language benchmark suite; an honest perf table in the readme</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/modules/encoding.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/modules/encoding.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../../documentation/">Documentation</a></li><li><a href="../../install/">Download</a></li><li><a href="../../playground.html">Playground</a></li><li><a href="../../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../../public/">public</a></li><li><a href="../../sitemap.xml">Sitemap</a></li><li><a href="../../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>
 </body>

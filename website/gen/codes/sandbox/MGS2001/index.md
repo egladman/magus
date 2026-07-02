@@ -1,3 +1,9 @@
+---
+title: "MGS2001: path read denied"
+description: Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.
+tags: [MGS2001, sandbox, security, permissions, read, allowlist, credentials]
+---
+
 # MGS2001: path read denied by sandbox
 
 A spell tried to read a file outside the workspace and outside the

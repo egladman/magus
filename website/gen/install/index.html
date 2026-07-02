@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Install — magus</title>
-  <meta name="description" content="magus is a single self-contained binary. Install a prebuilt release, or build it from source.">
+  <title>Install magus — magus</title>
+  <meta name="description" content="Install magus from a prebuilt release or build it from source with Go, then keep it current via magus self update or your package manager.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/install/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/" aria-current="page">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Install</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Install magus</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/install.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/install.md&body=Page%3A%20docs/install.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/install.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -69,21 +69,15 @@ to disable the self-update mechanism (e.g. for package-manager-owned binaries).<
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../engines/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Engines: how magus runs a magusfile</span></a>
-      <a class="page-nav-next" href="../mcp/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MCP: driving magus from agents</span></a>
+      <a class="page-nav-prev" href="../engines/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Engines</span></a>
+      <a class="page-nav-next" href="../mcp/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MCP</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be">72a3537</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/install.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/install.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be">72a3537</a> <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> redesign docs site with search, TOC, and copy buttons</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be"><code>72a3537</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - redesign docs site with search, TOC, and copy buttons</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/install.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/install.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

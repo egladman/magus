@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Anatomy of a magus Charm — magus</title>
-  <meta name="description" content="A charm is a named modifier that changes how a target runs, not which target or project. Where a Target answers &quot;what operation, on what project&amp;quot;">
+  <title>Charms — magus</title>
+  <meta name="description" content="Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target's argument vector at run time.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/charms/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Anatomy of a magus Charm</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Charms</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">16 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/charms.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/charms.md&body=Page%3A%20docs/charms.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 16 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/charms.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -60,7 +60,7 @@
 <h2 id="the-mechanism-a-json-patch-over-the-argv">The mechanism: a JSON Patch over the argv</h2>
 <p>A target runs a command: a <code>cmd</code> (e.g. <code>go</code>) and a base argv (e.g. <code>[&quot;tool&quot;, &quot;golangci-lint&quot;, &quot;run&quot;, &quot;./...&quot;]</code>). magus treats the argv as a JSON array and a charm as an <strong>RFC 6902 JSON Patch</strong> applied over it.</p>
 <p>Each operation is <code>{ op, path, value?, from? }</code>:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th><code>op</code></th>
@@ -100,7 +100,7 @@
 <td><code>value</code></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>path</code> and <code>from</code> are <strong>JSON Pointers</strong> (RFC 6901): <code>&quot;/0&quot;</code>, <code>&quot;/1&quot;</code>, ... for a specific index; <code>&quot;/-&quot;</code> for append (valid only as target of <code>add</code>/<code>move</code>/<code>copy</code>).</p>
 <p>Most authors use the <a href="#the-charm-constructor-reference"><code>charm</code> constructors</a> instead of writing raw patches; they resolve a <em>value anchor</em> to an index at author time so you never count indices.</p>
 <h2 id="applying-charms-on-the-cli">Applying charms on the CLI</h2>
@@ -112,7 +112,7 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 <p>The project is a <strong>positional</strong> argument, not part of the token. See the full grammar in <a href="../targets/#cli-grammar">targets.md#cli-grammar</a>.</p>
 <h2 id="the-rw-charm">The <code>rw</code> charm</h2>
 <p><code>rw</code> (read→write) is a <strong>built-in</strong> charm. It flips a target from check-only (read) to mutate-in-place:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Target</th>
@@ -137,7 +137,7 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 <td>apply autofixes where supported (e.g. <code>golangci-lint --fix</code>)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>rw</code> carries no special flag. Like every other charm, you activate it with a <code>:rw</code> suffix (<code>magus run format:rw</code>). There is no <code>-w</code>/<code>--write</code> shortcut and no <code>--write</code> flag: the suffix is the one way to ask for it.</p>
 <p><strong>CI is always read-only.</strong> <code>Magus.RunCI</code> strips the <code>rw</code> charm before dispatch, so the composite <code>ci</code> pipeline can never mutate the tree even if a caller requests it (e.g. <code>ci:rw</code>). <code>rw</code> is the only charm with this strip status; the other built-in (<code>cd</code>) and every workspace charm you define are ordinary vocabulary that survive into <code>ci</code>.</p>
 <h2 id="defaulting-charms-per-workspace-default-charms">Defaulting charms per workspace (<code>default_charms</code>)</h2>
@@ -235,7 +235,7 @@ charms = {
 <h2 id="the-charm-constructor-reference">The <code>charm</code> constructor reference</h2>
 <p>Both charm modules build a charm's patch; every constructor returns <code>{ ops = [...] }</code>. The <code>argv</code>-taking constructors resolve a <em>value anchor</em> (or predicate for the <code>*Func</code> variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.</p>
 <p>The table is the <strong>full</strong> set, available on the host <code>charm</code> module (<code>import &quot;charm&quot;</code>, called <code>charm.after(...)</code>). The pure-Buzz <code>magus/charm</code> module (<code>import &quot;magus/charm&quot;</code>, called bare, as <code>after(...)</code>) exports the <strong>core</strong> rows (append, prepend, after, before, set, drop) for self-contained built-in spells.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Constructor</th>
@@ -308,7 +308,7 @@ charms = {
 <td><code>path</code>, by predicate</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>Method names are camelCase (<code>charm.afterFunc</code>, <code>charm.pathFunc</code>), following Buzz's convention.</p>
 <p>A missing anchor is a <strong>load-time error</strong>, not a silently wrong index.</p>
 <h2 id="use-case-cookbook">Use-case cookbook</h2>
@@ -351,7 +351,7 @@ guard   = charm.test(base, &quot;run&quot;);
 <p><strong>A charm rewrites a target's arguments. It can never change the base command (<code>cmd</code>) or replace the whole argv.</strong> <code>ValidatePatch</code> rejects the root pointer (<code>&quot;&quot;</code>), so every charm op edits an <em>element</em> of the argv, never the array as a whole.</p>
 <p><code>ValidatePatch</code> enforces this boundary deliberately.</p>
 <h3 id="decision-guide">Decision guide</h3>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>You want to...</th>
@@ -381,7 +381,7 @@ guard   = charm.test(base, &quot;run&quot;);
 <td>identity, not a modifier</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="why-the-boundary-exists">Why the boundary exists</h3>
 <ul>
 <li><strong>Composability.</strong> Argument edits layer cleanly across charms. Two charms each replacing the whole command is an unresolvable conflict; element-level edits have a well-defined merge.</li>
@@ -466,7 +466,7 @@ type Charm struct {
 </code></pre>
 <p><code>ValidatePatch</code> enforces: the <code>op</code> is one of six; <code>path</code> is non-empty and rooted at <code>/</code> (root path rejected, forbidding whole-argv replacement); <code>move</code>/<code>copy</code> carry a <code>/</code>-rooted <code>from</code>. <code>ApplyPatch</code> runs ops in order over a copy of the argv (the base is never mutated), with bounds-checked indices. The implementation is verified differentially against the reference RFC 6902 library (<code>evanphx/json-patch</code>).</p>
 <h2 id="glossary">Glossary</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Term</th>
@@ -511,7 +511,7 @@ type Charm struct {
 <td>The set-membership query a spell uses to react to a charm; unknown charms are ignored.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../operations/">operations.md</a>: the Operation whose argv a charm patches, and where charms sit in the hierarchy.</li>
@@ -522,20 +522,14 @@ type Charm struct {
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-next" href="../debugging/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Debugging</span></a>
+      <a class="page-nav-next" href="../debugging/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Debugging magusfiles</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/charms.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/charms.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a> <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca">1763198</a> <time datetime="2026-06-29T01:37:10Z">June 29, 2026, 1:37 AM UTC</time> apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a> <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489">1d36f07</a> <time datetime="2026-06-19T00:28:50Z">June 19, 2026, 12:28 AM UTC</time> pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a">ca6bb4b</a> <time datetime="2026-06-18T23:50:00Z">June 18, 2026, 11:50 PM UTC</time> strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c">1a9364b</a> <time datetime="2026-06-18T23:20:00Z">June 18, 2026, 11:20 PM UTC</time> formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b80315e8c601f447f127e6b765e0111d6b27cc84">b80315e</a> <time datetime="2026-06-17T03:09:53Z">June 17, 2026, 3:09 AM UTC</time> target-level cross-project deps; needs is handles-only; pull the target graph from the buzz ast, not regex</li><li><a href="https://github.com/egladman/magus/commit/6357c6e8bcad45bfa2550cb6e0e6b0ec64126448">6357c6e</a> <time datetime="2026-06-16T23:42:00Z">June 16, 2026, 11:42 PM UTC</time> settle on the .buzz extension; in-package tests; bubblegum parity pass</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a"><code>ca6bb4b</code></a> <small><time datetime="2026-06-18T23:50:00Z">Jun 18, 2026</time></small> - strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b80315e8c601f447f127e6b765e0111d6b27cc84"><code>b80315e</code></a> <small><time datetime="2026-06-17T03:09:53Z">Jun 17, 2026</time></small> - target-level cross-project deps; needs is handles-only; pull the target graph from the buzz ast, not regex</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/charms.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/charms.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

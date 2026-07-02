@@ -1,3 +1,9 @@
+---
+title: magus watch
+description: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.
+tags: [cli, magus watch, watch, filesystem, fsnotify, continuous build]
+---
+
 # magus-watch
 
 Emit changed file paths to stdout

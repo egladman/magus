@@ -19,6 +19,9 @@ import { copyFeedback } from "./lib/clipboard.js";
     a.className = "heading-anchor";
     a.href = "#" + h.id;
     a.setAttribute("aria-label", "Link to this section");
+    a.setAttribute("title", "Copy link to this section");
+    a.setAttribute("data-tooltip", "Copy link to this section");
+    a.setAttribute("data-placement", "left");
     a.innerHTML = LINK;
     h.appendChild(a);
 

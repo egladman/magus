@@ -1,3 +1,9 @@
+---
+title: MCP
+description: The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.
+tags: [mcp, model-context-protocol, ai, agents, claude, cursor, daemon, ide]
+---
+
 # MCP: driving magus from agents
 
 When the daemon is running, it also exposes an **MCP (Model Context Protocol) server** over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.

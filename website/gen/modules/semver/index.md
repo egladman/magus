@@ -1,3 +1,9 @@
+---
+title: semver module
+description: Semantic version parsing and comparison per SemVer 2.0.0. Parse into structured parts and compare two versions with relational operators.
+tags: [semver, version, parse, compare, semantic versioning, magus stdlib]
+---
+
 # semver
 
 Semantic version parsing and comparison (SemVer 2.0.0).

@@ -1,3 +1,9 @@
+---
+title: magus x
+description: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.
+tags: [cli, magus x, interactive, picker, shorthand, run, tty]
+---
+
 # magus-x
 
 Interactive shorthand: pick project + target

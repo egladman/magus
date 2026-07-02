@@ -1,3 +1,9 @@
+---
+title: strings module
+description: Case conversion (camel, snake, kebab, Pascal), capitalize, word splitting, and ellipsis truncation for building identifiers and labels.
+tags: [strings, camelcase, snake_case, kebab-case, pascalcase, capitalize, ellipsis, magus stdlib]
+---
+
 # strings
 
 Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).

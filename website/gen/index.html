@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <title>magus</title>
-  <meta name="description" content="A fast cross-platform task orchestrator for polyglot (mono)repos.">
+  <meta name="description" content="A fast cross-platform task orchestrator for polyglot monorepos. Single binary, code as configuration, statically typed, no second toolchain.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/">
   <link rel="alternate" type="application/atom+xml" title="magus blog" href="public/atom/blog.atom.xml">
   <link rel="preload" as="image" href="assets/gopher.webp" type="image/webp" fetchpriority="high">
@@ -30,14 +30,14 @@
         <li><a href="blog/">Blog</a></li>
         <li><a href="install/">Install</a></li>
         <li><a href="playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">17 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/README.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20README.md&body=Page%3A%20README.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 17 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/README.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -288,7 +288,7 @@ magus status -o json   # machine-readable output
 <h2 id="cli">CLI</h2>
 <p>The magus command-line surface: the command reference, how arguments are forwarded to a target, and how output is formatted. The run grammar itself (<code>spell::op</code>, charms, project selectors) lives under <a href="#targets">Targets</a>.</p>
 <h3 id="commands">Commands</h3>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Command</th>
@@ -361,7 +361,7 @@ magus status -o json   # machine-readable output
 <td>Print version, commit, and build date</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h4 id="x-interactive-picker">x: interactive picker</h4>
 <p><code>magus x</code> is a TTY shorthand for <code>magus run</code>. It presents a fuzzy project picker followed by a target picker, then executes the selection.</p>
 <pre><code class="language-sh">magus x           # browse all projects
@@ -444,7 +444,7 @@ magus affected go::go-test -- -race            # affected projects, race detecto
 <hr>
 <h3 id="output-formats">Output formats</h3>
 <p>Every command takes <code>-o &lt;format&gt;</code> to switch its output shape.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Format</th>
@@ -477,7 +477,7 @@ magus affected go::go-test -- -race            # affected projects, race detecto
 <td>Custom Go <code>text/template</code> over the command's data model</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <pre><code class="language-sh">magus ls -o json
 magus ls -o name | xargs -I{} echo &quot;found project: {}&quot;
 magus ls -o 'template={{range .}}{{.Name}} ({{.Spell.Name}}){{&quot;\n&quot;}}{{end}}'
@@ -565,16 +565,10 @@ in <strong><a href="telemetry/">docs/telemetry.md</a></strong>.</p>
     </div>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T23:11:42Z">July 1, 2026, 11:11 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/eab40bc6f55db42186f68c705da70ae188b73e24">eab40bc</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/README.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/README.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/eab40bc6f55db42186f68c705da70ae188b73e24">eab40bc</a> <time datetime="2026-07-01T23:11:42Z">July 1, 2026, 11:11 PM UTC</time> site: optimize LCP images + CDN preconnect (WS A/B)</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a> <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca">1763198</a> <time datetime="2026-06-29T01:37:10Z">June 29, 2026, 1:37 AM UTC</time> apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/49399a3431ea33c0b0ba211fc19cfc9d8905046e">49399a3</a> <time datetime="2026-06-23T14:31:07Z">June 23, 2026, 2:31 PM UTC</time> Update README.md</li><li><a href="https://github.com/egladman/magus/commit/d650d608f064844161cf1150ab284358c59f2cbe">d650d60</a> <time datetime="2026-06-23T13:37:03Z">June 23, 2026, 1:37 PM UTC</time> Update README.md</li><li><a href="https://github.com/egladman/magus/commit/7f534d130a5cc47c79b7f1759780269410be4dc0">7f534d1</a> <time datetime="2026-06-23T03:37:00Z">June 23, 2026, 3:37 AM UTC</time> fix two broken README toc anchors</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a> <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/3d6073ab2bda3b75ee798034d7b251e71f426c22">3d6073a</a> <time datetime="2026-06-22T23:33:34Z">June 22, 2026, 11:33 PM UTC</time> remove em dashes; cut mermaid graphs; tighten prose</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/eab40bc6f55db42186f68c705da70ae188b73e24"><code>eab40bc</code></a> <small><time datetime="2026-07-01T23:11:42Z">Jul 1, 2026</time></small> - site: optimize LCP images + CDN preconnect (WS A/B)</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/49399a3431ea33c0b0ba211fc19cfc9d8905046e"><code>49399a3</code></a> <small><time datetime="2026-06-23T14:31:07Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/d650d608f064844161cf1150ab284358c59f2cbe"><code>d650d60</code></a> <small><time datetime="2026-06-23T13:37:03Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/7f534d130a5cc47c79b7f1759780269410be4dc0"><code>7f534d1</code></a> <small><time datetime="2026-06-23T03:37:00Z">Jun 23, 2026</time></small> - fix two broken README toc anchors</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="documentation/">Documentation</a></li><li><a href="install/">Download</a></li><li><a href="playground.html">Playground</a></li><li><a href="blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="public/">public</a></li><li><a href="sitemap.xml">Sitemap</a></li><li><a href=".well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="main.js"></script>
 </body>

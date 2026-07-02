@@ -1,5 +1,0 @@
-Contact: mailto:eli@gladman.cc
-Expires: 2027-12-31T23:59:59Z
-Preferred-Languages: en
-Canonical: https://eli.gladman.cc/magus/.well-known/security.txt
-Policy: https://github.com/egladman/magus/blob/docs-site-overhaul/SECURITY.md

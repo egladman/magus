@@ -1,3 +1,9 @@
+---
+title: "MGS1001: no ci target defined"
+description: Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.
+tags: [MGS1001, magusfile, ci, targets, doctor, anchor, affected]
+---
+
 # MGS1001: no ci target defined
 
 `magus ci` (or `magus affected ci`, `magus affected --plan`, `magus x` ci) was

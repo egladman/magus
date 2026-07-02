@@ -12,6 +12,8 @@
   btn.className = "back-to-top";
   btn.setAttribute("aria-label", "Back to top");
   btn.title = "Back to top";
+  btn.setAttribute("data-tooltip", "Back to top");
+  btn.setAttribute("data-placement", "left");
   btn.innerHTML =
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>';

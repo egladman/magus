@@ -1,3 +1,9 @@
+---
+title: crypto module
+description: Compute content digests for strings and files - SHA-256/512 for security, SHA-1 and MD5 for legacy checksum interop. Sandbox-aware over Buzz.
+tags: [crypto, hash, digest, sha256, sha512, sha1, md5, checksum, magus stdlib]
+---
+
 # crypto
 
 Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).

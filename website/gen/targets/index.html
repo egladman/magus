@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Anatomy of a magus Target — magus</title>
-  <meta name="description" content="A Target is the addressable unit of work in magus: what project (Path) and what operation (Name). Everything else (shards, spell filters, charms) is">
+  <title>Targets — magus</title>
+  <meta name="description" content="A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/targets/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Anatomy of a magus Target</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Targets</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">7 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/targets.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/targets.md&body=Page%3A%20docs/targets.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 7 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/targets.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -69,7 +69,7 @@
 </code></pre>
 <p>The project is a <strong>positional</strong> argument, not embedded in the target token. <code>:</code> introduces <a href="../charms/">charms</a>; <code>spell::op</code> invokes one spell's op directly (see <a href="#cli-extension-spell-qualified-targets">spell-qualified targets</a>).</p>
 <p>Examples:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Command</th>
@@ -116,9 +116,9 @@
 <td><code>go</code></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>Invalid forms:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>String</th>
@@ -139,11 +139,11 @@
 <td><code>/</code> not allowed in a target name (project is positional)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>The canonical serialized form of a resolved Target (what <code>Target.String()</code> emits and what <code>describe</code>/logs show) is <code>path:name</code> (e.g. <code>web/studio:test</code>). That is the output form; the grammar above is how you type it.</p>
 <h2 id="path-resolution-on-the-cli">Path resolution on the CLI</h2>
 <p><code>Path</code> is stored <strong>relative to the workspace root</strong>, but the CLI accepts project names from anywhere in the tree. Arguments to <code>magus run</code>, <code>magus list</code>, and <code>magus clean</code> resolve as follows:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Input</th>
@@ -173,7 +173,7 @@
 <td>n/a</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>So <code>../foo</code> behaves as a shell user expects: from <code>web/studio</code>, <code>magus run build ../foo</code> targets <code>web/foo</code>. Bare paths stay workspace-relative regardless of cwd. magus rejects two inputs:</p>
 <ul>
 <li><strong>Absolute paths</strong> (<code>/etc</code>, <code>C:\foo</code>): project paths must be repo-relative.</li>
@@ -189,7 +189,7 @@
 </ul>
 <h2 id="the-target-name">The target name</h2>
 <p>A target name is one of the seven canonical operations. The type is <code>project.Target</code> (a <code>string</code> alias).</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Name</th>
@@ -226,7 +226,7 @@
 <td>run code generators</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>There is also <code>ci</code>: a composite pipeline (preflight → generate → format → lint → build → test) handled specially by <code>Magus.RunCI</code>. It is not in the <code>project.Targets</code> list and is not a valid name for <code>ParseTarget</code>.</p>
 <p>Custom target names must use the target-name charset: letters, digits, <code>-</code>, <code>_</code> (<code>types.ValidateTargetName</code>). <code>:</code>, <code>@</code>, and <code>/</code> are reserved for the grammar above.</p>
 <h3 id="name-normalization-casing--delimiters">Name normalization (casing &amp; delimiters)</h3>
@@ -256,7 +256,7 @@ magus run go::golangci-lint         # the golangci-lint op of the go spell
 <p>The prefix is <strong>not</strong> stored in <code>Target</code>. The CLI strips it via <code>parseTarget</code> and passes it as a <code>WithSpellFilter</code> <code>RunOption</code>. The <code>ci</code> target does not support spell-qualified syntax.</p>
 <h2 id="what-is-not-part-of-a-targets-identity">What is not part of a Target's identity</h2>
 <p>These modify execution but are <strong>not</strong> durable identity. Charms parse into <code>Target.Charms</code> but propagate via context; the rest travel as <code>RunOption</code> values alongside the target list.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Input</th>
@@ -281,7 +281,7 @@ magus run go::golangci-lint         # the golangci-lint op of the go spell
 <td>forwarded to the underlying tool via <code>WithExtraArgs</code></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="lifecycle-parse--expand--run">Lifecycle: parse → expand → run</h2>
 <p>A target string goes through three stages before any tool is invoked:</p>
 <pre><code class="language-text">&quot;web/studio:test&quot;  (or: name token + positional projects)
@@ -302,7 +302,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
 </code></pre>
 <p>Key invariant: targets passed to <code>Run</code> should be concrete (each Path resolves to exactly one project). <code>ExpandPath</code>, <code>ExpandCwd</code>, and <code>ExpandAffected</code> enforce this.</p>
 <h2 id="glossary">Glossary</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Term</th>
@@ -339,7 +339,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
 <td>The composite CI pipeline. Not a target name; handled by <code>Magus.RunCI</code>.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../operations/">operations.md</a>: the formal Operation definition and the work hierarchy (Spell → Operation → Target).</li>
@@ -350,21 +350,15 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../spells/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Anatomy of a magus Spell</span></a>
-      <a class="page-nav-next" href="../telemetry/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Telemetry (OpenTelemetry)</span></a>
+      <a class="page-nav-prev" href="../spells/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Spells</span></a>
+      <a class="page-nav-next" href="../telemetry/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Telemetry</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/targets.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/targets.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a> <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a> <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/8b19368e64e9efb550bdefc5374423420bfa4ece">8b19368</a> <time datetime="2026-06-23T02:31:00Z">June 23, 2026, 2:31 AM UTC</time> rehome to github.com/egladman/magus; self-update + doc links point here; drop stray agent files; regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c">1a9364b</a> <time datetime="2026-06-18T23:20:00Z">June 18, 2026, 11:20 PM UTC</time> formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f">b60e99b</a> <time datetime="2026-05-22T01:07:00Z">May 22, 2026, 1:07 AM UTC</time> drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1">765b783</a> <time datetime="2026-05-07T03:42:00Z">May 7, 2026, 3:42 AM UTC</time> a parallel build orchestrator with content-addressed caching</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/8b19368e64e9efb550bdefc5374423420bfa4ece"><code>8b19368</code></a> <small><time datetime="2026-06-23T02:31:00Z">Jun 23, 2026</time></small> - rehome to github.com/egladman/magus; self-update + doc links point here; drop stray agent files; regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f"><code>b60e99b</code></a> <small><time datetime="2026-05-22T01:07:00Z">May 22, 2026</time></small> - drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/targets.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/targets.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

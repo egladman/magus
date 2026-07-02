@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Engines: how magus runs a magusfile — magus</title>
-  <meta name="description" content="A magusfile is written in Buzz and runs on the embedded Buzz VM through a small internal seam. A magusfile.buzz exposes the
-magus.* API and composes">
+  <title>Engines — magus</title>
+  <meta name="description" content="Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/engines/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -29,17 +28,17 @@ magus.* API and composes">
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Engines: how magus runs a magusfile</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Engines</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">3 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/engines.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/engines.md&body=Page%3A%20docs/engines.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 3 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/engines.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -162,21 +161,15 @@ are visible rather than surprising.</p>
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../documentation/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Documentation</span></a>
-      <a class="page-nav-next" href="../install/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Install</span></a>
+      <a class="page-nav-prev" href="../documentation/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus Documentation</span></a>
+      <a class="page-nav-next" href="../install/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Install magus</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/engines.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/engines.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a> <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/8b19368e64e9efb550bdefc5374423420bfa4ece">8b19368</a> <time datetime="2026-06-23T02:31:00Z">June 23, 2026, 2:31 AM UTC</time> rehome to github.com/egladman/magus; self-update + doc links point here; drop stray agent files; regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/5a8088a9f69aebadc047592add6abeeb4b95904d">5a8088a</a> <time datetime="2026-06-19T21:15:40Z">June 19, 2026, 9:15 PM UTC</time> api legibility: command/handler op dispatch; exhaustive switches; drop dead code; rename misleading symbols; bridge -> host</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489">1d36f07</a> <time datetime="2026-06-19T00:28:50Z">June 19, 2026, 12:28 AM UTC</time> pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a">ca6bb4b</a> <time datetime="2026-06-18T23:50:00Z">June 18, 2026, 11:50 PM UTC</time> strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c">1a9364b</a> <time datetime="2026-06-18T23:20:00Z">June 18, 2026, 11:20 PM UTC</time> formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/6357c6e8bcad45bfa2550cb6e0e6b0ec64126448">6357c6e</a> <time datetime="2026-06-16T23:42:00Z">June 16, 2026, 11:42 PM UTC</time> settle on the .buzz extension; in-package tests; bubblegum parity pass</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f">b60e99b</a> <time datetime="2026-05-22T01:07:00Z">May 22, 2026, 1:07 AM UTC</time> drop the lua/teal interpreter; buzz is the only magusfile language now</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/8b19368e64e9efb550bdefc5374423420bfa4ece"><code>8b19368</code></a> <small><time datetime="2026-06-23T02:31:00Z">Jun 23, 2026</time></small> - rehome to github.com/egladman/magus; self-update + doc links point here; drop stray agent files; regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/5a8088a9f69aebadc047592add6abeeb4b95904d"><code>5a8088a</code></a> <small><time datetime="2026-06-19T21:15:40Z">Jun 19, 2026</time></small> - api legibility: command/handler op dispatch; exhaustive switches; drop dead code; rename misleading symbols; bridge -> host</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a"><code>ca6bb4b</code></a> <small><time datetime="2026-06-18T23:50:00Z">Jun 18, 2026</time></small> - strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/6357c6e8bcad45bfa2550cb6e0e6b0ec64126448"><code>6357c6e</code></a> <small><time datetime="2026-06-16T23:42:00Z">Jun 16, 2026</time></small> - settle on the .buzz extension; in-package tests; bubblegum parity pass</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/engines.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/engines.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

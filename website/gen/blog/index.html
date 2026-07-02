@@ -29,7 +29,7 @@
         <li><a href="../blog/" aria-current="page">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
@@ -39,7 +39,7 @@
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/blog/index.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20blog/index.md&body=Page%3A%20blog/index.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="https://github.com/egladman/magus/edit/HEAD/blog/index.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <article>
 <h1>Blog</h1>
 <ul class="blog-index">
@@ -48,16 +48,10 @@
     </article>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-02T01:12:14Z">July 2, 2026, 1:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/3e8af91e6ac31a7f7df4d43ab2942982e16d0489">3e8af91</a>)</small>
+    <small>Last updated <time datetime="2026-07-02T01:12:14Z">July 2, 2026, 1:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/3e8af91e6ac31a7f7df4d43ab2942982e16d0489" data-tooltip="3e8af91e6ac31a7f7df4d43ab2942982e16d0489" title="3e8af91e6ac31a7f7df4d43ab2942982e16d0489">3e8af91</a>)</small>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

@@ -79,6 +79,8 @@
     runBtn.className = "run-example";
     runBtn.innerHTML = PLAY + '<span>Run</span>';
     runBtn.setAttribute("aria-label", "Run this Buzz snippet");
+    runBtn.setAttribute("title", "Run this Buzz snippet");
+    runBtn.setAttribute("data-tooltip", "Run this snippet");
     bar.appendChild(runBtn);
 
     var openLink = document.createElement("a");
@@ -86,6 +88,7 @@
     openLink.textContent = "Open in Playground →";
     openLink.href = ROOT + "playground.html#source=" + base64url(code.textContent);
     openLink.setAttribute("title", "Open this snippet in the playground");
+    openLink.setAttribute("data-tooltip", "Open in playground");
     bar.appendChild(openLink);
 
     pre.parentNode.insertBefore(bar, pre);

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>charm — magus</title>
-  <meta name="description" content="Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).">
+  <title>charm module — magus</title>
+  <meta name="description" content="Constructors for charm values - RFC 6902 JSON Patches over a target's argv. Append, prepend, after, before, set, drop, move, copy, test.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/modules/charm/">
   <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../../blog/">Blog</a></li>
         <li><a href="../../install/">Install</a></li>
         <li><a href="../../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">charm</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">charm module</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">4 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/charm.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/modules/charm.md&body=Page%3A%20docs/modules/charm.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 4 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/modules/charm.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -56,7 +56,7 @@
 <h3 id="append">append</h3>
 <p>Append vals to the end of the argv.</p>
 <p><strong>Signature:</strong> <code>charm.append(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L198" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -73,12 +73,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="prepend">prepend</h3>
 <p>Insert vals at the front of the argv, in order.</p>
 <p><strong>Signature:</strong> <code>charm.prepend(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L207" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -95,12 +95,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="after">after</h3>
 <p>Insert vals immediately after the first argv element equal to anchor.</p>
 <p><strong>Signature:</strong> <code>charm.after(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L212" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -129,12 +129,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="before">before</h3>
 <p>Insert vals immediately before the first argv element equal to anchor.</p>
 <p><strong>Signature:</strong> <code>charm.before(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L221" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -163,12 +163,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="set">set</h3>
 <p>Replace the first argv element equal to anchor with val.</p>
 <p><strong>Signature:</strong> <code>charm.set(argv, anchor, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L230" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -197,12 +197,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="drop">drop</h3>
 <p>Drop (remove) the first argv element equal to anchor.</p>
 <p><strong>Signature:</strong> <code>charm.drop(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L239" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -225,12 +225,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="after-func">after_func</h3>
 <p>Insert vals after the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.afterFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L248" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -259,12 +259,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="before-func">before_func</h3>
 <p>Insert vals before the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.beforeFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L257" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -293,12 +293,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="set-func">set_func</h3>
 <p>Replace the first argv element for which fn(s) is truthy with val.</p>
 <p><strong>Signature:</strong> <code>charm.setFunc(argv, fn, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L266" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -327,12 +327,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="drop-func">drop_func</h3>
 <p>Drop (remove) the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.dropFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L275" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -355,12 +355,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="path">path</h3>
 <p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element equal to anchor — the index, auto-calculated, for hand-built move/copy/test ops.</p>
 <p><strong>Signature:</strong> <code>charm.path(argv, anchor) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L284" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -383,12 +383,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="path-func">path_func</h3>
 <p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.pathFunc(argv, fn) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L293" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -411,12 +411,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="move">move</h3>
 <p>Move the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
 <p><strong>Signature:</strong> <code>charm.move(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L311" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -445,12 +445,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="move-func">move_func</h3>
 <p>Move the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
 <p><strong>Signature:</strong> <code>charm.moveFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L323" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -479,12 +479,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="copy">copy</h3>
 <p>Copy the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
 <p><strong>Signature:</strong> <code>charm.copy(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L335" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -513,12 +513,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="copy-func">copy_func</h3>
 <p>Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
 <p><strong>Signature:</strong> <code>charm.copyFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L347" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -547,12 +547,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="test">test</h3>
 <p>Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).</p>
 <p><strong>Signature:</strong> <code>charm.test(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L360" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -575,12 +575,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="test-func">test_func</h3>
 <p>Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.</p>
 <p><strong>Signature:</strong> <code>charm.testFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L369" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -603,26 +603,20 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../archive/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">archive</span></a>
-      <a class="page-nav-next" href="../crypto/"><span class="page-nav-dir">Next</span><span class="page-nav-title">crypto</span></a>
+      <a class="page-nav-prev" href="../archive/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">archive module</span></a>
+      <a class="page-nav-next" href="../crypto/"><span class="page-nav-dir">Next</span><span class="page-nav-title">crypto module</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/modules/charm.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/modules/charm.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a> <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489">1d36f07</a> <time datetime="2026-06-19T00:28:50Z">June 19, 2026, 12:28 AM UTC</time> pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a">ca6bb4b</a> <time datetime="2026-06-18T23:50:00Z">June 18, 2026, 11:50 PM UTC</time> strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c">1a9364b</a> <time datetime="2026-06-18T23:20:00Z">June 18, 2026, 11:20 PM UTC</time> formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0">b446235</a> <time datetime="2026-06-10T23:51:00Z">June 10, 2026, 11:51 PM UTC</time> zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa">6477ddd</a> <time datetime="2026-05-28T00:33:00Z">May 28, 2026, 12:33 AM UTC</time> native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1">765b783</a> <time datetime="2026-05-07T03:42:00Z">May 7, 2026, 3:42 AM UTC</time> a parallel build orchestrator with content-addressed caching</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a"><code>ca6bb4b</code></a> <small><time datetime="2026-06-18T23:50:00Z">Jun 18, 2026</time></small> - strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa"><code>6477ddd</code></a> <small><time datetime="2026-05-28T00:33:00Z">May 28, 2026</time></small> - native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/modules/charm.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/modules/charm.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../../documentation/">Documentation</a></li><li><a href="../../install/">Download</a></li><li><a href="../../playground.html">Playground</a></li><li><a href="../../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../../public/">public</a></li><li><a href="../../sitemap.xml">Sitemap</a></li><li><a href="../../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>
 </body>

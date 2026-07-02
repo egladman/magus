@@ -1,3 +1,9 @@
+---
+title: Spells
+description: A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.
+tags: [spells, operations, toolchain, cache, targets, go, rust, magusfile]
+---
+
 # Anatomy of a magus Spell
 
 A **Spell** is a _library of tool-native operations_ for one toolchain, plus the cache and affected-set metadata that toolchain needs. The `go` spell exposes `go-build`/`go-test`/`go-vet`/`go-fmt`/`golangci-lint`/...; the `rust` spell exposes `cargo-build`/`cargo-test`/`cargo-clippy`/`cargo-fmt`/.... Each op is named after the CLI command it runs (see [Naming operations](#naming-operations)). A spell is **bound to a project** and **runs nothing on its own**: it contributes operations your magusfile composes into [targets](targets.md), and it tells the cache which files are inputs and outputs.

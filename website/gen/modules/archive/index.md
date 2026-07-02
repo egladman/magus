@@ -1,3 +1,9 @@
+---
+title: archive module
+description: Create and extract archives with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst with parallel encode/decode.
+tags: [archive, tar, zip, compress, uncompress, gzip, zstd, magus stdlib]
+---
+
 # archive
 
 Archive creation and extraction with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst. Symlinks and non-regular entries are skipped.

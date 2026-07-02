@@ -1,3 +1,9 @@
+---
+title: "MGS2007: exec denied"
+description: Fires when a spell tries to execute a binary whose resolved path is outside the workspace, tmp, and the system executable allowlist.
+tags: [MGS2007, sandbox, security, exec, permissions, allowlist, binary]
+---
+
 # MGS2007: exec denied by sandbox
 
 A spell tried to execute a binary whose resolved path is outside the

@@ -222,21 +222,19 @@
   border-color: var(--accent-teal-hover, var(--accent-teal));
 }
 
-/* Secondary tool row below the search bar: italicized reading-time chip on the
-   left, "Suggest an edit" on the right, at every screen width. Empty on pages
-   without a reading time (the chip is skipped) - the edit link still hugs the
-   right edge via margin-left:auto. */
+/* Secondary tool row below the search bar: reading-time chip on the left,
+   the page-tools sentence ("See the Markdown source or suggest an edit...")
+   on the right, at every screen width. Empty on pages without a reading time
+   (the chip is skipped) - the sentence still hugs the right edge via
+   margin-left:auto. Just layout - Pico styles the <em> and <small> inside. */
 .page-tools-secondary {
   display: flex;
   align-items: baseline;
   gap: 0.75rem;
   margin: 0.25rem 0 1rem;
-  font-size: 0.875rem;
 }
-.page-tools-edit {
-  margin-left: auto;
-  font-size: 0.875rem;
-}
+.page-tools-edit { margin-left: auto; }
+.page-tools-edit a { margin: 0 0.3rem; }
 
 /* Wrapper that hosts the input and the right-side keybinding hint together.
    Takes the flex sizing so the input itself can be width:100% inside it. */
@@ -698,6 +696,7 @@ a code {
   color: var(--pico-muted-color);
   font-style: italic;
   white-space: nowrap;
+  opacity: 0.7;
 }
 
 /* Floating back-to-top button (JS-injected by back-to-top.js). Hidden until
@@ -973,18 +972,6 @@ a code {
   border-radius: 0;
 }
 
-/* Companion to "Suggest an edit" on the secondary tool row - report an issue
-   link with the page path prefilled. Sits directly before Suggest-an-edit,
-   both hugging the right side of the row via margin-left:auto on the first. */
-.page-tools-issue {
-  font-size: 0.875rem;
-  color: var(--pico-muted-color);
-  margin-left: auto;
-  margin-right: 0.75rem;
-}
-.page-tools-issue:hover { color: var(--pico-primary); }
-.page-tools-edit { margin-left: 0; }
-
 /* Keyboard-shortcut help overlay - a native <dialog> so the browser handles
    focus trap + backdrop + Esc-to-close. Pico gives <dialog> a card look; we
    just scope the inner width. */
@@ -1033,33 +1020,6 @@ a code {
 }
 .shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
 
-/* View-source link: sits before Suggest-an-edit on the secondary tool row.
-   Muted like Report-an-issue; margin-left:auto pins the whole trio to the
-   right side of the row. */
-.page-tools-source {
-  font-size: 0.875rem;
-  color: var(--pico-muted-color);
-  margin-left: auto;
-  margin-right: 0.75rem;
-}
-.page-tools-source:hover { color: var(--pico-primary); }
-.page-tools-issue { margin-left: 0; }
-
-/* Responsive tables: wrap gets horizontal scroll on narrow screens instead of
-   forcing the article column to blow out. Border replaces Pico's; the wrapper
-   handles overflow so the table itself can retain its natural min-widths. */
-.table-wrap {
-  overflow-x: auto;
-  margin: 1rem 0;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-}
-.table-wrap > table {
-  margin: 0;
-  border: 0;
-  min-width: 100%;
-}
-
 /* Broader reduced-motion pass: kill every animation/transition sitewide when
    the OS asks for reduced motion. Specific rules that already respect it
    (back-to-top, TOC sheet) stay intact; this covers everything else. */
@@ -1105,77 +1065,3 @@ article a[data-external]::after {
   letter-spacing: 0.06em;
 }
 
-/* Multi-column footer (WS Z). Auto-fit grid: four columns on wide screens,
-   two on tablets, one on mobile. Muted heading + tight list per column. */
-.footer-columns {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 1.25rem 2rem;
-  margin: 1.5rem 0 0.75rem;
-}
-.footer-columns h4 {
-  margin: 0 0 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--pico-muted-color);
-}
-.footer-columns ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: block;
-}
-.footer-columns li {
-  display: block;
-  margin: 0.15rem 0;
-  font-size: 0.875rem;
-}
-.footer-columns a {
-  color: var(--pico-color);
-  text-decoration: none;
-}
-.footer-columns a:hover { color: var(--pico-primary); text-decoration: underline; }
-.footer-bottom {
-  margin: 0.5rem 0 0;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--pico-muted-border-color);
-  color: var(--pico-muted-color);
-}
-
-/* Page history disclosure (WS R). Sits inside the .page-provenance small
-   line; the <summary> reads as an inline hint, and the expanded list stacks
-   underneath in muted rows. Works without JS via native <details>. */
-.page-history {
-  display: inline;
-  margin-left: 0.35rem;
-}
-.page-history > summary {
-  cursor: pointer;
-  color: var(--pico-muted-color);
-  list-style: none;   /* hide the default disclosure triangle */
-}
-.page-history > summary::-webkit-details-marker { display: none; }
-.page-history > summary::before {
-  content: "\25B8"; /* right-pointing triangle */
-  margin-right: 0.25em;
-  font-size: 0.75em;
-  color: var(--pico-muted-color);
-}
-.page-history[open] > summary::before {
-  content: "\25BE"; /* down-pointing triangle */
-}
-.page-history > ul {
-  list-style: none;
-  margin: 0.4rem 0 0;
-  padding: 0.4rem 0 0 0.75rem;
-  border-top: 1px solid var(--pico-muted-border-color);
-}
-.page-history > ul li {
-  margin: 0.15rem 0;
-  font-size: 0.8rem;
-  color: var(--pico-muted-color);
-}
-.page-history > ul a { color: var(--pico-primary); text-decoration: none; }
-.page-history > ul a:hover { text-decoration: underline; }

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Magusfile Module Reference — magus</title>
-  <meta name="description" content="These are the runtime utility modules. Import each under its bare name — import &quot;fs&amp;quot;, then fs.glob(...) — with camelCase methods. magus layers these">
+  <title>magus stdlib — magus</title>
+  <meta name="description" content="Overview of the magus stdlib modules for magusfiles - filesystem, process, HTTP, encoding, crypto, VCS, and more. Sandbox-aware host methods over Buzz.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/modules/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -28,7 +28,7 @@
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
@@ -38,7 +38,7 @@
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">1 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/index.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/modules/index.md&body=Page%3A%20docs/modules/index.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 1 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/modules/index.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -50,7 +50,7 @@
 <h1 id="magusfile-module-reference">Magusfile Module Reference</h1>
 <p>These are the runtime utility modules. Import each under its bare name — <code>import &quot;fs&quot;</code>, then <code>fs.glob(...)</code> — with <code>camelCase</code> methods. magus layers these host methods onto Buzz's own stdlib, so a single <code>import &quot;fs&quot;</code> (or <code>os</code>, <code>crypto</code>) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (<code>*</code>) and a footnote on their page; either form works.</p>
 <h2 id="files-and-paths">Files and paths</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -71,9 +71,9 @@
 <td>Archive creation and extraction with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst. Symlinks and non-regular entries are skipped.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="process-and-environment">Process and environment</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -94,9 +94,9 @@
 <td>Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin).</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="text-and-formatting">Text and formatting</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -117,9 +117,9 @@
 <td>GitHub-Flavored Markdown to semantic HTML.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="serialization-and-encoding">Serialization and encoding</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -140,9 +140,9 @@
 <td>Base64/hex/URL text codecs.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="cryptography">Cryptography</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -155,9 +155,9 @@
 <td>Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="networking">Networking</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -170,9 +170,9 @@
 <td>HTTP client with automatic retry on transient errors.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="time-and-versioning">Time and versioning</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -193,9 +193,9 @@
 <td>Version-control queries for the current working tree.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="magus-internals">Magus internals</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Module</th>
@@ -212,7 +212,7 @@
 <td>Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../targets/">Targets</a>: the runnable units whose magusfiles call these modules.</li>
@@ -224,16 +224,10 @@
     </div>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/modules/index.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/modules/index.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a> <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0">b446235</a> <time datetime="2026-06-10T23:51:00Z">June 10, 2026, 11:51 PM UTC</time> zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf">76aa6d3</a> <time datetime="2026-06-03T23:47:00Z">June 3, 2026, 11:47 PM UTC</time> cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa">6477ddd</a> <time datetime="2026-05-28T00:33:00Z">May 28, 2026, 12:33 AM UTC</time> native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f">b60e99b</a> <time datetime="2026-05-22T01:07:00Z">May 22, 2026, 1:07 AM UTC</time> drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1">765b783</a> <time datetime="2026-05-07T03:42:00Z">May 7, 2026, 3:42 AM UTC</time> a parallel build orchestrator with content-addressed caching</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa"><code>6477ddd</code></a> <small><time datetime="2026-05-28T00:33:00Z">May 28, 2026</time></small> - native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f"><code>b60e99b</code></a> <small><time datetime="2026-05-22T01:07:00Z">May 22, 2026</time></small> - drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/modules/index.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/modules/index.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

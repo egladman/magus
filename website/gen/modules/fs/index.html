@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>fs — magus</title>
-  <meta name="description" content="Filesystem and path primitives.">
+  <title>fs module — magus</title>
+  <meta name="description" content="Filesystem primitives for magusfiles - glob, read, write, stat, walk, watch, copy, mkdirall, symlinks, and temp dirs. Sandbox-aware over Buzz.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/modules/fs/">
   <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../../blog/">Blog</a></li>
         <li><a href="../../install/">Install</a></li>
         <li><a href="../../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">fs</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">fs module</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">5 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/fs.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/modules/fs.md&body=Page%3A%20docs/modules/fs.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 5 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/modules/fs.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -56,7 +56,7 @@
 <h3 id="glob">glob</h3>
 <p>Return paths matching pattern (doublestar-style).</p>
 <p><strong>Signature:</strong> <code>fs.glob(pattern) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L219" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -73,12 +73,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> []string</p>
 <h3 id="dirname">dirname</h3>
 <p>Directory portion of path.</p>
 <p><strong>Signature:</strong> <code>fs.dirname(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L246" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -95,12 +95,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="basename">basename</h3>
 <p>Final element of path.</p>
 <p><strong>Signature:</strong> <code>fs.basename(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L251" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -117,12 +117,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="exists">exists</h3>
 <p>True iff path exists.</p>
 <p><strong>Signature:</strong> <code>fs.exists(path) → bool</code>[^buzz-stdlib-fs-exists] · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L256" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -139,12 +139,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> bool</p>
 <h3 id="read-file">read_file</h3>
 <p>Return the contents of path as a string.</p>
 <p><strong>Signature:</strong> <code>fs.readFile(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L270" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -161,12 +161,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="write-file">write_file</h3>
 <p>Write content to path (mode 0644).</p>
 <p><strong>Signature:</strong> <code>fs.writeFile(path, content)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L283" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -189,11 +189,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="mkdirall">mkdirall</h3>
 <p>Create path and parents (default mode 0755).</p>
 <p><strong>Signature:</strong> <code>fs.mkdirall(path, [perm])</code>[^buzz-stdlib-fs-mkdirall] · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L298" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -216,11 +216,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="join">join</h3>
 <p>Join path elements with the OS separator.</p>
 <p><strong>Signature:</strong> <code>fs.join(parts...) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L313" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -237,12 +237,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="remove-all">remove_all</h3>
 <p>Recursively remove path (no error if missing).</p>
 <p><strong>Signature:</strong> <code>fs.removeAll(path)</code>[^buzz-stdlib-fs-remove_all] · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L318" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -259,11 +259,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="list-dir">list_dir</h3>
 <p>Return directory entries; empty if path does not exist.</p>
 <p><strong>Signature:</strong> <code>fs.listDir(path) → []string</code>[^buzz-stdlib-fs-list_dir] · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L333" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -280,12 +280,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> []string</p>
 <h3 id="ext">ext</h3>
 <p>File-name extension of path, including the leading dot (&quot;&quot; if none).</p>
 <p><strong>Signature:</strong> <code>fs.ext(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L353" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -302,12 +302,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="is-dir">is_dir</h3>
 <p>True iff path exists and is a directory (a sandbox-denied path reads as false).</p>
 <p><strong>Signature:</strong> <code>fs.isDir(path) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L360" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -324,12 +324,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> bool</p>
 <h3 id="is-file">is_file</h3>
 <p>True iff path exists and is a regular file (a sandbox-denied path reads as false).</p>
 <p><strong>Signature:</strong> <code>fs.isFile(path) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L371" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -346,12 +346,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> bool</p>
 <h3 id="stat">stat</h3>
 <p>Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.</p>
 <p><strong>Signature:</strong> <code>fs.stat(path) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L383" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -368,12 +368,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="copy-file">copy_file</h3>
 <p>Copy the file at src to dst (overwriting), preserving its permission bits.</p>
 <p><strong>Signature:</strong> <code>fs.copyFile(src, dst)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L402" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -396,11 +396,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="copy-dir">copy_dir</h3>
 <p>Recursively copy the directory tree at src to dst, preserving permission bits.</p>
 <p><strong>Signature:</strong> <code>fs.copyDir(src, dst)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L422" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -423,11 +423,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="watch">watch</h3>
 <p>Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.</p>
 <p><strong>Signature:</strong> <code>fs.watch(paths, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L520" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -450,11 +450,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="walk">walk</h3>
 <p>Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.</p>
 <p><strong>Signature:</strong> <code>fs.walk(root, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L570" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -477,11 +477,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="append-file">append_file</h3>
 <p>Append content to path (creating if absent, mode 0644).</p>
 <p><strong>Signature:</strong> <code>fs.appendFile(path, content)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L607" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -504,11 +504,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="chmod">chmod</h3>
 <p>Change the permission bits of path to mode (octal integer, e.g. 0755).</p>
 <p><strong>Signature:</strong> <code>fs.chmod(path, mode)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L630" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -531,11 +531,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="symlink">symlink</h3>
 <p>Create a symbolic link at link pointing to target.</p>
 <p><strong>Signature:</strong> <code>fs.symlink(target, link)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L646" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -558,11 +558,11 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="readlink">readlink</h3>
 <p>Return the target of the symbolic link at path.</p>
 <p><strong>Signature:</strong> <code>fs.readlink(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L664" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -579,12 +579,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="temp-dir">temp_dir</h3>
 <p>Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.</p>
 <p><strong>Signature:</strong> <code>fs.tempDir([prefix]) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L707" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -601,12 +601,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="read-lines">read_lines</h3>
 <p>Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.</p>
 <p><strong>Signature:</strong> <code>fs.readLines(path) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L680" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -623,12 +623,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> []string</p>
 <h3 id="write-lines">write_lines</h3>
 <p>Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.</p>
 <p><strong>Signature:</strong> <code>fs.writeLines(path, lines)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L694" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -651,7 +651,7 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>[^buzz-stdlib-fs-exists]: <code>fs.exists</code> is also in Buzz's standard library (<code>fs.exists</code>); the magus form is sandbox-aware.
 [^buzz-stdlib-fs-mkdirall]: <code>fs.mkdirall</code> is also in Buzz's standard library (<code>fs.makeDirectory</code>); the magus form is sandbox-aware.
 [^buzz-stdlib-fs-remove_all]: <code>fs.removeAll</code> is also in Buzz's standard library (<code>fs.delete</code>); the magus form is sandbox-aware.
@@ -659,21 +659,15 @@
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../fmt/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">fmt</span></a>
-      <a class="page-nav-next" href="../http/"><span class="page-nav-dir">Next</span><span class="page-nav-title">http</span></a>
+      <a class="page-nav-prev" href="../fmt/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">fmt module</span></a>
+      <a class="page-nav-next" href="../http/"><span class="page-nav-dir">Next</span><span class="page-nav-title">http module</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/modules/fs.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/modules/fs.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a> <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489">1d36f07</a> <time datetime="2026-06-19T00:28:50Z">June 19, 2026, 12:28 AM UTC</time> pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a">ca6bb4b</a> <time datetime="2026-06-18T23:50:00Z">June 18, 2026, 11:50 PM UTC</time> strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c">1a9364b</a> <time datetime="2026-06-18T23:20:00Z">June 18, 2026, 11:20 PM UTC</time> formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0">b446235</a> <time datetime="2026-06-10T23:51:00Z">June 10, 2026, 11:51 PM UTC</time> zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf">76aa6d3</a> <time datetime="2026-06-03T23:47:00Z">June 3, 2026, 11:47 PM UTC</time> cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa">6477ddd</a> <time datetime="2026-05-28T00:33:00Z">May 28, 2026, 12:33 AM UTC</time> native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1">765b783</a> <time datetime="2026-05-07T03:42:00Z">May 7, 2026, 3:42 AM UTC</time> a parallel build orchestrator with content-addressed caching</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a"><code>ca6bb4b</code></a> <small><time datetime="2026-06-18T23:50:00Z">Jun 18, 2026</time></small> - strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa"><code>6477ddd</code></a> <small><time datetime="2026-05-28T00:33:00Z">May 28, 2026</time></small> - native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/modules/fs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/modules/fs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../../documentation/">Documentation</a></li><li><a href="../../install/">Download</a></li><li><a href="../../playground.html">Playground</a></li><li><a href="../../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../../public/">public</a></li><li><a href="../../sitemap.xml">Sitemap</a></li><li><a href="../../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>
 </body>

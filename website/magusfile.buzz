@@ -62,6 +62,12 @@ final MONTHS: {str: str} = {
     "05": "May",     "06": "June",     "07": "July",     "08": "August",
     "09": "September", "10": "October", "11": "November", "12": "December",
 };
+// Short month names for compact date formats (page-history list).
+final MONTHS_SHORT: {str: str} = {
+    "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+    "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+    "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
+};
 final HOUR12: {str: str} = {
     "00": "12", "01": "1",  "02": "2",  "03": "3",  "04": "4",  "05": "5",
     "06": "6",  "07": "7",  "08": "8",  "09": "9",  "10": "10", "11": "11",
@@ -476,25 +482,6 @@ fun externalLinks(html: str) > str {
         buf = buf + tag;
         rest = rest.sub(closeIdx + 1);
         idx = rest.indexOf("<a href=\"http");
-    }
-    return buf + rest;
-}
-
-// wrapTables inserts a scrolling wrapper around every article <table>: on
-// narrow screens the table can overflow horizontally inside the wrapper
-// instead of blowing out the article column and forcing whole-page scroll.
-fun wrapTables(html: str) > str {
-    var buf = "";
-    var rest = html;
-    var idx = rest.indexOf("<table>");
-    while (idx != null) {
-        buf = buf + rest.sub(0, idx) + "<div class=\"table-wrap\"><table>";
-        rest = rest.sub(idx + 7);
-        final closeIdx = rest.indexOf("</table>");
-        if (closeIdx == null) { return buf + rest; }
-        buf = buf + rest.sub(0, closeIdx) + "</table></div>";
-        rest = rest.sub(closeIdx + 8);
-        idx = rest.indexOf("<table>");
     }
     return buf + rest;
 }
@@ -1063,7 +1050,7 @@ fun render404() > void {
         + "        <li><a href=\"" + basePath + "blog/\">Blog</a></li>\n"
         + "        <li><a href=\"" + basePath + "install/\">Install</a></li>\n"
         + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
-        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\">◐</button></li>\n"
+        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button></li>\n"
         + "      </ul>\n"
         + "    </nav>\n"
         + "  </header>\n"
@@ -1086,24 +1073,6 @@ fun render404() > void {
         + "</body>\n"
         + "</html>\n";
     fs.writeFile(OUT + "/404.html", doc);
-}
-
-// writeSecurityTxt emits /.well-known/security.txt (RFC 9116). Just a small
-// list of pointers a security researcher needs: how to contact the maintainer,
-// when the file expires, and where to find the release signing key that WS U
-// will document in more detail. Deterministic - a fixed expiry year rather
-// than "now + 365 days" (build-time-dependent = drift).
-fun writeSecurityTxt() > void {
-    // Expiry is a hard requirement (RFC 9116 §2.5.5). A fixed, deterministic
-    // date keeps the drift gate stable; maintainer bumps this yearly during
-    // the same commit that rotates the release signing key.
-    final body = "Contact: mailto:eli@gladman.cc\n"
-        + "Expires: 2027-12-31T23:59:59Z\n"
-        + "Preferred-Languages: en\n"
-        + "Canonical: " + SITE_URL + ".well-known/security.txt\n"
-        + "Policy: " + GH + "/blob/" + metaBranch + "/SECURITY.md\n";
-    fs.makeDirectory(OUT + "/.well-known");
-    fs.writeFile(OUT + "/.well-known/security.txt", body);
 }
 
 // writeManifest emits gen/manifest.webmanifest - the PWA metadata browsers
@@ -1186,6 +1155,16 @@ fun formatISO(iso: str) > str {
         + ", " + HOUR12[hour] + ":" + time[1] + " " + AMPM[hour] + " UTC";
 }
 
+// Compact form used by the recent-changes list; the full timestamp stays in the
+// <time datetime="..."> attribute for tooltips and screen readers.
+fun formatISOShort(iso: str) > str {
+    final dt   = iso.split("T");
+    final date = dt[0].split("-");
+    var   day  = date[2];
+    if (day.startsWith("0")) { day = day.sub(1); }
+    return MONTHS_SHORT[date[1]] + " " + day + ", " + date[0];
+}
+
 // Footer crediting the last commit that touched a page's source (a magus/-relative
 // path), falling back to HEAD for a not-yet-committed file. Keying off the file's
 // own history means a page changes when its source does, not when any commit lands.
@@ -1200,23 +1179,27 @@ fun commitFooter(path: str) > str {
         cShort = parts[1];
         cStamp = parts[2];
     }
-    var line = "Last updated: <time datetime=\"" + cStamp + "\">" + formatISO(cStamp) + "</time>"
-        + " (<a href=\"" + GH + "/commit/" + cFull + "\">" + cShort + "</a>)";
+    // "Last updated" line: the always-visible provenance. Emitted as a <small>
+    // paragraph so Pico's own typography sets the muted look; no custom classes.
+    var line = "<small>Last updated <time datetime=\"" + cStamp + "\">" + formatISO(cStamp) + "</time>"
+        + " (<a href=\"" + GH + "/commit/" + cFull + "\" data-tooltip=\"" + cFull + "\" title=\"" + cFull + "\">" + cShort + "</a>)</small>";
 
-    // WS R: History / Blame deep-links + a <details> panel listing the last N
-    // commits that touched this source file. The panel is server-rendered so it
-    // works without JS (native <details>/<summary>). Gated on the file having a
-    // real history entry - synthesized pages (blog index) fall back to the
-    // "Last updated" line alone.
+    // <details> disclosure of the last N commits that touched this page. Semantic
+    // markup only - Pico styles <details>/<summary>/<table>/<code>/<small>/<a>
+    // natively (see MEMORY: "classless Pico, minimize custom classes"). The two
+    // deep-links live inside the panel so the closed state stays quiet. Works
+    // without JS via native <details>/<summary>. Gated on the file having a real
+    // history entry - synthesized pages (blog index) fall back to the "Last
+    // updated" line alone.
     final histKey = metaPrefix + path;
     final hist = metaHistory[histKey];
     if (hist != null and hist.len() > 0) {
-        line = line
-            + " &middot; <a href=\"" + GH + "/commits/" + metaBranch + "/" + histKey + "\">History</a>"
-            + " &middot; <a href=\"" + GH + "/blame/" + metaBranch + "/" + histKey + "\">Blame</a>";
-        // <details> disclosure. Rendering to a fresh <ul> lets the CSS style
-        // rows independently of the surrounding <small>.
-        line = line + "<details class=\"page-history\"><summary>Recent history</summary><ul>";
+        line = line + "<details><summary><small>Recent changes</small></summary>";
+        // Plain <ul> - Pico styles it natively and it reflows on any width, no
+        // wrapper or overflow rule needed. Row shape: <code>hash</code> <time>
+        // date</time> - subject. Both hash and date get Pico's monospace/muted
+        // treatment through <code>/<small>; separator (em-dash) reads as prose.
+        line = line + "<ul>";
         foreach (row in hist) {
             final parts = row.split("|");
             if (parts.len() >= 3) {
@@ -1226,13 +1209,19 @@ fun commitFooter(path: str) > str {
                 var rowSubj = "";
                 if (parts.len() >= 4) { rowSubj = parts[3]; }
                 line = line + "<li>"
-                    + "<a href=\"" + GH + "/commit/" + rowFull + "\">" + rowShort + "</a>"
-                    + " <time datetime=\"" + rowStamp + "\">" + formatISO(rowStamp) + "</time>"
-                    + " " + escapeAttr(rowSubj)
+                    + "<a href=\"" + GH + "/commit/" + rowFull + "\"><code>" + rowShort + "</code></a>"
+                    + " <small><time datetime=\"" + rowStamp + "\">" + formatISOShort(rowStamp) + "</time></small>"
+                    + " - " + escapeAttr(rowSubj)
                     + "</li>";
             }
         }
-        line = line + "</ul></details>";
+        line = line + "</ul>";
+        line = line + "<p><small>"
+            + "<a href=\"" + GH + "/commits/" + metaBranch + "/" + histKey + "\" data-tooltip=\"All commits that touched this page\" title=\"All commits that touched this page\">Full history &#x2197;</a>"
+            + " &middot; "
+            + "<a href=\"" + GH + "/blame/" + metaBranch + "/" + histKey + "\" data-tooltip=\"Line-by-line commit attribution on GitHub\" title=\"Line-by-line commit attribution on GitHub\">Blame source &#x2197;</a>"
+            + "</small></p>";
+        line = line + "</details>";
     }
     return line;
 }
@@ -1594,15 +1583,9 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // dark until the host is confirmed. SITE_URL carries the trailing slash, canonUrl
     // is the slashed clean path ("" for home -> canonical is the site root).
     var canon = "";
-    var sitemapLink = "";
-    var publicLink = "";
     var feedDiscovery = "";
     if (SITE_URL != "") {
         canon = "  <link rel=\"canonical\" href=\"" + SITE_URL + canonUrl + "\">\n";
-        // Wrap the separator + anchor in a span so a CSS hide on .site-public
-        // takes out both together instead of leaving an orphan middle-dot.
-        sitemapLink = "<span class=\"sitemap-link\"> &middot; <a href=\"" + root + "sitemap.xml\">Sitemap</a></span>";
-        publicLink = "<span class=\"public-link\"> &middot; <a href=\"" + root + "public/\">public</a></span>";
         // Atom <link rel="alternate"> discovery: home + blog pages advertise both
         // feeds so a reader auto-detects them. Gate each on the feed having been
         // emitted: renderReleasesAtom only writes releases.atom.xml when at least
@@ -1633,28 +1616,24 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
             + "    <article>\n" + content + "    </article>\n"
             + "    </div>\n";
     }
-    // Companion to "Suggest an edit": a prefilled GitHub-issue link. Cheaper
-    // than a "was this helpful?" widget - no backend, no JS, no analytics; a
-    // reader who cares gets a real, actionable issue with the page URL.
-    final issueUrl = GH + "/issues/new?title=Docs%20issue%3A%20" + srcRel
-        + "&body=Page%3A%20" + srcRel + "%0A%0A";
-    // View source: link to the emitted per-page index.md next to the html.
-    // Suppress on synthesized pages (autoindex markers, blog index) that have
-    // no real source file on disk; the asset-integrity check would otherwise
-    // trip on a link to a missing .md.
-    var viewSourceHtml = "";
-    if (srcRel.endsWith(".md") and srcRel.startsWith("public/") == false
-        and srcRel != BLOG + "/index.md") {
-        viewSourceHtml = "<a class=\"page-tools-source\" href=\"index.md\">View source</a>";
+    // Page tools: two plain links on the right of the secondary row, separated
+    // by a middle-dot. "View source" only appears for pages backed by a real
+    // .md on disk (synthesized pages like the blog index and /public/* have no
+    // source). "Report an issue" was dropped - GitHub's edit flow is one click
+    // from Issues, and readers who just want to file a bug rarely start from
+    // a docs page.
+    final hasSource = srcRel.endsWith(".md") and srcRel.startsWith("public/") == false
+        and srcRel != BLOG + "/index.md";
+    var edit = "<small class=\"page-tools-edit\">";
+    if (hasSource) {
+        edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View source</a> &middot; ";
     }
-    final edit = viewSourceHtml
-        + "<a class=\"page-tools-edit\" href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a>"
-        + "<a class=\"page-tools-issue\" href=\"" + issueUrl + "\">Report an issue</a>";
+    edit = edit + "<a href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
     // Reading-time chip (module var, set by the renderX() caller). Consume-and-
     // clear so a page that forgets to set it doesn't inherit the previous value.
     var readingHtml = "";
     if (pageReading != "") {
-        readingHtml = "<em class=\"reading-time\" title=\"Estimated reading time\">" + pageReading + "</em>";
+        readingHtml = "<small class=\"reading-time\" title=\"Estimated reading time\">&#x29D7; " + pageReading + "</small>";
     }
     pageReading = "";
     // Second row under the search box: reading time on the left, "Suggest an
@@ -1708,7 +1687,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + navLink(root + "blog/", "Blog", "blog", active)
         + navLink(root + "install/", "Install", "install", active)
         + navLink(root + "playground.html", "Playground", "playground", active)
-        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\">◐</button></li>\n"
+        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button></li>\n"
         + "      </ul>\n"
         + "    </nav>\n"
         + "  </header>\n"
@@ -1725,37 +1704,15 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + pager
         + "  </main>\n"
         + "  <div class=\"page-provenance container\">\n"
-        + "    <small>" + commitFooter(srcRel) + "</small>\n"
+        + "    " + commitFooter(srcRel) + "\n"
         + "  </div>\n"
-        // Multi-column footer (WS Z). Groups links added across the plan
-        // (feeds, changelog, sitemap, Source Code) instead of crowding them onto
-        // one row. Stacks on mobile via the grid CSS in site.css.
+        // Small one-line footer: attribution only. Kept intentionally sparse -
+        // the site is one project, not a portal; deeper links (blog, changelog,
+        // security.txt, feeds) are reachable from Documentation and via the
+        // <link rel="alternate"> discovery tags in <head>, not by crowding the
+        // footer with a directory.
         + "  <footer class=\"site-footer container\">\n"
-        + "    <nav aria-label=\"Site\" class=\"footer-columns\">\n"
-        + "      <div><h4>Project</h4><ul>"
-        + "<li><a href=\"" + GH + "\">Source Code</a></li>"
-        + "<li><a href=\"" + GH + "/blob/" + metaBranch + "/CHANGELOG.md\">Changelog</a></li>"
-        + "<li><a href=\"" + GH + "/releases\">Releases</a></li>"
-        + "<li><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a></li>"
-        + "</ul></div>\n"
-        + "      <div><h4>Docs</h4><ul>"
-        + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>"
-        + "<li><a href=\"" + root + "install/\">Download</a></li>"
-        + "<li><a href=\"" + root + "playground.html\">Playground</a></li>"
-        + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
-        + "</ul></div>\n"
-        + "      <div><h4>Community</h4><ul>"
-        + "<li><a href=\"" + GH + "/discussions\">Discussions</a></li>"
-        + "<li><a href=\"" + GH + "/issues\">Issues</a></li>"
-        + "<li><a href=\"" + GH + "/blob/" + metaBranch + "/CONTRIBUTING.md\">Contributing</a></li>"
-        + "</ul></div>\n"
-        + "      <div><h4>Meta</h4><ul>"
-        + "<li><a href=\"" + root + "public/\">public</a></li>"
-        + "<li><a href=\"" + root + "sitemap.xml\">Sitemap</a></li>"
-        + "<li><a href=\"" + root + ".well-known/security.txt\">security.txt</a></li>"
-        + "</ul></div>\n"
-        + "    </nav>\n"
-        + "    <p class=\"footer-bottom\"><small>Built with <a href=\"https://buzz-lang.dev/\">Buzz</a> &middot; no cookies, no tracking.</small></p>\n"
+        + "    <small><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a> &middot; <a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
         + "  </footer>\n"
         // One deferred module bundle (esbuild) replaces the nine flat scripts; the
         // head-critical theme.js stays separate above. type=module defers by spec.
@@ -1785,7 +1742,6 @@ fun renderRoot() > void {
     html = tagRunnable(html);
     html = tagAdmonition(html);
     html = tagCodeTitle(html);
-    html = wrapTables(html);
     html = lazyImages(html);
     html = externalLinks(html);
     html = tagMermaid(html);
@@ -1821,7 +1777,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
 
-    final html = tagMermaid(externalLinks(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel)))))))));
+    final html = tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel))))))));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1900,7 +1856,7 @@ fun renderBlogPost(base: str) > void {
     // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
     // both so cross-references (../../documentation/) resolve correctly.
-    final html = tagMermaid(externalLinks(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug))))))));
+    final html = tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug)))))));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
@@ -2141,7 +2097,6 @@ fun site_render() > void {
     renderReleasesAtom();
     renderPublic();
     render404();
-    writeSecurityTxt();
     writeManifest();
     writeServiceWorker();
 

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>time — magus</title>
-  <meta name="description" content="Timestamp formatting/parsing and duration parsing (Go time, UTC).">
+  <title>time module — magus</title>
+  <meta name="description" content="Format and parse timestamps with Go reference layouts (UTC), parse Go duration strings, get now as RFC 3339, and add or diff Unix-millis values.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/modules/time/">
   <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
@@ -28,17 +28,17 @@
         <li><a href="../../blog/">Blog</a></li>
         <li><a href="../../install/">Install</a></li>
         <li><a href="../../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">time</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../modules/">Modules</a></li><li aria-current="page">time module</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">1 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/modules/time.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/modules/time.md&body=Page%3A%20docs/modules/time.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 1 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/modules/time.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -56,7 +56,7 @@
 <h3 id="format">format</h3>
 <p>Render Unix-millis as a string using a Go reference layout (UTC).</p>
 <p><strong>Signature:</strong> <code>time.format(layout, unix_millis) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L71" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -79,12 +79,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> string</p>
 <h3 id="parse">parse</h3>
 <p>Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.</p>
 <p><strong>Signature:</strong> <code>time.parse(layout, value) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L86" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -107,12 +107,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> float64</p>
 <h3 id="parse-duration">parse_duration</h3>
 <p>Parse a Go duration string (e.g. &quot;168h&quot;, &quot;1h30m&quot;) into milliseconds; errors on mismatch.</p>
 <p><strong>Signature:</strong> <code>time.parseDuration(duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L95" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -129,7 +129,7 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> float64</p>
 <h3 id="now-iso">now_iso</h3>
 <p>Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().</p>
@@ -138,7 +138,7 @@
 <h3 id="add">add</h3>
 <p>Add a Go duration string (e.g. &quot;24h&quot;, &quot;-1h30m&quot;) to a Unix-millis timestamp; returns the new Unix-millis timestamp.</p>
 <p><strong>Signature:</strong> <code>time.add(unix_millis, duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -161,12 +161,12 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> float64</p>
 <h3 id="diff">diff</h3>
 <p>Return a minus b in milliseconds (positive when a is later than b).</p>
 <p><strong>Signature:</strong> <code>time.diff(a, b) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L115" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -189,26 +189,20 @@
 <td></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Returns:</strong> float64</p>
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../strings/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">strings</span></a>
-      <a class="page-nav-next" href="../vcs/"><span class="page-nav-dir">Next</span><span class="page-nav-title">vcs</span></a>
+      <a class="page-nav-prev" href="../strings/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">strings module</span></a>
+      <a class="page-nav-next" href="../vcs/"><span class="page-nav-dir">Next</span><span class="page-nav-title">vcs module</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/modules/time.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/modules/time.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1">4f6f02c</a> <time datetime="2026-07-01T00:30:08Z">July 1, 2026, 12:30 AM UTC</time> regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0">b446235</a> <time datetime="2026-06-10T23:51:00Z">June 10, 2026, 11:51 PM UTC</time> zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf">76aa6d3</a> <time datetime="2026-06-03T23:47:00Z">June 3, 2026, 11:47 PM UTC</time> cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa">6477ddd</a> <time datetime="2026-05-28T00:33:00Z">May 28, 2026, 12:33 AM UTC</time> native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1">765b783</a> <time datetime="2026-05-07T03:42:00Z">May 7, 2026, 3:42 AM UTC</time> a parallel build orchestrator with content-addressed caching</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa"><code>6477ddd</code></a> <small><time datetime="2026-05-28T00:33:00Z">May 28, 2026</time></small> - native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/modules/time.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/modules/time.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../../documentation/">Documentation</a></li><li><a href="../../install/">Download</a></li><li><a href="../../playground.html">Playground</a></li><li><a href="../../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../../public/">public</a></li><li><a href="../../sitemap.xml">Sitemap</a></li><li><a href="../../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>
 </body>

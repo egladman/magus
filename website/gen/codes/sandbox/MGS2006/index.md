@@ -1,3 +1,9 @@
+---
+title: "MGS2006: PATH-shim manager stripped"
+description: Fires when a subprocess likely failed because the sandbox stripped env vars that a PATH-shim runtime manager such as mise, asdf, or direnv needs.
+tags: [MGS2006, sandbox, mise, asdf, direnv, PATH, shims, passthrough]
+---
+
 # MGS2006: likely PATH-shim manager stripped
 
 A subprocess failed and magus suspects the cause is sandbox

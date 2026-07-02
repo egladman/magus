@@ -1,3 +1,9 @@
+---
+title: "MGS4001: filesystem race condition"
+description: Fires when two or more concurrent projects modify the same git-tracked file during overlapping execution windows under the same target.
+tags: [MGS4001, race, filesystem, concurrency, parallel, watch, suppression]
+---
+
 # MGS4001: filesystem race condition detected
 
 Two or more concurrently executing projects modified the same git-tracked file

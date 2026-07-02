@@ -30,6 +30,9 @@ import { copyFeedback } from "./lib/clipboard.js";
     btn.type = "button";
     btn.className = "code-copy";
     btn.setAttribute("aria-label", "Copy code to clipboard");
+    btn.setAttribute("title", "Copy code to clipboard");
+    btn.setAttribute("data-tooltip", "Copy code");
+    btn.setAttribute("data-placement", "left");
     btn.innerHTML = CLIPBOARD;
     wrap.appendChild(btn);
 

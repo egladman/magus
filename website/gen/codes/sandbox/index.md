@@ -1,3 +1,9 @@
+---
+title: sandbox diagnostics
+description: Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.
+tags: [sandbox, diagnostics, error codes, MGS2xxx, security, permissions, landlock, supply chain]
+---
+
 # The sandbox
 
 The sandbox confines every magus subprocess and in-process spell to the

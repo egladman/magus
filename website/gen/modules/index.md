@@ -1,3 +1,9 @@
+---
+title: magus stdlib
+description: Overview of the magus stdlib modules for magusfiles - filesystem, process, HTTP, encoding, crypto, VCS, and more. Sandbox-aware host methods over Buzz.
+tags: [magus, stdlib, buzz stdlib, module reference, magusfile, host methods]
+---
+
 # Magusfile Module Reference
 
 These are the runtime utility modules. Import each under its bare name — `import "fs"`, then `fs.glob(...)` — with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.

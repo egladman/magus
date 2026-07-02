@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Telemetry (OpenTelemetry) — magus</title>
-  <meta name="description" content="magus can export metrics and traces to any OTLP collector you run. Telemetry is OFF by default: there is no magus-operated backend. The
-collector is">
+  <title>Telemetry — magus</title>
+  <meta name="description" content="Export magus metrics and traces to any OTLP collector you run, with head-based sampling, resource attributes, and full instrument reference.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/telemetry/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -29,17 +28,17 @@ collector is">
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Telemetry (OpenTelemetry)</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Telemetry</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">5 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/telemetry.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/telemetry.md&body=Page%3A%20docs/telemetry.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 5 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/telemetry.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -69,7 +68,7 @@ config in <a href="../internal/config/config.go"><code>internal/config/config.go
     x-api-key: &quot;…&quot;
 </code></pre>
 <p>Or via the environment:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Env var</th>
@@ -116,13 +115,13 @@ config in <a href="../internal/config/config.go"><code>internal/config/config.go
 <td>Head-based trace sampling ratio in <code>[0,1]</code></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><strong>Export details.</strong> magus pushes metrics over OTLP on a periodic reader every
 <strong>30s</strong>. It batches traces and samples them head-based by <code>sample_ratio</code>
 (<code>1.0</code> = every trace). Metrics are unsampled: every recorded point is exported.</p>
 <h2 id="resource-attributes">Resource attributes</h2>
 <p>Every metric and span carries these resource attributes:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Attribute</th>
@@ -151,12 +150,12 @@ config in <a href="../internal/config/config.go"><code>internal/config/config.go
 <td>detected host metadata</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="metrics">Metrics</h2>
 <h3 id="cache-local">Cache (local)</h3>
 <p>Low-cardinality aggregate view of the on-disk content-addressed cache; no
 per-project attribute.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -196,7 +195,7 @@ per-project attribute.</p>
 <td>Wall-clock of a single <code>Cache.Run</code></td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h3 id="remote-cache">Remote cache</h3>
 <p>The <a href="../remote-cache/">shared backend</a> (S3, GitHub Actions, ...), exported only
 when one is wired via <code>magus.cache.remote(...)</code>. These mirror the local-cache
@@ -205,7 +204,7 @@ local counters: a remote hit is still a <em>local</em> miss, because the remote 
 only runs after the local store misses. Instrumentation wraps the backend
 interface, so it applies to every backend (including ones you write) with no
 backend changes.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -252,13 +251,13 @@ backend changes.</p>
 <td>Bytes transferred, recorded on hits and puts only (egress/ingress cost)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>outcome ∈ {hit, miss, stored, error}</code>; <code>stored</code> is a successful <code>put</code>.
 <strong>Remote hit-rate</strong> is <code>hits / (hits + misses)</code>. <strong>Put success</strong> is the
 <code>magus.cache.remote.duration</code> count for <code>op=put</code> minus
 <code>magus.cache.remote.errors</code> for <code>op=put</code>.</p>
 <h3 id="graph">Graph</h3>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -284,13 +283,13 @@ backend changes.</p>
 <td>Wall-clock of a single graph query</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>strategy</code> is present only when the query reports one. <code>op=build</code> is the full
 graph build.</p>
 <h3 id="target-runs">Target runs</h3>
 <p>Per-project, per-spell. <code>magus.project</code> has unbounded cardinality; see
 <a href="#cardinality">Cardinality</a>.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -316,11 +315,11 @@ graph build.</p>
 <td>Wall-clock of a single target execution</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>outcome ∈ {success, error}</code> · <code>cache.hit ∈ {true, false}</code> · one row is emitted
 per resolved spell per project.</p>
 <h3 id="concurrency-pool">Concurrency pool</h3>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -346,12 +345,12 @@ per resolved spell per project.</p>
 <td>Concurrency slots currently in use (gauge-like)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>magus.pool.slots.inflight</code> is an up-down counter: it rises as targets acquire
 slots and falls as they release, so its value reads as the live in-use depth.</p>
 <h2 id="traces-spans">Traces (spans)</h2>
 <p>Spans are sampled head-based by <code>telemetry.sample_ratio</code>.</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Span</th>
@@ -396,7 +395,7 @@ slots and falls as they release, so its value reads as the live in-use depth.</p
 <td>A retention sweep (<code>magus config cache prune --remote</code>)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>The <code>magus.cache.hash</code> / <code>replay</code> / <code>snapshot</code> spans break a target's latency
 down by phase: hashing vs. building vs. I/O. The remote <code>get</code>/<code>put</code> spans put a
 network fetch or upload inline in the build trace with its own latency, so a slow
@@ -420,20 +419,14 @@ attribute would.</p>
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../targets/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Anatomy of a magus Target</span></a>
+      <a class="page-nav-prev" href="../targets/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Targets</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/telemetry.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/telemetry.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a> <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a> <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1">765b783</a> <time datetime="2026-05-07T03:42:00Z">May 7, 2026, 3:42 AM UTC</time> a parallel build orchestrator with content-addressed caching</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/telemetry.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/telemetry.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

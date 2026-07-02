@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Operations and the magus work hierarchy — magus</title>
-  <meta name="description" content="This document defines an Operation, magus's smallest named unit of tool work, and fixes its place in the hierarchy between Spells,
-Targets, and the result">
+  <title>Operations — magus</title>
+  <meta name="description" content="Defines an Operation, its place in the Spell to Target to Process hierarchy, and how fork ops and function ops compose into runnable targets.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/operations/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -29,17 +28,17 @@ Targets, and the result">
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../install/">Install</a></li>
         <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Operations and the magus work hierarchy</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Operations</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">5 min read</em><a class="page-tools-source" href="index.md">View source</a><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/operations.md">Suggest an edit</a><a class="page-tools-issue" href="https://github.com/egladman/magus/issues/new?title=Docs%20issue%3A%20docs/operations.md&body=Page%3A%20docs/operations.md%0A%0A">Report an issue</a></div>
+    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 5 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/operations.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -90,7 +89,7 @@ Target (export fun) ──composes──▶ Operations  +  ──needs──▶ 
   ▼ run by the dispatcher (cacheable, charm-modified)
 target.result event   (per target; no per-op breakdown)
 </code></pre>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Layer</th>
@@ -125,11 +124,11 @@ target.result event   (per target; no per-op breakdown)
 <td><code>Path + Name</code> (<a href="../targets/">Target</a>)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p>Charms (<a href="../charms/">charms.md</a>) sit orthogonal to this stack: a charm rewrites an
 Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own.</p>
 <h2 id="results-what-each-layer-produces">Results: what each layer produces</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Result</th>
@@ -162,7 +161,7 @@ Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own
 <td>exists</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <ul>
 <li>
 <p><strong><code>ExecResult</code> exists in both worlds.</strong> It is the Go <code>run.ExecResult</code> and the
@@ -184,7 +183,7 @@ across the cross-project boundary).</p>
 <p>magus overloads two words. Formalizing <strong>Operation</strong> fixes the first and exposes a
 latent misnaming in the second.</p>
 <p><strong>Three unrelated &quot;op&quot;s.</strong> Only the first is the Operation defined here:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Term</th>
@@ -213,7 +212,7 @@ latent misnaming in the second.</p>
 <td>remote-cache backend call (telemetry)</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>PatchOp</code> and <code>RemoteOp</code> keep their names; they are genuinely different
 operations. The handler callback parameter is named <code>cb</code>, not <code>op</code>, for exactly
 this reason (<a href="../spells/#operations-come-in-two-shapes">spells.md</a>).</p>
@@ -233,7 +232,7 @@ preserved. The docs warn against substituting &quot;Operation&quot; for a work-u
 protected <code>ispell.Target</code>, which was the actual offender.</p>
 <h2 id="relationship-to-the-value-types">Relationship to the value types</h2>
 <p>The serializable Buzz value types model the <em>nouns</em> around this hierarchy:</p>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Value type</th>
@@ -258,11 +257,11 @@ protected <code>ispell.Target</code>, which was the actual offender.</p>
 <td>Process</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <p><code>TargetQuery</code> <em>produces</em> <code>Target</code>s; a <code>Target</code> is run as a set of <code>Operation</code>s;
 each <code>Operation</code> yields an <code>ExecResult</code>.</p>
 <h2 id="glossary">Glossary</h2>
-<div class="table-wrap"><table>
+<table>
 <thead>
 <tr>
 <th>Term</th>
@@ -295,7 +294,7 @@ each <code>Operation</code> yields an <code>ExecResult</code>.</p>
 <td>The dispatcher-emitted report event for one target run: project, target, status, cache hit, duration.</td>
 </tr>
 </tbody>
-</table></div>
+</table>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../spells/">spells.md</a>: anatomy of a spell, the two op shapes, naming operations.</li>
@@ -305,21 +304,15 @@ each <code>Operation</code> yields an <code>ExecResult</code>.</p>
     </article>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../mcp/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MCP: driving magus from agents</span></a>
+      <a class="page-nav-prev" href="../mcp/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MCP</span></a>
       <a class="page-nav-next" href="../remote-cache/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Remote caching</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-07-01T05:28:00Z">July 1, 2026, 5:28 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/668d8d5a0d838a20e9cadd388776a291835d5bf5">668d8d5</a>) &middot; <a href="https://github.com/egladman/magus/commits/docs-site-overhaul/docs/operations.md">History</a> &middot; <a href="https://github.com/egladman/magus/blame/docs-site-overhaul/docs/operations.md">Blame</a><details class="page-history"><summary>Recent history</summary><ul><li><a href="https://github.com/egladman/magus/commit/668d8d5a0d838a20e9cadd388776a291835d5bf5">668d8d5</a> <time datetime="2026-07-01T05:28:00Z">July 1, 2026, 5:28 AM UTC</time> rename target weight policy to slots, unify isolated as exclusive</li><li><a href="https://github.com/egladman/magus/commit/7087163811821ab7acc2bb3f7d75b090fa9c0130">7087163</a> <time datetime="2026-07-01T04:21:51Z">July 1, 2026, 4:21 AM UTC</time> add per-target concurrency weight</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4">2d8cb47</a> <time datetime="2026-07-01T00:25:12Z">July 1, 2026, 12:25 AM UTC</time> apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e">83a4519</a> <time datetime="2026-06-23T03:19:36Z">June 23, 2026, 3:19 AM UTC</time> tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c">1a9364b</a> <time datetime="2026-06-18T23:20:00Z">June 18, 2026, 11:20 PM UTC</time> formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li></ul></details></small>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/668d8d5a0d838a20e9cadd388776a291835d5bf5"><code>668d8d5</code></a> <small><time datetime="2026-07-01T05:28:00Z">Jul 1, 2026</time></small> - rename target weight policy to slots, unify isolated as exclusive</li><li><a href="https://github.com/egladman/magus/commit/7087163811821ab7acc2bb3f7d75b090fa9c0130"><code>7087163</code></a> <small><time datetime="2026-07-01T04:21:51Z">Jul 1, 2026</time></small> - add per-target concurrency weight</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/operations.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/operations.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <nav aria-label="Site" class="footer-columns">
-      <div><h4>Project</h4><ul><li><a href="https://github.com/egladman/magus">Source Code</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/egladman/magus/releases">Releases</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="../documentation/">Documentation</a></li><li><a href="../install/">Download</a></li><li><a href="../playground.html">Playground</a></li><li><a href="../blog/">Blog</a></li></ul></div>
-      <div><h4>Community</h4><ul><li><a href="https://github.com/egladman/magus/discussions">Discussions</a></li><li><a href="https://github.com/egladman/magus/issues">Issues</a></li><li><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/CONTRIBUTING.md">Contributing</a></li></ul></div>
-      <div><h4>Meta</h4><ul><li><a href="../public/">public</a></li><li><a href="../sitemap.xml">Sitemap</a></li><li><a href="../.well-known/security.txt">security.txt</a></li></ul></div>
-    </nav>
-    <p class="footer-bottom"><small>Built with <a href="https://buzz-lang.dev/">Buzz</a> &middot; no cookies, no tracking.</small></p>
+    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

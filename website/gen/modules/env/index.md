@@ -1,3 +1,9 @@
+---
+title: env module
+description: Read, set, unset, list, and expand process environment variables. Sandbox-aware helpers including get_or, require, and $VAR expansion in strings.
+tags: [env, env vars, environment, getenv, expand, home, magus stdlib]
+---
+
 # env
 
 Process environment variable access.

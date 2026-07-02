@@ -1,3 +1,9 @@
+---
+title: os module
+description: Run commands directly or through the shell, manage env scopes and concurrency slots, retry with backoff, sleep, which, hostname, and platform triple.
+tags: [os, exec, shell, process, retry, which, sleep, concurrency, magus stdlib]
+---
+
 # os
 
 Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a line through the shell. Both stream output live and return a result {stdout, stderr, code, ok}.

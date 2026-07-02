@@ -1,3 +1,9 @@
+---
+title: magus server
+description: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.
+tags: [cli, magus server, daemon, server, socket, persistent]
+---
+
 # magus-server
 
 Manage the persistent magus daemon

@@ -1,3 +1,9 @@
+---
+title: magus module
+description: Magus core primitives - run, describe, insight, doctor, cmd, bust_cache, and has_charm. Invoke nested magus subcommands from within a target.
+tags: [magus, run, describe, insight, doctor, cmd, has_charm, magus stdlib]
+---
+
 # magus
 
 Magus core primitives.
