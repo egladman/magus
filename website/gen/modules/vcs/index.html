@@ -75,11 +75,11 @@
 <h2 id="methods">Methods</h2>
 <h3 id="root">root</h3>
 <p>Absolute path of the repository root.</p>
-<p><strong>Signature:</strong> <code>vcs.root() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L165">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.root() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L165" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="diff">diff</h3>
 <p>List files changed against the given base (defaults to vcs.base).</p>
-<p><strong>Signature:</strong> <code>vcs.diff([base]) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L178">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.diff([base]) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L178" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -101,23 +101,23 @@
 <p><strong>Returns:</strong> []string</p>
 <h3 id="short-hash">short_hash</h3>
 <p>Short commit hash, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.shortHash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L194">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.shortHash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L194" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="hash">hash</h3>
 <p>Full commit hash, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.hash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L207">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.hash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L207" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="branch">branch</h3>
 <p>Current branch, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.branch() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L220">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.branch() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L220" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="commit-date">commit_date</h3>
 <p>Commit date string, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.commitDate() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L233">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.commitDate() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L233" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="is-dirty">is_dirty</h3>
 <p>True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([&quot;MAGUS.md&quot;]) — the right way to gate generated outputs without shelling out to git or parsing porcelain.</p>
-<p><strong>Signature:</strong> <code>vcs.isDirty([paths]) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L246">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.isDirty([paths]) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L246" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -139,11 +139,11 @@
 <p><strong>Returns:</strong> bool</p>
 <h3 id="metadata">metadata</h3>
 <p>Full metadata table: short_hash, hash, branch, commit_date, is_dirty.</p>
-<p><strong>Signature:</strong> <code>vcs.metadata() → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L266">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.metadata() → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L266" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="commit">commit</h3>
 <p>Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up — test a field (e.g. c.date == &quot;&quot;) rather than for null.</p>
-<p><strong>Signature:</strong> <code>vcs.commit([rev]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L294">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.commit([rev]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L294" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -165,7 +165,7 @@
 <p><strong>Returns:</strong> any</p>
 <h3 id="history">history</h3>
 <p>Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.</p>
-<p><strong>Signature:</strong> <code>vcs.history([limit]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L308">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.history([limit]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L308" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -187,11 +187,11 @@
 <p><strong>Returns:</strong> any</p>
 <h3 id="exe">exe</h3>
 <p>Absolute path to the active VCS executable (git/hg/jj), or &quot;&quot; if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).</p>
-<p><strong>Signature:</strong> <code>vcs.exe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L338">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.exe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L338" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="describe">describe</h3>
 <p>Human-readable version string from the nearest tag (git's <code>describe --tags --always --dirty</code>: tag, else short hash, with a -dirty suffix for a modified tree). &quot;&quot; when no VCS is resolved, or for a backend without a tag-describe concept (jj) — so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.</p>
-<p><strong>Signature:</strong> <code>vcs.describe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L324">source</a></p>
+<p><strong>Signature:</strong> <code>vcs.describe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L324" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
     </article>
     </div>

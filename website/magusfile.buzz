@@ -421,6 +421,37 @@ fun tagRunnable(html: str) > str {
     return buf + rest;
 }
 
+// externalLinks adds rel="noopener noreferrer" and target="_blank" to every
+// http(s) link that doesn't already have them, and marks the anchor with a
+// data-external attribute so CSS can add a small "leaves this site" glyph via
+// ::after. Skips GitHub source links inside the article? No - they're external
+// too. Deterministic transform over rendered HTML.
+fun externalLinks(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("<a href=\"http");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx);
+        // Locate the closing ">" of the opening tag.
+        final closeIdx = rest.indexOf(">");
+        if (closeIdx == null) { return buf + rest; }
+        var tag = rest.sub(0, closeIdx + 1);
+        var attrs = "";
+        if (tag.indexOf("rel=") == null) { attrs = attrs + " rel=\"noopener noreferrer\""; }
+        if (tag.indexOf("target=") == null) { attrs = attrs + " target=\"_blank\""; }
+        if (tag.indexOf("data-external") == null) { attrs = attrs + " data-external"; }
+        if (attrs != "") {
+            // Insert before the closing ">".
+            tag = tag.sub(0, tag.len() - 1) + attrs + ">";
+        }
+        buf = buf + tag;
+        rest = rest.sub(closeIdx + 1);
+        idx = rest.indexOf("<a href=\"http");
+    }
+    return buf + rest;
+}
+
 // wrapTables inserts a scrolling wrapper around every article <table>: on
 // narrow screens the table can overflow horizontally inside the wrapper
 // instead of blowing out the article column and forcing whole-page scroll.
@@ -1612,6 +1643,7 @@ fun renderRoot() > void {
     html = tagCodeTitle(html);
     html = wrapTables(html);
     html = lazyImages(html);
+    html = externalLinks(html);
     html = tagMermaid(html);
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
@@ -1645,7 +1677,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
 
-    final html = tagMermaid(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel))))))));
+    final html = tagMermaid(externalLinks(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel)))))))));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1724,7 +1756,7 @@ fun renderBlogPost(base: str) > void {
     // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
     // both so cross-references (../../documentation/) resolve correctly.
-    final html = tagMermaid(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug)))))));
+    final html = tagMermaid(externalLinks(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug))))))));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
