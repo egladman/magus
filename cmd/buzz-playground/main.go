@@ -124,6 +124,12 @@ func main() {
 	// (parse + highlight happen in loadExample), then show the sandbox banner.
 	u.setupExamplePicker()
 	u.loadExample(examples[0].id)
+	// If the URL carries a #source=<base64url> deep link, replace the editor
+	// contents with the decoded source. The hash keeps source client-side (never
+	// sent to the server / CDN / referrer / logs), which is why the plan pins it
+	// to the hash instead of a ?code= query. Any load failure silently falls back
+	// to the seeded example.
+	u.applyHashSource()
 	u.render(u.shell.Banner())
 
 	if loading := doc.Call("getElementById", "loading"); loading.Truthy() {
@@ -172,6 +178,55 @@ func (u *ui) loadExample(id string) {
 		if name := u.doc.Call("getElementById", "file-name"); name.Truthy() {
 			name.Set("textContent", ex.file)
 		}
+		u.onSourceChanged()
+		return
+	}
+}
+
+// applyHashSource decodes a `#source=<base64url>` URL fragment and drops the
+// decoded text into the editor, replacing whatever example was seeded. This is
+// how "Open in Playground" deep-links from the docs (WS N) and the future Share
+// button pass source into the page — through the URL hash, so the content stays
+// client-side and never rides an HTTP request. Any malformed hash silently
+// no-ops (the seeded example stays put).
+func (u *ui) applyHashSource() {
+	hash := js.Global().Get("location").Get("hash").String()
+	if hash == "" {
+		return
+	}
+	// Strip leading "#" and split into k=v pairs; consume only "source".
+	q := strings.TrimPrefix(hash, "#")
+	for _, part := range strings.Split(q, "&") {
+		k, v, ok := strings.Cut(part, "=")
+		if !ok || k != "source" {
+			continue
+		}
+		// Base64URL-decode without depending on encoding/base64 (TinyGo builds
+		// this file, and pulling in extra encoding packages balloons the wasm).
+		// Instead, delegate to the browser: atob (standard base64) after
+		// converting URL-safe -> standard alphabet and re-padding.
+		s := strings.ReplaceAll(v, "-", "+")
+		s = strings.ReplaceAll(s, "_", "/")
+		switch len(s) % 4 {
+		case 2:
+			s += "=="
+		case 3:
+			s += "="
+		}
+		// atob returns a "binary string" (each JS char = one decoded byte); wrap
+		// it in decodeURIComponent(escape(...)) to reinterpret as UTF-8. Any
+		// invalid input throws; catch it to keep the boot path silent.
+		defer func() { _ = recover() }()
+		atob := js.Global().Get("atob")
+		if !atob.Truthy() {
+			return
+		}
+		decoded := atob.Invoke(s).String()
+		// decoded is bytes-as-latin1; UTF-8-decode via decodeURIComponent(escape).
+		esc := js.Global().Get("escape").Invoke(decoded).String()
+		src := js.Global().Get("decodeURIComponent").Invoke(esc).String()
+		u.src.Set("value", src)
+		u.src.Set("scrollTop", 0)
 		u.onSourceChanged()
 		return
 	}
