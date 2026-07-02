@@ -1,7 +1,7 @@
 ---
 title: magus completion
-description: Print a bash, zsh, or fish shell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.
-tags: [cli, magus completion, completion, bash, zsh, fish, shell]
+description: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.
+tags: [cli, magus completion, completion, bash, zsh, fish, powershell, shell]
 ---
 
 # magus-completion
@@ -10,7 +10,7 @@ Print a shell completion script
 
 ## Synopsis
 
-**magus** completion \<bash|zsh|fish\>
+**magus** completion \<bash|zsh|fish|powershell\>
 
 ## Description
 
@@ -34,6 +34,12 @@ magus completion zsh >> ~/.zshrc
 
 ```sh
 magus completion fish >> ~/.config/fish/config.fish
+```
+
+*PowerShell*
+
+```sh
+magus completion powershell >> $PROFILE
 ```
 
 ## See Also

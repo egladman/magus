@@ -1,7 +1,7 @@
 ---
 title: os module
-description: Run commands directly or through the shell, manage env scopes and concurrency slots, retry with backoff, sleep, which, hostname, and platform triple.
-tags: [os, exec, shell, process, retry, which, sleep, concurrency, magus stdlib]
+description: Process execution.
+tags: [os, module, stdlib, magusfile]
 ---
 
 # os

@@ -26,7 +26,7 @@
       <ul>
         <li><a href="../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../blog/">Blog</a></li>
-        <li><a href="../install/">Install</a></li>
+        <li><a href="../download/">Download</a></li>
         <li><a href="../playground.html">Playground</a></li>
         <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
@@ -38,19 +38,25 @@
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 2 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/documentation.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/documentation.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#core-concepts" title="Core concepts">Core concepts</a></li><li><a href="#going-further" title="Going further">Going further</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
+        <ul><li><a href="#philosophy" title="Philosophy">Philosophy</a></li><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#core-concepts" title="Core concepts">Core concepts</a></li><li><a href="#going-further" title="Going further">Going further</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
       </nav>
     </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="documentation">Documentation</h1>
-<p>New to magus? <a href="../install/"><strong>Install it</strong></a>, skim the two core ideas below (<a href="../targets/">Targets</a> and <a href="../spells/">Spells</a>), or <a href="../playground.html">try it live in the playground</a> without installing anything.</p>
+<p>New to magus? <a href="../download/">Install it</a>, skim the two core ideas below (<a href="../targets/">Targets</a> and <a href="../spells/">Spells</a>), or <a href="../playground.html">try it live in the playground</a> without installing anything.</p>
+<h2 id="philosophy">Philosophy</h2>
+<p>A build system sits in the hot path of development. You touch it constantly, so every small friction compounds; it earns its keep by staying out of the way.</p>
+<p>So magus does not try to define what &quot;build&quot;, &quot;test&quot;, or &quot;lint&quot; mean for your tools. That is the job of <a href="../spells/">spells</a>: libraries of tool-native operations. The <code>go</code> spell exposes <code>build</code>/<code>test</code>/<code>vet</code>/<code>fmt</code>/<code>lint</code>, the <code>rust</code> spell <code>build</code>/<code>test</code>/<code>clippy</code>/<code>fmt</code>, and your magusfile composes them into the targets you actually run. magus handles the orchestration around them: it computes the affected projects from a change, caches their results, and runs only the minimum.</p>
+<p>And it keeps that machinery transparent. The cache, the daemon socket, and the run log are all just files on disk; inspect them with <code>ls</code> and <code>cat</code>.</p>
 <h2 id="getting-started">Getting started</h2>
-<p><strong>1. <a href="../install/">Install magus</a>.</strong> It is a single self-contained binary: download a build from the <a href="https://github.com/egladman/magus/releases" rel="noopener noreferrer" target="_blank" data-external>releases page</a> and move it onto your <code>PATH</code>, or build from source. The <a href="../install/">installation guide</a> covers both, plus keeping up to date.</p>
+<p><strong>1. <a href="../download/">Install magus</a>.</strong> A single self-contained binary. The <a href="../download/">Download guide</a> covers install, verification, and updating.</p>
 <p><strong>2. Initialize your workspace.</strong> From the root of your repo:</p>
 <pre><code class="language-sh">magus init
 </code></pre>
@@ -86,8 +92,11 @@ magus affected ci   # run ci only for the projects your changes touched
 <h2 id="going-further">Going further</h2>
 <p>Once the basics click, these cover running magus at scale and in CI.</p>
 <ul>
+<li><a href="../ci/">CI</a> - compose a <code>ci</code> target with <code>magus.needs</code>, and the shared-cache trust model.</li>
+<li><a href="../daemon/">Daemon and concurrency</a> - one persistent process, one shared pool across every client.</li>
 <li><a href="../remote-cache/">Remote caching</a> - share the build cache across machines and CI, with a signing-based trust model.</li>
 <li><a href="../debugging/">Debugging</a> - the interactive REPL, <code>magus.pry()</code> breakpoints, and stepping through a target.</li>
+<li><a href="../tips/">Tips and tricks</a> - non-obvious ways to combine subcommands.</li>
 <li><a href="../mcp/">MCP</a> - drive magus from agents over the Model Context Protocol.</li>
 <li><a href="../telemetry/">Telemetry</a> - OpenTelemetry traces and metrics.</li>
 </ul>
@@ -107,16 +116,17 @@ magus affected ci   # run ci only for the projects your changes touched
 </ul>
     </article>
     </div>
+    </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../debugging/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Debugging magusfiles</span></a>
-      <a class="page-nav-next" href="../engines/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Engines</span></a>
+      <a class="page-nav-next" href="../download/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Download magus</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/911856b20e035614b41f02414945d66f6de0a761"><code>911856b</code></a> <small><time datetime="2026-07-01T04:31:23Z">Jul 1, 2026</time></small> - tighten documentation intro and reference</li><li><a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be"><code>72a3537</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - redesign docs site with search, TOC, and copy buttons</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/documentation.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/documentation.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/911856b20e035614b41f02414945d66f6de0a761"><code>911856b</code></a> <small><time datetime="2026-07-01T04:31:23Z">Jul 1, 2026</time></small> - tighten documentation intro and reference</li><li><a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be"><code>72a3537</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - redesign docs site with search, TOC, and copy buttons</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/documentation.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/documentation.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

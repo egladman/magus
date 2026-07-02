@@ -1,7 +1,7 @@
 ---
 title: markdown module
-description: Render GitHub-Flavored Markdown to semantic HTML, extract or strip YAML frontmatter, and auto-rewrite relative .md links to .html equivalents.
-tags: [markdown, gfm, html, render, frontmatter, docs, magus stdlib]
+description: GitHub-Flavored Markdown to semantic HTML.
+tags: [markdown, module, stdlib, magusfile]
 ---
 
 # markdown

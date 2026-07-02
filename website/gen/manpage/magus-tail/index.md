@@ -1,6 +1,6 @@
 ---
 title: magus tail
-description: Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.
+description: "Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test."
 tags: [cli, magus tail, tail, logs, cache, interactive]
 ---
 

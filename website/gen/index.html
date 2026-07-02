@@ -28,7 +28,7 @@
       <ul>
         <li><a href="documentation/">Documentation</a></li>
         <li><a href="blog/">Blog</a></li>
-        <li><a href="install/">Install</a></li>
+        <li><a href="download/">Download</a></li>
         <li><a href="playground.html">Playground</a></li>
         <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
@@ -37,14 +37,16 @@
   <main id="main-content" class="container" tabindex="-1">
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 17 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/README.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/README.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#philosophy" title="Philosophy">Philosophy</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#shell-setup" title="Shell setup">Shell setup</a><ul><li><a href="#shorthand-mgs" title="Shorthand: mgs">Shorthand: <code>mgs</code></a></li><li><a href="#tab-completion" title="Tab completion">Tab completion</a></li></ul></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#ci" title="CI">CI</a><ul><li><a href="#recommendations" title="Recommendations">Recommendations</a></li><li><a href="#shared-cache-trust" title="Shared cache trust">Shared cache trust</a></li></ul></li><li><a href="#concepts" title="Concepts">Concepts</a><ul><li><a href="#workspaces" title="Workspaces">Workspaces</a></li><li><a href="#projects" title="Projects">Projects</a></li><li><a href="#targets" title="Targets">Targets</a></li><li><a href="#spells" title="Spells">Spells</a></li><li><a href="#charms" title="Charms">Charms</a></li></ul></li><li><a href="#tips--tricks" title="Tips &amp; Tricks">Tips &amp; Tricks</a><ul><li><a href="#live-pool-snapshot-in-a-multiplexer-sidebar" title="Live pool snapshot in a multiplexer sidebar">Live pool snapshot in a multiplexer sidebar</a></li><li><a href="#step-through-a-target-to-diagnose-a-flaky-build" title="Step through a target to diagnose a flaky build">Step through a target to diagnose a flaky build</a></li><li><a href="#re-run-only-affected-projects-on-each-save" title="Re-run only affected projects on each save">Re-run only affected projects on each save</a></li><li><a href="#one-shot-daemon-health-probe" title="One-shot daemon health probe">One-shot daemon health probe</a></li><li><a href="#debugging" title="Debugging">Debugging</a></li><li><a href="#recursion" title="Recursion">Recursion</a></li></ul></li><li><a href="#cli" title="CLI">CLI</a><ul><li><a href="#commands" title="Commands">Commands</a></li><li><a href="#argument-forwarding" title="Argument forwarding">Argument forwarding</a></li><li><a href="#output-formats" title="Output formats">Output formats</a></li></ul></li><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#daemon" title="Daemon">Daemon</a><ul><li><a href="#configuring-the-socket-address" title="Configuring the socket address">Configuring the socket address</a></li></ul></li><li><a href="#mcp" title="MCP">MCP</a></li><li><a href="#sandbox" title="Sandbox">Sandbox</a></li><li><a href="#observability" title="Observability">Observability</a><ul><li><a href="#opentelemetry" title="OpenTelemetry">OpenTelemetry</a></li></ul></li></ul>
+        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li><li><a href="#contributing" title="Contributing">Contributing</a></li></ul></li><li><a href="#license" title="License">License</a></li></ul>
       </nav>
     </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
@@ -59,516 +61,81 @@
 <p>Magus computes affected projects from your changes, caches the results, and runs the minimum rebuild set after a change.</p>
 <p>Single binary. Code as configuration. Statically typed. No second toolchain.</p>
 <hr>
-<h2 id="philosophy">Philosophy</h2>
-<p>A build system sits in the hot path of development. You touch it constantly, so every small friction compounds; it earns its keep by staying out of the way.</p>
-<p>So magus does not try to define what &quot;build&quot;, &quot;test&quot;, or &quot;lint&quot; mean for your tools. That is the job of <strong>spells</strong>: libraries of tool-native operations. The <code>go</code> spell exposes <code>build</code>/<code>test</code>/<code>vet</code>/<code>fmt</code>/<code>lint</code>, the <code>rust</code> spell <code>build</code>/<code>test</code>/<code>clippy</code>/<code>fmt</code>, and your magusfile composes them into the targets you actually run. magus handles the orchestration around them: it computes the affected projects from a change, caches their results, and runs only the minimum (see <a href="#spells">Spells</a>).</p>
-<p>And it keeps that machinery transparent. The cache, the daemon socket, and the run log are all just files on disk; inspect them with <code>ls</code> and <code>cat</code>.</p>
-<hr>
+<h2 id="documentation">Documentation</h2>
+<p>Full docs live at <strong><a href="https://eli.gladman.cc/magus/" rel="noopener noreferrer" target="_blank" data-external>https://eli.gladman.cc/magus/</a></strong> (<a href="documentation/">source</a>). Start there for targets, spells, charms, CI, remote caching, the daemon, MCP, telemetry, and the rest.</p>
 <h2 id="install">Install</h2>
-<p>magus is a single self-contained binary. Download a build from the <a href="https://github.com/egladman/magus/releases" rel="noopener noreferrer" target="_blank" data-external>releases page</a> and move it onto your <code>PATH</code>, or build from source. See the <a href="install/">installation guide</a> for the details.</p>
+<p>magus ships as a single self-contained binary. See the <a href="download/">Download guide</a>.</p>
 <hr>
-<h2 id="shell-setup">Shell setup</h2>
-<h3 id="shorthand-mgs">Shorthand: <code>mgs</code></h3>
-<p>The de facto shorthand for <code>magus</code> is <code>mgs</code>: three left-hand keys, fast to type, and collision-free. Either alias it in your shell:</p>
-<pre><code class="language-sh">alias mgs=magus
+<h2 id="development">Development</h2>
+<p>Building magus itself. Requires Go 1.25+; <a href="https://mise.jdx.dev/" rel="noopener noreferrer" target="_blank" data-external>mise</a> is recommended for the pinned toolchain (see <a href="https://github.com/egladman/magus/blob/main/mise.toml" rel="noopener noreferrer" target="_blank" data-external><code>mise.toml</code></a>).</p>
+<pre><code class="language-sh">git clone https://github.com/egladman/magus
+cd magus
+go build -o magus ./cmd/magus
 </code></pre>
-<p>or create a symlink:</p>
-<pre><code class="language-sh">ln -s &quot;$(command -v magus)&quot; ~/.local/bin/mgs
+<p>Run the tests:</p>
+<pre><code class="language-sh">go test ./...
 </code></pre>
-<h3 id="tab-completion">Tab completion</h3>
-<p>Magus ships completion scripts for bash, zsh, and fish:</p>
-<pre><code class="language-sh">magus completion bash &gt;&gt; ~/.bashrc
-magus completion zsh  &gt;&gt; ~/.zshrc
-magus completion fish &gt;&gt; ~/.config/fish/config.fish
+<p>Or, once magus is built, via its own targets:</p>
+<pre><code class="language-sh">magus run test
+magus run ci
 </code></pre>
-<hr>
-<h2 id="quick-start">Quick start</h2>
-<p><strong>1. Initialize the workspace</strong></p>
-<p>From the root of your repo:</p>
-<pre><code class="language-sh">magus init
-</code></pre>
-<p>Writes <code>magus.yaml</code>, stubs <code>magusfile.buzz</code>, and wires the VCS merge driver. Config goes to <code>$XDG_CONFIG_HOME/magus/magus.yaml</code> by default; <code>--local</code> writes it into the repo instead.</p>
-<p><strong>2. Edit the magusfile</strong></p>
-<p><code>magus init</code> drops a starter <code>magusfile.buzz</code> registering your project and wiring CI flow. Targets are declared as exported functions, with no registration call needed:</p>
-<pre><code class="language-buzz">// magusfile.buzz (generated by `magus init`)
-import &quot;magus&quot;;
-import &quot;spells/hello&quot;;   // ./spells/hello/spell.buzz
-
-magus.project({
-    &quot;spells&quot;: [hello],
-});
-
-// Each exported function becomes a runnable target.
-// 'ci' is the canonical entry point for `magus affected ci`.
-export fun preflight(args: [str]) &gt; void {}
-export fun generate(args: [str]) &gt; void {}
-export fun format(args: [str]) &gt; void {}
-export fun lint(args: [str]) &gt; void {}
-export fun build(args: [str]) &gt; void { hello.build(); }
-export fun test(args: [str]) &gt; void {}
-</code></pre>
-<p><strong>3. Verify</strong></p>
-<pre><code class="language-sh">magus ls               # lists the registered project
-magus run build        # delegates to hello's build target
-magus run ci           # runs the ci target you composed, read-only
-</code></pre>
-<hr>
-<h2 id="ci">CI</h2>
-<p><code>ci</code> is an ordinary magusfile target; magus does not hardcode its steps. Export a <code>ci</code> function, wire the flow with <code>magus.needs</code>, and magus runs it read-only.</p>
-<pre><code class="language-buzz">export fun ci(args: [str]) &gt; void {
-    // declare the edges you want; independent steps run in parallel
-    magus.needs(
-        magus.target.literal(&quot;preflight&quot;),
-        magus.target.literal(&quot;generate&quot;),
-        magus.target.literal(&quot;format&quot;),
-        magus.target.literal(&quot;lint&quot;),
-        magus.target.literal(&quot;build&quot;),
-        magus.target.literal(&quot;test&quot;),
-    );
-}
-</code></pre>
-<h3 id="recommendations">Recommendations</h3>
-<p>We document this order; we don't enforce it. Chain steps with <code>magus.needs</code> where order matters (e.g. <code>test</code> depends on <code>build</code>).</p>
-<div class="mermaid-src"><pre><code class="language-mermaid">flowchart TD
-    cmd[&quot;magus affected ci&quot;] --&gt; preflight
-    subgraph targets[&quot;Targets (composed in your magusfile)&quot;]
-        preflight --&gt; generate
-        generate --&gt; format
-        format --&gt; lint
-        lint --&gt; build
-        build --&gt; test
-    end
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<h3 id="shared-cache-trust">Shared cache trust</h3>
-<p><strong>Who may write the cache is a trust boundary.</strong> The primary defense is Ed25519 signing: a consumer replays a remote artifact only if it carries a signature from a key in <code>cache.remote.trusted_keys</code>. Wiring a remote backend without a trust set is refused.</p>
-<pre><code class="language-yaml"># magus.yaml  -  bind the backend in magusfile.buzz via magus.cache.remote(github)
-cache:
-  remote:
-    trusted_keys:
-      - &quot;&lt;base64 Ed25519 public key&gt;&quot;   # magus config cache key generate
-</code></pre>
-<p>A complementary defense is to open the cache <strong>read-only on untrusted refs</strong>: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and flake detector read it): restore always, save only from trusted pushes.</p>
-<pre><code class="language-yaml"># PRs replay the cache and see main's history, but write neither
-MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
-</code></pre>
-<p>To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own backend) and generate signing keys, see <a href="remote-cache/">Remote caching</a>.</p>
-<hr>
-<h2 id="concepts">Concepts</h2>
-<p>The magus model comes down to five terms: a <strong>workspace</strong> holds <strong>projects</strong>; in each project you run <strong>targets</strong>, which compose the operations that <strong>spells</strong> provide; <strong>charms</strong> modify how a run behaves.</p>
-<h3 id="workspaces">Workspaces</h3>
-<p>magus scopes to the current working directory by default.</p>
-<pre><code class="language-sh">magus run build        # current project
-magus run build api    # explicit project (workspace-relative)
-magus run build ../web # relative to cwd: from web/studio this targets web/web
-magus run build .      # the project containing the cwd
-magus run build /      # entire workspace
-</code></pre>
-<p>Bare paths (<code>api</code>, <code>web/studio</code>) are always workspace-relative; dot-relative
-paths (<code>./x</code>, <code>../x</code>) resolve against the current directory. Absolute paths and
-paths that escape the workspace root are rejected, so magus never operates
-outside the workspace it discovered. See <a href="targets/#path-resolution-on-the-cli"><code>docs/targets.md</code></a>
-for the full rules, including how symlinks are treated.</p>
-<p>Scoping is descend-only: every spell runs with <code>cwd = project.Dir</code> and can only
-reach files below it. Sibling projects are structurally invisible: a formatter on
-<code>api</code> cannot touch <code>web</code> regardless of its glob pattern. If a spell walks into a
-registered <strong>descendant</strong> project's directory, magus catches it at runtime
-(write-mode targets only) and emits diagnostic code <strong>MGS3001</strong>. See
-<a href="codes/sandbox/MGS3001/"><code>docs/codes/sandbox/MGS3001.md</code></a>.</p>
-<h3 id="projects">Projects</h3>
-<p>A project is a directory magus treats as a unit of work, with its own targets,
-cache entries, and scope. magus infers dependencies between projects automatically
-from language manifests: <code>go.mod</code> <code>require</code> directives, <code>Cargo.toml</code> <code>path = &quot;...&quot;</code>
-entries, and <code>package.json</code> <code>workspace:*</code> entries. You only need to declare
-dependencies explicitly when magus can't see the edge, typically cross-language
-relationships or codegen producers.</p>
-<pre><code class="language-buzz">magus.project(&quot;apps/ui&quot;, {
-    &quot;spell&quot;:      { &quot;name&quot;: &quot;typescript&quot; },
-    &quot;depends_on&quot;: [&quot;api&quot;, &quot;internal/schema&quot;],
-});
-</code></pre>
-<p>Paths can be repo-relative (<code>&quot;api&quot;</code>) or relative to the declaring project (<code>&quot;../api&quot;</code>).</p>
-<p>Declared dependencies affect <code>magus affected</code>: when <code>api</code> changes, <code>apps/ui</code> is included in the affected set and rebuilt downstream. They also appear in <code>magus describe</code> output and graph views.</p>
-<h3 id="targets">Targets</h3>
-<p>A <strong>target</strong> is <em>what</em> you run (<code>magus run lint</code>): a named operation declared as an
-exported function in your <code>magusfile.buzz</code>. Targets compose the operations spells
-provide; you <strong>bind</strong> spells and <strong>invoke</strong> targets. See also <a href="targets/">Target Anatomy</a> and <a href="spells/#spells-vs-targets">Spells vs Targets</a>.</p>
-<p>The full form of a run target is:</p>
-<pre><code>magus run [&lt;spell&gt;::]&lt;target-or-op&gt;[:&lt;charm&gt;,...] [project...] [-- &lt;extra args&gt;]
-</code></pre>
-<p>The project is always a positional argument; the <code>:</code> after a target introduces
-<strong>charms</strong>, not a project path.</p>
-<p><strong>Basic</strong></p>
-<pre><code class="language-sh">magus run build          # build the cwd project (or all if not inside one)
-magus run test api       # test the 'api' project specifically
-magus run lint /         # lint every project in the workspace
-</code></pre>
-<p><strong>Spell-qualified (<code>::</code>)</strong></p>
-<p><code>spell::op</code> invokes a single spell's op <strong>directly</strong>, bypassing your composed targets. It is an escape hatch for ad-hoc runs and introspection. The token after <code>::</code> is a spell <strong>op</strong> (its CLI-command name), not a lifecycle target:</p>
-<pre><code class="language-sh">magus run typescript::eslint api    # the eslint op of the typescript spell on 'api'
-magus run go::go-test /             # the go-test op of the go spell across all projects
-</code></pre>
-<p>The spell name matches one of the built-in identifiers (<code>go</code>, <code>typescript</code>, <code>python</code>, <code>rust</code>, etc.); op names are matched verbatim, so <code>go::go-vet</code> runs while <code>go::lint</code> is a graceful no-op (the go spell's linter op is <code>golangci-lint</code>). See <a href="spells/#naming-operations">Naming operations</a>.</p>
-<p><strong><code>::</code> works with <code>affected</code> too:</strong></p>
-<pre><code class="language-sh">magus affected typescript::eslint
-</code></pre>
-<p><strong>Charms (<code>:</code>)</strong> are named execution modifiers appended after the target, like <code>:rw</code> to let a read-only target write. See <a href="#charms">Charms</a> for the full definition and how they stack.</p>
-<h3 id="spells">Spells</h3>
-<p>A <strong>spell</strong> is <em>how</em> a tool does something (the <code>go-vet</code> op): a library of
-tool-native operations. The <code>go</code> spell exposes <code>build</code>/<code>test</code>/<code>vet</code>/<code>fmt</code>/<code>lint</code>,
-the <code>rust</code> spell <code>build</code>/<code>test</code>/<code>clippy</code>/<code>fmt</code>. Binding a spell to a project
-contributes its inputs and outputs to the cache key and affected set but runs
-nothing on its own; you wire its ops to lifecycle targets in your magusfile. See
-<a href="spells/">Spell Anatomy</a>.</p>
-<h3 id="charms">Charms</h3>
-<p>A charm is a shared, named execution modifier, an intent like <code>rw</code> that each
-target interprets in its own way (<code>format</code> rewrites files, <code>generate</code> writes
-outputs). Reuse charms across targets rather than defining them per-target.
-Append a comma-separated list after the target with <code>:</code>; names use
-the target charset (<code>[A-Za-z0-9_-]</code>).</p>
-<p><code>rw</code> is the built-in read→write charm, activated like any other with a <code>:rw</code> suffix:</p>
-<pre><code class="language-sh">magus run format:rw api    # the rw charm on format, in project api
-</code></pre>
-<p>Charms <strong>stack</strong>: pass several and they all apply (order- and
-duplicate-insensitive), so orthogonal intents compose:</p>
-<pre><code class="language-sh">magus run lint:rw,debug    # autofix + verbose, together
-</code></pre>
-<p>The default (no <code>rw</code>) is read-only, and CI always runs read-only. A workspace can
-flip its local baseline with <code>default_charms: [rw]</code> in <code>magus.yaml</code> (applied to
-<code>magus run</code>/<code>x</code>, not <code>affected</code>; <code>--no-default-charms</code> opts out per run). Spells
-read charms from context via <code>HasCharm</code>, so workspaces can introduce their own
-shared charms. See <a href="charms/">docs/charms.md</a>.</p>
-<hr>
-<h2 id="tips--tricks">Tips &amp; Tricks</h2>
-<p>Non-obvious ways to combine magus subcommands.</p>
-<h3 id="live-pool-snapshot-in-a-multiplexer-sidebar">Live pool snapshot in a multiplexer sidebar</h3>
-<p><code>magus status</code> is a non-blocking, one-shot RPC snapshot: it returns immediately whether the daemon is running or not. Combine <code>--compact</code> (a single densely-packed line) with <code>--watch</code> to keep a tmux/screen sidebar pane current:</p>
-<pre><code class="language-sh">magus status --compact --watch=1s
-</code></pre>
-<p>Sample output:</p>
-<pre><code>daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
-</code></pre>
-<p>When no daemon is running the line reads <code>daemon: off</code>, with no error and no hang. Drop <code>--compact</code> for the full grid view when you have a wider pane to spare.</p>
-<h3 id="step-through-a-target-to-diagnose-a-flaky-build">Step through a target to diagnose a flaky build</h3>
-<p><code>magus run --step</code> pauses before every subprocess and lets you inspect state, skip commands, or open a REPL mid-run. Concurrency is forced to 1, so commands execute one at a time:</p>
-<pre><code class="language-sh">magus run build --step
-magus affected build --step
-</code></pre>
-<p>See <a href="debugging/#--step"><code>--step</code></a> for the full prompt reference.</p>
-<h3 id="re-run-only-affected-projects-on-each-save">Re-run only affected projects on each save</h3>
-<p>Pipe <code>magus watch</code> into <code>magus affected --stdin</code> for a tight inner loop that re-runs only the projects touched by each edit:</p>
-<pre><code class="language-sh">magus watch | while IFS= read -r path; do
-    echo &quot;$path&quot; | magus affected --stdin test
-done
-</code></pre>
-<h3 id="one-shot-daemon-health-probe">One-shot daemon health probe</h3>
-<p><code>magus status</code> exits 0 even when the daemon is down (the pool block reads <code>daemon: off</code>). Use it as a cheap, non-blocking reachability probe in scripts or CI health checks, with no risk of hanging on a network timeout:</p>
-<pre><code class="language-sh">magus status
-magus status -o json   # machine-readable output
-</code></pre>
-<h3 id="debugging">Debugging</h3>
-<p>Two entry points into an interactive Buzz REPL, sharing one evaluator:</p>
-<ul>
-<li><a href="#repl-interactive-shell"><code>magus repl</code></a>: standalone shell with magusfile bindings preloaded.</li>
-<li><a href="debugging/#maguspry-breakpoint-in-a-magusfile"><code>magus.pry()</code></a>: <code>binding.pry</code>-style breakpoint that opens the same REPL mid-target with frame context (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...).</li>
-</ul>
-<pre><code class="language-buzz">export fun build(args: [str]) &gt; void {
-    os.exec(&quot;go&quot;, [&quot;generate&quot;, &quot;./...&quot;]);
-    magus.pry();   // execution pauses here; inspect or modify state
-    os.exec(&quot;go&quot;, [&quot;build&quot;, &quot;./...&quot;]);
-}
-</code></pre>
-<p><code>magus run build --step</code> pauses before every subprocess instead (concurrency forced to 1) so you can step, skip, or drop into a REPL command-by-command.</p>
-<p>Full reference (meta-commands, pry stack navigation, <code>--step</code> keymap, multiline behavior) is in <strong><a href="debugging/">docs/debugging.md</a></strong>.</p>
-<h3 id="recursion">Recursion</h3>
-<p>Targets can call <code>magus</code> recursively. Child invocations forward work to the parent process over a local socket; concurrency limits are shared, so nested calls draw from the same budget instead of each grabbing their own slots.</p>
-<pre><code class="language-buzz">magus.cmd([&quot;run&quot;, &quot;build&quot;, &quot;api&quot;]);
-</code></pre>
-<p><code>magus.cmd</code> is the in-magusfile entry point for invoking magus recursively. When a <a href="#daemon">daemon</a> is running, the call rides the existing socket connection instead of spawning a new process.</p>
-<hr>
-<h2 id="cli">CLI</h2>
-<p>The magus command-line surface: the command reference, how arguments are forwarded to a target, and how output is formatted. The run grammar itself (<code>spell::op</code>, charms, project selectors) lives under <a href="#targets">Targets</a>.</p>
-<h3 id="commands">Commands</h3>
+<h3 id="project-layout">Project layout</h3>
 <table>
 <thead>
 <tr>
-<th>Command</th>
+<th>Path</th>
 <th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>ls</code></td>
-<td>List discovered projects</td>
+<td><a href="https://github.com/egladman/magus/tree/main/cmd/magus" rel="noopener noreferrer" target="_blank" data-external><code>cmd/magus/</code></a></td>
+<td>CLI entry point</td>
 </tr>
 <tr>
-<td><code>where</code></td>
-<td>Print the absolute path of a project (fuzzy match)</td>
+<td><a href="https://github.com/egladman/magus/tree/main/cmd/magus-utils" rel="noopener noreferrer" target="_blank" data-external><code>cmd/magus-utils/</code></a></td>
+<td>release signing helper</td>
 </tr>
 <tr>
-<td><code>describe</code></td>
-<td>Explain why a project is in the affected set</td>
+<td><a href="https://github.com/egladman/magus/tree/main/internal" rel="noopener noreferrer" target="_blank" data-external><code>internal/</code></a></td>
+<td>core engine (affected set, cache, sandbox, daemon, MCP)</td>
 </tr>
 <tr>
-<td><code>run</code></td>
-<td>Run a target for selected projects</td>
+<td><a href="https://github.com/egladman/magus/tree/main/gopherbuzz" rel="noopener noreferrer" target="_blank" data-external><code>gopherbuzz/</code></a></td>
+<td>the embedded Buzz interpreter</td>
 </tr>
 <tr>
-<td><code>x</code></td>
-<td>Interactive picker: choose project + target (TTY only)</td>
+<td><a href="https://github.com/egladman/magus/tree/main/std" rel="noopener noreferrer" target="_blank" data-external><code>std/</code></a></td>
+<td>magusfile stdlib (<code>fs</code>, <code>os</code>, <code>http</code>, ...)</td>
 </tr>
 <tr>
-<td><code>affected</code></td>
-<td>Run a target against VCS-affected projects; <code>--stdin</code> reads paths from stdin, <code>--plan</code> emits a CI shard plan, <code>--bisect</code> finds a regression's culprit commit</td>
+<td><a href="https://github.com/egladman/magus/tree/main/spells" rel="noopener noreferrer" target="_blank" data-external><code>spells/</code></a></td>
+<td>built-in language spells (<code>go</code>, <code>rust</code>, <code>typescript</code>, ...)</td>
 </tr>
 <tr>
-<td><code>watch</code></td>
-<td>Emit changed paths to stdout</td>
+<td><a href="https://github.com/egladman/magus/tree/main/docs" rel="noopener noreferrer" target="_blank" data-external><code>docs/</code></a></td>
+<td>documentation source (rendered by <code>magus run generate website</code>)</td>
 </tr>
 <tr>
-<td><code>tail</code></td>
-<td>Stream the most recent cached log for the cwd project</td>
-</tr>
-<tr>
-<td><code>status</code></td>
-<td>Show telemetry, cache settings, and the live concurrency pool</td>
-</tr>
-<tr>
-<td><code>doctor</code></td>
-<td>Validate the workspace</td>
-</tr>
-<tr>
-<td><code>config</code></td>
-<td>View or update configuration (<code>init</code>, <code>view</code>, <code>set</code>, <code>history</code>, <code>cache</code>)</td>
-</tr>
-<tr>
-<td><code>server</code></td>
-<td>Manage the persistent daemon (<code>start</code>, <code>stop</code>, <code>status</code>)</td>
-</tr>
-<tr>
-<td><code>repl</code></td>
-<td>Interactive Buzz REPL with the magusfile bindings preloaded</td>
-</tr>
-<tr>
-<td><code>completion</code></td>
-<td>Print a shell completion script (<code>bash</code>, <code>zsh</code>, <code>fish</code>)</td>
-</tr>
-<tr>
-<td><code>self update</code></td>
-<td>Update magus to the latest release (replaces running binary)</td>
-</tr>
-<tr>
-<td><code>version</code></td>
-<td>Print version, commit, and build date</td>
+<td><a href="https://github.com/egladman/magus/tree/main/website" rel="noopener noreferrer" target="_blank" data-external><code>website/</code></a></td>
+<td>docs-site generator (Buzz-based static site)</td>
 </tr>
 </tbody>
 </table>
-<h4 id="x-interactive-picker">x: interactive picker</h4>
-<p><code>magus x</code> is a TTY shorthand for <code>magus run</code>. It presents a fuzzy project picker followed by a target picker, then executes the selection.</p>
-<pre><code class="language-sh">magus x           # browse all projects
-magus x api       # pre-filter to projects matching 'api'
-magus x web ui    # AND-filter: projects matching both 'web' and 'ui'
-</code></pre>
-<p>The target list is: <code>build</code>, <code>test</code>, <code>lint</code>, <code>format</code>, <code>clean</code>, <code>generate</code>, <code>ci</code>.</p>
-<p><code>x</code> remembers the last target used per project and pre-highlights it on the next run.</p>
-<p><code>magus x</code> refuses to run outside an interactive terminal. To override (e.g. in a wrapper script), set <code>assume_interactive: true</code> in <code>magus.yaml</code> or <code>MAGUS_ASSUME_INTERACTIVE=1</code>.</p>
-<h4 id="repl-interactive-shell">repl: interactive shell</h4>
-<p><code>magus repl</code> opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the <code>extra</code> modules and spell bindings) is preloaded.</p>
-<pre><code class="language-sh">magus repl
-</code></pre>
-<p>If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
-<h5 id="--no-autoload"><code>--no-autoload</code></h5>
-<p>Skip executing the magusfile on start.</p>
-<p>Useful when you want a blank environment to experiment without side-effects from your project's startup code.</p>
-<h5 id="-c-dir"><code>-C &lt;dir&gt;</code></h5>
-<p>Set the working directory for <code>import</code> resolution (default: cwd).</p>
-<pre><code class="language-sh">magus repl -C internal/auth
-</code></pre>
-<p>See <a href="debugging/">docs/debugging.md</a> for the full meta-command reference and multiline behavior.</p>
-<h4 id="where-project-path-lookup">where: project path lookup</h4>
-<p><code>magus where</code> prints the absolute path of a project <strong>or file</strong> to stdout. No TTY picker, no prompts. Designed for shell substitution.</p>
-<pre><code class="language-sh">cd &quot;$(magus where api)&quot;
-code &quot;$(magus where dash)&quot;
-</code></pre>
-<p>Filters are AND-combined substrings with leaf-anchored scoring. A unique top match prints the path and exits 0. Ambiguity lists candidates on stderr and exits 2.</p>
-<pre><code class="language-sh">magus where api gateway   # must match both 'api' and 'gateway'
-</code></pre>
-<h5 id="file-fallback">File fallback</h5>
-<p>When no project matches the filters, <code>magus where</code> falls back to fuzzy file search across the workspace. The same AND-substring filters and leaf-anchored ranking apply to file paths.</p>
-<pre><code class="language-sh">vim &quot;$(magus where readme.md)&quot;
-cat &quot;$(magus where api server.go)&quot;   # path must contain both 'api' and 'server.go'
-magus where --all --glob '**/*.go' | xargs wc -l
-</code></pre>
-<p>Well-known build and vendor directories are pruned automatically (<code>.git</code>, <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>gen</code>, and the rest of the <code>IgnoreDirs</code> list). Symlinks are skipped.</p>
-<p><strong>Scoring and ambiguity:</strong> when filter tokens are present, the top scorer wins as usual, unique or not. When only a pattern flag is given with no filter tokens, every matching file scores 0 (no basis for ranking); use <code>--all</code> and pipe to <code>fzf</code> in that case.</p>
-<h5 id="--all---a-and-pattern-flags"><code>--all</code> / <code>-A</code> and pattern flags</h5>
-<p><code>--all</code>/<code>-A</code> prints every match instead of erroring on ambiguity. Restrict the
-file fallback to a pattern with <code>--glob</code>, <code>--regex</code>, or <code>--literal</code> (same
-semantics as <code>magus watch --ignore</code>; one per invocation, <code>--filter</code> is the long
-form for patterns containing a comma):</p>
-<pre><code class="language-sh">magus where -A server | fzf --select-1
-magus where --glob '**/*_test.go' api    # test files with 'api' in path
-magus where --literal Dockerfile web     # Dockerfile under a path containing 'web'
-</code></pre>
-<p>Full flag reference: <a href="manpage/magus-where/"><code>magus where</code></a>.</p>
-<h4 id="affected---plan-and---bisect-ci-sharding-and-bisection">affected --plan and --bisect: CI sharding and bisection</h4>
-<p><code>magus affected</code> has two forensic modes that reason about the affected set from the outside rather than executing a target. They are siblings of <code>--explain</code>: <code>--plan</code> shards the set for CI fan-out, and <code>--bisect</code> hunts a regression's culprit commit. Neither executes the flow. Use <code>magus run ci</code> or <code>magus affected ci</code> for that. Full flag reference: <a href="manpage/magus-affected/"><code>magus affected</code></a>.</p>
-<h5 id="affected---plan-shard-the-affected-set"><code>affected --plan</code>: shard the affected set</h5>
-<p>Emits a provider-neutral JSON shard plan for the affected project set, keyed off the <code>ci</code> anchor. <code>--max-shards</code> caps the shard count; <code>--max-parallel-budget</code> caps cross-shard parallelism. Adaptive sharding balances by past duration when <code>history_path</code> (or <code>MAGUS_HISTORY_PATH</code>) is set.</p>
-<pre><code class="language-sh">magus affected --plan
-magus affected --plan --max-shards=8
-</code></pre>
-<h5 id="affected---bisect-find-the-regression-commit"><code>affected --bisect</code>: find the regression commit</h5>
-<p>Drives <code>git bisect</code> (or <code>hg bisect</code>) automatically to find the commit that introduced a test failure. Requires run history with a confirmed regression (clean passing history followed by consistent failures). Magus derives the last known-good commit from recorded pass timestamps (override with <code>--good</code>), runs <code>magus run test --no-flake-retry &lt;project&gt;</code> at each step (override the target with <code>--target</code>), and prints the culprit:</p>
-<pre><code class="language-sh">magus affected --bisect api
-magus affected --bisect api --target=lint --good=abc1234
-# → suspected culprit: d3f9a21  fix(auth): reuse connection pool
-</code></pre>
+<h3 id="contributing">Contributing</h3>
+<p>See <a href="https://github.com/egladman/magus/blob/main/CONTRIBUTING.md" rel="noopener noreferrer" target="_blank" data-external>CONTRIBUTING.md</a>. Larger changes are worth discussing first in <a href="https://github.com/egladman/magus/discussions" rel="noopener noreferrer" target="_blank" data-external>Discussions</a>.</p>
 <hr>
-<h3 id="argument-forwarding">Argument forwarding</h3>
-<p>Append <code>--</code> after the project selector to forward extra arguments to the target function. Everything before <code>--</code> is parsed by magus (flags, project names). Everything after is passed verbatim as the <code>args</code> array in the target function; magus never touches it.</p>
-<pre><code class="language-sh">magus run go::go-test -- -run TestAuth
-magus run go::go-test api -- -v -run TestFoo   # select project 'api', then forward
-magus affected go::go-test -- -race            # affected projects, race detector on
-</code></pre>
-<p>Inside a magusfile target the forwarded args arrive as the first parameter:</p>
-<pre><code class="language-buzz">export fun test(args: [str]) &gt; void {
-    var argv = [&quot;test&quot;, &quot;./...&quot;];
-    for (a in args) { argv.append(a); }
-    os.exec(&quot;go&quot;, argv);
-}
-</code></pre>
-<pre><code class="language-sh">magus run test -- -run TestAuth -count=1
-# → go test ./... -run TestAuth -count=1
-</code></pre>
-<p>If no <code>--</code> is present, <code>args</code> is an empty array.</p>
-<hr>
-<h3 id="output-formats">Output formats</h3>
-<p>Every command takes <code>-o &lt;format&gt;</code> to switch its output shape.</p>
-<table>
-<thead>
-<tr>
-<th>Format</th>
-<th>Use case</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>text</code></td>
-<td>Default human-readable output</td>
-</tr>
-<tr>
-<td><code>json</code></td>
-<td>One JSON document, structured</td>
-</tr>
-<tr>
-<td><code>jsonl</code></td>
-<td>One JSON record per line, stream-friendly</td>
-</tr>
-<tr>
-<td><code>yaml</code></td>
-<td>YAML document</td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td>One name per line, ideal for <code>xargs</code></td>
-</tr>
-<tr>
-<td><code>template=&lt;tmpl&gt;</code></td>
-<td>Custom Go <code>text/template</code> over the command's data model</td>
-</tr>
-</tbody>
-</table>
-<pre><code class="language-sh">magus ls -o json
-magus ls -o name | xargs -I{} echo &quot;found project: {}&quot;
-magus ls -o 'template={{range .}}{{.Name}} ({{.Spell.Name}}){{&quot;\n&quot;}}{{end}}'
-</code></pre>
-<p>Graph-emitting commands (<code>describe</code>, <code>affected --graph</code>, etc.) additionally support <code>-o dot</code>, <code>-o mermaid</code>, and <code>-o tree</code>:</p>
-<pre><code class="language-sh">magus describe api -o tree
-magus describe api -o mermaid | gh-mermaid
-</code></pre>
-<h4 id="silent-mode--s----silent">Silent mode: <code>-s</code> / <code>--silent</code></h4>
-<p><code>-s</code> (or <code>MAGUS_LOG_SILENT=1</code>) suppresses all output from passing runs and caps failing output to 50 lines (full log path printed). Targets promote a line to visible output by prefixing it with <code>magus:notice:</code>:</p>
-<pre><code class="language-sh">os.exec(&quot;sh&quot;, [&quot;-c&quot;, &quot;echo 'magus:notice: deployed api v1.2.3'&quot;]);
-# → prints:  notice: services/api: deployed api v1.2.3
-</code></pre>
-<p>Cache hits never replay notice lines. <code>--silent</code> implies <code>--quiet</code>.</p>
-<hr>
-<h2 id="concurrency">Concurrency</h2>
-<p>Magus runs project builds in parallel up to a configurable limit.</p>
-<pre><code class="language-sh">magus run build --concurrency=4
-magus config set key=concurrency,value=4
-MAGUS_CONCURRENCY=4 magus run build
-</code></pre>
-<p>When a <a href="#daemon">daemon</a> is running, all clients share a single concurrency pool. Parallel CI steps and nested <code>magus</code> invocations all draw from the same budget.</p>
-<p><code>magus status</code> shows the live pool state and current slot usage.</p>
-<hr>
-<h2 id="daemon">Daemon</h2>
-<p>By default every <code>magus run</code> is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A daemon fixes this: it holds workspace state in memory and enforces <strong>one</strong> concurrency pool across all clients.</p>
-<pre><code class="language-sh">magus server start &amp;   # foreground process; &amp; or a supervisor backgrounds it
-magus server stop      # graceful shutdown; waits for in-flight work
-magus status           # live pool + reachability check (reports the reason when down)
-magus status -W 1s     # poll and reprint every second
-</code></pre>
-<h3 id="configuring-the-socket-address">Configuring the socket address</h3>
-<p>The socket address is resolved in priority order:</p>
-<ol>
-<li><code>--daemon-address &lt;unix://…&gt;</code> flag</li>
-<li><code>MAGUS_DAEMON_ADDRESS</code> environment variable</li>
-<li><code>daemon.address</code> in <code>magus.yaml</code></li>
-<li>Stable per-workspace default (<code>unix://&lt;sock-dir&gt;/magus-daemon.sock</code>)</li>
-</ol>
-<p>The default socket is named without a PID so <code>server stop</code> and <code>server status</code> can find it without discovery.</p>
-<p>To pin a socket address in config:</p>
-<pre><code class="language-sh">magus config set key=daemon.address,value=unix:///run/user/1000/magus/daemon.sock
-</code></pre>
-<hr>
-<h2 id="mcp">MCP</h2>
-<p>When the daemon is running it also exposes an <strong>MCP server</strong> over Streamable HTTP so agents and IDE plugins (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus directly. <code>magus server start</code> brings it up at <code>http://127.0.0.1:7391/mcp</code>; disable with <code>mcp.enabled: false</code> or <code>MAGUS_MCP_ENABLED=0</code>.</p>
-<blockquote>
-<p><strong>Warning:</strong> the MCP endpoint is equivalent to shell access to your workspace. It requires a bearer token and binds to <code>127.0.0.1</code>, but <strong>do not</strong> expose the port over tunnels or shared port-forwards. To drive magus remotely, use the CLI over SSH.</p>
-</blockquote>
-<p>Tool list, token management, and the full security policy are in <strong><a href="mcp/">docs/mcp.md</a></strong>.</p>
-<hr>
-<h2 id="sandbox">Sandbox</h2>
-<p>Magus ships an optional sandbox that confines every subprocess and in-process spell to the workspace plus a curated allowlist, and strips secret-bearing env vars (<code>AWS_*</code>, <code>GITHUB_TOKEN</code>, <code>NPM_TOKEN</code>, <code>ANTHROPIC_API_KEY</code>, and more) from the inherited environment. On Linux ≥5.13 enforcement uses landlock; elsewhere the Buzz host bindings enforce the same policy.</p>
-<p>Enable it in <code>magus.yaml</code>:</p>
-<pre><code class="language-yaml">sandbox: true
-</code></pre>
-<p>Or per-invocation:</p>
-<pre><code class="language-sh">MAGUS_SANDBOX_ENABLED=1 magus run build
-</code></pre>
-<p>See <a href="codes/sandbox"><code>docs/codes/sandbox/</code></a> for the full policy, allowlist syntax, and <code>MGS2001</code>–<code>MGS2007</code> diagnostic codes.</p>
-<hr>
-<h2 id="observability">Observability</h2>
-<h3 id="opentelemetry">OpenTelemetry</h3>
-<p>Magus can export metrics and traces to any OTLP collector you run. Telemetry is <strong>OFF by default</strong>: there is no magus-operated backend, the collector is yours.</p>
-<p>Enable it in <code>magus.yaml</code>:</p>
-<pre><code class="language-yaml">telemetry:
-  enabled: true
-  endpoint: &quot;localhost:4318&quot; # host:port, no scheme
-  protocol: &quot;http&quot; # &quot;grpc&quot; (default) or &quot;http&quot;
-  insecure: true # plaintext for local collectors
-</code></pre>
-<p>Or via the environment:</p>
-<pre><code class="language-sh">MAGUS_TELEMETRY_ENABLED=true \
-MAGUS_TELEMETRY_ENDPOINT=localhost:4317 \
-MAGUS_TELEMETRY_INSECURE=true \
-magus run build
-</code></pre>
-<h4 id="what-gets-exported">What gets exported</h4>
-<p>magus exports metrics for the local cache, the <a href="remote-cache/">remote cache</a>
-backend, graph queries, target runs, and the concurrency pool, plus build traces
-(target runs, cache phases, and remote get/put). The <strong>complete reference</strong> (every
-metric, span, unit, attribute, the config/env vars, and cardinality guidance) is
-in <strong><a href="telemetry/">docs/telemetry.md</a></strong>.</p>
+<h2 id="license">License</h2>
+<p>MIT - see <a href="https://github.com/egladman/magus/blob/main/LICENSE" rel="noopener noreferrer" target="_blank" data-external>LICENSE</a>.</p>
     </article>
+    </div>
     </div>
   </main>
   <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/eab40bc6f55db42186f68c705da70ae188b73e24"><code>eab40bc</code></a> <small><time datetime="2026-07-01T23:11:42Z">Jul 1, 2026</time></small> - site: optimize LCP images + CDN preconnect (WS A/B)</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/49399a3431ea33c0b0ba211fc19cfc9d8905046e"><code>49399a3</code></a> <small><time datetime="2026-06-23T14:31:07Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/d650d608f064844161cf1150ab284358c59f2cbe"><code>d650d60</code></a> <small><time datetime="2026-06-23T13:37:03Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/7f534d130a5cc47c79b7f1759780269410be4dc0"><code>7f534d1</code></a> <small><time datetime="2026-06-23T03:37:00Z">Jun 23, 2026</time></small> - fix two broken README toc anchors</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/eab40bc6f55db42186f68c705da70ae188b73e24"><code>eab40bc</code></a> <small><time datetime="2026-07-01T23:11:42Z">Jul 1, 2026</time></small> - site: optimize LCP images + CDN preconnect (WS A/B)</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/49399a3431ea33c0b0ba211fc19cfc9d8905046e"><code>49399a3</code></a> <small><time datetime="2026-06-23T14:31:07Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/d650d608f064844161cf1150ab284358c59f2cbe"><code>d650d60</code></a> <small><time datetime="2026-06-23T13:37:03Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/7f534d130a5cc47c79b7f1759780269410be4dc0"><code>7f534d1</code></a> <small><time datetime="2026-06-23T03:37:00Z">Jun 23, 2026</time></small> - fix two broken README toc anchors</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="main.js"></script>
 </body>

@@ -1,84 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" class="no-js">
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="generator" content="magus">
-  <title>Install magus — magus</title>
-  <meta name="description" content="Install magus from a prebuilt release or build it from source with Go, then keep it current via magus self update or your package manager.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/install/">
-  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
-  <link rel="manifest" href="../manifest.webmanifest">
-  <meta name="theme-color" content="#3178c6">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
-  <link rel="stylesheet" href="../theme.css">
-  <link rel="stylesheet" href="../site.css">
-  <script src="../theme.js"></script>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=../download/">
+<link rel="canonical" href="../download/">
+<title>Redirecting</title>
+<script>location.replace("../download/");</script>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="site-header">
-    <nav class="container">
-      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
-      <ul>
-        <li><a href="../documentation/">Documentation</a></li>
-        <li><a href="../blog/">Blog</a></li>
-        <li><a href="../install/" aria-current="page">Install</a></li>
-        <li><a href="../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
-      </ul>
-    </nav>
-  </header>
-  <main id="main-content" class="container" tabindex="-1">
-    <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Install magus</li></ul>
-    </nav>
-    <div class="page-tools"></div>
-    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/install.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
-    <div class="with-toc">
-    <aside class="toc">
-      <nav>
-        <p class="toc-title">On this page</p>
-        <ul><li><a href="#from-a-release-binary" title="From a release binary">From a release binary</a></li><li><a href="#from-source" title="From source">From source</a></li><li><a href="#keeping-up-to-date" title="Keeping up to date">Keeping up to date</a></li></ul>
-      </nav>
-    </aside>
-    <article>
-<h1 id="install">Install</h1>
-<p>magus is a single self-contained binary. Install a prebuilt release, or build it from source.</p>
-<h2 id="from-a-release-binary">From a release binary</h2>
-<p>Download the latest release for your platform from the <a href="https://github.com/egladman/magus/releases" rel="noopener noreferrer" target="_blank" data-external>releases page</a>, extract the archive, and move the binary onto your <code>PATH</code>:</p>
-<pre><code class="language-sh">mv magus ~/.local/bin/magus
-</code></pre>
-<p>Make sure the destination directory is on your <code>PATH</code> (for example, add <code>export PATH=&quot;$HOME/.local/bin:$PATH&quot;</code> to your shell profile). Enable tab completion with <code>magus completion &lt;shell&gt;</code>.</p>
-<h2 id="from-source">From source</h2>
-<p>With a recent Go toolchain:</p>
-<pre><code class="language-sh">git clone https://github.com/egladman/magus
-cd magus
-go build -o magus ./cmd/magus
-</code></pre>
-<p><code>magus self update</code> is compiled in by default. Build with <code>-tags noselfupdate</code>
-to disable the self-update mechanism (e.g. for package-manager-owned binaries).</p>
-<h2 id="keeping-up-to-date">Keeping up to date</h2>
-<p>Once installed, update in place with:</p>
-<pre><code class="language-sh">magus self update
-</code></pre>
-    </article>
-    </div>
-    <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../engines/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Engines</span></a>
-      <a class="page-nav-next" href="../mcp/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MCP</span></a>
-    </nav>
-  </main>
-  <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be"><code>72a3537</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - redesign docs site with search, TOC, and copy buttons</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/install.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/install.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
-  </div>
-  <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
-  </footer>
-  <script type="module" src="../main.js"></script>
+<p>This page moved. <a href="../download/">Continue to its new location</a>.</p>
 </body>
 </html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Daemon and concurrency — magus</title>
+  <meta name="description" content="The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/daemon/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Daemon and concurrency</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/daemon.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#daemon" title="Daemon">Daemon</a></li><li><a href="#configuring-the-socket-address" title="Configuring the socket address">Configuring the socket address</a></li></ul>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <article>
+<h1 id="daemon-and-concurrency">Daemon and concurrency</h1>
+<h2 id="concurrency">Concurrency</h2>
+<p>Magus runs project builds in parallel up to a configurable limit.</p>
+<pre><code class="language-sh">magus run build --concurrency=4
+magus config set key=concurrency,value=4
+MAGUS_CONCURRENCY=4 magus run build
+</code></pre>
+<p>When a <a href="#daemon">daemon</a> is running, all clients share a single concurrency pool. Parallel CI steps and nested <code>magus</code> invocations all draw from the same budget.</p>
+<p><code>magus status</code> shows the live pool state and current slot usage.</p>
+<h2 id="daemon">Daemon</h2>
+<p>By default every <code>magus run</code> is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A daemon fixes this: it holds workspace state in memory and enforces <strong>one</strong> concurrency pool across all clients.</p>
+<pre><code class="language-sh">magus server start &amp;   # foreground process; &amp; or a supervisor backgrounds it
+magus server stop      # graceful shutdown; waits for in-flight work
+magus status           # live pool + reachability check (reports the reason when down)
+magus status -W 1s     # poll and reprint every second
+</code></pre>
+<h2 id="configuring-the-socket-address">Configuring the socket address</h2>
+<p>The socket address is resolved in priority order:</p>
+<ol>
+<li><code>--daemon-address &lt;unix://...&gt;</code> flag</li>
+<li><code>MAGUS_DAEMON_ADDRESS</code> environment variable</li>
+<li><code>daemon.address</code> in <code>magus.yaml</code></li>
+<li>Stable per-workspace default (<code>unix://&lt;sock-dir&gt;/magus-daemon.sock</code>)</li>
+</ol>
+<p>The default socket is named without a PID so <code>server stop</code> and <code>server status</code> can find it without discovery.</p>
+<p>To pin a socket address in config:</p>
+<pre><code class="language-sh">magus config set key=daemon.address,value=unix:///run/user/1000/magus/daemon.sock
+</code></pre>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../ci/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">CI</span></a>
+      <a class="page-nav-next" href="../debugging/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Debugging magusfiles</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-02T17:39:05Z">July 2, 2026, 5:39 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/fc95bf033b01807cba7da9ec575c93ea3ddd1d65" data-tooltip="fc95bf033b01807cba7da9ec575c93ea3ddd1d65" title="fc95bf033b01807cba7da9ec575c93ea3ddd1d65">fc95bf0</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

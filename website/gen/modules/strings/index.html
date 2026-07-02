@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <title>strings module — magus</title>
-  <meta name="description" content="Case conversion (camel, snake, kebab, Pascal), capitalize, word splitting, and ellipsis truncation for building identifiers and labels.">
+  <meta name="description" content="Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).">
   <link rel="canonical" href="https://eli.gladman.cc/magus/modules/strings/">
   <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
@@ -26,7 +26,7 @@
       <ul>
         <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../../blog/">Blog</a></li>
-        <li><a href="../../install/">Install</a></li>
+        <li><a href="../../download/">Download</a></li>
         <li><a href="../../playground.html">Playground</a></li>
         <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
       </ul>
@@ -38,7 +38,7 @@
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="reading-time" title="Estimated reading time">&#x29D7; 1 min read</small><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/modules/strings.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/modules/strings.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -46,6 +46,8 @@
         <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#camel-case" title="camel_case">camel_case</a></li><li><a href="#snake-case" title="snake_case">snake_case</a></li><li><a href="#kebab-case" title="kebab_case">kebab_case</a></li><li><a href="#pascal-case" title="pascal_case">pascal_case</a></li><li><a href="#capitalize" title="capitalize">capitalize</a></li><li><a href="#words" title="words">words</a></li><li><a href="#ellipsis" title="ellipsis">ellipsis</a></li></ul></li></ul>
       </nav>
     </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="strings">strings</h1>
 <p>Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).</p>
@@ -75,6 +77,13 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+std.print(strings.camelCase(&quot;hello world&quot;));
+// -&gt; &quot;helloWorld&quot;
+</code></pre>
 <h3 id="snake-case">snake_case</h3>
 <p>Convert s to snake_case.</p>
 <p><strong>Signature:</strong> <code>strings.snakeCase(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L82" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
@@ -97,6 +106,13 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+std.print(strings.snakeCase(&quot;HelloWorld&quot;));
+// -&gt; &quot;hello_world&quot;
+</code></pre>
 <h3 id="kebab-case">kebab_case</h3>
 <p>Convert s to kebab-case.</p>
 <p><strong>Signature:</strong> <code>strings.kebabCase(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L87" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
@@ -119,6 +135,13 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+std.print(strings.kebabCase(&quot;MyComponentName&quot;));
+// -&gt; &quot;my-component-name&quot;
+</code></pre>
 <h3 id="pascal-case">pascal_case</h3>
 <p>Convert s to PascalCase.</p>
 <p><strong>Signature:</strong> <code>strings.pascalCase(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L92" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
@@ -141,6 +164,13 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+std.print(strings.pascalCase(&quot;user_profile&quot;));
+// -&gt; &quot;UserProfile&quot;
+</code></pre>
 <h3 id="capitalize">capitalize</h3>
 <p>Uppercase the first rune of s and lowercase the rest.</p>
 <p><strong>Signature:</strong> <code>strings.capitalize(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L97" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
@@ -163,6 +193,13 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+std.print(strings.capitalize(&quot;hELLO&quot;));
+// -&gt; &quot;Hello&quot;
+</code></pre>
 <h3 id="words">words</h3>
 <p>Split s into its constituent words (splitting on case changes, digits, and separators).</p>
 <p><strong>Signature:</strong> <code>strings.words(s) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L102" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
@@ -185,6 +222,17 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> []string</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+final parts = strings.words(&quot;parseHTTPResponse2&quot;);
+foreach (w in parts) { std.print(w); }
+// -&gt; parse
+// -&gt; HTTP
+// -&gt; Response
+// -&gt; 2
+</code></pre>
 <h3 id="ellipsis">ellipsis</h3>
 <p>Trim s to at most length runes, appending &quot;...&quot; when truncated.</p>
 <p><strong>Signature:</strong> <code>strings.ellipsis(s, length) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
@@ -213,7 +261,15 @@
 </tbody>
 </table>
 <p><strong>Returns:</strong> string</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+std.print(strings.ellipsis(&quot;the quick brown fox&quot;, 12));
+// -&gt; &quot;the quick...&quot;
+</code></pre>
     </article>
+    </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../semver/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">semver module</span></a>
@@ -221,10 +277,10 @@
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/modules/strings.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/modules/strings.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/modules/strings.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/modules/strings.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>
 </body>

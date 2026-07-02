@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Tips and tricks — magus</title>
+  <meta name="description" content="Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, and recursive invocation.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/tips/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Tips and tricks</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/tips.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#live-pool-snapshot-in-a-multiplexer-sidebar" title="Live pool snapshot in a multiplexer sidebar">Live pool snapshot in a multiplexer sidebar</a></li><li><a href="#step-through-a-target-to-diagnose-a-flaky-build" title="Step through a target to diagnose a flaky build">Step through a target to diagnose a flaky build</a></li><li><a href="#re-run-only-affected-projects-on-each-save" title="Re-run only affected projects on each save">Re-run only affected projects on each save</a></li><li><a href="#one-shot-daemon-health-probe" title="One-shot daemon health probe">One-shot daemon health probe</a></li><li><a href="#interactive-debugging-entry-points" title="Interactive debugging entry points">Interactive debugging entry points</a></li><li><a href="#recursive-invocation" title="Recursive invocation">Recursive invocation</a></li></ul>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="tips-and-tricks">Tips and tricks</h1>
+<p>Non-obvious ways to combine magus subcommands.</p>
+<h2 id="live-pool-snapshot-in-a-multiplexer-sidebar">Live pool snapshot in a multiplexer sidebar</h2>
+<p><code>magus status</code> is a non-blocking, one-shot RPC snapshot: it returns immediately whether the daemon is running or not. Combine <code>--compact</code> (a single densely-packed line) with <code>--watch</code> to keep a tmux/screen sidebar pane current:</p>
+<pre><code class="language-sh">magus status --compact --watch=1s
+</code></pre>
+<p>Sample output:</p>
+<pre><code>daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
+</code></pre>
+<p>When no daemon is running the line reads <code>daemon: off</code>, with no error and no hang. Drop <code>--compact</code> for the full grid view when you have a wider pane to spare.</p>
+<h2 id="step-through-a-target-to-diagnose-a-flaky-build">Step through a target to diagnose a flaky build</h2>
+<p><code>magus run --step</code> pauses before every subprocess and lets you inspect state, skip commands, or open a REPL mid-run. Concurrency is forced to 1, so commands execute one at a time:</p>
+<pre><code class="language-sh">magus run build --step
+magus affected build --step
+</code></pre>
+<p>See <a href="../debugging/#--step"><code>--step</code></a> for the full prompt reference.</p>
+<h2 id="re-run-only-affected-projects-on-each-save">Re-run only affected projects on each save</h2>
+<p>Pipe <code>magus watch</code> into <code>magus affected --stdin</code> for a tight inner loop that re-runs only the projects touched by each edit:</p>
+<pre><code class="language-sh">magus watch | while IFS= read -r path; do
+    echo &quot;$path&quot; | magus affected --stdin test
+done
+</code></pre>
+<h2 id="one-shot-daemon-health-probe">One-shot daemon health probe</h2>
+<p><code>magus status</code> exits 0 even when the daemon is down (the pool block reads <code>daemon: off</code>). Use it as a cheap, non-blocking reachability probe in scripts or CI health checks, with no risk of hanging on a network timeout:</p>
+<pre><code class="language-sh">magus status
+magus status -o json   # machine-readable output
+</code></pre>
+<h2 id="interactive-debugging-entry-points">Interactive debugging entry points</h2>
+<p>Two entry points into an interactive Buzz REPL, sharing one evaluator:</p>
+<ul>
+<li><strong><code>magus repl</code></strong> - standalone shell with magusfile bindings preloaded.</li>
+<li><strong><code>magus.pry()</code></strong> - <code>binding.pry</code>-style breakpoint that opens the same REPL mid-target with frame context (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...).</li>
+</ul>
+<pre><code class="language-buzz">export fun build(args: [str]) &gt; void {
+    os.exec(&quot;go&quot;, [&quot;generate&quot;, &quot;./...&quot;]);
+    magus.pry();   // execution pauses here; inspect or modify state
+    os.exec(&quot;go&quot;, [&quot;build&quot;, &quot;./...&quot;]);
+}
+</code></pre>
+<p><code>magus run build --step</code> pauses before every subprocess instead (concurrency forced to 1) so you can step, skip, or drop into a REPL command-by-command.</p>
+<p>Full reference (meta-commands, pry stack navigation, <code>--step</code> keymap, multiline behavior) is in <a href="../debugging/">debugging</a>.</p>
+<h2 id="recursive-invocation">Recursive invocation</h2>
+<p>Targets can call <code>magus</code> recursively. Child invocations forward work to the parent process over a local socket; concurrency limits are shared, so nested calls draw from the same budget instead of each grabbing their own slots.</p>
+<pre><code class="language-buzz">magus.cmd([&quot;run&quot;, &quot;build&quot;, &quot;api&quot;]);
+</code></pre>
+<p><code>magus.cmd</code> is the in-magusfile entry point for invoking magus recursively. When a <a href="../daemon/">daemon</a> is running, the call rides the existing socket connection instead of spawning a new process.</p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../telemetry/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Telemetry</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-02T17:39:05Z">July 2, 2026, 5:39 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/fc95bf033b01807cba7da9ec575c93ea3ddd1d65" data-tooltip="fc95bf033b01807cba7da9ec575c93ea3ddd1d65" title="fc95bf033b01807cba7da9ec575c93ea3ddd1d65">fc95bf0</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 ---
 title: yaml module
-description: Parse a YAML string into a value and stringify a value back to YAML. YAML 1.2 via gopkg.in/yaml.v3, handling maps, lists, numbers, bools, null.
-tags: [yaml, parse yaml, stringify, encode, decode, yaml 1.2, magus stdlib]
+description: YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).
+tags: [yaml, module, stdlib, magusfile]
 ---
 
 # yaml
