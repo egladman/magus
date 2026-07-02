@@ -1032,3 +1032,15 @@ a code {
   background: var(--pico-card-sectioning-background-color);
 }
 .shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
+
+/* View-source link: sits before Suggest-an-edit on the secondary tool row.
+   Muted like Report-an-issue; margin-left:auto pins the whole trio to the
+   right side of the row. */
+.page-tools-source {
+  font-size: 0.875rem;
+  color: var(--pico-muted-color);
+  margin-left: auto;
+  margin-right: 0.75rem;
+}
+.page-tools-source:hover { color: var(--pico-primary); }
+.page-tools-issue { margin-left: 0; }

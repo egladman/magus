@@ -1,0 +1,46 @@
+# MGS2006: likely PATH-shim manager stripped
+
+A subprocess failed and magus suspects the cause is sandbox
+stripping the env vars that a PATH-shim runtime manager (mise, asdf,
+direnv) relies on.
+
+```text
+[MGS2006] mise shims appear stripped from PATH; the build is using system tools instead
+  cmd=go missing_var=MISE_DATA_DIR
+```
+
+## Why
+
+`mise`, `asdf`, and `direnv` work by injecting a shim directory into
+`PATH` and reading a tool-version file from the workspace. The shim
+binary is invoked when the user runs `go`, then `mise` looks at its
+own `MISE_*` env vars to decide which Go version to dispatch to.
+
+When sandbox strips `MISE_*` (or `ASDF_*`, `DIRENV_*`) from the
+child's environment, the shim runs without configuration and either
+fails or falls back to a system tool the user did not intend to use.
+
+## Resolution
+
+Add the variables your runtime manager needs to `sandbox.env.passthrough`:
+
+```yaml
+sandbox:
+  env:
+    passthrough:
+      - "MISE_*" # mise
+      - "ASDF_*" # asdf
+      - "DIRENV_*" # direnv
+```
+
+Pick the one (or two) you actually use. The wildcard is a suffix match
+so `MISE_*` covers `MISE_DATA_DIR`, `MISE_SHIMS`, `__MISE_*`, etc.
+
+These variables do not, by themselves, contain credentials a
+supply-chain attacker would target. They configure a local tool
+manager. Adding them to the passthrough list does not
+weaken sandbox's secret-protection guarantee.
+
+If you do not use a PATH-shim manager and this code fires, the
+heuristic is wrong; please file an issue with the parent `PATH` and
+the failing command.

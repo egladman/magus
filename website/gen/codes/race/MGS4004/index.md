@@ -1,0 +1,107 @@
+# MGS4004: potential undeclared dependency
+
+A project that did not run in this dispatch consumes a file written by a project
+that did run. The dependency graph is likely missing an edge. The build works
+today because of accidental ordering, but a future parallelism increase or
+scheduling reorder could expose a real race.
+
+```text
+[MGS4004] potential undeclared dependency (see …/MGS4004.md)
+  consumer=worker producer=api path=api/dist/schema.json target=build
+```
+
+## Why
+
+The dependency graph defines what depends on what: project `worker` depends on
+`api` _only_ if `worker.dependsOn` contains `api` or `api` appears in `worker`'s
+inferred sources (a glob that matches a path inside `api/`).
+
+When the graph is correct, `magus run build` schedules `api` strictly before
+`worker` because of the edge. When the graph is missing an edge but `worker`
+still happens to consume `api`'s output, three things are simultaneously true:
+
+1. `worker.Sources` matches a path inside `api/dist/`.
+2. `api` wrote that path during this run (recorded by the Phase-3 attribution
+   diff).
+3. `worker` itself was NOT in this dispatch's project set (the missing edge
+   means `magus affected` didn't pull it in).
+
+This is the same hazard that Ninja's `missingdeps` subcommand catches:
+"targets had depfile dependencies on generated inputs without a non-depfile
+dep path to the generator." The build is correct by accident, and the
+graph cannot defend it against a scheduling change.
+
+Detection happens post-build, behind `--race`, because it consumes the
+Phase-3 per-project write attribution. It is observational: magus does
+not block or fail the build.
+
+## Resolution
+
+### 1. Add the missing graph edge
+
+The fix is usually to declare the dependency the build relies on. In
+`magusfile.go`:
+
+```go
+boosterpack.Bind(pack.Go, specWorker.Build).DependsOn(specAPI.Build)
+```
+
+Or via the consumer project's sources, if the consumer's sources should pull
+the producer in automatically:
+
+```yaml
+# worker/magus.yaml
+sources:
+  - ../api/dist/schema.json # explicit dep
+```
+
+Either way, after the edit, `magus affected` will correctly include both
+producer and consumer when either changes.
+
+### 2. If the consumer should not consume the producer's output
+
+Sometimes MGS4004 fires because the consumer's source glob is too broad and
+sweeps in a path it shouldn't. Tighten the glob:
+
+```yaml
+# Before: matches every file under api/, including dist/
+sources:
+  - "../api/**"
+
+# After: matches only api source files
+sources:
+  - "../api/**/*.go"
+  - "!../api/dist/**"
+```
+
+### 3. If the producer's "output" isn't really an output
+
+If `api` happens to write `api/dist/schema.json` only as a side-effect (e.g. a
+formatter touched it), and the file isn't meant to be a build artifact, remove
+it from `api`'s declared `outputs` and from any consumer's `sources`. Or
+suppress the spell's side-effect in `api` so it stops writing the path.
+
+## False positives
+
+MGS4004 is the lowest-confidence finding in the MGS4xxx family. Known sources
+of false positives:
+
+- **The consumer was correctly excluded from the dispatch** (e.g. `--scope`
+  was set; the consumer isn't broken, it just wasn't asked to run). Magus
+  cannot tell the difference between "consumer was excluded on purpose" and
+  "consumer wasn't included because the edge is missing."
+- **The path is a transitive workspace-level file** (e.g. `go.work.sum`) that
+  technically lives under one project but is logically shared.
+- **Glob matches that don't represent real consumption**: e.g. `worker`
+  declares `**/*.md` as sources but reads no markdown.
+
+When in doubt, run with `--race` and consult
+`MGS4001` findings as well. A real race usually fires both.
+
+## See also
+
+- `MGS4001.md`: runtime race detector that this check builds on.
+- [Ninja's `missingdeps`](https://ninja-build.org/manual.html): the
+  inspiration for this audit. Same problem, same shape of fix.
+- `magus describe project <path>`: shows the project's declared
+  `sources`/`outputs` and inferred `dependsOn` edges.

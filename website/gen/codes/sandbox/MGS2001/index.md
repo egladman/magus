@@ -1,0 +1,44 @@
+# MGS2001: path read denied by sandbox
+
+A spell tried to read a file outside the workspace and outside the
+configured allowlist.
+
+```text
+[MGS2001] fs read denied: /home/user/.aws/credentials
+```
+
+## Why
+
+The sandbox confines every magus subprocess and every in-process spell
+to the workspace plus a curated allowlist of cache and system paths.
+Reads of dotfile-style credential stores in `$HOME` are exactly what
+compromised supply-chain packages target, so they are denied by default.
+
+## Resolution
+
+1. **If this is a malicious spell** (the path is a credential file you
+   never asked the spell to touch): do not lift the restriction. This is
+   the system working as intended. Uninstall the spell and report it.
+
+2. **If this is a legitimate spell** that needs to read an external path
+   (e.g. it reads `~/.terraform.d/plugins` to discover providers): add
+   the path to your workspace's `magus.yaml`:
+
+   ```yaml
+   sandbox:
+     allow:
+       - path: ~/.terraform.d/plugins
+         mode: ro
+   ```
+
+   `mode: ro` is read-only; `mode: rw` permits writes. Use the
+   narrowest mode that lets the workflow succeed.
+
+3. **If you want to disable sandbox** for one invocation while you
+   investigate:
+
+   ```sh
+   MAGUS_SANDBOX_ENABLED=0 magus run build
+   ```
+
+   Do not set `sandbox.enabled: false` in `magus.yaml` to silence a real warning.
