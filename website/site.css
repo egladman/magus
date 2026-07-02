@@ -841,12 +841,18 @@ a code {
    else, and let the autoindex listing span the full viewport width instead of
    being trapped in the article-width container. Reads as a "server directory"
    surface without stranding the visitor. */
+/* Raw autoindex - no site chrome at all. The page renders as if it were a
+   plain Apache mod_autoindex response: just the listing on the page background.
+   Everything the shared template emits around it (nav, breadcrumb, page-tools,
+   provenance, site footer, skip-link) is hidden so /public/ reads as its own
+   surface, not a docs component. */
+.site-public .skip-link,
+.site-public .site-header,
 .site-public .breadcrumb,
 .site-public .page-tools,
 .site-public .page-tools-secondary,
 .site-public .page-provenance,
-.site-public .site-footer .sitemap-link,
-.site-public .site-footer .public-link {
+.site-public .site-footer {
   display: none !important;
 }
 .site-public main.container,
@@ -854,9 +860,9 @@ a code {
   max-width: none !important;
   padding: 0.75rem 1rem !important;
 }
-/* Strip Pico's article card look on public pages: no background, no border, no
-   padding, no rounded corners, no shadow. The autoindex should read as plain
-   content on the page background - edge to edge, maximum table area. */
+/* Strip Pico's article card look: no background, no border, no padding, no
+   rounded corners, no shadow. The autoindex sits directly on the page
+   background - edge to edge, maximum table area. */
 .site-public article {
   background: transparent !important;
   border: 0 !important;
@@ -865,17 +871,9 @@ a code {
   box-shadow: none !important;
   border-radius: 0 !important;
 }
-/* Same flat look on the autoindex block itself: drop the panel border,
-   background, and inner padding so the monospace listing spans the full width
-   with no framing. */
 .site-public .autoindex {
   background: transparent !important;
   border: 0 !important;
   padding: 0 !important;
   width: 100%;
-}
-.site-public .site-footer {
-  padding: 0.5rem 1rem 1rem;
-  border-top: 1px solid var(--pico-muted-border-color);
-  color: var(--pico-muted-color);
 }
