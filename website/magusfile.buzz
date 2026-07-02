@@ -16,6 +16,8 @@ import "http";
 import "project/../gopherbuzz" as gopherbuzz;
 
 magus.project({
+    "sources": ["magusfile.buzz", "js/**/*.js", "*.css", "playground.html",
+                "../README.md", "../docs/**", "../blog/**", "../assets/**"],
     "outputs": ["gen/**", "MAGUS.md"],
     // The cross-project dependency on gopherbuzz is declared via the project import
     // above (build_playground uses gopherbuzz.build); magus folds that into this
@@ -37,6 +39,7 @@ magus.project({
 
 final ROOT = "..";          // the magus/ workspace dir, relative to this project
 final DOCS = "docs";        // source docs subtree under ROOT
+final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";          // generated site output, under this project
 final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
 final GH   = "https://github.com/egladman/magus";
@@ -92,6 +95,11 @@ var searchRecords: [str] = mut [];
 // by two pages, or shadowing a real page) rather than silently overwriting.
 var aliasTarget: {str: str} = mut {};
 var pageUrls: {str: bool} = mut {};
+
+// Collected blog-post index records built by renderBlogPost() as the walk visits
+// each post; the blog index page and (later) the blog Atom feed both consume this
+// list. Each entry is {slug, title, date, description, url}. Reset per site_render().
+var blogPosts: [{str: str}] = mut [<{str: str}>];
 
 fun capture(cmd: str) > str {
     final tmp = os.tmpFilename("sitegen");
@@ -548,7 +556,7 @@ fun truncateWords(s: str, n: int) > str {
     final head = s.sub(0, n);
     var i = head.len() - 1;
     while (i > 0) {
-        if (head.sub(i, i + 1) == " ") { return head.sub(0, i); }
+        if (head.sub(i, 1) == " ") { return head.sub(0, i); }
         i = i - 1;
     }
     return head;
@@ -566,7 +574,9 @@ fun deriveDescription(html: str) > str {
     while (open != null) {
         final close = rest.indexOf("</p>");
         if (close == null) { return ""; }
-        final inner = rest.sub(open + 3, close);
+        // sub(start, length): the inner-paragraph text runs from just past "<p>"
+        // to just before "</p>", so its length is (close - (open + 3)).
+        final inner = rest.sub(open + 3, close - (open + 3));
         final text = decodeEntities(collapseWs(stripTags(inner)));
         if (text != "") { return truncateWords(text, 155); }
         rest = rest.sub(close + 4);
@@ -683,6 +693,19 @@ fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
 
     var li = "<li><a href=\"" + root + "index.html\">Home</a></li>";
 
+    // Blog pages have their own root: Home / Blog / <post> (the blog index itself
+    // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
+    // the listing page.
+    if (srcRel == BLOG + "/index.md") {
+        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+            + li + "<li aria-current=\"page\">Blog</li></ul>\n    </nav>\n";
+    }
+    if (srcRel.startsWith(BLOG + "/")) {
+        li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
+            + "<li aria-current=\"page\">" + title + "</li>";
+        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+    }
+
     // The Documentation hub roots every docs trail; on the hub page itself it is
     // the current leaf rather than a link back to where you already are.
     if (rel == "documentation.md") {
@@ -795,6 +818,8 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     var active = "documentation";
     if (srcRel == "README.md") { active = ""; }
     if (srcRel == DOCS + "/install.md") { active = "install"; }
+    // Blog posts and the blog index live under the "Blog" nav item.
+    if (srcRel.startsWith(BLOG + "/") or srcRel == BLOG + "/index.md") { active = "blog"; }
     var descMeta = "";
     if (description != "") {
         descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
@@ -850,6 +875,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><picture><source srcset=\"" + root + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
         + "      <ul>\n"
         + navLink(root + "documentation/", "Documentation", "documentation", active)
+        + navLink(root + "blog/", "Blog", "blog", active)
         + navLink(root + "install/", "Install", "install", active)
         + navLink(root + "playground.html", "Playground", "playground", active)
         + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\">◐</button></li>\n"
@@ -959,6 +985,203 @@ fun renderFile(rel: str) > void {
     std.print("  " + rel + " -> " + dir + "/index.html");
 }
 
+// blogSlug drops the leading YYYY-MM-DD- date prefix (if present) so a post's URL
+// reads /blog/<slug>/ rather than /blog/2026-07-01-<slug>/. Filenames are still
+// date-prefixed for stable byte-order in the walk, but URLs are date-free.
+fun blogSlug(base: str) > str {
+    var s = base;
+    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    // Detect a YYYY-MM-DD- prefix (11 chars: 4 digits, "-", 2 digits, "-", 2 digits,
+    // "-"). Buzz str.sub is (start, length), so sub(4, 1) is one char at index 4.
+    if (s.len() >= 11) {
+        final hd = s.sub(0, 4);
+        var allDigit = true;
+        var i = 0;
+        while (i < hd.len()) {
+            final b = hd.byte(i);
+            if (b < 48 or b > 57) { allDigit = false; }
+            i = i + 1;
+        }
+        if (allDigit and s.sub(4, 1) == "-" and s.sub(7, 1) == "-" and s.sub(10, 1) == "-") {
+            s = s.sub(11);
+        }
+    }
+    return s;
+}
+
+// renderBlogPost renders one blog/<file>.md as its own directory-index page. base
+// is the file's basename (e.g. "2026-07-01-hello-blog.md"); the emitted URL is
+// blog/<blogSlug(base)>/ so posts stay readable regardless of the source's date
+// prefix. Post metadata (title/date/description) is captured into blogPosts for
+// the index page (and, later, the Atom feed).
+fun renderBlogPost(base: str) > void {
+    final rel = BLOG + "/" + base;
+    final f = io.File.open(ROOT + "/" + rel, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = titleOf(md, base); }
+    final date = fm.q("date").stringValue();
+
+    final slug = blogSlug(base);
+    final url = BLOG + "/" + slug + "/";
+    // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
+    // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
+    // both so cross-references (../../documentation/) resolve correctly.
+    final html = rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug);
+
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
+    final pager = blogPagerFor(base);
+
+    final doc = page(title, desc, html, rel, pager, url);
+    fs.makeDirectory(OUT + "/" + BLOG + "/" + slug);
+    final of = io.File.open(OUT + "/" + BLOG + "/" + slug + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+
+    addRecord(url, title, desc, md);
+    foreach (a in fm.q("aliases").listValue()) { collectAlias(a.stringValue(), url); }
+
+    final rec: {str: str} = mut {};
+    rec["base"] = base;
+    rec["slug"] = slug;
+    rec["title"] = title;
+    rec["date"] = date;
+    rec["description"] = desc;
+    rec["url"] = url;
+    blogPosts.append(rec);
+
+    std.print("  " + rel + " -> " + OUT + "/" + BLOG + "/" + slug + "/index.html");
+}
+
+// blogPagerFor renders the previous/next links between posts, ordered by date
+// (newest to oldest so "next" is older and "prev" is newer, matching timeline
+// intuition). Falls back to filename order when a post lacks a date. Reuses
+// pagerLink's climb-relative sibling link form.
+fun blogPagerFor(base: str) > str {
+    // Rebuild the ordering deterministically from disk (blogPosts may be partial
+    // during the walk). Newest first.
+    var posts: [{str: str}] = mut [<{str: str}>];
+    foreach (name in fs.list(ROOT + "/" + BLOG)) {
+        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+            final f = io.File.open(ROOT + "/" + BLOG + "/" + name, io.FileMode.read);
+            final md = f.readAll();
+            f.close();
+            final fm = serialize.jsonDecode(markdown.frontmatter(md));
+            final r: {str: str} = mut {};
+            r["base"] = name;
+            r["date"] = fm.q("date").stringValue();
+            var t = fm.q("title").stringValue();
+            if (t == "") { t = titleOf(md, name); }
+            r["title"] = t;
+            posts.append(r);
+        }
+    }
+    if (posts.len() < 2) { return ""; }
+    // Sort by date DESC, tiebreak by filename ASC so ordering is stable when two
+    // posts share a date.
+    final ordered = posts.sort(fun (a: {str: str}, b: {str: str}) > bool {
+        if (a["date"] != b["date"]) { return strLess(b["date"], a["date"]); }
+        return strLess(a["base"], b["base"]);
+    });
+
+    var pos = -1;
+    var i = 0;
+    while (i < ordered.len()) {
+        if (ordered[i]["base"] == base) { pos = i; }
+        i = i + 1;
+    }
+    if (pos < 0) { return ""; }
+
+    var body = "";
+    // Previous = newer post (earlier in ordered), Next = older post (later).
+    if (pos > 0) {
+        final prev = ordered[pos - 1];
+        body = body + "      <a class=\"page-nav-prev\" href=\"../" + blogSlug(prev["base"]) + "/\">"
+            + "<span class=\"page-nav-dir\">Newer</span>"
+            + "<span class=\"page-nav-title\">" + prev["title"] + "</span></a>\n";
+    }
+    if (pos < ordered.len() - 1) {
+        final nxt = ordered[pos + 1];
+        body = body + "      <a class=\"page-nav-next\" href=\"../" + blogSlug(nxt["base"]) + "/\">"
+            + "<span class=\"page-nav-dir\">Older</span>"
+            + "<span class=\"page-nav-title\">" + nxt["title"] + "</span></a>\n";
+    }
+    if (body == "") { return ""; }
+    return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
+}
+
+// renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the
+// collected blog posts. It runs AFTER renderBlogPost has populated blogPosts for
+// every post in the walk. The listing is a plain <ul> under the shared page()
+// template, so it inherits nav/breadcrumb/footer for free.
+fun renderBlogIndex() > void {
+    // Newest first, tiebreak by base for determinism.
+    final sorted = blogPosts.sort(fun (a: {str: str}, b: {str: str}) > bool {
+        if (a["date"] != b["date"]) { return strLess(b["date"], a["date"]); }
+        return strLess(a["base"], b["base"]);
+    });
+
+    var body = "<h1>Blog</h1>\n";
+    if (sorted.len() == 0) {
+        body = body + "<p>No posts yet.</p>\n";
+    } else {
+        body = body + "<ul class=\"blog-index\">\n";
+        foreach (p in sorted) {
+            body = body + "  <li><a href=\"" + p["slug"] + "/\"><span class=\"blog-index-title\">"
+                + p["title"] + "</span></a>";
+            if (p["date"] != "") {
+                body = body + " <time class=\"blog-index-date\" datetime=\"" + p["date"] + "\">"
+                    + p["date"] + "</time>";
+            }
+            if (p["description"] != "") {
+                body = body + "<p class=\"blog-index-desc\">" + p["description"] + "</p>";
+            }
+            body = body + "</li>\n";
+        }
+        body = body + "</ul>\n";
+    }
+
+    final title = "Blog";
+    final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
+    final url = BLOG + "/";
+    // srcRel for the index page: blog/index.md marker so page() picks the "blog"
+    // active-nav key even though there is no source file. Provenance keys off it
+    // too; a missing entry in metaCommits falls back to HEAD, so the footer stays
+    // valid regardless of whether an authored blog/index.md exists.
+    final doc = page(title, desc, body, BLOG + "/index.md", "", url);
+    fs.makeDirectory(OUT + "/" + BLOG);
+    final of = io.File.open(OUT + "/" + BLOG + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // The index is a real page, so it belongs in the search index and sitemap.
+    // No frontmatter tags/description — the resolved desc above rides through.
+    pageUrls[url] = true;
+    // Build a fake mini record so addRecord's shape stays consistent.
+    final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";
+    addRecord(url, title, desc, recStub);
+    std.print("  blog index -> " + OUT + "/" + BLOG + "/index.html");
+}
+
+// walkBlog visits every blog/*.md post file (excluding index.md and _underscored
+// fixtures), in fs.list's sorted order — so the walk is deterministic. Posts are
+// flat: no nested subdirectories under blog/.
+fun walkBlog() > void {
+    if (isDir(ROOT + "/" + BLOG) == false) { return; }
+    foreach (name in fs.list(ROOT + "/" + BLOG)) {
+        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+            renderBlogPost(name);
+        }
+    }
+    renderBlogIndex();
+}
+
 // True if path is a directory.
 fun isDir(path: str) > bool {
     return os.execute(["test", "-d", path]) == 0;
@@ -988,6 +1211,7 @@ fun site_render() > void {
     searchRecords = mut [];
     aliasTarget = mut {};
     pageUrls = mut {};
+    blogPosts = mut [<{str: str}>];
     fs.delete(OUT);
     fs.makeDirectory(OUT);
     std.print("generating site from " + ROOT + "/" + DOCS + "/ -> " + OUT + "/");
@@ -1016,6 +1240,7 @@ fun site_render() > void {
 
     renderRoot();
     walk("");
+    walkBlog();
 
     // Emit a redirect stub per declared frontmatter alias (after the walk, so every
     // real page URL is known for the collision guard). Aliases stay out of the
@@ -1109,8 +1334,8 @@ export fun serve(args: [str]) > void {
     // 8080 is busy.
     final port = http.server(OUT);
     magus.info("serving " + OUT + " at http://localhost:{port}");
-    magus.info("watching " + ROOT + "/" + DOCS + " — re-rendering " + OUT + " on change (Ctrl-C to stop)");
-    fs.watch([ROOT + "/" + DOCS], fun(changed: [str]) > bool {
+    magus.info("watching " + ROOT + "/" + DOCS + " + " + ROOT + "/" + BLOG + " — re-rendering " + OUT + " on change (Ctrl-C to stop)");
+    fs.watch([ROOT + "/" + DOCS, ROOT + "/" + BLOG], fun(changed: [str]) > bool {
         magus.info("change detected — re-rendering");
         try {
             site_render();

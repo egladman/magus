@@ -627,3 +627,31 @@ a code {
   color: var(--pico-primary);
   font-weight: 600;
 }
+
+/* Reverse-chronological listing on /blog/. Each entry stacks title + date + one-
+   line description; hover raises the title (no background flash) to keep the list
+   dense. Layout comes from the ul; no per-post card so 10 posts stay browsable. */
+.blog-index {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+.blog-index li {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.blog-index li:last-child {
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.blog-index-title {
+  font-weight: 600;
+}
+.blog-index-date {
+  color: var(--pico-muted-color);
+  margin-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.blog-index-desc {
+  margin: 0.25rem 0 0;
+  color: var(--pico-muted-color);
+}

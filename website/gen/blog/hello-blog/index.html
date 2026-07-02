@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Magusfile authoring diagnostics</title>
-  <meta name="description" content="Codes in the MGS1xxx range flag problems with how a workspace's magusfile(s) are authored: targets that must exist but don't, declarations that">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/magusfile/">
+  <title>Hello, blog</title>
+  <meta name="description" content="A first post to seed the magus docs blog. New here? Start with the Documentation.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/blog/hello-blog/">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="../../theme.css">
@@ -18,8 +18,8 @@
     <nav class="container">
       <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <ul>
-        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
-        <li><a href="../../blog/">Blog</a></li>
+        <li><a href="../../documentation/">Documentation</a></li>
+        <li><a href="../../blog/" aria-current="page">Blog</a></li>
         <li><a href="../../install/">Install</a></li>
         <li><a href="../../playground.html">Playground</a></li>
         <li><button id="theme-toggle" class="outline" aria-label="Color theme">◐</button></li>
@@ -28,34 +28,19 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Codes</li><li aria-current="page">Magusfile</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../blog/">Blog</a></li><li aria-current="page">Hello, blog</li></ul>
     </nav>
-    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/docs/codes/magusfile/README.md">Suggest an edit</a></div>
+    <div class="page-tools"><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/blog/2026-07-01-hello-blog.md">Suggest an edit</a></div>
     <article>
-<h1 id="magusfile-authoring-diagnostics">Magusfile authoring diagnostics</h1>
-<p>Codes in the <code>MGS1xxx</code> range flag problems with how a workspace's magusfile(s)
-are authored: targets that must exist but don't, declarations that won't
-resolve, and similar. Magus raises them at run time (as a typed
-<code>DiagnosticError</code>) and, where applicable, as a <code>magus doctor</code> health check so the
-gap is visible before CI runs.</p>
-<table>
-<thead>
-<tr>
-<th>Code</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>MGS1001</code></td>
-<td>no <code>ci</code> target defined in the selected project(s)</td>
-</tr>
-</tbody>
-</table>
+<h1 id="hello-blog">Hello, blog</h1>
+<p>This is the first post on the magus docs blog. Posts land here alongside the
+docs, share the same rendering pipeline, and appear in the site search index.</p>
+<p>New to magus? Start with the <a href="../../documentation">documentation</a>, or try it
+live in the <a href="../../playground.html">playground</a>.</p>
     </article>
   </main>
   <div class="page-provenance container">
-    <small>Last updated: <time datetime="2026-06-23T03:26:53Z">June 23, 2026, 3:26 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/9ee3dce1b3c7ab7473778d3bc86398a929467ebf">9ee3dce</a>)</small>
+    <small>Last updated: <time datetime="2026-07-02T00:42:53Z">July 2, 2026, 12:42 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/5688293eef319d67dca502f67565b40d21b00586">5688293</a>)</small>
   </div>
   <footer class="site-footer container">
     <small><a href="https://github.com/egladman/magus/blob/docs-site-overhaul/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="../../sitemap.xml">Sitemap</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
