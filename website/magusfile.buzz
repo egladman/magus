@@ -416,6 +416,58 @@ fun tagRunnable(html: str) > str {
     return buf + rest;
 }
 
+// tagAdmonition converts GitHub-alert-syntax blockquotes to styled callouts:
+// each "<blockquote>\n<p>[!TYPE]\n..." becomes a <div class="admonition
+// admonition-<type>"> with a heading and the rest of the paragraph. Recognized
+// TYPES: NOTE / TIP / IMPORTANT / WARNING / CAUTION (the GitHub set). Anything
+// else passes through as a normal blockquote. Fully static, no JS.
+fun tagAdmonition(html: str) > str {
+    var buf = "";
+    var rest = html;
+    while (true) {
+        final open = rest.indexOf("<blockquote>\n<p>[!");
+        if (open == null) { return buf + rest; }
+        buf = buf + rest.sub(0, open);
+        rest = rest.sub(open);
+        final tagEnd = rest.indexOf("]");
+        if (tagEnd == null) { return buf + rest; }
+        // rest starts at "<blockquote>\n<p>[!"; the type name runs from index 18
+        // (past "<blockquote>\n<p>[!") to tagEnd.
+        final typ = rest.sub(18, tagEnd - 18);
+        var kind = "";
+        if (typ == "NOTE") { kind = "note"; }
+        if (typ == "TIP") { kind = "tip"; }
+        if (typ == "IMPORTANT") { kind = "important"; }
+        if (typ == "WARNING") { kind = "warning"; }
+        if (typ == "CAUTION") { kind = "caution"; }
+        if (kind == "") {
+            // Unrecognized type; leave the blockquote alone and advance past it.
+            buf = buf + rest.sub(0, 12);   // len("<blockquote>")
+            rest = rest.sub(12);
+        } else {
+            final closeBq = rest.indexOf("</blockquote>");
+            if (closeBq == null) { return buf + rest; }
+            // Inner content: everything between the opening blockquote and the
+            // marker's line-ending newline, up to </blockquote>. Strip the
+            // marker paragraph's leading "[!TYPE]\n" from the first <p>.
+            var inner = rest.sub(12, closeBq - 12);        // between <blockquote> and </blockquote>
+            // Drop the leading "\n<p>[!TYPE]\n" so what's left starts with the
+            // real prose the author wrote.
+            final prefix = "\n<p>[!" + typ + "]\n";
+            if (inner.startsWith(prefix)) {
+                inner = "\n<p>" + inner.sub(prefix.len());
+            }
+            var label = typ.sub(0, 1) + typ.sub(1).lower();  // Note / Tip / ...
+            buf = buf + "<div class=\"admonition admonition-" + kind + "\">"
+                + "<p class=\"admonition-title\">" + label + "</p>"
+                + inner
+                + "</div>";
+            rest = rest.sub(closeBq + 13);   // len("</blockquote>")
+        }
+    }
+    return buf + rest;
+}
+
 // tagMermaid finds each Mermaid code fence in the rendered HTML (goldmark emits
 // them as <pre><code class="language-mermaid">) and wraps them in a <div class=
 // "mermaid-src"> with a small no-JS-visible label. With JS on, mermaid-init.js
@@ -1409,6 +1461,7 @@ fun renderRoot() > void {
     // rewritten from the root directory to the root directory.
     html = rewriteLinks(html, "", "");
     html = tagRunnable(html);
+    html = tagAdmonition(html);
     html = tagMermaid(html);
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
@@ -1441,7 +1494,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
 
-    final html = tagMermaid(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel))));
+    final html = tagMermaid(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel)))));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1515,7 +1568,7 @@ fun renderBlogPost(base: str) > void {
     // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
     // both so cross-references (../../documentation/) resolve correctly.
-    final html = tagMermaid(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug)));
+    final html = tagMermaid(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug))));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }

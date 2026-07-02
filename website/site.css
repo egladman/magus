@@ -912,3 +912,35 @@ a code {
    users have JS on and expect the diagram surface). */
 .js .mermaid-src-caption { display: none; }
 .mermaid-src-caption { display: block; margin-top: 0.25rem; }
+
+/* Admonitions / callouts. Author with GitHub-alert syntax:
+     > [!NOTE]
+     > Body prose here.
+   The render pass rewrites the blockquote to a bordered card with a colored
+   left accent per type. Fully static, no JS. */
+.admonition {
+  margin: 1rem 0;
+  padding: 0.6rem 1rem 0.75rem 1.1rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-left: 4px solid var(--pico-muted-color);
+  border-radius: 3px;
+}
+.admonition-title {
+  margin: 0 0 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--pico-muted-color);
+}
+.admonition p:last-child { margin-bottom: 0; }
+.admonition-note      { border-left-color: #3178c6; }
+.admonition-note      .admonition-title { color: #3178c6; }
+.admonition-tip       { border-left-color: #2e8b57; }
+.admonition-tip       .admonition-title { color: #2e8b57; }
+.admonition-important { border-left-color: #8a2be2; }
+.admonition-important .admonition-title { color: #8a2be2; }
+.admonition-warning   { border-left-color: #d99a1f; }
+.admonition-warning   .admonition-title { color: #d99a1f; }
+.admonition-caution   { border-left-color: #d13438; }
+.admonition-caution   .admonition-title { color: #d13438; }
