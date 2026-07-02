@@ -1406,7 +1406,13 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
             + "    <article>\n" + content + "    </article>\n"
             + "    </div>\n";
     }
-    final edit = "<a class=\"page-tools-edit\" href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a>";
+    // Companion to "Suggest an edit": a prefilled GitHub-issue link. Cheaper
+    // than a "was this helpful?" widget - no backend, no JS, no analytics; a
+    // reader who cares gets a real, actionable issue with the page URL.
+    final issueUrl = GH + "/issues/new?title=Docs%20issue%3A%20" + srcRel
+        + "&body=Page%3A%20" + srcRel + "%0A%0A";
+    final edit = "<a class=\"page-tools-edit\" href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\">Suggest an edit</a>"
+        + "<a class=\"page-tools-issue\" href=\"" + issueUrl + "\">Report an issue</a>";
     // Reading-time chip (module var, set by the renderX() caller). Consume-and-
     // clear so a page that forgets to set it doesn't inherit the previous value.
     var readingHtml = "";

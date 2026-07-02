@@ -972,3 +972,63 @@ a code {
   border: 0;
   border-radius: 0;
 }
+
+/* Companion to "Suggest an edit" on the secondary tool row - report an issue
+   link with the page path prefilled. Sits directly before Suggest-an-edit,
+   both hugging the right side of the row via margin-left:auto on the first. */
+.page-tools-issue {
+  font-size: 0.875rem;
+  color: var(--pico-muted-color);
+  margin-left: auto;
+  margin-right: 0.75rem;
+}
+.page-tools-issue:hover { color: var(--pico-primary); }
+.page-tools-edit { margin-left: 0; }
+
+/* Keyboard-shortcut help overlay - a native <dialog> so the browser handles
+   focus trap + backdrop + Esc-to-close. Pico gives <dialog> a card look; we
+   just scope the inner width. */
+.shortcut-help[open] {
+  max-width: 22rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0;
+}
+.shortcut-help header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.shortcut-help header h2 { margin: 0; font-size: 1rem; }
+.shortcut-close {
+  background: transparent;
+  border: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+}
+.shortcut-close:hover { color: var(--pico-primary); }
+.shortcut-help dl {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 1rem;
+  row-gap: 0.4rem;
+  align-items: center;
+}
+.shortcut-help dt { margin: 0; }
+.shortcut-help dd { margin: 0; color: var(--pico-muted-color); }
+.shortcut-help kbd {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 3px;
+  background: var(--pico-card-sectioning-background-color);
+}
+.shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
