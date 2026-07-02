@@ -1041,16 +1041,6 @@ a code {
   outline-offset: 2px;
 }
 
-/* External link indicator - a small "leaves this site" arrow after any anchor
-   the render's externalLinks() pass marked with data-external. GitHub-style
-   arrow; muted color to keep it a hint, not a decoration. */
-article a[data-external]::after {
-  content: " \2197";     /* upward-right arrow */
-  font-size: 0.85em;
-  color: var(--pico-muted-color);
-  vertical-align: baseline;
-  margin-left: 0.1em;
-}
 
 /* Code-block language badge: reads the class hljs / highlight gave the block
    and drops it in the top-right of any titled code block. Non-titled blocks

@@ -52,7 +52,6 @@
     var label = open ? "Hide table of contents" : "Show table of contents";
     btn.setAttribute("aria-label", label);
     btn.setAttribute("title", label);
-    btn.setAttribute("data-tooltip", label);
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   }
   function applyDesktop() {

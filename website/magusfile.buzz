@@ -980,9 +980,39 @@ fun renderPublic() > void {
     }
     if (atomEntries.len() > 0) { autoindex("public/atom", atomEntries, "../"); }
 
-    // /public/release/ - placeholder until WS U wires the release-artifacts matrix.
-    // Even empty, the parent /public/ links to it and it must exist to avoid a 404.
-    autoindex("public/release", mut [<{str: str}>], "../");
+    // /public/release/  - per-version tree. Each released version (parsed from
+    // CHANGELOG.md by parseChangelog) gets its own subdirectory listing the 8
+    // artifacts that ship with every release. Deep-links to individual assets
+    // are safe here: the version is known at build time, so hrefs resolve to
+    // GH/releases/download/<ver>/<file> directly. The signing-key PEM links to
+    // the local /assets/ copy (three levels up from /public/release/<ver>/).
+    // Size stays "-" (GitHub-hosted byte counts would require a network fetch,
+    // which would break the drift gate); modified is the release date from
+    // the CHANGELOG entry.
+    foreach (rel in releases) {
+        final ver = rel["version"];
+        final date = rel["date"];
+        final assetBase = GH + "/releases/download/" + ver;
+        var verEntries: [{str: str}] = mut [<{str: str}>];
+        verEntries.append(mut {"name": "magus_" + ver + "_linux_amd64.tar.gz",   "href": assetBase + "/magus_" + ver + "_linux_amd64.tar.gz",   "size": "-", "modified": date, "desc": "Linux amd64 binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_linux_arm64.tar.gz",   "href": assetBase + "/magus_" + ver + "_linux_arm64.tar.gz",   "size": "-", "modified": date, "desc": "Linux arm64 binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_darwin_amd64.tar.gz",  "href": assetBase + "/magus_" + ver + "_darwin_amd64.tar.gz",  "size": "-", "modified": date, "desc": "macOS Intel binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_darwin_arm64.tar.gz",  "href": assetBase + "/magus_" + ver + "_darwin_arm64.tar.gz",  "size": "-", "modified": date, "desc": "macOS Apple Silicon binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_windows_amd64.tar.gz", "href": assetBase + "/magus_" + ver + "_windows_amd64.tar.gz", "size": "-", "modified": date, "desc": "Windows amd64 binary"});
+        verEntries.append(mut {"name": "SHA256SUMS",         "href": assetBase + "/SHA256SUMS",     "size": "-", "modified": date, "desc": "SHA-256 manifest"});
+        verEntries.append(mut {"name": "SHA256SUMS.sig",     "href": assetBase + "/SHA256SUMS.sig", "size": "-", "modified": date, "desc": "Ed25519 signature of SHA256SUMS"});
+        verEntries.append(mut {"name": "magus-release.pem",  "href": "../../../assets/magus-release.pem", "size": "-", "modified": "-", "desc": "Release signing key (SPKI PEM)"});
+        autoindex("public/release/" + ver, verEntries, "../");
+    }
+
+    // /public/release/  - parent index listing every version as a subdirectory.
+    // Empty when no releases have shipped yet; the fake-server signature stays.
+    var releaseParent: [{str: str}] = mut [<{str: str}>];
+    foreach (rel in releases) {
+        final ver = rel["version"];
+        releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel["date"], "desc": "Release " + ver});
+    }
+    autoindex("public/release", releaseParent, "../");
 
     // /public/ hub.
     var hubEntries: [{str: str}] = mut [<{str: str}>];
@@ -1048,7 +1078,7 @@ fun render404() > void {
         + "      <ul>\n"
         + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
         + "        <li><a href=\"" + basePath + "blog/\">Blog</a></li>\n"
-        + "        <li><a href=\"" + basePath + "install/\">Install</a></li>\n"
+        + "        <li><a href=\"" + basePath + "download/\">Download</a></li>\n"
         + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
         + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button></li>\n"
         + "      </ul>\n"
@@ -1061,7 +1091,7 @@ fun render404() > void {
         + "      <ul>\n"
         + "        <li><a href=\"" + basePath + "\">Home</a></li>\n"
         + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
-        + "        <li><a href=\"" + basePath + "install/\">Install</a></li>\n"
+        + "        <li><a href=\"" + basePath + "download/\">Download</a></li>\n"
         + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
         + "      </ul>\n"
         + "    </article>\n"
@@ -1376,7 +1406,11 @@ fun tocOf(content: str) > str {
                     final end = inner.indexOf("</h");
                     var label = inner;
                     if (end != null) { label = inner.sub(0, end); }
-                    final link = "<a href=\"#" + id + "\" title=\"" + stripTags(label) + "\">" + label + "</a>";
+                    // TOC entries render as plain text - drop inline <code>,
+                    // <strong>, <em> etc from the heading so nothing in the
+                    // sidebar looks bold, italic, or code-styled.
+                    final plain = stripTags(label);
+                    final link = "<a href=\"#" + id + "\" title=\"" + plain + "\">" + plain + "</a>";
                     if (lvl == 2) {
                         if (inSub) { ul = ul + "</ul>"; inSub = false; }
                         if (haveLi) { ul = ul + "</li>"; }
@@ -1570,7 +1604,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // highlights nothing (its wordmark is the home link).
     var active = "documentation";
     if (srcRel == "README.md") { active = ""; }
-    if (srcRel == DOCS + "/install.md") { active = "install"; }
+    if (srcRel == DOCS + "/download.md") { active = "download"; }
     // Blog posts and the blog index live under the "Blog" nav item.
     if (srcRel.startsWith(BLOG + "/") or srcRel == BLOG + "/index.md") { active = "blog"; }
     // /public/ autoindex pages are meta surfaces; no nav item is current.
@@ -1607,13 +1641,25 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     if (srcRel == "README.md") {
         heroPreload = "  <link rel=\"preload\" as=\"image\" href=\"" + root + "assets/gopher.webp\" type=\"image/webp\" fetchpriority=\"high\">\n";
     }
+    // Reading-time chip (module var, set by the renderX() caller). Rendered as
+    // a sibling ABOVE the <article> card but INSIDE its column - a chip that
+    // hovers above the card, aligned with the card's left edge, not floating
+    // far-left above the TOC sidebar. Consume-and-clear so a page that forgets
+    // to set it doesn't inherit the previous value.
+    var readingHtml = "";
+    if (pageReading != "") {
+        readingHtml = "    <small class=\"reading-time\" title=\"Estimated reading time\">" + pageReading + "</small>\n";
+    }
+    pageReading = "";
     // Headings drive the TOC sidebar; without enough of them the article goes
     // full-width (no .with-toc grid) and toc.js simply finds nothing to enhance.
+    // With TOC: wrap reading-time + article in a div so both share the article
+    // grid cell (TOC in col 1, [chip + article] in col 2).
     final toc = tocOf(content);
-    var contentBlock = "    <article>\n" + content + "    </article>\n";
+    var contentBlock = "" + readingHtml + "    <article>\n" + content + "    </article>\n";
     if (toc != "") {
         contentBlock = "    <div class=\"with-toc\">\n" + toc
-            + "    <article>\n" + content + "    </article>\n"
+            + "    <div>\n" + readingHtml + "    <article>\n" + content + "    </article>\n    </div>\n"
             + "    </div>\n";
     }
     // Page tools: two plain links on the right of the secondary row, separated
@@ -1629,17 +1675,9 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View source</a> &middot; ";
     }
     edit = edit + "<a href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
-    // Reading-time chip (module var, set by the renderX() caller). Consume-and-
-    // clear so a page that forgets to set it doesn't inherit the previous value.
-    var readingHtml = "";
-    if (pageReading != "") {
-        readingHtml = "<small class=\"reading-time\" title=\"Estimated reading time\">&#x29D7; " + pageReading + "</small>";
-    }
-    pageReading = "";
-    // Second row under the search box: reading time on the left, "Suggest an
-    // edit" on the right. Rendered even when reading time is empty so the edit
-    // link keeps its own row (and doesn't squash next to the search input).
-    final secondaryRow = "    <div class=\"page-tools-secondary\">" + readingHtml + edit + "</div>\n";
+    // Second row under the search box: "Suggest an edit" hugging the right edge
+    // via margin-left:auto (reading-time now lives inside the article, above).
+    final secondaryRow = "    <div class=\"page-tools-secondary\">" + edit + "</div>\n";
     // Consistent "<page title> - magus" suffix everywhere. Home just says
     // "magus" (its H1-derived title is the wordmark, no need to duplicate).
     var fullTitle = title + " — magus";
@@ -1685,7 +1723,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "      <ul>\n"
         + navLink(root + "documentation/", "Documentation", "documentation", active)
         + navLink(root + "blog/", "Blog", "blog", active)
-        + navLink(root + "install/", "Install", "install", active)
+        + navLink(root + "download/", "Download", "download", active)
         + navLink(root + "playground.html", "Playground", "playground", active)
         + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button></li>\n"
         + "      </ul>\n"
