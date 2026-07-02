@@ -1,3 +1,9 @@
+---
+title: time module
+description: Format and parse timestamps with Go reference layouts (UTC), parse Go duration strings, get now as RFC 3339, and add or diff Unix-millis values.
+tags: [time, timestamp, duration, format, parse, rfc 3339, utc, magus stdlib]
+---
+
 # time
 
 Timestamp formatting/parsing and duration parsing (Go time, UTC).

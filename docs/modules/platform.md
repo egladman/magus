@@ -1,3 +1,9 @@
+---
+title: platform module
+description: Normalize OS and architecture identifiers across naming conventions (aarch64 to arm64, Darwin to darwin) and render them in go or uname style.
+tags: [platform, os, arch, goarch, goos, uname, normalize, magus stdlib]
+---
+
 # platform
 
 Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin).

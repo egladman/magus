@@ -1,3 +1,9 @@
+---
+title: magus command
+description: Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.
+tags: [cli, magus, build, monorepo, orchestrator, cache, workspace]
+---
+
 # magus
 
 magus - workspace-aware build orchestrator and content-addressed cache

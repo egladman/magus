@@ -1,3 +1,9 @@
+---
+title: "MGS4002: declared output overlap"
+description: Fires at graph construction when two or more projects in the current dispatch declare the same output path glob under the same target.
+tags: [MGS4002, race, outputs, static check, graph, overlap, declarations]
+---
+
 # MGS4002: declared output overlap
 
 Two or more projects in the current dispatch declare the same output path glob.

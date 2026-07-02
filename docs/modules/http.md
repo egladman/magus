@@ -1,3 +1,9 @@
+---
+title: http module
+description: HTTP client with automatic retry on transient errors. Get, post, and generic request methods plus a background static file server for local dev.
+tags: [http, http client, get, post, request, retry, static server, magus stdlib]
+---
+
 # http
 
 HTTP client with automatic retry on transient errors.

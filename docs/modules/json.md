@@ -1,3 +1,9 @@
+---
+title: json module
+description: Parse JSON strings to values and stringify values to JSON. Compact or pretty output via optional indent. Sandbox-aware form over Buzz's serialize.
+tags: [json, parse json, stringify, encode, decode, serialize, magus stdlib]
+---
+
 # json
 
 JSON encode/decode.

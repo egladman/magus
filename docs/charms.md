@@ -1,3 +1,9 @@
+---
+title: Charms
+description: Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target's argument vector at run time.
+tags: [charms, targets, argv, json-patch, rfc-6902, modifiers, cli]
+---
+
 # Anatomy of a magus Charm
 
 A **charm** is a named modifier that changes _how_ a target runs, not _which_ target or project. Where a Target answers "what operation, on what project" (see [targets.md](targets.md)) and a Spell answers "how a tool performs an operation" (see [spells.md](spells.md)), a charm answers **"in what manner."**

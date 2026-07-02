@@ -1,3 +1,9 @@
+---
+title: "MGS2004: sandbox.allow unresolved"
+description: Fires when a sandbox.allow path in magus.yaml references an env var or path that magus cannot resolve, so the rule is skipped rather than fatal.
+tags: [MGS2004, sandbox, configuration, allowlist, path resolution, magus.yaml]
+---
+
 # MGS2004: sandbox.allow entry failed to resolve
 
 A `sandbox.allow` entry in `magus.yaml` (or an equivalent built-in

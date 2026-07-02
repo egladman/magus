@@ -1,3 +1,9 @@
+---
+title: magus ls
+description: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.
+tags: [cli, magus ls, list, projects, discovery, workspace]
+---
+
 # magus-ls
 
 List all discovered projects

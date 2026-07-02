@@ -1,3 +1,9 @@
+---
+title: Operations
+description: Defines an Operation, its place in the Spell to Target to Process hierarchy, and how fork ops and function ops compose into runnable targets.
+tags: [operations, ops, hierarchy, spells, targets, ci, work-model, execution]
+---
+
 # Operations and the magus work hierarchy
 
 This document defines an **Operation**, magus's smallest named unit of

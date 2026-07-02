@@ -1,3 +1,9 @@
+---
+title: fmt module
+description: printf-style string formatting using Go verbs like %s and %q. One method, sprintf, that formats args into a template and returns the string.
+tags: [fmt, sprintf, format, printf, string formatting, magus stdlib]
+---
+
 # fmt
 
 String formatting (printf-style).

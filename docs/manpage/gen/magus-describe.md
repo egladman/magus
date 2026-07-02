@@ -1,3 +1,9 @@
+---
+title: magus describe
+description: Show the changed files and dependency chains that cause a given project to appear in the affected set computed by magus affected.
+tags: [cli, magus describe, affected, dependency graph, explain, debugging]
+---
+
 # magus-describe
 
 Explain why a project is in the affected set

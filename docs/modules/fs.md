@@ -1,3 +1,9 @@
+---
+title: fs module
+description: Filesystem primitives for magusfiles - glob, read, write, stat, walk, watch, copy, mkdirall, symlinks, and temp dirs. Sandbox-aware over Buzz.
+tags: [fs, filesystem, glob, read file, write file, walk, watch, stat, magus stdlib]
+---
+
 # fs
 
 Filesystem and path primitives.

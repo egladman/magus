@@ -1,3 +1,9 @@
+---
+title: "MGS2003: env vars stripped"
+description: Informational notice that the sandbox replaced a child process environment with a curated allowlist, dropping variables like tokens or credentials.
+tags: [MGS2003, sandbox, security, environment, passthrough, secrets, subprocess]
+---
+
 # MGS2003: env vars stripped from child process
 
 The sandbox replaced a child process's inherited environment with a

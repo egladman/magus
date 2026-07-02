@@ -1,3 +1,9 @@
+---
+title: magus self
+description: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.
+tags: [cli, magus self, self update, updates, versioning, install]
+---
+
 # magus-self
 
 Manage the magus binary (update)

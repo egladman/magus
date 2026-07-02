@@ -1,3 +1,9 @@
+---
+title: Install magus
+description: Install magus from a prebuilt release or build it from source with Go, then keep it current via magus self update or your package manager.
+tags: [install, installation, binary, release, self-update, setup, build-from-source]
+---
+
 # Install
 
 magus is a single self-contained binary. Install a prebuilt release, or build it from source.

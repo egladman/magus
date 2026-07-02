@@ -1,3 +1,9 @@
+---
+title: path module
+description: Pure path-string helpers - abs, rel, clean, is_abs, and expand_user. No I/O, just lexical operations for building and normalizing paths.
+tags: [path, abs, rel, clean, is_abs, expand_user, paths, magus stdlib]
+---
+
 # path
 
 Pure path-string math: abs, rel, clean, is_abs, expand_user.

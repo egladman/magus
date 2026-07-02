@@ -1,3 +1,9 @@
+---
+title: "MGS2005: kernel landlock unavailable"
+description: Notice that the sandbox is enabled but the host lacks kernel landlock, so only interpreter-level enforcement is active on this platform.
+tags: [MGS2005, sandbox, landlock, kernel, macOS, Linux, interpreter, enforcement]
+---
+
 # MGS2005: kernel landlock unavailable; interpreter-level only
 
 The sandbox is enabled but the host kernel does not support

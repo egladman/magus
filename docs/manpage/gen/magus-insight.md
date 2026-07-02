@@ -1,3 +1,9 @@
+---
+title: magus insight
+description: Read VCS history to surface hotspots, temporal coupling, ownership, and trends, showing where a codebase's attention and risk concentrate.
+tags: [cli, magus insight, analysis, hotspots, ownership, coupling, vcs]
+---
+
 # magus-insight
 
 Behavioral code analysis from VCS history

@@ -1,3 +1,9 @@
+---
+title: magus doctor
+description: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.
+tags: [cli, magus doctor, diagnostics, troubleshooting, validation, workspace]
+---
+
 # magus-doctor
 
 Validate the workspace

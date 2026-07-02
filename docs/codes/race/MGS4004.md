@@ -1,3 +1,9 @@
+---
+title: "MGS4004: potential undeclared dependency"
+description: Fires when a project not in the dispatch consumes a file written by one that ran, suggesting the dependency graph is missing an edge.
+tags: [MGS4004, race, dependency graph, undeclared, missingdeps, sources, attribution]
+---
+
 # MGS4004: potential undeclared dependency
 
 A project that did not run in this dispatch consumes a file written by a project

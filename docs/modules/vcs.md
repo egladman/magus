@@ -1,3 +1,9 @@
+---
+title: vcs module
+description: Query the current working tree - repo root, branch, hash, commit metadata, history, diff against a base, dirty check, and the resolved VCS exe.
+tags: [vcs, git, hg, jj, branch, commit, hash, diff, history, magus stdlib]
+---
+
 # vcs
 
 Version-control queries for the current working tree.

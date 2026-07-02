@@ -1,3 +1,9 @@
+---
+title: Remote caching
+description: Wire an S3 or GitHub Actions remote cache backend as a spell so CI runners replay signed build artifacts across machines with a strict trust model.
+tags: [remote-cache, cache, ci, s3, github-actions, artifacts, signing, supply-chain]
+---
+
 # Remote caching
 
 magus's [build cache](../README.md#build-model) is content-addressed: a target's

@@ -1,3 +1,9 @@
+---
+title: "MGS2002: path write denied"
+description: Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.
+tags: [MGS2002, sandbox, security, permissions, write, allowlist, persistence]
+---
+
 # MGS2002: path write denied by sandbox
 
 A spell tried to write to a file outside the workspace and outside the

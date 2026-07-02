@@ -1,3 +1,9 @@
+---
+title: magus config
+description: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.
+tags: [cli, magus config, configuration, magus.yaml, settings, cache]
+---
+
 # magus-config
 
 View or update magus configuration

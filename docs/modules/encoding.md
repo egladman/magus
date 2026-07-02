@@ -1,3 +1,9 @@
+---
+title: encoding module
+description: Text codecs for magusfiles - base64 (standard and URL-safe), hex, URL percent-encoding, and parse/build URLs into structured parts.
+tags: [encoding, base64, hex, url, percent encoding, parse url, magus stdlib]
+---
+
 # encoding
 
 Base64/hex/URL text codecs.
