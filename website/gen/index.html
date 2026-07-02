@@ -30,6 +30,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
     <div class="page-tools-secondary"><em class="reading-time" title="Estimated reading time">17 min read</em><a class="page-tools-edit" href="https://github.com/egladman/magus/edit/docs-site-overhaul/README.md">Suggest an edit</a></div>
     <div class="with-toc">
     <aside class="toc">
@@ -122,7 +123,7 @@ magus run ci           # runs the ci target you composed, read-only
 </code></pre>
 <h3 id="recommendations">Recommendations</h3>
 <p>We document this order; we don't enforce it. Chain steps with <code>magus.needs</code> where order matters (e.g. <code>test</code> depends on <code>build</code>).</p>
-<pre><code class="language-mermaid">flowchart TD
+<div class="mermaid-src"><pre><code class="language-mermaid">flowchart TD
     cmd[&quot;magus affected ci&quot;] --&gt; preflight
     subgraph targets[&quot;Targets (composed in your magusfile)&quot;]
         preflight --&gt; generate
@@ -131,7 +132,7 @@ magus run ci           # runs the ci target you composed, read-only
         lint --&gt; build
         build --&gt; test
     end
-</code></pre>
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
 <h3 id="shared-cache-trust">Shared cache trust</h3>
 <p><strong>Who may write the cache is a trust boundary.</strong> The primary defense is Ed25519 signing: a consumer replays a remote artifact only if it carries a signature from a key in <code>cache.remote.trusted_keys</code>. Wiring a remote backend without a trust set is refused.</p>
 <pre><code class="language-yaml"># magus.yaml  -  bind the backend in magusfile.buzz via magus.cache.remote(github)

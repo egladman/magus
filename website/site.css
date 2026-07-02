@@ -877,3 +877,38 @@ a code {
   padding: 0 !important;
   width: 100%;
 }
+
+/* --- No-JS graceful degradation (foundation from WS D: theme.js flips
+       <html class="no-js"> to "js" before paint). Anything the JS bundle
+       injects (TOC toggle, search box, code-copy, anchors, back-to-top,
+       Run buttons) simply doesn't appear when JS is off. The theme-toggle
+       button is static in the template but a dead control without JS, so
+       hide it explicitly; the OS still drives dark mode via
+       prefers-color-scheme. */
+.no-js #theme-toggle {
+  display: none;
+}
+
+/* NoScript notices sit inline where their JS-only feature would live.
+   Muted card look so they read as guidance, not errors. */
+.noscript-notice {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-sectioning-background-color);
+  border-left: 3px solid var(--pico-muted-border-color);
+  border-radius: 2px;
+}
+.noscript-inline {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  font-style: italic;
+}
+
+/* Mermaid source: with JS off, we show the raw DSL plus a caption identifying
+   it. With JS on, mermaid-init.js replaces the <pre> with the rendered SVG, so
+   the caption should disappear. .js gates the caption off (mermaid-init.js
+   runs regardless of whether it fully renders the SVG; even if the CDN fails,
+   users have JS on and expect the diagram surface). */
+.js .mermaid-src-caption { display: none; }
+.mermaid-src-caption { display: block; margin-top: 0.25rem; }

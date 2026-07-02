@@ -268,6 +268,19 @@
       </div>
 
       <div class="loading-overlay" id="loading" role="status">loading WebAssembly…</div>
+      <!-- No-JS fallback: the loading overlay stays visible forever without JS,
+           so replace the panel content with a clear explanation. -->
+      <noscript>
+        <style>
+          #loading, .panel .editor, .panel .term { display: none !important; }
+        </style>
+        <div class="loading-overlay" style="position:static;padding:1.5rem;">
+          <p><strong>The playground needs JavaScript.</strong></p>
+          <p>It runs a WebAssembly Buzz interpreter in your browser to evaluate
+             magusfiles locally. Enable JavaScript to try magus live, or
+             <a href="install/">install magus</a> to run it for real.</p>
+        </div>
+      </noscript>
     </section>
 
     <section class="pg-panes">
