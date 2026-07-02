@@ -474,6 +474,247 @@ fun writeSeoFiles() > void {
     fs.writeFile(OUT + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + SITE_URL + "sitemap.xml\n");
 }
 
+// escapeXml is the XML-safe form of escapeAttr for feed content (Atom entries,
+// autoindex descriptions): the same five-entity substitution but with & handled
+// last so pre-encoded entities don't get double-encoded.
+fun escapeXml(s: str) > str {
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&apos;");
+}
+
+// atomDate normalizes a frontmatter date (YYYY-MM-DD or full RFC3339) to the
+// RFC3339 UTC form Atom requires. A bare date becomes T00:00:00Z; anything
+// already containing "T" passes through (buildCommits emits full RFC3339).
+fun atomDate(d: str) > str {
+    if (d == "") { return ""; }
+    if (d.indexOf("T") == null) { return d + "T00:00:00Z"; }
+    return d;
+}
+
+// renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of
+// blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),
+// updated (post date), summary (description), author. Feed-level updated = newest
+// post's date. Gated on SITE_URL so it can ship dark until the host is confirmed.
+fun renderBlogAtom() > void {
+    if (SITE_URL == "") { return; }
+    if (blogPosts.len() == 0) { return; }
+    final sorted = blogPosts.sort(fun (a: {str: str}, b: {str: str}) > bool {
+        if (a["date"] != b["date"]) { return strLess(b["date"], a["date"]); }
+        return strLess(a["base"], b["base"]);
+    });
+    final feedUpdated = atomDate(sorted[0]["date"]);
+    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
+        + "  <title>magus blog</title>\n"
+        + "  <link href=\"" + SITE_URL + "blog/\" rel=\"alternate\"/>\n"
+        + "  <link href=\"" + SITE_URL + "public/atom/blog.atom.xml\" rel=\"self\"/>\n"
+        + "  <id>" + SITE_URL + "blog/</id>\n"
+        + "  <updated>" + feedUpdated + "</updated>\n";
+    foreach (p in sorted) {
+        final entryUrl = SITE_URL + p["url"];
+        body = body + "  <entry>\n"
+            + "    <title>" + escapeXml(p["title"]) + "</title>\n"
+            + "    <link href=\"" + entryUrl + "\"/>\n"
+            + "    <id>" + entryUrl + "</id>\n"
+            + "    <updated>" + atomDate(p["date"]) + "</updated>\n"
+            + "    <summary>" + escapeXml(p["description"]) + "</summary>\n"
+            + "  </entry>\n";
+    }
+    body = body + "</feed>\n";
+    fs.makeDirectory(OUT + "/public/atom");
+    fs.writeFile(OUT + "/public/atom/blog.atom.xml", body);
+}
+
+// Each parsed CHANGELOG release: version + date (frontmatter-style headings) +
+// its body (the section under the heading, up to the next release). Populated by
+// parseChangelog; used by renderReleasesAtom.
+var releases: [{str: str}] = mut [<{str: str}>];
+
+// parseChangelog reads CHANGELOG.md (Keep-a-Changelog form) and extracts every
+// "## [<version>] - <date>" heading and its body. "[Unreleased]" is skipped: the
+// feed is for released versions only. Deterministic: reads a committed file, no
+// network. Ordering follows the file, which authors keep newest-first.
+fun parseChangelog() > void {
+    releases = mut [<{str: str}>];
+    if (os.execute(["test", "-f", ROOT + "/CHANGELOG.md"]) != 0) { return; }
+    final f = io.File.open(ROOT + "/CHANGELOG.md", io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    var cur: {str: str} = mut {};
+    var have = false;
+    var body = "";
+    foreach (line in md.split("\n")) {
+        if (line.startsWith("## ")) {
+            // Flush the previous release before starting a new one.
+            if (have) {
+                cur["body"] = body;
+                releases.append(cur);
+            }
+            cur = mut {};
+            have = false;
+            body = "";
+            // "## [1.2.3] - 2026-07-01"  or  "## [Unreleased]"
+            var rest = line.sub(3);
+            if (rest.startsWith("[")) {
+                final close = rest.indexOf("]");
+                if (close != null) {
+                    final ver = rest.sub(1, close - 1);
+                    if (ver != "Unreleased" and ver != "unreleased") {
+                        cur["version"] = ver;
+                        // After the "]": " - <date>" (may be missing on WIP entries).
+                        final rem = rest.sub(close + 1);
+                        var date = "";
+                        final dash = rem.indexOf("-");
+                        if (dash != null) { date = rem.sub(dash + 1).trim(); }
+                        cur["date"] = date;
+                        have = true;
+                    }
+                }
+            }
+        } else if (have) {
+            body = body + line + "\n";
+        }
+    }
+    if (have) {
+        cur["body"] = body;
+        releases.append(cur);
+    }
+}
+
+// renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed
+// releases (newest first as authored). Per <entry>: title = version, link =
+// GH/releases/tag/<ver>, id = same, updated = release date, summary = the section
+// body. Feed-level updated = newest release's date. Gated on SITE_URL and on
+// having at least one released version.
+fun renderReleasesAtom() > void {
+    if (SITE_URL == "") { return; }
+    if (releases.len() == 0) { return; }
+    final feedUpdated = atomDate(releases[0]["date"]);
+    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
+        + "  <title>magus releases</title>\n"
+        + "  <link href=\"" + GH + "/releases\" rel=\"alternate\"/>\n"
+        + "  <link href=\"" + SITE_URL + "public/atom/releases.atom.xml\" rel=\"self\"/>\n"
+        + "  <id>" + GH + "/releases</id>\n"
+        + "  <updated>" + feedUpdated + "</updated>\n";
+    foreach (r in releases) {
+        final ver = r["version"];
+        final link = GH + "/releases/tag/" + ver;
+        body = body + "  <entry>\n"
+            + "    <title>" + escapeXml(ver) + "</title>\n"
+            + "    <link href=\"" + link + "\"/>\n"
+            + "    <id>" + link + "</id>\n"
+            + "    <updated>" + atomDate(r["date"]) + "</updated>\n"
+            + "    <summary type=\"text\">" + escapeXml(r["body"].trim()) + "</summary>\n"
+            + "  </entry>\n";
+    }
+    body = body + "</feed>\n";
+    fs.makeDirectory(OUT + "/public/atom");
+    fs.writeFile(OUT + "/public/atom/releases.atom.xml", body);
+}
+
+// autoindex renders one Apache-`mod_autoindex`-styled listing at path (a gen-
+// root-relative dir, without trailing slash; "" for the root of the /public/
+// tree, "atom" or "release" for a subdir). entries is a list of records with
+// {name, href, size?, modified?, desc}. Every level closes with a fake Apache
+// server-signature easter egg. Themed with Pico via the shared page() template
+// (no bespoke color palette), so light/dark follow the site theme. rootDepth is
+// how many "../" the caller needs to reach gen/'s root, used only to preload the
+// hat asset in the shared head.
+fun autoindex(path: str, entries: [{str: str}], parentHref: str) > void {
+    // Displayed path: /public or /public/atom, always absolute with leading + trailing slash.
+    var displayPath = "/public";
+    if (path != "public") { displayPath = "/" + path; }
+    displayPath = displayPath + "/";
+
+    var body = "<h1>Index of " + displayPath + "</h1>\n"
+        + "<pre class=\"autoindex\">"
+        + "<span class=\"autoindex-head\">Name                          Last modified      Size  Description</span>\n"
+        + "<hr>\n";
+    if (parentHref != "") {
+        body = body + "<a href=\"" + parentHref + "\">Parent Directory</a>                                        -   \n";
+    }
+    // Sort entries by name so listings are byte-stable.
+    final sorted = entries.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["name"], b["name"]); });
+    foreach (e in sorted) {
+        final name = e["name"];
+        final href = e["href"];
+        final size = e["size"];
+        final modified = e["modified"];
+        final desc = e["desc"];
+        var nameCell = "<a href=\"" + href + "\">" + name + "</a>";
+        // Pad to a 30-char column so alignment stays stable across variable-length names.
+        var padName = nameCell;
+        var i = name.len();
+        while (i < 30) { padName = padName + " "; i = i + 1; }
+        var padMod = modified;
+        var j = modified.len();
+        while (j < 19) { padMod = padMod + " "; j = j + 1; }
+        var padSize = size;
+        var k = size.len();
+        while (k < 5) { padSize = " " + padSize; k = k + 1; }
+        body = body + padName + " " + padMod + "  " + padSize + "  " + desc + "\n";
+    }
+    body = body + "<hr>\n"
+        + "<address>magus/latest (Grimoire) Server at eli.gladman.cc Port 443</address>\n"
+        + "</pre>\n";
+
+    fs.makeDirectory(OUT + "/" + path);
+    // srcMarker matches the emitted directory depth so rootPrefix computes the
+    // right "../" climb (public/x.md -> "../", public/atom/x.md -> "../../").
+    final srcMarker = path + "/_index.md";
+    // Alias the marker's commit footer to HEAD (no source file) so it stays stable.
+    metaCommits[metaPrefix + srcMarker] = metaFull + "|" + metaShort + "|" + metaStamp;
+    final doc = page("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/");
+    final of = io.File.open(OUT + "/" + path + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // Register the URL for sitemap purposes.
+    pageUrls[path + "/"] = true;
+}
+
+// renderPublic emits the nested /public/ autoindex tree: the hub at /public/
+// lists atom/ + release/ subdirs plus the machine files that live at their
+// canonical spec locations (/sitemap.xml, /robots.txt); /public/atom/ lists the
+// two Atom feeds; /public/release/ is a placeholder browsing entry (populated in
+// WS U with the release-artifacts matrix). Deterministic (no network at build).
+fun renderPublic() > void {
+    if (SITE_URL == "") { return; }
+
+    // /public/atom/ - the two feeds (if they were emitted).
+    var atomEntries: [{str: str}] = mut [<{str: str}>];
+    if (blogPosts.len() > 0) {
+        atomEntries.append(mut {
+            "name": "blog.atom.xml", "href": "blog.atom.xml",
+            "size": "-", "modified": atomDate(blogPosts[0]["date"]),
+            "desc": "Blog posts (Atom 1.0)"
+        });
+    }
+    if (releases.len() > 0) {
+        atomEntries.append(mut {
+            "name": "releases.atom.xml", "href": "releases.atom.xml",
+            "size": "-", "modified": atomDate(releases[0]["date"]),
+            "desc": "Releases (Atom 1.0)"
+        });
+    }
+    if (atomEntries.len() > 0) { autoindex("public/atom", atomEntries, "../"); }
+
+    // /public/release/ - placeholder until WS U wires the release-artifacts matrix.
+    // Even empty, the parent /public/ links to it and it must exist to avoid a 404.
+    autoindex("public/release", mut [<{str: str}>], "../");
+
+    // /public/ hub.
+    var hubEntries: [{str: str}] = mut [<{str: str}>];
+    if (atomEntries.len() > 0) {
+        hubEntries.append(mut {"name": "atom/", "href": "atom/", "size": "-", "modified": atomDate(blogPosts[0]["date"]), "desc": "Atom feeds"});
+    }
+    hubEntries.append(mut {"name": "release/", "href": "release/", "size": "-", "modified": metaStamp, "desc": "Release artifacts"});
+    hubEntries.append(mut {"name": "sitemap.xml", "href": "../sitemap.xml", "size": "-", "modified": metaStamp, "desc": "XML sitemap"});
+    hubEntries.append(mut {"name": "robots.txt", "href": "../robots.txt", "size": "-", "modified": metaStamp, "desc": "Robots policy"});
+    autoindex("public", hubEntries, "../");
+}
+
 // formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
 // human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
 // date library. Used as the no-JS fallback; client-side JS rewrites it to the
@@ -705,6 +946,13 @@ fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
             + "<li aria-current=\"page\">" + title + "</li>";
         return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
     }
+    // The /public/ autoindex tree also skips the Documentation root; each level
+    // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
+    // link in its own body, so the breadcrumb stays flat).
+    if (srcRel.startsWith("public/")) {
+        li = li + "<li aria-current=\"page\">" + title + "</li>";
+        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+    }
 
     // The Documentation hub roots every docs trail; on the hub page itself it is
     // the current leaf rather than a link back to where you already are.
@@ -820,6 +1068,8 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     if (srcRel == DOCS + "/install.md") { active = "install"; }
     // Blog posts and the blog index live under the "Blog" nav item.
     if (srcRel.startsWith(BLOG + "/") or srcRel == BLOG + "/index.md") { active = "blog"; }
+    // /public/ autoindex pages are meta surfaces; no nav item is current.
+    if (srcRel.startsWith("public/")) { active = ""; }
     var descMeta = "";
     if (description != "") {
         descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
@@ -829,9 +1079,20 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // is the slashed clean path ("" for home -> canonical is the site root).
     var canon = "";
     var sitemapLink = "";
+    var publicLink = "";
+    var feedDiscovery = "";
     if (SITE_URL != "") {
         canon = "  <link rel=\"canonical\" href=\"" + SITE_URL + canonUrl + "\">\n";
         sitemapLink = " &middot; <a href=\"" + root + "sitemap.xml\">Sitemap</a>";
+        publicLink = " &middot; <a href=\"" + root + "public/\">public</a>";
+        // Atom <link rel="alternate"> discovery: home + blog pages advertise both
+        // feeds so a reader auto-detects them. Release pages will advertise the
+        // releases feed too once WS U links them; keep it simple for now.
+        feedDiscovery = "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus releases\" href=\"" + root + "public/atom/releases.atom.xml\">\n";
+        if (srcRel == "README.md" or srcRel.startsWith(BLOG + "/")) {
+            feedDiscovery = feedDiscovery
+                + "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus blog\" href=\"" + root + "public/atom/blog.atom.xml\">\n";
+        }
     }
     // Preload the LCP hero image on the home page only (README's gopher), so the
     // browser fetches it in parallel with the CSS instead of discovering it after
@@ -858,6 +1119,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "  <title>" + title + "</title>\n"
         + descMeta
         + canon
+        + feedDiscovery
         + heroPreload
         // Warm the CDN connection before the render-blocking Pico <link> below, so
         // the TLS handshake overlaps HTML parsing; the same origin also serves the
@@ -897,6 +1159,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         // "Source Code" (not "GitHub") describes purpose over platform and survives a
         // repo move; relocating it here also de-crowds the mobile nav.
         + " &middot; <a href=\"" + GH + "\">Source Code</a>"
+        + publicLink
         + sitemapLink
         + " &middot; "
         + "<a href=\"https://buzz-lang.dev/\">Built with Buzz</a>"
@@ -1252,6 +1515,10 @@ fun site_render() > void {
     // search index/sitemap/feeds — only the real page they point to appears there.
     emitAliases();
     writeSeoFiles();
+    parseChangelog();
+    renderBlogAtom();
+    renderReleasesAtom();
+    renderPublic();
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the

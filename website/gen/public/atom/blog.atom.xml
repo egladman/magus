@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>magus blog</title>
+  <link href="https://eli.gladman.cc/magus/blog/" rel="alternate"/>
+  <link href="https://eli.gladman.cc/magus/public/atom/blog.atom.xml" rel="self"/>
+  <id>https://eli.gladman.cc/magus/blog/</id>
+  <updated>2026-07-01T00:00:00Z</updated>
+  <entry>
+    <title>Hello, blog</title>
+    <link href="https://eli.gladman.cc/magus/blog/hello-blog/"/>
+    <id>https://eli.gladman.cc/magus/blog/hello-blog/</id>
+    <updated>2026-07-01T00:00:00Z</updated>
+    <summary>A first post to seed the magus docs blog. New here? Start with the Documentation.</summary>
+  </entry>
+</feed>
