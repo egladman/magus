@@ -54,7 +54,7 @@
 <h3 id="parse">parse</h3>
 <p>Decode a JSON string into a value (map, list, string, number, or boolean).</p>
 <p><strong>Signature:</strong> <code>json.parse(s) → any</code>[^buzz-stdlib-json-parse] · <a href="https://github.com/egladman/magus/blob/main/std/json.go#L40">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -71,12 +71,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> any</p>
 <h3 id="stringify">stringify</h3>
 <p>Encode a value as a JSON string. With no indent (or &quot;&quot;) the output is compact; pass an indent string (e.g. &quot;  &quot; or &quot;\t&quot;) for pretty, multi-line output.</p>
 <p><strong>Signature:</strong> <code>json.stringify(value, [indent]) → string</code>[^buzz-stdlib-json-stringify] · <a href="https://github.com/egladman/magus/blob/main/std/json.go#L53">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -99,7 +99,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <p>[^buzz-stdlib-json-parse]: <code>json.parse</code> is also in Buzz's standard library (<code>serialize.jsonDecode</code>); the magus form is sandbox-aware.
 [^buzz-stdlib-json-stringify]: <code>json.stringify</code> is also in Buzz's standard library (<code>serialize.jsonEncode</code>); the magus form is sandbox-aware.</p>

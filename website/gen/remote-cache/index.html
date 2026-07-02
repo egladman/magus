@@ -67,7 +67,7 @@ a fork PR, nor anyone holding raw bucket credentials can publish an artifact tha
 any machine will replay.</p>
 <p>magus itself knows nothing about S3 or GitHub. A backend is an ordinary
 <a href="../spells/">spell</a> exposing three <a href="../spells/#operations-come-in-two-shapes">function-ops</a>:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>op</th>
@@ -92,7 +92,7 @@ any machine will replay.</p>
 <td>upload the artifact at <code>src</code>; <code>true</code> = stored</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Everything backend-specific (auth, transport) stays in the spell, in pure Buzz.
 See <a href="../spells/">spells.md</a> and <a href="../engines/">engines.md</a>.</p>
 <h2 id="wiring-a-backend">Wiring a backend</h2>
@@ -124,7 +124,7 @@ magus.cache.remote(github);
 </code></pre>
 <p>It reads everything it needs from the runner environment, all provided
 automatically inside a GitHub Actions job:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>variable</th>
@@ -149,7 +149,7 @@ automatically inside a GitHub Actions job:</p>
 <td>bearer token for the cache service</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>There is no transport to configure: bind it, and it activates in CI and stays
 dormant locally. You still declare a trust set and set the signing secret as for
 any backend (see <a href="#signing-is-required-trust-model">Signing is required</a>). GitHub
@@ -162,7 +162,7 @@ Signature V4.</p>
 magus.cache.remote(s3);
 </code></pre>
 <p>Configuration comes from the environment (standard AWS variables plus a bucket):</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>variable</th>
@@ -202,7 +202,7 @@ magus.cache.remote(s3);
 <td>base URL incl. scheme, no trailing slash; set for MinIO/R2/B2 (default <code>https://s3.&lt;region&gt;.amazonaws.com</code>)</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Unlike the GitHub backend, S3 has no automatic eviction. Prune it on a schedule:</p>
 <pre><code class="language-sh">magus config cache prune --remote   # evict by the configured retention policy
 </code></pre>

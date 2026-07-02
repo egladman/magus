@@ -54,7 +54,7 @@
 <h3 id="get">get</h3>
 <p>Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
 <p><strong>Signature:</strong> <code>http.get(url, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L106">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -83,12 +83,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="post">post</h3>
 <p>Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
 <p><strong>Signature:</strong> <code>http.post(url, body, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L112">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -123,12 +123,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="request">request</h3>
 <p>Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
 <p><strong>Signature:</strong> <code>http.request(method, url, [body], [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L118">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -169,12 +169,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="server">server</h3>
 <p>Start a static file server for dir in the background and return the bound port. With no port (or 0) it scans upward from 8080 and binds the first available port. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.</p>
 <p><strong>Signature:</strong> <code>http.server(dir, [port]) → int</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L127">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -197,7 +197,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> int</p>
     </article>
     </div>

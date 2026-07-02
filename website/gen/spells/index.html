@@ -50,7 +50,7 @@
 <p>A spell is <em>how</em> a tool does something (the <code>go-vet</code>, <code>cargo-clippy</code> ops); a target is <em>what</em> you run (<code>magus run lint</code>). You <strong>bind</strong> spells and <strong>invoke</strong> targets. See <a href="#spells-vs-targets">Spells vs Targets</a>.</p>
 <h2 id="spells-vs-targets">Spells vs Targets</h2>
 <p>These are the two core nouns in magus, on orthogonal axes. Confusing them is the usual reason a build runs and does nothing.</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th></th>
@@ -105,7 +105,7 @@
 <td><code>Path + Name</code> (see <a href="../targets/">targets.md</a>)</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>The relationship is <strong>compositional</strong>: a target's body calls spell ops.</p>
 <pre><code class="language-buzz">import &quot;magus/spell/go&quot;;
 magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); return true; });   // bind the spell (runs nothing)
@@ -128,7 +128,7 @@ export fun test(args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&qu
 <p>magus deliberately does <strong>not</strong> decide what &quot;lint&quot; or &quot;format&quot; means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).</p>
 <h2 id="what-a-spell-provides">What a spell provides</h2>
 <p>A bound spell contributes three things to its project. Only operations are &quot;runnable&quot;; the other two are metadata that make caching and the affected set correct.</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Contribution</th>
@@ -158,7 +158,7 @@ export fun test(args: [str])  &gt; void { go[&quot;go-test&quot;]({ &quot;cwd&qu
 <td>files this spell owns for affected-set attribution</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Binding a spell contributes its <code>needs</code>/<code>claims</code>/<code>provides</code> to that project's cache key and affected set even before you wire any target; it executes nothing until a target calls one of its ops.</p>
 <h3 id="operations-come-in-two-shapes">Operations come in two shapes</h3>
 <ol>
@@ -203,7 +203,7 @@ export fun build(args: [str]) &gt; void {
 <h2 id="naming-operations">Naming operations</h2>
 <p>An op's public name is the <strong>map key</strong> in <code>mgs_listTargets</code> (or the <code>ops</code> table). That key is what a magusfile calls and what <code>magus run spell::op</code> invokes. The implementation function is private. Name both after the CLI command, not after a magus lifecycle verb, so the spell is self-documenting and a developer who knows the toolchain can invoke an op without reading the magusfile.</p>
 <p><strong>Op key: the CLI command, kebab-case, lowercase, no flags.</strong> Write the command as you type it and replace spaces with hyphens. The golang spell:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>runs</th>
@@ -243,7 +243,7 @@ export fun build(args: [str]) &gt; void {
 <td><code>golangCILint</code></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Naming the op <code>golangci-lint</code> (not <code>lint</code>) and <code>go-fmt</code> (not <code>fmt</code>) says exactly which tool runs: there is no <code>go lint</code>, and <code>fmt</code> here is the <code>gofmt</code> binary. Multi-tool spells already work this way: typescript exposes <code>tsc</code>/<code>eslint</code>/<code>prettier</code>/<code>vitest</code>, one op per tool.</p>
 <p><strong>Handler: the same command in lowerCamelCase, with Go-style initialisms</strong> (<code>go-fmt</code> → <code>goFmt</code>, <code>golangci-lint</code> → <code>golangCILint</code>, <code>ruff-check</code> → <code>ruffCheck</code>). The handler name is invisible to magus for fork ops; it exists to tell the reader the exact binary.</p>
 <p><strong>Not every op is a CLI command.</strong> A no-op marker (typescript's <code>preflight</code>) or a cache-backend verb (github/s3 <code>get-entry</code>) is not a tool invocation, so keep a descriptive name.</p>
@@ -297,7 +297,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 </code></pre>
 <p>Key invariant: <strong>binding is not running.</strong> A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; call the host modules directly).</p>
 <h2 id="glossary">Glossary</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Term</th>
@@ -342,10 +342,10 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <td>The runnable unit a spell op is composed into. A separate concept; see <a href="../targets/">targets.md</a>.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="worked-examples-in-this-repo">Worked examples in this repo</h2>
 <p>Read these spells under <a href="./"><code>spells/</code></a> when you outgrow a plain fork spell:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Spell</th>
@@ -370,7 +370,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <td>A <strong>remote cache backend</strong> for S3/MinIO/R2/B2 that signs every request with <strong>AWS SigV4</strong> via <code>crypto</code>'s keyed-hash primitives.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../operations/">Operations</a>: the formal definition of an op and the Spell → Operation → Target work hierarchy.</li>

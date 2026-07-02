@@ -54,7 +54,7 @@
 <h3 id="format">format</h3>
 <p>Render Unix-millis as a string using a Go reference layout (UTC).</p>
 <p><strong>Signature:</strong> <code>time.format(layout, unix_millis) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L71">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -77,12 +77,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="parse">parse</h3>
 <p>Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.</p>
 <p><strong>Signature:</strong> <code>time.parse(layout, value) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L86">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -105,12 +105,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> float64</p>
 <h3 id="parse-duration">parse_duration</h3>
 <p>Parse a Go duration string (e.g. &quot;168h&quot;, &quot;1h30m&quot;) into milliseconds; errors on mismatch.</p>
 <p><strong>Signature:</strong> <code>time.parseDuration(duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L95">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -127,7 +127,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> float64</p>
 <h3 id="now-iso">now_iso</h3>
 <p>Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().</p>
@@ -136,7 +136,7 @@
 <h3 id="add">add</h3>
 <p>Add a Go duration string (e.g. &quot;24h&quot;, &quot;-1h30m&quot;) to a Unix-millis timestamp; returns the new Unix-millis timestamp.</p>
 <p><strong>Signature:</strong> <code>time.add(unix_millis, duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L105">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -159,12 +159,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> float64</p>
 <h3 id="diff">diff</h3>
 <p>Return a minus b in milliseconds (positive when a is later than b).</p>
 <p><strong>Signature:</strong> <code>time.diff(a, b) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L115">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -187,7 +187,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> float64</p>
     </article>
     </div>

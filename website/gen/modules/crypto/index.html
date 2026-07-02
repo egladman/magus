@@ -54,7 +54,7 @@
 <h3 id="sha256-hex">sha256_hex</h3>
 <p>Return the lowercase hex SHA-256 digest of data.</p>
 <p><strong>Signature:</strong> <code>crypto.sha256Hex(data) → string</code>[^buzz-stdlib-crypto-sha256_hex] · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L121">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -71,12 +71,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="sha256-file">sha256_file</h3>
 <p>Return the lowercase hex SHA-256 digest of the file at path.</p>
 <p><strong>Signature:</strong> <code>crypto.sha256File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L126">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -93,12 +93,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="sha512-hex">sha512_hex</h3>
 <p>Return the lowercase hex SHA-512 digest of data.</p>
 <p><strong>Signature:</strong> <code>crypto.sha512Hex(data) → string</code>[^buzz-stdlib-crypto-sha512_hex] · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L131">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -115,12 +115,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="sha512-file">sha512_file</h3>
 <p>Return the lowercase hex SHA-512 digest of the file at path.</p>
 <p><strong>Signature:</strong> <code>crypto.sha512File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L136">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -137,12 +137,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="sha1-hex">sha1_hex</h3>
 <p>Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.</p>
 <p><strong>Signature:</strong> <code>crypto.sha1Hex(data) → string</code>[^buzz-stdlib-crypto-sha1_hex] · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L141">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -159,12 +159,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="sha1-file">sha1_file</h3>
 <p>Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.</p>
 <p><strong>Signature:</strong> <code>crypto.sha1File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L146">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -181,12 +181,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="md5-hex">md5_hex</h3>
 <p>Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.</p>
 <p><strong>Signature:</strong> <code>crypto.md5Hex(data) → string</code>[^buzz-stdlib-crypto-md5_hex] · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L151">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -203,12 +203,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="md5-file">md5_file</h3>
 <p>Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.</p>
 <p><strong>Signature:</strong> <code>crypto.md5File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L156">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -225,7 +225,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <p>[^buzz-stdlib-crypto-sha256_hex]: <code>crypto.sha256Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Sha256, …)</code>); the magus form is sandbox-aware.
 [^buzz-stdlib-crypto-sha512_hex]: <code>crypto.sha512Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Sha512, …)</code>); the magus form is sandbox-aware.

@@ -54,7 +54,7 @@
 <h3 id="cmd">cmd</h3>
 <p>Escape hatch: run <code>magus &lt;args&gt;</code> for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists — magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
 <p><strong>Signature:</strong> <code>magus.cmd(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L136">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -77,12 +77,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="run">run</h3>
 <p>Run <code>magus run &lt;args&gt;</code> recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
 <p><strong>Signature:</strong> <code>magus.run(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L154">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -105,12 +105,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="describe">describe</h3>
 <p>Run <code>magus describe &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.</p>
 <p><strong>Signature:</strong> <code>magus.describe(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L159">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -133,12 +133,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="insight">insight</h3>
 <p>Run <code>magus insight &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
 <p><strong>Signature:</strong> <code>magus.insight(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L164">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -161,12 +161,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="doctor">doctor</h3>
 <p>Run <code>magus doctor &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
 <p><strong>Signature:</strong> <code>magus.doctor(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L169">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -189,12 +189,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="bust-cache">bust_cache</h3>
 <p>Invalidate the build cache. Escape hatch — prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.</p>
 <p><strong>Signature:</strong> <code>magus.bustCache([project_path])</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L112">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -211,11 +211,11 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="has-charm">has_charm</h3>
 <p>True when execution charm <code>name</code> is active, letting a target body branch on a charm carried in context (e.g. has_charm(&quot;rw&quot;)).</p>
 <p><strong>Signature:</strong> <code>magus.has_charm(name) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L105">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -232,7 +232,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> bool</p>
     </article>
     </div>

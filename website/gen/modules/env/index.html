@@ -54,7 +54,7 @@
 <h3 id="get">get</h3>
 <p>Return the value of name, or &quot;&quot; if unset. Use lookup to tell unset from set-but-empty.</p>
 <p><strong>Signature:</strong> <code>env.get(name) → string</code>[^buzz-stdlib-env-get] · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L89">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -71,12 +71,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="lookup">lookup</h3>
 <p>Return (value, found); found is false when name is unset or stripped by the sandbox.</p>
 <p><strong>Signature:</strong> <code>env.lookup(name) → string, bool</code>[^buzz-stdlib-env-lookup] · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L105">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -93,12 +93,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string, bool</p>
 <h3 id="set">set</h3>
 <p>Set name to value in the current process environment.</p>
 <p><strong>Signature:</strong> <code>env.set(name, value)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L114">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -121,7 +121,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="list">list</h3>
 <p>Return all environment variables as a name→value map.</p>
 <p><strong>Signature:</strong> <code>env.list() → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L196">source</a></p>
@@ -129,7 +129,7 @@
 <h3 id="unset">unset</h3>
 <p>Remove name from the current process environment.</p>
 <p><strong>Signature:</strong> <code>env.unset(name)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L132">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -146,11 +146,11 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="expand">expand</h3>
 <p>Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to &quot;&quot;).</p>
 <p><strong>Signature:</strong> <code>env.expand(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L147">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -167,7 +167,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="home">home</h3>
 <p>Return the current user's home directory.</p>
@@ -176,7 +176,7 @@
 <h3 id="get-or">get_or</h3>
 <p>Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.</p>
 <p><strong>Signature:</strong> <code>env.getOr(name, def) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L169">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -199,12 +199,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="require">require</h3>
 <p>Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).</p>
 <p><strong>Signature:</strong> <code>env.require(name) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L184">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -221,7 +221,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <p>[^buzz-stdlib-env-get]: <code>env.get</code> is also in Buzz's standard library (<code>os.env</code>); the magus form is sandbox-aware.
 [^buzz-stdlib-env-lookup]: <code>env.lookup</code> is also in Buzz's standard library (<code>os.env (returns null when unset)</code>); the magus form is sandbox-aware.</p>

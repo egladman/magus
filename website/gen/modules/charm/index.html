@@ -54,7 +54,7 @@
 <h3 id="append">append</h3>
 <p>Append vals to the end of the argv.</p>
 <p><strong>Signature:</strong> <code>charm.append(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L198">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -71,12 +71,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="prepend">prepend</h3>
 <p>Insert vals at the front of the argv, in order.</p>
 <p><strong>Signature:</strong> <code>charm.prepend(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L207">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -93,12 +93,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="after">after</h3>
 <p>Insert vals immediately after the first argv element equal to anchor.</p>
 <p><strong>Signature:</strong> <code>charm.after(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L212">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -127,12 +127,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="before">before</h3>
 <p>Insert vals immediately before the first argv element equal to anchor.</p>
 <p><strong>Signature:</strong> <code>charm.before(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L221">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -161,12 +161,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="set">set</h3>
 <p>Replace the first argv element equal to anchor with val.</p>
 <p><strong>Signature:</strong> <code>charm.set(argv, anchor, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L230">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -195,12 +195,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="drop">drop</h3>
 <p>Drop (remove) the first argv element equal to anchor.</p>
 <p><strong>Signature:</strong> <code>charm.drop(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L239">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -223,12 +223,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="after-func">after_func</h3>
 <p>Insert vals after the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.afterFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L248">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -257,12 +257,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="before-func">before_func</h3>
 <p>Insert vals before the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.beforeFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L257">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -291,12 +291,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="set-func">set_func</h3>
 <p>Replace the first argv element for which fn(s) is truthy with val.</p>
 <p><strong>Signature:</strong> <code>charm.setFunc(argv, fn, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L266">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -325,12 +325,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="drop-func">drop_func</h3>
 <p>Drop (remove) the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.dropFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L275">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -353,12 +353,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="path">path</h3>
 <p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element equal to anchor — the index, auto-calculated, for hand-built move/copy/test ops.</p>
 <p><strong>Signature:</strong> <code>charm.path(argv, anchor) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L284">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -381,12 +381,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="path-func">path_func</h3>
 <p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element for which fn(s) is truthy.</p>
 <p><strong>Signature:</strong> <code>charm.pathFunc(argv, fn) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L293">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -409,12 +409,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="move">move</h3>
 <p>Move the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
 <p><strong>Signature:</strong> <code>charm.move(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L311">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -443,12 +443,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="move-func">move_func</h3>
 <p>Move the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
 <p><strong>Signature:</strong> <code>charm.moveFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L323">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -477,12 +477,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="copy">copy</h3>
 <p>Copy the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
 <p><strong>Signature:</strong> <code>charm.copy(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L335">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -511,12 +511,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="copy-func">copy_func</h3>
 <p>Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
 <p><strong>Signature:</strong> <code>charm.copyFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L347">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -545,12 +545,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="test">test</h3>
 <p>Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).</p>
 <p><strong>Signature:</strong> <code>charm.test(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L360">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -573,12 +573,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="test-func">test_func</h3>
 <p>Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.</p>
 <p><strong>Signature:</strong> <code>charm.testFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L369">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -601,7 +601,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> map[string]any</p>
     </article>
     </div>

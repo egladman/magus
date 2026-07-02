@@ -51,7 +51,7 @@
 <p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;vcs&quot;</code>) and call methods in <code>camelCase</code> (<code>vcs.someMethod</code>).</p>
 </blockquote>
 <h2 id="fields">Fields</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Field</th>
@@ -71,7 +71,7 @@
 <td>Resolved base ref for diffs.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="methods">Methods</h2>
 <h3 id="root">root</h3>
 <p>Absolute path of the repository root.</p>
@@ -80,7 +80,7 @@
 <h3 id="diff">diff</h3>
 <p>List files changed against the given base (defaults to vcs.base).</p>
 <p><strong>Signature:</strong> <code>vcs.diff([base]) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L178">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -97,7 +97,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> []string</p>
 <h3 id="short-hash">short_hash</h3>
 <p>Short commit hash, or empty on error.</p>
@@ -118,7 +118,7 @@
 <h3 id="is-dirty">is_dirty</h3>
 <p>True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([&quot;MAGUS.md&quot;]) — the right way to gate generated outputs without shelling out to git or parsing porcelain.</p>
 <p><strong>Signature:</strong> <code>vcs.isDirty([paths]) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L246">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -135,7 +135,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> bool</p>
 <h3 id="metadata">metadata</h3>
 <p>Full metadata table: short_hash, hash, branch, commit_date, is_dirty.</p>
@@ -144,7 +144,7 @@
 <h3 id="commit">commit</h3>
 <p>Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up — test a field (e.g. c.date == &quot;&quot;) rather than for null.</p>
 <p><strong>Signature:</strong> <code>vcs.commit([rev]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L294">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -161,12 +161,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> any</p>
 <h3 id="history">history</h3>
 <p>Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.</p>
 <p><strong>Signature:</strong> <code>vcs.history([limit]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L308">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -183,7 +183,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> any</p>
 <h3 id="exe">exe</h3>
 <p>Absolute path to the active VCS executable (git/hg/jj), or &quot;&quot; if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).</p>

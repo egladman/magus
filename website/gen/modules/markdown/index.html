@@ -54,7 +54,7 @@
 <h3 id="to-html">to_html</h3>
 <p>Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a &quot;---&quot; fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md → index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).</p>
 <p><strong>Signature:</strong> <code>markdown.toHtml(source) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/markdown.go#L76">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -71,12 +71,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="frontmatter">frontmatter</h3>
 <p>Parse the leading YAML frontmatter block (a &quot;---&quot; fenced header at the top of the document) and return it as a JSON object string; decode with serialize.jsonDecode. Returns &quot;{}&quot; when no frontmatter is present.</p>
 <p><strong>Signature:</strong> <code>markdown.frontmatter(source) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/markdown.go#L90">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -93,12 +93,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
 <h3 id="strip-frontmatter">strip_frontmatter</h3>
 <p>Return the Markdown body with any leading YAML frontmatter block removed (the source unchanged when none is present).</p>
 <p><strong>Signature:</strong> <code>markdown.stripFrontmatter(source) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/markdown.go#L113">source</a></p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -115,7 +115,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><strong>Returns:</strong> string</p>
     </article>
     </div>

@@ -52,7 +52,7 @@
   </picture>
 </p>
 <!-- Generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
-<img alt="Coverage" width="113" height="20" src="./assets/coverage.svg">
+<img loading="lazy" decoding="async" alt="Coverage" width="113" height="20" src="./assets/coverage.svg">
 <p>A fast cross-platform task orchestrator for polyglot (mono)repos.</p>
 <p>Magus computes affected projects from your changes, caches the results, and runs the minimum rebuild set after a change.</p>
 <p>Single binary. Code as configuration. Statically typed. No second toolchain.</p>
@@ -286,7 +286,7 @@ magus status -o json   # machine-readable output
 <h2 id="cli">CLI</h2>
 <p>The magus command-line surface: the command reference, how arguments are forwarded to a target, and how output is formatted. The run grammar itself (<code>spell::op</code>, charms, project selectors) lives under <a href="#targets">Targets</a>.</p>
 <h3 id="commands">Commands</h3>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Command</th>
@@ -359,7 +359,7 @@ magus status -o json   # machine-readable output
 <td>Print version, commit, and build date</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h4 id="x-interactive-picker">x: interactive picker</h4>
 <p><code>magus x</code> is a TTY shorthand for <code>magus run</code>. It presents a fuzzy project picker followed by a target picker, then executes the selection.</p>
 <pre><code class="language-sh">magus x           # browse all projects
@@ -442,7 +442,7 @@ magus affected go::go-test -- -race            # affected projects, race detecto
 <hr>
 <h3 id="output-formats">Output formats</h3>
 <p>Every command takes <code>-o &lt;format&gt;</code> to switch its output shape.</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Format</th>
@@ -475,7 +475,7 @@ magus affected go::go-test -- -race            # affected projects, race detecto
 <td>Custom Go <code>text/template</code> over the command's data model</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <pre><code class="language-sh">magus ls -o json
 magus ls -o name | xargs -I{} echo &quot;found project: {}&quot;
 magus ls -o 'template={{range .}}{{.Name}} ({{.Spell.Name}}){{&quot;\n&quot;}}{{end}}'

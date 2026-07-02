@@ -88,7 +88,7 @@ Target (export fun) ──composes──▶ Operations  +  ──needs──▶ 
   ▼ run by the dispatcher (cacheable, charm-modified)
 target.result event   (per target; no per-op breakdown)
 </code></pre>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Layer</th>
@@ -123,11 +123,11 @@ target.result event   (per target; no per-op breakdown)
 <td><code>Path + Name</code> (<a href="../targets/">Target</a>)</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Charms (<a href="../charms/">charms.md</a>) sit orthogonal to this stack: a charm rewrites an
 Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own.</p>
 <h2 id="results-what-each-layer-produces">Results: what each layer produces</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Result</th>
@@ -160,7 +160,7 @@ Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own
 <td>exists</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <ul>
 <li>
 <p><strong><code>ExecResult</code> exists in both worlds.</strong> It is the Go <code>run.ExecResult</code> and the
@@ -182,7 +182,7 @@ across the cross-project boundary).</p>
 <p>magus overloads two words. Formalizing <strong>Operation</strong> fixes the first and exposes a
 latent misnaming in the second.</p>
 <p><strong>Three unrelated &quot;op&quot;s.</strong> Only the first is the Operation defined here:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Term</th>
@@ -211,7 +211,7 @@ latent misnaming in the second.</p>
 <td>remote-cache backend call (telemetry)</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><code>PatchOp</code> and <code>RemoteOp</code> keep their names; they are genuinely different
 operations. The handler callback parameter is named <code>cb</code>, not <code>op</code>, for exactly
 this reason (<a href="../spells/#operations-come-in-two-shapes">spells.md</a>).</p>
@@ -231,7 +231,7 @@ preserved. The docs warn against substituting &quot;Operation&quot; for a work-u
 protected <code>ispell.Target</code>, which was the actual offender.</p>
 <h2 id="relationship-to-the-value-types">Relationship to the value types</h2>
 <p>The serializable Buzz value types model the <em>nouns</em> around this hierarchy:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Value type</th>
@@ -256,11 +256,11 @@ protected <code>ispell.Target</code>, which was the actual offender.</p>
 <td>Process</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><code>TargetQuery</code> <em>produces</em> <code>Target</code>s; a <code>Target</code> is run as a set of <code>Operation</code>s;
 each <code>Operation</code> yields an <code>ExecResult</code>.</p>
 <h2 id="glossary">Glossary</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Term</th>
@@ -293,7 +293,7 @@ each <code>Operation</code> yields an <code>ExecResult</code>.</p>
 <td>The dispatcher-emitted report event for one target run: project, target, status, cache hit, duration.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../spells/">spells.md</a>: anatomy of a spell, the two op shapes, naming operations.</li>

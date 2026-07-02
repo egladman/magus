@@ -1044,3 +1044,39 @@ a code {
 }
 .page-tools-source:hover { color: var(--pico-primary); }
 .page-tools-issue { margin-left: 0; }
+
+/* Responsive tables: wrap gets horizontal scroll on narrow screens instead of
+   forcing the article column to blow out. Border replaces Pico's; the wrapper
+   handles overflow so the table itself can retain its natural min-widths. */
+.table-wrap {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+.table-wrap > table {
+  margin: 0;
+  border: 0;
+  min-width: 100%;
+}
+
+/* Broader reduced-motion pass: kill every animation/transition sitewide when
+   the OS asks for reduced motion. Specific rules that already respect it
+   (back-to-top, TOC sheet) stay intact; this covers everything else. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Global :focus-visible so tabbing has a visible ring on every interactive
+   element, not just the ones already styled. Uses Pico's primary as accent. */
+:focus-visible {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+}

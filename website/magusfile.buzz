@@ -421,6 +421,50 @@ fun tagRunnable(html: str) > str {
     return buf + rest;
 }
 
+// wrapTables inserts a scrolling wrapper around every article <table>: on
+// narrow screens the table can overflow horizontally inside the wrapper
+// instead of blowing out the article column and forcing whole-page scroll.
+fun wrapTables(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("<table>");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx) + "<div class=\"table-wrap\"><table>";
+        rest = rest.sub(idx + 7);
+        final closeIdx = rest.indexOf("</table>");
+        if (closeIdx == null) { return buf + rest; }
+        buf = buf + rest.sub(0, closeIdx) + "</table></div>";
+        rest = rest.sub(closeIdx + 8);
+        idx = rest.indexOf("<table>");
+    }
+    return buf + rest;
+}
+
+// lazyImages adds loading="lazy" decoding="async" to every in-content <img>
+// tag that doesn't already carry a loading attribute. The homepage hero stays
+// eager because renderRoot's markup carries loading="high"/fetchpriority (WS A)
+// which this pass leaves alone. Deterministic transform.
+fun lazyImages(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("<img ");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx);
+        final closeIdx = rest.indexOf(">");
+        if (closeIdx == null) { return buf + rest; }
+        var tag = rest.sub(0, closeIdx + 1);
+        // Only add if not already present (author markup wins).
+        if (tag.indexOf("loading=") == null and tag.indexOf("fetchpriority=") == null) {
+            tag = "<img loading=\"lazy\" decoding=\"async\" " + tag.sub(5);
+        }
+        buf = buf + tag;
+        rest = rest.sub(closeIdx + 1);
+        idx = rest.indexOf("<img ");
+    }
+    return buf + rest;
+}
+
 // tagCodeTitle finds "<!-- code-title: FILENAME -->" comments and prepends a
 // <figcaption> title bar to the following <pre> block, wrapping both in a
 // <figure class="code-block-titled">. Authoring:
@@ -1566,6 +1610,8 @@ fun renderRoot() > void {
     html = tagRunnable(html);
     html = tagAdmonition(html);
     html = tagCodeTitle(html);
+    html = wrapTables(html);
+    html = lazyImages(html);
     html = tagMermaid(html);
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
@@ -1599,7 +1645,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
 
-    final html = tagMermaid(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel))))));
+    final html = tagMermaid(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel))))))));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1678,7 +1724,7 @@ fun renderBlogPost(base: str) > void {
     // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
     // both so cross-references (../../documentation/) resolve correctly.
-    final html = tagMermaid(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug)))));
+    final html = tagMermaid(lazyImages(wrapTables(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug)))))));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
