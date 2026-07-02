@@ -10,7 +10,41 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
+	vm "github.com/egladman/gopherbuzz/vm"
+
+	hostgen "github.com/egladman/magus/host/gen"
 )
+
+// BrowserSafeHostModules is the allowlist of magus host modules the browser
+// playground registers. Each is pure computation: no filesystem, no network,
+// no process/env access - safe under WASM. IO modules (fs / os / http / env /
+// archive / vcs / magus) are deliberately excluded; their examples render as
+// reference-only code blocks in the docs.
+//
+// The docs generator (cmd/magus-docs) imports this map so the runnable-marker
+// decision and the actually-runs-in-browser decision are the same list.
+var BrowserSafeHostModules = map[string]func(context.Context, *buzz.Session) vm.Value{
+	"strings":  hostgen.RegisterStrings,
+	"encoding": hostgen.RegisterEncoding,
+	"fmt":      hostgen.RegisterFmt,
+	"path":     hostgen.RegisterPath,
+	"semver":   hostgen.RegisterSemver,
+	"platform": hostgen.RegisterPlatform,
+	"crypto":   hostgen.RegisterCrypto,
+	"json":     hostgen.RegisterJson,
+	"yaml":     hostgen.RegisterYaml,
+	"time":     hostgen.RegisterTime,
+	"charm":    hostgen.RegisterCharm,
+	"markdown": hostgen.RegisterMarkdown,
+}
+
+// registerBrowserSafeHostModules installs every module in BrowserSafeHostModules
+// on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
+func registerBrowserSafeHostModules(ctx context.Context, sess *buzz.Session) {
+	for name, register := range BrowserSafeHostModules {
+		sess.SetSyntheticModule(name, register(ctx, sess))
+	}
+}
 
 // Diag is a structured evaluation error: the message plus a 1-based source
 // position when one could be recovered from it (0 when not).
@@ -29,13 +63,16 @@ type EvalResult struct {
 	Diag   *Diag  `json:"diag"`
 }
 
-// EvalBuzz runs plain Buzz source in a fresh session with the std library
-// available and print captured. This is the language playground's core: no
-// magus host, no magusfile semantics.
+// EvalBuzz runs plain Buzz source in a fresh session with Buzz's stdlib and
+// the browser-safe magus host modules available, and captures print output.
+// This is the language playground's core: no filesystem, no network, no
+// magusfile semantics; runs the module-doc examples for strings / encoding /
+// json / etc.
 func EvalBuzz(ctx context.Context, src string) EvalResult {
 	var out bytes.Buffer
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
+	registerBrowserSafeHostModules(ctx, sess)
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {

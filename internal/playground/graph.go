@@ -20,10 +20,10 @@ import (
 // Project is one magus.project(...) call, flattened to the fields the
 // playground surfaces.
 type Project struct {
-	Path      string   `json:"path"`
-	DependsOn []string `json:"dependsOn"`
-	Outputs   []string `json:"outputs"`
-	Spells    []string `json:"spells"`
+	Path             string   `json:"path"`
+	DependsOn        []string `json:"dependsOn"`
+	Outputs          []string `json:"outputs"`
+	Spells           []string `json:"spells"`
 	Exclusive        bool     `json:"exclusive"`
 	NoCache          []string `json:"noCache"`          // target names opted out of caching (skipCache)
 	ExclusiveTargets []string `json:"exclusiveTargets"` // target names that run alone (exclusive=true)
