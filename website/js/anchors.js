@@ -2,11 +2,12 @@
 //
 // Every article heading already carries a slug id (from the markdown renderer).
 // This appends a small chain-link anchor to each h2-h6 inside the article.
-// Clicking it jumps to that section (via the plain href) and, through clipboard.js
-// (window.copyFeedback), copies the section's full URL, briefly swapping the link
-// icon for a check to confirm. The icon stays hidden until its heading is hovered
-// (see .heading-anchor in site.css); the href still works without the Clipboard
-// API (or the shared helper).
+// Clicking it jumps to that section (via the plain href) and, through copyFeedback
+// (lib/clipboard.js), copies the section's full URL, briefly swapping the link icon
+// for a check to confirm. The icon stays hidden until its heading is hovered (see
+// .heading-anchor in site.css); the href still works without the Clipboard API.
+import { copyFeedback } from "./lib/clipboard.js";
+
 (function () {
   var LINK =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -24,8 +25,8 @@
     // The href already updates the hash and scrolls; copyFeedback additionally
     // copies the section's absolute URL on click. Guarded so the anchor still
     // renders and navigates if the shared helper isn't present.
-    if (window.copyFeedback) {
-      window.copyFeedback({
+    if (copyFeedback) {
+      copyFeedback({
         el: a,
         getText: function () {
           return location.origin + location.pathname + location.search + "#" + h.id;

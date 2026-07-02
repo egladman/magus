@@ -1,12 +1,14 @@
-// copy.js - add a copy-to-clipboard button to each code block.
+// code-copy.js - add a copy-to-clipboard button to each code block.
 //
 // goldmark emits code blocks as <pre><code>...</code></pre>. This wraps each one
-// (except mermaid diagram sources, which mermaid-init.js replaces) in a
+// (except mermaid diagram sources, which the mermaid module replaces) in a
 // positioned .code-block and drops a small button in the top-right corner;
-// clipboard.js (window.copyFeedback) wires the copy + check-confirmation. No-ops
-// where the Clipboard API or the shared helper is unavailable.
+// copyFeedback (lib/clipboard.js) wires the copy + check-confirmation. No-ops
+// where the Clipboard API is unavailable.
+import { copyFeedback } from "./lib/clipboard.js";
+
 (function () {
-  if (!navigator.clipboard || !window.copyFeedback) return;
+  if (!navigator.clipboard) return;
 
   // Idle icon; sized by `.code-copy svg` in site.css (the shared check matches).
   var CLIPBOARD =
@@ -31,7 +33,7 @@
     btn.innerHTML = CLIPBOARD;
     wrap.appendChild(btn);
 
-    window.copyFeedback({
+    copyFeedback({
       el: btn,
       getText: function () { return code.textContent; },
       restIcon: CLIPBOARD,

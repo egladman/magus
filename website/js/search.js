@@ -14,12 +14,11 @@
   var main = document.querySelector("main.container") || document.querySelector("main");
   if (!main) return;
 
-  // Resolve gen/'s root from this script's own URL so the index fetch and result
-  // links resolve at any page depth.
-  var ROOT = "";
-  if (document.currentScript && document.currentScript.src) {
-    ROOT = document.currentScript.src.replace(/search\.js(\?.*)?$/, "");
-  }
+  // Resolve gen/'s root from the bundle's own URL so the index fetch and result
+  // links resolve at any page depth. import.meta.url is the module's own URL under
+  // esbuild's --format=esm output (main.js sits at gen/'s root); pre-bundle this
+  // used document.currentScript, which is null in ES modules.
+  var ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
 
   // page() renders the toolbar (with the edit link); reuse it, else create one so
   // search works on any page.

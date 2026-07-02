@@ -876,14 +876,9 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "<a href=\"https://buzz-lang.dev/\">Built with Buzz</a>"
         + "</small>\n"
         + "  </footer>\n"
-        + "  <script defer src=\"" + root + "clipboard.js\"></script>\n"
-        + "  <script defer src=\"" + root + "toc.js\"></script>\n"
-        + "  <script defer src=\"" + root + "anchors.js\"></script>\n"
-        + "  <script defer src=\"" + root + "copy.js\"></script>\n"
-        + "  <script src=\"" + root + "search.js\"></script>\n"
-        + "  <script type=\"module\" src=\"" + root + "hljs-init.js\"></script>\n"
-        + "  <script defer src=\"" + root + "mermaid-init.js\"></script>\n"
-        + "  <script defer src=\"" + root + "home-heading.js\"></script>\n"
+        // One deferred module bundle (esbuild) replaces the nine flat scripts; the
+        // head-critical theme.js stays separate above. type=module defers by spec.
+        + "  <script type=\"module\" src=\"" + root + "main.js\"></script>\n"
         + "</body>\n"
         + "</html>\n";
 }
@@ -1000,18 +995,23 @@ fun site_render() > void {
     // Copy static assets referenced by the root README (images, badges).
     os.execute(["sh", "-c", "[ -d " + ROOT + "/assets ] && cp -r " + ROOT + "/assets " + OUT + "/ || true"]);
 
-    // Copy the client-side enhancement assets the page template loads (search box,
-    // styles, TOC scroll-spy/collapse, heading anchors, code-copy buttons, mermaid
-    // theming); the search index they read is written below, after the walk.
-    os.execute(["sh", "-c", "for c in site.css theme.css; do [ -f \"$c\" ] && cp \"$c\" " + OUT + "/; done; true"]);
-    os.execute(["sh", "-c", "for j in search.js toc.js anchors.js copy.js mermaid-init.js hljs-init.js clipboard.js home-heading.js; do [ -f \"$j\" ] && cp \"$j\" " + OUT + "/; done; true"]);
+    // Bundle + minify the client-side assets with esbuild (pinned in mise.toml).
+    // The nine flat scripts became a js/ ES-module tree (feature modules + lib/);
+    // esbuild emits two outputs: theme.js (head, critical, minified — no bundle
+    // needed, it has no imports) and main.js (the deferred bundle of every feature
+    // module). The heavy hljs/mermaid CDN libs stay lazy dynamic import()s, which
+    // esbuild leaves as external runtime imports. CSS is minified per-file (not
+    // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
+    os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + OUT + "/site.css"]);
+    os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + OUT + "/theme.css"]);
+    os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + OUT + "/theme.js"]);
+    os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + OUT + "/main.js"]);
 
     // Copy the WebAssembly playground — the editor page plus the committed
     // buzz.wasm and its TinyGo glue. These are source artifacts of this project
     // (rebuilt by the build-playground target), not rendered from docs, so the
     // render only copies them; that keeps the drift gate stable.
     os.execute(["sh", "-c", "[ -f playground.html ] && cp playground.html " + OUT + "/ || true"]);
-    os.execute(["sh", "-c", "[ -f theme.js ] && cp theme.js " + OUT + "/ || true"]);
     os.execute(["sh", "-c", "[ -d playground ] && cp -r playground " + OUT + "/ || true"]);
 
     renderRoot();

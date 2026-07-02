@@ -5,6 +5,11 @@ go = "1.26.4"
 node = "24"
 "npm:markdownlint-cli" = "0.49.0"
 "npm:prettier" = "3.9.4"
+# esbuild bundles + minifies the website's client JS (js/theme.js -> gen/theme.js,
+# js/main.js -> gen/main.js) and minifies its CSS, in the website generate target.
+# Pinned EXACTLY: a version bump silently rewrites every gen/*.js|css byte and trips
+# the drift gate, so bumping means "regen + commit gen/" in the same change.
+"npm:esbuild" = "0.25.5"
 # tinygo + binaryen (wasm-opt) back the website's build-playground target, which
 # compiles cmd/buzz-playground to website/playground/buzz.wasm. TinyGo >= 0.40 is
 # required; wasm-opt runs as tinygo's post-link optimization step.

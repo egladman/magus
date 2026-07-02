@@ -316,7 +316,8 @@
       sync();
     })();
   </script>
-  <!-- Copy-to-clipboard buttons on code blocks (shared with the generated pages). -->
-  <script src="copy.js"></script>
+  <!-- Shared feature bundle (code-copy etc.); each module guards on its own DOM
+       targets, so the ones the playground lacks simply no-op. WS M reworks this. -->
+  <script type="module" src="main.js"></script>
 </body>
 </html>
