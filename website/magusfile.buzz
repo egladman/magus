@@ -100,6 +100,10 @@ var pageUrls: {str: bool} = mut {};
 // each post; the blog index page and (later) the blog Atom feed both consume this
 // list. Each entry is {slug, title, date, description, url}. Reset per site_render().
 var blogPosts: [{str: str}] = mut [<{str: str}>];
+// True when the blog source dir has at least one non-index .md post. Precomputed
+// before the walk so pages rendered early (README) can decide whether to advertise
+// the blog Atom feed in <head>. Reset per site_render().
+var hasBlogPosts: bool = false;
 
 // Per-page reading-time chip ("6 min read"), set by each render*() before calling
 // page() and read into the page-tools row. "" for pages whose source is too short
@@ -1241,10 +1245,15 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         sitemapLink = " &middot; <a href=\"" + root + "sitemap.xml\">Sitemap</a>";
         publicLink = " &middot; <a href=\"" + root + "public/\">public</a>";
         // Atom <link rel="alternate"> discovery: home + blog pages advertise both
-        // feeds so a reader auto-detects them. Release pages will advertise the
-        // releases feed too once WS U links them; keep it simple for now.
-        feedDiscovery = "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus releases\" href=\"" + root + "public/atom/releases.atom.xml\">\n";
-        if (srcRel == "README.md" or srcRel.startsWith(BLOG + "/")) {
+        // feeds so a reader auto-detects them. Gate each on the feed having been
+        // emitted: renderReleasesAtom only writes releases.atom.xml when at least
+        // one released version exists; renderBlogAtom only writes blog.atom.xml
+        // when at least one post exists. Advertising a missing file would trip
+        // WS L's asset-integrity check.
+        if (releases.len() > 0) {
+            feedDiscovery = "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus releases\" href=\"" + root + "public/atom/releases.atom.xml\">\n";
+        }
+        if (hasBlogPosts and (srcRel == "README.md" or srcRel.startsWith(BLOG + "/"))) {
             feedDiscovery = feedDiscovery
                 + "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus blog\" href=\"" + root + "public/atom/blog.atom.xml\">\n";
         }
@@ -1646,6 +1655,14 @@ fun site_render() > void {
     aliasTarget = mut {};
     pageUrls = mut {};
     blogPosts = mut [<{str: str}>];
+    hasBlogPosts = false;
+    if (isDir(ROOT + "/" + BLOG)) {
+        foreach (name in fs.list(ROOT + "/" + BLOG)) {
+            if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+                hasBlogPosts = true;
+            }
+        }
+    }
     fs.delete(OUT);
     fs.makeDirectory(OUT);
     std.print("generating site from " + ROOT + "/" + DOCS + "/ -> " + OUT + "/");
@@ -1672,6 +1689,11 @@ fun site_render() > void {
     os.execute(["sh", "-c", "[ -f playground.html ] && cp playground.html " + OUT + "/ || true"]);
     os.execute(["sh", "-c", "[ -d playground ] && cp -r playground " + OUT + "/ || true"]);
 
+    // Parse the changelog BEFORE the walk so page() knows whether the releases
+    // Atom feed will be emitted and can gate its <link rel=alternate> discovery
+    // tag accordingly (advertising a missing file would trip WS L's asset check).
+    parseChangelog();
+
     renderRoot();
     walk("");
     walkBlog();
@@ -1681,7 +1703,6 @@ fun site_render() > void {
     // search index/sitemap/feeds — only the real page they point to appears there.
     emitAliases();
     writeSeoFiles();
-    parseChangelog();
     renderBlogAtom();
     renderReleasesAtom();
     renderPublic();
@@ -1692,7 +1713,131 @@ fun site_render() > void {
     // walk order is fs.list's (sorted), so the file is byte-stable across runs.
     fs.writeFile(OUT + "/search-index.json", "[" + searchRecords.join(",") + "]");
 
+    // Reproducibility guard: throw on any dangling href/src reference. Runs after
+    // every asset + page has been emitted, so a missing file (renamed bundle,
+    // deleted image, forgotten alias fix) fails the build here rather than
+    // shipping a silent 404. See docs/engines.md.
+    assetIntegrityCheck();
+
     std.print("done");
+}
+
+// checkPathExists returns true when target (gen-root-relative, no leading slash)
+// resolves to a real file under gen/. Directory refs (URL ending in "/" or a plain
+// slugged path) resolve to their index.html; assets pass through verbatim.
+fun checkPathExists(target: str) > bool {
+    // Empty target = gen/'s root, always the index.html landing. This shows up
+    // when a page links to "../" (Parent Directory in an autoindex hub) and the
+    // resolver pops back to the root.
+    if (target == "") { return os.execute(["test", "-f", OUT + "/index.html"]) == 0; }
+    if (os.execute(["test", "-f", OUT + "/" + target]) == 0) { return true; }
+    if (os.execute(["test", "-d", OUT + "/" + target]) == 0) {
+        return os.execute(["test", "-f", OUT + "/" + target + "/index.html"]) == 0;
+    }
+    if (target.endsWith("/")) {
+        return os.execute(["test", "-f", OUT + "/" + target + "index.html"]) == 0;
+    }
+    return false;
+}
+
+// scanRefsInHtml pulls every href="..." and src="..." out of html, skipping
+// external URLs, mailto:, javascript:, data:, and pure fragments. Each reference
+// is returned as a gen-root-relative path (resolved against pageDir).
+fun scanRefsInHtml(html: str, pageDir: str) > [str] {
+    var refs: [str] = mut [<str>];
+    var seen: {str: bool} = mut {};
+    var rest = html;
+    while (true) {
+        final iHref = rest.indexOf("href=\"");
+        final iSrc = rest.indexOf("src=\"");
+        var i: int = -1;
+        var advance = 0;
+        if (iHref != null and iSrc != null) {
+            if (iHref < iSrc) { i = iHref; advance = 6; } else { i = iSrc; advance = 5; }
+        } else if (iHref != null) { i = iHref; advance = 6; }
+        else if (iSrc != null) { i = iSrc; advance = 5; }
+        else { i = -1; }
+        if (i < 0) { return refs; }
+        rest = rest.sub(i + advance);
+        final end = rest.indexOf("\"");
+        if (end == null) { return refs; }
+        final raw = rest.sub(0, end);
+        rest = rest.sub(end + 1);
+        if (raw == "") { continue; }
+        if (raw.startsWith("http://") or raw.startsWith("https://") or raw.startsWith("//")
+            or raw.startsWith("#") or raw.startsWith("mailto:") or raw.startsWith("javascript:")
+            or raw.startsWith("data:") or raw.startsWith("tel:")) { continue; }
+        // Root-absolute paths (leading /) are the deploy-time reference form
+        // (WS0b's ONE deliberate exception on 404.html, WS S's manifest, etc.);
+        // they resolve at the deploy base, not against gen/'s root, so we can't
+        // check them locally without threading SITE_URL's basePath in. Skip.
+        if (raw.startsWith("/")) { continue; }
+        // References to repo source files (.go/.buzz) point at their GitHub
+        // location relative to the repo root, not to a generated site asset.
+        // magus's `markdown` module rewrites .md links but leaves .go/.buzz
+        // untouched, matching author intent. Skip so the check stays focused on
+        // real page/asset breakage.
+        if (raw.endsWith(".go") or raw.endsWith(".buzz")) { continue; }
+        // Strip a URL #fragment; the file only needs to exist, the fragment is
+        // client-side.
+        var path = raw;
+        final hash = path.indexOf("#");
+        if (hash != null) { path = path.sub(0, hash); }
+        if (path == "") { continue; }
+        // Also drop a query string.
+        final q = path.indexOf("?");
+        if (q != null) { path = path.sub(0, q); }
+        if (path == "") { continue; }
+        final resolved = resolvePath(pageDir, path);
+        if (seen[resolved] == null) {
+            seen[resolved] = true;
+            refs.append(resolved);
+        }
+    }
+    return refs;
+}
+
+// walkGen recursively enumerates every emitted file under gen/ so the integrity
+// check reads each once. Skips buzz.wasm (binary; slow file test suffices).
+fun walkGen(rel: str, acc: [str]) > void {
+    var dir = OUT;
+    if (rel != "") { dir = OUT + "/" + rel; }
+    foreach (name in fs.list(dir)) {
+        var childRel = name;
+        if (rel != "") { childRel = rel + "/" + name; }
+        if (os.execute(["test", "-d", OUT + "/" + childRel]) == 0) {
+            walkGen(childRel, acc);
+        } else {
+            acc.append(childRel);
+        }
+    }
+}
+
+// assetIntegrityCheck walks every emitted .html + .xml + .txt file, extracts
+// each internal href/src, and throws on the first dangling reference. Runs
+// after every render/emit step, so a missing file trips this rather than a
+// silent 404 in production. Aliases are legitimate targets (their index.html is
+// real), so they resolve like any other page.
+fun assetIntegrityCheck() > void {
+    var files: [str] = mut [<str>];
+    walkGen("", files);
+    foreach (f in files) {
+        if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
+            // Non-textual asset: nothing to scan for refs.
+        } else {
+            final fh = io.File.open(OUT + "/" + f, io.FileMode.read);
+            final html = fh.readAll();
+            fh.close();
+            final parts = f.split("/");
+            var pageDir = "";
+            if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
+            foreach (target in scanRefsInHtml(html, pageDir)) {
+                if (checkPathExists(target) == false) {
+                    throw "asset integrity: " + f + " references missing " + target;
+                }
+            }
+        }
+    }
 }
 
 export fun preflight(args: [str]) > void {}
