@@ -41,7 +41,12 @@ final ROOT = "..";          // the magus/ workspace dir, relative to this projec
 final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";          // generated site output, under this project
-final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
+// PICO is pinned to an EXACT version so PICO_SRI stays valid (the @2 moving
+// range would silently invalidate the integrity hash on a Pico release). Bump
+// both together; the SRI hash is:
+//   curl -sL <PICO> | openssl dgst -sha384 -binary | openssl base64 -A
+final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css";
+final PICO_SRI = "sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU";
 final GH   = "https://github.com/egladman/magus";
 
 // SITE_URL is the site's public base (with trailing slash), used for the canonical
@@ -941,7 +946,7 @@ fun render404() > void {
         + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + basePath + "assets/favicon-32.png\">\n"
         + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + basePath + "assets/apple-touch-icon.png\">\n"
         + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
-        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\" integrity=\"" + PICO_SRI + "\" crossorigin=\"anonymous\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + basePath + "theme.css\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + basePath + "site.css\">\n"
         + "  <script src=\"" + basePath + "theme.js\"></script>\n"
@@ -979,6 +984,25 @@ fun render404() > void {
         + "</html>\n";
     fs.writeFile(OUT + "/404.html", doc);
 }
+
+// writeSecurityTxt emits /.well-known/security.txt (RFC 9116). Just a small
+// list of pointers a security researcher needs: how to contact the maintainer,
+// when the file expires, and where to find the release signing key that WS U
+// will document in more detail. Deterministic - a fixed expiry year rather
+// than "now + 365 days" (build-time-dependent = drift).
+fun writeSecurityTxt() > void {
+    // Expiry is a hard requirement (RFC 9116 §2.5.5). A fixed, deterministic
+    // date keeps the drift gate stable; maintainer bumps this yearly during
+    // the same commit that rotates the release signing key.
+    final body = "Contact: mailto:eli@gladman.cc\n"
+        + "Expires: 2027-12-31T23:59:59Z\n"
+        + "Preferred-Languages: en\n"
+        + "Canonical: " + SITE_URL + ".well-known/security.txt\n"
+        + "Policy: " + GH + "/blob/" + metaBranch + "/SECURITY.md\n";
+    fs.makeDirectory(OUT + "/.well-known");
+    fs.writeFile(OUT + "/.well-known/security.txt", body);
+}
+
 
 // formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
 // human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
@@ -1468,7 +1492,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         // the TLS handshake overlaps HTML parsing; the same origin also serves the
         // lazily-imported hljs/mermaid, so this preconnect covers them too.
         + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
-        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\" integrity=\"" + PICO_SRI + "\" crossorigin=\"anonymous\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + root + "theme.css\">\n"
         + "  <link rel=\"stylesheet\" href=\"" + root + "site.css\">\n"
         + "  <script src=\"" + root + "theme.js\"></script>\n"
@@ -1895,6 +1919,7 @@ fun site_render() > void {
     renderReleasesAtom();
     renderPublic();
     render404();
+    writeSecurityTxt();
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the
