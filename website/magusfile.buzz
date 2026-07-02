@@ -376,6 +376,42 @@ fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
 // wraps it), so the nav/breadcrumb/pager hrefs — built separately with clean URLs —
 // are never double-processed. oldDir/newDir are the page's old flat directory and
 // new clean directory (both gen-root-relative, "" for the home page).
+// tagRunnable is a post-process pass over rendered markdown that finds
+// "<!-- run -->" comments the author placed above a Buzz code fence and swaps
+// the following <pre> with <pre data-runnable="true">, so the client-side Run ▶
+// mechanism (run-example.js) can find opt-in blocks without an author-visible
+// info-string extension goldmark doesn't natively surface. The comment itself
+// is dropped from the output.
+fun tagRunnable(html: str) > str {
+    final marker = "<!-- run -->";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(marker);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx + marker.len());
+        // Skip whitespace after the comment (typically a newline). The next
+        // non-whitespace token should be "<pre>" or "<pre ..."; tag it.
+        var i = 0;
+        while (i < rest.len()) {
+            final b = rest.byte(i);
+            if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
+            i = i + 1;
+        }
+        if (rest.sub(i, 5) == "<pre>") {
+            buf = buf + rest.sub(0, i) + "<pre data-runnable=\"true\">";
+            rest = rest.sub(i + 5);
+        } else {
+            // Not immediately followed by a fence — drop the marker; the block
+            // renders normally.
+            buf = buf + rest.sub(0, i);
+            rest = rest.sub(i);
+        }
+        idx = rest.indexOf(marker);
+    }
+    return buf + rest;
+}
+
 fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
     var buf = "";
     var rest = html;
@@ -1316,6 +1352,7 @@ fun renderRoot() > void {
     // The home page stays at gen/index.html (gen root), so its in-content links are
     // rewritten from the root directory to the root directory.
     html = rewriteLinks(html, "", "");
+    html = tagRunnable(html);
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     var title = fm.q("title").stringValue();
@@ -1347,7 +1384,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
 
-    final html = rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel));
+    final html = tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel)));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1421,7 +1458,7 @@ fun renderBlogPost(base: str) > void {
     // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
     // both so cross-references (../../documentation/) resolve correctly.
-    final html = rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug);
+    final html = tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }

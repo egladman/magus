@@ -790,3 +790,40 @@ a code {
   h1, h2, h3, h4 { page-break-after: avoid; }
   img { max-width: 100% !important; height: auto !important; }
 }
+
+/* Runnable code examples: a small toolbar above an opt-in Buzz block with a Run
+   button + Open-in-Playground link, and an output panel that appears below
+   after the first run. The block sits inline with the article's flow; the
+   toolbar doesn't shift the code-copy button positioned inside the block. */
+.runnable-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0;
+}
+.run-example {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  border-radius: var(--pico-border-radius);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.run-example[disabled] { opacity: 0.6; }
+.open-in-playground {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+.open-in-playground:hover { color: var(--pico-primary); text-decoration: underline; }
+.runnable-output {
+  margin: 0.25rem 0 1rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-left: 3px solid var(--accent-teal, var(--pico-primary));
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+.runnable-output.failed {
+  border-left-color: var(--pico-del-color, #b3261e);
+}

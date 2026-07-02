@@ -39,6 +39,17 @@
 docs, share the same rendering pipeline, and appear in the site search index.</p>
 <p>New to magus? Start with the <a href="../../documentation">documentation</a>, or try it
 live in the <a href="../../playground.html">playground</a>.</p>
+<h2 id="try-a-runnable-snippet">Try a runnable snippet</h2>
+<p>Click <strong>Run</strong> to execute this Buzz snippet in your browser — the WebAssembly
+interpreter is fetched lazily on the first click, so unopened pages stay light:</p>
+
+<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+final greeting = &quot;hello from a runnable snippet&quot;;
+std.print(greeting);
+std.print(&quot;length is {greeting.len()}&quot;);
+</code></pre>
+<p>&quot;Open in Playground →&quot; carries the same snippet into <code>/playground.html</code> via a
+<code>#source=&lt;base64url&gt;</code> deep-link.</p>
     </article>
   </main>
   <div class="page-provenance container">

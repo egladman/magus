@@ -98,7 +98,23 @@ type ui struct {
 }
 
 func main() {
+	// Install globalThis.buzz FIRST so consumers that don't need the full UI
+	// (WS N's Run buttons on docs pages; console scripting) always have the raw
+	// evaluation API, regardless of whether the playground's editor markup
+	// happens to be on this page. The UI setup below assumes the playground DOM
+	// and would panic on a bare docs page - keeping the scoped nil channel below
+	// alive on the goroutine keeps our exported callbacks reachable either way.
+	exposeDataAPI()
+
 	doc := js.Global().Get("document")
+	// If the editor's root element is absent, this page isn't the playground:
+	// leave main() to keep exposeDataAPI's callbacks alive without touching the
+	// missing DOM. The Run-a-snippet path only needs window.buzz.evalBuzz.
+	if !doc.Call("getElementById", "src").Truthy() {
+		<-make(chan struct{}) // keep callbacks alive; nothing else to wire
+		return
+	}
+
 	u := &ui{
 		doc:    doc,
 		src:    doc.Call("getElementById", "src"),
@@ -139,8 +155,8 @@ func main() {
 	u.in.Call("focus")
 	showIntroOnce(doc)
 
-	// A small data API for the browser console / scripting, in addition to the UI.
-	exposeDataAPI()
+	// (exposeDataAPI already ran at the top of main so window.buzz is available
+	// on docs pages that don't carry the editor markup.)
 
 	<-make(chan struct{}) // keep the exported callbacks alive
 }
