@@ -1485,14 +1485,19 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		return &ast.PatLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Pattern: t.Val}, nil
 	case token.Int:
 		p.advance()
-		n, err := strconv.ParseInt(t.Val, 10, 64)
+		// Base 0 lets strconv auto-detect 0x/0o/0b prefixes from the lexer.
+		// Strip underscore digit separators (Zig/Rust convention: allowed
+		// between digits for readability).
+		cleaned := strings.ReplaceAll(t.Val, "_", "")
+		n, err := strconv.ParseInt(cleaned, 0, 64)
 		if err != nil {
 			return nil, fmt.Errorf("buzz: line %d:%d: invalid int %q", t.Line, t.Col, t.Val)
 		}
 		return &ast.IntLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Val: n}, nil
 	case token.Float:
 		p.advance()
-		f, err := strconv.ParseFloat(t.Val, 64)
+		cleaned := strings.ReplaceAll(t.Val, "_", "")
+		f, err := strconv.ParseFloat(cleaned, 64)
 		if err != nil {
 			return nil, fmt.Errorf("buzz: line %d:%d: invalid float %q", t.Line, t.Col, t.Val)
 		}

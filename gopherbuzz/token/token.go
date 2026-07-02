@@ -723,21 +723,78 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 	return "", fmt.Errorf("buzz: unterminated interpolation at line %d:%d", line, col)
 }
 
+// lexNumber consumes a numeric literal. Matches upstream Buzz 0.6.0-dev
+// (src/Scanner.zig, functions number / hexa / binary). Accepts:
+//
+//   - Decimal ints and floats:  42, 1_000_000, 3.14, 1_000.5
+//   - Hex ints:                 0x1a, 0xFF_FF, 0xDEADBEEF   (lowercase prefix only)
+//   - Binary ints:              0b1010, 0b1100_1010          (lowercase prefix only)
+//
+// Underscores are permitted between digits as a readability separator, but
+// must not appear at the start or end of the digit run - upstream rejects
+// those with "'_' must be between digits". Upstream has NO octal prefix
+// (0o) and NO float exponent syntax (e/E); this lexer matches that.
+// Leading zero on a decimal stays decimal (no implicit-octal C footgun).
 func (l *lexer) lexNumber(line, col int) (Token, error) {
 	start := l.pos
+	// Non-decimal prefix: 0x (hex) or 0b (binary). Lowercase only - upstream
+	// dispatches on '0' followed by literal 'x' / 'b'.
+	if l.pos+1 < len(l.src) && l.src[l.pos] == '0' {
+		switch l.src[l.pos+1] {
+		case 'x':
+			l.pos += 2
+			l.col += 2
+			for l.pos < len(l.src) && isHexDigit(l.src[l.pos]) {
+				l.pos++
+				l.col++
+			}
+			raw := l.src[start:l.pos]
+			if len(raw) == 2 {
+				return Token{}, fmt.Errorf("buzz: line %d:%d: unterminated hexa literal", line, col)
+			}
+			if raw[len(raw)-1] == '_' {
+				return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
+			}
+			return Token{Kind: Int, Val: raw, Line: line, Col: col}, nil
+		case 'b':
+			l.pos += 2
+			l.col += 2
+			for l.pos < len(l.src) && isBinaryDigit(l.src[l.pos]) {
+				l.pos++
+				l.col++
+			}
+			raw := l.src[start:l.pos]
+			if len(raw) == 2 {
+				return Token{}, fmt.Errorf("buzz: line %d:%d: unterminated binary literal", line, col)
+			}
+			if raw[len(raw)-1] == '_' {
+				return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
+			}
+			return Token{Kind: Int, Val: raw, Line: line, Col: col}, nil
+		}
+	}
+	// Decimal integer or float.
 	isFloat := false
-	for l.pos < len(l.src) && l.src[l.pos] >= '0' && l.src[l.pos] <= '9' {
+	for l.pos < len(l.src) && isDecimalDigit(l.src[l.pos]) {
 		l.pos++
 		l.col++
+	}
+	// Match upstream: '_' must not trail the integer part.
+	if l.pos > start && l.src[l.pos-1] == '_' {
+		return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
 	}
 	if l.pos < len(l.src) && l.src[l.pos] == '.' &&
 		l.pos+1 < len(l.src) && l.src[l.pos+1] >= '0' && l.src[l.pos+1] <= '9' {
 		isFloat = true
 		l.pos++
 		l.col++
-		for l.pos < len(l.src) && l.src[l.pos] >= '0' && l.src[l.pos] <= '9' {
+		fracStart := l.pos
+		for l.pos < len(l.src) && isDecimalDigit(l.src[l.pos]) {
 			l.pos++
 			l.col++
+		}
+		if l.pos > fracStart && l.src[l.pos-1] == '_' {
+			return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
 		}
 	}
 	raw := l.src[start:l.pos]
@@ -746,6 +803,17 @@ func (l *lexer) lexNumber(line, col int) (Token, error) {
 	}
 	return Token{Kind: Int, Val: raw, Line: line, Col: col}, nil
 }
+
+// isDecimalDigit accepts 0-9 or _ (digit separator).
+func isDecimalDigit(b byte) bool { return (b >= '0' && b <= '9') || b == '_' }
+
+// isHexDigit accepts 0-9, a-f, A-F, or _.
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F') || b == '_'
+}
+
+// isBinaryDigit accepts 0, 1, or _.
+func isBinaryDigit(b byte) bool { return b == '0' || b == '1' || b == '_' }
 
 func (l *lexer) lexIdent(line, col int) (Token, error) {
 	start := l.pos
