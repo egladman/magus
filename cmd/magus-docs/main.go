@@ -161,6 +161,64 @@ func writeModule(dir string, m std.Module) error {
 	return os.WriteFile(filepath.Join(dir, m.Name+".md"), []byte(renderModule(m)), 0o644)
 }
 
+// writeFrontmatter emits the site's YAML frontmatter block at the top of a
+// generated docs page. Values that contain a colon are quoted to keep YAML
+// parsers from reading the second half as a nested mapping.
+func writeFrontmatter(b *strings.Builder, title, description string, tags []string) {
+	b.WriteString("---\n")
+	fmt.Fprintf(b, "title: %s\n", yamlScalar(title))
+	fmt.Fprintf(b, "description: %s\n", yamlScalar(description))
+	b.WriteString("tags: [")
+	for i, t := range tags {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(yamlScalar(t))
+	}
+	b.WriteString("]\n---\n\n")
+}
+
+func yamlScalar(s string) string {
+	if !strings.ContainsAny(s, ":\"'") && (len(s) == 0 || (s[0] != ' ' && s[len(s)-1] != ' ')) {
+		return s
+	}
+	return "\"" + strings.ReplaceAll(s, "\"", "\\\"") + "\""
+}
+
+// readExample reads a per-method example from std/examples/<module>/<method>.buzz
+// (resolved against repoRoot so tests and `go run` both find it). Returns "" if
+// the file is absent or unreadable, so a missing example just skips rendering.
+func readExample(module, method string) string {
+	p := filepath.Join(repoRoot, "std", "examples", module, method+".buzz")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// frontmatterDesc trims a module's doc string down to a single-sentence
+// description suitable for the meta tag. Splits on the first period + space,
+// falls back to a truncated form if the doc is one long line.
+func frontmatterDesc(m std.Module) string {
+	doc := strings.TrimSpace(m.Doc)
+	if doc == "" {
+		return "The " + m.Name + " magusfile stdlib module."
+	}
+	// Prefer the first sentence.
+	if i := strings.Index(doc, ". "); i > 0 && i < 200 {
+		return doc[:i+1]
+	}
+	// Or the first line.
+	if i := strings.Index(doc, "\n"); i > 0 && i < 200 {
+		return strings.TrimSpace(doc[:i])
+	}
+	if len(doc) > 180 {
+		return doc[:177] + "..."
+	}
+	return doc
+}
+
 // stdlibNote is one collected footnote: a method that is also in Buzz's stdlib.
 type stdlibNote struct {
 	label  string // page-unique footnote label ([^label])
@@ -171,6 +229,11 @@ type stdlibNote struct {
 func renderModule(m std.Module) string {
 	var b strings.Builder
 
+	writeFrontmatter(&b,
+		m.Name+" module",
+		frontmatterDesc(m),
+		[]string{m.Name, "module", "stdlib", "magusfile"},
+	)
 	fmt.Fprintf(&b, "# %s\n\n", m.Name)
 	if m.Doc != "" {
 		fmt.Fprintf(&b, "%s\n\n", m.Doc)
@@ -247,6 +310,26 @@ func renderModule(m std.Module) string {
 				}
 				fmt.Fprintf(&b, "**Returns:** %s\n\n", strings.Join(rets, ", "))
 			}
+			// Per-method example, if one exists at
+			//   std/examples/<module>/<method>.buzz
+			// Rendered as a plain fenced buzz block (reference-only). Making
+			// these Run ▶-clickable requires the WASM playground to register
+			// magus host modules, which needs a std/hostgen restructure so
+			// TinyGo can compile the browser-safe subset without dragging in
+			// the IO-heavy leaves (fs, os, http, archive, ...). See
+			// playground.BrowserSafeHostModules for the intended allowlist
+			// once that lands.
+			if ex := readExample(m.Name, meth.Name); ex != "" {
+				fmt.Fprintln(&b, "**Example:**")
+				fmt.Fprintln(&b)
+				fmt.Fprintln(&b, "```buzz")
+				fmt.Fprint(&b, ex)
+				if !strings.HasSuffix(ex, "\n") {
+					fmt.Fprintln(&b)
+				}
+				fmt.Fprintln(&b, "```")
+				fmt.Fprintln(&b)
+			}
 		}
 	}
 
@@ -283,6 +366,11 @@ func renderIndex(modules []std.Module) string {
 	}
 
 	var b strings.Builder
+	writeFrontmatter(&b,
+		"magus stdlib",
+		"Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.",
+		[]string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},
+	)
 	fmt.Fprintf(&b, "# Magusfile Module Reference\n\n")
 	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name — `import \"fs\"`, then `fs.glob(...)` — with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.\n\n")
 

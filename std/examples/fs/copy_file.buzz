@@ -1,0 +1,3 @@
+import "fs";
+
+fs.copyFile("dist/magus", "/usr/local/bin/magus");

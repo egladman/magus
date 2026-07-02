@@ -1,7 +1,7 @@
 ---
 title: fs module
-description: Filesystem primitives for magusfiles - glob, read, write, stat, walk, watch, copy, mkdirall, symlinks, and temp dirs. Sandbox-aware over Buzz.
-tags: [fs, filesystem, glob, read file, write file, walk, watch, stat, magus stdlib]
+description: Filesystem and path primitives.
+tags: [fs, module, stdlib, magusfile]
 ---
 
 # fs
@@ -24,6 +24,15 @@ Return paths matching pattern (doublestar-style).
 
 **Returns:** []string
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+foreach (path in fs.glob("cmd/**/*.go")) { std.print(path); }
+```
+
 ### dirname
 
 Directory portion of path.
@@ -35,6 +44,16 @@ Directory portion of path.
 | `path` | `string` |  | |
 
 **Returns:** string
+
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+std.print(fs.dirname("cmd/magus/main.go"));
+// -> "cmd/magus"
+```
 
 ### basename
 
@@ -48,6 +67,16 @@ Final element of path.
 
 **Returns:** string
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+std.print(fs.basename("cmd/magus/main.go"));
+// -> "main.go"
+```
+
 ### exists
 
 True iff path exists.
@@ -59,6 +88,15 @@ True iff path exists.
 | `path` | `string` |  | |
 
 **Returns:** bool
+
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+if (fs.exists("go.mod")) { std.print("Go module"); }
+```
 
 ### read_file
 
@@ -72,6 +110,16 @@ Return the contents of path as a string.
 
 **Returns:** string
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+final version = fs.readFile("VERSION");
+std.print(version);
+```
+
 ### write_file
 
 Write content to path (mode 0644).
@@ -83,6 +131,14 @@ Write content to path (mode 0644).
 | `path` | `string` |  | |
 | `content` | `string` |  | |
 
+**Example:**
+
+```buzz
+import "fs";
+
+fs.writeFile("dist/manifest.txt", "artifact list here\n");
+```
+
 ### mkdirall
 
 Create path and parents (default mode 0755).
@@ -93,6 +149,15 @@ Create path and parents (default mode 0755).
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `perm` | `int` | yes | |
+
+**Example:**
+
+```buzz
+import "fs";
+
+// Buzz has no octal literal (matches upstream); Unix mode 0755 = 493 decimal.
+fs.mkdirall("dist/reports", 493);
+```
 
 ### join
 
@@ -106,6 +171,16 @@ Join path elements with the OS separator.
 
 **Returns:** string
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+std.print(fs.join(["cmd", "magus", "main.go"]));
+// -> "cmd/magus/main.go"
+```
+
 ### remove_all
 
 Recursively remove path (no error if missing).
@@ -115,6 +190,14 @@ Recursively remove path (no error if missing).
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
+
+**Example:**
+
+```buzz
+import "fs";
+
+fs.removeAll("dist/");
+```
 
 ### list_dir
 
@@ -128,6 +211,15 @@ Return directory entries; empty if path does not exist.
 
 **Returns:** []string
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+foreach (name in fs.listDir("cmd")) { std.print(name); }
+```
+
 ### ext
 
 File-name extension of path, including the leading dot ("" if none).
@@ -139,6 +231,16 @@ File-name extension of path, including the leading dot ("" if none).
 | `path` | `string` |  | |
 
 **Returns:** string
+
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+std.print(fs.ext("archive.tar.gz"));
+// -> ".gz"
+```
 
 ### is_dir
 
@@ -152,6 +254,15 @@ True iff path exists and is a directory (a sandbox-denied path reads as false).
 
 **Returns:** bool
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+if (fs.isDir("internal")) { std.print("internal is a directory"); }
+```
+
 ### is_file
 
 True iff path exists and is a regular file (a sandbox-denied path reads as false).
@@ -163,6 +274,15 @@ True iff path exists and is a regular file (a sandbox-denied path reads as false
 | `path` | `string` |  | |
 
 **Returns:** bool
+
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+if (fs.isFile("go.mod")) { std.print("go.mod is a file"); }
+```
 
 ### stat
 
@@ -176,6 +296,17 @@ Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as
 
 **Returns:** map[string]any
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+final info = fs.stat("go.mod");
+std.print(info.size);
+std.print(info.modTime);
+```
+
 ### copy_file
 
 Copy the file at src to dst (overwriting), preserving its permission bits.
@@ -186,6 +317,14 @@ Copy the file at src to dst (overwriting), preserving its permission bits.
 |-----------|------|----------|-------------|
 | `src` | `string` |  | |
 | `dst` | `string` |  | |
+
+**Example:**
+
+```buzz
+import "fs";
+
+fs.copyFile("dist/magus", "/usr/local/bin/magus");
+```
 
 ### copy_dir
 
@@ -198,6 +337,15 @@ Recursively copy the directory tree at src to dst, preserving permission bits.
 | `src` | `string` |  | |
 | `dst` | `string` |  | |
 
+**Example:**
+
+```buzz
+import "fs";
+
+// Recursive copy; preserves file mode and dir structure.
+fs.copyDir("assets/", "dist/assets/");
+```
+
 ### watch
 
 Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.
@@ -208,6 +356,19 @@ Blocking. Watch paths (directories, recursively) and call callback with each deb
 |-----------|------|----------|-------------|
 | `paths` | `[]string` |  | |
 | `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+// Blocks; the callback fires per change batch. Return true to keep watching.
+fs.watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
+    foreach (p in paths) { std.print("changed: " + p); }
+    return true;
+});
+```
 
 ### walk
 
@@ -220,6 +381,21 @@ Recursively walk the directory tree rooted at root, calling callback(path, is_di
 | `root` | `string` |  | |
 | `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+fs.walk(".", fun (path: str, isDir: bool) > bool {
+    if (isDir and fs.basename(path) == "node_modules") {
+        return false;   // skip descent
+    }
+    if (fs.ext(path) == ".go") { std.print(path); }
+    return true;
+});
+```
+
 ### append_file
 
 Append content to path (creating if absent, mode 0644).
@@ -230,6 +406,14 @@ Append content to path (creating if absent, mode 0644).
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `content` | `string` |  | |
+
+**Example:**
+
+```buzz
+import "fs";
+
+fs.appendFile("dist/build.log", "compile done\n");
+```
 
 ### chmod
 
@@ -242,6 +426,16 @@ Change the permission bits of path to mode (octal integer, e.g. 0755).
 | `path` | `string` |  | |
 | `mode` | `int` |  | |
 
+**Example:**
+
+```buzz
+import "fs";
+
+// Mark the release binary executable. Buzz has no octal literal
+// (matches upstream); Unix mode 0755 = 493 decimal.
+fs.chmod("dist/magus", 493);
+```
+
 ### symlink
 
 Create a symbolic link at link pointing to target.
@@ -252,6 +446,14 @@ Create a symbolic link at link pointing to target.
 |-----------|------|----------|-------------|
 | `target` | `string` |  | |
 | `link` | `string` |  | |
+
+**Example:**
+
+```buzz
+import "fs";
+
+fs.symlink("dist/magus", "/usr/local/bin/magus");
+```
 
 ### readlink
 
@@ -265,6 +467,15 @@ Return the target of the symbolic link at path.
 
 **Returns:** string
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+std.print(fs.readlink("/usr/local/bin/magus"));
+```
+
 ### temp_dir
 
 Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.
@@ -276,6 +487,17 @@ Create a new temporary directory (in os.TempDir()) with an optional name prefix 
 | `prefix` | `string` | yes | |
 
 **Returns:** string
+
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+final tmp = fs.tempDir("magus-build-");
+std.print(tmp);
+// -> "/tmp/magus-build-abc123"
+```
 
 ### read_lines
 
@@ -289,6 +511,15 @@ Read path and return its lines as a list, with the line terminators stripped. A 
 
 **Returns:** []string
 
+**Example:**
+
+```buzz
+import "std";
+import "fs";
+
+foreach (line in fs.readLines("targets.txt")) { std.print(line); }
+```
+
 ### write_lines
 
 Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.
@@ -299,6 +530,14 @@ Write lines to path (mode 0644), each followed by a newline. The companion to re
 |-----------|------|----------|-------------|
 | `path` | `string` |  | |
 | `lines` | `[]string` |  | |
+
+**Example:**
+
+```buzz
+import "fs";
+
+fs.writeLines("dist/targets.txt", ["build", "test", "lint"]);
+```
 
 [^buzz-stdlib-fs-exists]: `fs.exists` is also in Buzz's standard library (`fs.exists`); the magus form is sandbox-aware.
 [^buzz-stdlib-fs-mkdirall]: `fs.mkdirall` is also in Buzz's standard library (`fs.makeDirectory`); the magus form is sandbox-aware.

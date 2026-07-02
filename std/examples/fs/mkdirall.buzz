@@ -1,0 +1,4 @@
+import "fs";
+
+// Buzz has no octal literal (matches upstream); Unix mode 0755 = 493 decimal.
+fs.mkdirall("dist/reports", 493);

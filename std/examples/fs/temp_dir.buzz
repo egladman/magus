@@ -1,0 +1,6 @@
+import "std";
+import "fs";
+
+final tmp = fs.tempDir("magus-build-");
+std.print(tmp);
+// -> "/tmp/magus-build-abc123"

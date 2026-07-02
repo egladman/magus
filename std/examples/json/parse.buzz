@@ -1,0 +1,8 @@
+import "std";
+import "json";
+
+final v = json.parse("\{\"name\": \"api\", \"port\": 8080\}");
+std.print(v["name"]);
+std.print(v["port"]);
+// -> api
+// -> 8080

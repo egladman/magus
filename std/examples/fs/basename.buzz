@@ -1,0 +1,5 @@
+import "std";
+import "fs";
+
+std.print(fs.basename("cmd/magus/main.go"));
+// -> "main.go"

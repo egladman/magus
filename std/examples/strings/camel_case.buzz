@@ -1,0 +1,5 @@
+import "std";
+import "strings";
+
+std.print(strings.camelCase("hello world"));
+// -> "helloWorld"

@@ -1,0 +1,9 @@
+import "std";
+import "json";
+
+final config = { "target": "build", "parallel": true };
+std.print(json.stringify(config));
+// -> {"parallel":true,"target":"build"}
+
+// Pretty-printed with two-space indent:
+std.print(json.stringify(config, "  "));

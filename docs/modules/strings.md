@@ -1,7 +1,7 @@
 ---
 title: strings module
-description: Case conversion (camel, snake, kebab, Pascal), capitalize, word splitting, and ellipsis truncation for building identifiers and labels.
-tags: [strings, camelcase, snake_case, kebab-case, pascalcase, capitalize, ellipsis, magus stdlib]
+description: Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).
+tags: [strings, module, stdlib, magusfile]
 ---
 
 # strings
@@ -24,6 +24,16 @@ Convert s to camelCase.
 
 **Returns:** string
 
+**Example:**
+
+```buzz
+import "std";
+import "strings";
+
+std.print(strings.camelCase("hello world"));
+// -> "helloWorld"
+```
+
 ### snake_case
 
 Convert s to snake_case.
@@ -35,6 +45,16 @@ Convert s to snake_case.
 | `s` | `string` |  | |
 
 **Returns:** string
+
+**Example:**
+
+```buzz
+import "std";
+import "strings";
+
+std.print(strings.snakeCase("HelloWorld"));
+// -> "hello_world"
+```
 
 ### kebab_case
 
@@ -48,6 +68,16 @@ Convert s to kebab-case.
 
 **Returns:** string
 
+**Example:**
+
+```buzz
+import "std";
+import "strings";
+
+std.print(strings.kebabCase("MyComponentName"));
+// -> "my-component-name"
+```
+
 ### pascal_case
 
 Convert s to PascalCase.
@@ -59,6 +89,16 @@ Convert s to PascalCase.
 | `s` | `string` |  | |
 
 **Returns:** string
+
+**Example:**
+
+```buzz
+import "std";
+import "strings";
+
+std.print(strings.pascalCase("user_profile"));
+// -> "UserProfile"
+```
 
 ### capitalize
 
@@ -72,6 +112,16 @@ Uppercase the first rune of s and lowercase the rest.
 
 **Returns:** string
 
+**Example:**
+
+```buzz
+import "std";
+import "strings";
+
+std.print(strings.capitalize("hELLO"));
+// -> "Hello"
+```
+
 ### words
 
 Split s into its constituent words (splitting on case changes, digits, and separators).
@@ -83,6 +133,20 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 | `s` | `string` |  | |
 
 **Returns:** []string
+
+**Example:**
+
+```buzz
+import "std";
+import "strings";
+
+final parts = strings.words("parseHTTPResponse2");
+foreach (w in parts) { std.print(w); }
+// -> parse
+// -> HTTP
+// -> Response
+// -> 2
+```
 
 ### ellipsis
 
@@ -96,4 +160,14 @@ Trim s to at most length runes, appending "..." when truncated.
 | `length` | `int` |  | |
 
 **Returns:** string
+
+**Example:**
+
+```buzz
+import "std";
+import "strings";
+
+std.print(strings.ellipsis("the quick brown fox", 12));
+// -> "the quick..."
+```
 

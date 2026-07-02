@@ -1,0 +1,10 @@
+import "std";
+import "fs";
+
+fs.walk(".", fun (path: str, isDir: bool) > bool {
+    if (isDir and fs.basename(path) == "node_modules") {
+        return false;   // skip descent
+    }
+    if (fs.ext(path) == ".go") { std.print(path); }
+    return true;
+});

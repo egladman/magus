@@ -1,0 +1,5 @@
+import "std";
+import "fs";
+
+std.print(fs.join(["cmd", "magus", "main.go"]));
+// -> "cmd/magus/main.go"

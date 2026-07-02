@@ -1,0 +1,5 @@
+import "std";
+import "strings";
+
+std.print(strings.pascalCase("user_profile"));
+// -> "UserProfile"

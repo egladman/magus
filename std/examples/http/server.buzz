@@ -1,0 +1,5 @@
+import "http";
+
+// Serve the current build output over http on port 8080 for quick sharing.
+// Blocks until the process exits.
+http.server("dist/", 8080);

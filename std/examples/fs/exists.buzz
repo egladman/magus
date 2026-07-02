@@ -1,0 +1,4 @@
+import "std";
+import "fs";
+
+if (fs.exists("go.mod")) { std.print("Go module"); }

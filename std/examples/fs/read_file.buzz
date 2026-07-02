@@ -1,0 +1,5 @@
+import "std";
+import "fs";
+
+final version = fs.readFile("VERSION");
+std.print(version);

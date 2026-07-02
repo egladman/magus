@@ -1,0 +1,4 @@
+import "std";
+import "fs";
+
+std.print(fs.readlink("/usr/local/bin/magus"));

@@ -1,0 +1,4 @@
+import "std";
+import "fs";
+
+if (fs.isFile("go.mod")) { std.print("go.mod is a file"); }

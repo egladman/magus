@@ -1,0 +1,4 @@
+import "std";
+import "fs";
+
+foreach (path in fs.glob("cmd/**/*.go")) { std.print(path); }

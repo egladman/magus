@@ -1,0 +1,4 @@
+import "std";
+import "fs";
+
+foreach (name in fs.listDir("cmd")) { std.print(name); }

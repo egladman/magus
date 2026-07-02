@@ -1,0 +1,3 @@
+import "fs";
+
+fs.symlink("dist/magus", "/usr/local/bin/magus");

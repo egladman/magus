@@ -1,0 +1,4 @@
+import "std";
+import "fs";
+
+foreach (line in fs.readLines("targets.txt")) { std.print(line); }

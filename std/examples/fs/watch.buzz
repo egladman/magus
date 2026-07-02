@@ -1,0 +1,8 @@
+import "std";
+import "fs";
+
+// Blocks; the callback fires per change batch. Return true to keep watching.
+fs.watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
+    foreach (p in paths) { std.print("changed: " + p); }
+    return true;
+});

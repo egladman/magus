@@ -1,0 +1,4 @@
+import "std";
+import "fs";
+
+if (fs.isDir("internal")) { std.print("internal is a directory"); }

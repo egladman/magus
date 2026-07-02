@@ -1,0 +1,9 @@
+import "std";
+import "strings";
+
+final parts = strings.words("parseHTTPResponse2");
+foreach (w in parts) { std.print(w); }
+// -> parse
+// -> HTTP
+// -> Response
+// -> 2

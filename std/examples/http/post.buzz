@@ -1,0 +1,10 @@
+import "http";
+
+// Post JSON with a curl-style opts map for retry behaviour.
+// Escape { and } as \{ \} so Buzz does not try to interpolate them.
+final r = http.post(
+    "https://httpbin.org/post",
+    "\{\"target\":\"build\"\}",
+    {"Content-Type": "application/json"},
+    {"retry": 3, "timeout": 10},
+);

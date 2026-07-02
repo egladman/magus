@@ -1,0 +1,4 @@
+import "fs";
+
+// Recursive copy; preserves file mode and dir structure.
+fs.copyDir("assets/", "dist/assets/");

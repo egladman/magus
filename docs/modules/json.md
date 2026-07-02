@@ -1,7 +1,7 @@
 ---
 title: json module
-description: Parse JSON strings to values and stringify values to JSON. Compact or pretty output via optional indent. Sandbox-aware form over Buzz's serialize.
-tags: [json, parse json, stringify, encode, decode, serialize, magus stdlib]
+description: JSON encode/decode.
+tags: [json, module, stdlib, magusfile]
 ---
 
 # json
@@ -24,6 +24,19 @@ Decode a JSON string into a value (map, list, string, number, or boolean).
 
 **Returns:** any
 
+**Example:**
+
+```buzz
+import "std";
+import "json";
+
+final v = json.parse("\{\"name\": \"api\", \"port\": 8080\}");
+std.print(v["name"]);
+std.print(v["port"]);
+// -> api
+// -> 8080
+```
+
 ### stringify
 
 Encode a value as a JSON string. With no indent (or "") the output is compact; pass an indent string (e.g. "  " or "\t") for pretty, multi-line output.
@@ -36,6 +49,20 @@ Encode a value as a JSON string. With no indent (or "") the output is compact; p
 | `indent` | `string` | yes | |
 
 **Returns:** string
+
+**Example:**
+
+```buzz
+import "std";
+import "json";
+
+final config = { "target": "build", "parallel": true };
+std.print(json.stringify(config));
+// -> {"parallel":true,"target":"build"}
+
+// Pretty-printed with two-space indent:
+std.print(json.stringify(config, "  "));
+```
 
 [^buzz-stdlib-json-parse]: `json.parse` is also in Buzz's standard library (`serialize.jsonDecode`); the magus form is sandbox-aware.
 [^buzz-stdlib-json-stringify]: `json.stringify` is also in Buzz's standard library (`serialize.jsonEncode`); the magus form is sandbox-aware.

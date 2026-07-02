@@ -1,0 +1,3 @@
+import "fs";
+
+fs.writeLines("dist/targets.txt", ["build", "test", "lint"]);

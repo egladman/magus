@@ -1,0 +1,6 @@
+import "std";
+import "fs";
+
+final info = fs.stat("go.mod");
+std.print(info.size);
+std.print(info.modTime);

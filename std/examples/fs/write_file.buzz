@@ -1,0 +1,3 @@
+import "fs";
+
+fs.writeFile("dist/manifest.txt", "artifact list here\n");

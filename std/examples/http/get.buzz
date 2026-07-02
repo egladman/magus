@@ -1,0 +1,6 @@
+import "std";
+import "http";
+
+final r = http.get("https://api.github.com/repos/egladman/magus");
+std.print(r.status);
+std.print(r.body.sub(0, 80) + "...");

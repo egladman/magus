@@ -1,7 +1,7 @@
 ---
 title: magus stdlib
-description: Overview of the magus stdlib modules for magusfiles - filesystem, process, HTTP, encoding, crypto, VCS, and more. Sandbox-aware host methods over Buzz.
-tags: [magus, stdlib, buzz stdlib, module reference, magusfile, host methods]
+description: Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.
+tags: [stdlib, modules, magusfile, reference, fs, os, http, json]
 ---
 
 # Magusfile Module Reference

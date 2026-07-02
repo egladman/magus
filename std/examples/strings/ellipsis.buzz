@@ -1,0 +1,5 @@
+import "std";
+import "strings";
+
+std.print(strings.ellipsis("the quick brown fox", 12));
+// -> "the quick..."

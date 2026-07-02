@@ -1,0 +1,5 @@
+import "std";
+import "fs";
+
+std.print(fs.ext("archive.tar.gz"));
+// -> ".gz"
