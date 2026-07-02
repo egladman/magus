@@ -6,11 +6,19 @@ tags: [documentation, docs, getting-started, magus, guide, index, overview]
 
 # Documentation
 
-New to magus? [**Install it**](install.md), skim the two core ideas below ([Targets](targets.md) and [Spells](spells.md)), or [try it live in the playground](playground.html) without installing anything.
+New to magus? [Install it](download.md), skim the two core ideas below ([Targets](targets.md) and [Spells](spells.md)), or [try it live in the playground](playground.html) without installing anything.
+
+## Philosophy
+
+A build system sits in the hot path of development. You touch it constantly, so every small friction compounds; it earns its keep by staying out of the way.
+
+So magus does not try to define what "build", "test", or "lint" mean for your tools. That is the job of [spells](spells.md): libraries of tool-native operations. The `go` spell exposes `build`/`test`/`vet`/`fmt`/`lint`, the `rust` spell `build`/`test`/`clippy`/`fmt`, and your magusfile composes them into the targets you actually run. magus handles the orchestration around them: it computes the affected projects from a change, caches their results, and runs only the minimum.
+
+And it keeps that machinery transparent. The cache, the daemon socket, and the run log are all just files on disk; inspect them with `ls` and `cat`.
 
 ## Getting started
 
-**1. [Install magus](install.md).** It is a single self-contained binary: download a build from the [releases page](https://github.com/egladman/magus/releases) and move it onto your `PATH`, or build from source. The [installation guide](install.md) covers both, plus keeping up to date.
+**1. [Install magus](download.md).** A single self-contained binary. The [Download guide](download.md) covers install, verification, and updating.
 
 **2. Initialize your workspace.** From the root of your repo:
 
@@ -58,8 +66,11 @@ Start here to understand the model magus is built on.
 
 Once the basics click, these cover running magus at scale and in CI.
 
+- [CI](ci.md) - compose a `ci` target with `magus.needs`, and the shared-cache trust model.
+- [Daemon and concurrency](daemon.md) - one persistent process, one shared pool across every client.
 - [Remote caching](remote-cache.md) - share the build cache across machines and CI, with a signing-based trust model.
 - [Debugging](debugging.md) - the interactive REPL, `magus.pry()` breakpoints, and stepping through a target.
+- [Tips and tricks](tips.md) - non-obvious ways to combine subcommands.
 - [MCP](mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Telemetry](telemetry.md) - OpenTelemetry traces and metrics.
 
