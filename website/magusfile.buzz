@@ -416,6 +416,55 @@ fun tagRunnable(html: str) > str {
     return buf + rest;
 }
 
+// tagCodeTitle finds "<!-- code-title: FILENAME -->" comments and prepends a
+// <figcaption> title bar to the following <pre> block, wrapping both in a
+// <figure class="code-block-titled">. Authoring:
+//   <!-- code-title: magusfile.buzz -->
+//   ```buzz
+//   ...
+//   ```
+// Goldmark drops multi-word fence info strings, so the marker lives in HTML
+// space rather than in the fence itself. The comment is dropped from output.
+fun tagCodeTitle(html: str) > str {
+    final open = "<!-- code-title:";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx + open.len());
+        // Read the title text up to the marker's closing "-->".
+        final closeMarker = rest.indexOf("-->");
+        if (closeMarker == null) { return buf + open + rest; }
+        final title = rest.sub(0, closeMarker).trim();
+        rest = rest.sub(closeMarker + 3);
+        // Skip whitespace, then wrap the next <pre>...</pre> in a figure.
+        var i = 0;
+        while (i < rest.len()) {
+            final b = rest.byte(i);
+            if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
+            i = i + 1;
+        }
+        // Check for <pre with any attributes.
+        if (rest.sub(i, 4) == "<pre") {
+            final endPre = rest.indexOf("</pre>");
+            if (endPre != null) {
+                final preBlock = rest.sub(i, endPre + 6 - i);
+                buf = buf + rest.sub(0, i)
+                    + "<figure class=\"code-block-titled\"><figcaption>" + title + "</figcaption>"
+                    + preBlock + "</figure>";
+                rest = rest.sub(endPre + 6);
+                idx = rest.indexOf(open);
+                continue;
+            }
+        }
+        buf = buf + rest.sub(0, i);
+        rest = rest.sub(i);
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
 // tagAdmonition converts GitHub-alert-syntax blockquotes to styled callouts:
 // each "<blockquote>\n<p>[!TYPE]\n..." becomes a <div class="admonition
 // admonition-<type>"> with a heading and the rest of the paragraph. Recognized
@@ -1462,6 +1511,7 @@ fun renderRoot() > void {
     html = rewriteLinks(html, "", "");
     html = tagRunnable(html);
     html = tagAdmonition(html);
+    html = tagCodeTitle(html);
     html = tagMermaid(html);
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
@@ -1494,7 +1544,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
 
-    final html = tagMermaid(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel)))));
+    final html = tagMermaid(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel))))));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1568,7 +1618,7 @@ fun renderBlogPost(base: str) > void {
     // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
     // both so cross-references (../../documentation/) resolve correctly.
-    final html = tagMermaid(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug))));
+    final html = tagMermaid(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug)))));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }

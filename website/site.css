@@ -944,3 +944,31 @@ a code {
 .admonition-warning   .admonition-title { color: #d99a1f; }
 .admonition-caution   { border-left-color: #d13438; }
 .admonition-caution   .admonition-title { color: #d13438; }
+
+/* Code-block titles: authoring marker
+     <!-- code-title: magusfile.buzz -->
+     ```buzz
+     ...
+     ```
+   Wraps the <pre> in a <figure class="code-block-titled"> with a small caption
+   bar on top - looks like an editor tab or filename header. Layered cleanly on
+   top of the existing .code-block copy button (which stays inside the pre). */
+.code-block-titled {
+  margin: 1rem 0;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  overflow: hidden;
+}
+.code-block-titled figcaption {
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-sectioning-background-color);
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.code-block-titled pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
