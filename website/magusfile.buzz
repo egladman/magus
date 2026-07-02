@@ -1242,8 +1242,10 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     var feedDiscovery = "";
     if (SITE_URL != "") {
         canon = "  <link rel=\"canonical\" href=\"" + SITE_URL + canonUrl + "\">\n";
-        sitemapLink = " &middot; <a href=\"" + root + "sitemap.xml\">Sitemap</a>";
-        publicLink = " &middot; <a href=\"" + root + "public/\">public</a>";
+        // Wrap the separator + anchor in a span so a CSS hide on .site-public
+        // takes out both together instead of leaving an orphan middle-dot.
+        sitemapLink = "<span class=\"sitemap-link\"> &middot; <a href=\"" + root + "sitemap.xml\">Sitemap</a></span>";
+        publicLink = "<span class=\"public-link\"> &middot; <a href=\"" + root + "public/\">public</a></span>";
         // Atom <link rel="alternate"> discovery: home + blog pages advertise both
         // feeds so a reader auto-detects them. Gate each on the feed having been
         // emitted: renderReleasesAtom only writes releases.atom.xml when at least
@@ -1279,9 +1281,19 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // clear so a page that forgets to set it doesn't inherit the previous value.
     var readingHtml = "";
     if (pageReading != "") {
-        readingHtml = "<span class=\"reading-time\" title=\"Estimated reading time\">" + pageReading + "</span>";
+        readingHtml = "<em class=\"reading-time\" title=\"Estimated reading time\">" + pageReading + "</em>";
     }
     pageReading = "";
+    // Second row under the search box: reading time on the left, "Suggest an
+    // edit" on the right. Rendered even when reading time is empty so the edit
+    // link keeps its own row (and doesn't squash next to the search input).
+    final secondaryRow = "    <div class=\"page-tools-secondary\">" + readingHtml + edit + "</div>\n";
+    // Body class marks pages that want the stripped-down "server directory
+    // listing" chrome: nav on top and a minimal footer only; no breadcrumb, no
+    // page-tools row, no per-page provenance, and the article runs full viewport
+    // width (CSS in site.css keys off .site-public).
+    var bodyTag = "<body>\n";
+    if (srcRel.startsWith("public/")) { bodyTag = "<body class=\"site-public\">\n"; }
     return "<!DOCTYPE html>\n"
         + "<html lang=\"en\" class=\"no-js\">\n"
         + "<head>\n"
@@ -1301,7 +1313,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "  <link rel=\"stylesheet\" href=\"" + root + "site.css\">\n"
         + "  <script src=\"" + root + "theme.js\"></script>\n"
         + "</head>\n"
-        + "<body>\n"
+        + bodyTag
         + "  <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>\n"
         + "  <header class=\"site-header\">\n"
         + "    <nav class=\"container\">\n"
@@ -1317,7 +1329,8 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "  </header>\n"
         + "  <main id=\"main-content\" class=\"container\" tabindex=\"-1\">\n"
         + breadcrumbOf(srcRel, title, root)
-        + "    <div class=\"page-tools\">" + readingHtml + edit + "</div>\n"
+        + "    <div class=\"page-tools\"></div>\n"
+        + secondaryRow
         + contentBlock
         + pager
         + "  </main>\n"

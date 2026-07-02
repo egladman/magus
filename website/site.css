@@ -222,7 +222,17 @@
   border-color: var(--accent-teal-hover, var(--accent-teal));
 }
 
-/* The "Suggest an edit" link floats to the right end of the toolbar. */
+/* Secondary tool row below the search bar: italicized reading-time chip on the
+   left, "Suggest an edit" on the right, at every screen width. Empty on pages
+   without a reading time (the chip is skipped) - the edit link still hugs the
+   right edge via margin-left:auto. */
+.page-tools-secondary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0.25rem 0 1rem;
+  font-size: 0.875rem;
+}
 .page-tools-edit {
   margin-left: auto;
   font-size: 0.875rem;
@@ -365,12 +375,11 @@
 }
 @media (max-width: 1023px) {
   /* Toolbar reflows: the search field takes its own full-width row, and "Suggest
-     an edit" drops onto the next row, right-aligned, instead of squashing beside
-     the search box. The toolbar stays position:relative so the absolute search
-     results dropdown remains anchored to it. */
+     an edit" already sits on its own secondary row below (page-tools-secondary),
+     so the toolbar just needs to let the search field take its own full-width
+     row and keep search results anchored via position:relative. */
   .page-tools { flex-wrap: wrap; }
   .search-wrap { flex: 1 1 100%; }
-  .page-tools-edit { margin-left: 0; flex: 1 1 100%; text-align: right; }
 
   /* No-JS / default: the TOC stacks statically above the article (nothing to
      toggle, so it must stay visible). */
@@ -683,12 +692,12 @@ a code {
   margin-top: 0.25rem;
 }
 
-/* Reading-time chip next to the breadcrumb / provenance: small muted label with
-   a clock glyph. Deterministic (a word count of the source markdown). */
+/* Reading-time chip on the secondary tool row (left side, in line with
+   "Suggest an edit" on the right). Italic + muted so it reads as an incidental
+   hint, not a control. Deterministic (a word count of the source markdown). */
 .reading-time {
   color: var(--pico-muted-color);
-  font-size: 0.85rem;
-  margin-left: 0.75rem;
+  font-style: italic;
   white-space: nowrap;
 }
 
@@ -826,4 +835,32 @@ a code {
 }
 .runnable-output.failed {
   border-left-color: var(--pico-del-color, #b3261e);
+}
+
+/* Stripped-down chrome for the /public/ autoindex tree: keep the site nav bar
+   (so a visitor can jump back), keep a minimal footer line, hide everything
+   else, and let the autoindex listing span the full viewport width instead of
+   being trapped in the article-width container. Reads as a "server directory"
+   surface without stranding the visitor. */
+.site-public .breadcrumb,
+.site-public .page-tools,
+.site-public .page-tools-secondary,
+.site-public .page-provenance,
+.site-public .site-footer .sitemap-link,
+.site-public .site-footer .public-link {
+  display: none !important;
+}
+.site-public main.container,
+.site-public main {
+  max-width: none !important;
+  padding: 1rem 1.5rem !important;
+}
+.site-public .autoindex {
+  /* Autoindex was constrained by the container's max-width - now it can breathe. */
+  width: 100%;
+}
+.site-public .site-footer {
+  padding: 0.5rem 1.5rem 1rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  color: var(--pico-muted-color);
 }
