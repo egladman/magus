@@ -35,6 +35,8 @@ magus.project({
     "outputs": [
         "host/gen/*.go",
         "docs/modules/*.md",
+        "docs/spells/*.md",
+        "docs/spells.md",
         "docs/manpage/gen/*.md",
         "manpage/gen/*.1",
         "MAGUS.md",
@@ -169,6 +171,7 @@ export fun config_generate(args: [str]) > void {
 // Regenerates the committed docs Markdown (module reference + man pages).
 export fun docs_generate(args: [str]) > void {
     os.exec("go", ["run", "./cmd/magus-docs", "-out", "./docs/modules"]);
+    os.exec("go", ["run", "./cmd/magus-spelldocs", "-out", "./docs/spells"]);
     os.exec("go", ["run", "./cmd/magus-manpage", "-format", "md", "-out", "./docs/manpage/gen"]);
 }
 
