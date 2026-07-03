@@ -100,3 +100,6 @@ Two layers run together:
 | `MGS2005` | landlock unavailable; interpreter-level only         |
 | `MGS2006` | likely PATH-shim manager (mise/asdf/direnv) stripped |
 | `MGS2007` | exec denied                                          |
+| `MGS2008` | daemon socket withheld from sandboxed children       |
+| `MGS2009` | outbound network request (audited, not blocked)      |
+| `MGS2010` | sandbox policy mismatch (undeclared / fingerprint)   |
