@@ -25,7 +25,7 @@ const TargetModulePath = "magus/target"
 //go:embed buzzlib/target.gen.buzz
 var TargetModuleSource string
 
-// PatchOpSource / CharmTypeSource / RunSource are the generated Buzz `object`
+// PatchOpSource / CharmTypeSource / CommandSource are the generated Buzz `object`
 // mirrors of types.PatchOp, types.Charm, and types.Run — the {cmd, args, charms}
 // command a command target's handler hands to its cb callback, down to the RFC 6902
 // ops. Unlike the other record mirrors they are inlined into self-contained
@@ -41,9 +41,19 @@ var PatchOpSource string
 //go:embed buzzlib/charm.gen.buzz
 var CharmTypeSource string
 
-//go:generate go run ../../cmd/magus-utils types -type Run -out buzzlib/run.gen.buzz
-//go:embed buzzlib/run.gen.buzz
-var RunSource string
+//go:generate go run ../../cmd/magus-utils types -type Command -out buzzlib/command.gen.buzz
+//go:embed buzzlib/command.gen.buzz
+var CommandSource string
+
+// ServiceSource is the generated Buzz `object Service` mirror of types.Service - the
+// {command, readiness, stop} a service op returns, each field a Command (command is the
+// process; readiness/stop are optional). It ships in the magus/target bundle so a spell
+// can author a service op; it must follow CommandSource there (Service's fields are
+// typed Command).
+//
+//go:generate go run ../../cmd/magus-utils types -type Service -out buzzlib/service.gen.buzz
+//go:embed buzzlib/service.gen.buzz
+var ServiceSource string
 
 // TargetQuerySource is the generated Buzz `object TargetQuery` mirror of
 // types.TargetQuery (see cmd/magus-utils types). It ships in the magus/target source
@@ -119,10 +129,11 @@ var CharmModuleSource string
 // carries the value types; magus/charm the patch constructors. Any other import
 // means the spell needs host bindings and is not a built-in.
 var builtinModuleSources = map[string]string{
-	// The magus/target bundle carries Target plus the command value types
-	// PatchOp/Charm/Run (every command spell references Run). Order is load-bearing:
-	// PatchOp before Charm before Run, since each references the prior.
-	TargetModulePath: strings.Join([]string{TargetModuleSource, PatchOpSource, CharmTypeSource, RunSource}, "\n"),
+	// The magus/target bundle carries Target plus the op value types
+	// PatchOp/Charm/Command/Service (a command op returns a Command, a service op a
+	// Service). Order is load-bearing: PatchOp before Charm before Command before
+	// Service, since each references the prior.
+	TargetModulePath: strings.Join([]string{TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource}, "\n"),
 	CharmModulePath:  CharmModuleSource,
 }
 

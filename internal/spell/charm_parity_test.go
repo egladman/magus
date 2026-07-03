@@ -33,7 +33,7 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		// charm.buzz imports magus/target for the Charm/PatchOp object types; register
 		// the same bundle the runtime does so the import resolves in this bare session.
 		s.SetSourceModule(spell.TargetModulePath, strings.Join([]string{
-			spell.TargetModuleSource, spell.PatchOpSource, spell.CharmTypeSource, spell.RunSource,
+			spell.TargetModuleSource, spell.PatchOpSource, spell.CharmTypeSource, spell.CommandSource,
 		}, "\n"))
 		require.NoError(t, s.Exec(ctx, spell.CharmModuleSource), "load charm.buzz")
 		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)

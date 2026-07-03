@@ -11,33 +11,28 @@ import (
 )
 
 // resolve builds a bare session with the magus/target types registered, execs
-// src, and resolves its spec in the given mode — the same setup Extract
-// uses, but with the mode passed explicitly so the HandlerOps branch can be
-// exercised without a host-importing spell.
-func resolve(t *testing.T, src string, mode ResolveMode) (Descriptor, error) {
+// src, and resolves its spec — the same setup Extract uses. Every op resolves to
+// its declared command.
+func resolve(t *testing.T, src string) (Descriptor, error) {
 	t.Helper()
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	sess.SetSourceModule(TargetModulePath, TargetModuleSource)
+	sess.SetSourceModule(TargetModulePath, builtinModuleSources[TargetModulePath])
 	require.NoError(t, sess.Exec(ctx, src), "exec")
-	return Resolve(ctx, sess, mode)
+	return Resolve(ctx, sess)
 }
-
-// The cases below drive Resolve with the mode auto-selected from the source
-// (CommandOrHandlerOps), exactly as the spell loader does — the bare-session
-// extraction path a built-in or self-contained fork spell takes.
 
 func TestResolve_GetName(t *testing.T) {
 	const src = `export fun mgs_getName() > str { return "testspell"; }`
-	spec, err := resolve(t, src, CommandOrHandlerOps(src))
+	spec, err := resolve(t, src)
 	require.NoError(t, err)
 	assert.Equal(t, "testspell", spec.Name)
 }
 
 func TestResolve_MissingGetName(t *testing.T) {
 	const src = `var x: int = 1;`
-	_, err := resolve(t, src, CommandOrHandlerOps(src))
+	_, err := resolve(t, src)
 	assert.Error(t, err, "expected error for missing mgs_getName")
 }
 
@@ -45,106 +40,106 @@ func TestResolve_RecordTargets(t *testing.T) {
 	src := `
 export fun mgs_getName() > str { return "mypkg"; }
 export fun mgs_listTargets() > any {
-    return {"build": {"cmd": "echo", "args": ["ok"]}};
+    return {"build": {"bin": "echo", "args": ["ok"]}};
 }
 `
-	spec, err := resolve(t, src, CommandOrHandlerOps(src))
+	spec, err := resolve(t, src)
 	require.NoError(t, err)
 	assert.Equal(t, "mypkg", spec.Name)
 	assert.Contains(t, spec.Ops, "build", "Targets[\"build\"] missing")
 }
 
-// TestResolve_FunctionValueTargets verifies the strictly-typed fork form:
-// mgs_listTargets returning {str: fun(Target, fun(any)) bool} handlers, referenced
-// by value, that hand a {cmd, args, charms} record to the magus-injected cb callback.
-// A self-contained (fork) spell's handlers are called once at resolution to record
-// their specs, so the result decodes to the same fork targets a plain data form
-// would — proving the typed form is behaviorally identical to the old form.
+// TestResolve_FunctionValueTargets verifies the op form: mgs_listTargets returning
+// {str: fun(Target) Command} handlers, referenced by value, each returning the
+// {bin, args, charms} Command it declares. Handlers are called once at resolution to
+// record their commands, so the result decodes to the same targets a plain data form
+// would — proving the function form is behaviorally identical to a record.
 func TestResolve_FunctionValueTargets(t *testing.T) {
 	src := `
 import "magus/target";
 export fun mgs_getName() > str { return "fnpkg"; }
-fun build(t: Target, cb: fun(any)) > bool { cb({"cmd": "go", "args": ["build"]}); return true; }
-fun fmt(t: Target, cb: fun(any)) > bool {
-    cb({"cmd": "gofmt", "args": ["-l", "."], "charms": {"write": {"ops": [{"op": "replace", "path": "/0", "value": "-w"}]}}}); return true;
+fun build(t: Target) > Command { return Command{bin = "go", args = ["build"]}; }
+fun fmt(t: Target) > Command {
+    return Command{bin = "gofmt", args = ["-l", "."], charms = {"write": {"ops": [{"op": "replace", "path": "/0", "value": "-w"}]}}};
 }
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"build": build, "fmt": fmt};
 }
 `
-	spec, err := resolve(t, src, CommandOrHandlerOps(src))
+	spec, err := resolve(t, src)
 	require.NoError(t, err)
 	b := spec.Ops["build"]
-	assert.Equal(t, "go", b.Cmd)
+	assert.Equal(t, "go", b.Bin)
 	assert.Equal(t, []string{"build"}, b.Args)
 
 	f := spec.Ops["fmt"]
-	assert.Equal(t, "gofmt", f.Cmd)
+	assert.Equal(t, "gofmt", f.Bin)
 	ch, ok := f.Charms["write"]
 	require.Truef(t, ok, "fmt missing charm \"write\": %+v", f)
 	want := types.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
 	assert.Equal(t, []types.PatchOp{want}, ch.Ops)
 }
 
-// TestResolve_HandlerOpRecordsHandlerName pins that a function-op is
-// dispatched by its handler's real exported name, recovered from the function
-// value — not by the op-map key. A `"deploy": shipIt` entry must record shipIt,
-// so invoke-time lookup (Exports()[fn]) finds the right handler even when the key
-// differs from the handler name.
-func TestResolve_HandlerOpRecordsHandlerName(t *testing.T) {
+// TestResolve_ServiceAndCommandCoexist proves op-level kind: one spell mixes a
+// command op (returns Command, run to completion) and a service op (returns Service,
+// a long-running process `magus run` blocks on) under one name. The service op's
+// embedded Command mirrors Service.Command so every fork/render/cache path reads it
+// uniformly.
+func TestResolve_ServiceAndCommandCoexist(t *testing.T) {
+	src := `
+import "magus/target";
+export fun mgs_getName() > str { return "node"; }
+fun nodeBuild(t: Target) > Command { return Command{bin = "npm", args = ["run", "build"]}; }
+fun nodeServe(t: Target) > Service {
+    return Service{ command   = Command{bin = "npm", args = ["run", "dev"]},
+                   readiness = Command{bin = "curl", args = ["-sf", "http://localhost:5173"]} };
+}
+export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeServe}; }
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+
+	build := spec.Ops["build"]
+	assert.Equal(t, types.OpKindCommand, build.OpKind())
+	assert.Equal(t, "npm", build.Bin)
+	assert.Equal(t, []string{"run", "build"}, build.Args)
+	assert.Nil(t, build.Service, "a command op has no Service")
+
+	serve := spec.Ops["serve"]
+	assert.Equal(t, types.OpKindService, serve.OpKind())
+	assert.True(t, serve.IsService())
+	require.NotNil(t, serve.Service)
+	assert.Equal(t, "npm", serve.Service.Command.Bin)
+	assert.Equal(t, []string{"run", "dev"}, serve.Service.Command.Args)
+	// Optional readiness probe decodes when provided.
+	assert.Equal(t, "curl", serve.Service.Readiness.Bin)
+	// stop is optional and omitted here, so it stays the empty Command.
+	assert.Equal(t, "", serve.Service.Stop.Bin)
+	// The embedded Command mirrors Service.Command so existing paths read it uniformly.
+	assert.Equal(t, serve.Service.Command.Bin, serve.Bin)
+	assert.Equal(t, serve.Service.Command.Args, serve.Args)
+}
+
+// TestResolve_NonCommandOpRejected pins the new invariant: every op is a command,
+// so a function op that declares no command (returns a value without handing/
+// returning a Run) is rejected at resolution rather than silently becoming a
+// no-op. In-VM work (a cache backend's enabled/get/put) is no longer an op kind;
+// it lives on a spell's plain exported functions, not in mgs_listTargets.
+func TestResolve_NonCommandOpRejected(t *testing.T) {
 	src := `
 import "magus/target";
 export fun mgs_getName() > str { return "fnpkg"; }
 export fun enabled(tg: Target, cb: fun(any)) > bool { return true; }
-export fun shipIt(tg: Target, cb: fun(any)) > bool { return true; }
 export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
-    return {"enabled": enabled, "deploy": shipIt};
+    return {"enabled": enabled};
 }
 `
-	spec, err := resolve(t, src, HandlerOps)
-	require.NoError(t, err)
-	assert.Equal(t, "enabled", spec.Ops["enabled"].Func)
-	assert.Equal(t, "shipIt", spec.Ops["deploy"].Func, "Func should be handler name, not op key")
-}
-
-// TestResolve_HandlerOpUnexportedHandler pins that referencing a
-// non-exported handler fails at resolution, not silently at invoke time — the
-// invoke path can only look up exported names.
-func TestResolve_HandlerOpUnexportedHandler(t *testing.T) {
-	src := `
-import "magus/target";
-export fun mgs_getName() > str { return "fnpkg"; }
-fun helper(tg: Target, cb: fun(any)) > bool { return true; }
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
-    return {"build": helper};
-}
-`
-	_, err := resolve(t, src, HandlerOps)
+	_, err := resolve(t, src)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "not exported")
+	assert.ErrorContains(t, err, "return `Command{...}`")
 }
 
-// TestResolve_CommandRejectsMultipleRun pins that a fork handler calling cb
-// more than once is an error, not a silently dropped earlier command.
-func TestResolve_CommandRejectsMultipleRun(t *testing.T) {
-	src := `
-import "magus/target";
-export fun mgs_getName() > str { return "forkpkg"; }
-export fun build(tg: Target, cb: fun(any)) > bool {
-    cb({"cmd": "echo", "args": ["a"]});
-    cb({"cmd": "echo", "args": ["b"]});
-    return true;
-}
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
-    return {"build": build};
-}
-`
-	_, err := resolve(t, src, CommandOps)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "exactly once")
-}
-
-// TestResolve_CommandCapturesHandlerDoc pins that a fork handler's doc comment —
+// TestResolve_CommandCapturesHandlerDoc pins that an op handler's doc comment —
 // the comment block directly above its `fun` declaration — is captured onto the
 // target's Doc, while an undocumented handler and one separated by a blank line
 // carry none. This is the data `magus describe` prints and `magus doctor` enforces.
@@ -154,19 +149,19 @@ import "magus/target";
 export fun mgs_getName() > str { return "forkpkg"; }
 
 // build compiles the project.
-fun build(tg: Target, run: any) > bool { return run({"cmd": "echo", "args": ["a"]}); }
+fun build(tg: Target) > Command { return Command{bin = "echo", args = ["a"]}; }
 
-fun test(tg: Target, run: any) > bool { return run({"cmd": "echo", "args": ["b"]}); }
+fun test(tg: Target) > Command { return Command{bin = "echo", args = ["b"]}; }
 
 // stray comment with a blank line below — not a doc comment.
 
-fun lint(tg: Target, run: any) > bool { return run({"cmd": "echo", "args": ["c"]}); }
+fun lint(tg: Target) > Command { return Command{bin = "echo", args = ["c"]}; }
 
-export fun mgs_listTargets() > {str: fun(Target, any) bool} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"build": build, "test": test, "lint": lint};
 }
 `
-	spec, err := resolve(t, src, CommandOps)
+	spec, err := resolve(t, src)
 	require.NoError(t, err)
 	assert.Equal(t, "build compiles the project.", spec.Ops["build"].Doc)
 	assert.Empty(t, spec.Ops["test"].Doc, "undocumented handler should carry no doc")
@@ -182,54 +177,32 @@ import "magus/target";
 export fun mgs_getName() > str { return "mixed"; }
 
 // build is a function handler.
-fun build(tg: Target, run: any) > bool { return run({"cmd": "echo", "args": ["a"]}); }
+fun build(tg: Target) > Command { return Command{bin = "echo", args = ["a"]}; }
 
 export fun mgs_listTargets() > any {
     return {
         "build": build,
-        "lint": {"cmd": "echo", "args": ["b"]},
+        "lint": {"bin": "echo", "args": ["b"]},
     };
 }
 `
-	spec, err := resolve(t, src, CommandOps)
+	spec, err := resolve(t, src)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"build"}, spec.DocOps, "record op 'lint' should be excluded")
 }
 
-// TestResolve_HandlerOpCapturesHandlerDoc pins doc capture for the function-op
-// form too: an `export fun` handler's preceding comment lands on the target Doc.
-func TestResolve_HandlerOpCapturesHandlerDoc(t *testing.T) {
-	src := `
-import "magus/target";
-export fun mgs_getName() > str { return "fnpkg"; }
-
-// deploy ships the build to production.
-export fun deploy(tg: Target, p: any) > bool { return true; }
-
-export fun mgs_listTargets() > {str: fun(Target, any) bool} {
-    return {"deploy": deploy};
-}
-`
-	spec, err := resolve(t, src, HandlerOps)
-	require.NoError(t, err)
-	assert.Equal(t, "deploy ships the build to production.", spec.Ops["deploy"].Doc)
-}
-
-// TestResolve_CommandRejectsTargetRead pins that a fork handler that reads
-// the Target fails at resolution (the Target is null there) rather than silently
+// TestResolve_CommandRejectsTargetRead pins that an op handler that reads the
+// Target fails at resolution (the Target is null there) rather than silently
 // recording a command built from empty fields.
 func TestResolve_CommandRejectsTargetRead(t *testing.T) {
 	src := `
 import "magus/target";
 export fun mgs_getName() > str { return "forkpkg"; }
-export fun build(tg: Target, cb: fun(any)) > bool {
-    cb({"cmd": "echo", "args": [tg.name]});
-    return true;
-}
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
+export fun build(tg: Target) > Command { return Command{bin = "echo", args = [tg.name]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"build": build};
 }
 `
-	_, err := resolve(t, src, CommandOps)
+	_, err := resolve(t, src)
 	assert.Error(t, err, "expected error for a handler reading the Target")
 }

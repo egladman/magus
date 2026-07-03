@@ -75,7 +75,7 @@ func Decode(src Obj) (Descriptor, error) {
 			if err := types.ValidateTargetName(op); err != nil {
 				return Descriptor{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
 			}
-			t := types.SpellOp{Run: types.Run{Args: spec.Strs("args")}, Capture: spec.Bool("capture")}
+			t := types.SpellOp{Capture: spec.Bool("capture")}
 			if doc, ok := spec.Str("doc"); ok {
 				t.Doc = doc
 			}
@@ -84,44 +84,41 @@ func Decode(src Obj) (Descriptor, error) {
 			if spec.Bool("handler") {
 				docOps = append(docOps, op)
 			}
-			// An op declared with "fn" is a handler op dispatched in-VM; otherwise
-			// it is a command op running the declared command. Mutually exclusive.
-			if fn, ok := spec.Str("fn"); ok && fn != "" {
-				t.Func = fn
-			} else if cmd, ok := spec.Str("cmd"); ok {
-				t.Cmd = cmd
-			}
-			if charms, ok := spec.Obj("charms"); ok {
-				cm := map[string]types.Charm{}
-				for _, cn := range charms.Keys() {
-					ce, ok := charms.Obj(cn)
-					if !ok {
-						continue
-					}
-					// A charm value is { ops = [ {op, path, value?, from?}, ... ] },
-					// an RFC 6902 patch over the base argv (built by the charm.*
-					// constructors at author time).
-					var ch types.Charm
-					for _, opObj := range ce.Objs("ops") {
-						po := types.PatchOp{}
-						po.Op, _ = opObj.Str("op")
-						po.Path, _ = opObj.Str("path")
-						if v, ok := opObj.Str("value"); ok {
-							po.Value = v
-						}
-						if f, ok := opObj.Str("from"); ok {
-							po.From = f
-						}
-						ch.Ops = append(ch.Ops, po)
-					}
-					if err := ValidatePatch(ch.Ops); err != nil {
-						return Descriptor{}, fmt.Errorf("spell %q op %q charm %q: %w", name, op, cn, err)
-					}
-					cm[cn] = ch
+			// A service op is recognized by its `command` field: a Service whose
+			// `command` is the long-running process, with optional `readiness` and
+			// `stop` commands. The op's embedded Command mirrors `command` so the
+			// fork/render/cache paths read every op uniformly; `magus run` forks it in
+			// the foreground and blocks. A command op (the default) decodes its Command
+			// directly.
+			if cmdObj, ok := spec.Obj("command"); ok {
+				cmd, err := decodeCommand(name, op, cmdObj)
+				if err != nil {
+					return Descriptor{}, err
 				}
-				if len(cm) > 0 {
-					t.Charms = cm
+				svc := &types.Service{Command: cmd}
+				if readinessObj, ok := spec.Obj("readiness"); ok {
+					readiness, err := decodeCommand(name, op, readinessObj)
+					if err != nil {
+						return Descriptor{}, err
+					}
+					svc.Readiness = readiness
 				}
+				if stopObj, ok := spec.Obj("stop"); ok {
+					stop, err := decodeCommand(name, op, stopObj)
+					if err != nil {
+						return Descriptor{}, err
+					}
+					svc.Stop = stop
+				}
+				t.Kind = types.OpKindService
+				t.Service = svc
+				t.Command = cmd
+			} else {
+				cmd, err := decodeCommand(name, op, spec)
+				if err != nil {
+					return Descriptor{}, err
+				}
+				t.Command = cmd
 			}
 			opMap[op] = t
 		}
@@ -134,4 +131,48 @@ func Decode(src Obj) (Descriptor, error) {
 		}
 	}
 	return m, nil
+}
+
+// decodeCommand reads a Command field map (bin/args/charms), validating each charm's
+// RFC 6902 patch. It is shared by a command op and by each of a service op's
+// run/ready/stop commands, so every command shape decodes identically.
+func decodeCommand(spellName, opName string, o Obj) (types.Command, error) {
+	c := types.Command{Args: o.Strs("args")}
+	if bin, ok := o.Str("bin"); ok {
+		c.Bin = bin
+	}
+	charms, ok := o.Obj("charms")
+	if !ok {
+		return c, nil
+	}
+	cm := map[string]types.Charm{}
+	for _, cn := range charms.Keys() {
+		ce, ok := charms.Obj(cn)
+		if !ok {
+			continue
+		}
+		// A charm value is { ops = [ {op, path, value?, from?}, ... ] }, an RFC 6902
+		// patch over the base argv (built by the charm.* constructors at author time).
+		var ch types.Charm
+		for _, opObj := range ce.Objs("ops") {
+			po := types.PatchOp{}
+			po.Op, _ = opObj.Str("op")
+			po.Path, _ = opObj.Str("path")
+			if v, ok := opObj.Str("value"); ok {
+				po.Value = v
+			}
+			if f, ok := opObj.Str("from"); ok {
+				po.From = f
+			}
+			ch.Ops = append(ch.Ops, po)
+		}
+		if err := ValidatePatch(ch.Ops); err != nil {
+			return types.Command{}, fmt.Errorf("spell %q op %q charm %q: %w", spellName, opName, cn, err)
+		}
+		cm[cn] = ch
+	}
+	if len(cm) > 0 {
+		c.Charms = cm
+	}
+	return c, nil
 }

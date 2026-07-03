@@ -145,7 +145,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Name:  "bash",
 		Needs: []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
 		Ops: map[string]types.SpellOp{
-			"shellcheck": {Run: types.Run{Cmd: "sh", Args: []string{"-c", "find . \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
+			"shellcheck": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
 		},
 	},
 	"buf": {
@@ -154,12 +154,12 @@ var goldenBuiltins = map[string]Descriptor{
 		Provides:   []string{"gen/**"},
 		VersionCmd: []string{"buf", "--version"},
 		Ops: map[string]types.SpellOp{
-			"buf-build":    {Run: types.Run{Cmd: "buf", Args: []string{"build"}}},
-			"buf-generate": {Run: types.Run{Cmd: "buf", Args: []string{"generate"}}},
-			"buf-lint": {Run: types.Run{Cmd: "buf", Args: []string{"lint"}, Charms: map[string]types.Charm{
+			"buf-build":    {Command: types.Command{Bin: "buf", Args: []string{"build"}}},
+			"buf-generate": {Command: types.Command{Bin: "buf", Args: []string{"generate"}}},
+			"buf-lint": {Command: types.Command{Bin: "buf", Args: []string{"lint"}, Charms: map[string]types.Charm{
 				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 			}}},
-			"buf-format": {Run: types.Run{Cmd: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]types.Charm{
+			"buf-format": {Command: types.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
 		},
@@ -168,18 +168,18 @@ var goldenBuiltins = map[string]Descriptor{
 		Name:  "buzz",
 		Needs: []string{"**/*.buzz"},
 		Ops: map[string]types.SpellOp{
-			"buzz-check": {Run: types.Run{Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}}},
-			"buzz-test":  {Run: types.Run{Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}}},
-			"magus-buzz": {Run: types.Run{Cmd: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
+			"buzz-check": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}}},
+			"buzz-test":  {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}}},
+			"magus-buzz": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
 		},
 	},
 	"cosign": {
 		Name:       "cosign",
 		VersionCmd: []string{"cosign", "version"},
 		Ops: map[string]types.SpellOp{
-			"cosign-sign":   {Run: types.Run{Cmd: "cosign", Args: []string{"sign", "--yes"}}},
-			"cosign-verify": {Run: types.Run{Cmd: "cosign", Args: []string{"verify"}}},
-			"cosign-attest": {Run: types.Run{Cmd: "cosign", Args: []string{"attest", "--yes"}}},
+			"cosign-sign":   {Command: types.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
+			"cosign-verify": {Command: types.Command{Bin: "cosign", Args: []string{"verify"}}},
+			"cosign-attest": {Command: types.Command{Bin: "cosign", Args: []string{"attest", "--yes"}}},
 		},
 	},
 	"docker": {
@@ -187,10 +187,10 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
 		VersionCmd: []string{"docker", "--version"},
 		Ops: map[string]types.SpellOp{
-			"docker-build":       {Run: types.Run{Cmd: "docker", Args: []string{"build"}}},
-			"docker-buildx":      {Run: types.Run{Cmd: "docker", Args: []string{"buildx", "build"}}},
-			"docker-build-check": {Run: types.Run{Cmd: "docker", Args: []string{"build", "--check"}}},
-			"hadolint":           {Run: types.Run{Cmd: "hadolint", Args: []string{"Dockerfile"}}},
+			"docker-build":       {Command: types.Command{Bin: "docker", Args: []string{"build"}}},
+			"docker-buildx":      {Command: types.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
+			"docker-build-check": {Command: types.Command{Bin: "docker", Args: []string{"build", "--check"}}},
+			"hadolint":           {Command: types.Command{Bin: "hadolint", Args: []string{"Dockerfile"}}},
 		},
 	},
 	"golang": {
@@ -198,17 +198,17 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
 		Ops: map[string]types.SpellOp{
-			"go-build":    {Run: types.Run{Cmd: "go", Args: []string{"build"}}},
-			"go-clean":    {Run: types.Run{Cmd: "go", Args: []string{"clean", "./..."}}},
-			"go-generate": {Run: types.Run{Cmd: "go", Args: []string{"generate", "./..."}}},
-			"go-fmt": {Run: types.Run{Cmd: "gofmt", Args: []string{"-l", "."}, Charms: map[string]types.Charm{
+			"go-build":    {Command: types.Command{Bin: "go", Args: []string{"build"}}},
+			"go-clean":    {Command: types.Command{Bin: "go", Args: []string{"clean", "./..."}}},
+			"go-generate": {Command: types.Command{Bin: "go", Args: []string{"generate", "./..."}}},
+			"go-fmt": {Command: types.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
-			"golangci-lint": {Run: types.Run{Cmd: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]types.Charm{
+			"golangci-lint": {Command: types.Command{Bin: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]types.Charm{
 				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
 			}}},
-			"go-test": {Run: types.Run{Cmd: "go", Args: []string{"test", "./..."}, Charms: map[string]types.Charm{
+			"go-test": {Command: types.Command{Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]types.Charm{
 				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"cd": {Ops: []types.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
@@ -217,11 +217,11 @@ var goldenBuiltins = map[string]Descriptor{
 			}}},
 			// tidy checks by default (--diff exits non-zero if go.mod/go.sum need
 			// changes — safe for CI gating); the write charm applies the changes.
-			"go-mod-tidy": {Run: types.Run{Cmd: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]types.Charm{
+			"go-mod-tidy": {Command: types.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Run: types.Run{Cmd: "go", Args: []string{"vet", "./..."}}},
-			"govulncheck": {Run: types.Run{Cmd: "go", Args: []string{"tool", "govulncheck", "./..."}}},
+			"go-vet":      {Command: types.Command{Bin: "go", Args: []string{"vet", "./..."}}},
+			"govulncheck": {Command: types.Command{Bin: "go", Args: []string{"tool", "govulncheck", "./..."}}},
 		},
 	},
 	"markdown": {
@@ -229,9 +229,12 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"},
 		Claims: []string{"**/*.md", "**/*.mdx"},
 		Ops: map[string]types.SpellOp{
-			"markdownlint": {Run: types.Run{Cmd: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
-			"prettier": {Run: types.Run{Cmd: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]types.Charm{
+			"markdownlint": {Command: types.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
+			"prettier": {Command: types.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
+			}}},
+			"typos": {Command: types.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]types.Charm{
+				"rw": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-w"}}},
 			}}},
 		},
 	},
@@ -240,17 +243,17 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		VersionCmd: []string{"python3", "--version"},
 		Ops: map[string]types.SpellOp{
-			"uv-build": {Run: types.Run{Cmd: "uv", Args: []string{"build"}}},
-			"uv-clean": {Run: types.Run{Cmd: "uv", Args: []string{"clean"}}},
-			"pytest": {Run: types.Run{Cmd: "uv", Args: []string{"run", "pytest"}, Charms: map[string]types.Charm{
+			"uv-build": {Command: types.Command{Bin: "uv", Args: []string{"build"}}},
+			"uv-clean": {Command: types.Command{Bin: "uv", Args: []string{"clean"}}},
+			"pytest": {Command: types.Command{Bin: "uv", Args: []string{"run", "pytest"}, Charms: map[string]types.Charm{
 				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 			}}},
-			"ruff-check": {Run: types.Run{Cmd: "uv", Args: []string{"run", "ruff", "check", "."}, Charms: map[string]types.Charm{
+			"ruff-check": {Command: types.Command{Bin: "uv", Args: []string{"run", "ruff", "check", "."}, Charms: map[string]types.Charm{
 				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
 				"gha":   {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
 			}}},
-			"ruff-format": {Run: types.Run{Cmd: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]types.Charm{
+			"ruff-format": {Command: types.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
 		},
@@ -260,13 +263,13 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		VersionCmd: []string{"rustc", "--version"},
 		Ops: map[string]types.SpellOp{
-			"cargo-build":  {Run: types.Run{Cmd: "cargo", Args: []string{"build", "--release"}}},
-			"cargo-clean":  {Run: types.Run{Cmd: "cargo", Args: []string{"clean"}}},
-			"cargo-clippy": {Run: types.Run{Cmd: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}}},
-			"cargo-fmt": {Run: types.Run{Cmd: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]types.Charm{
+			"cargo-build":  {Command: types.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
+			"cargo-clean":  {Command: types.Command{Bin: "cargo", Args: []string{"clean"}}},
+			"cargo-clippy": {Command: types.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}}},
+			"cargo-fmt": {Command: types.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
-			"cargo-test": {Run: types.Run{Cmd: "cargo", Args: []string{"test"}}},
+			"cargo-test": {Command: types.Command{Bin: "cargo", Args: []string{"test"}}},
 		},
 	},
 	"typescript": {
@@ -276,13 +279,13 @@ var goldenBuiltins = map[string]Descriptor{
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
 		Ops: map[string]types.SpellOp{
-			"eslint":    {Run: types.Run{Cmd: "pnpm", Args: []string{"exec", "eslint", "."}}},
+			"eslint":    {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}}},
 			"preflight": {},
-			"prettier": {Run: types.Run{Cmd: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]types.Charm{
+			"prettier": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
-			"tsc": {Run: types.Run{Cmd: "pnpm", Args: []string{"exec", "tsc"}}},
-			"vitest": {Run: types.Run{Cmd: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]types.Charm{
+			"tsc": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
+			"vitest": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]types.Charm{
 				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 			}}},
 		},
@@ -297,10 +300,16 @@ func TestBuiltinsMatchGolden(t *testing.T) {
 		if !assert.Truef(t, ok, "registry missing built-in %q", dir) {
 			continue
 		}
-		// DocTargets is resolution-path metadata (which targets are function
-		// handlers), not part of a spell's semantic identity, and is not pinned by
-		// this golden; clear it before comparing the semantic fields.
+		// DocOps and each op's Doc are resolution-path metadata (which targets are
+		// function handlers, and their doc comments), not part of a spell's semantic
+		// identity — and the Doc is not even stable across compiler versions (whether
+		// bytecode serializes doc comments varies). Clear both before comparing the
+		// semantic fields (bin/args/charms).
 		g.DocOps = nil
+		for name, op := range g.Ops {
+			op.Doc = ""
+			g.Ops[name] = op
+		}
 		assert.Equalf(t, want, g, "built-in %q", dir)
 	}
 }

@@ -115,7 +115,7 @@ func TestDecode_CommandOp(t *testing.T) {
 		"name": "myspell",
 		"ops": map[string]any{
 			"build": map[string]any{
-				"cmd":  "go",
+				"bin":  "go",
 				"args": []string{"build", "./..."},
 			},
 		},
@@ -124,9 +124,8 @@ func TestDecode_CommandOp(t *testing.T) {
 	require.NoError(t, err)
 	tgt, ok := m.Ops["build"]
 	require.True(t, ok, `Targets["build"] missing`)
-	assert.Equal(t, "go", tgt.Cmd)
+	assert.Equal(t, "go", tgt.Bin)
 	assert.Equal(t, []string{"build", "./..."}, tgt.Args)
-	assert.Empty(t, tgt.Func, "fork target should have empty Func")
 }
 
 // TestDecode_CharmReplaceOp checks that a charm carrying a replace patch op is
@@ -136,7 +135,7 @@ func TestDecode_CharmReplaceOp(t *testing.T) {
 		"name": "myspell",
 		"ops": map[string]any{
 			"fmt": map[string]any{
-				"cmd":  "gofmt",
+				"bin":  "gofmt",
 				"args": []string{"-l", "."},
 				"charms": map[string]any{
 					"write": map[string]any{
@@ -164,7 +163,7 @@ func TestDecode_CharmAddOp(t *testing.T) {
 		"name": "myspell",
 		"ops": map[string]any{
 			"test": map[string]any{
-				"cmd":  "go",
+				"bin":  "go",
 				"args": []string{"test", "./..."},
 				"charms": map[string]any{
 					"debug": map[string]any{
@@ -190,7 +189,7 @@ func TestDecode_CharmRootRejected(t *testing.T) {
 		"name": "myspell",
 		"ops": map[string]any{
 			"fmt": map[string]any{
-				"cmd": "gofmt",
+				"bin": "gofmt",
 				"charms": map[string]any{
 					"write": map[string]any{
 						"ops": []any{
@@ -211,7 +210,7 @@ func TestDecode_InvalidTargetName(t *testing.T) {
 		"name": "myspell",
 		"ops": map[string]any{
 			"has space": map[string]any{
-				"cmd": "echo",
+				"bin": "echo",
 			},
 		},
 	}

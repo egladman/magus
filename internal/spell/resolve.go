@@ -8,30 +8,6 @@ import (
 	"github.com/egladman/gopherbuzz/vm"
 )
 
-// ResolveMode tells Resolve how to reduce a function-valued
-// mgs_listTargets (see resolveOps).
-type ResolveMode int
-
-const (
-	// HandlerOps keeps each op handler for invoke-time dispatch — the form a
-	// spell that imports host modules (e.g. github) needs, since its handlers do
-	// host work rather than declare a command.
-	HandlerOps ResolveMode = iota
-	// CommandOps calls each op handler once to record the command it declares,
-	// so a self-contained command spell decodes as ordinary command targets.
-	CommandOps
-)
-
-// CommandOrHandlerOps returns the ResolveMode for a spell source: CommandOps for
-// a self-contained command spell (imports only magus/target, or nothing),
-// HandlerOps otherwise.
-func CommandOrHandlerOps(src string) ResolveMode {
-	if IsSelfContained(src) {
-		return CommandOps
-	}
-	return HandlerOps
-}
-
 // Resolve calls a Buzz spell module's exported mgs_ functions
 // once and assembles the definition map the shared decoder reads (keyed by the
 // decoder's field names), returning the decoded Descriptor. Centralizing it here
@@ -39,12 +15,12 @@ func CommandOrHandlerOps(src string) ResolveMode {
 // the embedded built-ins all read plain data uniformly.
 //
 // It takes an already-executed session so a caller whose spell body imports host
-// modules (e.g. a handler op spell using std/http) can register those
-// modules and run its own Exec before resolving; Extract-style helpers in the
-// buzz engine wrap it for the bare-session case.
-//
-// mode selects how a function-valued mgs_listTargets is reduced (see resolveOps).
-func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Descriptor, error) {
+// modules can register those modules and run its own Exec before resolving;
+// Extract-style helpers in the buzz engine wrap it for the bare-session case. Each
+// function-valued op in mgs_listTargets is reduced to its declared command (see
+// resolveOps); a spell that does in-VM work (a cache backend) exports plain
+// functions and declares no ops.
+func Resolve(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
 	ex := sess.Exports()
 
 	nameFn, ok := ex["mgs_getName"]
@@ -76,7 +52,7 @@ func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Descrip
 		// ops is post-processed here because its handlers can be function-valued
 		// (a Buzz-only form) and need resolving to data. See contract.go.
 		if f.Field == "ops" {
-			rv, err = resolveOps(ctx, sess, rv, mode)
+			rv, err = resolveOps(ctx, sess, rv)
 			if err != nil {
 				return Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 			}
@@ -86,27 +62,17 @@ func Resolve(ctx context.Context, sess *buzz.Session, mode ResolveMode) (Descrip
 	return Decode(buzzSpellObj{v: def})
 }
 
-// resolveOps reduces a function-valued mgs_listTargets — the strictly-typed
-// {str: fun(Target, fun(Run)) void} (command) or {str: fun(Target, fun(any)) bool}
-// (handler op) form a spell returns, referencing its op
-// handlers directly by value — into the records the shared decoder reads. A function
-// value becomes either:
-//
-//   - CommandOps: the {cmd, args, charms} spec the handler passes to its injected
-//     cb-callback, captured by calling the handler once (recordCommandRun). The
-//     decoder then reads it as an ordinary command target — so the built-in command path,
-//     BuiltinsHash, and charm enumeration are all unchanged.
-//   - HandlerOps: a {"fn": <handler>} record naming the handler for invoke-time
-//     dispatch (handler op spells like github, whose handlers do host work, not
-//     run a command).
-//
-// Record-shaped entries (a legacy {cmd, args} map or explicit {"fn": "..."}) pass
-// through untouched, so every shape resolves identically.
-func resolveOps(ctx context.Context, sess *buzz.Session, ops vm.Value, mode ResolveMode) (vm.Value, error) {
+// resolveOps reduces a function-valued mgs_listTargets — the op handlers a spell
+// returns by value, each `fun(Target) > Run` (or the legacy
+// `fun(Target, fun(Run)) void`) — into the {cmd, args, charms} records the shared
+// decoder reads. Each handler is called once (recordCommandRun) to capture the
+// command it declares, so the built-in command path, BuiltinsHash, and charm
+// enumeration all read plain data. Record-shaped entries (a bare {cmd, args} map)
+// pass through untouched, so every shape resolves identically.
+func resolveOps(ctx context.Context, sess *buzz.Session, ops vm.Value) (vm.Value, error) {
 	if !ops.IsMap() {
 		return ops, nil
 	}
-	ex := sess.Exports()
 	out := vm.NewMap()
 	for _, k := range ops.MapKeys() {
 		v, _ := ops.MapGet(k)
@@ -120,82 +86,77 @@ func resolveOps(ctx context.Context, sess *buzz.Session, ops vm.Value, mode Reso
 		// "handler" marker distinguishes a function-authored target (which the
 		// doctor doc-comment check applies to) from a plain {cmd,args} record op.
 		doc := v.FunDoc()
-		if mode == CommandOps {
-			spec, err := recordCommandRun(ctx, sess, v)
-			if err != nil {
-				return vm.Null, fmt.Errorf("op %q: %w", k, err)
-			}
-			spec.MapSet("handler", vm.True)
-			if doc != "" {
-				spec.MapSet("doc", vm.StrValue(doc))
-			}
-			out.MapSet(k, spec)
-			continue
+		spec, err := recordOp(ctx, sess, v)
+		if err != nil {
+			return vm.Null, fmt.Errorf("op %q: %w", k, err)
 		}
-		// Dispatch is by the handler's own exported name — recovered from the
-		// function value, not the op key — so `"foo": bar` invokes bar, and a
-		// handler that isn't an exported function fails here, not at invoke time
-		// (callBuzzSpellFunc looks it up in Exports by this name).
-		name := v.FunName()
-		if name == "" {
-			return vm.Null, fmt.Errorf("op %q: handler must be a named function", k)
-		}
-		if _, ok := ex[name]; !ok {
-			return vm.Null, fmt.Errorf("op %q: handler %q is not exported", k, name)
-		}
-		rec := vm.NewMap()
-		rec.MapSet("fn", vm.StrValue(name))
-		rec.MapSet("handler", vm.True)
+		spec.MapSet("handler", vm.True)
 		if doc != "" {
-			rec.MapSet("doc", vm.StrValue(doc))
+			spec.MapSet("doc", vm.StrValue(doc))
 		}
-		out.MapSet(k, rec)
+		out.MapSet(k, spec)
 	}
 	return out, nil
 }
 
-// recordCommandRun calls a command op handler once with a recording cb-callback and
-// returns the single {cmd, args, charms} Run the handler hands to cb(...). A
-// command handler must be straight-line: `cb(Run{...});`, calling cb exactly
-// once with a constant command — it must not branch on or read the Target (passed
-// as null here, so a value pulled from it would be null). The recorded cmd/args,
-// when present, must be strings (an empty Run is allowed — a no-op marker op),
-// so a second cb(...) call or a null value read from the Target fails at
-// resolution rather than silently caching a wrong spec.
-func recordCommandRun(ctx context.Context, sess *buzz.Session, fn vm.Value) (vm.Value, error) {
-	captured := vm.Null
-	calls := 0
-	cb := vm.DirectValue("magus.cb", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		calls++
-		if calls > 1 {
-			return vm.Null, fmt.Errorf("command op handler must call cb(...) exactly once")
-		}
-		if len(args) > 0 {
-			captured = args[0]
-		}
-		return vm.Null, nil
-	})
-	if _, err := sess.CallValue(ctx, fn, []vm.Value{vm.Null, cb}); err != nil {
+// recordOp calls an op handler once with a null Target and returns the Command or
+// Service it declares as a field map, for the decoder to read. The op is
+// `fun(Target) > Command` or `fun(Target) > Service`: it must be straight-line and
+// must not branch on or read the Target (passed as null here, so a value pulled from
+// it would be null). A Service op is recognized by its `command` field (the process);
+// a Command op by validating directly. Bin/Args, when present, must be strings (an
+// empty Command is allowed — a no-op marker op), so a null value read from the Target
+// fails at resolution rather than silently caching a wrong command.
+func recordOp(ctx context.Context, sess *buzz.Session, fn vm.Value) (vm.Value, error) {
+	rv, err := sess.CallValue(ctx, fn, []vm.Value{vm.Null})
+	if err != nil {
 		return vm.Null, err
 	}
-	// The handler hands cb an Run object (magus/target); MapView yields its
-	// {cmd, args, charms} field map. MapView also accepts a plain map, so a spell or
-	// test that passes a bare record still resolves identically.
-	mv, ok := captured.MapView()
+	// The handler returns a Command or Service object (magus/target); MapView yields
+	// its field map. MapView also accepts a plain map, so a spell or test that returns
+	// a bare record still resolves identically.
+	mv, ok := rv.MapView()
 	if !ok {
-		return vm.Null, fmt.Errorf("command op handler must call `cb(Run{...})` with a command record")
+		return vm.Null, fmt.Errorf("op handler must return `Command{...}` or `Service{...}`")
 	}
-	if cmd, ok := mv.MapGet("cmd"); ok && !cmd.IsStr() {
-		return vm.Null, fmt.Errorf("command op handler's cb(Run{...}) cmd must be a string")
+	if _, ok := mv.MapGet("command"); ok {
+		// A service op: validate its `command` plus the optional `readiness`/`stop`
+		// commands, each a Command (an empty Command validates as a no-op).
+		for _, field := range []string{"command", "readiness", "stop"} {
+			sub, ok := mv.MapGet(field)
+			if !ok {
+				continue
+			}
+			sc, ok := sub.MapView()
+			if !ok {
+				return vm.Null, fmt.Errorf("service op's Service `%s` must be a `Command{...}`", field)
+			}
+			if err := validateCmdFields(sc); err != nil {
+				return vm.Null, fmt.Errorf("service op %s: %w", field, err)
+			}
+		}
+		return mv, nil
 	}
-	if args, ok := mv.MapGet("args"); ok && args.IsList() {
+	if err := validateCmdFields(mv); err != nil {
+		return vm.Null, err
+	}
+	return mv, nil
+}
+
+// validateCmdFields checks a Command field map: bin is a string and args are all
+// strings, when present.
+func validateCmdFields(m vm.Value) error {
+	if bin, ok := m.MapGet("bin"); ok && !bin.IsStr() {
+		return fmt.Errorf("Command bin must be a string")
+	}
+	if args, ok := m.MapGet("args"); ok && args.IsList() {
 		for _, a := range args.ListItems() {
 			if !a.IsStr() {
-				return vm.Null, fmt.Errorf("command op handler's cb(Run{...}) args must all be strings")
+				return fmt.Errorf("Command args must all be strings")
 			}
 		}
 	}
-	return mv, nil
+	return nil
 }
 
 // DecodeHandle decodes a bind-time spell handle — a map of resolved native data

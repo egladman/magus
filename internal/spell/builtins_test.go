@@ -90,7 +90,7 @@ func TestBuiltinBytecodeParity(t *testing.T) {
 			rs := buzz.NewSession(ctx, buzz.WithEmbedded())
 			defer rs.Close()
 			require.NoError(t, rs.ExecChunk(ctx, rechunk), "exec chunk")
-			got, err := Resolve(ctx, rs, CommandOps)
+			got, err := Resolve(ctx, rs)
 			require.NoError(t, err, "resolve")
 			w, ok := want[got.Name]
 			require.Truef(t, ok, "built-in %q (name %q) not in registry", dir, got.Name)
@@ -105,7 +105,7 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 	require.Truef(t, ok, "go spell has no go-mod-tidy target; targets: %v", goSpell.OpNames())
 	// Default (no write charm): check mode via --diff (non-zero exit if changes
 	// are needed — safe for CI gating).
-	assert.Equal(t, "go", tidy.Cmd)
+	assert.Equal(t, "go", tidy.Bin)
 	assert.Equal(t, []string{"mod", "tidy", "--diff"}, tidy.Args)
 	// rw charm drops --diff (remove /2) so tidy actually applies the changes.
 	w, ok := tidy.Charms["rw"]
