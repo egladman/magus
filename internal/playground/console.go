@@ -55,20 +55,80 @@ type Diag struct {
 }
 
 // EvalResult is the outcome of an evaluation: the value of a trailing `return`
-// (Result), anything the program printed (Output), and a Diag on failure.
+// (Result), anything the program printed (Output), and a Diag on failure. Trace
+// is populated only in recorder mode (EvalBuzz with WithRecorder): the ordered
+// host-op trace a spell example's targets would perform (empty otherwise).
 type EvalResult struct {
 	OK     bool   `json:"ok"`
 	Result string `json:"result"`
 	Output string `json:"output"`
 	Diag   *Diag  `json:"diag"`
+	Trace  []Op   `json:"trace,omitempty"`
 }
 
-// EvalBuzz runs plain Buzz source in a fresh session with Buzz's stdlib and
-// the browser-safe magus host modules available, and captures print output.
-// This is the language playground's core: no filesystem, no network, no
-// magusfile semantics; runs the module-doc examples for strings / encoding /
-// json / etc.
-func EvalBuzz(ctx context.Context, src string) EvalResult {
+// evalConfig is the resolved configuration for an EvalBuzz call. The zero value is
+// the plain language playground: Buzz stdlib plus the browser-safe host modules,
+// evaluated once for its Result. Options layer on the recording magusfile host.
+type evalConfig struct {
+	// recorder switches from the eval-once path (return a Result) to the dry-run
+	// path: install the recording magus/spell host, probe every target, and return
+	// the host-op Trace instead.
+	recorder bool
+	// spells names the extra spells (import name -> op names) to register beyond
+	// the built-ins, so a workspace or third-party spell's example records too.
+	// Non-nil implies recorder mode.
+	spells map[string][]string
+}
+
+// EvalOption configures EvalBuzz. Options are additive: each turns on a capability
+// over the plain-language base, so a caller opts into exactly the host surface its
+// snippet needs.
+type EvalOption func(*evalConfig)
+
+// WithRecorder runs src as a magusfile dry run rather than a plain expression: it
+// installs the recording magus/spell host, probes every target body once, and
+// returns the ordered host-op Trace those bodies would perform (no process is
+// forked). This is the runnable path for the spell docs.
+func WithRecorder() EvalOption {
+	return func(c *evalConfig) { c.recorder = true }
+}
+
+// WithSpells registers additional spells (import name -> op names) as recording
+// `magus/spell/<name>` modules on top of the built-ins, so an example that binds a
+// workspace or third-party spell records its ops like a built-in's. It implies
+// WithRecorder. This is the first-class hook for documenting non-built-in spells.
+func WithSpells(spells map[string][]string) EvalOption {
+	return func(c *evalConfig) {
+		c.recorder = true
+		if c.spells == nil {
+			c.spells = map[string][]string{}
+		}
+		for name, ops := range spells {
+			c.spells[name] = ops
+		}
+	}
+}
+
+// EvalBuzz evaluates Buzz source in a fresh sandboxed session. With no options it
+// is the language playground: Buzz stdlib plus the browser-safe host modules
+// (strings / json / crypto / ...), evaluated once, returning the trailing value's
+// Result and any print Output. This runs the stdlib-module doc examples.
+//
+// With WithRecorder (or WithSpells), it instead runs src as a magusfile dry run:
+// the recording magus/spell host is layered on, every target is probed once, and
+// the ordered host-op Trace those targets would perform is returned - so a spell
+// example like `import "magus/spell/go"; go["go-build"]()` reports a `go build` op
+// instead of forking anything. A parse/compile failure returns a Diag; a target
+// that panics mid-probe still yields the ops recorded up to that point.
+func EvalBuzz(ctx context.Context, src string, opts ...EvalOption) EvalResult {
+	var cfg evalConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.recorder {
+		return evalRecording(ctx, src, mergeSpells(cfg.spells))
+	}
+
 	var out bytes.Buffer
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
@@ -81,6 +141,40 @@ func EvalBuzz(ctx context.Context, src string) EvalResult {
 	return EvalResult{OK: true, Result: v.String(), Output: out.String()}
 }
 
+// evalRecording is the dry-run path of EvalBuzz: it probes every target under the
+// recording host and flattens their ops into one Trace, in discovery (sorted-key)
+// order so a multi-target example reads top to bottom. Unlike DryRun it does not
+// walk a single target's dependency closure - an example is self-contained and
+// every op it wires is worth showing.
+func evalRecording(ctx context.Context, src string, spells map[string][]string) EvalResult {
+	rec, targets, diag := evalAndProbe(ctx, src, nil, spells)
+	if diag != nil {
+		return EvalResult{Output: rec.out.String(), Diag: diag}
+	}
+	var trace []Op
+	for _, t := range targets {
+		trace = append(trace, rec.opsByTarget[t.key]...)
+	}
+	return EvalResult{OK: true, Output: rec.out.String(), Trace: trace}
+}
+
+// mergeSpells returns the built-in spell registry with extra merged over it (extra
+// wins on a name clash), so a caller's WithSpells adds to - rather than replaces -
+// the built-ins. A nil extra just returns the built-ins.
+func mergeSpells(extra map[string][]string) map[string][]string {
+	if len(extra) == 0 {
+		return builtinSpellOps
+	}
+	merged := make(map[string][]string, len(builtinSpellOps)+len(extra))
+	for name, ops := range builtinSpellOps {
+		merged[name] = ops
+	}
+	for name, ops := range extra {
+		merged[name] = ops
+	}
+	return merged
+}
+
 // EvalInContext evaluates expr in a session that has first executed magusfileSrc,
 // so the file's top-level functions, objects, enums, and consts are in scope —
 // like a REPL with the magusfile autoloaded. It uses the same recording host as
@@ -91,7 +185,7 @@ func EvalBuzz(ctx context.Context, src string) EvalResult {
 func EvalInContext(ctx context.Context, magusfileSrc, expr string) EvalResult {
 	rec := newRecorder()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	installHost(sess, rec)
+	installHost(ctx, sess, rec, builtinSpellOps)
 
 	_ = sess.Exec(ctx, magusfileSrc) // best effort: bind whatever compiles
 

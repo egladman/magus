@@ -40,7 +40,7 @@ import (
 // already a manual rebuild of the committed wasm.
 const (
 	builtScheduler = "asyncify"
-	builtWithGo    = "go1.24.7"
+	builtWithGo    = "go1.26.4"
 )
 
 // buildInfo reports the toolchain that produced this binary. The compiler,
@@ -410,6 +410,25 @@ func exposeDataAPI() {
 		}
 		r := playground.EvalBuzz(context.Background(), args[0].String())
 		return map[string]any{"ok": r.OK, "result": r.Result, "output": r.Output}
+	}))
+	// evalBuzzWithRecorder is the spell-docs Run path: it dry-runs a magusfile
+	// example (probing its targets under the recording host) and returns the
+	// host-op trace the targets would perform, so `import "magus/spell/go";
+	// go["go-build"]()` reports a `go build` op instead of failing on a module the
+	// bare evalBuzz can't resolve. Trace entries are marshalled as plain objects
+	// the client renders as "[target] name detail  kind · recorded" lines.
+	api.Set("evalBuzzWithRecorder", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) < 1 {
+			return nil
+		}
+		r := playground.EvalBuzz(context.Background(), args[0].String(), playground.WithRecorder())
+		trace := make([]any, len(r.Trace))
+		for i, op := range r.Trace {
+			trace[i] = map[string]any{
+				"target": op.Target, "kind": op.Kind, "name": op.Name, "detail": op.Detail,
+			}
+		}
+		return map[string]any{"ok": r.OK, "output": r.Output, "trace": trace}
 	}))
 	api.Set("loadMagusfile", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) < 1 {

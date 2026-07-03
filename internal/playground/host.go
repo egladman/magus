@@ -14,20 +14,29 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// installHost wires a session for magusfile evaluation: the std library (with
-// print captured into rec.out) plus stub `magus`, `magus/extra`, and
-// `magus/spell/*` modules backed by rec. Every host effect is recorded, not
-// performed.
-func installHost(sess *buzz.Session, rec *Recorder) {
+// installHost wires a session for magusfile evaluation, layering host surfaces
+// from least to most permissive: the Buzz std library (print captured into
+// rec.out), then the pure-compute browser-safe host modules (`strings`, `json`,
+// ...), then the recording `magus`, `magus/extra`, and `magus/spell/*` modules
+// backed by rec. Every host effect is recorded, not performed.
+//
+// spells is the set of spells to register as recording `magus/spell/<name>`
+// modules, keyed by import name with its op names. Callers pass the built-in
+// registry (builtinSpellOps) plus any extra spells a caller registered — see
+// WithSpells — so a workspace or third-party spell's example records like a
+// built-in's.
+func installHost(ctx context.Context, sess *buzz.Session, rec *Recorder, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &rec.out)
+	registerBrowserSafeHostModules(ctx, sess)
 
 	sess.SetGlobal("magus", buildMagus(sess, rec))
 	sess.SetSyntheticModule("magus/extra", buildExtra(rec))
-	for name, ops := range builtinSpellOps {
+	for name, ops := range spells {
 		sess.SetSyntheticModule("magus/spell/"+name, buildSpell(name, ops, rec))
 	}
-	// A workspace-local `import "spells/foo"` can't be resolved in the sandbox;
-	// report it instead of failing the whole evaluation with a file-not-found.
+	// A workspace-local `import "spells/foo"` that no caller registered can't be
+	// resolved in the sandbox; report it instead of failing the whole evaluation
+	// with a file-not-found.
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		m := vm.NewMap()
 		m.MapSet("name", vm.StrValue(importPath))

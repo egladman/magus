@@ -41,11 +41,11 @@ type targetInfo struct {
 // targets from exported functions, then probes each target body once under the
 // recording host to capture its depends_on edges and host ops. Host effects are
 // inert, so probing a target never cascades into running its dependencies.
-func evalAndProbe(ctx context.Context, src string, charms []string) (*Recorder, []targetInfo, *Diag) {
+func evalAndProbe(ctx context.Context, src string, charms []string, spells map[string][]string) (*Recorder, []targetInfo, *Diag) {
 	rec := newRecorder()
 	rec.charms = charms
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	installHost(sess, rec)
+	installHost(ctx, sess, rec, spells)
 
 	if err := sess.Exec(ctx, src); err != nil {
 		return rec, nil, toDiag(err)
@@ -97,7 +97,7 @@ func discoverTargets(sess *buzz.Session) []targetInfo {
 // LoadMagusfile evaluates src to its project/target/edge graph. Charms are off
 // (empty) for a structural load — the graph is charm-independent.
 func LoadMagusfile(ctx context.Context, src string) Graph {
-	rec, targets, diag := evalAndProbe(ctx, src, nil)
+	rec, targets, diag := evalAndProbe(ctx, src, nil, builtinSpellOps)
 	if diag != nil {
 		return Graph{Output: rec.out.String(), Diag: diag}
 	}
@@ -119,7 +119,7 @@ func LoadMagusfile(ctx context.Context, src string) Graph {
 // trace of each target in that order. charms is the active charm set (from a
 // `run t:charm` invocation), so charm-gated branches (has_charm) resolve.
 func DryRun(ctx context.Context, src, targetKey string, charms []string) DryRunResult {
-	rec, targets, diag := evalAndProbe(ctx, src, charms)
+	rec, targets, diag := evalAndProbe(ctx, src, charms, builtinSpellOps)
 	if diag != nil {
 		return DryRunResult{Output: rec.out.String(), Diag: diag}
 	}

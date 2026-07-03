@@ -1,6 +1,9 @@
-//go:build !cgo
+//go:build !cgo || wasm
 
 package codec
+
+// The `|| wasm` arm routes the wasm playground here even under cgo: native
+// libzstd can't be linked into a wasm sandbox (see zstd_cgo.go).
 
 import (
 	"io"

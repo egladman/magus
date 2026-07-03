@@ -1,6 +1,9 @@
-//go:build cgo
+//go:build cgo && !wasm
 
 package codec
+
+// Excluded on wasm: see the rationale in xz_cgo.go. The pure-Go fallback
+// (zstd_other.go) covers the wasm playground.
 
 // zstd compress/decompress via libzstd (cgo, pkg-config: libzstd).
 // Requires libzstd >= 1.4.0 (ZSTD_compressStream2); >= 1.5.0 for ZSTD_c_nbWorkers.

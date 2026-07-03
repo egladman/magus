@@ -1,6 +1,12 @@
-//go:build cgo
+//go:build cgo && !wasm
 
 package codec
+
+// Excluded on wasm even with cgo enabled: a wasm sandbox can't link native
+// liblzma, and TinyGo forces cgo on with a clang that has no host headers for
+// it, so the cgo path fails the playground build. The pure-Go fallback
+// (xz_other.go) is a complete implementation and covers wasm, which never
+// decompresses at runtime anyway. zstd_cgo.go carries the matching exclusion.
 
 // xz decompress via liblzma (cgo, pkg-config: liblzma).
 // Requires liblzma >= 5.0 (LZMA_CONCATENATED). Cross-compile targets must have liblzma installed.
