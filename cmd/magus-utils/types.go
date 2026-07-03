@@ -21,7 +21,8 @@ import (
 var registry = map[string]reflect.Type{
 	"Target":        reflect.TypeOf(types.Target{}),
 	"TargetQuery":   reflect.TypeOf(types.TargetQuery{}),
-	"Run":           reflect.TypeOf(types.Run{}),
+	"Command":       reflect.TypeOf(types.Command{}),
+	"Service":       reflect.TypeOf(types.Service{}),
 	"Charm":         reflect.TypeOf(types.Charm{}),
 	"PatchOp":       reflect.TypeOf(types.PatchOp{}),
 	"ExecResult":    reflect.TypeOf(types.ExecResult{}),

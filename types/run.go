@@ -25,56 +25,74 @@ type Charm struct {
 	Ops []PatchOp `json:"ops,omitempty"`
 }
 
-// Run is the command a command op runs: a program (Cmd), its argument vector
-// (Args), and charm modifiers keyed by charm name. It is the single source of
-// truth shared two ways: magus-utils types mirrors it to the Buzz `object Run` a
-// command handler builds and hands to its cb callback, and the resolved spell Op
-// embeds it. An empty Run (no Cmd) is the no-op marker.
-//
-// Despite the name, Run is a command/invocation spec (what to run), not part of
-// the run subsystem (the execution machinery that runs targets); the two are
-// unrelated.
-type Run struct {
-	Cmd    string           `json:"cmd,omitempty"`
+// Command is the declarative description of what a command op runs: a program on
+// PATH (Bin), its argument vector (Args), and charm modifiers keyed by charm name.
+// It describes what would run, not the running of it — the static form is what lets
+// the argv be charm-patched, hashed into the cache key, and previewed by
+// `magus describe` without executing. It is the single source of truth shared two
+// ways: magus-utils types mirrors it to the Buzz `object Command` a spell op
+// returns, and the resolved spell Op embeds it. An empty Command (no Bin) is the
+// no-op marker.
+type Command struct {
+	Bin    string           `json:"bin,omitempty"`
 	Args   []string         `json:"args,omitempty"`
 	Charms map[string]Charm `json:"charms,omitempty"`
 }
 
-// OpKind is the dispatch strategy of a [SpellOp].
-type OpKind int
-
+// Op kinds. A kind lives on the op, not the spell: one spell freely mixes command
+// ops and service ops under one name. The kind is inferred from what the op handler
+// returns - a [Command] (OpKindCommand) or a [Service] (OpKindService) - so
+// authoring stays a single mgs_listTargets. Both are declarative data differing only
+// in lifecycle (run-to-completion vs long-running), not the imperative handler split
+// magus removed. An empty SpellOp.Kind means OpKindCommand.
 const (
-	// OpCommand runs the op's declared command (the embedded [Run]) as an external
-	// process via PATH — declarative data: its argv is charm-patchable and can be
-	// rendered by `magus describe` without executing it.
-	OpCommand OpKind = iota
-	// OpHandler invokes the op's named in-VM function with the request's Params —
-	// imperative spell logic (API calls, branching) that no single command expresses.
-	OpHandler
+	OpKindCommand = "command"
+	OpKindService = "service"
 )
 
+// Service is the declarative description of a long-running process a service op
+// manages. Command (required) is the process: `magus run <target>` forks it in the
+// foreground and blocks on it (Ctrl-C signals the child), rather than running to
+// completion. Readiness and Stop are optional: Readiness is a probe polled until it
+// exits 0 (how a supervisor learns the process is up), and Stop is a graceful-shutdown
+// command run instead of signaling the process. Both are consumed once magus
+// supervises processes in the background; today's foreground `magus run` uses only
+// Command, but the contract carries them so an author writes a complete service now.
+// Like [Command] each is static data - inspectable, cache-keyable, charm-patchable. It
+// is a distinct return type (vs [Command]) so an op's kind is inferred from what it
+// returns. magus-utils types mirrors it to the Buzz `object Service` a service op returns.
+type Service struct {
+	Command   Command `json:"command,omitempty"`
+	Readiness Command `json:"readiness,omitempty"`
+	Stop      Command `json:"stop,omitempty"`
+}
+
 // SpellOp is a single dispatchable surface of a spell — one tool-native Operation
-// (see docs/operations.md). Its [SpellOp.Kind] is either:
+// (see docs/operations.md). An op is one of two declarative shapes, tagged by Kind:
+// a command op (OpKindCommand, the default) whose embedded [Command] Bin/Args run
+// via PATH with no script VM; or a service op (OpKindService) whose [Service]
+// describes a long-running process `magus run` blocks on. Either way the form is declarative,
+// so the argv is charm-patched and rendered by `magus describe` without executing.
 //
-//   - OpCommand: the embedded [Run]'s Cmd/Args run via PATH with no script VM,
-//     magus passing the command straight through to the tool (Run.Cmd may itself
-//     be empty, for a no-op marker op); or
-//   - OpHandler: the exported function named by Func is dispatched in-VM with the
-//     invoke request's Params.
+// For a service op the embedded Command mirrors Service.Command (the process), so
+// every fork/render/cache path reads the op uniformly; `magus run` forks it in the
+// foreground and blocks. Command.Bin may be empty, for a no-op marker op.
 //
-// The two are mutually exclusive: a set Func selects OpHandler, otherwise the op
-// is an OpCommand. Capture makes the op's magusfile method return the
-// {stdout, stderr, code, ok} record (the same shape os.exec returns) instead of
-// void — for ops whose output is the point (a hash, a revision date) rather than a
-// build action whose exit code is all that matters. It is Go-internal (the
-// resolved op), not mirrored to Buzz.
+// (In-VM spell logic — API calls, a cache backend's get/put — is not an op kind: a
+// remote cache backend is a separate contract magus's core invokes by name, and
+// other custom logic belongs in a magusfile target body, not the operation model.)
+//
+// Capture makes the op's magusfile method return the {stdout, stderr, code, ok}
+// record (the same shape os.exec returns) instead of void — for ops whose output
+// is the point (a hash, a revision date) rather than a build action whose exit code
+// is all that matters. It is Go-internal (the resolved op), not mirrored to Buzz.
 type SpellOp struct {
-	Run
-	Capture bool `json:"capture,omitempty"`
-	// Func names an exported spell function to dispatch in-VM with the invoke
-	// request's Params, returning its Data — i.e. the op is an OpHandler. When
-	// empty the op is an OpCommand (Run.Cmd/Args); when set, Run.Cmd is unused.
-	Func string `json:"fn,omitempty"`
+	// Kind is the op's lifecycle kind (OpKind*); empty means OpKindCommand.
+	Kind string `json:"kind,omitempty"`
+	Command
+	// Service is set only for a service op (Kind == OpKindService); nil otherwise.
+	Service *Service `json:"service,omitempty"`
+	Capture bool     `json:"capture,omitempty"`
 	// Doc is the handler function's documentation comment (see buzz Chunk.Doc),
 	// surfaced by `magus describe` and enforced by `magus doctor` for local Buzz
 	// spells. Empty for command built-ins (their Doc is not serialized in bytecode).
@@ -82,12 +100,15 @@ type SpellOp struct {
 	Doc string `json:"doc,omitempty"`
 }
 
-// Kind reports how the op is dispatched: OpHandler when it names an in-VM
-// function, else OpCommand. It is the one place the command/handler distinction is
-// decided, so call sites read Kind() rather than testing Func directly.
-func (o SpellOp) Kind() OpKind {
-	if o.Func != "" {
-		return OpHandler
+// OpKind returns the op's kind, resolving the empty default to OpKindCommand so
+// callers dispatch on one canonical value.
+func (o SpellOp) OpKind() string {
+	if o.Kind == "" {
+		return OpKindCommand
 	}
-	return OpCommand
+	return o.Kind
 }
+
+// IsService reports whether the op is a service op (a long-running process) rather
+// than a command op (run to completion).
+func (o SpellOp) IsService() bool { return o.Kind == OpKindService }
