@@ -29,14 +29,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestImportedBuzzSpellHasHandlerOps is the generalization check: a Buzz spell
-// loaded via the ordinary import path (loadLocalBuzzSpell) — not loadSpellFile or
-// magus.cache.remote — registers with function-op support, so any imported Buzz
-// spell can carry function-ops, not only cache backends.
-func TestImportedBuzzSpellHasHandlerOps(t *testing.T) {
+// TestImportedBuzzSpellInvokesExportedFunc is the generalization check: a Buzz
+// spell loaded via the ordinary import path (loadLocalBuzzSpell) can have its
+// exported functions invoked by name — the direct-invoke path a cache backend
+// uses. It declares no ops (mgs_listTargets); the invoker falls back to the
+// exported function when the target isn't a command op.
+func TestImportedBuzzSpellInvokesExportedFunc(t *testing.T) {
 	src := `
 export fun mgs_getName() > str { return "echo-import"; }
-export fun mgs_listTargets() > any { return {"echo": {"fn": "echo"}}; }
 export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "yo " + p["x"]; }
 `
 	path := filepath.Join(t.TempDir(), "echo-import.buzz")
@@ -92,9 +92,6 @@ func writeSpell(t *testing.T, name, srvURL string) string {
 import "http" as xhttp
 
 export fun mgs_getName() > str { return %q; }
-export fun mgs_listTargets() > any {
-    return {"get_artifact": {"fn": "get_artifact"}, "put_artifact": {"fn": "put_artifact"}};
-}
 
 final BASE = %q;
 
@@ -159,12 +156,12 @@ func TestResolveBackendSpellMissingName(t *testing.T) {
 	assert.Error(t, err, "expected error for unregistered spell name")
 }
 
-// TestLoadSpellFileHandlerOp checks the function-op machinery directly: a loaded
-// spell's op runs in the VM, receives Params, and returns Data.
+// TestLoadSpellFileDirectFunc checks the direct-invoke machinery directly: a loaded
+// spell's exported function runs in the VM, receives Params, and returns Data — the
+// path a cache backend uses. The spell declares no ops.
 func TestLoadSpellFileHandlerOp(t *testing.T) {
 	src := `
 export fun mgs_getName() > str { return "echo-spell"; }
-export fun mgs_listTargets() > any { return {"echo": {"fn": "echo"}}; }
 export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "hi " + p["who"]; }
 `
 	path := filepath.Join(t.TempDir(), "echo-spell.buzz")
@@ -415,13 +412,12 @@ export final cname = build().charms[0];
 
 func TestNewCommandRenderer(t *testing.T) {
 	targets := map[string]types.SpellOp{
-		"lint": {Run: types.Run{Cmd: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]types.Charm{
+		"lint": {Command: types.Command{Bin: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]types.Charm{
 			"write": {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
 			"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 		}}},
-		"build": {Run: types.Run{Cmd: "go", Args: []string{"build"}}},
-		"fn":    {Func: "handler"}, // function-op: no static command
-		"noop":  {},                // empty cmd
+		"build": {Command: types.Command{Bin: "go", Args: []string{"build"}}},
+		"noop":  {}, // empty cmd
 	}
 	render := newCommandRenderer(targets)
 
@@ -442,12 +438,6 @@ func TestNewCommandRenderer(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)
 		assert.Equal(t, []string{"build"}, args)
-	})
-	t.Run("function-op → no command", func(t *testing.T) {
-		cmd, args, ok := render("fn", nil)
-		assert.False(t, ok)
-		assert.Empty(t, cmd)
-		assert.Nil(t, args)
 	})
 	t.Run("no-op (empty cmd) → none", func(t *testing.T) {
 		cmd, args, ok := render("noop", nil)

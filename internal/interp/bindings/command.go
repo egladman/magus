@@ -31,12 +31,12 @@ type commandOpts struct {
 	hasArgs bool
 }
 
-// runCommand runs tgt.Cmd as a subprocess with the base argv as reshaped by the
+// runCommand runs tgt.Bin as a subprocess with the base argv as reshaped by the
 // active charms (see resolveCharmArgs). Empty Cmd is a no-op. opts.cwd defaults to
 // "." (the process cwd). Write-mode rides along as the "rw" charm on ctx, so no
 // separate write flag is needed.
 func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.ExecResult, error) {
-	if tgt.Cmd == "" {
+	if tgt.Bin == "" {
 		return run.ExecResult{}, nil
 	}
 	dir := opts.cwd
@@ -48,7 +48,7 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 		return run.ExecResult{}, err
 	}
 	args = append(args, opts.args...)
-	return execCommand(ctx, dir, tgt.Cmd, args, opts.env, opts.stdin, tgt.Capture)
+	return execCommand(ctx, dir, tgt.Bin, args, opts.env, opts.stdin, tgt.Capture)
 }
 
 // resolveCharmArgs reshapes base by the charms active on ctx. Each active charm

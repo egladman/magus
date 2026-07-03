@@ -43,9 +43,7 @@ func bindBuzzTargetDispatch(h vm.Value, targets map[string]types.SpellOp) {
 		return strSliceToBuzzList(commandTargetNames(targets)), nil
 	}))
 	for name, tgt := range targets {
-		if tgt.Kind() == types.OpCommand {
-			bindBuzzCommandMethod(h, name, tgt)
-		}
+		bindBuzzCommandMethod(h, name, tgt)
 	}
 }
 
@@ -130,8 +128,8 @@ func targetsToBuzzMap(targets map[string]types.SpellOp) vm.Value {
 	ops := vm.NewMap()
 	for name, t := range targets {
 		op := vm.NewMap()
-		if t.Cmd != "" {
-			op.MapSet("cmd", vm.StrValue(t.Cmd))
+		if t.Bin != "" {
+			op.MapSet("bin", vm.StrValue(t.Bin))
 		}
 		if len(t.Args) > 0 {
 			op.MapSet("args", strSliceToBuzzList(t.Args))

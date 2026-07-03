@@ -91,25 +91,20 @@ func newVersionProbe(argv []string) func(context.Context, string) (string, error
 	}
 }
 
-// handlerFn invokes a named in-VM spell function for a request. Built-in spells
-// have no script body and pass nil, which makes a handler op a no-op.
-type handlerFn func(ctx context.Context, fn string, req types.InvokeRequest) (any, error)
-
-// newCommandRenderer returns the command preview used by `magus describe`: for a
-// command op it reports cmd plus the argv as reshaped by the active charms,
-// executing nothing. A handler op or a no-op (empty Cmd) returns ok=false — there
-// is no static command to show.
+// newCommandRenderer returns the command preview used by `magus describe`: it
+// reports cmd plus the argv as reshaped by the active charms, executing nothing. A
+// no-op marker op (empty Cmd) returns ok=false — there is no command to show.
 func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string) (string, []string, bool) {
 	return func(target string, charms []string) (string, []string, bool) {
 		op, ok := targets[target]
-		if !ok || op.Kind() != types.OpCommand || op.Cmd == "" {
+		if !ok || op.Bin == "" {
 			return "", nil, false
 		}
 		args, err := resolveCharmArgs(types.WithCharms(context.Background(), charms), op.Args, op.Charms)
 		if err != nil {
 			return "", nil, false
 		}
-		return op.Cmd, args, true
+		return op.Bin, args, true
 	}
 }
 
@@ -124,50 +119,35 @@ func noResult() (any, error) {
 }
 
 // dispatchOp is the single op-dispatch bridge between the magus host and the Buzz
-// interpreter. It resolves the request's target to a [types.SpellOp] and runs it by
-// its [types.OpKind]: an OpCommand runs the declared command as a subprocess; an
-// OpHandler invokes the in-VM function via run (nil for built-ins, so their handler
-// ops no-op). An unknown target is also a no-op, matching the fan-out-and-skip
-// dispatch model.
-func dispatchOp(ctx context.Context, ops map[string]types.SpellOp, req types.InvokeRequest, run handlerFn) (any, error) {
+// interpreter. It resolves the request's target to a [types.SpellOp] and runs its
+// declared command as a subprocess. An unknown target is a no-op, matching the
+// fan-out-and-skip dispatch model. Every op is a command; in-VM work (a cache
+// backend) is dispatched separately (see newBuzzSpellInvoker), not through here.
+func dispatchOp(ctx context.Context, ops map[string]types.SpellOp, req types.InvokeRequest) (any, error) {
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
 		return noResult()
 	}
-	switch op.Kind() {
-	case types.OpCommand:
-		slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Cmd, "dir", req.Dir)
-		_, err := runCommand(ctx, op, commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
-		return nil, err
-	case types.OpHandler:
-		if run == nil {
-			slog.DebugContext(ctx, "spell: handler op is a no-op for a built-in (no script body)", "target", req.Target, "fn", op.Func)
-			return noResult()
-		}
-		slog.DebugContext(ctx, "spell: dispatch handler", "target", req.Target, "fn", op.Func, "dir", req.Dir)
-		return run(ctx, op.Func, req)
-	default:
-		return nil, fmt.Errorf("spell: unknown op kind %d for target %q", op.Kind(), req.Target)
-	}
+	slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
+	_, err := runCommand(ctx, op, commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
+	return nil, err
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
-// are command-only (cmd/args/charms data, no script body), so it dispatches
-// through the shared bridge with a nil handler runner.
+// are command-only (cmd/args/charms data, no script body).
 func newSpellInvoker(targets map[string]types.SpellOp) func(context.Context, types.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, req, nil)
+		return dispatchOp(ctx, targets, req)
 	}
 }
 
-// commandTargetNames returns the spell's command (forkable) target names, sorted.
+// commandTargetNames returns the spell's command target names, sorted. Every op is
+// a command, so this is all of them.
 func commandTargetNames(targets map[string]types.SpellOp) []string {
 	names := make([]string, 0, len(targets))
-	for name, op := range targets {
-		if op.Kind() == types.OpCommand {
-			names = append(names, name)
-		}
+	for name := range targets {
+		names = append(names, name)
 	}
 	slices.Sort(names)
 	return names

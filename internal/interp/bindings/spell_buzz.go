@@ -65,19 +65,22 @@ func extractDescriptorWithModules(ctx context.Context, src string) (ispell.Descr
 	if err := sess.Exec(ctx, src); err != nil {
 		return ispell.Descriptor{}, err
 	}
-	return ispell.Resolve(ctx, sess, ispell.CommandOrHandlerOps(src))
+	return ispell.Resolve(ctx, sess)
 }
 
-// newBuzzSpellInvoker dispatches a Buzz spell's ops through the shared bridge
-// (dispatchOp): a Buzz spell HAS a script body, so it supplies a handler op
-// runner — handler ops (Func set) run in the VM with req.Params and return their
-// result as Data, while command ops run their declared command. This is the same priority rule the built-in
-// invoker uses; only the handler op branch differs (built-ins pass nil).
+// newBuzzSpellInvoker dispatches a request against a Buzz spell. A declared command
+// op (from mgs_listTargets) runs its command through the shared bridge. Otherwise,
+// if the spell exports a function by that name, it is called directly in the VM —
+// the escape hatch a remote cache backend uses: its enabled/get_artifact/
+// put_artifact/prune are plain exported functions, invoked by name with req.Params,
+// not operations in the command model. An unknown name is a no-op (fan-out skip, or
+// an optional backend op a spell doesn't implement).
 func newBuzzSpellInvoker(spec ispell.Descriptor, src string) func(context.Context, types.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, spec.Ops, req, func(ctx context.Context, fn string, req types.InvokeRequest) (any, error) {
-			return callBuzzSpellFunc(ctx, src, fn, req)
-		})
+		if _, ok := spec.Ops[req.Target]; ok {
+			return dispatchOp(ctx, spec.Ops, req)
+		}
+		return callBuzzSpellFunc(ctx, src, req.Target, req)
 	}
 }
 
@@ -101,7 +104,11 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 	}
 	f, ok := sess.Exports()[fn]
 	if !ok {
-		return nil, fmt.Errorf("spell handler op %q: not an exported function", fn)
+		// No such exported function: a no-op, not an error. This is the fan-out-skip
+		// for an unknown target, and how an optional backend op (a cache backend that
+		// declares no enabled()/prune()) reports "unsupported" — nil Data, which the
+		// remote-cache adapter reads as always-active / not-implemented.
+		return nil, nil //nolint:nilnil // documented no-op: unknown function, nil Data
 	}
 	// cb delivers the op's inputs by copying req.Params into the map the handler
 	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after

@@ -48,7 +48,7 @@ func TestBuzzLocalSpellImport(t *testing.T) {
 	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "widgetimport"; }
 export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.ts"]; }
 export fun mgs_listTargets() > any {
-    return {"build": {"cmd": "npm", "args": ["run", "build"]}};
+    return {"build": {"bin": "npm", "args": ["run", "build"]}};
 }
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
@@ -119,7 +119,7 @@ func TestBuzzSpellMethodForwardsOpts(t *testing.T) {
 	// process cwd, so the test can assert both the args and the working directory.
 	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "optswidget"; }
 export fun mgs_listTargets() > any {
-    return {"capture": {"cmd": "sh", "args": ["-c", "printf '%s ' \"$@\" > captured.txt", "sh"]}};
+    return {"capture": {"bin": "sh", "args": ["-c", "printf '%s ' \"$@\" > captured.txt", "sh"]}};
 }
 `)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
@@ -152,7 +152,7 @@ func TestBuzzSpellMethodEnv(t *testing.T) {
 
 	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "envwidget"; }
 export fun mgs_listTargets() > any {
-    return {"capture": {"cmd": "sh", "args": ["-c", "printf \"$MYVAR\" > out.txt"]}};
+    return {"capture": {"bin": "sh", "args": ["-c", "printf \"$MYVAR\" > out.txt"]}};
 }
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
@@ -179,7 +179,7 @@ func TestBuzzSpellCaptureReturnsRecord(t *testing.T) {
 
 	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "capbuzzwidget"; }
 export fun mgs_listTargets() > any {
-    return {"hash": {"cmd": "sh", "args": ["-c", "printf abc123"], "capture": true}};
+    return {"hash": {"bin": "sh", "args": ["-c", "printf abc123"], "capture": true}};
 }
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
@@ -205,8 +205,8 @@ func TestBuzzSpellPipeStdin(t *testing.T) {
 	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "pipewidget"; }
 export fun mgs_listTargets() > any {
     return {
-        "emit": {"cmd": "sh", "args": ["-c", "printf alpha"], "capture": true},
-        "shout": {"cmd": "tr", "args": ["a-z", "A-Z"], "capture": true}
+        "emit": {"bin": "sh", "args": ["-c", "printf alpha"], "capture": true},
+        "shout": {"bin": "tr", "args": ["a-z", "A-Z"], "capture": true}
     };
 }
 `)
@@ -292,7 +292,7 @@ export fun mgs_listClaimedGlobs() > [str] { return [".rubocop.yml", "Gemfile"]; 
 export fun mgs_getVersionCommand() > [str] { return ["ruby", "--version"]; }
 export fun mgs_isOpaque() > bool { return false; }
 export fun mgs_listTargets() > any {
-    return {"rspec": {"cmd": "bundle", "args": ["exec", "rspec"]}};
+    return {"rspec": {"bin": "bundle", "args": ["exec", "rspec"]}};
 }
 `
 

@@ -92,11 +92,11 @@ func registerHostModules(ctx context.Context, sess *buzz.Session) {
 	// have no use for TargetQuery — so it is appended only here, on the runtime path.
 	sess.SetSourceModule(ispell.TargetModulePath, strings.Join([]string{
 		ispell.TargetModuleSource,
-		// Command value types (PatchOp < Charm < Run ordering: each references
+		// Command value types (PatchOp < Charm < Command ordering: each references
 		// the prior). Inlined into built-ins too — see builtinModuleSources.
 		ispell.PatchOpSource,
 		ispell.CharmTypeSource,
-		ispell.RunSource,
+		ispell.CommandSource,
 		ispell.TargetQuerySource,
 		ispell.ExecResultSource,
 		// Boundary mirrors of the host-method record shapes, so a magusfile can

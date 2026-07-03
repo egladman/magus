@@ -109,7 +109,7 @@ func TestSpellModuleRequireLocal(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "spells", "locreq.buzz"), []byte(`
 export fun mgs_getName() > str { return "locreq"; }
 export fun mgs_listTargets() > any {
-    return {"build": {"cmd": "true"}};
+    return {"build": {"bin": "true"}};
 }
 `), 0o644))
 	writeBzzBP(t, dir, `
