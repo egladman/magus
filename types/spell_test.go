@@ -74,3 +74,13 @@ func TestSpellNilInvokerIsNoop(t *testing.T) {
 func TestSpellImplementsSpellDriver(t *testing.T) {
 	require.Implements(t, (*SpellDriver)(nil), NewSpell("x"))
 }
+
+func TestSpellServiceTargets(t *testing.T) {
+	s := NewSpell("node", WithTargets("build", "serve"), WithServiceTargets("serve"))
+	assert.True(t, s.IsServiceTarget("serve"), "serve is a service op")
+	assert.False(t, s.IsServiceTarget("build"), "build is a command op")
+	assert.False(t, s.IsServiceTarget("missing"), "unknown target is not a service")
+
+	// A spell with no service targets never reports one.
+	assert.False(t, NewSpell("go", WithTargets("build")).IsServiceTarget("build"))
+}

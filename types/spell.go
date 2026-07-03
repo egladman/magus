@@ -37,6 +37,7 @@ type Spell struct {
 	claims              []string
 	outputs             []string
 	targets             []string
+	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	targetSources       map[string][]string
 	targetCharms        map[string][]string // target name → charm names it declares (for discovery)
@@ -73,6 +74,10 @@ func (s *Spell) Sources() []string                  { return s.sources }
 func (s *Spell) Claims() []string                   { return s.claims }
 func (s *Spell) Outputs() []string                  { return s.outputs }
 func (s *Spell) Targets() []string                  { return s.targets }
+
+// IsServiceTarget reports whether target name is backed by a service op (a
+// long-running process). The runner forces such targets uncacheable.
+func (s *Spell) IsServiceTarget(name string) bool { return s.serviceTargets[name] }
 func (s *Spell) Opaque() bool                       { return s.opaque }
 func (s *Spell) TargetSources() map[string][]string { return s.targetSources }
 func (s *Spell) Charms(target string) []string      { return s.targetCharms[target] }
@@ -137,6 +142,23 @@ func WithSpellOutputs(outputs ...string) SpellOption {
 
 func WithTargets(targets ...string) SpellOption {
 	return func(s *Spell) { s.targets = append(s.targets, targets...) }
+}
+
+// WithServiceTargets records which of the spell's targets are backed by a service
+// op (long-running). The runner forces such targets uncacheable so a re-run
+// restarts the process instead of replaying a completed-target result.
+func WithServiceTargets(names ...string) SpellOption {
+	return func(s *Spell) {
+		if len(names) == 0 {
+			return
+		}
+		if s.serviceTargets == nil {
+			s.serviceTargets = make(map[string]bool, len(names))
+		}
+		for _, n := range names {
+			s.serviceTargets[n] = true
+		}
+	}
 }
 
 // WithOpaque marks the spell as opaque: it delegates to a foreign process that

@@ -105,6 +105,9 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 	assert.Equal(t, []string{"run", "build"}, build.Args)
 	assert.Nil(t, build.Service, "a command op has no Service")
 
+	// Only the service op is reported as a service target (drives uncached-at-run).
+	assert.Equal(t, []string{"serve"}, spec.ServiceOpNames())
+
 	serve := spec.Ops["serve"]
 	assert.Equal(t, types.OpKindService, serve.OpKind())
 	assert.True(t, serve.IsService())

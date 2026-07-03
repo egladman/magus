@@ -87,3 +87,16 @@ func (d Descriptor) OpNames() []string {
 	sort.Strings(names)
 	return names
 }
+
+// ServiceOpNames returns the names of the spell's service ops (sorted). A service
+// op runs a long-running process, so its target is never cached.
+func (d Descriptor) ServiceOpNames() []string {
+	var names []string
+	for name, op := range d.Ops {
+		if op.IsService() {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}

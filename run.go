@@ -262,10 +262,24 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	}
 	step.DependsOn = p.DependsOn
 	pol := p.TargetPolicies[target]
-	step.NoCache = pol.SkipCache
+	// A service op is a long-running process: it must never be cached, or a re-run
+	// would replay a completed-target result instead of restarting the process. This
+	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
+	step.NoCache = pol.SkipCache || servesTarget(p.ResolvedSpells, target)
 	step.Exclusive = pol.Exclusive
 	step.Slots = pol.Slots
 	return step
+}
+
+// servesTarget reports whether target is backed by a service op in any of the
+// project's resolved spells.
+func servesTarget(spells []*types.Spell, target string) bool {
+	for _, s := range spells {
+		if s.IsServiceTarget(target) {
+			return true
+		}
+	}
+	return false
 }
 
 // firstTargetPolicy returns the policy for target from the first project that declares one.
