@@ -1,0 +1,9 @@
+// Wire go-vet into a `vet` target. `magus run vet` forks `go vet ./...`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun vet(args: [str]) > void {
+    go["go-vet"]();
+}

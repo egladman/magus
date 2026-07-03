@@ -1,0 +1,9 @@
+// eslint lints the project through the package manager (pnpm exec eslint).
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun lint(args: [str]) > void {
+    ts["eslint"]();
+}

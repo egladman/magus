@@ -1,0 +1,9 @@
+// cargo-fmt checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/rs";
+
+magus.project({ "spells": [rs] });
+
+export fun format(args: [str]) > void {
+    rs["cargo-fmt"]();
+}

@@ -1,0 +1,10 @@
+// golangci-lint runs as a `go tool` (resolved from go.mod's tool block). The rw
+// charm inserts --fix, so `magus run lint:rw` applies the autofixable findings.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun lint(args: [str]) > void {
+    go["golangci-lint"]();
+}

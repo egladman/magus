@@ -1,0 +1,10 @@
+// docker-build's base command is just `docker build`, so pass the image tag and
+// build context: `magus run image` forks `docker build -t app:latest .`.
+import "magus";
+import "magus/spell/docker";
+
+magus.project({ "spells": [docker] });
+
+export fun image(args: [str]) > void {
+    docker["docker-build"]({ "args": ["-t", "app:latest", "."] });
+}

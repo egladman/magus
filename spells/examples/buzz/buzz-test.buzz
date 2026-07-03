@@ -1,0 +1,9 @@
+// buzz-test runs the test blocks in every .buzz file via buzz --test.
+import "magus";
+import "magus/spell/buzz";
+
+magus.project({ "spells": [buzz] });
+
+export fun test(args: [str]) > void {
+    buzz["buzz-test"]();
+}

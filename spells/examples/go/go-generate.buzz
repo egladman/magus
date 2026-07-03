@@ -1,0 +1,10 @@
+// Wire go-generate into a `generate` target: `magus run generate` forks
+// `go generate ./...`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun generate(args: [str]) > void {
+    go["go-generate"]();
+}

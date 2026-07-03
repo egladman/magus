@@ -1,0 +1,9 @@
+// vitest runs the test suite; the gha charm annotates failures in GitHub Actions.
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun test(args: [str]) > void {
+    ts["vitest"]();
+}

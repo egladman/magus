@@ -1,0 +1,9 @@
+// Wire cargo-test into a test target: magus run test forks cargo test.
+import "magus";
+import "magus/spell/rs";
+
+magus.project({ "spells": [rs] });
+
+export fun test(args: [str]) > void {
+    rs["cargo-test"]();
+}

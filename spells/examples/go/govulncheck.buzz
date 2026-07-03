@@ -1,0 +1,10 @@
+// govulncheck scans the module's call graph for known vulnerabilities, run as a
+// `go tool` so it resolves from go.mod's tool block.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun audit(args: [str]) > void {
+    go["govulncheck"]();
+}

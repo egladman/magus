@@ -1,0 +1,9 @@
+// Wire go-build into a `build` target. `magus run build` forks `go build`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun build(args: [str]) > void {
+    go["go-build"]();
+}

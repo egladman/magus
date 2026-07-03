@@ -1,0 +1,9 @@
+// buf-format checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun format(args: [str]) > void {
+    buf["buf-format"]();
+}

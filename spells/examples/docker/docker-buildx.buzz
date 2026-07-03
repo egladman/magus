@@ -1,0 +1,10 @@
+// docker-buildx builds with BuildKit; pass the tag and context. Add
+// "--platform", "linux/amd64,linux/arm64" to the args for a multi-platform build.
+import "magus";
+import "magus/spell/docker";
+
+magus.project({ "spells": [docker] });
+
+export fun image_buildx(args: [str]) > void {
+    docker["docker-buildx"]({ "args": ["-t", "app:latest", "."] });
+}

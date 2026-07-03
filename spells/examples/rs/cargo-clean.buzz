@@ -1,0 +1,9 @@
+// Wire cargo-clean into a clean target: magus run clean forks cargo clean.
+import "magus";
+import "magus/spell/rs";
+
+magus.project({ "spells": [rs] });
+
+export fun clean(args: [str]) > void {
+    rs["cargo-clean"]();
+}

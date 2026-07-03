@@ -1,0 +1,10 @@
+// cosign-attest attaches a signed attestation; pass the predicate file, its type,
+// and the image reference.
+import "magus";
+import "magus/spell/cosign";
+
+magus.project({ "spells": [cosign] });
+
+export fun attest(args: [str]) > void {
+    cosign["cosign-attest"]({ "args": ["--predicate", "sbom.json", "--type", "cyclonedx", "app:latest"] });
+}

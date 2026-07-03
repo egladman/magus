@@ -1,0 +1,9 @@
+// magus-buzz runs each .buzz file through the magus interpreter.
+import "magus";
+import "magus/spell/buzz";
+
+magus.project({ "spells": [buzz] });
+
+export fun run_buzz(args: [str]) > void {
+    buzz["magus-buzz"]();
+}

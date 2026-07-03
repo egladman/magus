@@ -1,0 +1,11 @@
+// go-test runs the suite; here with the race detector, so `magus run test` forks
+// `go test ./... -race`. The cd charm (`magus run test:cd`) adds the atomic
+// coverage profile a CD pipeline ships.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun test(args: [str]) > void {
+    go["go-test"]({ "args": ["-race"] });
+}

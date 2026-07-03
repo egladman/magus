@@ -1,0 +1,11 @@
+// pytest runs the suite via `uv run`; here filtered to tests matching a keyword,
+// so `magus run test` forks `uv run pytest -k integration`. The debug charm
+// (`magus run test:debug`) adds -v.
+import "magus";
+import "magus/spell/py";
+
+magus.project({ "spells": [py] });
+
+export fun test(args: [str]) > void {
+    py["pytest"]({ "args": ["-k", "integration"] });
+}

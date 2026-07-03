@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/host"
+	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/std"
 
 	// Blank imports so all module init() functions run, populating std.All().
@@ -161,30 +162,6 @@ func writeModule(dir string, m std.Module) error {
 	return os.WriteFile(filepath.Join(dir, m.Name+".md"), []byte(renderModule(m)), 0o644)
 }
 
-// writeFrontmatter emits the site's YAML frontmatter block at the top of a
-// generated docs page. Values that contain a colon are quoted to keep YAML
-// parsers from reading the second half as a nested mapping.
-func writeFrontmatter(b *strings.Builder, title, description string, tags []string) {
-	b.WriteString("---\n")
-	fmt.Fprintf(b, "title: %s\n", yamlScalar(title))
-	fmt.Fprintf(b, "description: %s\n", yamlScalar(description))
-	b.WriteString("tags: [")
-	for i, t := range tags {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString(yamlScalar(t))
-	}
-	b.WriteString("]\n---\n\n")
-}
-
-func yamlScalar(s string) string {
-	if !strings.ContainsAny(s, ":\"'") && (len(s) == 0 || (s[0] != ' ' && s[len(s)-1] != ' ')) {
-		return s
-	}
-	return "\"" + strings.ReplaceAll(s, "\"", "\\\"") + "\""
-}
-
 // readExample reads a per-method example from std/examples/<module>/<method>.buzz
 // (resolved against repoRoot so tests and `go run` both find it). Returns "" if
 // the file is absent or unreadable, so a missing example just skips rendering.
@@ -229,7 +206,7 @@ type stdlibNote struct {
 func renderModule(m std.Module) string {
 	var b strings.Builder
 
-	writeFrontmatter(&b,
+	docs.WriteFrontmatter(&b,
 		m.Name+" module",
 		frontmatterDesc(m),
 		[]string{m.Name, "module", "stdlib", "magusfile"},
@@ -366,7 +343,7 @@ func renderIndex(modules []std.Module) string {
 	}
 
 	var b strings.Builder
-	writeFrontmatter(&b,
+	docs.WriteFrontmatter(&b,
 		"magus stdlib",
 		"Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.",
 		[]string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},

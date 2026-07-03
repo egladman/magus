@@ -1,0 +1,10 @@
+// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// `magus run format` checks, `magus run format:rw` applies gofmt.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun format(args: [str]) > void {
+    go["go-fmt"]();
+}

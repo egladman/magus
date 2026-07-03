@@ -1,0 +1,10 @@
+// go-mod-tidy checks go.mod/go.sum with --diff (CI-safe); the rw charm drops
+// --diff so `magus run tidy:rw` applies the changes.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun tidy(args: [str]) > void {
+    go["go-mod-tidy"]();
+}

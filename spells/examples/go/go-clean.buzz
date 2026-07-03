@@ -1,0 +1,9 @@
+// Wire go-clean into a `clean` target: `magus run clean` forks `go clean ./...`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun clean(args: [str]) > void {
+    go["go-clean"]();
+}

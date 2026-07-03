@@ -1,0 +1,10 @@
+// cosign-sign signs an artifact keyless (--yes for CI); pass the image reference
+// to sign, so `magus run sign` forks `cosign sign --yes app:latest`.
+import "magus";
+import "magus/spell/cosign";
+
+magus.project({ "spells": [cosign] });
+
+export fun sign(args: [str]) > void {
+    cosign["cosign-sign"]({ "args": ["app:latest"] });
+}

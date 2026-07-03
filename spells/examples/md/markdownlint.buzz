@@ -1,0 +1,9 @@
+// markdownlint enforces Markdown style across the docs.
+import "magus";
+import "magus/spell/md";
+
+magus.project({ "spells": [md] });
+
+export fun lint(args: [str]) > void {
+    md["markdownlint"]();
+}

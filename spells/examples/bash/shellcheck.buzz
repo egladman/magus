@@ -1,0 +1,9 @@
+// shellcheck lints every .sh/.bash script found under the project.
+import "magus";
+import "magus/spell/bash";
+
+magus.project({ "spells": [bash] });
+
+export fun lint(args: [str]) > void {
+    bash["shellcheck"]();
+}

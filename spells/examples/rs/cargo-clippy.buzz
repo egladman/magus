@@ -1,0 +1,9 @@
+// cargo-clippy lints and denies warnings (-D warnings), gating CI on a clean run.
+import "magus";
+import "magus/spell/rs";
+
+magus.project({ "spells": [rs] });
+
+export fun clippy(args: [str]) > void {
+    rs["cargo-clippy"]();
+}

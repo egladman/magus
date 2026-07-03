@@ -1,0 +1,9 @@
+// ruff-check lints via uv run ruff; the rw charm autofixes, gha annotates in CI.
+import "magus";
+import "magus/spell/py";
+
+magus.project({ "spells": [py] });
+
+export fun lint(args: [str]) > void {
+    py["ruff-check"]();
+}

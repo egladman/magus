@@ -1,0 +1,9 @@
+// prettier checks Markdown formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/md";
+
+magus.project({ "spells": [md] });
+
+export fun format(args: [str]) > void {
+    md["prettier"]();
+}
