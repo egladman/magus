@@ -24,22 +24,22 @@ export fun mgs_isOpaque() > bool { return true; }
 
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 
-fun eslint(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "pnpm", args = ["exec", "eslint", "."]}); }
+fun eslint(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "eslint", "."]}; }
 // preflight is a no-op marker op (no command).
-fun preflight(target: Target, cb: fun(Run)) > void { cb(Run{}); }
-fun prettier(target: Target, cb: fun(Run)) > void {
+fun preflight(target: Target) > Command { return Command{}; }
+fun prettier(target: Target) > Command {
     final args = ["exec", "prettier", "--check", "."];
-    cb(Run{cmd = "pnpm", args = args, charms = {
+    return Command{bin = "pnpm", args = args, charms = {
         "rw": set(args, "--check", "--write"),
-    }});
+    }};
 }
-fun tsc(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "pnpm", args = ["exec", "tsc"]}); }
-fun vitest(target: Target, cb: fun(Run)) > void {
-    cb(Run{cmd = "pnpm", args = ["exec", "vitest", "run"], charms = {
+fun tsc(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc"]}; }
+fun vitest(target: Target) > Command {
+    return Command{bin = "pnpm", args = ["exec", "vitest", "run"], charms = {
         "gha": append(["--reporter=github-actions"]),
-    }});
+    }};
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc, "vitest": vitest};
 }

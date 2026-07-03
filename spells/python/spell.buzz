@@ -13,28 +13,28 @@ export fun mgs_getVersionCommand() > [str] { return ["python3", "--version"]; }
 
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
-fun uvBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "uv", args = ["build"]}); }
-fun uvClean(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "uv", args = ["clean"]}); }
-fun pytest(target: Target, cb: fun(Run)) > void {
-    cb(Run{cmd = "uv", args = ["run", "pytest"], charms = {
+fun uvBuild(target: Target) > Command { return Command{bin = "uv", args = ["build"]}; }
+fun uvClean(target: Target) > Command { return Command{bin = "uv", args = ["clean"]}; }
+fun pytest(target: Target) > Command {
+    return Command{bin = "uv", args = ["run", "pytest"], charms = {
         "debug": append(["-v"]),
-    }});
+    }};
 }
-fun ruffCheck(target: Target, cb: fun(Run)) > void {
+fun ruffCheck(target: Target) > Command {
     final args = ["run", "ruff", "check", "."];
-    cb(Run{cmd = "uv", args = args, charms = {
+    return Command{bin = "uv", args = args, charms = {
         "debug": append(["-v"]),
         "rw": after(args, "check", ["--fix"]),
         "gha": after(args, "check", ["--output-format=github"]),
-    }});
+    }};
 }
-fun ruffFormat(target: Target, cb: fun(Run)) > void {
+fun ruffFormat(target: Target) > Command {
     final args = ["run", "ruff", "format", "--check", "."];
-    cb(Run{cmd = "uv", args = args, charms = {
+    return Command{bin = "uv", args = args, charms = {
         "rw": drop(args, "--check"),
-    }});
+    }};
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat};
 }

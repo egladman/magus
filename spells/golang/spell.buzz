@@ -5,12 +5,10 @@
 // the source says exactly which tool runs. `lint` is `golangci-lint`, not `go lint`;
 // `fmt` is the `gofmt` binary.
 //
-// mgs_listTargets returns the op handlers by value, typed
-// {str: fun(Target, fun(Run)) void}: the checker verifies each handler exists with
-// the right signature, so a typo'd op is a compile error. A fork handler declares its
-// command by handing the {cmd, args, charms} record to the magus-injected cb
-// callback, so it returns nothing (void) — the command travels through cb, not the
-// return. (Only cache-backend function-op spells return bool; fork handlers do not.)
+// mgs_listTargets returns the op handlers by value, typed {str: fun(Target) Command}:
+// each handler takes the Target and RETURNS the {cmd, args, charms} Command it declares.
+// One signature, no callback. (PROTOTYPE: this spell uses the return form; the
+// legacy fun(Target, fun(Command)) void cb form still resolves for un-migrated spells.)
 
 import "magus/target";
 // charm constructors compute argv patches from anchors, so the charms below
@@ -26,46 +24,46 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
 
-fun goBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["build"]}); }
-fun goClean(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["clean", "./..."]}); }
-fun goGenerate(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["generate", "./..."]}); }
+fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"]}; }
+fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clean", "./..."]}; }
+fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["generate", "./..."]}; }
 
-fun goFmt(target: Target, cb: fun(Run)) > void {
+fun goFmt(target: Target) > Command {
     final args = ["-l", "."];
-    cb(Run{cmd = "gofmt", args = args, charms = {
+    return Command{bin = "gofmt", args = args, charms = {
         "rw": set(args, "-l", "-w"),
-    }});
+    }};
 }
-fun golangCILint(target: Target, cb: fun(Run)) > void {
+fun golangCILint(target: Target) > Command {
     final args = ["tool", "golangci-lint", "run", "./..."];
-    cb(Run{cmd = "go", args = args, charms = {
+    return Command{bin = "go", args = args, charms = {
         "debug": append(["-v"]),
         "rw": after(args, "run", ["--fix"]),
-    }});
+    }};
 }
 // The cd charm instruments the run with an atomic-mode coverage profile written
 // to coverage.out — the deliverable a CD pipeline ships to a coverage service
 // (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
-fun goTest(target: Target, cb: fun(Run)) > void {
-    cb(Run{cmd = "go", args = ["test", "./..."], charms = {
+fun goTest(target: Target) > Command {
+    return Command{bin = "go", args = ["test", "./..."], charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
-    }});
+    }};
 }
 // tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes —
 // safe for CI gating); the write charm applies the changes.
-fun goModTidy(target: Target, cb: fun(Run)) > void {
+fun goModTidy(target: Target) > Command {
     final args = ["mod", "tidy", "--diff"];
-    cb(Run{cmd = "go", args = args, charms = {
+    return Command{bin = "go", args = args, charms = {
         "rw": drop(args, "--diff"),
-    }});
+    }};
 }
-fun goVet(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["vet", "./..."]}); }
-// Scans for known vulnerabilities in the module's call graph. Run as a `go tool`
+fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."]}; }
+// Scans for known vulnerabilities in the module's call graph. Command as a `go tool`
 // (like golangci-lint) so it resolves from go.mod's tool block, not PATH.
-fun goVulncheck(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "go", args = ["tool", "govulncheck", "./..."]}); }
+fun goVulncheck(target: Target) > Command { return Command{bin = "go", args = ["tool", "govulncheck", "./..."]}; }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "go-build": goBuild,
         "go-clean": goClean,

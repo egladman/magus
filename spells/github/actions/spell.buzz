@@ -5,20 +5,19 @@
 //   magus.cache.remote(github)
 //
 // magus knows nothing about GitHub Actions: it speaks only the generic spell
-// contract. This spell exposes function-ops: mgs_listTargets returns the op
-// handlers by value, typed {str: fun(Target, fun(any)) bool}, so the checker
-// verifies each handler exists with the right signature. The remote-cache subsystem
-// invokes them with the work-unit Target and an input callback cb, and reads the
-// boolean result of:
+// contract. It exports the cache contract, functions typed fun(Target, fun(any))
+// bool that the remote-cache subsystem detects by name and invokes with the
+// work-unit Target and an input callback cb, reading the boolean result of:
 //
 //   enabled(target, cb)   -> bool   active here? (gates fetch/push; ignores cb)
 //   get_artifact(target, cb) -> bool   download artifact into dest; true=hit
 //   put_artifact(target, cb) -> bool   upload artifact at src;     true=stored
 //
-// An op reads its inputs by calling cb(io) with an empty map: the host writes the
-// cache inputs ({project, hash, dest/src}) into io, which the op then reads. The
-// input shape varies per op (and a handler may skip cb entirely), so io is typed
-// `any`.
+// A contract function reads its inputs by calling cb(io) with an empty map: the
+// host writes the cache inputs ({project, hash, dest/src}) into io, which the
+// function then reads. The input shape varies per function (and one may skip cb
+// entirely), so io is typed `any`. Command ops do not use cb - they return a
+// Command; cb survives only here, where the work happens in-VM.
 //
 // This targets the GitHub Actions Cache service **v2** — the Twirp API at
 // ACTIONS_RESULTS_URL that replaced the v1 _apis/artifactcache REST service GitHub
@@ -42,13 +41,10 @@ import "os"
 
 export fun mgs_getName() > str { return "actions"; }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
-    return {
-        "enabled": enabled,
-        "get_artifact": get_artifact,
-        "put_artifact": put_artifact,
-    };
-}
+// A cache backend exports the well-known cache-contract functions below (enabled
+// / get_artifact / put_artifact), which the remote-cache subsystem detects by name
+// and invokes via magus.cache.remote(github). It declares no mgs_listTargets - a
+// cache backend contributes no operations a target could compose.
 
 // enabled gates the whole backend on running under GitHub Actions. The cache
 // probes this once and skips fetch/push entirely when false, so wiring this spell

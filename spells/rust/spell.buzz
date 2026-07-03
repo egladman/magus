@@ -10,21 +10,21 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
 
-fun cargoBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "cargo", args = ["build", "--release"]}); }
-fun cargoClean(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "cargo", args = ["clean"]}); }
-fun cargoClippy(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "cargo", args = ["clippy", "--", "-D", "warnings"]}); }
-fun cargoFmt(target: Target, cb: fun(Run)) > void {
+fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
+fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }
+fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"]}; }
+fun cargoFmt(target: Target) > Command {
     final args = ["fmt", "--", "--check"];
     // rw turns the check into a write by dropping --check then -- (`cargo fmt`).
     // Two ops in one charm: concatenate the drop constructors' op lists. Order
     // matters — drop --check (the higher index) before -- so the patch applies
     // sequentially without an index shifting out from under it.
-    cb(Run{cmd = "cargo", args = args, charms = {
+    return Command{bin = "cargo", args = args, charms = {
         "rw": Charm{ ops = drop(args, "--check").ops + drop(args, "--").ops },
-    }});
+    }};
 }
-fun cargoTest(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "cargo", args = ["test"]}); }
+fun cargoTest(target: Target) > Command { return Command{bin = "cargo", args = ["test"]}; }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest};
 }

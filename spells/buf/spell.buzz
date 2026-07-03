@@ -26,24 +26,24 @@ export fun mgs_listProvidedGlobs() > [str] { return ["gen/**"]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["buf", "--version"]; }
 
-fun bufBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "buf", args = ["build"]}); }
-fun bufGenerate(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "buf", args = ["generate"]}); }
-fun bufLint(target: Target, cb: fun(Run)) > void {
-    cb(Run{cmd = "buf", args = ["lint"], charms = {
+fun bufBuild(target: Target) > Command { return Command{bin = "buf", args = ["build"]}; }
+fun bufGenerate(target: Target) > Command { return Command{bin = "buf", args = ["generate"]}; }
+fun bufLint(target: Target) > Command {
+    return Command{bin = "buf", args = ["lint"], charms = {
         "gha": append(["--error-format=github-actions"]),
-    }});
+    }};
 }
 
-// format checks by default (--exit-code fails CI when files would change); the
+// format checks by default (--exit-code fails CI when files would change; the
 // write charm applies the formatting in place.
-fun bufFormat(target: Target, cb: fun(Run)) > void {
+fun bufFormat(target: Target) > Command {
     final args = ["format", "--exit-code"];
-    cb(Run{cmd = "buf", args = args, charms = {
+    return Command{bin = "buf", args = args, charms = {
         "rw": set(args, "--exit-code", "-w"),
-    }});
+    }};
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "buf-build": bufBuild,
         "buf-generate": bufGenerate,

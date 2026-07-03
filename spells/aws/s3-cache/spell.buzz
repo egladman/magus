@@ -5,21 +5,22 @@
 //   import "spells/aws/s3-cache" as s3
 //   magus.cache.remote(s3)
 //
-// magus knows nothing about S3: it speaks only the generic spell contract. This
-// spell exposes function-ops typed {str: fun(Target, fun(any)) bool}; the
-// remote-cache subsystem invokes them with the work-unit Target and an input
-// callback cb, reading the boolean result of:
+// magus knows nothing about S3: it speaks only the generic spell contract. It
+// exports the cache contract, four functions typed fun(Target, fun(any)) bool
+// that the remote-cache subsystem detects by name and invokes with the work-unit
+// Target and an input callback cb, reading the boolean result of:
 //
 //   enabled(target, cb)   -> bool   active here? (gates fetch/push; ignores cb)
 //   get_artifact(target, cb) -> bool   download artifact into dest; true=hit
 //   put_artifact(target, cb) -> bool   upload artifact at src;     true=stored
 //   prune(target, cb)     -> bool   evict artifacts by retention policy; true=swept
 //
-// An op reads its inputs by calling cb(io): the host writes {project, hash,
-// dest/src} (or, for prune, {older_than_secs, keep_last, dry_run}) into io, which
-// the op then reads.
+// A contract function reads its inputs by calling cb(io): the host writes
+// {project, hash, dest/src} (or, for prune, {older_than_secs, keep_last, dry_run})
+// into io, which the function then reads. (Command ops do not use cb - they return
+// a Command; cb survives only here, where the work happens in-VM.)
 //
-// prune is the maintenance op behind `magus config cache prune --remote`: it walks
+// prune is the maintenance function behind `magus config cache prune --remote`: it walks
 // the bucket through the `listing` fiber — a coroutine that yields one object per
 // resume and transparently fetches the next S3 page when the current one drains,
 // hiding marker pagination behind the generator — then deletes whatever trips the
@@ -54,14 +55,10 @@ import "os"
 
 export fun mgs_getName() > str { return "s3-cache"; }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
-    return {
-        "enabled": enabled,
-        "get_artifact": get_artifact,
-        "put_artifact": put_artifact,
-        "prune": prune,
-    };
-}
+// A cache backend exports the well-known cache-contract functions below (enabled
+// / get_artifact / put_artifact / prune), which the remote-cache subsystem detects
+// by name and invokes via magus.cache.remote(s3). It declares no mgs_listTargets -
+// a cache backend contributes no operations a target could compose.
 
 // SHA-256 of the empty string — the x-amz-content-sha256 for a bodyless GET.
 final EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";

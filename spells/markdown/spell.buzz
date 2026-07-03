@@ -12,19 +12,19 @@ export fun mgs_listClaimedGlobs() > [str] {
     return ["**/*.md", "**/*.mdx"];
 }
 
-fun markdownlint(target: Target, cb: fun(Run)) > void {
-    cb(Run{cmd = "markdownlint", args = ["**/*.md", "**/*.mdx"]});
+fun markdownlint(target: Target) > Command {
+    return Command{bin = "markdownlint", args = ["**/*.md", "**/*.mdx"]};
 }
-fun prettier(target: Target, cb: fun(Run)) > void {
+fun prettier(target: Target) > Command {
     // --no-error-on-unmatched-pattern: the claimed globs include **/*.mdx, but a
     // project may have only .md files; without it prettier exits non-zero on the
     // empty .mdx glob. The `rw` charm swaps --check for --write by anchor.
     final args = ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"];
-    cb(Run{cmd = "prettier", args = args, charms = {
+    return Command{bin = "prettier", args = args, charms = {
         "rw": set(args, "--check", "--write"),
-    }});
+    }};
 }
-fun typos(target: Target, cb: fun(Run)) > void {
+fun typos(target: Target) > Command {
     // Corrections-based prose checker: `typos` walks the tree, matches only known
     // misspellings from its curated typo->fix map (never unknown words), and
     // exits non-zero when any are found. Config comes from ./_typos.toml at the
@@ -33,11 +33,11 @@ fun typos(target: Target, cb: fun(Run)) > void {
     // The `rw` charm swaps the read-only check for typos' safe autofix so
     // `md.typos:rw` writes corrections in place.
     final args = ["--format", "brief"];
-    cb(Run{cmd = "typos", args = args, charms = {
+    return Command{bin = "typos", args = args, charms = {
         "rw": append(["-w"]),
-    }});
+    }};
 }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"markdownlint": markdownlint, "prettier": prettier, "typos": typos};
 }

@@ -21,11 +21,11 @@ export fun mgs_getVersionCommand() > [str] { return ["cosign", "version"]; }
 
 // --yes skips the interactive transparency-log confirmation so signing/attesting
 // runs unattended; the caller appends the target reference and flags.
-fun sign(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "cosign", args = ["sign", "--yes"]}); }
-fun verify(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "cosign", args = ["verify"]}); }
-fun attest(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "cosign", args = ["attest", "--yes"]}); }
+fun sign(target: Target) > Command { return Command{bin = "cosign", args = ["sign", "--yes"]}; }
+fun verify(target: Target) > Command { return Command{bin = "cosign", args = ["verify"]}; }
+fun attest(target: Target) > Command { return Command{bin = "cosign", args = ["attest", "--yes"]}; }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "cosign-sign": sign,
         "cosign-verify": verify,

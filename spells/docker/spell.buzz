@@ -8,11 +8,11 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 export fun mgs_getVersionCommand() > [str] { return ["docker", "--version"]; }
 
-fun dockerBuild(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "docker", args = ["build"]}); }
-fun dockerBuildx(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "docker", args = ["buildx", "build"]}); }
-fun dockerBuildCheck(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "docker", args = ["build", "--check"]}); }
-fun hadolint(target: Target, cb: fun(Run)) > void { cb(Run{cmd = "hadolint", args = ["Dockerfile"]}); }
+fun dockerBuild(target: Target) > Command { return Command{bin = "docker", args = ["build"]}; }
+fun dockerBuildx(target: Target) > Command { return Command{bin = "docker", args = ["buildx", "build"]}; }
+fun dockerBuildCheck(target: Target) > Command { return Command{bin = "docker", args = ["build", "--check"]}; }
+fun hadolint(target: Target) > Command { return Command{bin = "hadolint", args = ["Dockerfile"]}; }
 
-export fun mgs_listTargets() > {str: fun(Target, fun(Run)) void} {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"docker-build": dockerBuild, "docker-buildx": dockerBuildx, "docker-build-check": dockerBuildCheck, "hadolint": hadolint};
 }
