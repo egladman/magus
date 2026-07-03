@@ -16,7 +16,7 @@ HTTP client with automatic retry on transient errors.
 
 Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
 
-**Signature:** `http.get(url, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L106)
+**Signature:** `http.get(url, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L108)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -41,7 +41,7 @@ std.print(r.body.sub(0, 80) + "...");
 
 Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
 
-**Signature:** `http.post(url, body, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L112)
+**Signature:** `http.post(url, body, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L114)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -71,7 +71,7 @@ final r = http.post(
 
 Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
 
-**Signature:** `http.request(method, url, [body], [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L118)
+**Signature:** `http.request(method, url, [body], [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L120)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -102,7 +102,7 @@ final r = http.request(
 
 Start a static file server for dir in the background and return the bound port. With no port (or 0) it scans upward from 8080 and binds the first available port. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.
 
-**Signature:** `http.server(dir, [port]) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L127)
+**Signature:** `http.server(dir, [port]) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L129)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

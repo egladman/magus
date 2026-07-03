@@ -16,7 +16,7 @@ Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a
 
 Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input — pipe by passing a prior call's stdout.
 
-**Signature:** `os.exec(cmd, [args], [dir], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L389)
+**Signature:** `os.exec(cmd, [args], [dir], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L332)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -31,7 +31,7 @@ Run cmd directly (no shell; args are never shell-interpolated). Output streams l
 
 Run line through a shell — for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. "bash") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes — for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.
 
-**Signature:** `os.execSh(line, [dir], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L403)
+**Signature:** `os.execSh(line, [dir], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L346)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -45,29 +45,29 @@ Run line through a shell — for pipes, redirection, globs, and variable expansi
 
 Set env vars for the duration of callback; restore after.
 
-**Signature:** `os.withEnv(env, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L449)
+**Signature:** `os.withEnv(env, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L392)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `env` | `map[string]string` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 
 ### with_slots
 
 Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.
 
-**Signature:** `os.withSlots(n, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L529)
+**Signature:** `os.withSlots(n, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L472)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `n` | `int` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 
 ### platform
 
 Return the Docker/OCI platform triple: (os, arch, variant).
 
-**Signature:** `os.platform() → string, string, string` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L298)
+**Signature:** `os.platform() → string, string, string` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L241)
 
 **Returns:** string, string, string
 
@@ -75,7 +75,7 @@ Return the Docker/OCI platform triple: (os, arch, variant).
 
 Abort the current run with the given exit code — typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.
 
-**Signature:** `os.exit(code)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L290)
+**Signature:** `os.exit(code)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L233)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -85,7 +85,7 @@ Abort the current run with the given exit code — typically after logging an er
 
 Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.
 
-**Signature:** `os.sleep(ms)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L265)
+**Signature:** `os.sleep(ms)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L208)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -95,7 +95,7 @@ Pause for the given number of milliseconds (fractional allowed), matching Buzz's
 
 Resolve cmd against PATH and return its absolute path, or "" if it is not found. Use it to check a tool is installed before running it (and emit a clear hint/error instead of a cryptic exec failure).
 
-**Signature:** `os.which(cmd) → string` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L255)
+**Signature:** `os.which(cmd) → string` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L198)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -107,7 +107,7 @@ Resolve cmd against PATH and return its absolute path, or "" if it is not found.
 
 Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.
 
-**Signature:** `os.stdinIsTerminal() → bool` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L249)
+**Signature:** `os.stdinIsTerminal() → bool` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L192)
 
 **Returns:** bool
 
@@ -115,7 +115,7 @@ Report whether standard input is a terminal (TTY) rather than a pipe, file, or /
 
 Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).
 
-**Signature:** `os.numCpu() → int` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L234)
+**Signature:** `os.numCpu() → int` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L177)
 
 **Returns:** int
 
@@ -123,7 +123,7 @@ Return the number of logical CPUs available, for sizing a command's own internal
 
 Return the host machine's name.
 
-**Signature:** `os.hostname() → string` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L239)
+**Signature:** `os.hostname() → string` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L182)
 
 **Returns:** string
 
@@ -131,12 +131,12 @@ Return the host machine's name.
 
 Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.
 
-**Signature:** `os.retry(max, fn, [opts]) → any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L465)
+**Signature:** `os.retry(max, fn, [opts]) → any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L408)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `max` | `int` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 | `opts` | `map[string]any` | yes | |
 
 **Returns:** any

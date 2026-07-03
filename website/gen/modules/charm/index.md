@@ -100,7 +100,7 @@ Insert vals after the first argv element for which fn(s) is truthy.
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 | `vals` | `[]string` |  | |
 
 **Returns:** map[string]any
@@ -114,7 +114,7 @@ Insert vals before the first argv element for which fn(s) is truthy.
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 | `vals` | `[]string` |  | |
 
 **Returns:** map[string]any
@@ -128,7 +128,7 @@ Replace the first argv element for which fn(s) is truthy with val.
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 | `val` | `string` |  | |
 
 **Returns:** map[string]any
@@ -142,7 +142,7 @@ Drop (remove) the first argv element for which fn(s) is truthy.
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 
 **Returns:** map[string]any
 
@@ -168,7 +168,7 @@ Return the JSON Pointer ("/N") of the first argv element for which fn(s) is trut
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 
 **Returns:** string
 
@@ -195,7 +195,7 @@ Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 | `to` | `string` |  | |
 
 **Returns:** map[string]any
@@ -223,7 +223,7 @@ Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 | `to` | `string` |  | |
 
 **Returns:** map[string]any
@@ -250,7 +250,7 @@ Guard: assert the first argv element for which fn(s) is truthy is still at its p
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L18) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
 
 **Returns:** map[string]any
 

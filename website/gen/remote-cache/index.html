@@ -68,12 +68,13 @@ key, and wiring a backend without a trust set is refused</strong> (see
 <a href="#signing-is-required-trust-model">Signing is required</a> below). Neither a developer,
 a fork PR, nor anyone holding raw bucket credentials can publish an artifact that
 any machine will replay.</p>
-<p>magus itself knows nothing about S3 or GitHub. A backend is an ordinary
-<a href="../spells/">spell</a> exposing three <a href="../spells/#operations-come-in-two-shapes">function-ops</a>:</p>
+<p>magus itself knows nothing about S3 or GitHub. A backend is a
+<a href="../spells/">spell</a> that declares no operations and instead exports the cache
+contract — three functions the remote-cache subsystem detects by name and invokes:</p>
 <table>
 <thead>
 <tr>
-<th>op</th>
+<th>function</th>
 <th>when</th>
 <th>does</th>
 </tr>
@@ -96,8 +97,10 @@ any machine will replay.</p>
 </tr>
 </tbody>
 </table>
-<p>Everything backend-specific (auth, transport) stays in the spell, in pure Buzz.
-See <a href="../spells/">spells.md</a> and <a href="../engines/">engines.md</a>.</p>
+<p>(A fourth, <code>prune</code>, evicts artifacts by retention policy.) These are not
+operations a target composes; they are the contract the remote-cache subsystem
+calls. Everything backend-specific (auth, transport) stays in the spell, in pure
+Buzz. See <a href="../spells/">spells.md</a> and <a href="../engines/">engines.md</a>.</p>
 <h2 id="wiring-a-backend">Wiring a backend</h2>
 <p>Wiring has two parts: the magusfile binds the backend (a spell, i.e. code), and
 <code>magus.yaml</code> declares the trust set that secures it (<code>cache.remote.trusted_keys</code>, i.e.
@@ -286,7 +289,7 @@ under their own <code>.remote</code> prefix and are never folded into the local
 <code>magus.cache.*</code> counters. See the
 <a href="../telemetry/#remote-cache">telemetry reference</a> for the full instrument list.</p>
 <h2 id="writing-your-own-backend">Writing your own backend</h2>
-<p>Any store reachable over HTTP can be a backend. Implement the three function-ops
+<p>Any store reachable over HTTP can be a backend. Implement the three functions
 (<code>enabled</code>/<code>get_artifact</code>/<code>put_artifact</code>) in a spell: read inputs from the <code>cb(io)</code>
 callback (<code>io.hash</code>, <code>io.dest</code>/<code>io.src</code>), use the <code>http</code> byte primitives
 (<code>http.download</code>/<code>upload_chunked</code>/<code>byteSize</code>) and <code>crypto</code> for request signing
@@ -306,7 +309,7 @@ signing for free. It only moves the opaque bytes.</p>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/c459f838b1aae23ea8fbd97b2f0d73ada44602b0"><code>c459f83</code></a> <small><time datetime="2026-06-18T01:03:00Z">Jun 18, 2026</time></small> - rename the site project to website; route releases through magus and the cd charm</li><li><a href="https://github.com/egladman/magus/commit/6357c6e8bcad45bfa2550cb6e0e6b0ec64126448"><code>6357c6e</code></a> <small><time datetime="2026-06-16T23:42:00Z">Jun 16, 2026</time></small> - settle on the .buzz extension; in-package tests; bubblegum parity pass</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f"><code>b60e99b</code></a> <small><time datetime="2026-05-22T01:07:00Z">May 22, 2026</time></small> - drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/remote-cache.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/remote-cache.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de" data-tooltip="5d9e514ddc79f4e388d41f11d6894bd4afba27de" title="5d9e514ddc79f4e388d41f11d6894bd4afba27de">5d9e514</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/c459f838b1aae23ea8fbd97b2f0d73ada44602b0"><code>c459f83</code></a> <small><time datetime="2026-06-18T01:03:00Z">Jun 18, 2026</time></small> - rename the site project to website; route releases through magus and the cd charm</li><li><a href="https://github.com/egladman/magus/commit/6357c6e8bcad45bfa2550cb6e0e6b0ec64126448"><code>6357c6e</code></a> <small><time datetime="2026-06-16T23:42:00Z">Jun 16, 2026</time></small> - settle on the .buzz extension; in-package tests; bubblegum parity pass</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f"><code>b60e99b</code></a> <small><time datetime="2026-05-22T01:07:00Z">May 22, 2026</time></small> - drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/remote-cache.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/remote-cache.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>

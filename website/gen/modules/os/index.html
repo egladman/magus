@@ -57,7 +57,7 @@
 <h2 id="methods">Methods</h2>
 <h3 id="exec">exec</h3>
 <p>Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input — pipe by passing a prior call's stdout.</p>
-<p><strong>Signature:</strong> <code>os.exec(cmd, [args], [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L389" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.exec(cmd, [args], [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L332" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -97,7 +97,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="exec-sh">exec_sh</h3>
 <p>Run line through a shell — for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. &quot;bash&quot;) to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes — for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.</p>
-<p><strong>Signature:</strong> <code>os.execSh(line, [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L403" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.execSh(line, [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L346" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -131,7 +131,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="with-env">with_env</h3>
 <p>Set env vars for the duration of callback; restore after.</p>
-<p><strong>Signature:</strong> <code>os.withEnv(env, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L449" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.withEnv(env, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L392" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -150,7 +150,7 @@
 </tr>
 <tr>
 <td><code>callback</code></td>
-<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18" rel="noopener noreferrer" target="_blank" data-external><code>Callback</code></a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L17" rel="noopener noreferrer" target="_blank" data-external><code>Callback</code></a></td>
 <td></td>
 <td></td>
 </tr>
@@ -158,7 +158,7 @@
 </table>
 <h3 id="with-slots">with_slots</h3>
 <p>Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.</p>
-<p><strong>Signature:</strong> <code>os.withSlots(n, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L529" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.withSlots(n, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L472" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -177,7 +177,7 @@
 </tr>
 <tr>
 <td><code>callback</code></td>
-<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18" rel="noopener noreferrer" target="_blank" data-external><code>Callback</code></a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L17" rel="noopener noreferrer" target="_blank" data-external><code>Callback</code></a></td>
 <td></td>
 <td></td>
 </tr>
@@ -185,11 +185,11 @@
 </table>
 <h3 id="platform">platform</h3>
 <p>Return the Docker/OCI platform triple: (os, arch, variant).</p>
-<p><strong>Signature:</strong> <code>os.platform() → string, string, string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L298" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.platform() → string, string, string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L241" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string, string, string</p>
 <h3 id="exit">exit</h3>
 <p>Abort the current run with the given exit code — typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.</p>
-<p><strong>Signature:</strong> <code>os.exit(code)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L290" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.exit(code)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L233" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -210,7 +210,7 @@
 </table>
 <h3 id="sleep">sleep</h3>
 <p>Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.</p>
-<p><strong>Signature:</strong> <code>os.sleep(ms)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L265" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.sleep(ms)</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L208" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -231,7 +231,7 @@
 </table>
 <h3 id="which">which</h3>
 <p>Resolve cmd against PATH and return its absolute path, or &quot;&quot; if it is not found. Use it to check a tool is installed before running it (and emit a clear hint/error instead of a cryptic exec failure).</p>
-<p><strong>Signature:</strong> <code>os.which(cmd) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L255" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.which(cmd) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L198" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -253,19 +253,19 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="stdin-is-terminal">stdin_is_terminal</h3>
 <p>Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.</p>
-<p><strong>Signature:</strong> <code>os.stdinIsTerminal() → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L249" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.stdinIsTerminal() → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L192" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> bool</p>
 <h3 id="num-cpu">num_cpu</h3>
 <p>Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).</p>
-<p><strong>Signature:</strong> <code>os.numCpu() → int</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L234" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.numCpu() → int</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L177" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> int</p>
 <h3 id="hostname">hostname</h3>
 <p>Return the host machine's name.</p>
-<p><strong>Signature:</strong> <code>os.hostname() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L239" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.hostname() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L182" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="retry">retry</h3>
 <p>Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.</p>
-<p><strong>Signature:</strong> <code>os.retry(max, fn, [opts]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L465" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>os.retry(max, fn, [opts]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L408" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -284,7 +284,7 @@
 </tr>
 <tr>
 <td><code>fn</code></td>
-<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L18" rel="noopener noreferrer" target="_blank" data-external><code>Callback</code></a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/std/module.go#L17" rel="noopener noreferrer" target="_blank" data-external><code>Callback</code></a></td>
 <td></td>
 <td></td>
 </tr>
@@ -306,7 +306,7 @@
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa"><code>6477ddd</code></a> <small><time datetime="2026-05-28T00:33:00Z">May 28, 2026</time></small> - native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/modules/os.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/modules/os.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T22:09:25Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a78ecc7b0d84a98f1891d5de7357d53075e99d38" data-tooltip="a78ecc7b0d84a98f1891d5de7357d53075e99d38" title="a78ecc7b0d84a98f1891d5de7357d53075e99d38">a78ecc7</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/a78ecc7b0d84a98f1891d5de7357d53075e99d38"><code>a78ecc7</code></a> <small><time datetime="2026-07-02T22:09:25Z">Jul 2, 2026</time></small> - docs: generator emits frontmatter; per-method examples under std/examples/</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/b44623521485f499405440ef847dbcff277d72b0"><code>b446235</code></a> <small><time datetime="2026-06-10T23:51:00Z">Jun 10, 2026</time></small> - zdef struct returns + named args; upstream-buzz ffi parity; align readZAt to upstream</li><li><a href="https://github.com/egladman/magus/commit/76aa6d35d7938cc7f28cffff4a62d29080abdbaf"><code>76aa6d3</code></a> <small><time datetime="2026-06-03T23:47:00Z">Jun 3, 2026</time></small> - cross-language benchmark suite; an honest perf table in the readme</li><li><a href="https://github.com/egladman/magus/commit/6477ddde580ff02a7f8c75c290acef3067086dfa"><code>6477ddd</code></a> <small><time datetime="2026-05-28T00:33:00Z">May 28, 2026</time></small> - native jit for amd64 and arm64; golang-asm, sse fast paths, w^x-hardened code pages</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/modules/os.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/modules/os.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>

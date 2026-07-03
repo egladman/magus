@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>ts spell — magus</title>
+  <meta name="description" content="TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/spells/ts/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../blog/">Blog</a></li>
+        <li><a href="../../download/">Download</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Spells</li><li aria-current="page">ts spell</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/spells/ts.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#eslint" title="eslint">eslint</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#preflight" title="preflight">preflight</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#tsc" title="tsc">tsc</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#vitest" title="vitest">vitest</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li></ul>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="ts">ts</h1>
+<p>The <code>ts</code> spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (<code>pnpm exec</code>). It is an opaque spell: <code>preflight</code> composes the individual checks into one target.</p>
+<p><strong>Runtime name:</strong> <code>ts</code> (source <code>spells/typescript/</code>)</p>
+<p><strong>Version probe:</strong> <code>node --version</code></p>
+<p><strong>Opaque:</strong> yes (its outputs are not enumerable, so magus treats the whole workspace as the cache input).</p>
+<h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
+<p>Every op is invoked as <code>ts[&quot;&lt;op&gt;&quot;](opts?)</code>, where the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Description</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>args</code></td>
+<td><code>[str]</code></td>
+<td>Extra arguments appended to the resolved command. Omit it and a bare <code>ts[&quot;&lt;op&gt;&quot;]()</code> forwards <code>magus run &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+<tr>
+<td><code>cwd</code></td>
+<td><code>str</code></td>
+<td>Working directory the command runs in. Defaults to the project directory.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L104" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td><code>{str: str}</code></td>
+<td>Environment variables set for the process, on top of the inherited environment.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+<tr>
+<td><code>stdin</code></td>
+<td><code>str</code></td>
+<td>Data written to the command's standard input.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L119" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+</tbody>
+</table>
+<p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
+<h2 id="eslint">eslint</h2>
+<p><strong>Command:</strong> <code>pnpm exec eslint .</code></p>
+<h3 id="example">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// eslint lints the project through the package manager (pnpm exec eslint).
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun lint(args: [str]) &gt; void {
+    ts[&quot;eslint&quot;]();
+}
+</code></pre>
+<h2 id="preflight">preflight</h2>
+<p>preflight is a no-op marker op (no command).</p>
+<p><strong>Command:</strong> none; this op composes the spell's other ops (see the intro).</p>
+<h3 id="example-1">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// preflight composes the tsc/eslint/prettier/vitest checks into one opaque target.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun preflight(args: [str]) &gt; void {
+    ts[&quot;preflight&quot;]();
+}
+</code></pre>
+<h2 id="prettier">prettier</h2>
+<p><strong>Command:</strong> <code>pnpm exec prettier --check .</code></p>
+<h3 id="rw">rw</h3>
+<p>Replaces <code>--check</code> with <code>--write</code>.</p>
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+<pre><code class="language-json">[
+  {
+    &quot;op&quot;: &quot;replace&quot;,
+    &quot;path&quot;: &quot;/2&quot;,
+    &quot;value&quot;: &quot;--write&quot;
+  }
+]
+</code></pre>
+</details>
+<h3 id="example-2">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// prettier checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun format(args: [str]) &gt; void {
+    ts[&quot;prettier&quot;]();
+}
+</code></pre>
+<h2 id="tsc">tsc</h2>
+<p><strong>Command:</strong> <code>pnpm exec tsc</code></p>
+<h3 id="example-3">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// tsc type-checks the project through the package manager (pnpm exec tsc).
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun typecheck(args: [str]) &gt; void {
+    ts[&quot;tsc&quot;]();
+}
+</code></pre>
+<h2 id="vitest">vitest</h2>
+<p><strong>Command:</strong> <code>pnpm exec vitest run</code></p>
+<h3 id="gha">gha</h3>
+<p>Appends <code>--reporter=github-actions</code>.</p>
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+<pre><code class="language-json">[
+  {
+    &quot;op&quot;: &quot;add&quot;,
+    &quot;path&quot;: &quot;/-&quot;,
+    &quot;value&quot;: &quot;--reporter=github-actions&quot;
+  }
+]
+</code></pre>
+</details>
+<h3 id="example-4">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// vitest runs the test suite; the gha charm annotates failures in GitHub Actions.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun test(args: [str]) &gt; void {
+    ts[&quot;vitest&quot;]();
+}
+</code></pre>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../rs/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">rs spell</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-02T22:09:59Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/6ee82cc83db5e3753c39a23de1a9348ddb53efc9" data-tooltip="6ee82cc83db5e3753c39a23de1a9348ddb53efc9" title="6ee82cc83db5e3753c39a23de1a9348ddb53efc9">6ee82cc</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../main.js"></script>
+</body>
+</html>

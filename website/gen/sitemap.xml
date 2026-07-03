@@ -68,6 +68,16 @@
   <url><loc>https://eli.gladman.cc/magus/operations/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/remote-cache/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/spells/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/bash/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/buf/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/buzz/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/cosign/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/docker/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/go/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/md/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/py/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/rs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/spells/ts/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/targets/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/telemetry/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/tips/</loc></url>

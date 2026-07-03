@@ -66,13 +66,50 @@
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
+  // formatTrace renders an evalBuzzWithRecorder result as text lines, matching the
+  // playground console's dry-run output: any printed output first, then one line
+  // per recorded op ("[target] name detail  kind · recorded"), then a summary. On
+  // failure it shows the diagnostic; with no ops it says nothing would run.
+  function formatTrace(r) {
+    if (!r) return "(no result)";
+    if (!r.ok) return (r.output ? r.output + "\n" : "") + "dry-run failed";
+    var lines = [];
+    if (r.output) lines.push(r.output);
+    var trace = r.trace || [];
+    for (var i = 0; i < trace.length; i++) {
+      var op = trace[i];
+      var tag = op.target ? "[" + op.target + "] " : "";
+      var detail = op.detail ? " " + op.detail : "";
+      lines.push(tag + op.name + detail + "  " + op.kind + " · recorded");
+    }
+    var n = trace.length;
+    lines.push("[pass] dry-run: " + n + " step" + (n === 1 ? "" : "s") +
+      " recorded, nothing executed");
+    return lines.join("\n");
+  }
+
   blocks.forEach(function (pre) {
     var code = pre.querySelector("code");
     if (!code) return;
 
-    // Toolbar row above the block: Run + Open-in-Playground.
+    // Couple the controls to the code block itself: reuse the .code-block wrapper
+    // code-copy.js already added (or create one), then hang an action bar off the
+    // BOTTOM of that wrapper so Run + Open-in-Playground read as part of the block
+    // rather than a row floating above it. The output panel attaches directly below
+    // the same block, so the whole thing is one visually-connected unit.
+    var block = pre.parentElement && pre.parentElement.classList.contains("code-block")
+      ? pre.parentElement
+      : (function () {
+          var w = document.createElement("div");
+          w.className = "code-block";
+          pre.parentNode.insertBefore(w, pre);
+          w.appendChild(pre);
+          return w;
+        })();
+    block.classList.add("runnable");
+
     var bar = document.createElement("div");
-    bar.className = "runnable-toolbar";
+    bar.className = "runnable-bar";
 
     var runBtn = document.createElement("button");
     runBtn.type = "button";
@@ -91,15 +128,15 @@
     openLink.setAttribute("data-tooltip", "Open in playground");
     bar.appendChild(openLink);
 
-    pre.parentNode.insertBefore(bar, pre);
+    block.appendChild(bar);
 
-    // Output panel inserted after the block on first successful run.
+    // Output panel inserted after the whole block on first run.
     var out = null;
     function panel() {
       if (out) return out;
       out = document.createElement("pre");
       out.className = "runnable-output";
-      pre.parentNode.insertBefore(out, pre.nextSibling);
+      block.parentNode.insertBefore(out, block.nextSibling);
       return out;
     }
 
@@ -107,11 +144,22 @@
       runBtn.disabled = true;
       var oldLabel = runBtn.querySelector("span").textContent;
       runBtn.querySelector("span").textContent = "Running…";
+      // Spell examples opt into the dry-run recorder (data-recorder): their
+      // targets fork tools, so evalBuzz can't run them, but evalBuzzWithRecorder
+      // reports the tool invocations they WOULD trigger as a trace. Module
+      // examples stay on the plain evalBuzz path (print output).
+      var recorder = pre.hasAttribute("data-recorder");
       ensureBuzz().then(function () {
-        var r = window.buzz.evalBuzz(code.textContent);
         var pnl = panel();
-        pnl.textContent = (r && r.output) ? r.output : "(no output)";
-        pnl.classList.toggle("failed", !(r && r.ok));
+        if (recorder) {
+          var r = window.buzz.evalBuzzWithRecorder(code.textContent);
+          pnl.textContent = formatTrace(r);
+          pnl.classList.toggle("failed", !(r && r.ok));
+        } else {
+          var r = window.buzz.evalBuzz(code.textContent);
+          pnl.textContent = (r && r.output) ? r.output : "(no output)";
+          pnl.classList.toggle("failed", !(r && r.ok));
+        }
       }).catch(function (e) {
         var pnl = panel();
         pnl.textContent = "Failed to load the Buzz runtime: " + e.message;

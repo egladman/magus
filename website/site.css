@@ -798,33 +798,45 @@ a code {
   img { max-width: 100% !important; height: auto !important; }
 }
 
-/* Runnable code examples: a small toolbar above an opt-in Buzz block with a Run
-   button + Open-in-Playground link, and an output panel that appears below
-   after the first run. The block sits inline with the article's flow; the
-   toolbar doesn't shift the code-copy button positioned inside the block. */
-.runnable-toolbar {
+/* Runnable code examples: an action bar coupled to the BOTTOM of an opt-in Buzz
+   block (a .code-block wrapper flagged .runnable), holding a Run button and an
+   Open-in-Playground link, plus an output panel that attaches below the block on
+   first run. The bar lives inside .code-block so it reads as part of the block,
+   not a floating row; squaring the code's bottom corners fuses the two. */
+.code-block.runnable > pre {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.runnable-bar {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin: 0.5rem 0 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-top: 1px solid var(--pico-muted-border-color);
+  border-bottom-left-radius: var(--pico-border-radius);
+  border-bottom-right-radius: var(--pico-border-radius);
 }
 .run-example {
-  padding: 0.25rem 0.7rem;
+  padding: 0.2rem 0.65rem;
   font-size: 0.85rem;
   border-radius: var(--pico-border-radius);
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  margin: 0;
 }
 .run-example[disabled] { opacity: 0.6; }
 .open-in-playground {
+  margin-left: auto; /* push to the right edge of the bar */
   font-size: 0.85rem;
   color: var(--pico-muted-color);
   text-decoration: none;
 }
 .open-in-playground:hover { color: var(--pico-primary); text-decoration: underline; }
 .runnable-output {
-  margin: 0.25rem 0 1rem;
+  margin: 0.4rem 0 1rem;
   padding: 0.6rem 0.75rem;
   background: var(--pico-card-sectioning-background-color);
   border-left: 3px solid var(--accent-teal, var(--pico-primary));
@@ -833,6 +845,67 @@ a code {
 }
 .runnable-output.failed {
   border-left-color: var(--pico-del-color, #b3261e);
+}
+
+/* Charm JSON-Patch disclosure (spell docs). The default Pico <details> reads as
+   plain text, so this makes the summary an obvious clickable header - a caret that
+   rotates on open, a card-like background/border set off from the description
+   above - and fuses the revealed code block to the bottom of the header bar so the
+   open state reads as one panel. Scoped to .charm-patch so other <details> are
+   untouched. */
+.charm-patch {
+  margin: 0.6rem 0 1.25rem;
+}
+.charm-patch > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0; /* Pico gives summary a bottom margin; drop it so the panel fuses */
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  cursor: pointer;
+  user-select: none;
+  list-style: none; /* Firefox: drop the default disclosure triangle */
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.charm-patch > summary::-webkit-details-marker { display: none; } /* Safari/Chrome */
+.charm-patch > summary::after { content: none; } /* kill Pico's own chevron */
+/* Custom caret on the left; points right when closed, down when open. */
+.charm-patch > summary::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.charm-patch[open] > summary::before { transform: rotate(90deg); }
+.charm-patch > summary:hover {
+  color: var(--pico-primary);
+  border-color: var(--pico-primary);
+}
+/* When open, square the summary's bottom and the code block's top so they fuse.
+   The margin-bottom override is required: Pico's `details[open] > summary` re-adds
+   a bottom margin (higher specificity than the base rule above), which this
+   more-specific selector cancels so the code block sits flush. */
+.charm-patch[open] > summary {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.charm-patch[open] .code-block {
+  margin-top: 0;
+}
+.charm-patch[open] .code-block > pre {
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 /* Stripped-down chrome for the /public/ autoindex tree: keep the site nav bar

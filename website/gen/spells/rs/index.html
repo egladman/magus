@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>rs spell — magus</title>
+  <meta name="description" content="Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/spells/rs/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../blog/">Blog</a></li>
+        <li><a href="../../download/">Download</a></li>
+        <li><a href="../../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Spells</li><li aria-current="page">rs spell</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/spells/rs.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#cargo-build" title="cargo-build">cargo-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#cargo-clean" title="cargo-clean">cargo-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#cargo-clippy" title="cargo-clippy">cargo-clippy</a><ul><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#cargo-fmt" title="cargo-fmt">cargo-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#cargo-test" title="cargo-test">cargo-test</a><ul><li><a href="#example-4" title="Example">Example</a></li></ul></li></ul>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="rs">rs</h1>
+<p>The <code>rs</code> spell wires Cargo into a magusfile. Each op forks a <code>cargo</code> subcommand directly; <code>cargo-build</code> builds in release mode and <code>cargo-clippy</code> denies warnings, matching a CI-gating default.</p>
+<p><strong>Runtime name:</strong> <code>rs</code> (source <code>spells/rust/</code>)</p>
+<p><strong>Version probe:</strong> <code>rustc --version</code></p>
+<h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
+<p>Every op is invoked as <code>rs[&quot;&lt;op&gt;&quot;](opts?)</code>, where the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Description</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>args</code></td>
+<td><code>[str]</code></td>
+<td>Extra arguments appended to the resolved command. Omit it and a bare <code>rs[&quot;&lt;op&gt;&quot;]()</code> forwards <code>magus run &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+<tr>
+<td><code>cwd</code></td>
+<td><code>str</code></td>
+<td>Working directory the command runs in. Defaults to the project directory.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L104" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td><code>{str: str}</code></td>
+<td>Environment variables set for the process, on top of the inherited environment.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+<tr>
+<td><code>stdin</code></td>
+<td><code>str</code></td>
+<td>Data written to the command's standard input.</td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L119" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+</tr>
+</tbody>
+</table>
+<p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
+<h2 id="cargo-build">cargo-build</h2>
+<p><strong>Command:</strong> <code>cargo build --release</code></p>
+<h3 id="example">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// cargo-build compiles in release mode: magus run build forks cargo build --release.
+import &quot;magus&quot;;
+import &quot;magus/spell/rs&quot;;
+
+magus.project({ &quot;spells&quot;: [rs] });
+
+export fun build(args: [str]) &gt; void {
+    rs[&quot;cargo-build&quot;]();
+}
+</code></pre>
+<h2 id="cargo-clean">cargo-clean</h2>
+<p><strong>Command:</strong> <code>cargo clean</code></p>
+<h3 id="example-1">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// Wire cargo-clean into a clean target: magus run clean forks cargo clean.
+import &quot;magus&quot;;
+import &quot;magus/spell/rs&quot;;
+
+magus.project({ &quot;spells&quot;: [rs] });
+
+export fun clean(args: [str]) &gt; void {
+    rs[&quot;cargo-clean&quot;]();
+}
+</code></pre>
+<h2 id="cargo-clippy">cargo-clippy</h2>
+<p><strong>Command:</strong> <code>cargo clippy -- -D warnings</code></p>
+<h3 id="example-2">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// cargo-clippy lints and denies warnings (-D warnings), gating CI on a clean run.
+import &quot;magus&quot;;
+import &quot;magus/spell/rs&quot;;
+
+magus.project({ &quot;spells&quot;: [rs] });
+
+export fun clippy(args: [str]) &gt; void {
+    rs[&quot;cargo-clippy&quot;]();
+}
+</code></pre>
+<h2 id="cargo-fmt">cargo-fmt</h2>
+<p><strong>Command:</strong> <code>cargo fmt -- --check</code></p>
+<h3 id="rw">rw</h3>
+<p>Drops <code>--check</code>, drops <code>--</code>.</p>
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+<pre><code class="language-json">[
+  {
+    &quot;op&quot;: &quot;remove&quot;,
+    &quot;path&quot;: &quot;/2&quot;
+  },
+  {
+    &quot;op&quot;: &quot;remove&quot;,
+    &quot;path&quot;: &quot;/1&quot;
+  }
+]
+</code></pre>
+</details>
+<h3 id="example-3">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// cargo-fmt checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import &quot;magus&quot;;
+import &quot;magus/spell/rs&quot;;
+
+magus.project({ &quot;spells&quot;: [rs] });
+
+export fun format(args: [str]) &gt; void {
+    rs[&quot;cargo-fmt&quot;]();
+}
+</code></pre>
+<h2 id="cargo-test">cargo-test</h2>
+<p><strong>Command:</strong> <code>cargo test</code></p>
+<h3 id="example-4">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// Wire cargo-test into a test target: magus run test forks cargo test.
+import &quot;magus&quot;;
+import &quot;magus/spell/rs&quot;;
+
+magus.project({ &quot;spells&quot;: [rs] });
+
+export fun test(args: [str]) &gt; void {
+    rs[&quot;cargo-test&quot;]();
+}
+</code></pre>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../py/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">py spell</span></a>
+      <a class="page-nav-next" href="../ts/"><span class="page-nav-dir">Next</span><span class="page-nav-title">ts spell</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-02T22:09:59Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/6ee82cc83db5e3753c39a23de1a9348ddb53efc9" data-tooltip="6ee82cc83db5e3753c39a23de1a9348ddb53efc9" title="6ee82cc83db5e3753c39a23de1a9348ddb53efc9">6ee82cc</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../main.js"></script>
+</body>
+</html>

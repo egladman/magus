@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <title>Operations — magus</title>
-  <meta name="description" content="Defines an Operation, its place in the Spell to Target to Process hierarchy, and how fork ops and function ops compose into runnable targets.">
+  <meta name="description" content="Defines an Operation, its place in the Spell to Target to Process hierarchy, and how ops compose into runnable targets.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/operations/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -67,22 +67,25 @@ model, marked <strong>(not built)</strong>.</p>
 named after the CLI command it runs: <code>go-build</code>, <code>go-vet</code>, <code>golangci-lint</code>,
 <code>cargo-clippy</code>, <code>eslint</code>. It is the unit a <a href="../targets/">Target</a> <em>composes</em>: a
 target body calls ops, ops do the tool work.</p>
-<p>An Operation is declared in one of two shapes, which decode to the same thing
-(see <a href="../spells/#operations-come-in-two-shapes">Operations come in two shapes</a>):</p>
-<ul>
-<li><strong>Fork op</strong>: a <code>{cmd, args, charms}</code> record. magus forks the command directly
-(no shell), so one fork op runs exactly <strong>one process</strong>.</li>
-<li><strong>Function op</strong>: an exported handler dispatched in-VM (HTTP, signing, a cache
-backend's <code>get-entry</code>). It may run zero or many processes, or none.</li>
-</ul>
+<p>An Operation is one of two declarative shapes, and the shape is its <strong>kind</strong>: a
+<strong>command</strong> op returns a <code>Command</code> (<code>{bin, args, charms}</code>) magus forks directly
+(no shell, one process, run to completion) — the default; a <strong>service</strong> op returns a
+<code>Service</code> (<code>{command, readiness?, stop?}</code>), a long-running process <code>magus run</code> forks
+in the foreground and <strong>blocks</strong> on. You author either as a function that returns it
+(<code>fun(Target) &gt; Command</code> or <code>fun(Target) &gt; Service</code>) or as a bare record; the kind is
+inferred from the return
+(see <a href="../spells/#an-operation-is-a-command-or-a-service">An operation is a command or a service</a>).
+Because both are declarative data, the argv is charm-patchable, cache-keyable, and
+previewable without running. The kind lives on the op, so one spell mixes command and
+service ops. In-VM work that magus neither forks nor blocks on (a remote cache
+backend) is not an op at all: it is a separate contract magus's core invokes by name.</p>
 <p>An Operation is <em>how</em> a tool performs an action; a <a href="../targets/">Target</a> is <em>what</em>
 you run. You <strong>bind</strong> spells (which contribute ops) and <strong>invoke</strong> targets (which
 call ops). A target with no ops of its own, like <code>ci</code>, is pure composition: it
 only <code>needs</code> other targets.</p>
 <h2 id="the-work-hierarchy">The work hierarchy</h2>
 <pre><code class="language-text">Spell ──exposes──▶ Operation (op)              go-build, eslint, golangci-lint
-  │                   │  fork op    → one process
-  │                   │  function op → arbitrary in-VM work
+  │                   │  a command → one process (no shell)
   │                   ▼ runs
   │                Process  ──yields──▶  ExecResult
   │
@@ -116,7 +119,7 @@ target.result event   (per target; no per-op breakdown)
 <tr>
 <td><strong>Process</strong></td>
 <td>one forked command</td>
-<td>0..N per op (1 for a fork op)</td>
+<td>1 per op (0 for a no-op marker)</td>
 <td>argv</td>
 </tr>
 <tr>
@@ -145,7 +148,7 @@ Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own
 <td><strong><code>ExecResult</code></strong></td>
 <td>Process</td>
 <td><code>{stdout, stderr, code, ok}</code></td>
-<td><strong>returned</strong> by <code>os.exec</code>, <code>magus.cmd</code>/<code>run</code>/<code>describe</code>/<code>insight</code>/<code>doctor</code>, a fork op</td>
+<td><strong>returned</strong> by <code>os.exec</code>, <code>magus.cmd</code>/<code>run</code>/<code>describe</code>/<code>insight</code>/<code>doctor</code>, a Capture op</td>
 <td>exists</td>
 </tr>
 <tr>
@@ -216,8 +219,7 @@ latent misnaming in the second.</p>
 </tbody>
 </table>
 <p><code>PatchOp</code> and <code>RemoteOp</code> keep their names; they are genuinely different
-operations. The handler callback parameter is named <code>cb</code>, not <code>op</code>, for exactly
-this reason (<a href="../spells/#operations-come-in-two-shapes">spells.md</a>).</p>
+operations. magus never names anything just <code>op</code> in the spell API, for exactly this reason.</p>
 <p><strong>Two &quot;Target&quot;s.</strong> These are distinct and must not be conflated:</p>
 <ul>
 <li><strong><code>types.Target</code></strong>: the addressable <strong>work-unit</strong> <code>Path + Name</code>, plus charms
@@ -312,7 +314,7 @@ each <code>Operation</code> yields an <code>ExecResult</code>.</p>
     </nav>
   </main>
   <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75" data-tooltip="c687abe872260fa490e30fb632f3f1f52b14ee75" title="c687abe872260fa490e30fb632f3f1f52b14ee75">c687abe</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/c687abe872260fa490e30fb632f3f1f52b14ee75"><code>c687abe</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter + short titles</li><li><a href="https://github.com/egladman/magus/commit/668d8d5a0d838a20e9cadd388776a291835d5bf5"><code>668d8d5</code></a> <small><time datetime="2026-07-01T05:28:00Z">Jul 1, 2026</time></small> - rename target weight policy to slots, unify isolated as exclusive</li><li><a href="https://github.com/egladman/magus/commit/7087163811821ab7acc2bb3f7d75b090fa9c0130"><code>7087163</code></a> <small><time datetime="2026-07-01T04:21:51Z">Jul 1, 2026</time></small> - add per-target concurrency weight</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/operations.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/operations.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de" data-tooltip="5d9e514ddc79f4e388d41f11d6894bd4afba27de" title="5d9e514ddc79f4e388d41f11d6894bd4afba27de">5d9e514</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/668d8d5a0d838a20e9cadd388776a291835d5bf5"><code>668d8d5</code></a> <small><time datetime="2026-07-01T05:28:00Z">Jul 1, 2026</time></small> - rename target weight policy to slots, unify isolated as exclusive</li><li><a href="https://github.com/egladman/magus/commit/7087163811821ab7acc2bb3f7d75b090fa9c0130"><code>7087163</code></a> <small><time datetime="2026-07-01T04:21:51Z">Jul 1, 2026</time></small> - add per-target concurrency weight</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/operations.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/operations.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>

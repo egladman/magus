@@ -426,7 +426,21 @@ fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
 // info-string extension goldmark doesn't natively surface. The comment itself
 // is dropped from the output.
 fun tagRunnable(html: str) > str {
-    final marker = "<!-- run -->";
+    // Two opt-in markers, each tagging the following <pre> with the attributes a
+    // client mode reads. "<!-- run -->" is the plain evalBuzz path (module
+    // examples: print output). "<!-- run-recorder -->" is the dry-run path
+    // (spell examples: `import "magus/spell/go"; go["go-build"]()` records a
+    // trace instead of executing), which run-example.js routes to
+    // evalBuzzWithRecorder on seeing data-recorder. run-recorder is matched first
+    // so its longer marker isn't mistaken for a bare run marker.
+    final recTagged = tagRunnableWith(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
+    return tagRunnableWith(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
+}
+
+// tagRunnableWith swaps the <pre> that follows each marker comment with openTag
+// (the marker is dropped). A marker not immediately followed by a fence is simply
+// removed, so the block renders normally.
+fun tagRunnableWith(html: str, marker: str, openTag: str) > str {
     var buf = "";
     var rest = html;
     var idx = rest.indexOf(marker);
@@ -442,7 +456,7 @@ fun tagRunnable(html: str) > str {
             i = i + 1;
         }
         if (rest.sub(i, 5) == "<pre>") {
-            buf = buf + rest.sub(0, i) + "<pre data-runnable=\"true\">";
+            buf = buf + rest.sub(0, i) + openTag;
             rest = rest.sub(i + 5);
         } else {
             // Not immediately followed by a fence — drop the marker; the block
@@ -453,6 +467,17 @@ fun tagRunnable(html: str) > str {
         idx = rest.indexOf(marker);
     }
     return buf + rest;
+}
+
+// renderContentHtml is the ONE post-processing pipeline every page render runs: it
+// rewrites a rendered-markdown fragment's in-content links from the page's old flat
+// directory (oldDir) to its new clean directory (newDir), then applies the ordered
+// content transforms - runnable markers, admonitions, code titles, lazy images,
+// external-link marks, and mermaid. Routing renderRoot, renderFile, and
+// renderBlogPost through this is what keeps a transform (like the runnable Run
+// buttons) from being applied on one path and silently forgotten on another.
+fun renderContentHtml(rawHtml: str, oldDir: str, newDir: str) > str {
+    return tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir)))))));
 }
 
 // externalLinks adds rel="noopener noreferrer" and target="_blank" to every
@@ -1776,13 +1801,7 @@ fun renderRoot() > void {
     }
     // The home page stays at gen/index.html (gen root), so its in-content links are
     // rewritten from the root directory to the root directory.
-    html = rewriteLinks(html, "", "");
-    html = tagRunnable(html);
-    html = tagAdmonition(html);
-    html = tagCodeTitle(html);
-    html = lazyImages(html);
-    html = externalLinks(html);
-    html = tagMermaid(html);
+    html = renderContentHtml(html, "", "");
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     var title = fm.q("title").stringValue();
@@ -1815,7 +1834,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = titleOf(md, rel); }
 
-    final html = tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel))))))));
+    final html = renderContentHtml(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1894,7 +1913,7 @@ fun renderBlogPost(base: str) > void {
     // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
     // both so cross-references (../../documentation/) resolve correctly.
-    final html = tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(markdown.toHtml(md), BLOG, BLOG + "/" + slug)))))));
+    final html = renderContentHtml(markdown.toHtml(md), BLOG, BLOG + "/" + slug);
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }

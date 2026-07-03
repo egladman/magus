@@ -63,13 +63,16 @@ and the decoder keys they map to is **single-sourced** in
 `OptionalContract`, and the Buzz resolver (`internal/spell/resolve.go`) iterates
 that one list. A spell's `mgs_` functions decode to a `Spec` for every scalar and
 list contribution (`needs`, `provides`, `claims`, `version_cmd`, `opaque`) and
-for record-shaped ops (`{cmd, args, charms}`).
+for record-shaped ops (`{bin, args, charms}`).
 
-Spells support **function-ops**, ops whose handler does host work in-VM rather
-than forking a command, so you can author a remote cache backend
-(`get_artifact`/`put_artifact`) and wire it with `magus.cache.remote`. A handler
-hands its command to the injected `cb` callback (the form the resolver also
-extracts statically).
+An op is a command or a service; a function-valued op is `fun(Target) > Command` or
+`fun(Target) > Service`, called once at load to record the declarative value it
+returns (a Command's `{bin, args, charms}` or a Service's `{command, readiness?, stop?}`,
+a long-running process `magus run` blocks on). The op's kind is inferred from that
+value, so one spell mixes both. A remote cache backend
+is not an op: it is a spell that exports the backend functions
+(`enabled`/`get_artifact`/`put_artifact`/`prune`), detected by name and wired with
+`magus.cache.remote` (see [Remote caching](remote-cache.md)).
 
 **Doc-comment capture.** Buzz captures a handler's doc comment at compile time
 (the parser binds the comment to the function node; `FunDoc` reads it back), and

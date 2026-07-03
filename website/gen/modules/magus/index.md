@@ -16,7 +16,7 @@ Magus core primitives.
 
 Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists — magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.
 
-**Signature:** `magus.cmd(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L136)
+**Signature:** `magus.cmd(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L138)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Escape hatch: run `magus <args>` for any subcommand, in the target's project dir
 
 Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.
 
-**Signature:** `magus.run(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L154)
+**Signature:** `magus.run(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L156)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,7 +42,7 @@ Run `magus run <args>` recursively in the target's project directory and capture
 
 Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.
 
-**Signature:** `magus.describe(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L159)
+**Signature:** `magus.describe(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L161)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -55,7 +55,7 @@ Run `magus describe <args>` in the target's project directory and capture its ou
 
 Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.
 
-**Signature:** `magus.insight(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L164)
+**Signature:** `magus.insight(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L166)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -68,7 +68,7 @@ Run `magus insight <args>` in the target's project directory and capture its out
 
 Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.
 
-**Signature:** `magus.doctor(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L169)
+**Signature:** `magus.doctor(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L171)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -81,7 +81,7 @@ Run `magus doctor <args>` in the target's project directory and capture its outp
 
 Invalidate the build cache. Escape hatch — prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.
 
-**Signature:** `magus.bustCache([project_path])` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L112)
+**Signature:** `magus.bustCache([project_path])` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L114)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -91,7 +91,7 @@ Invalidate the build cache. Escape hatch — prefer modeling missing inputs as S
 
 True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm("rw")).
 
-**Signature:** `magus.has_charm(name) → bool` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L105)
+**Signature:** `magus.has_charm(name) → bool` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L107)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
