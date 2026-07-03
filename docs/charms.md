@@ -117,26 +117,26 @@ project: .  target: lint
     command: go tool golangci-lint run --fix ./... -v
 ```
 
-Add charms to the target ref and the `command:` line updates. Two caveats: function-op and magusfile-function targets compute their argv at runtime, so no static command is shown; and `describe` never executes or writes files even for `:rw`. (`--dry-run` reports at the target level; use `describe` to see the command itself.)
+Add charms to the target ref and the `command:` line updates. Two caveats: a magusfile-function target computes its argv at runtime, so no static command is shown; and `describe` never executes or writes files even for `:rw`. (`--dry-run` reports at the target level; use `describe` to see the command itself.)
 
 ## Declaring what a charm does
 
 A charm only does something for a target that declares it. Declarations live in a spell's `charms` table, keyed by charm name. Two charm-construction modules exist (pick by where the spell runs), plus the raw-data escape hatch.
 
-### 1. Built-in fork spells (`import "magus/charm"`)
+### 1. Built-in command spells (`import "magus/charm"`)
 
-A built-in fork spell is **self-contained**: it imports only the pure-Buzz modules `magus/target` and `magus/charm`, so it compiles to bare bytecode with no host bindings. `magus/charm` exports the core constructors as **bare functions** (the same flat-import idiom `magus/target` uses for `Target`), each resolving a _value anchor_ to an index so you never count positions:
+A built-in command spell is **self-contained**: it imports only the pure-Buzz modules `magus/target` and `magus/charm`, so it compiles to bare bytecode with no host bindings. `magus/charm` exports the core constructors as **bare functions** (the same flat-import idiom `magus/target` uses for `Target`), each resolving a _value anchor_ to an index so you never count positions:
 
 ```buzz
 import "magus/target";
 import "magus/charm";
 
-fun lint(target: Target, cb: fun(Run)) > void {
+fun lint(target: Target) > Command {
     final args = ["tool", "golangci-lint", "run", "./..."];
-    cb(Run{cmd = "go", args = args, charms = {
+    return Command{bin = "go", args = args, charms = {
         "rw":    after(args, "run", ["--fix"]),  // insert after "run" — index-proof
         "debug": append(["-v"]),                 // append
-    }});
+    }};
 }
 ```
 

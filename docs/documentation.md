@@ -87,4 +87,5 @@ Generated man pages for every command:
 The magusfile API and diagnostics:
 
 - [Standard library modules](modules/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
+- [Spells reference](spells.md#built-in-spells) - the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
 - Diagnostic codes - [magusfile](codes/magusfile/README.md), [race](codes/race/README.md), and [sandbox](codes/sandbox/README.md) error explanations.

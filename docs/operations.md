@@ -1,6 +1,6 @@
 ---
 title: Operations
-description: Defines an Operation, its place in the Spell to Target to Process hierarchy, and how fork ops and function ops compose into runnable targets.
+description: Defines an Operation, its place in the Spell to Target to Process hierarchy, and how ops compose into runnable targets.
 tags: [operations, ops, hierarchy, spells, targets, ci, work-model, execution]
 ---
 
@@ -25,13 +25,18 @@ named after the CLI command it runs: `go-build`, `go-vet`, `golangci-lint`,
 `cargo-clippy`, `eslint`. It is the unit a [Target](targets.md) _composes_: a
 target body calls ops, ops do the tool work.
 
-An Operation is declared in one of two shapes, which decode to the same thing
-(see [Operations come in two shapes](spells.md#operations-come-in-two-shapes)):
-
-- **Fork op**: a `{cmd, args, charms}` record. magus forks the command directly
-  (no shell), so one fork op runs exactly **one process**.
-- **Function op**: an exported handler dispatched in-VM (HTTP, signing, a cache
-  backend's `get-entry`). It may run zero or many processes, or none.
+An Operation is one of two declarative shapes, and the shape is its **kind**: a
+**command** op returns a `Command` (`{bin, args, charms}`) magus forks directly
+(no shell, one process, run to completion) — the default; a **service** op returns a
+`Service` (`{command, readiness?, stop?}`), a long-running process `magus run` forks
+in the foreground and **blocks** on. You author either as a function that returns it
+(`fun(Target) > Command` or `fun(Target) > Service`) or as a bare record; the kind is
+inferred from the return
+(see [An operation is a command or a service](spells.md#an-operation-is-a-command-or-a-service)).
+Because both are declarative data, the argv is charm-patchable, cache-keyable, and
+previewable without running. The kind lives on the op, so one spell mixes command and
+service ops. In-VM work that magus neither forks nor blocks on (a remote cache
+backend) is not an op at all: it is a separate contract magus's core invokes by name.
 
 An Operation is _how_ a tool performs an action; a [Target](targets.md) is _what_
 you run. You **bind** spells (which contribute ops) and **invoke** targets (which
@@ -42,8 +47,7 @@ only `needs` other targets.
 
 ```text
 Spell ──exposes──▶ Operation (op)              go-build, eslint, golangci-lint
-  │                   │  fork op    → one process
-  │                   │  function op → arbitrary in-VM work
+  │                   │  a command → one process (no shell)
   │                   ▼ runs
   │                Process  ──yields──▶  ExecResult
   │
@@ -57,7 +61,7 @@ target.result event   (per target; no per-op breakdown)
 | ------------- | ----------------------- | ----------------------------- | ------------------------------------ |
 | **Spell**     | a library of operations | many spells per project       | `name` + its ops                     |
 | **Operation** | one tool-native action  | many ops per spell            | `spell` + op name                    |
-| **Process**   | one forked command      | 0..N per op (1 for a fork op) | argv                                 |
+| **Process**   | one forked command      | 1 per op (0 for a no-op marker)   | argv                                 |
 | **Target**    | a runnable `export fun` | one per name per project      | `Path + Name` ([Target](targets.md)) |
 
 Charms ([charms.md](charms.md)) sit orthogonal to this stack: a charm rewrites an
@@ -67,7 +71,7 @@ Operation's argv (_in what manner_ it runs), it is not a layer of its own.
 
 | Result              | Layer     | Shape                                               | Returned or emitted                                                                   | Status          |
 | ------------------- | --------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------- |
-| **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `os.exec`, `magus.cmd`/`run`/`describe`/`insight`/`doctor`, a fork op | exists          |
+| **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `os.exec`, `magus.cmd`/`run`/`describe`/`insight`/`doctor`, a Capture op | exists          |
 | `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                   | **(not built)** |
 | **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                     | exists          |
 
@@ -98,8 +102,7 @@ latent misnaming in the second.
 | **RemoteOp**  | `RemoteOp`  | `{op, outcome, duration, bytes}` | remote-cache backend call (telemetry)         |
 
 `PatchOp` and `RemoteOp` keep their names; they are genuinely different
-operations. The handler callback parameter is named `cb`, not `op`, for exactly
-this reason ([spells.md](spells.md#operations-come-in-two-shapes)).
+operations. magus never names anything just `op` in the spell API, for exactly this reason.
 
 **Two "Target"s.** These are distinct and must not be conflated:
 

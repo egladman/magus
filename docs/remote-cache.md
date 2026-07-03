@@ -27,17 +27,20 @@ key, and wiring a backend without a trust set is refused** (see
 a fork PR, nor anyone holding raw bucket credentials can publish an artifact that
 any machine will replay.
 
-magus itself knows nothing about S3 or GitHub. A backend is an ordinary
-[spell](spells.md) exposing three [function-ops](spells.md#operations-come-in-two-shapes):
+magus itself knows nothing about S3 or GitHub. A backend is a
+[spell](spells.md) that declares no operations and instead exports the cache
+contract — three functions the remote-cache subsystem detects by name and invokes:
 
-| op                         | when                             | does                                            |
+| function                   | when                             | does                                            |
 | -------------------------- | -------------------------------- | ----------------------------------------------- |
 | `enabled(target, cb)`      | once, before fetch/push          | is the backend active here? (gates everything)  |
 | `get_artifact(target, cb)` | on a local cache miss            | download the artifact into `dest`; `true` = hit |
 | `put_artifact(target, cb)` | after building a missed artifact | upload the artifact at `src`; `true` = stored   |
 
-Everything backend-specific (auth, transport) stays in the spell, in pure Buzz.
-See [spells.md](spells.md) and [engines.md](engines.md).
+(A fourth, `prune`, evicts artifacts by retention policy.) These are not
+operations a target composes; they are the contract the remote-cache subsystem
+calls. Everything backend-specific (auth, transport) stays in the spell, in pure
+Buzz. See [spells.md](spells.md) and [engines.md](engines.md).
 
 ## Wiring a backend
 
@@ -219,7 +222,7 @@ under their own `.remote` prefix and are never folded into the local
 
 ## Writing your own backend
 
-Any store reachable over HTTP can be a backend. Implement the three function-ops
+Any store reachable over HTTP can be a backend. Implement the three functions
 (`enabled`/`get_artifact`/`put_artifact`) in a spell: read inputs from the `cb(io)`
 callback (`io.hash`, `io.dest`/`io.src`), use the `http` byte primitives
 (`http.download`/`upload_chunked`/`byteSize`) and `crypto` for request signing
