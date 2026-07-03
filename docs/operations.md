@@ -28,8 +28,11 @@ target body calls ops, ops do the tool work.
 An Operation is one of two declarative shapes, and the shape is its **kind**: a
 **command** op returns a `Command` (`{bin, args, charms}`) magus forks directly
 (no shell, one process, run to completion) — the default; a **service** op returns a
-`Service` (`{command, readiness?, stop?}`), a long-running process `magus run` forks
-in the foreground and **blocks** on. You author either as a function that returns it
+`Service` (`{command, readiness?, stop?, distinct?, idle?}`), a long-running process.
+Run directly (`magus run dev`) a service forks in the foreground and magus **blocks**
+on it; reached as a dependency (`magus.needs`) it is instead **supervised in the
+background** — started, readiness-gated, and shared across dependents (see
+[services.md](services.md)). You author either as a function that returns it
 (`fun(Target) > Command` or `fun(Target) > Service`) or as a bare record; the kind is
 inferred from the return
 (see [An operation is a command or a service](spells.md#an-operation-is-a-command-or-a-service)).

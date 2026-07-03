@@ -123,6 +123,46 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 	assert.Equal(t, serve.Service.Command.Args, serve.Args)
 }
 
+// TestResolve_ServiceDistinctAndIdle pins that the optional distinct (justified
+// dedup opt-out) and idle (per-service idle-timeout override) fields decode from
+// the Buzz object Service into types.Service.
+func TestResolve_ServiceDistinctAndIdle(t *testing.T) {
+	src := `
+import "magus/target";
+export fun mgs_getName() > str { return "db"; }
+fun pg(t: Target) > Service {
+    return Service{ command  = Command{bin = "docker", args = ["run", "postgres:16"]},
+                   distinct = "pins PG 16 for the 15 to 16 migration test",
+                   idle     = "45m" };
+}
+export fun mgs_listTargets() > any { return {"pg": pg}; }
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+
+	pg := spec.Ops["pg"]
+	require.NotNil(t, pg.Service)
+	assert.Equal(t, "pins PG 16 for the 15 to 16 migration test", pg.Service.Distinct)
+	assert.Equal(t, "45m", pg.Service.Idle)
+}
+
+// TestResolve_DetachedServiceRejected pins the kind-coherence ward (MGS5002): a
+// service op that detaches (docker run -d) is rejected at resolution, before
+// anything forks, because detaching breaks foreground supervision.
+func TestResolve_DetachedServiceRejected(t *testing.T) {
+	src := `
+import "magus/target";
+export fun mgs_getName() > str { return "db"; }
+fun pg(t: Target) > Service {
+    return Service{ command = Command{bin = "docker", args = ["run", "-d", "postgres:16"]} };
+}
+export fun mgs_listTargets() > any { return {"pg": pg}; }
+`
+	_, err := resolve(t, src)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, &types.DiagnosticError{Code: types.ServiceOpDetached})
+}
+
 // TestResolve_NonCommandOpRejected pins the new invariant: every op is a command,
 // so a function op that declares no command (returns a value without handing/
 // returning a Run) is rejected at resolution rather than silently becoming a

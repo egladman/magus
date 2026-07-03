@@ -19,10 +19,57 @@ import (
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
+	"github.com/egladman/magus/internal/serviceaudit"
+	"github.com/egladman/magus/internal/serviceident"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
+
+// checkNearDuplicateServices is the static, whole-workspace half of MGS5001: it
+// reports service targets across projects that look like copies of the same
+// service (same image and container port) but differ subtly, so they will run as
+// separate processes instead of one shared instance. Unlike the runtime warning
+// (scoped to a single run's graph) this audit is repo-wide, so it is "potential
+// overlap": some clusters may never co-occur in one run.
+func (*runner) checkNearDuplicateServices(projects []*types.Project) Check {
+	const name = "service duplication"
+	clusters := serviceaudit.NearDuplicates(projects, nil)
+	if len(clusters) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no near-duplicate services detected"}
+	}
+	details := strings.Split(serviceident.FormatWarning(clusters), "\n")
+	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.NearDuplicateServices.URL()))
+	return Check{
+		Name:    name,
+		Status:  StatusFail,
+		Message: fmt.Sprintf("%d near-duplicate service cluster(s); extract a shared target or mark them distinct", len(clusters)),
+		Details: details,
+	}
+}
+
+// checkStaleServiceSuppressions is the allow-unused half of the justified-
+// suppression model: it flags services marked distinct (opted out of dedup with a
+// reason) whose near-duplicate no longer exists, so the reason is stale and should
+// be pruned to keep the opt-out meaningful.
+func (*runner) checkStaleServiceSuppressions(projects []*types.Project) Check {
+	const name = "service suppressions"
+	unused := serviceaudit.UnusedDistinct(projects, nil)
+	if len(unused) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no stale distinct-service suppressions"}
+	}
+	details := make([]string, 0, len(unused)+1)
+	for _, n := range unused {
+		details = append(details, fmt.Sprintf("%s is marked distinct but has no near-duplicate; remove the opt-out", n))
+	}
+	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.NearDuplicateServices.URL()))
+	return Check{
+		Name:    name,
+		Status:  StatusFail,
+		Message: fmt.Sprintf("%d stale distinct-service suppression(s)", len(unused)),
+		Details: details,
+	}
+}
 
 func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 	var noLang []string

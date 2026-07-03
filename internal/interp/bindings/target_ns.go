@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -225,6 +226,10 @@ func dispatchBuzzDeps(callCtx context.Context, targets map[string]vm.Callable, n
 	if len(names) == 0 {
 		return nil
 	}
+	// These are dependencies (magus.needs), so a service op among them is supervised
+	// in the background rather than blocked on (see runCommand). The directly-run
+	// target is dispatched without this marker, so it still foregrounds.
+	callCtx = service.WithSupervision(callCtx)
 	names = dedupStrings(names)
 	if src := interp.SourceFromContext(callCtx); src != nil {
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {

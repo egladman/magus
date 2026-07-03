@@ -7,4 +7,6 @@ export object Service {
     command: Command = Command{},
     readiness: Command = Command{},
     stop: Command = Command{},
+    distinct: str = "",
+    idle: str = "",
 }

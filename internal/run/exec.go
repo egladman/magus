@@ -121,7 +121,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 
 	runErr := c.Run()
 	if ctx.Err() != nil {
-		killGroup(c) // reap grandchildren that ignored the graceful signal
+		KillGroup(c) // reap grandchildren that ignored the graceful signal
 	}
 
 	res := ExecResult{}

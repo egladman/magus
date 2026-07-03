@@ -58,6 +58,9 @@ func TestDiagnosticCode_URL(t *testing.T) {
 	}
 	// MGS1xxx routes to the magusfile docs dir, not the sandbox/race bases.
 	assert.Contains(t, NoCITarget.URL(), "/docs/codes/magusfile/")
+	// MGS5xxx routes to the services docs dir.
+	assert.Contains(t, NearDuplicateServices.URL(), "MGS5001")
+	assert.Contains(t, NearDuplicateServices.URL(), "/docs/codes/services/")
 }
 
 func TestDiagnosticError_Is(t *testing.T) {

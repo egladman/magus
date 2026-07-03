@@ -62,6 +62,7 @@ type Options struct {
 	Version         string                                         // "" disables version-skew check
 	Address         string                                         // "" → auto-generate in SockDir()
 	WorkspaceLister func() []Workspace                             // optional; used by daemon Status RPC
+	ServiceHost     ServiceHost                                    // optional; hosts shared services across invocations (daemon only)
 }
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
@@ -134,6 +135,7 @@ func New(opts Options) (*Server, error) {
 
 	svc := &service{
 		handler:         opts.Handler,
+		serviceHost:     opts.ServiceHost,
 		parentCtx:       serverCtx,
 		lim:             lim,
 		version:         opts.Version,
@@ -261,8 +263,64 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		}
 		_ = writeFrame(conn, typeShutdownReply, reply)
 
+	case typeServiceAcquire:
+		var req ServiceAcquireRequest
+		if err := codec.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode service.acquire request: "+err.Error())
+			return
+		}
+		var reply ServiceAcquireReply
+		svc.serviceAcquire(req, &reply)
+		_ = writeFrame(conn, typeServiceAcquireReply, reply)
+
+	case typeServiceRelease:
+		var req ServiceReleaseRequest
+		if err := codec.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode service.release request: "+err.Error())
+			return
+		}
+		svc.serviceRelease(req)
+		_ = writeFrame(conn, typeServiceReleaseReply, ServiceReleaseReply{})
+
+	case typeServiceStopAll:
+		var req ServiceStopAllRequest
+		if err := codec.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode service.stopall request: "+err.Error())
+			return
+		}
+		_ = req
+		count := 0
+		if svc.serviceHost != nil {
+			count = svc.serviceHost.StopAll()
+		}
+		_ = writeFrame(conn, typeServiceStopAllReply, ServiceStopAllReply{Count: count})
+
 	default:
 		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))
+	}
+}
+
+// serviceAcquire starts (or reuses) a shared service on the daemon's ServiceHost so
+// it stays warm across invocations. A daemon with no host (a per-process proc server)
+// reports that hosting is unavailable, so the client falls back to running the
+// service in-process for the current run.
+func (s *service) serviceAcquire(req ServiceAcquireRequest, reply *ServiceAcquireReply) {
+	if s.serviceHost == nil {
+		reply.Err = "proc: service.acquire: this server does not host shared services"
+		return
+	}
+	// The acquire runs under the daemon's own context, not the caller's, so the
+	// service outlives the requesting invocation.
+	if err := s.serviceHost.Acquire(s.parentCtx, req.Key, req.Service); err != nil {
+		reply.Err = err.Error()
+	}
+}
+
+// serviceRelease drops one dependent's hold on a shared service. Releasing an unknown
+// key, or on a server without a host, is a no-op.
+func (s *service) serviceRelease(req ServiceReleaseRequest) {
+	if s.serviceHost != nil {
+		s.serviceHost.Release(req.Key)
 	}
 }
 
@@ -278,6 +336,7 @@ type service struct {
 	lim             *cache.Limiter
 	version         string
 	workspaceLister func() []Workspace
+	serviceHost     ServiceHost
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
 	calls           sync.Map // uint64 id → *activeCall, for Status reporting
 	nextID          atomic.Uint64

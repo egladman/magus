@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/types"
 )
 
 // statusQueryTimeout caps the QueryStatus round-trip; prevents hung daemons from blocking forever.
@@ -142,6 +143,129 @@ func Shutdown(ctx context.Context, addr string) error {
 		return fmt.Errorf("proc: shutdown: unexpected reply type %q", typ)
 	}
 	return nil
+}
+
+// AcquireService asks the daemon at addr to start (or reuse) a shared service and
+// keep it warm past this invocation, returning once it is ready. addr accepts a
+// unix:// URL or a bare path.
+func AcquireService(ctx context.Context, addr, key string, svc types.Service) error {
+	ep, err := ParseEndpoint(addr)
+	if err != nil {
+		return fmt.Errorf("proc: service.acquire: invalid address: %w", err)
+	}
+	conn, err := ep.Dial(ctx)
+	if err != nil {
+		return fmt.Errorf("proc: service.acquire: dial %s: %w", ep, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	req := ServiceAcquireRequest{Protocol: ProtocolV2, Key: key, Service: svc}
+	if err := writeFrame(conn, typeServiceAcquire, req); err != nil {
+		return fmt.Errorf("proc: service.acquire: write: %w", err)
+	}
+	typ, line, err := readFrame(conn)
+	if err != nil {
+		return fmt.Errorf("proc: service.acquire: read: %w", err)
+	}
+	if typ == typeError {
+		var er ErrorReply
+		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+			return fmt.Errorf("proc: service.acquire: server error: %s", er.Message)
+		}
+		return fmt.Errorf("proc: service.acquire: server error (undecodable)")
+	}
+	if typ != typeServiceAcquireReply {
+		return fmt.Errorf("proc: service.acquire: unexpected reply type %q", typ)
+	}
+	var reply ServiceAcquireReply
+	if err := codec.Unmarshal(line, &reply); err != nil {
+		return fmt.Errorf("proc: service.acquire: decode reply: %w", err)
+	}
+	if reply.Err != "" {
+		return fmt.Errorf("proc: service.acquire: %s", reply.Err)
+	}
+	return nil
+}
+
+// ReleaseService tells the daemon at addr that this invocation no longer needs the
+// shared service for key; the daemon keeps it warm and reaps it later. addr accepts
+// a unix:// URL or a bare path.
+func ReleaseService(ctx context.Context, addr, key string) error {
+	ep, err := ParseEndpoint(addr)
+	if err != nil {
+		return fmt.Errorf("proc: service.release: invalid address: %w", err)
+	}
+	conn, err := ep.Dial(ctx)
+	if err != nil {
+		return fmt.Errorf("proc: service.release: dial %s: %w", ep, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Release is quick bookkeeping on the daemon (drop a ref, arm the idle timer), so
+	// bound it: a wedged daemon must not block the run's teardown forever.
+	deadline := time.Now().Add(statusQueryTimeout)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	_ = conn.SetDeadline(deadline)
+
+	req := ServiceReleaseRequest{Protocol: ProtocolV2, Key: key}
+	if err := writeFrame(conn, typeServiceRelease, req); err != nil {
+		return fmt.Errorf("proc: service.release: write: %w", err)
+	}
+	typ, line, err := readFrame(conn)
+	if err != nil {
+		return fmt.Errorf("proc: service.release: read: %w", err)
+	}
+	if typ == typeError {
+		var er ErrorReply
+		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+			return fmt.Errorf("proc: service.release: server error: %s", er.Message)
+		}
+		return fmt.Errorf("proc: service.release: server error (undecodable)")
+	}
+	if typ != typeServiceReleaseReply {
+		return fmt.Errorf("proc: service.release: unexpected reply type %q", typ)
+	}
+	return nil
+}
+
+// StopAllServices asks the daemon at addr to stop every service it hosts (leaving the
+// daemon running) and returns how many were stopped. addr accepts a unix:// URL or a
+// bare path.
+func StopAllServices(ctx context.Context, addr string) (int, error) {
+	ep, err := ParseEndpoint(addr)
+	if err != nil {
+		return 0, fmt.Errorf("proc: service.stopall: invalid address: %w", err)
+	}
+	conn, err := ep.Dial(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("proc: service.stopall: dial %s: %w", ep, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err := writeFrame(conn, typeServiceStopAll, ServiceStopAllRequest{Protocol: ProtocolV2}); err != nil {
+		return 0, fmt.Errorf("proc: service.stopall: write: %w", err)
+	}
+	typ, line, err := readFrame(conn)
+	if err != nil {
+		return 0, fmt.Errorf("proc: service.stopall: read: %w", err)
+	}
+	if typ == typeError {
+		var er ErrorReply
+		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+			return 0, fmt.Errorf("proc: service.stopall: server error: %s", er.Message)
+		}
+		return 0, fmt.Errorf("proc: service.stopall: server error (undecodable)")
+	}
+	if typ != typeServiceStopAllReply {
+		return 0, fmt.Errorf("proc: service.stopall: unexpected reply type %q", typ)
+	}
+	var reply ServiceStopAllReply
+	if err := codec.Unmarshal(line, &reply); err != nil {
+		return 0, fmt.Errorf("proc: service.stopall: decode reply: %w", err)
+	}
+	return reply.Count, nil
 }
 
 // remapSkewError converts a server-side error string back to its typed sentinel to preserve errors.Is() behaviour.

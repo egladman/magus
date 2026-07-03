@@ -101,7 +101,7 @@ func Run(ctx context.Context, dir, name string, args ...string) error {
 	}
 	err := c.Run()
 	if ctx.Err() != nil {
-		killGroup(c) // reap grandchildren that ignored the graceful signal
+		KillGroup(c) // reap grandchildren that ignored the graceful signal
 	}
 	// Surface ctx.Err() whenever cancelled — even if err is nil because the
 	// process won the race and exited 0 — so callers can distinguish cancel from a
