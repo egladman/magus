@@ -60,6 +60,7 @@ Start here to understand the model magus is built on.
 - [Spells](spells.md) - language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](spells.md#spells-vs-targets) for where the line falls.
 - [Charms](charms.md) - execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
 - [Operations and the work hierarchy](operations.md) - how a run is scheduled and parallelized across projects.
+- [Services](services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
 - [Engines](engines.md) - how magus loads and evaluates a magusfile.
 
 ## Going further

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
@@ -110,6 +111,12 @@ func Decode(src Obj) (Descriptor, error) {
 					}
 					svc.Stop = stop
 				}
+				if distinct, ok := spec.Str("distinct"); ok {
+					svc.Distinct = distinct
+				}
+				if idle, ok := spec.Str("idle"); ok {
+					svc.Idle = idle
+				}
 				t.Kind = types.OpKindService
 				t.Service = svc
 				t.Command = cmd
@@ -119,6 +126,12 @@ func Decode(src Obj) (Descriptor, error) {
 					return Descriptor{}, err
 				}
 				t.Command = cmd
+			}
+			// Kind-coherence wards: reject an op whose argv contradicts its kind
+			// (a detached service, a never-exiting command) at resolution time,
+			// before anything forks.
+			if diags := ward.Check(op, t); len(diags) > 0 {
+				return Descriptor{}, diags[0]
 			}
 			opMap[op] = t
 		}

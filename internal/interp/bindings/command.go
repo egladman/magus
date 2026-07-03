@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/serviceident"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/types"
 )
@@ -48,6 +50,22 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 		return run.ExecResult{}, err
 	}
 	args = append(args, opts.args...)
+	// A service op reached as a dependency is supervised in the background (started,
+	// readiness-gated, deduped by fingerprint) instead of forked to completion, which
+	// would block the run forever. A directly-run service (no supervisor active) falls
+	// through and foregrounds, blocking as intended (Ctrl-C stops it).
+	if tgt.IsService() && tgt.Service != nil {
+		svc := types.Service{
+			Command:   types.Command{Bin: tgt.Bin, Args: args},
+			Readiness: tgt.Service.Readiness,
+			Stop:      tgt.Service.Stop,
+			Idle:      tgt.Service.Idle,
+			Distinct:  tgt.Service.Distinct,
+		}
+		if handled, serr := service.TrySupervise(ctx, serviceident.Fingerprint(svc), svc); handled {
+			return run.ExecResult{}, serr
+		}
+	}
 	return execCommand(ctx, dir, tgt.Bin, args, opts.env, opts.stdin, tgt.Capture)
 }
 

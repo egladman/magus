@@ -148,6 +148,8 @@ func (r *runner) run(wsErr error) Report {
 		r.checkCacheWritable(),
 		r.checkLanguageCoverage(projects),
 		r.checkCITarget(projects),
+		r.checkNearDuplicateServices(projects),
+		r.checkStaleServiceSuppressions(projects),
 		r.checkMagusfileSyntax(projects),
 		r.checkSpellDocs(project.DefaultSpellRegistry().All()),
 		r.checkGraphCycles(),

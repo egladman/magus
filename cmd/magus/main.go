@@ -55,6 +55,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/types"
 )
 
@@ -543,6 +544,20 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	reg := newWSRegistry(ctx, lim, ttl)
 	reg.setDeclared(declared)
 
+	// The daemon hosts shared services so they stay warm across separate `magus run`
+	// invocations. Only the stable daemon does this (a per-process proc server leaves
+	// ServiceHost nil), which is why cross-invocation sharing needs the daemon.
+	// A journal records each hosted service's stop command so this daemon can reap
+	// orphans left by a previous one that crashed; sweep them before hosting anything.
+	svcJournal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
+	if jerr != nil {
+		log.Printf("daemon: service journal unavailable (crash reaping disabled): %v", jerr)
+	} else if res := svcJournal.Sweep(ctx); res.Reaped > 0 || res.Unreapable > 0 {
+		log.Printf("daemon: reaped %d orphaned service(s) from a previous run; %d left running (no stop command)",
+			res.Reaped, res.Unreapable)
+	}
+	svcReg := service.New(service.ExecRunner{}, defaultServiceIdle, service.WithJournal(svcJournal))
+
 	if len(declared) > 0 {
 		if err := reg.preloadAndApplySandbox(ctx, declared); err != nil {
 			log.Printf("daemon: workspace union setup failed: %v", err)
@@ -565,6 +580,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 			return reg.dispatch(hctx, root, rc, args)
 		},
 		WorkspaceLister: reg.status,
+		ServiceHost:     serviceHost{svcReg},
 		Context:         ctx,
 		Limiter:         lim,
 		Version:         version,
@@ -585,6 +601,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		// Drain in-flight handlers (srv.Close waits on connWg) before reg.close so a
 		// workspace can't be closed under an in-flight build.
 		srv.Close()
+		svcReg.Shutdown() // stop every hosted service on daemon teardown
 		reg.close()
 	}()
 }

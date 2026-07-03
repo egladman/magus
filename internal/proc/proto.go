@@ -4,8 +4,11 @@
 package proc
 
 import (
+	"context"
 	"errors"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // ProtocolV2 identifies the JSONL message shape; distinct from the binary Version.
@@ -21,6 +24,13 @@ const (
 	typeShutdown      = "shutdown"
 	typeShutdownReply = "shutdown.reply"
 	typeError         = "error"
+
+	typeServiceAcquire      = "service.acquire"
+	typeServiceAcquireReply = "service.acquire.reply"
+	typeServiceRelease      = "service.release"
+	typeServiceReleaseReply = "service.release.reply"
+	typeServiceStopAll      = "service.stopall"
+	typeServiceStopAllReply = "service.stopall.reply"
 )
 
 // RunRequest is the JSONL payload sent from a child magus to its parent.
@@ -87,6 +97,59 @@ type ShutdownReply struct{}
 
 // ShutdownMagic is the expected value of ShutdownRequest.Magic.
 const ShutdownMagic = "magus-shutdown-v1"
+
+// ServiceAcquireRequest asks the daemon to start (or reuse) a shared service and
+// keep it warm past this invocation. Key is the service fingerprint; Service is the
+// resolved process description (command, readiness, stop, idle).
+type ServiceAcquireRequest struct {
+	Protocol string        `json:"protocol"`
+	Key      string        `json:"key"`
+	Service  types.Service `json:"service"`
+}
+
+// ServiceAcquireReply reports whether the service came up. Err is non-empty when it
+// could not be started or did not become ready.
+type ServiceAcquireReply struct {
+	Err string `json:"err,omitempty"`
+}
+
+// ServiceReleaseRequest drops this invocation's hold on a shared service. The daemon
+// keeps it warm (idle timeout) and reaps it later, so a later run reuses it.
+type ServiceReleaseRequest struct {
+	Protocol string `json:"protocol"`
+	Key      string `json:"key"`
+}
+
+// ServiceReleaseReply is the response to a release.
+type ServiceReleaseReply struct{}
+
+// ServiceStopAllRequest asks the daemon to stop every service it is hosting while
+// staying up, for `magus server stop --services`. It clears warm services (stale
+// data, held ports) without killing the daemon.
+type ServiceStopAllRequest struct {
+	Protocol string `json:"protocol"`
+}
+
+// ServiceStopAllReply reports how many services were stopped.
+type ServiceStopAllReply struct {
+	Count int `json:"count"`
+}
+
+// ServiceHost hosts long-running shared services on behalf of adopted magus
+// invocations, keeping them warm across separate runs. The daemon supplies one via
+// [Options]; a per-process proc server leaves it nil (no cross-invocation hosting).
+// Acquire/Release mirror the ref-counted lifecycle of cache.Limiter and
+// service.Registry, the shared vocabulary for held resources.
+type ServiceHost interface {
+	// Acquire starts (or reuses) the service identified by key, returning once it is
+	// ready, and increments its dependent count.
+	Acquire(ctx context.Context, key string, svc types.Service) error
+	// Release drops one dependent of key; the host keeps it warm and reaps it later.
+	Release(key string)
+	// StopAll stops every hosted service and returns how many were stopped, leaving
+	// the daemon running.
+	StopAll() int
+}
 
 // ErrorReply is returned by the server for transport-level failures.
 type ErrorReply struct {

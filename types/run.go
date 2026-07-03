@@ -51,13 +51,13 @@ const (
 )
 
 // Service is the declarative description of a long-running process a service op
-// manages. Command (required) is the process: `magus run <target>` forks it in the
-// foreground and blocks on it (Ctrl-C signals the child), rather than running to
-// completion. Readiness and Stop are optional: Readiness is a probe polled until it
-// exits 0 (how a supervisor learns the process is up), and Stop is a graceful-shutdown
-// command run instead of signaling the process. Both are consumed once magus
-// supervises processes in the background; today's foreground `magus run` uses only
-// Command, but the contract carries them so an author writes a complete service now.
+// manages. Command (required) is the process. Run directly (`magus run <target>`) it
+// is forked in the foreground and blocked on (Ctrl-C signals the child); reached as a
+// dependency it is supervised in the background (see internal/service). Readiness and
+// Stop are optional: Readiness is a probe polled until it exits 0 (how the supervisor
+// learns the process is up and gates dependents on it), and Stop is a graceful-shutdown
+// command run instead of signaling the process (also replayed by the daemon's crash
+// reaper).
 // Like [Command] each is static data - inspectable, cache-keyable, charm-patchable. It
 // is a distinct return type (vs [Command]) so an op's kind is inferred from what it
 // returns. magus-utils types mirrors it to the Buzz `object Service` a service op returns.
@@ -65,6 +65,17 @@ type Service struct {
 	Command   Command `json:"command,omitempty"`
 	Readiness Command `json:"readiness,omitempty"`
 	Stop      Command `json:"stop,omitempty"`
+	// Distinct, when non-empty, opts this service out of shared-instance dedup and
+	// silences its near-duplicate (MGS5001) warning. It is a required reason string
+	// (the golangci-lint nolintlint model): being distinct without a reason is
+	// meaningless, so the reason IS the value. Recorded so `magus doctor` can audit
+	// every deliberate divergence and flag reasons that no longer apply (a distinct
+	// service with no remaining near-duplicate is a stale suppression).
+	Distinct string `json:"distinct,omitempty"`
+	// Idle overrides the per-service idle timeout (a duration like "30m") after which
+	// the daemon reaps this shared service once its last dependent releases. Empty
+	// uses the daemon's global default. Consumed by the service supervisor.
+	Idle string `json:"idle,omitempty"`
 }
 
 // SpellOp is a single dispatchable surface of a spell — one tool-native Operation

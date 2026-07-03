@@ -77,12 +77,16 @@ func serverStart(ctx context.Context, args []string) error {
 
 func serverStop(ctx context.Context, args []string) error {
 	var socket string
+	var servicesOnly bool
 	_, err := cmdParse("server stop", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&socket, "socket", "", "daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+		fs.BoolVar(&servicesOnly, "services", false, "stop the daemon's hosted services (leave the daemon running)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server stop [flags]")
 			fmt.Fprintln(os.Stderr, "\nSend a graceful shutdown request to a running daemon. In-flight RPCs")
 			fmt.Fprintln(os.Stderr, "complete before the daemon exits.")
+			fmt.Fprintln(os.Stderr, "\nWith --services, stop the shared services the daemon is hosting (to clear")
+			fmt.Fprintln(os.Stderr, "stale state or free held ports) without shutting the daemon down.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
 			fs.PrintDefaults()
 		}
@@ -94,6 +98,14 @@ func serverStop(ctx context.Context, args []string) error {
 	addr, err := resolveDaemonAddr(ctx, socket)
 	if err != nil {
 		return fmt.Errorf("server stop: %w", err)
+	}
+	if servicesOnly {
+		n, err := proc.StopAllServices(ctx, addr)
+		if err != nil {
+			return fmt.Errorf("server stop: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "stopped %d hosted service(s); daemon still running\n", n)
+		return nil
 	}
 	if err := proc.Shutdown(ctx, addr); err != nil {
 		return fmt.Errorf("server stop: %w", err)

@@ -489,3 +489,38 @@ func mustSymlink(t *testing.T, target, link string) {
 	t.Helper()
 	require.NoErrorf(t, os.Symlink(target, link), "symlink %s -> %s", link, target)
 }
+
+func TestCheckNearDuplicateServices(t *testing.T) {
+	dbProject := func(path string, args ...string) *types.Project {
+		spell := types.NewSpell("docker",
+			types.WithTargets("db"),
+			types.WithServiceTargets("db"),
+			types.WithCommandRenderer(func(target string, _ []string) (string, []string, bool) {
+				return "docker", append([]string{"run"}, args...), true
+			}),
+		)
+		return &types.Project{Path: path, ResolvedSpells: []*types.Spell{spell}}
+	}
+
+	t.Run("clean when no services", func(t *testing.T) {
+		got := (&runner{}).checkNearDuplicateServices(nil)
+		assert.Equal(t, StatusOK, got.Status)
+	})
+
+	t.Run("flags near-duplicates", func(t *testing.T) {
+		got := (&runner{}).checkNearDuplicateServices([]*types.Project{
+			dbProject("web", "-e", "POSTGRES_DB=api", "-p", "5432:5432", "postgres:15"),
+			dbProject("billing", "-e", "POSTGRES_DB=billing", "-p", "5432:5432", "postgres:15"),
+		})
+		assert.Equal(t, StatusFail, got.Status)
+		assert.Contains(t, strings.Join(got.Details, "\n"), "MGS5001")
+	})
+
+	t.Run("silent for identical services", func(t *testing.T) {
+		got := (&runner{}).checkNearDuplicateServices([]*types.Project{
+			dbProject("a", "-p", "5432:5432", "postgres:15"),
+			dbProject("b", "-p", "5432:5432", "postgres:15"),
+		})
+		assert.Equal(t, StatusOK, got.Status)
+	})
+}

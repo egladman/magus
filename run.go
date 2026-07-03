@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -446,6 +447,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		slog.WarnContext(ctx, "magus: charm not declared by any selected target (typo? a function target may still read it)", "charm", c)
 	}
 
+	// MGS5001: warn when this run brings up services that look like near-duplicate
+	// copies of one shared service (same image and container port, subtly different).
+	// Scoped to the run's reachable projects so it fires at the moment of cost.
+	m.warnNearDuplicateServices(uniqueProjects, charmKey)
+
 	if opts.Report == nil && opts.ReportWriter != nil {
 		rw := report.NewWriter(opts.ReportWriter)
 		defer func() { _ = rw.Close() }()
@@ -539,6 +545,12 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if m.cache == nil {
 		return fmt.Errorf("magus: workspace was constructed with Inspect; use Open to enable Run")
 	}
+	// One service supervisor per run: a service op reached as a dependency is started
+	// and readiness-gated, deduped by fingerprint so N dependents share one instance,
+	// and released when the run ends (warm on the daemon, or stopped in-process).
+	svcSession := m.newServiceSession(ctx)
+	defer svcSession.ReleaseAll()
+	ctx = service.WithSession(ctx, svcSession)
 	_, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
 		// Each step invocation gets a fresh TargetMemo so depends_on diamonds
 		// within one target's inline dispatch run shared deps exactly once.
