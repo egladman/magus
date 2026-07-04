@@ -147,9 +147,21 @@ func EvalBuzz(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 // walk a single target's dependency closure - an example is self-contained and
 // every op it wires is worth showing.
 func evalRecording(ctx context.Context, src string, spells map[string][]string) EvalResult {
-	rec, targets, diag := evalAndProbe(ctx, src, nil, spells)
+	rec, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, spells)
 	if diag != nil {
 		return EvalResult{Output: rec.out.String(), Diag: diag}
+	}
+	// A SPELL buffer records one op per discovered op (with any ward), rather than
+	// per-target host ops, so its example reads top to bottom like a magusfile's.
+	if isSpellBuf {
+		var trace []Op
+		for _, o := range ops {
+			trace = append(trace, Op{Target: o.name, Kind: o.kind, Name: o.name, Detail: o.detail()})
+			for _, w := range o.wards {
+				trace = append(trace, Op{Target: o.name, Kind: "ward", Name: string(w.Code), Detail: wardDetail(w)})
+			}
+		}
+		return EvalResult{OK: true, Output: rec.out.String(), Trace: trace}
 	}
 	var trace []Op
 	for _, t := range targets {
@@ -273,7 +285,11 @@ func (s *Console) SetSource(ctx context.Context, src string) (ok bool, status st
 	s.parsed = LoadMagusfile(ctx, src)
 	if s.parsed.OK {
 		n := len(s.parsed.Targets)
-		return true, "[pass] " + strconv.Itoa(n) + " target" + plural(n)
+		unit := "target"
+		if s.parsed.Spell {
+			unit = "op" // a spell buffer's runnable units are its ops, not targets
+		}
+		return true, "[pass] " + strconv.Itoa(n) + " " + unit + plural(n)
 	}
 	if d := s.parsed.Diag; d != nil && d.Line > 0 {
 		return false, "[fail] line " + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col)
@@ -417,7 +433,7 @@ func (s *Console) Banner() []Line {
 		{HTML: head},
 		{HTML: ``},
 		{HTML: `<span class="muted">  The interpreter is compiled to <b>WebAssembly</b> and runs in this browser tab:</span>`},
-		{HTML: `<span class="muted">  no server, no shell, no filesystem. A magusfile is </span><b>planned, not run</b><span class="muted">:</span>`},
+		{HTML: `<span class="muted">  no server, no shell, no filesystem. A magusfile or spell is </span><b>planned, not run</b><span class="muted">:</span>`},
 		{HTML: `<span class="muted">  build steps are recorded so you can read the plan, but </span><b>no command is executed.</b>`},
 		{HTML: ``},
 		{HTML: `<span class="muted">  New here? Type </span><b>help</b><span class="muted"> to see the commands, or </span><b>ls</b><span class="muted"> to list this file's targets.</span>`},
@@ -532,13 +548,39 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 					esc(op.Name) + `</b>  <span class="muted">recursive invocation · recorded</span>`})
 				continue
 			}
+			if op.Kind == "ward" {
+				// A kind-coherence diagnostic (MGSxxxx) the ward package raised for a
+				// resolved spell op: an error line showing its code and message.
+				out = append(out, Line{HTML: "  " + tag + esc(op.Detail), Class: "err"})
+				continue
+			}
 			detail := ""
 			if op.Detail != "" {
 				detail = " " + esc(op.Detail)
 			}
+			hint := op.Kind + " · recorded"
+			if op.Kind == "service" {
+				// A long-running, magus-supervised op shared across dependents by
+				// config fingerprint — distinct from a run-to-completion command.
+				hint = "service · supervised, shared"
+			}
 			out = append(out, Line{HTML: "  " + tag + `<b>` + esc(op.Name) + `</b>` + detail +
-				`  <span class="muted">` + esc(op.Kind) + ` · recorded</span>`})
+				`  <span class="muted">` + esc(hint) + `</span>`})
 		}
+	}
+	wards := 0
+	for _, op := range r.Trace {
+		if op.Kind == "ward" {
+			wards++
+		}
+	}
+	if wards > 0 {
+		// A kind-coherence ward is a rejection at resolution, not a passing plan:
+		// magus refuses the op before running anything. Say so rather than a green
+		// pass, so the wards lesson reads correctly.
+		out = append(out, Line{HTML: "[fail] " + esc(target) + " rejected at resolution: " +
+			strconv.Itoa(wards) + " ward" + plural(wards) + " raised, <b>nothing would run</b>", Class: "err"})
+		return out
 	}
 	n := len(r.Trace)
 	out = append(out, Line{HTML: "[pass] dry-run of " + esc(target) + ": " + strconv.Itoa(n) +

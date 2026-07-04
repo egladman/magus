@@ -42,12 +42,13 @@ type Edge struct {
 	To   string `json:"to"`
 }
 
-// Op is one recorded host operation a target body would have performed.
+// Op is one recorded host operation a target body would have performed, or (for a
+// SPELL buffer) one resolved op and its wards.
 type Op struct {
-	Target string `json:"target"` // target whose body emitted it
-	Kind   string `json:"kind"`   // "spell" | "exec" | "log"
-	Name   string `json:"name"`   // op name ("go-build"), argv[0], or log level
-	Detail string `json:"detail"` // argv / message / extra context
+	Target string `json:"target"` // target/op whose body emitted it
+	Kind   string `json:"kind"`   // "spell" | "exec" | "log" | "run" | "service" | "command" | "ward"
+	Name   string `json:"name"`   // op name ("go-build"), argv[0], log level, or MGS code (ward)
+	Detail string `json:"detail"` // argv / message / diagnostic / extra context
 }
 
 // Recorder accumulates the side effects of evaluating a magusfile under the

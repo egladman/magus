@@ -11,6 +11,7 @@ import (
 	buzzstd "github.com/egladman/gopherbuzz/std"
 	"github.com/egladman/gopherbuzz/vm"
 
+	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,9 +35,34 @@ func installHost(ctx context.Context, sess *buzz.Session, rec *Recorder, spells 
 	for name, ops := range spells {
 		sess.SetSyntheticModule("magus/spell/"+name, buildSpell(name, ops, rec))
 	}
+
+	// Register the canonical value-type modules as embedded SOURCE modules, mirroring
+	// the real runtime (internal/interp/bindings.registerHostModules), so a SPELL
+	// buffer's `import "magus/target"` resolves the Target/Command/Service object types
+	// instead of failing with `undefined type "Service"`. Source modules take precedence
+	// over the catch-all resolver below (see the session's import lookup order:
+	// synthetic, then source, then resolver), so these are never shadowed by a stub.
+	sess.SetSourceModule(ispell.TargetModulePath, strings.Join([]string{
+		ispell.TargetModuleSource,
+		ispell.PatchOpSource,
+		ispell.CharmTypeSource,
+		ispell.CommandSource,
+		ispell.ServiceSource,
+		ispell.TargetQuerySource,
+		ispell.ExecResultSource,
+		ispell.CommitAuthorSource,
+		ispell.CommitSource,
+		ispell.FileInfoSource,
+		ispell.HTTPResponseSource,
+		ispell.SemverVersionSource,
+		ispell.URLSource,
+	}, "\n"))
+	sess.SetSourceModule(ispell.CharmModulePath, ispell.CharmModuleSource)
+
 	// A workspace-local `import "spells/foo"` that no caller registered can't be
 	// resolved in the sandbox; report it instead of failing the whole evaluation
-	// with a file-not-found.
+	// with a file-not-found. The two source modules above are resolved before this
+	// resolver is consulted, so returning a stub here never shadows them.
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		m := vm.NewMap()
 		m.MapSet("name", vm.StrValue(importPath))
