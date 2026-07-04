@@ -9,6 +9,15 @@
    whole UI read noticeably larger than a typical 16px site (e.g. github.com).
    Pin it to 100% so 1rem == 16px at every width; spacing is rem-based, so the
    entire layout tightens proportionally to match. */
+/* Reserve the vertical scrollbar's space so the layout width is the same whether or
+   not a page scrolls. Without this, when the scrollbar appears it narrows the
+   viewport and the centered container reflows - left and right gutters stop matching
+   (most visible on always-shown scrollbars, e.g. Windows / "always show" on macOS).
+   No-op where scrollbars overlay. */
+html {
+  scrollbar-gutter: stable;
+}
+
 :root {
   --pico-font-size: 100%;
   /* Shared width for the app-like tool pages (search, playground editor) so they
@@ -81,6 +90,9 @@
   justify-content: center;
   width: auto;
   padding: 0.4rem; /* square icon button, matching the TOC toggle */
+  /* Breathing room from the last section link (Playground); butted against it the
+     visual weight reads as cramped. Adds to the nav-right flex gap. */
+  margin-left: 0.6rem;
 }
 /* Active top-nav item ("you are here"). Pico recolors aria-current links but
    also resets nav underlines (nav li a:not(:hover){text-decoration:none}), so
@@ -313,7 +325,7 @@
    Takes the flex sizing so the input itself can be width:100% inside it. */
 .search-wrap {
   position: relative;
-  flex: 0 1 22rem;
+  flex: 0 1 26rem;
   min-width: 0;
 }
 
@@ -387,7 +399,10 @@
   top: calc(100% + 0.3rem);
   left: 0;
   z-index: 20;
-  width: min(30rem, calc(100vw - 2rem));
+  /* Cap to the toolbar width (its positioned parent), not 100vw: 100vw includes the
+     vertical scrollbar, so on always-visible-scrollbar systems the open dropdown is
+     a few px wider than the content and forces a horizontal scroll. */
+  width: min(30rem, 100%);
   margin: 0;
   padding: 0.35rem;
   list-style: none;
@@ -533,10 +548,18 @@ article :is(h2, h3, h4, h5, h6) {
   font-size: 0.85rem;
   border-bottom: none; /* drop Pico's accordion rule; this is a self-contained panel */
 }
+/* One consistent label aesthetic in both states: the uppercase, tracked
+   "reference label" look. Opening only adds the panel chrome (border, background,
+   a gap below the summary) - the summary itself is the same element rendered the
+   same way, so it reads as a panel expanding beneath a fixed label, not a swap. */
 .recent-changes > summary {
   width: fit-content;
   cursor: pointer;
   color: var(--pico-muted-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .recent-changes[open] {
   padding: 0.6rem 0.75rem;
@@ -546,10 +569,6 @@ article :is(h2, h3, h4, h5, h6) {
 }
 .recent-changes[open] > summary {
   margin-bottom: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .recent-changes ul {
   list-style: none;
@@ -1669,6 +1688,19 @@ a code {
 :focus-visible {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
+}
+/* Focus ring: this global outline is the single source of truth. Pico also draws
+   its own box-shadow focus ring on form fields (via --pico-form-element-focus-
+   color); on the search field the two stack into a doubled blue outline. Neutralize
+   Pico's ring on the search input so a focused field shows one clean outline,
+   consistent with every other interactive element. */
+.page-tools .search-input:focus,
+.page-tools .search-input:focus-visible,
+.search-page-inputwrap .search-input:focus,
+.search-page-inputwrap .search-input:focus-visible {
+  --pico-form-element-focus-color: transparent;
+  --pico-form-element-focus-border-color: var(--pico-form-element-border-color);
+  box-shadow: none;
 }
 
 

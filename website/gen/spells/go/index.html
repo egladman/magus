@@ -32,7 +32,7 @@
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground.html">Playground</a></li>
         </ul>
-        <button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
   </header>
@@ -51,7 +51,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="go">go</h1>
 <p>The <code>go</code> spell wires the Go toolchain into a magusfile: each op forks a <code>go</code> (or <code>gofmt</code>) subcommand directly, with no shell. Lint and vulnerability scanning run as <code>go tool</code> invocations so they resolve from the module's tool block rather than PATH.</p>

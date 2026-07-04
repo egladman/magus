@@ -32,7 +32,7 @@
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground.html">Playground</a></li>
         </ul>
-        <button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
   </header>
@@ -51,7 +51,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">13 min read</small>
+    <small class="reading-time" title="Estimated reading time">14 min read</small>
     <article>
 <h1 id="anatomy-of-a-magus-spell">Anatomy of a magus Spell</h1>
 <p>A <strong>Spell</strong> is a <em>library of tool-native operations</em> for one toolchain, plus the cache and affected-set metadata that toolchain needs. The <code>go</code> spell exposes <code>go-build</code>/<code>go-test</code>/<code>go-vet</code>/<code>go-fmt</code>/<code>golangci-lint</code>/...; the <code>rust</code> spell exposes <code>cargo-build</code>/<code>cargo-test</code>/<code>cargo-clippy</code>/<code>cargo-fmt</code>/.... Each op is named after the CLI command it runs (see <a href="#naming-operations">Naming operations</a>). A spell is <strong>bound to a project</strong> and <strong>runs nothing on its own</strong>: it contributes operations your magusfile composes into <a href="../targets/">targets</a>, and it tells the cache which files are inputs and outputs.</p>

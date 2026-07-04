@@ -322,6 +322,12 @@ fun outName(base: str) > str {
 //   "codes/race/README.md"      -> "codes/race/"
 //   "manpage/gen/magus-run.md"  -> "manpage/magus-run/"
 fun cleanUrl(rel: str) > str {
+    // Blog posts are date-scoped: blog/2026-07-01-slug.md -> blog/2026/07/01/slug/.
+    // The blog index (blog/index.md) is not a post, so it falls through to the
+    // generic landing rule below and stays at blog/.
+    if (rel.startsWith(BLOG + "/") and rel != BLOG + "/index.md") {
+        return BLOG + "/" + blogUrlPath(rel.sub((BLOG + "/").len())) + "/";
+    }
     var base = rel;
     if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
     final parts = base.split("/");
@@ -1402,30 +1408,56 @@ fun truncateWords(s: str, n: int) > str {
     return head;
 }
 
-// readingTime estimates minutes-to-read from a word count of the source markdown
-// (frontmatter stripped so YAML doesn't skew it). 220 wpm is a common average for
-// technical prose. Returns "" when the source is too short to be worth labeling.
-// Deterministic: pure function of the committed source.
+// readingTime estimates minutes-to-read by weighting content by type rather than
+// blindly counting words: prose reads at 220 wpm, but a fenced code block is
+// parsed line by line (not skimmed like prose) and an image or diagram costs a
+// few seconds of looking. So a page that is mostly code or figures gets a truer
+// estimate than a raw word count, which would badly under- or over-shoot it.
+// Frontmatter is stripped so YAML doesn't skew the count. Returns "" for pages too
+// short to be worth labeling. Deterministic: a pure function of the committed source.
 fun readingTime(md: str) > str {
     final text = markdown.stripFrontmatter(md);
-    // Count runs of non-whitespace. Buzz's split with " " coalesces empties poorly,
-    // so scan bytes explicitly.
-    var words = 0;
-    var inWord = false;
-    var i = 0;
-    while (i < text.len()) {
-        final b = text.byte(i);
-        final isSpace = (b == 32 or b == 9 or b == 10 or b == 13);
-        if (isSpace) {
-            inWord = false;
+    final WPM = 220;               // prose words per minute
+    final CODE_SEC_PER_LINE = 2;   // a code line is read deliberately, not skimmed
+    final IMG_SEC = 10;            // time to take in one image or diagram
+
+    // Walk line by line so fenced code (``` or ~~~) is measured by line count while
+    // prose is measured by word count. A fence marker line itself is chrome, not
+    // content; blank lines inside a fence are skipped so whitespace doesn't inflate.
+    var proseWords = 0;
+    var codeLines = 0;
+    var inFence = false;
+    var fence = "";                // the marker (``` or ~~~) that opened the fence
+    foreach (line in text.split("\n")) {
+        final t = line.trim();
+        if (inFence) {
+            if (t.startsWith(fence)) { inFence = false; fence = ""; }
+            else { if (t != "") { codeLines = codeLines + 1; } }
         } else {
-            if (inWord == false) { words = words + 1; }
-            inWord = true;
+            if (t.startsWith("```")) { inFence = true; fence = "```"; }
+            else { if (t.startsWith("~~~")) { inFence = true; fence = "~~~"; }
+            else {
+                // Prose line: count runs of non-whitespace as words.
+                var inWord = false;
+                var i = 0;
+                while (i < line.len()) {
+                    final b = line.byte(i);
+                    final isSpace = (b == 32 or b == 9 or b == 10 or b == 13);
+                    if (isSpace) { inWord = false; }
+                    else { if (inWord == false) { proseWords = proseWords + 1; } inWord = true; }
+                    i = i + 1;
+                }
+            } }
         }
-        i = i + 1;
     }
-    if (words < 200) { return ""; }   // don't chip pages under ~1 min
-    var mins = words / 220;
+
+    // Images/diagrams: markdown "![alt](src)" plus raw <img>. A split-count is cheap
+    // and order-independent; a stray "![" in prose is rare enough to ignore.
+    final images = (text.split("![").len() - 1) + (text.split("<img").len() - 1);
+
+    final seconds = (proseWords * 60) / WPM + codeLines * CODE_SEC_PER_LINE + images * IMG_SEC;
+    if (seconds < 45) { return ""; }   // too short to be worth a chip (~under a minute)
+    var mins = (seconds + 30) / 60;    // round to the nearest minute
     if (mins < 1) { mins = 1; }
     return "{mins} min read";
 }
@@ -1564,7 +1596,7 @@ fun siteNav(root: str, active: str) > str {
         + navLink(root + "tour/", "Tour", "tour", active)
         + navLink(root + "playground.html", "Playground", "playground", active)
         + "        </ul>\n"
-        + "        <button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button>\n"
+        + "        <button id=\"theme-toggle\" class=\"outline\" aria-label=\"Cycle theme (auto / light / dark)\" title=\"Cycle theme (auto / light / dark)\">◐</button>\n"
         + "      </div>\n"
         + "    </nav>\n"
         + "  </header>\n";
@@ -2028,28 +2060,58 @@ fun renderFile(rel: str) > void {
     std.print("  " + rel + " -> " + dir + "/index.html");
 }
 
-// blogSlug drops the leading YYYY-MM-DD- date prefix (if present) so a post's URL
-// reads /blog/<slug>/ rather than /blog/2026-07-01-<slug>/. Filenames are still
-// date-prefixed for stable byte-order in the walk, but URLs are date-free.
+// allDigits reports whether every byte of s is an ASCII digit (and s is non-empty).
+fun allDigits(s: str) > bool {
+    if (s.len() == 0) { return false; }
+    var i = 0;
+    while (i < s.len()) {
+        final b = s.byte(i);
+        if (b < 48 or b > 57) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// hasDatePrefix detects a leading YYYY-MM-DD- date prefix on a slugged filename
+// (the ".md" already stripped): 11 chars of 4-digit year, "-", 2-digit month, "-",
+// 2-digit day, "-". Buzz str.sub is (start, length), so sub(4, 1) is one char at 4.
+fun hasDatePrefix(s: str) > bool {
+    if (s.len() < 11) { return false; }
+    return allDigits(s.sub(0, 4)) and allDigits(s.sub(5, 2)) and allDigits(s.sub(8, 2))
+        and s.sub(4, 1) == "-" and s.sub(7, 1) == "-" and s.sub(10, 1) == "-";
+}
+
+// blogSlug drops the leading YYYY-MM-DD- date prefix (if present), leaving the
+// title portion of the URL. The date is not discarded - it re-enters the URL as
+// its own nested scope via blogDateDir/blogUrlPath, so two posts that share a
+// title stay distinct by date (/blog/2026/07/01/hello/ vs /blog/2026/07/02/hello/).
 fun blogSlug(base: str) > str {
     var s = base;
     if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
-    // Detect a YYYY-MM-DD- prefix (11 chars: 4 digits, "-", 2 digits, "-", 2 digits,
-    // "-"). Buzz str.sub is (start, length), so sub(4, 1) is one char at index 4.
-    if (s.len() >= 11) {
-        final hd = s.sub(0, 4);
-        var allDigit = true;
-        var i = 0;
-        while (i < hd.len()) {
-            final b = hd.byte(i);
-            if (b < 48 or b > 57) { allDigit = false; }
-            i = i + 1;
-        }
-        if (allDigit and s.sub(4, 1) == "-" and s.sub(7, 1) == "-" and s.sub(10, 1) == "-") {
-            s = s.sub(11);
-        }
-    }
+    if (hasDatePrefix(s)) { s = s.sub(11); }
     return s;
+}
+
+// blogDateDir parses a blog filename's YYYY-MM-DD- prefix into nested "YYYY/MM/DD"
+// URL segments, or null when the file carries no date prefix. The filename prefix
+// is the canonical URL date; renderBlogPost validates it against the frontmatter
+// `date` so the human-facing byline and the permalink can never drift apart.
+fun blogDateDir(base: str) > str? {
+    var s = base;
+    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    if (!hasDatePrefix(s)) { return null; }
+    return s.sub(0, 4) + "/" + s.sub(5, 2) + "/" + s.sub(8, 2);
+}
+
+// blogUrlPath is a post's gen-root-relative URL path below blog/: the date scope
+// followed by the title slug ("2026/07/01/hello-blog"), or just the slug for an
+// undated file. cleanUrl and renderBlogPost both route through this so the depth
+// they compute (for climb-relative links) and the directory they write agree.
+fun blogUrlPath(base: str) > str {
+    final slug = blogSlug(base);
+    final dd = blogDateDir(base);
+    if (dd != null) { return dd + "/" + slug; }
+    return slug;
 }
 
 // renderBlogPost renders one blog/<file>.md as its own directory-index page. base
@@ -2068,12 +2130,36 @@ fun renderBlogPost(base: str) > void {
     if (title == "") { title = titleOf(md, base); }
     final date = fm.q("date").stringValue();
 
+    // Frontmatter `date` is the human-facing byline; the filename's YYYY-MM-DD-
+    // prefix is the canonical URL scope. Require them to agree so the permalink and
+    // the printed date can never drift. A post with a date but no filename prefix
+    // (or a mismatched one) is a hard error, not a silent divergence.
+    final dateDir = blogDateDir(base);
+    if (date != "") {
+        // Frontmatter dates decode as full RFC3339 ("2026-07-01T00:00:00Z"); take
+        // the calendar day and re-slash it to compare against the filename's
+        // "YYYY/MM/DD" scope. (str.replace is first-match only, so build by split.)
+        final fp = date.split("T")[0].split("-");   // ["2026","07","01"]
+        var fmDir = "";
+        if (fp.len() >= 3) { fmDir = fp[0] + "/" + fp[1] + "/" + fp[2]; }
+        if (dateDir == null) {
+            throw "blog: " + rel + " has frontmatter date " + date
+                + " but the filename lacks a matching YYYY-MM-DD- prefix";
+        }
+        if (dateDir != fmDir) {
+            throw "blog: " + rel + " frontmatter date " + date
+                + " disagrees with the filename date prefix";
+        }
+    }
+
     final slug = blogSlug(base);
-    final url = BLOG + "/" + slug + "/";
-    // Blog posts sit at gen/blog/<slug>/index.html. Their old flat directory was
-    // "blog"; their new clean directory is "blog/<slug>". The link rewriter needs
-    // both so cross-references (../../documentation/) resolve correctly.
-    final html = renderContentHtml(markdown.toHtml(md), BLOG, BLOG + "/" + slug);
+    final urlPath = blogUrlPath(base);        // "2026/07/01/hello-blog"
+    final url = BLOG + "/" + urlPath + "/";
+    // Blog posts sit at gen/blog/<urlPath>/index.html. Their old flat directory was
+    // "blog"; their new clean directory is "blog/<urlPath>" (date-scoped). The link
+    // rewriter needs both so cross-references (../../documentation/) resolve at the
+    // post's real depth.
+    final html = renderContentHtml(markdown.toHtml(md), BLOG, BLOG + "/" + urlPath);
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
@@ -2102,11 +2188,11 @@ fun renderBlogPost(base: str) > void {
     pageReading = readingTime(md);
     pageTags = tagsOf(md);
     final doc = page(title, desc, article, rel, pager, url);
-    fs.makeDirectory(OUT + "/" + BLOG + "/" + slug);
-    final of = io.File.open(OUT + "/" + BLOG + "/" + slug + "/index.html", io.FileMode.write);
+    fs.makeDirectory(OUT + "/" + BLOG + "/" + urlPath);
+    final of = io.File.open(OUT + "/" + BLOG + "/" + urlPath + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
-    fs.writeFile(OUT + "/" + BLOG + "/" + slug + "/index.md", md);
+    fs.writeFile(OUT + "/" + BLOG + "/" + urlPath + "/index.md", md);
 
     addRecord(url, title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { collectAlias(a.stringValue(), url); }
@@ -2114,13 +2200,14 @@ fun renderBlogPost(base: str) > void {
     final rec: {str: str} = mut {};
     rec["base"] = base;
     rec["slug"] = slug;
+    rec["urlPath"] = urlPath;
     rec["title"] = title;
     rec["date"] = date;
     rec["description"] = desc;
     rec["url"] = url;
     blogPosts.append(rec);
 
-    std.print("  " + rel + " -> " + OUT + "/" + BLOG + "/" + slug + "/index.html");
+    std.print("  " + rel + " -> " + OUT + "/" + BLOG + "/" + urlPath + "/index.html");
 }
 
 // blogPagerFor renders the previous/next links between posts, ordered by date
@@ -2162,17 +2249,23 @@ fun blogPagerFor(base: str) > str {
     }
     if (pos < 0) { return ""; }
 
+    // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link is no longer
+    // a flat "../<slug>/"; relativize walks from this post's dir to the target's URL
+    // and emits the minimal climb, correct across any shared date prefix.
+    final fromDir = BLOG + "/" + blogUrlPath(base);
     var body = "";
     // Previous = newer post (earlier in ordered), Next = older post (later).
     if (pos > 0) {
         final prev = ordered[pos - 1];
-        body = body + "      <a class=\"page-nav-prev\" href=\"../" + blogSlug(prev["base"]) + "/\">"
+        final href = relativize(fromDir, BLOG + "/" + blogUrlPath(prev["base"]) + "/");
+        body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Newer</span>"
             + "<span class=\"page-nav-title\">" + prev["title"] + "</span></a>\n";
     }
     if (pos < ordered.len() - 1) {
         final nxt = ordered[pos + 1];
-        body = body + "      <a class=\"page-nav-next\" href=\"../" + blogSlug(nxt["base"]) + "/\">"
+        final href = relativize(fromDir, BLOG + "/" + blogUrlPath(nxt["base"]) + "/");
+        body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Older</span>"
             + "<span class=\"page-nav-title\">" + nxt["title"] + "</span></a>\n";
     }
@@ -2197,7 +2290,7 @@ fun renderBlogIndex() > void {
     } else {
         body = body + "<ul class=\"blog-index\">\n";
         foreach (p in sorted) {
-            body = body + "  <li><a href=\"" + p["slug"] + "/\"><span class=\"blog-index-title\">"
+            body = body + "  <li><a href=\"" + p["urlPath"] + "/\"><span class=\"blog-index-title\">"
                 + p["title"] + "</span></a>";
             if (p["date"] != "") {
                 body = body + " <time class=\"blog-index-date\" datetime=\"" + blogDateAttr(p["date"]) + "\">"
