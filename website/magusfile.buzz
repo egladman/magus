@@ -10,6 +10,7 @@ import "std";
 import "serialize";
 import "vcs";
 import "http";
+import "encoding";
 // The playground embeds the gopherbuzz Buzz VM, so build-playground depends on
 // gopherbuzz's build. Importing it by path binds its targets as cross-project
 // handles (gopherbuzz.build), referenced from build_playground below.
@@ -127,6 +128,12 @@ var hasBlogPosts: bool = false;
 // that forgets to set it doesn't inherit the previous page's value.
 var pageReading: str = "";
 
+// Per-page frontmatter tags ("tags: [meta, announcement]"), set by each render*()
+// before calling page() and rendered as outlined chips in the provenance footer.
+// Empty for pages with no tags: field (nothing renders). Cleared after page()
+// reads it so a page that forgets to set it doesn't inherit the previous page's.
+var pageTags: [str] = mut [];
+
 fun capture(cmd: str) > str {
     final tmp = os.tmpFilename("sitegen");
     final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
@@ -225,6 +232,62 @@ fun escapeAttr(s: str) > str {
     return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
 }
 
+// tagsOf reads the frontmatter `tags:` list from raw markdown as [str], empty when
+// the field is absent. The one place tags are extracted so the rendered chips and
+// the search index draw from the same source (markdown.frontmatter returns the
+// YAML as JSON; serialize navigates it).
+fun tagsOf(md: str) > [str] {
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final tags: [str] = mut [];
+    foreach (t in fm.q("tags").listValue()) {
+        final tag = t.stringValue();
+        // A "magus" tag narrows nothing - it is the whole project. Drop it site-wide so it
+        // never renders as a chip or clutters the search index (a few docs, plus the magus
+        // module/command pages, carry it in frontmatter).
+        if (tag.lower() != "magus") { tags.append(tag); }
+    }
+    return tags;
+}
+
+// isGenerated reports whether a page is mechanically generated rather than hand-
+// written. Generated references live under three fixed docs/ subtrees that the doc
+// generators overwrite wholesale: modules/ (cmd/magus-docs), spells/*.md
+// (cmd/magus-spelldocs; the spells.md landing itself is hand-written), and
+// manpage/ (cmd/magus-manpage). srcRel is the docs/-prefixed source path. Kept as
+// a path convention because the generated .md carries no frontmatter marker.
+fun isGenerated(srcRel: str) > bool {
+    return srcRel.startsWith(DOCS + "/modules/")
+        or srcRel.startsWith(DOCS + "/spells/")
+        or srcRel.startsWith(DOCS + "/manpage/");
+}
+
+// cleanBody turns a page's raw markdown body into compact prose for the search index:
+// it drops fenced code / mermaid blocks (everything between ``` fences), removes a few
+// inline markdown markers, and collapses whitespace. The text field is ~94% of the index
+// by size, so this both shrinks the download and hands the client clean snippet text (no
+// per-load client-side cleanup). Trade-off: body-text search/snippets no longer include
+// fenced code - title, tags, description, and prose still do.
+fun cleanBody(md: str) > str {
+    // Keep only the segments OUTSIDE ``` fences (even-numbered split pieces).
+    var buf = "";
+    var inside = false;
+    foreach (p in md.split("```")) {
+        if (inside == false) { buf = buf + " " + p; }
+        inside = (inside == false);
+    }
+    // Newlines / tabs -> spaces; drop inline markers that only add snippet noise.
+    while (buf.indexOf("\n") != null) { buf = buf.replace("\n", " "); }
+    while (buf.indexOf("\t") != null) { buf = buf.replace("\t", " "); }
+    while (buf.indexOf("#") != null) { buf = buf.replace("#", " "); }
+    while (buf.indexOf("*") != null) { buf = buf.replace("*", " "); }
+    while (buf.indexOf("|") != null) { buf = buf.replace("|", " "); }
+    while (buf.indexOf("`") != null) { buf = buf.replace("`", " "); }
+    // Collapse runs of spaces via split/join (avoids a quadratic replace loop).
+    final words: [str] = mut [<str>];
+    foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
+    return words.join(" ");
+}
+
 // addRecord appends one page's search record (url, title, body text, frontmatter
 // tags, optional description) to searchRecords as a JSON object. url is the
 // page's path relative to gen/'s root (what search.js fetches against); md is the
@@ -237,12 +300,8 @@ fun addRecord(url: str, title: str, desc: str, md: str) > void {
     final rec = mut {<str: any>};
     rec["url"] = url;
     rec["title"] = title;
-    rec["text"] = markdown.stripFrontmatter(md);
-
-    final fm = serialize.jsonDecode(markdown.frontmatter(md));
-    final tags = mut [];
-    foreach (t in fm.q("tags").listValue()) { tags.append(t.stringValue()); }
-    rec["tags"] = tags;
+    rec["text"] = cleanBody(markdown.stripFrontmatter(md));
+    rec["tags"] = tagsOf(md);
 
     if (desc != "") { rec["description"] = desc; }
     searchRecords.append(serialize.jsonEncode(serialize.Boxed.init(rec)));
@@ -1097,18 +1156,7 @@ fun render404() > void {
         + "  <script src=\"" + basePath + "theme.js\"></script>\n"
         + "</head>\n"
         + "<body>\n"
-        + "  <header class=\"site-header\">\n"
-        + "    <nav class=\"container\">\n"
-        + "      <ul><li><a href=\"" + basePath + "\" class=\"contrast\"><picture><source srcset=\"" + basePath + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + basePath + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
-        + "      <ul>\n"
-        + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
-        + "        <li><a href=\"" + basePath + "blog/\">Blog</a></li>\n"
-        + "        <li><a href=\"" + basePath + "download/\">Download</a></li>\n"
-        + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
-        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button></li>\n"
-        + "      </ul>\n"
-        + "    </nav>\n"
-        + "  </header>\n"
+        + siteNav(basePath, "")
         + "  <main class=\"container\">\n"
         + "    <article>\n"
         + "      <h1>You have warped off the map.</h1>\n"
@@ -1117,13 +1165,12 @@ fun render404() > void {
         + "        <li><a href=\"" + basePath + "\">Home</a></li>\n"
         + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
         + "        <li><a href=\"" + basePath + "download/\">Download</a></li>\n"
+        + "        <li><a href=\"" + basePath + "tour/\">Tour</a></li>\n"
         + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
         + "      </ul>\n"
         + "    </article>\n"
         + "  </main>\n"
-        + "  <footer class=\"site-footer container\">\n"
-        + "    <small><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a> &middot; <a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
-        + "  </footer>\n"
+        + siteFooter()
         + "  <script type=\"module\" src=\"" + basePath + "main.js\"></script>\n"
         + "</body>\n"
         + "</html>\n";
@@ -1249,7 +1296,7 @@ fun commitFooter(path: str) > str {
     final histKey = metaPrefix + path;
     final hist = metaHistory[histKey];
     if (hist != null and hist.len() > 0) {
-        line = line + "<details><summary><small>Recent changes</small></summary>";
+        line = line + "<details class=\"recent-changes\"><summary>Recent changes</summary>";
         // Plain <ul> - Pico styles it natively and it reflows on any width, no
         // wrapper or overflow rule needed. Row shape: <code>hash</code> <time>
         // date</time> - subject. Both hash and date get Pico's monospace/muted
@@ -1475,6 +1522,57 @@ fun navLink(href: str, label: str, key: str, active: str) > str {
     return "        <li><a href=\"" + href + "\"" + attr + ">" + label + "</a></li>\n";
 }
 
+// siteNav renders the shared top bar (brand + section links + theme toggle). One
+// definition for every page - docs pages via page(), the 404, and the playground
+// (build-time injected via renderPlayground) - so adding a nav item lands everywhere
+// at once. root is the relative prefix back to gen/'s root; active is the current
+// section's key (or "" for none).
+fun siteNav(root: str, active: str) > str {
+    // On mobile the five section links collapse behind a menu button. That button is a
+    // plain Pico .outline <button> (like the theme toggle) - NOT a <details>, whose Pico
+    // accordion styling we kept having to fight - so it inherits the button look for free
+    // and nav.js toggles the dropdown. Brand + theme toggle stay outside it, always shown.
+    return "  <header class=\"site-header\">\n"
+        + "    <nav class=\"container\">\n"
+        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><picture><source srcset=\"" + root + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
+        + "      <div class=\"nav-right\">\n"
+        + "        <button class=\"nav-toggle outline\" type=\"button\" aria-label=\"Menu\" aria-expanded=\"false\" aria-controls=\"site-nav-links\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><line x1=\"4\" y1=\"7\" x2=\"20\" y2=\"7\"/><line x1=\"4\" y1=\"12\" x2=\"20\" y2=\"12\"/><line x1=\"4\" y1=\"17\" x2=\"20\" y2=\"17\"/></svg></button>\n"
+        + "        <ul class=\"nav-links\" id=\"site-nav-links\">\n"
+        + navLink(root + "documentation/", "Documentation", "documentation", active)
+        + navLink(root + "blog/", "Blog", "blog", active)
+        + navLink(root + "download/", "Download", "download", active)
+        + navLink(root + "tour/", "Tour", "tour", active)
+        + navLink(root + "playground.html", "Playground", "playground", active)
+        + "        </ul>\n"
+        + "        <button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button>\n"
+        + "      </div>\n"
+        + "    </nav>\n"
+        + "  </header>\n";
+}
+
+// siteFooter renders the shared one-line attribution footer. It has no relative
+// links (the GitHub URLs are absolute), so it needs no root; the branch tracks the
+// render's metaBranch like every other page.
+fun siteFooter() > str {
+    return "  <footer class=\"site-footer container\">\n"
+        + "    <small><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a> &middot; <a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
+        + "  </footer>\n";
+}
+
+// renderPlayground emits gen/playground.html from the hand-authored source, injecting
+// the shared nav + footer at its <!-- site-nav --> / <!-- site-footer --> placeholders.
+// The playground is a standalone page (custom head, wasm, its own scripts) so it does
+// not go through page(); templating only the chrome keeps its top bar and footer in
+// lockstep with every other page. It sits at gen/'s root, so its nav prefix is "".
+fun renderPlayground() > void {
+    final f = io.File.open("playground.html", io.FileMode.read);
+    var html = f.readAll();
+    f.close();
+    html = html.replace("<!-- site-nav -->", siteNav("", "playground"));
+    html = html.replace("<!-- site-footer -->", siteFooter());
+    fs.writeFile(OUT + "/playground.html", html);
+}
+
 // hasIndexSource is true when a docs subdirectory (docs-relative) carries its own
 // landing-page source, so a breadcrumb crumb for it can link rather than sit as
 // plain text.
@@ -1504,6 +1602,17 @@ fun breadcrumbOf(srcRel: str, title: str, root: str) > str {
     if (srcRel == BLOG + "/index.md") {
         return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
             + li + "<li aria-current=\"page\">Blog</li></ul>\n    </nav>\n";
+    }
+    // The search page is a top-level tool surface: Home / Search (no Documentation
+    // root, it does not hang off the docs hub).
+    if (srcRel == "search/index.md") {
+        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+            + li + "<li aria-current=\"page\">Search</li></ul>\n    </nav>\n";
+    }
+    // The tour page is a top-level onboarding surface: Home / Tour.
+    if (srcRel == "tour/index.md") {
+        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+            + li + "<li aria-current=\"page\">Tour</li></ul>\n    </nav>\n";
     }
     if (srcRel.startsWith(BLOG + "/")) {
         li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
@@ -1634,6 +1743,10 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     if (srcRel.startsWith(BLOG + "/") or srcRel == BLOG + "/index.md") { active = "blog"; }
     // /public/ autoindex pages are meta surfaces; no nav item is current.
     if (srcRel.startsWith("public/")) { active = ""; }
+    // The search page is a tool surface with no nav home of its own.
+    if (srcRel == "search/index.md") { active = ""; }
+    // The tour page is its own top-nav item.
+    if (srcRel == "tour/index.md") { active = "tour"; }
     var descMeta = "";
     if (description != "") {
         descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
@@ -1676,6 +1789,30 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         readingHtml = "    <small class=\"reading-time\" title=\"Estimated reading time\">" + pageReading + "</small>\n";
     }
     pageReading = "";
+    // Frontmatter tags render as outlined, non-interactive chips in the provenance
+    // footer (there are no tag-archive pages to link to yet). Consume-and-clear so a
+    // page that forgets to set pageTags doesn't inherit the previous page's list.
+    // Generated pages (module/spell/man-page references) lead with a filled
+    // "Generated" status chip so readers know the source of truth is code, not the
+    // page - and that its "Suggest an edit" link points at generated output.
+    final gen = isGenerated(srcRel);
+    var tagsHtml = "";
+    if (gen or pageTags.len() > 0) {
+        var chips = "";
+        if (gen) {
+            chips = chips + "<span class=\"tag generated\" data-tooltip=\"Auto-generated from source; edit the generator, not this page\" title=\"Auto-generated from source; edit the generator, not this page\">auto-generated</span>";
+        }
+        foreach (t in pageTags) {
+            // Topical tags are links into the search page, scoped to that exact tag
+            // (tag:"<name>"), so a click lists every page carrying it. The value is
+            // quoted so multi-word tags survive as one token; url_encode makes the
+            // whole thing querystring-safe. The generated status chip stays a span.
+            final tagQuery = encoding.urlEncode("tag:\"" + t + "\"");
+            chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
+        }
+        tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips + "</div>\n";
+    }
+    pageTags = mut [];
     // Headings drive the TOC sidebar; without enough of them the article goes
     // full-width (no .with-toc grid) and toc.js simply finds nothing to enhance.
     // With TOC: wrap reading-time + article in a div so both share the article
@@ -1694,15 +1831,18 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // from Issues, and readers who just want to file a bug rarely start from
     // a docs page.
     final hasSource = srcRel.endsWith(".md") and srcRel.startsWith("public/") == false
-        and srcRel != BLOG + "/index.md";
+        and srcRel != BLOG + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md";
     var edit = "<small class=\"page-tools-edit\">";
     if (hasSource) {
         edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View source</a> &middot; ";
     }
     edit = edit + "<a href=\"" + GH + "/edit/" + metaBranch + "/" + metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
     // Second row under the search box: "Suggest an edit" hugging the right edge
-    // via margin-left:auto (reading-time now lives inside the article, above).
-    final secondaryRow = "    <div class=\"page-tools-secondary\">" + edit + "</div>\n";
+    // via margin-left:auto (reading-time now lives inside the article, above). The
+    // search page is a generated tool surface with no editable source, so it skips
+    // the row entirely (a "Suggest an edit" link there would 404 on GitHub).
+    var secondaryRow = "    <div class=\"page-tools-secondary\">" + edit + "</div>\n";
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md") { secondaryRow = ""; }
     // Consistent "<page title> - magus" suffix everywhere. Home just says
     // "magus" (its H1-derived title is the wordmark, no need to duplicate).
     var fullTitle = title + " — magus";
@@ -1713,6 +1853,19 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // width (CSS in site.css keys off .site-public).
     var bodyTag = "<body>\n";
     if (srcRel.startsWith("public/")) { bodyTag = "<body class=\"site-public\">\n"; }
+    // The search page keeps the full chrome but widens the container: it is a listing
+    // surface (a syntax rail beside results), not prose, so the reading-width cap wastes
+    // space. site-search only raises the container width; CSS lays out the two columns.
+    if (srcRel == "search/index.md") { bodyTag = "<body class=\"site-search\">\n"; }
+    // Per-page provenance strip (footer tags + "Last updated" commit line). The
+    // search page is a generated tool surface with no source commit; emitting it
+    // would make commitFooter fall back to HEAD, drifting the output every commit
+    // and tripping the generate drift gate. So omit the whole strip there.
+    var provenance = "  <div class=\"page-provenance container\">\n"
+        + tagsHtml
+        + "    " + commitFooter(srcRel) + "\n"
+        + "  </div>\n";
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md") { provenance = ""; }
     return "<!DOCTYPE html>\n"
         + "<html lang=\"en\" class=\"no-js\">\n"
         + "<head>\n"
@@ -1742,18 +1895,7 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + "</head>\n"
         + bodyTag
         + "  <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>\n"
-        + "  <header class=\"site-header\">\n"
-        + "    <nav class=\"container\">\n"
-        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><picture><source srcset=\"" + root + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
-        + "      <ul>\n"
-        + navLink(root + "documentation/", "Documentation", "documentation", active)
-        + navLink(root + "blog/", "Blog", "blog", active)
-        + navLink(root + "download/", "Download", "download", active)
-        + navLink(root + "playground.html", "Playground", "playground", active)
-        + "        <li><button id=\"theme-toggle\" class=\"outline\" aria-label=\"Color theme\" data-tooltip=\"Cycle theme (auto / light / dark)\" data-placement=\"bottom\">◐</button></li>\n"
-        + "      </ul>\n"
-        + "    </nav>\n"
-        + "  </header>\n"
+        + siteNav(root, active)
         + "  <main id=\"main-content\" class=\"container\" tabindex=\"-1\">\n"
         + breadcrumbOf(srcRel, title, root)
         + "    <div class=\"page-tools\"></div>\n"
@@ -1766,17 +1908,13 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
         + contentBlock
         + pager
         + "  </main>\n"
-        + "  <div class=\"page-provenance container\">\n"
-        + "    " + commitFooter(srcRel) + "\n"
-        + "  </div>\n"
+        + provenance
         // Small one-line footer: attribution only. Kept intentionally sparse -
         // the site is one project, not a portal; deeper links (blog, changelog,
         // security.txt, feeds) are reachable from Documentation and via the
         // <link rel="alternate"> discovery tags in <head>, not by crowding the
         // footer with a directory.
-        + "  <footer class=\"site-footer container\">\n"
-        + "    <small><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a> &middot; <a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
-        + "  </footer>\n"
+        + siteFooter()
         // One deferred module bundle (esbuild) replaces the nine flat scripts; the
         // head-critical theme.js stays separate above. type=module defers by spec.
         + "  <script type=\"module\" src=\"" + root + "main.js\"></script>\n"
@@ -1813,6 +1951,7 @@ fun renderRoot() > void {
     if (desc == "") { desc = SITE_DESC; }
 
     pageReading = readingTime(md);
+    pageTags = tagsOf(md);
     final doc = page(title, desc, html, "README.md", "", "");
     final of = io.File.open(OUT + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -1844,6 +1983,7 @@ fun renderFile(rel: str) > void {
 
     final url = cleanUrl(rel);
     pageReading = readingTime(md);
+    pageTags = tagsOf(md);
     final doc = page(title, desc, html, DOCS + "/" + rel, pagerFor(rel), url);
 
     // Directory-index output: every page is <cleanUrl>index.html (extensionless,
@@ -1923,6 +2063,7 @@ fun renderBlogPost(base: str) > void {
     final pager = blogPagerFor(base);
 
     pageReading = readingTime(md);
+    pageTags = tagsOf(md);
     final doc = page(title, desc, html, rel, pager, url);
     fs.makeDirectory(OUT + "/" + BLOG + "/" + slug);
     final of = io.File.open(OUT + "/" + BLOG + "/" + slug + "/index.html", io.FileMode.write);
@@ -2059,6 +2200,172 @@ fun renderBlogIndex() > void {
     std.print("  blog index -> " + OUT + "/" + BLOG + "/index.html");
 }
 
+// renderSearchPage writes gen/search/index.html: the dedicated, deep-linkable search
+// surface. It is a tool page (no markdown source; kept out of the search index and
+// sitemap, and out of the provenance/edit chrome via the srcRel guards in page()).
+// The #search-page container is the signal search.js keys off to switch from the
+// header dropdown to full-page, URL-synced (?q=) results. Emitted after the walk so
+// it is a peer of renderPublic()/render404().
+// syntaxRow renders one Search Syntax entry: a clickable example that runs itself
+// (search.js intercepts the ?q= link) beside a plain-language description. The query
+// is url-encoded for the href and entity-escaped for its <code> display.
+fun syntaxRow(q: str, desc: str) > str {
+    return "        <dt><a class=\"syntax-example\" href=\"?q=" + encoding.urlEncode(q)
+        + "\"><code>" + escapeAttr(q) + "</code></a></dt><dd>" + desc + "</dd>\n";
+}
+
+fun renderSearchPage() > void {
+    final root = rootPrefix("search/index.md");
+    // Always-open, forefront syntax reference: on the dedicated page the query
+    // language is a first-class part of the surface, not a disclosure to hunt for
+    // (the header dropdown carries only a compact hint). Each example is a real ?q=
+    // link, so it works without JS and doubles as teach-by-doing once search.js runs
+    // it in place.
+    final syntax = "  <section class=\"search-syntax\" aria-label=\"Search syntax\">\n"
+        + "    <p class=\"search-syntax-title\">Search Syntax</p>\n"
+        + "    <p class=\"search-syntax-lead\">Terms are combined with AND and matched case-insensitively. Click an example to run it.</p>\n"
+        + "    <dl>\n"
+        + syntaxRow("tag:build", "Pages carrying the exact tag \"build\".")
+        + syntaxRow("-tag:spell", "Exclude pages with a tag.")
+        + syntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.")
+        + syntaxRow("title:install", "Scope a term to one field: title, description, or text.")
+        + syntaxRow("\"exact phrase\"", "Match words that appear together, in order.")
+        + syntaxRow("cache -go", "Require a word; drop another with a leading minus.")
+        + syntaxRow("tag:cache OR tag:build", "OR matches either; terms are ANDed by default.")
+        + syntaxRow("tag:(cache OR build)", "Group several values for one field.")
+        + syntaxRow("title:mag*", "Wildcards: * stands for any run of characters.")
+        + syntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.")
+        + "    </dl>\n"
+        + "  </section>\n";
+    final body = "<h1>Search</h1>\n"
+        + "<div id=\"search-page\">\n"
+        + "  <div class=\"search-page-inputwrap\">\n"
+        + "    <input id=\"search-page-input\" class=\"search-input\" type=\"text\" placeholder=\"Search docs... (try tag:cache)\" autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Search the documentation\" aria-controls=\"search-page-results\">\n"
+        + "    <ul id=\"search-facets\" class=\"search-facets\" role=\"listbox\" aria-label=\"Tag suggestions\" hidden></ul>\n"
+        + "  </div>\n"
+        + "  <div id=\"search-chips\" class=\"search-chips\" aria-hidden=\"true\" hidden></div>\n"
+        // Two columns on wide screens: results in the main column, the syntax reference
+        // (and, later, facet filters) in a left rail. Results come FIRST in the DOM so
+        // that when the grid collapses on narrow screens they stack above the reference
+        // rather than being pushed down by it; the grid reorders the rail to the left.
+        + "  <div class=\"search-layout\">\n"
+        + "    <div class=\"search-main\">\n"
+        + "      <p id=\"search-page-status\" class=\"search-page-status\" role=\"status\" aria-live=\"polite\"></p>\n"
+        + "      <ul id=\"search-page-results\" class=\"search-page-results\"></ul>\n"
+        + "    </div>\n"
+        + "    <aside class=\"search-side\">\n"
+        + syntax
+        + "    </aside>\n"
+        + "  </div>\n"
+        + "  <noscript><p class=\"noscript-notice\">Search needs JavaScript. Browse the <a href=\"" + root + "documentation/\">documentation</a>, or use GitHub's code search on the <a href=\"" + GH + "\">source repo</a>.</p></noscript>\n"
+        + "</div>\n";
+    final title = "Search";
+    final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
+    final doc = page(title, desc, body, "search/index.md", "", "search/");
+    fs.makeDirectory(OUT + "/search");
+    final of = io.File.open(OUT + "/search/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    std.print("  search page -> " + OUT + "/search/index.html");
+}
+
+// teaserOf pulls a short code preview from a tour example: skip the leading comment
+// block and blank lines, then take the first several real lines. Gives each card a
+// code snippet at a glance instead of the descriptive header comment.
+fun teaserOf(src: str) > str {
+    var started = false;
+    final kept: [str] = mut [<str>];
+    foreach (line in src.split("\n")) {
+        if (started == false) {
+            final t = line.trim();
+            if (t == "" or t.startsWith("//")) { continue; }
+            started = true;
+        }
+        if (kept.len() >= 7) { break; }
+        kept.append(line);
+    }
+    return kept.join("\n");
+}
+
+// tourSrc reads one curated example from the tour/ dir (cwd-relative; build-time only,
+// the files are not emitted - their content rides into the page as teaser + deep-link).
+fun tourSrc(file: str) > str {
+    final f = io.File.open("tour/" + file, io.FileMode.read);
+    final s = f.readAll();
+    f.close();
+    return s;
+}
+
+// tourStep bundles one card's copy; the .buzz file is the source of truth for the code.
+fun tourStep(file: str, title: str, desc: str) > {str: str} {
+    final m = mut {<str: str>};
+    m["file"] = file;
+    m["title"] = title;
+    m["desc"] = desc;
+    return m;
+}
+
+// playgroundLink deep-links src into the playground editor. The raw source is url-safe
+// base64 (unpadded, matching js/run-example.js and the wasm's applyHashSource decoder)
+// in the #source= fragment, so the code stays client-side (never hits the server/CDN).
+fun playgroundLink(root: str, src: str) > str {
+    var enc = encoding.base64urlEncode(src);
+    while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
+    return root + "playground.html#source=" + enc;
+}
+
+// renderTourPage writes gen/tour/index.html: a numbered card grid that walks a newcomer
+// through magusfiles and Buzz. Each card carries a step number, title, one-liner, a code
+// teaser, and an Open-in-Playground deep-link. A synthesized page like the search page -
+// no .md source - so page()'s srcRel guards drop its provenance/edit chrome.
+fun renderTourPage() > void {
+    final root = rootPrefix("tour/index.md");
+    final steps: [{str: str}] = mut [<{str: str}>];
+    steps.append(tourStep("01-hello.buzz", "Hello, magus",
+        "A magusfile is a build definition; each exported function is a runnable target."));
+    steps.append(tourStep("02-targets.buzz", "Targets and dependencies",
+        "Wire a pipeline with magus.needs; ci is the conventional anchor it all keys off."));
+    steps.append(tourStep("03-spells.buzz", "Spells",
+        "Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops."));
+    steps.append(tourStep("04-buzz.buzz", "Buzz is a real language",
+        "Variables, functions, recursion, closures - evaluated live in your browser."));
+    steps.append(tourStep("05-magusfile.buzz", "A real magusfile",
+        "The full multi-toolchain pipeline: generate, format, lint, build, test, release."));
+
+    var cards = "";
+    var n = 1;
+    foreach (step in steps) {
+        final src = tourSrc(step["file"]);
+        cards = cards
+            + "      <li class=\"tour-card\">\n"
+            + "        <div class=\"tour-head\"><span class=\"tour-num\">{n}</span><h3>" + step["title"] + "</h3></div>\n"
+            + "        <p class=\"tour-desc\">" + step["desc"] + "</p>\n"
+            + "        <pre class=\"tour-teaser\"><code class=\"language-buzz\">" + escapeAttr(teaserOf(src)) + "</code></pre>\n"
+            + "        <a class=\"tour-open\" href=\"" + playgroundLink(root, src) + "\">Open in Playground &rarr;</a>\n"
+            + "      </li>\n";
+        n = n + 1;
+    }
+
+    final body = "<h1>Tour</h1>\n"
+        + "<p class=\"lede\">A guided walk through magusfiles and Buzz in five steps. Open any example in the Playground to run and edit it.</p>\n"
+        + "    <ol class=\"tour-grid\">\n"
+        + cards
+        + "    </ol>\n";
+    final title = "Tour";
+    final desc = "A guided tour of magus: five curated, runnable examples from a hello-world magusfile to a full multi-toolchain pipeline.";
+    final doc = page(title, desc, body, "tour/index.md", "", "tour/");
+    fs.makeDirectory(OUT + "/tour");
+    final of = io.File.open(OUT + "/tour/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // addRecord uses the desc arg directly and only parses this stub for tags, so the
+    // stub carries just a valid tags list (a description: line with colons would break
+    // the YAML). The body text seeds a few search terms for the page.
+    addRecord("tour/", title, desc,
+        "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
+    std.print("  tour page -> " + OUT + "/tour/index.html");
+}
+
 // walkBlog visits every blog/*.md post file (excluding index.md and _underscored
 // fixtures), in fs.list's sorted order — so the walk is deterministic. Posts are
 // flat: no nested subdirectories under blog/.
@@ -2129,11 +2436,11 @@ fun site_render() > void {
     os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + OUT + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + OUT + "/main.js"]);
 
-    // Copy the WebAssembly playground — the editor page plus the committed
-    // buzz.wasm and its TinyGo glue. These are source artifacts of this project
-    // (rebuilt by the build-playground target), not rendered from docs, so the
-    // render only copies them; that keeps the drift gate stable.
-    os.execute(["sh", "-c", "[ -f playground.html ] && cp playground.html " + OUT + "/ || true"]);
+    // Emit the WebAssembly playground page (injecting the shared nav/footer into the
+    // hand-authored playground.html), then copy the committed buzz.wasm + TinyGo glue
+    // beside it. The wasm is a source artifact (rebuilt by build-playground), not
+    // rendered from docs, so it is only copied; that keeps the drift gate stable.
+    renderPlayground();
     os.execute(["sh", "-c", "[ -d playground ] && cp -r playground " + OUT + "/ || true"]);
 
     // Parse the changelog BEFORE the walk so page() knows whether the releases
@@ -2154,6 +2461,8 @@ fun site_render() > void {
     renderReleasesAtom();
     renderPublic();
     render404();
+    renderSearchPage();
+    renderTourPage();
     writeManifest();
     writeServiceWorker();
 
