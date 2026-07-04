@@ -1183,6 +1183,9 @@ a code {
   margin: 1rem 0 0;
 }
 .blog-index li {
+  /* Pico sets list-style-type: square on li itself, which out-specifies the
+     ul's list-style:none - clear it here so entries don't sprout a marker. */
+  list-style: none;
   padding: 0.75rem 0;
   border-top: 1px solid var(--pico-muted-border-color);
 }
@@ -1200,6 +1203,14 @@ a code {
 .blog-index-desc {
   margin: 0.25rem 0 0;
   color: var(--pico-muted-color);
+}
+
+/* Post byline under the <h1>: date, author, and permalink on one muted line,
+   set just below the title so it reads as the post's metadata. */
+.blog-post-meta {
+  margin: -0.25rem 0 1.5rem;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
 }
 
 /* Nested /public/ autoindex tree - Pico-themed Apache mod_autoindex look. Fixed-
