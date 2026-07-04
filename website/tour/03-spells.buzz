@@ -1,0 +1,23 @@
+// Spells bind a real toolchain to magus. Importing one gives you a handle whose
+// ops are cached, kebab-case targets: go-build, go-test, go-vet. Call an op by
+// indexing the handle with its name - the same name `magus run go-build` uses.
+// The tools are stubbed in the playground, so `run ci` records the ops (try it,
+// then `graph`) without executing anything.
+
+import "magus";
+import "magus/spell/go";     // the Go toolchain: go-build, go-test, go-vet, ...
+
+magus.project({ "spells": [go] });
+
+export fun build(args: [str]) > void {
+    go["go-build"]();
+}
+
+export fun test(args: [str]) > void {
+    magus.needs(magus.target.literal("build"));
+    go["go-test"]();
+}
+
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("build"), magus.target.literal("test"));
+}

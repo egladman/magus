@@ -61,28 +61,20 @@ func buildInfo() playground.BuildInfo {
 	return info
 }
 
-// The editor ships a few examples the picker switches between. Each is a real
-// .buzz file so it reads (and highlights) the same in the repo as in the browser.
+// The editor opens on one minimal magusfile - a near-empty hello-world scratchpad.
+// The curated, guided examples now live on the site's Tour page, which deep-links
+// each into this playground; the editor no longer ships a picker.
 //
-//go:embed showcase.buzz
-var defaultSrc string // the flagship: a realistic magusfile with the full pipeline
-
 //go:embed hello.buzz
-var helloSrc string // the smallest useful magusfile
+var helloSrc string // the minimal magusfile the editor opens with
 
-//go:embed fibonacci.buzz
-var fibonacciSrc string // pure Buzz, to show the interpreter runs client-side
-
-// example is one entry in the editor's example picker.
+// example is the entry seeded into the editor on boot.
 type example struct {
 	id, label, file, src string
 }
 
-// examples are listed in picker order; the first is the one the editor opens with.
 var examples = []example{
-	{"advanced", "Advanced", "magusfile.buzz", defaultSrc},
-	{"hello", "Hello world", "hello.buzz", helloSrc},
-	{"fibonacci", "Fibonacci", "fibonacci.buzz", fibonacciSrc},
+	{"hello", "Hello world", "magusfile.buzz", helloSrc},
 }
 
 // ui bundles the DOM handles and the shell, captured by the event handlers.
@@ -136,9 +128,8 @@ func main() {
 	doc.Call("getElementById", "term").Call("addEventListener", "click",
 		js.FuncOf(func(js.Value, []js.Value) any { u.in.Call("focus"); return nil }))
 
-	// Populate the example picker and seed the editor with the first example
-	// (parse + highlight happen in loadExample), then show the sandbox banner.
-	u.setupExamplePicker()
+	// Seed the editor with the minimal example (parse + highlight happen in
+	// loadExample), then show the sandbox banner.
 	u.loadExample(examples[0].id)
 	// If the URL carries a #source=<base64url> deep link, replace the editor
 	// contents with the decoded source. The hash keeps source client-side (never
@@ -159,27 +150,6 @@ func main() {
 	// on docs pages that don't carry the editor markup.)
 
 	<-make(chan struct{}) // keep the exported callbacks alive
-}
-
-// setupExamplePicker fills the <select id="example-picker"> with the examples and
-// loads the chosen one into the editor on change. Absent (older page), it no-ops.
-func (u *ui) setupExamplePicker() {
-	picker := u.doc.Call("getElementById", "example-picker")
-	if !picker.Truthy() {
-		return
-	}
-	for _, ex := range examples {
-		opt := u.doc.Call("createElement", "option")
-		opt.Set("value", ex.id)
-		opt.Set("textContent", ex.label)
-		picker.Call("appendChild", opt)
-	}
-	picker.Set("value", examples[0].id)
-	picker.Call("addEventListener", "change", js.FuncOf(func(js.Value, []js.Value) any {
-		u.loadExample(picker.Get("value").String())
-		u.in.Call("focus")
-		return nil
-	}))
 }
 
 // loadExample swaps the editor to the named example: it replaces the source,

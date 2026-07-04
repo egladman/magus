@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Tour — magus</title>
+  <meta name="description" content="A guided tour of magus: five curated, runnable examples from a hello-world magusfile to a full multi-toolchain pipeline.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/tour/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+        <li><a href="../documentation/">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/" aria-current="page">Tour</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li aria-current="page">Tour</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <article>
+<h1>Tour</h1>
+<p class="lede">A guided walk through magusfiles and Buzz in five steps. Open any example in the Playground to run and edit it.</p>
+    <ol class="tour-grid">
+      <li class="tour-card">
+        <div class="tour-head"><span class="tour-num">1</span><h3>Hello, magus</h3></div>
+        <p class="tour-desc">A magusfile is a build definition; each exported function is a runnable target.</p>
+        <pre class="tour-teaser"><code class="language-buzz">import &quot;magus";
+
+export fun greet(args: [str]) > void {
+    magus.info("hello from magus");
+}
+</code></pre>
+        <a class="tour-open" href="../playground.html#source=Ly8gSGVsbG8sIG1hZ3VzLiBBIG1hZ3VzZmlsZSBpcyBhIGJ1aWxkIGRlZmluaXRpb246IGEgZGlyZWN0b3J5IGJlY29tZXMgYSBtYWd1cwovLyBwcm9qZWN0IGp1c3QgYnkgaGF2aW5nIG9uZSwgYW5kIGVhY2ggRVhQT1JURUQgZnVuY3Rpb24gaXMgYSBydW5uYWJsZSB0YXJnZXQuCi8vIFRyeSBpdCBpbiB0aGUgY29uc29sZSBiZWxvdyAtIGBsc2AgbGlzdHMgdGFyZ2V0cywgYHJ1biBncmVldGAgcnVucyB0aGlzIG9uZS4KCmltcG9ydCAibWFndXMiOwoKZXhwb3J0IGZ1biBncmVldChhcmdzOiBbc3RyXSkgPiB2b2lkIHsKICAgIG1hZ3VzLmluZm8oImhlbGxvIGZyb20gbWFndXMiKTsKfQo">Open in Playground &rarr;</a>
+      </li>
+      <li class="tour-card">
+        <div class="tour-head"><span class="tour-num">2</span><h3>Targets and dependencies</h3></div>
+        <p class="tour-desc">Wire a pipeline with magus.needs; ci is the conventional anchor it all keys off.</p>
+        <pre class="tour-teaser"><code class="language-buzz">import &quot;magus";
+
+export fun build(args: [str]) > void {
+    magus.info("compiling");
+}
+
+export fun test(args: [str]) > void {</code></pre>
+        <a class="tour-open" href="../playground.html#source=Ly8gVGFyZ2V0cyBkZXBlbmQgb24gb3RoZXIgdGFyZ2V0cy4gbWFndXMubmVlZHMobWFndXMudGFyZ2V0LmxpdGVyYWwoIm5hbWUiKSkKLy8gZGVjbGFyZXMgYW4gZWRnZTsgbWFndXMgcnVucyBkZXBlbmRlbmNpZXMgZmlyc3QsIGRlZHVwbGljYXRlZCBhbmQgaW4gcGFyYWxsZWwKLy8gd2hlcmV2ZXIgdGhlIGdyYXBoIGFsbG93cy4gYGNpYCBpcyB0aGUgY29udmVudGlvbmFsIGFuY2hvciB5b3VyIHBpcGVsaW5lIChhbmQKLy8gYG1hZ3VzIGFmZmVjdGVkIGNpYCkga2V5cyBvZmYuIFRyeSBgcnVuIGNpYCAtIGJ1aWxkIHJ1bnMgb25jZSwgdGhvdWdoIGJvdGggdGVzdAovLyBhbmQgY2kgYXNrIGZvciBpdC4KCmltcG9ydCAibWFndXMiOwoKZXhwb3J0IGZ1biBidWlsZChhcmdzOiBbc3RyXSkgPiB2b2lkIHsKICAgIG1hZ3VzLmluZm8oImNvbXBpbGluZyIpOwp9CgpleHBvcnQgZnVuIHRlc3QoYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgiYnVpbGQiKSk7CiAgICBtYWd1cy5pbmZvKCJ0ZXN0aW5nIik7Cn0KCmV4cG9ydCBmdW4gY2koYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgiYnVpbGQiKSwgbWFndXMudGFyZ2V0LmxpdGVyYWwoInRlc3QiKSk7Cn0K">Open in Playground &rarr;</a>
+      </li>
+      <li class="tour-card">
+        <div class="tour-head"><span class="tour-num">3</span><h3>Spells</h3></div>
+        <p class="tour-desc">Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops.</p>
+        <pre class="tour-teaser"><code class="language-buzz">import &quot;magus";
+import "magus/spell/go";     // the Go toolchain: go-build, go-test, go-vet, ...
+
+magus.project({ "spells": [go] });
+
+export fun build(args: [str]) > void {
+    go["go-build"]();</code></pre>
+        <a class="tour-open" href="../playground.html#source=Ly8gU3BlbGxzIGJpbmQgYSByZWFsIHRvb2xjaGFpbiB0byBtYWd1cy4gSW1wb3J0aW5nIG9uZSBnaXZlcyB5b3UgYSBoYW5kbGUgd2hvc2UKLy8gb3BzIGFyZSBjYWNoZWQsIGtlYmFiLWNhc2UgdGFyZ2V0czogZ28tYnVpbGQsIGdvLXRlc3QsIGdvLXZldC4gQ2FsbCBhbiBvcCBieQovLyBpbmRleGluZyB0aGUgaGFuZGxlIHdpdGggaXRzIG5hbWUgLSB0aGUgc2FtZSBuYW1lIGBtYWd1cyBydW4gZ28tYnVpbGRgIHVzZXMuCi8vIFRoZSB0b29scyBhcmUgc3R1YmJlZCBpbiB0aGUgcGxheWdyb3VuZCwgc28gYHJ1biBjaWAgcmVjb3JkcyB0aGUgb3BzICh0cnkgaXQsCi8vIHRoZW4gYGdyYXBoYCkgd2l0aG91dCBleGVjdXRpbmcgYW55dGhpbmcuCgppbXBvcnQgIm1hZ3VzIjsKaW1wb3J0ICJtYWd1cy9zcGVsbC9nbyI7ICAgICAvLyB0aGUgR28gdG9vbGNoYWluOiBnby1idWlsZCwgZ28tdGVzdCwgZ28tdmV0LCAuLi4KCm1hZ3VzLnByb2plY3QoeyAic3BlbGxzIjogW2dvXSB9KTsKCmV4cG9ydCBmdW4gYnVpbGQoYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBnb1siZ28tYnVpbGQiXSgpOwp9CgpleHBvcnQgZnVuIHRlc3QoYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgiYnVpbGQiKSk7CiAgICBnb1siZ28tdGVzdCJdKCk7Cn0KCmV4cG9ydCBmdW4gY2koYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgiYnVpbGQiKSwgbWFndXMudGFyZ2V0LmxpdGVyYWwoInRlc3QiKSk7Cn0K">Open in Playground &rarr;</a>
+      </li>
+      <li class="tour-card">
+        <div class="tour-head"><span class="tour-num">4</span><h3>Buzz is a real language</h3></div>
+        <p class="tour-desc">Variables, functions, recursion, closures - evaluated live in your browser.</p>
+        <pre class="tour-teaser"><code class="language-buzz">import &quot;magus";
+
+// Recursion, the classic. `buzz fibo(30)` computes 832040 in a real bytecode VM.
+fun fibo(n: int) > int {
+    if (n &lt; 2) { return n; }
+    return fibo(n - 1) + fibo(n - 2);
+}</code></pre>
+        <a class="tour-open" href="../playground.html#source=Ly8gQnV6eiwgcnVubmluZyBpbiB5b3VyIGJyb3dzZXIuIGdvcGhlcmJ1enogKHRoZSBpbnRlcnByZXRlciBtYWd1cyBlbWJlZHMgdG8gcmVhZAovLyBtYWd1c2ZpbGVzKSBpcyBjb21waWxlZCB0byBXZWJBc3NlbWJseSBhbmQgcnVucyBlbnRpcmVseSBpbiB0aGlzIHRhYjogbm8gc2VydmVyLAovLyBubyBuZXR3b3JrLCBub3RoaW5nIGxlYXZlcyB0aGUgcGFnZS4gVGhlIGNvbnNvbGUgYmVsb3cgZXZhbHVhdGVzIHJlYWwgQnV6egovLyBhZ2FpbnN0IHRoZXNlIGRlZmluaXRpb25zLCBzbyB0cnkgYGJ1enogZmlibygzMClgLCBgYnV6eiBmYWN0KDEwKWAsIG9yCi8vIGBidXp6IHN1bShbMiwgNCwgNiwgOF0pYC4gYHJ1biBkZW1vYCBwcmludHMgdGhlIHNhbWUgdmFsdWVzLCBjb21wdXRlZCBsaXZlLgoKaW1wb3J0ICJtYWd1cyI7CgovLyBSZWN1cnNpb24sIHRoZSBjbGFzc2ljLiBgYnV6eiBmaWJvKDMwKWAgY29tcHV0ZXMgODMyMDQwIGluIGEgcmVhbCBieXRlY29kZSBWTS4KZnVuIGZpYm8objogaW50KSA-IGludCB7CiAgICBpZiAobiA8IDIpIHsgcmV0dXJuIG47IH0KICAgIHJldHVybiBmaWJvKG4gLSAxKSArIGZpYm8obiAtIDIpOwp9CgovLyBSZWN1cnNpb24gYWdhaW4sIGJ1aWxkaW5nIGEgcHJvZHVjdC4gYGJ1enogZmFjdCgxMClgIC0-IDM2Mjg4MDAuCmZ1biBmYWN0KG46IGludCkgPiBpbnQgewogICAgaWYgKG4gPCAyKSB7IHJldHVybiAxOyB9CiAgICByZXR1cm4gbiAqIGZhY3QobiAtIDEpOwp9CgovLyBIaWdoZXItb3JkZXI6IGEgZnVuY3Rpb24gdGhhdCB0YWtlcyBhIGZ1bmN0aW9uLCBpbnZva2VkIHdpdGggYW4gaW5saW5lIGNsb3N1cmUuCi8vIGBidXp6IHN1bShbMiwgNCwgNiwgOF0pYCAtPiAyMC4KZnVuIHJlZHVjZShpdGVtczogW2ludF0sIHNlZWQ6IGludCwgc3RlcDogZnVuKGludCwgaW50KSBpbnQpID4gaW50IHsKICAgIHZhciBhY2MgPSBzZWVkOwogICAgZm9yZWFjaCAoeCBpbiBpdGVtcykgeyBhY2MgPSBzdGVwKGFjYywgeCk7IH0KICAgIHJldHVybiBhY2M7Cn0KZnVuIHN1bShpdGVtczogW2ludF0pID4gaW50IHsKICAgIHJldHVybiByZWR1Y2UoaXRlbXMsIDAsIGZ1bihhOiBpbnQsIGI6IGludCkgPiBpbnQgeyByZXR1cm4gYSArIGI7IH0pOwp9CgovLyBUaGUgb25lIHRhcmdldDogaXQgcHJpbnRzIHZhbHVlcyB0aGUgZnVuY3Rpb25zIGFib3ZlIGNvbXB1dGUuIGBydW4gZGVtb2AKLy8gZXZhbHVhdGVzIHRoZW0gZm9yIHJlYWwgKHRoZSBjYWxscyBydW4gaW5zaWRlIHRoZSBzdHJpbmcgaW50ZXJwb2xhdGlvbiksIHNvIHRoZQovLyB0cmFjZSBzaG93cyB0aGUgYWN0dWFsIG51bWJlcnMsIG5vdCBwbGFjZWhvbGRlcnMuCmV4cG9ydCBmdW4gZGVtbyhhcmdzOiBbc3RyXSkgPiB2b2lkIHsKICAgIG1hZ3VzLmluZm8oImZpYm8oMjApICA9IHtmaWJvKDIwKX0iKTsKICAgIG1hZ3VzLmluZm8oImZhY3QoMTApID0ge2ZhY3QoMTApfSIpOwogICAgbWFndXMuaW5mbygic3VtICAgICAgPSB7c3VtKFsyLCA0LCA2LCA4XSl9Iik7Cn0K">Open in Playground &rarr;</a>
+      </li>
+      <li class="tour-card">
+        <div class="tour-head"><span class="tour-num">5</span><h3>A real magusfile</h3></div>
+        <p class="tour-desc">The full multi-toolchain pipeline: generate, format, lint, build, test, release.</p>
+        <pre class="tour-teaser"><code class="language-buzz">import &quot;magus";                 // project registration, targets, dependency edges
+import "magus/spell/buf";       // protobuf toolchain: buf-generate, buf-lint, buf-format
+import "magus/spell/go";        // Go toolchain: go-build, go-test, go-vet, go-fmt, ...
+import "magus/spell/ts";        // TypeScript toolchain: tsc, eslint, prettier, vitest
+import "magus/spell/docker";    // container image: docker-build, hadolint
+
+final VERSION: str = "1.4.0";</code></pre>
+        <a class="tour-open" href="../playground.html#source=Ly8gQSBtYWd1c2ZpbGU6IHRoZSBidWlsZCBkZWZpbml0aW9uIG1hZ3VzIHJlYWRzLiBUaGlzIG9uZSBtb2RlbHMgYSBzaW5nbGUKLy8gcHJvamVjdCAoYSBzZXJ2aWNlIHdpdGggYSBwcm90b2J1ZiBBUEksIGEgR28gc2VydmVyLCBhbmQgYSBUeXBlU2NyaXB0IGNsaWVudCwKLy8gYnVpbHQgYXMgb25lIHVuaXQpIGFuZCB3aXJlcyB0aGUgY29udmVudGlvbmFsIHBpcGVsaW5lOiBwcmVmbGlnaHQsIGdlbmVyYXRlLAovLyBmb3JtYXQsIGxpbnQsIGJ1aWxkLCB0ZXN0LCBhIGNpIGFuY2hvciwgYW5kIGEgcmVsZWFzZSBpbWFnZS4KLy8KLy8gQSBsYXJnZXIgd29ya3NwYWNlIGdpdmVzIEVBQ0ggcHJvamVjdCBpdHMgb3duIG1hZ3VzZmlsZSBpbiBpdHMgb3duIGRpcmVjdG9yeQovLyBhbmQgd2lyZXMgY3Jvc3MtcHJvamVjdCBvcmRlciB3aXRoIGRlcGVuZHNfb247IG1hZ3VzIGRpc2NvdmVycyB0aGVtIGFuZCBmYW5zIGEKLy8gdGFyZ2V0IG91dCBhY3Jvc3MgZXZlcnkgcHJvamVjdCB0aGF0IGRlY2xhcmVzIGl0LiBUaGlzIHNpbmdsZS1idWZmZXIgZXhhbXBsZQovLyBpbnN0ZWFkIGJpbmRzIHNldmVyYWwgdG9vbGNoYWlucyB0byBPTkUgcHJvamVjdCAodGhlIGNvLWJpbmRpbmcgcGF0dGVybikgc28gaXQKLy8gaXMgcnVubmFibGUgaGVyZS4gU2VlIHRoZSBkb2NzIG9uIHByb2plY3RzL3dvcmtzcGFjZXMgZm9yIHRoZSBtdWx0aS1maWxlIHNldHVwLgoKaW1wb3J0ICJtYWd1cyI7ICAgICAgICAgICAgICAgICAvLyBwcm9qZWN0IHJlZ2lzdHJhdGlvbiwgdGFyZ2V0cywgZGVwZW5kZW5jeSBlZGdlcwppbXBvcnQgIm1hZ3VzL3NwZWxsL2J1ZiI7ICAgICAgIC8vIHByb3RvYnVmIHRvb2xjaGFpbjogYnVmLWdlbmVyYXRlLCBidWYtbGludCwgYnVmLWZvcm1hdAppbXBvcnQgIm1hZ3VzL3NwZWxsL2dvIjsgICAgICAgIC8vIEdvIHRvb2xjaGFpbjogZ28tYnVpbGQsIGdvLXRlc3QsIGdvLXZldCwgZ28tZm10LCAuLi4KaW1wb3J0ICJtYWd1cy9zcGVsbC90cyI7ICAgICAgICAvLyBUeXBlU2NyaXB0IHRvb2xjaGFpbjogdHNjLCBlc2xpbnQsIHByZXR0aWVyLCB2aXRlc3QKaW1wb3J0ICJtYWd1cy9zcGVsbC9kb2NrZXIiOyAgICAvLyBjb250YWluZXIgaW1hZ2U6IGRvY2tlci1idWlsZCwgaGFkb2xpbnQKCmZpbmFsIFZFUlNJT046IHN0ciA9ICIxLjQuMCI7CmZpbmFsIElNQUdFOiBzdHIgPSAiZ2hjci5pby9leGFtcGxlL2FwaSI7CgovLyBlc2xpbnQgaXMgQ1BVLSBhbmQgbWVtb3J5LWh1bmdyeSwgc28gd2Ugc2l6ZSBpdCBvbmNlIGFzIGFuIE4tY29yZSBqb2IgYW5kIGZlZWQKLy8gdGhhdCBudW1iZXIgdG8gQk9USCBsZXZlcnMgYmVsb3c6IG1hZ3VzIHJlc2VydmVzIHRoaXMgbWFueSBzY2hlZHVsZXIgc2xvdHMgZm9yCi8vIHRoZSBqcy1saW50IHRhcmdldCAodGhlIGBzbG90c2AgcG9saWN5KSwgYW5kIGVzbGludCBpcyB0b2xkIHRvIHVzZSB0aGlzIG1hbnkKLy8gd29ya2VyIHRocmVhZHMgKC0tY29uY3VycmVuY3kpLiBSZXNlcnZpbmcgc2xvdHMgd2l0aG91dCB0ZWxsaW5nIHRoZSB0b29sIHRvIHVzZQovLyB0aGVtIHdhc3RlcyB0aGUgcmVzZXJ2YXRpb247IHRlbGxpbmcgdGhlIHRvb2wgdG8gdXNlIG1vcmUgdGhhbiB3ZSByZXNlcnZlZAovLyBvdmVyc3Vic2NyaWJlcyB0aGUgbWFjaGluZS4gS2VlcGluZyB0aGVtIGVxdWFsIG1ha2VzIHRoZSB0d28gYWdyZWUuIHNsb3RzIGlzIGEKLy8gcGVyLXRhcmdldCBwb2xpY3kgKGEgdGFyZ2V0IGlzIHRoZSB1bml0IHRoZSBzY2hlZHVsZXIgYWNxdWlyZXMgc2xvdHMgZm9yKSwgc28KLy8gZXNsaW50IHJ1bnMgaW4gaXRzIG93biBqcy1saW50IHRhcmdldCByYXRoZXIgdGhhbiByaWRpbmcgdGhlIGJyb2FkZXIgbGludCBzdGFnZS4KZmluYWwgTElOVF9TTE9UUzogaW50ID0gNDsKCi8vIE9uZSBwcm9qZWN0IGJpbmRpbmcgZXZlcnkgdG9vbGNoYWluIGl0IHVzZXM7IHRoZSB0YXJnZXRzIGJlbG93IGNvbXBvc2Ugb3BzCi8vIGFjcm9zcyBhbGwgb2YgdGhlbS4gUGVyLXRhcmdldCBwb2xpY3k6IHRoZSBqcy1saW50IHRhcmdldCBob2xkcyBMSU5UX1NMT1RTCi8vIHNjaGVkdWxlciBzbG90cyAoZXNsaW50IGlzIHRoZSBoZWF2eSBvbmUpOyByZWxlYXNlIHJ1bnMgYWxvbmUgKGV4Y2x1c2l2ZSkuCi8vIEV2ZXJ5dGhpbmcgZWxzZSByZWxpZXMgb24gdGhlIGNhY2hlIGJ5IGRlZmF1bHQgKG1hZ3VzIGtleXMgZWFjaCB0YXJnZXQgb24gaXRzCi8vIGRlY2xhcmVkIGlucHV0cyBhbmQgcmVwbGF5cyBvdXRwdXRzIHdoZW4gdGhleSBhcmUgdW5jaGFuZ2VkKSwgd2hpY2ggaXMgdGhlIHdob2xlCi8vIHBvaW50LCBzbyB3ZSBkbyBOT1Qgb3B0IHRhcmdldHMgb3V0IG9mIGl0IGhlcmUuCm1hZ3VzLnByb2plY3QoewogICAgInNwZWxscyI6IFtidWYsIGdvLCB0cywgZG9ja2VyXSwKICAgICJvdXRwdXRzIjogWyJnZW4vKioiLCAiYmluLyoqIl0sCiAgICAidGFyZ2V0cyI6IHsKICAgICAgICAianMtbGludCI6IHsic2xvdHMiOiBMSU5UX1NMT1RTfSwKICAgICAgICAicmVsZWFzZSI6IHsiZXhjbHVzaXZlIjogdHJ1ZX0sCiAgICB9LAp9KTsKCi8vIEEgcGxhaW4gQnV6eiBoZWxwZXIgdGhhdCBhc3NlbWJsZXMgdGhlIC1sZGZsYWdzIHN0YW1waW5nIHRoZSB2ZXJzaW9uIGludG8gdGhlCi8vIHNlcnZlciBiaW5hcnkgKHVzZWQgYnkgYnVpbGQgYmVsb3cpLiBUcnkgYGxkZmxhZ3MoVkVSU0lPTilgIGluIHRoZSBjb25zb2xlIHRvCi8vIHNlZSBCdXp6IGV2YWx1YXRlIGl0OyB0aGUgaW50ZXJwcmV0ZXIgaXMgcmVhbCwgb25seSB0aGUgYnVpbGQgdG9vbHMgYXJlIHN0dWJiZWQuCmZ1biBsZGZsYWdzKHZlcnNpb246IHN0cikgPiBzdHIgewogICAgcmV0dXJuICItcyAtdyAtWCBtYWluLnZlcnNpb249IiArIHZlcnNpb247Cn0KCi8vIEVhY2ggZXhwb3J0ZWQgZnVuY3Rpb24gaXMgYSBydW5uYWJsZSB0YXJnZXQuIEl0cyBuYW1lIGlzIG5vcm1hbGl6ZWQgdG8KLy8ga2ViYWItY2FzZSwgc28gY2FzaW5nIGFuZCBzZXBhcmF0b3JzIGRvIG5vdCBtYXR0ZXI6IGltYWdlX2J1aWxkLCBpbWFnZUJ1aWxkLAovLyBhbmQgSU1BR0VfQlVJTEQgYWxsIGRlZmluZSAoYW5kIHJ1bikgdGhlIHRhcmdldCBpbWFnZS1idWlsZC4gYG1hZ3VzIHJ1bgovLyBpbWFnZUJ1aWxkYCBhbmQgYG1hZ3VzIHJ1biBpbWFnZS1idWlsZGAgYXJlIHRoZSBzYW1lIGNvbW1hbmQ7IHRyeSBgcnVuCi8vIG1vY2tHZW5lcmF0ZWAgaW4gdGhlIGNvbnNvbGUgYmVsb3cuIERlcGVuZGVuY2llcyBhcmUgZGVjbGFyZWQgd2l0aAovLyBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgibmFtZSIpKTogbmVlZHMgdGFrZXMgYSBtYWd1cy50YXJnZXQuKiBxdWVyeQovLyB3cmFwcGluZyBhIHN0cmluZyBsaXRlcmFsIChub3QgYSBiYXJlIHN0cmluZyBvciB0aGUgZnVuY3Rpb24gaXRzZWxmKSwgc28gbWFndXMKLy8gY2FuIHJlY292ZXIgdGhlIHdob2xlIERBRyBzdGF0aWNhbGx5LCB3aXRob3V0IHJ1bm5pbmcgdGhlIGZpbGUuIG1hZ3VzIHJ1bnMgdGhlCi8vIGRlcGVuZGVuY2llcyBmaXJzdCwgZGVkdXBsaWNhdGVkLCBhbmQgaW4gcGFyYWxsZWwgd2hlcmV2ZXIgdGhlIGdyYXBoIGFsbG93cy4KLy8KLy8gQSBzcGVsbCdzIG9wcyBhcmUgaXRzIGNvbnRyaWJ1dGVkIHRhcmdldHMsIGtleWVkIGJ5IHRoZSBrZWJhYi1jYXNlIENMSSBuYW1lCi8vIChnby1idWlsZCwgYnVmLWxpbnQpLiBDYWxsIG9uZSBieSBpbmRleGluZyB0aGUgaGFuZGxlIHdpdGggdGhhdCBuYW1lLCB0aGUgc2FtZQovLyBuYW1lIGBtYWd1cyBydW4gZ28tYnVpbGRgIGFuZCB0aGUgY2FjaGUgdXNlLgoKLy8gR2F0ZSB0aGUgcGlwZWxpbmUgb24gYSBoZWFsdGh5IHdvcmtzcGFjZSBiZWZvcmUgYW55dGhpbmcgYnVpbGRzLgpleHBvcnQgZnVuIHByZWZsaWdodChhcmdzOiBbc3RyXSkgPiB2b2lkIHt9CgovLyBDb2RlZ2VuIGlzIG9uZSBgKi1nZW5lcmF0ZWAgdGFyZ2V0IHBlciBnZW5lcmF0b3IuIEVhY2ggaXMgb3JkaW5hcnkgY2FjaGVkCi8vIGNvZGVnZW46IG1hZ3VzIGtleXMgaXQgb24gaXRzIGlucHV0cyBhbmQgaXRzIGdlbi8qKiBvdXRwdXRzLCBzbyBpdCByZXJ1bnMgb25seQovLyB3aGVuIHRob3NlIGlucHV0cyBjaGFuZ2UuIChDb250cmFzdCB3aXRoIGEgZHJpZnQtZ2F0ZSB0YXJnZXQgdGhhdCB2ZXJpZmllcwovLyBjb21taXR0ZWQgb3V0cHV0IGlzIGN1cnJlbnQgb24gZXZlcnkgcnVuOyB0aGF0IG9uZSB3b3VsZCBzZXQgc2tpcENhY2hlIGJlY2F1c2UKLy8gaXRzIHBvaW50IGlzIHRoZSBjaGVjaywgbm90IGEgY2FjaGVhYmxlIGFydGlmYWN0LikKZXhwb3J0IGZ1biBwcm90b19nZW5lcmF0ZShhcmdzOiBbc3RyXSkgPiB2b2lkIHsgYnVmWyJidWYtZ2VuZXJhdGUiXSgpOyB9CmV4cG9ydCBmdW4gbW9ja19nZW5lcmF0ZShhcmdzOiBbc3RyXSkgID4gdm9pZCB7IGdvWyJnby1nZW5lcmF0ZSJdKCk7IH0KCi8vIFRoZSB1bWJyZWxsYSBgZ2VuZXJhdGVgIHRhcmdldCBwdWxscyBpbiBldmVyeSBgKi1nZW5lcmF0ZWAgdGFyZ2V0IHdpdGggT05FIGdsb2IKLy8gaW5zdGVhZCBvZiBsaXN0aW5nIGVhY2ggYnkgaGFuZDogbWFndXMudGFyZ2V0Lmdsb2IoIiotZ2VuZXJhdGUiKSBtYXRjaGVzIGV2ZXJ5Ci8vIHRhcmdldCBlbmRpbmcgaW4gLWdlbmVyYXRlLCBzbyBhZGRpbmcgYSBgc3FsLWdlbmVyYXRlYCBsYXRlciBuZWVkcyBubyBlZGl0IGhlcmUuCi8vIChGb3IgYXJiaXRyYXJ5IHBhdHRlcm5zIHRoZXJlIGlzIGFsc28gbWFndXMudGFyZ2V0LnJlZ2V4KC4uLikuKSBUaGF0IGlzIHRoZQovLyBwYXlvZmYgb2YgbmFtaW5nIHRhcmdldHMgYnkgYSBzaGFyZWQgY29udmVudGlvbi4gVHJ5IGBydW4gZ2VuZXJhdGVgIHRvIGZhbiBvdXQuCmV4cG9ydCBmdW4gZ2VuZXJhdGUoYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgicHJlZmxpZ2h0IiksIG1hZ3VzLnRhcmdldC5nbG9iKCIqLWdlbmVyYXRlIikpOwp9CgovLyBGb3JtYXQgZXZlcnkgbGFuZ3VhZ2UuIFRoZXNlIG9wcyBDSEVDSyBieSBkZWZhdWx0OyBydW4gYG1hZ3VzIHJ1biBmb3JtYXQ6cndgCi8vIHRvIEFQUExZIHRoZSBmaXhlczogdGhlIHJ3IGNoYXJtIGZsaXBzIGdvZm10IC1sIHRvIC13LCBwcmV0dGllciAtLWNoZWNrIHRvCi8vIC0td3JpdGUsIGJ1ZiBmb3JtYXQgdG8gLXcuIFRoZSBjaGFybSByaWRlcyBkb3duIGZyb20gdGhlIHJ1biwgc28gbm8gYnJhbmNoIGlzCi8vIG5lZWRlZCBoZXJlLiAoVHJ5IGBydW4gZm9ybWF0YCB0aGVuIGBydW4gZm9ybWF0OnJ3YCBpbiB0aGUgY29uc29sZSB0byBjb21wYXJlLikKZXhwb3J0IGZ1biBmb3JtYXQoYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgiZ2VuZXJhdGUiKSk7CiAgICBidWZbImJ1Zi1mb3JtYXQiXSgpOwogICAgZ29bImdvLWZtdCJdKCk7CiAgICB0c1sicHJldHRpZXIiXSgpOwp9CgovLyBMaW50aW5nIGlzIGEgYCotbGludGAgc2V0IHRvbywgb25lIHRhcmdldCBwZXIgdG9vbGNoYWluLCBzbyBgbGludGAgY2FuIGdsb2IKLy8gdGhlbSB0aGUgc2FtZSB3YXkgYGdlbmVyYXRlYCBnbG9icyBpdHMgZ2VuZXJhdG9ycy4ganMtbGludCBpcyBzcGxpdCBvdXQgb24gaXRzCi8vIG93biBiZWNhdXNlIGl0IGNhcnJpZXMgdGhlIGxvYWQ6IGVzbGludCBpcyB0aGUgaGVhdnkgb25lLCBzbyB0aGlzIHRhcmdldCBob2xkcwovLyBMSU5UX1NMT1RTIHNsb3RzIGFuZCBydW5zIGVzbGludCB3aXRoIGEgbWF0Y2hpbmcgLS1jb25jdXJyZW5jeSAodGhlIGNoZWFwIGJ1Zi9nbwovLyBjaGVja3Mgc3RheSBhdCB0aGUgZGVmYXVsdCBvZiAxIHNsb3QpLiBgbWFndXMgcnVuIGxpbnQ6cndgIGFwcGxpZXMgdGhlCi8vIGF1dG8tZml4YWJsZSBmaW5kaW5ncyB3aGVyZSBhIHRvb2wgc3VwcG9ydHMgaXQgKGUuZy4gZ29sYW5nY2ktbGludCAtLWZpeCkuCmV4cG9ydCBmdW4gcHJvdG9fbGludChhcmdzOiBbc3RyXSkgPiB2b2lkIHsKICAgIG1hZ3VzLm5lZWRzKG1hZ3VzLnRhcmdldC5saXRlcmFsKCJmb3JtYXQiKSk7CiAgICBidWZbImJ1Zi1saW50Il0oKTsKfQpleHBvcnQgZnVuIGdvX2xpbnQoYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgiZm9ybWF0IikpOwogICAgZ29bImdvLXZldCJdKCk7CiAgICBnb1siZ29sYW5nY2ktbGludCJdKCk7Cn0KZXhwb3J0IGZ1biBqc19saW50KGFyZ3M6IFtzdHJdKSA-IHZvaWQgewogICAgbWFndXMubmVlZHMobWFndXMudGFyZ2V0LmxpdGVyYWwoImZvcm1hdCIpKTsKICAgIHRzWyJlc2xpbnQiXSh7ImFyZ3MiOiBbIi0tY29uY3VycmVuY3k9IiArIExJTlRfU0xPVFNdfSk7Cn0KCi8vIFRoZSB1bWJyZWxsYSBgbGludGAgZmFucyBvdXQgYWNyb3NzIHRoZSB3aG9sZSBmYW1pbHkgd2l0aCBvbmUgZ2xvYi4KZXhwb3J0IGZ1biBsaW50KGFyZ3M6IFtzdHJdKSA-IHZvaWQgewogICAgbWFndXMubmVlZHMobWFndXMudGFyZ2V0Lmdsb2IoIiotbGludCIpKTsKfQoKLy8gQ29tcGlsZSB0aGUgdmVyc2lvbi1zdGFtcGVkIHNlcnZlciBiaW5hcnkgYW5kIHR5cGUtY2hlY2sgdGhlIGNsaWVudC4KZXhwb3J0IGZ1biBidWlsZChhcmdzOiBbc3RyXSkgPiB2b2lkIHsKICAgIG1hZ3VzLm5lZWRzKG1hZ3VzLnRhcmdldC5saXRlcmFsKCJmb3JtYXQiKSk7CiAgICBnb1siZ28tYnVpbGQiXSh7ImFyZ3MiOiBbIi1sZGZsYWdzIiwgbGRmbGFncyhWRVJTSU9OKSwgIi1vIiwgImJpbi9hcGkiLCAiLi9jbWQvYXBpIl19KTsKICAgIHRzWyJ0c2MiXSgpOwp9CgovLyBSdW4gYm90aCBzdWl0ZXMuCmV4cG9ydCBmdW4gdGVzdChhcmdzOiBbc3RyXSkgPiB2b2lkIHsKICAgIG1hZ3VzLm5lZWRzKG1hZ3VzLnRhcmdldC5saXRlcmFsKCJmb3JtYXQiKSk7CiAgICBnb1siZ28tdGVzdCJdKCk7CiAgICB0c1sidml0ZXN0Il0oKTsKfQoKLy8gVGhlIGNvbnZlbnRpb25hbCBhbmNob3IgYG1hZ3VzIGFmZmVjdGVkIGNpYCBrZXlzIG9mZi4gSXQgZGVjbGFyZXMgbm8gd29yayBvZgovLyBpdHMgb3duOyBpdCBmYW5zIG91dCB0byBsaW50LCBidWlsZCwgYW5kIHRlc3QsIHdoaWNoIHNoYXJlIHRoZSBmb3JtYXQgLT4KLy8gZ2VuZXJhdGUgLT4gcHJlZmxpZ2h0IHNwaW5lIGFuZCBlYWNoIHJ1biBvbmNlLiBUcnkgYHJ1biBjaWAgdG8gc2VlIHRoZSBwbGFuLgpleHBvcnQgZnVuIGNpKGFyZ3M6IFtzdHJdKSA-IHZvaWQgewogICAgbWFndXMubmVlZHMobWFndXMudGFyZ2V0LmxpdGVyYWwoImxpbnQiKSwgbWFndXMudGFyZ2V0LmxpdGVyYWwoImJ1aWxkIiksIG1hZ3VzLnRhcmdldC5saXRlcmFsKCJ0ZXN0IikpOwp9CgovLyBCdWlsZCB0aGUgY29udGFpbmVyIGltYWdlIGZyb20gdGhlIGNvbXBpbGVkIGJpbmFyeS4gRGVmYXVsdDogYSBzaW5nbGUtYXJjaAovLyBpbWFnZSBsb2FkZWQgaW50byB0aGUgbG9jYWwgZGFlbW9uLiBVbmRlciB0aGUgYGNkYCBjaGFybTogYSBtdWx0aS1hcmNoIGltYWdlCi8vIHB1c2hlZCB0byB0aGUgcmVnaXN0cnkuIEtlcHQgYXMgaXRzIG93biB0YXJnZXQgc28gYG1hZ3VzIHJ1biBpbWFnZS1idWlsZGAKLy8gd29ya3Mgc3RhbmRhbG9uZS4KZXhwb3J0IGZ1biBpbWFnZV9idWlsZChhcmdzOiBbc3RyXSkgPiB2b2lkIHsKICAgIG1hZ3VzLm5lZWRzKG1hZ3VzLnRhcmdldC5saXRlcmFsKCJidWlsZCIpKTsKICAgIGZpbmFsIHRhZyA9IElNQUdFICsgIjoiICsgVkVSU0lPTjsKICAgIGlmIChtYWd1cy5oYXNfY2hhcm0oImNkIikpIHsKICAgICAgICBkb2NrZXJbImRvY2tlci1idWlsZCJdKHsiYXJncyI6IFsiLS1wbGF0Zm9ybSIsICJsaW51eC9hbWQ2NCxsaW51eC9hcm02NCIsICItLXB1c2giLCAiLXQiLCB0YWcsICIuIl19KTsKICAgIH0gZWxzZSB7CiAgICAgICAgZG9ja2VyWyJkb2NrZXItYnVpbGQiXSh7ImFyZ3MiOiBbIi0tbG9hZCIsICItdCIsIHRhZywgIi4iXX0pOwogICAgfQp9CgovLyBTaGlwIGEgcmVsZWFzZTogYSBuZWVkcygpIGVkZ2Ugb250byBpbWFnZS1idWlsZCwgc28gaXQgc2hvd3MgdXAgaW4gYGdyYXBoYC9gbHNgCi8vIGFzIHBhcnQgb2YgdGhlIERBRy4gQ2hhcm1zIHJpZGUgZG93biBuZWVkcygpIGVkZ2VzIGZyb20gdGhlIHJ1biwgc28gYG1hZ3VzIHJ1bgovLyByZWxlYXNlOmNkYCBmbG93cyB0aGUgY2QgY2hhcm0gaW50byBpbWFnZS1idWlsZCBhbmQgaXQgc3dpdGNoZXMgdG8gYSBtdWx0aS1hcmNoCi8vIHB1c2guIChtYWd1cy5ydW4oWyJpbWFnZS1idWlsZDpjZCJdKSB3b3VsZCBpbnN0ZWFkIGludm9rZSBpdCBpbXBlcmF0aXZlbHkgd2l0aAovLyB0aGUgY2hhcm0gcGlubmVkIGluIHRoZSBjYWxsLCBidXQgYW4gaW1wZXJhdGl2ZSBjYWxsIGlzIG5vdCBhIHN0YXRpYyBlZGdlLCBzbyBpdAovLyB3b3VsZCBub3QgYXBwZWFyIGluIHRoZSBncmFwaC4gQm90aCBhcmUgdmFsaWQ7IG5lZWRzIGtlZXBzIHRoZSBEQUcgY29tcGxldGUuKQpleHBvcnQgZnVuIHJlbGVhc2UoYXJnczogW3N0cl0pID4gdm9pZCB7CiAgICBtYWd1cy5uZWVkcyhtYWd1cy50YXJnZXQubGl0ZXJhbCgiaW1hZ2UtYnVpbGQiKSk7Cn0K">Open in Playground &rarr;</a>
+      </li>
+    </ol>
+    </article>
+  </main>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/claude/peaceful-elbakyan-6bb406/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>
