@@ -1,0 +1,29 @@
+// Wards: guardrails that catch a contradiction before it runs. A ward is a coded
+// diagnostic - an MGSxxxx code - magus raises when your magusfile or a resolved op
+// disagrees with itself. This service op looks fine, but its command detaches:
+// `docker run -d` forks the container away from magus, and a detached process
+// cannot be supervised - foreground blocking, stdout capture, the readiness probe,
+// and the stop command all become meaningless. So magus rejects it at resolution,
+// before anything forks, with MGS5002. Try `run serve` and read the ward.
+//
+// It is an error with no suppression: the fix is to change the shape, not silence
+// the check. Drop the -d (a supervised service stays in the foreground), or if you
+// truly want fire-and-forget, make it a Command op instead of a Service. Delete
+// the "-d" below and `run serve` again to watch the ward clear.
+
+import "magus/target";
+
+export fun mgs_getName() > str { return "postgres"; }
+
+fun serve(t: Target) > Service {
+    return Service{
+        // The -d is the bug: a service that detaches contradicts its own kind.
+        command   = Command{bin = "docker", args = ["run", "-d", "-p", "5432:5432", "postgres:16"]},
+        readiness = Command{bin = "pg_isready", args = ["-h", "localhost"]},
+        stop      = Command{bin = "docker", args = ["stop", "magus-pg"]},
+    };
+}
+
+export fun mgs_listTargets() > any {
+    return {"serve": serve};
+}

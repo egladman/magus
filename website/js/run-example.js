@@ -5,7 +5,7 @@
 // panel, and on click LAZY-LOADS the playground WASM (never on page load - the
 // ~1.9 MB artifact would regress the perf work). Subsequent runs on the page
 // reuse the cached module. Also adds an "Open in Playground →" link that deep-
-// links the snippet into /playground.html#source=<base64url> (WS M's loader).
+// links the snippet into /playground/#source=<base64url>.
 
 (function () {
   var blocks = document.querySelectorAll("pre[data-runnable]");
@@ -123,7 +123,7 @@
     var openLink = document.createElement("a");
     openLink.className = "open-in-playground";
     openLink.textContent = "Open in Playground →";
-    openLink.href = ROOT + "playground.html#source=" + base64url(code.textContent);
+    openLink.href = ROOT + "playground/#source=" + base64url(code.textContent);
     openLink.setAttribute("title", "Open this snippet in the playground");
     openLink.setAttribute("data-tooltip", "Open in playground");
     bar.appendChild(openLink);

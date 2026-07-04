@@ -1,0 +1,28 @@
+// Charms: check by default, apply on demand. A charm is a named modifier you
+// attach to a run with a colon suffix - `run format:rw` - and magus flows it down
+// the dependency edges to every target in the plan. The convention: a bare target
+// is READ-ONLY (format checks, lint reports); the built-in `rw` charm (read to
+// write) flips it to mutate. Compare `run format` with `run format:rw` and watch
+// the flag change from -l (list) to -w (write).
+
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+// Read the active charm set with has_charm, then branch. (Most real spell ops do
+// this flip internally, so you usually get rw for free; here it is spelled out so
+// the plan shows the difference.)
+export fun format(args: [str]) > void {
+    if (magus.has_charm("rw")) {
+        go["go-fmt"]({"args": ["-w"]});   // rewrite files in place
+    } else {
+        go["go-fmt"]({"args": ["-l"]});   // just list what would change
+    }
+}
+
+// Charms ride down needs() edges, so a single charm on the anchor reaches the
+// whole plan: `run ci:rw` hands rw to format too. Try `run ci`, then `run ci:rw`.
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("format"));
+}
