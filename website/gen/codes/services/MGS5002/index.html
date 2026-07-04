@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>MGS5002: service op detaches — magus</title>
+  <meta name="description" content="Fires when a service op's process command detaches (docker run -d), which forks the process away from magus and breaks foreground supervision, stdout capture, readiness probing, and graceful stop.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/services/MGS5002/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/services/">Services</a></li><li aria-current="page">MGS5002: service op detaches</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/services/MGS5002.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <article>
+<h1 id="mgs5002-service-op-detaches">MGS5002: service op detaches</h1>
+<p>A <a href="../../../operations/">service op</a> returned a <code>Service</code> whose process command
+detaches - <code>docker run -d</code> / <code>--detach</code> (or a combined short-flag block like
+<code>-itd</code>). magus rejects it at resolution, before anything forks.</p>
+<pre><code class="language-text">[MGS5002] service op &quot;db&quot; detaches with &quot;-d&quot;: magus forks a service in the foreground and supervises it, so detaching breaks stdout capture, readiness, and stop. Drop the detach flag, or make this a command op if you really want it detached.
+  see: …/MGS5002.md
+</code></pre>
+<h2 id="why">Why</h2>
+<p>magus runs a service in the <strong>foreground</strong> and supervises it: it blocks on the
+process, captures its stdout and stderr, polls the readiness probe against it, and
+sends the stop command to shut it down. A detached process forks away from magus
+immediately, so all four of those become meaningless - magus is left blocking on a
+launcher that already exited, supervising nothing.</p>
+<p>This is not a style preference; it is a self-contradiction between the op's kind
+(a long-running, supervised service) and its argv (fire-and-forget). So it is an
+error with no flag-level suppression: the resolution is to change the shape, not to
+silence the check.</p>
+<p>The check is scoped to container runtimes (<code>docker</code>, <code>podman</code>, <code>nerdctl</code>) because
+<code>-d</code> is tool-specific: <code>dnsmasq -d</code>, for example, means the opposite (stay in the
+foreground) and is never flagged.</p>
+<h2 id="fix">Fix</h2>
+<ul>
+<li>Drop the detach flag. <code>docker run</code> (no <code>-d</code>) stays in the foreground and streams
+logs, which is exactly what a supervised service wants.</li>
+<li>If you genuinely want a fire-and-forget process that magus does not supervise,
+model it as a command op (which runs to completion) rather than a service op. But
+prefer a supervised service: magus deliberately discourages spawning a process it
+can no longer see or cleanly tear down.</li>
+</ul>
+    </article>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../MGS5001/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS5001: near-duplicate services</span></a>
+      <a class="page-nav-next" href="../MGS5003/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS5003: command op never exits</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/services/MGS5002.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/services/MGS5002.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

@@ -1210,6 +1210,26 @@ fun formatISO(iso: str) > str {
         + ", " + HOUR12[hour] + ":" + time[1] + " " + AMPM[hour] + " UTC";
 }
 
+// blogDate renders a post's frontmatter date (date-only "2026-07-01" or a full
+// RFC3339 timestamp) as a plain calendar byline: "July 1, 2026" - full month, no
+// time-of-day. Blog dates are calendar days, not instants, so the paired <time>
+// carries the date-only "YYYY-MM-DD" form and theme.js formats it in UTC (a
+// midnight-UTC instant would otherwise slip to the previous day west of GMT).
+fun blogDate(d: str) > str {
+    final date = d.split("T")[0].split("-");   // ["2026", "07", "01"]
+    if (date.len() < 3) { return d; }
+    var day = date[2];
+    if (day.startsWith("0")) { day = day.sub(1); }
+    return MONTHS[date[1]] + " " + day + ", " + date[0];
+}
+
+// blogDateAttr is the date-only "YYYY-MM-DD" that pairs with blogDate() in a
+// <time datetime> attribute (theme.js keys off its 10-char length to format in
+// UTC rather than the viewer's local zone).
+fun blogDateAttr(d: str) > str {
+    return d.split("T")[0];
+}
+
 // Compact form used by the recent-changes list; the full timestamp stays in the
 // <time datetime="..."> attribute for tooltips and screen readers.
 fun formatISOShort(iso: str) > str {
@@ -1919,11 +1939,28 @@ fun renderBlogPost(base: str) > void {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = SITE_DESC; }
 
+    // Dateline: a scoped byline injected directly under the post's H1 - publish
+    // date (calendar day; see blogDate), author, and a permalink to the post's
+    // own canonical URL. Sitting inside the <article> right after the title, it
+    // reads as the post's metadata rather than free-floating page chrome. Guarded
+    // on there being an H1 and a date; a title-less or undated post just skips it.
+    var article = html;
+    final h1End = html.indexOf("</h1>");
+    if (h1End != null and date != "") {
+        final author = fm.q("author").stringValue();
+        var meta = "<p class=\"blog-post-meta\"><time datetime=\"" + blogDateAttr(date)
+            + "\">" + blogDate(date) + "</time>";
+        if (author != "") { meta = meta + " &middot; " + author; }
+        meta = meta + " &middot; <a href=\"" + SITE_URL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
+        final cut = h1End + 5;   // length of "</h1>"
+        article = html.sub(0, cut) + "\n" + meta + html.sub(cut);
+    }
+
     // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
     final pager = blogPagerFor(base);
 
     pageReading = readingTime(md);
-    final doc = page(title, desc, html, rel, pager, url);
+    final doc = page(title, desc, article, rel, pager, url);
     fs.makeDirectory(OUT + "/" + BLOG + "/" + slug);
     final of = io.File.open(OUT + "/" + BLOG + "/" + slug + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -2022,8 +2059,8 @@ fun renderBlogIndex() > void {
             body = body + "  <li><a href=\"" + p["slug"] + "/\"><span class=\"blog-index-title\">"
                 + p["title"] + "</span></a>";
             if (p["date"] != "") {
-                body = body + " <time class=\"blog-index-date\" datetime=\"" + p["date"] + "\">"
-                    + p["date"] + "</time>";
+                body = body + " <time class=\"blog-index-date\" datetime=\"" + blogDateAttr(p["date"]) + "\">"
+                    + blogDate(p["date"]) + "</time>";
             }
             if (p["description"] != "") {
                 body = body + "<p class=\"blog-index-desc\">" + p["description"] + "</p>";

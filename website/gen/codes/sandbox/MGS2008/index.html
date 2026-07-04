@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>MGS2008: daemon socket withheld — magus</title>
+  <meta name="description" content="Fires at debug level when magus re-injects the daemon socket vars into a recursive magus invocation, after withholding them from sandboxed spell subprocesses.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/sandbox/MGS2008/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/sandbox/">Sandbox</a></li><li aria-current="page">MGS2008: daemon socket withheld</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/sandbox/MGS2008.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <article>
+<h1 id="mgs2008-daemon-socket-withheld-from-sandboxed-children">MGS2008: daemon socket withheld from sandboxed children</h1>
+<p>The daemon socket vars (<code>MAGUS_DAEMON_SOCKET</code>, <code>MAGUS_DAEMON_ADDRESS</code>) are
+withheld from the environment of sandboxed spell subprocesses. This code is
+logged, at debug level only, when magus re-injects them for a legitimate
+recursive <code>magus</code> invocation.</p>
+<pre><code class="language-text">[MGS2008] daemon socket injected into recursive magus invocation (see https://github.com/egladman/magus/blob/main/docs/codes/sandbox/MGS2008.md)
+  var=MAGUS_DAEMON_SOCKET
+</code></pre>
+<h2 id="why">Why</h2>
+<p>The daemon socket is unauthenticated: anything that can reach it can drive
+the daemon. If those vars were inherited by every child, a compromised
+third-party spell could connect to the daemon and issue commands. So the
+sandbox child environment strips them by default, alongside the other
+secret-bearing vars (see <code>MGS2003.md</code>).</p>
+<p>A nested <code>magus</code> call is different. It is a recursive invocation of the same
+trusted binary, and it genuinely needs the daemon to coordinate. For that one
+case magus re-injects <code>MAGUS_DAEMON_SOCKET</code> and <code>MAGUS_DAEMON_ADDRESS</code> as
+explicit env overrides on the child, and records it with this code.</p>
+<p>The log fires at debug (<code>-v</code>), not info, because a fan-out can spawn many
+recursive invocations and it would otherwise be pure noise at default
+verbosity. It is an internal correctness note, not an error and not
+user-actionable.</p>
+<h2 id="resolution">Resolution</h2>
+<p>Nothing to do. This is the sandbox working as intended: the socket stays
+hidden from spell subprocesses, and is handed only to nested magus processes
+that need it.</p>
+<p>You will see this line only when running at <code>-v</code> or higher. If you do not
+want the noise, run at default verbosity.</p>
+    </article>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../MGS2007/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS2007: exec denied</span></a>
+      <a class="page-nav-next" href="../MGS2009/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS2009: outbound network request</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-03T20:04:47Z">July 3, 2026, 8:04 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" data-tooltip="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" title="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1">b68d6ff</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1"><code>b68d6ff</code></a> <small><time datetime="2026-07-03T20:04:47Z">Jul 3, 2026</time></small> - merge: document MGS2008, MGS2009, MGS2010</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/sandbox/MGS2008.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/sandbox/MGS2008.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

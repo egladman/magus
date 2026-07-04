@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>MGS2009: outbound network request — magus</title>
+  <meta name="description" content="Fires at info level for every outbound network request a spell makes through the http bindings while the sandbox is active. The sandbox audits egress but does not block it.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/sandbox/MGS2009/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/sandbox/">Sandbox</a></li><li aria-current="page">MGS2009: outbound network request</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/sandbox/MGS2009.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <article>
+<h1 id="mgs2009-outbound-network-request-audited-not-blocked">MGS2009: outbound network request (audited, not blocked)</h1>
+<p>A spell made an outbound network request through the <code>http.*</code> bindings while
+the sandbox was active. The sandbox logs every such request for audit, but
+does not block it.</p>
+<pre><code class="language-text">[MGS2009] sandbox: outbound network request
+  method=GET url=https://api.example.com/v1/data
+</code></pre>
+<h2 id="why">Why</h2>
+<p>Sandbox v1 confines the filesystem and the child environment, but does not
+block network egress: a compromised spell with no token in its env can still
+reach an arbitrary host. Closing that gap needs an opt-in network policy
+(a future <code>sandbox_network</code> flag), which does not exist yet.</p>
+<p>Until then the sandbox does the next best thing and keeps an audit trail.
+Every request issued through the built-in <code>http.*</code> bindings is recorded at
+info level with its method and URL before it is sent. There is no SSRF
+allow/deny enforcement: the request is still fetched, including localhost,
+RFC1918 ranges, and the cloud metadata endpoint (169.254.169.254). Treat any
+URL reachable from a magusfile as trusted.</p>
+<h2 id="resolution">Resolution</h2>
+<p>This is informational, not an error. In normal use it documents the network
+calls your spells make.</p>
+<ol>
+<li>
+<p><strong>If the host is one you expect</strong> (the spell's documented API, a package
+registry, etc.): nothing to do.</p>
+</li>
+<li>
+<p><strong>If you see a request to a host you do not recognize:</strong> treat it as a
+red flag and investigate the spell that issued it. The URL in the log is
+the exact destination. There is no built-in way to block egress yet, so
+the safe response is to stop running the untrusted spell.</p>
+</li>
+</ol>
+    </article>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../MGS2008/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS2008: daemon socket withheld</span></a>
+      <a class="page-nav-next" href="../MGS2010/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS2010: sandbox policy mismatch</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-03T20:04:47Z">July 3, 2026, 8:04 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" data-tooltip="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" title="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1">b68d6ff</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1"><code>b68d6ff</code></a> <small><time datetime="2026-07-03T20:04:47Z">Jul 3, 2026</time></small> - merge: document MGS2008, MGS2009, MGS2010</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/sandbox/MGS2009.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/sandbox/MGS2009.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

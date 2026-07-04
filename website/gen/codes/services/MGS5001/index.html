@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>MGS5001: near-duplicate services — magus</title>
+  <meta name="description" content="Fires when two or more service ops in a run look like copies of the same service (same image and container port) but differ subtly, so they will run as separate processes instead of one shared instance.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/services/MGS5001/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../playground.html">Playground</a></li>
+        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
+      </ul>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/services/">Services</a></li><li aria-current="page">MGS5001: near-duplicate services</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/services/MGS5001.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <article>
+<h1 id="mgs5001-near-duplicate-services">MGS5001: near-duplicate services</h1>
+<p>Two or more long-running <a href="../../../operations/">service ops</a> in the resolved run
+look like copies of the same service: they share an image repository and a
+container port, but differ in some detail (an environment variable, an image tag,
+a volume), so magus will not silently merge them. Left as-is they run as separate
+processes.</p>
+<pre><code class="language-text">[MGS5001] 3 services share image &quot;postgres&quot; on container port 5432 but will run as separate processes:
+  billing/db  (tag=15, POSTGRES_DB=billing)
+  search/pg   (tag=16, POSTGRES_DB=search)
+  web/api-db  (tag=15, POSTGRES_DB=api)
+if these are meant to be one shared service, extract a shared target both need; otherwise mark them distinct with a reason.
+  see: …/MGS5001.md
+</code></pre>
+<h2 id="why">Why</h2>
+<p>When several projects each define &quot;their own&quot; Postgres (or app), each service is
+a distinct target, nothing deduplicates them, and bringing up the whole stack
+runs one process per project. That is the sprawl foot-gun: a machine drowning in
+near-identical, resource-hungry containers nobody meant to run separately.</p>
+<p>Magus deduplicates services by a <strong>fingerprint</strong> of their configuration. Two
+services with an identical fingerprint are auto-shared silently. But these
+services are only <em>nearly</em> identical, and the difference may be load-bearing (a
+different <code>POSTGRES_DB</code> means a different database), so magus refuses to merge
+them on its own and surfaces them to you instead.</p>
+<p>The comparison is deliberately conservative: the container port is the identity
+(&quot;5432 means Postgres&quot;) while the host-port binding and the image tag are ignored
+for grouping, so version skew (<code>postgres:15</code> vs <code>postgres:16</code>) still clusters and
+is reported as a difference rather than hidden. Services on <strong>different</strong> container
+ports are treated as intentionally separate and are not flagged at run time (they
+appear only in the <code>magus doctor</code> audit).</p>
+<h2 id="fix">Fix</h2>
+<ul>
+<li>If they are meant to be one instance, extract a single shared service target and
+have each project <code>magus.needs</code> it, so the dependency graph runs it once.</li>
+<li>If the difference is intentional (for example, a test that pins a different
+Postgres major version), mark the service distinct with a reason so the warning
+stays meaningful and the decision is auditable.</li>
+</ul>
+    </article>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-next" href="../MGS5002/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS5002: service op detaches</span></a>
+    </nav>
+  </main>
+  <div class="page-provenance container">
+    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/services/MGS5001.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/services/MGS5001.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+  </div>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

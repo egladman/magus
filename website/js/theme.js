@@ -53,11 +53,14 @@
     }
 
     document.querySelectorAll("time[datetime]").forEach(function (el) {
-      var d = new Date(el.getAttribute("datetime"));
+      var raw = el.getAttribute("datetime");
+      var d = new Date(raw);
       if (isNaN(d)) return;
-      el.textContent = new Intl.DateTimeFormat(undefined, {
-        month: "short", day: "numeric", year: "numeric",
-      }).format(d);
+      var opts = { month: "short", day: "numeric", year: "numeric" };
+      // A date-only value ("2026-07-01") is a calendar day, not an instant:
+      // format it in UTC so a viewer west of GMT doesn't see it slip a day.
+      if (raw.length === 10) opts.timeZone = "UTC";
+      el.textContent = new Intl.DateTimeFormat(undefined, opts).format(d);
     });
   });
 })();
