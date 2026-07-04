@@ -30,7 +30,7 @@
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
-        <li><a href="../playground.html">Playground</a></li>
+        <li><a href="../playground/">Playground</a></li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -54,7 +54,7 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="documentation">Documentation</h1>
-<p>New to magus? <a href="../download/">Install it</a>, skim the two core ideas below (<a href="../targets/">Targets</a> and <a href="../spells/">Spells</a>), or <a href="../playground.html">try it live in the playground</a> without installing anything.</p>
+<p>New to magus? <a href="../download/">Install it</a>, skim the two core ideas below (<a href="../targets/">Targets</a> and <a href="../spells/">Spells</a>), or <a href="../playground/">try it live in the playground</a> without installing anything.</p>
 <h2 id="philosophy">Philosophy</h2>
 <p>A build system sits in the hot path of development. You touch it constantly, so every small friction compounds; it earns its keep by staying out of the way.</p>
 <p>So magus does not try to define what &quot;build&quot;, &quot;test&quot;, or &quot;lint&quot; mean for your tools. That is the job of <a href="../spells/">spells</a>: libraries of tool-native operations. The <code>go</code> spell exposes <code>build</code>/<code>test</code>/<code>vet</code>/<code>fmt</code>/<code>lint</code>, the <code>rust</code> spell <code>build</code>/<code>test</code>/<code>clippy</code>/<code>fmt</code>, and your magusfile composes them into the targets you actually run. magus handles the orchestration around them: it computes the affected projects from a change, caches their results, and runs only the minimum.</p>

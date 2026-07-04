@@ -7,14 +7,14 @@
   <meta name="generator" content="magus">
   <title>Playground — magus</title>
   <meta name="description" content="Try magus live in the browser. Edit a magusfile, run it against the embedded Buzz interpreter, and share the result — no install needed.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/playground.html">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/playground/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
-  <link rel="stylesheet" href="theme.css">
-  <link rel="stylesheet" href="site.css">
-  <script src="theme.js"></script>
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
   <style>
     :root { --pad: clamp(0.75rem, 2vw, 1.25rem); }
     /* Cap the editor to the same width as the /search/ page (--content-wide, from
@@ -214,15 +214,15 @@
 <body>
     <header class="site-header">
     <nav class="container">
-      <ul><li><a href="index.html" class="contrast"><picture><source srcset="assets/hat.webp" type="image/webp"><img class="brand-mark" src="assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
         <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
-        <li><a href="documentation/">Documentation</a></li>
-        <li><a href="blog/">Blog</a></li>
-        <li><a href="download/">Download</a></li>
-        <li><a href="tour/">Tour</a></li>
-        <li><a href="playground.html" aria-current="page">Playground</a></li>
+        <li><a href="../documentation/">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/" aria-current="page">Playground</a></li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -232,7 +232,7 @@
 
   <main class="container-fluid">
     <h1 class="pg-title">Playground</h1>
-    <p class="lede">A scratchpad for magusfiles. New to magus? <a href="tour/">Take the tour</a> for guided, runnable examples.</p>
+    <p class="lede">A scratchpad for magusfiles. New to magus? <a href="../tour/">Take the tour</a> for guided, runnable examples.</p>
 
     <section class="panel">
       <header class="file-bar">
@@ -282,7 +282,7 @@
           <p><strong>The playground needs JavaScript.</strong></p>
           <p>It runs a WebAssembly Buzz interpreter in your browser to evaluate
              magusfiles locally. Enable JavaScript to try magus live, or
-             <a href="download/">download magus</a> to run it for real.</p>
+             <a href="../download/">download magus</a> to run it for real.</p>
         </div>
       </noscript>
     </section>
@@ -297,7 +297,7 @@
         </p>
         <p>
           Installed on your machine, <code>magus</code> runs these targets for real. See the
-          <a href="documentation/">documentation</a> or how to <a href="download/">download it</a>.
+          <a href="../documentation/">documentation</a> or how to <a href="../download/">download it</a>.
         </p>
       </article>
 
@@ -307,8 +307,6 @@
           <li><strong>Build tools don't run.</strong> A browser has no shell or filesystem, so <code>run</code>
             shows a target's plan (like <code>magus run --dry-run</code>) instead of invoking
             <code>go-build</code>, <code>git</code>, and friends.</li>
-          <li><strong>Buzz is real.</strong> The magusfile is parsed and evaluated, so
-            <code>buzz ldflags(VERSION)</code> returns <code>-s -w -X main.version=1.4.0</code>.</li>
           <li><strong>It stays local.</strong> Your edits never leave the tab; reload to start over.</li>
         </ul>
       </article>
@@ -324,7 +322,7 @@
 
 
   <!-- TinyGo runtime glue. Defines globalThis.Go. Committed alongside buzz.wasm. -->
-  <script src="playground/wasm_exec.js"></script>
+  <script src="wasm_exec.js"></script>
   <script>
     // Bootstrap only: instantiate the wasm module and hand control to Go, which
     // owns the editor + console UI (see cmd/buzz-playground). Streaming
@@ -333,10 +331,10 @@
     (function () {
       const go = new Go();
       const start = (r) => go.run(r.instance);
-      WebAssembly.instantiateStreaming(fetch("playground/buzz.wasm"), go.importObject)
+      WebAssembly.instantiateStreaming(fetch("buzz.wasm"), go.importObject)
         .then(start)
         .catch(async () => {
-          const bytes = await (await fetch("playground/buzz.wasm")).arrayBuffer();
+          const bytes = await (await fetch("buzz.wasm")).arrayBuffer();
           start(await WebAssembly.instantiate(bytes, go.importObject));
         });
     })();
@@ -362,6 +360,6 @@
   </script>
   <!-- Shared feature bundle (code-copy etc.); each module guards on its own DOM
        targets, so the ones the playground lacks simply no-op. WS M reworks this. -->
-  <script type="module" src="main.js"></script>
+  <script type="module" src="../main.js"></script>
 </body>
 </html>
