@@ -1,0 +1,34 @@
+// Shared services: one database, many dependents. Some ops are not commands that
+// finish - they are long-running processes: a dev server, a watcher, a database.
+// You declare one by writing a SPELL (the flip side of step 3, where you only
+// bound spells): a small module magus binds, whose handler returns a Service
+// instead of a Command. magus then supervises it - starts the process, waits for
+// the readiness probe, and shares ONE instance across every target and run that
+// needs the same config, keeping it warm between invocations. Try `ls` to see the
+// spell's ops, then `run serve` for the plan.
+
+import "magus/target";
+
+// A spell announces its name...
+export fun mgs_getName() > str { return "postgres"; }
+
+// serve returns a Service, so magus treats it as a long-running, shared op:
+//   command   - the process magus forks in the foreground and supervises
+//   readiness - a probe polled until it exits 0 (the Kubernetes exec-probe model),
+//               so dependents wait for "actually up", not a fixed sleep
+//   stop      - a graceful shutdown, replayed to reap orphans after a crash
+// Reached as a dependency (some target's magus.needs), it runs in the background,
+// shared by config fingerprint; run directly, it runs in the foreground.
+fun serve(t: Target) > Service {
+    return Service{
+        command   = Command{bin = "docker", args = ["run", "-p", "5432:5432", "postgres:16"]},
+        readiness = Command{bin = "pg_isready", args = ["-h", "localhost"]},
+        stop      = Command{bin = "docker", args = ["stop", "magus-pg"]},
+    };
+}
+
+// ...and lists its ops: a map of op name to handler. Each handler takes the
+// Target being built and returns a Command (runs to completion) or a Service.
+export fun mgs_listTargets() > any {
+    return {"serve": serve};
+}

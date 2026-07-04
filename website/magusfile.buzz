@@ -148,12 +148,6 @@ fun capture(cmd: str) > str {
     return result.trim();
 }
 
-fun gitBranch() > str {
-    final b = capture("git -C " + ROOT + " rev-parse --abbrev-ref HEAD");
-    if (b == "") { return "main"; }
-    return b;
-}
-
 // Map of repo-root-relative source path -> "full|short|date" of the most recent
 // commit that touched it, built from ONE git log (newest-first, so a file's first
 // sighting wins) instead of a git call per page. ">>>" can't begin a repo path,
@@ -208,7 +202,11 @@ fun buildCommits() > {str: str} {
 fun loadMeta() > void {
     if (metaLoaded) { return; }
     metaPrefix = capture("git -C " + ROOT + " rev-parse --show-prefix");
-    metaBranch = gitBranch();
+    // Pinned to the default branch, not the render's actual branch: the deployed
+    // site ships from main, and a stable ref keeps GitHub links (footer License,
+    // history, blame, edit) from churning every gen/ file when the site is
+    // regenerated on a feature branch.
+    metaBranch = "main";
     metaFull = capture("git -C " + ROOT + " rev-parse HEAD");
     metaShort = capture("git -C " + ROOT + " rev-parse --short HEAD");
     metaStamp = capture("TZ=UTC git -C " + ROOT + " show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd HEAD");
@@ -370,8 +368,7 @@ fun climb(n: int) > str {
 // extra "../" to climb back out, and every internal .html target became a directory
 // (drop .html, drop a trailing index/README, drop the "gen" build segment, add a
 // trailing slash). External/anchor/asset links pass through untouched; a #fragment
-// is preserved. playground.html is a hand-authored static page (WS M migrates it to
-// /playground/) so it keeps its .html — only its depth is adjusted.
+// is preserved.
 // splitPath splits a gen-root-relative path into its non-empty segments, dropping
 // "." segments (a trailing slash yields no empty tail segment).
 fun splitPath(p: str) > [str] {
@@ -408,11 +405,11 @@ fun resolvePath(fromDir: str, link: str) > str {
 // "codes/race/index.html", "install.html", "index.html") to its NEW clean URL
 // ("manpage/magus-ls/", "codes/race/", "install/", ""): drop .html, drop a trailing
 // index/README landing, drop the "gen" build segment, add a trailing slash.
-// playground.html is a hand-authored static page (WS M migrates it) so it is kept.
+// playground.html directorifies like any other page (a link to it lands on
+// "playground/", matching its emitted gen/playground/index.html).
 fun cleanTarget(oldPath: str) > str {
     final segs = splitPath(oldPath);
     if (segs.len() == 0) { return ""; }
-    if (segs[segs.len() - 1] == "playground.html") { return oldPath; }
     var keep: [str] = mut [<str>];
     var i = 0;
     while (i < segs.len()) {
@@ -435,7 +432,7 @@ fun cleanTarget(oldPath: str) > str {
 // relativize returns the relative link from fromDir (gen-root-relative) to toUrl
 // (gen-root-relative). A toUrl ending in "/" — or "" for the home page — is a
 // directory (its link keeps the trailing slash); anything else is a file
-// (playground.html, an asset). "./" when they resolve to the same place.
+// (an asset like main.js or an image). "./" when they resolve to the same place.
 fun relativize(fromDir: str, toUrl: str) > str {
     final fromSegs = splitPath(fromDir);
     final toSegs = splitPath(toUrl);
@@ -1172,7 +1169,7 @@ fun render404() > void {
         + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
         + "        <li><a href=\"" + basePath + "download/\">Download</a></li>\n"
         + "        <li><a href=\"" + basePath + "tour/\">Tour</a></li>\n"
-        + "        <li><a href=\"" + basePath + "playground.html\">Playground</a></li>\n"
+        + "        <li><a href=\"" + basePath + "playground/\">Playground</a></li>\n"
         + "      </ul>\n"
         + "    </article>\n"
         + "  </main>\n"
@@ -1594,7 +1591,7 @@ fun siteNav(root: str, active: str) > str {
         + navLink(root + "blog/", "Blog", "blog", active)
         + navLink(root + "download/", "Download", "download", active)
         + navLink(root + "tour/", "Tour", "tour", active)
-        + navLink(root + "playground.html", "Playground", "playground", active)
+        + navLink(root + "playground/", "Playground", "playground", active)
         + "        </ul>\n"
         + "        <button id=\"theme-toggle\" class=\"outline\" aria-label=\"Cycle theme (auto / light / dark)\" title=\"Cycle theme (auto / light / dark)\">◐</button>\n"
         + "      </div>\n"
@@ -1603,15 +1600,15 @@ fun siteNav(root: str, active: str) > str {
 }
 
 // siteFooter renders the shared one-line attribution footer. It has no relative
-// links (the GitHub URLs are absolute), so it needs no root; the branch tracks the
-// render's metaBranch like every other page.
+// links (the GitHub URLs are absolute), so it needs no root; the License link
+// points at the pinned metaBranch (main) like the other GitHub links.
 fun siteFooter() > str {
     return "  <footer class=\"site-footer container\">\n"
         + "    <small><a href=\"" + GH + "/blob/" + metaBranch + "/LICENSE\">License</a> &middot; <a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
         + "  </footer>\n";
 }
 
-// renderPlayground emits gen/playground.html from the hand-authored source, injecting
+// renderPlayground emits gen/playground/index.html from the hand-authored source, injecting
 // the shared nav + footer at its <!-- site-nav --> / <!-- site-footer --> placeholders.
 // The playground is a standalone page (custom head, wasm, its own scripts) so it does
 // not go through page(); templating only the chrome keeps its top bar and footer in
@@ -1620,9 +1617,12 @@ fun renderPlayground() > void {
     final f = io.File.open("playground.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- site-nav -->", siteNav("", "playground"));
+    // The page ships at /playground/ (a directory index like every other page), so
+    // its injected nav climbs one level to reach the site root.
+    html = html.replace("<!-- site-nav -->", siteNav("../", "playground"));
     html = html.replace("<!-- site-footer -->", siteFooter());
-    fs.writeFile(OUT + "/playground.html", html);
+    fs.makeDirectory(OUT + "/playground");
+    fs.writeFile(OUT + "/playground/index.html", html);
 }
 
 // hasIndexSource is true when a docs subdirectory (docs-relative) carries its own
@@ -2441,7 +2441,7 @@ fun tourStep(file: str, title: str, desc: str) > {str: str} {
 fun playgroundLink(root: str, src: str) > str {
     var enc = encoding.base64urlEncode(src);
     while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
-    return root + "playground.html#source=" + enc;
+    return root + "playground/#source=" + enc;
 }
 
 // renderTourPage writes gen/tour/index.html: a numbered card grid that walks a newcomer
@@ -2459,7 +2459,21 @@ fun renderTourPage() > void {
         "Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops."));
     steps.append(tourStep("04-buzz.buzz", "Buzz is a real language",
         "Variables, functions, recursion, closures - evaluated live in your browser."));
-    steps.append(tourStep("05-magusfile.buzz", "A real magusfile",
+    steps.append(tourStep("05-slots.buzz", "Slots: taming a greedy target",
+        "A target starts with one slot; reserve more so a parallel tool cannot starve the rest."));
+    steps.append(tourStep("06-cache.buzz", "Caching and drift",
+        "Targets replay from cache and run once per plan; skipCache opts a check out."));
+    steps.append(tourStep("07-globs.buzz", "Target families",
+        "Name targets by a shared suffix and gather them with one glob; regex for the rest."));
+    steps.append(tourStep("08-charms.buzz", "Charms: check, then apply",
+        "A charm rides down the plan; the built-in rw flips read-only checks to rewrites."));
+    steps.append(tourStep("09-services.buzz", "Shared services",
+        "Author a spell whose op returns a Service; magus supervises one, shared across runs."));
+    steps.append(tourStep("10-wards.buzz", "Wards: catch the contradiction",
+        "A detached service trips MGS5002 at resolution, before anything forks."));
+    steps.append(tourStep("11-workspace.buzz", "Workspaces and affected",
+        "Projects wire cross-project order with depends_on; affected runs only what changed."));
+    steps.append(tourStep("12-magusfile.buzz", "A real magusfile",
         "The full multi-toolchain pipeline: generate, format, lint, build, test, release."));
 
     var cards = "";
@@ -2477,12 +2491,12 @@ fun renderTourPage() > void {
     }
 
     final body = "<h1>Tour</h1>\n"
-        + "<p class=\"lede\">A guided walk through magusfiles and Buzz in five steps. Open any example in the Playground to run and edit it.</p>\n"
+        + "<p class=\"lede\">A guided walk through magusfiles and Buzz, step by step. Open any example in the Playground to run and edit it.</p>\n"
         + "    <ol class=\"tour-grid\">\n"
         + cards
         + "    </ol>\n";
     final title = "Tour";
-    final desc = "A guided tour of magus: five curated, runnable examples from a hello-world magusfile to a full multi-toolchain pipeline.";
+    final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile to a full multi-toolchain pipeline.";
     final doc = page(title, desc, body, "tour/index.md", "", "tour/");
     fs.makeDirectory(OUT + "/tour");
     final of = io.File.open(OUT + "/tour/index.html", io.FileMode.write);
@@ -2566,12 +2580,15 @@ fun site_render() > void {
     os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + OUT + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + OUT + "/main.js"]);
 
-    // Emit the WebAssembly playground page (injecting the shared nav/footer into the
-    // hand-authored playground.html), then copy the committed buzz.wasm + TinyGo glue
-    // beside it. The wasm is a source artifact (rebuilt by build-playground), not
-    // rendered from docs, so it is only copied; that keeps the drift gate stable.
+    // Emit the WebAssembly playground page at gen/playground/index.html (injecting the
+    // shared nav/footer into the hand-authored playground.html), then copy the committed
+    // buzz.wasm + TinyGo glue into that same directory. renderPlayground creates the dir
+    // and writes index.html first, so the copy merges the assets in (cp of `playground/.`
+    // into the existing dir, not `playground` which would nest a subdir). The wasm is a
+    // source artifact (rebuilt by build-playground), not rendered from docs, so it is
+    // only copied; that keeps the drift gate stable.
     renderPlayground();
-    os.execute(["sh", "-c", "[ -d playground ] && cp -r playground " + OUT + "/ || true"]);
+    os.execute(["sh", "-c", "[ -d playground ] && cp -r playground/. " + OUT + "/playground/ || true"]);
 
     // Parse the changelog BEFORE the walk so page() knows whether the releases
     // Atom feed will be emitted and can gate its <link rel=alternate> discovery

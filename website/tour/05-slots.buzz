@@ -1,0 +1,56 @@
+// Slots: keeping a greedy target from eating the machine. magus runs targets in
+// parallel, and every target starts with ONE slot - it counts as a single unit
+// of a fixed budget (roughly your core count). That default is a lie for a tool
+// that already parallelizes internally: eslint spins up a worker per core, so
+// three "one slot" checks running at once oversubscribe the box threefold and
+// every job crawls. The `slots` policy fixes the accounting - reserve what the
+// target really costs and the scheduler lends it that many, holding the rest of
+// the queue back until it finishes. Try `graph` to see the policy, then `run ci`
+// for the plan.
+
+import "magus";
+import "magus/spell/go";
+import "magus/spell/ts";
+
+// Size the heavy job once, then feed the SAME number to both levers: the slots
+// magus reserves for the target, and the --concurrency eslint runs with. Reserve
+// without using them and the slots sit idle; use more than you reserved and you
+// oversubscribe the machine. Keeping the two equal is the whole trick.
+final LINT_SLOTS: int = 4;
+
+magus.project({
+    "spells": [go, ts],
+    "targets": {
+        // js-lint reserves LINT_SLOTS; while it holds them, the cheap checks wait
+        // rather than pile on. release runs alone - the degenerate case, "I need
+        // the whole machine," which is `exclusive` instead of a slot count.
+        "js-lint": {"slots": LINT_SLOTS},
+        "release": {"exclusive": true},
+    },
+});
+
+// A cheap check. It stays at the default of one slot; several like it run at once.
+export fun go_lint(args: [str]) > void {
+    go["go-vet"]();
+}
+
+// The greedy one: reserve 4 slots AND tell eslint to actually use 4 threads.
+export fun js_lint(args: [str]) > void {
+    ts["eslint"]({"args": ["--concurrency=" + LINT_SLOTS]});
+}
+
+// lint fans out to both. The scheduler runs the 1-slot check alongside other
+// small work, but quiets the queue around js-lint's 4-slot reservation.
+export fun lint(args: [str]) > void {
+    magus.needs(magus.target.literal("go-lint"), magus.target.literal("js-lint"));
+}
+
+// The conventional anchor. Kept to lint here so the plan stays short.
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("lint"));
+}
+
+// A stand-in release, so `graph` shows the exclusive policy in context.
+export fun release(args: [str]) > void {
+    magus.needs(magus.target.literal("ci"));
+}

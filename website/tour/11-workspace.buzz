@@ -1,0 +1,44 @@
+// Workspaces: many projects, one graph. A real repo is not one project - it is
+// several, each with its own magusfile in its own directory. A project declares
+// cross-project order with depends_on, and magus stitches them into a single
+// graph: ask for a target and it fans out across every project that defines it,
+// running dependencies first. This one buffer can only sketch that (the playground
+// edits a single file), so the two projects below stand in for two directories.
+// Try `graph` to see both projects and the edge between them.
+//
+// The payoff is `magus affected ci`: magus maps your declared outputs to the
+// projects that own them, diffs against a base branch, and runs ci ONLY for the
+// projects a change actually touched, plus anything depending on them. A one-line
+// change in the shared lib reruns the lib and its dependents; nothing else. That
+// is a CLI action, not magusfile syntax, so it is described here, not run.
+
+import "magus";
+import "magus/spell/go";
+
+// The shared library project. Nothing depends on the app, so a lib change is what
+// ripples outward through the graph.
+magus.project("lib", {
+    "spells": [go],
+    "outputs": ["lib/**"],
+});
+
+// The app project depends on lib: magus orders lib's work first, and a change to
+// lib marks the app affected too.
+magus.project("app", {
+    "spells": [go],
+    "outputs": ["bin/**"],
+    "depends_on": ["lib"],
+});
+
+export fun build(args: [str]) > void {
+    go["go-build"]();
+}
+
+export fun test(args: [str]) > void {
+    magus.needs(magus.target.literal("build"));
+    go["go-test"]();
+}
+
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("test"));
+}
