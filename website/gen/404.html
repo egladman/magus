@@ -18,14 +18,18 @@
 <body>
   <header class="site-header">
     <nav class="container">
-      <ul><li><a href="/magus/" class="contrast"><picture><source srcset="/magus/assets/hat.webp" type="image/webp"><img class="brand-mark" src="/magus/assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
-      <ul>
+      <ul><li><a href="/magus/index.html" class="contrast"><picture><source srcset="/magus/assets/hat.webp" type="image/webp"><img class="brand-mark" src="/magus/assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
         <li><a href="/magus/documentation/">Documentation</a></li>
         <li><a href="/magus/blog/">Blog</a></li>
         <li><a href="/magus/download/">Download</a></li>
+        <li><a href="/magus/tour/">Tour</a></li>
         <li><a href="/magus/playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
-      </ul>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button>
+      </div>
     </nav>
   </header>
   <main class="container">
@@ -36,6 +40,7 @@
         <li><a href="/magus/">Home</a></li>
         <li><a href="/magus/documentation/">Documentation</a></li>
         <li><a href="/magus/download/">Download</a></li>
+        <li><a href="/magus/tour/">Tour</a></li>
         <li><a href="/magus/playground.html">Playground</a></li>
       </ul>
     </article>

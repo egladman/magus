@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Search — magus</title>
+  <meta name="description" content="Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/search/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body class="site-search">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+        <li><a href="../documentation/">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground.html">Playground</a></li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li aria-current="page">Search</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <article>
+<h1>Search</h1>
+<div id="search-page">
+  <div class="search-page-inputwrap">
+    <input id="search-page-input" class="search-input" type="text" placeholder="Search docs... (try tag:cache)" autocomplete="off" spellcheck="false" aria-label="Search the documentation" aria-controls="search-page-results">
+    <ul id="search-facets" class="search-facets" role="listbox" aria-label="Tag suggestions" hidden></ul>
+  </div>
+  <div id="search-chips" class="search-chips" aria-hidden="true" hidden></div>
+  <div class="search-layout">
+    <div class="search-main">
+      <p id="search-page-status" class="search-page-status" role="status" aria-live="polite"></p>
+      <ul id="search-page-results" class="search-page-results"></ul>
+    </div>
+    <aside class="search-side">
+  <section class="search-syntax" aria-label="Search syntax">
+    <p class="search-syntax-title">Search Syntax</p>
+    <p class="search-syntax-lead">Terms are combined with AND and matched case-insensitively. Click an example to run it.</p>
+    <dl>
+        <dt><a class="syntax-example" href="?q=tag%3Abuild"><code>tag:build</code></a></dt><dd>Pages carrying the exact tag "build".</dd>
+        <dt><a class="syntax-example" href="?q=-tag%3Aspell"><code>-tag:spell</code></a></dt><dd>Exclude pages with a tag.</dd>
+        <dt><a class="syntax-example" href="?q=tag%3A%22remote+cache%22"><code>tag:&quot;remote cache"</code></a></dt><dd>Quote values that contain spaces.</dd>
+        <dt><a class="syntax-example" href="?q=title%3Ainstall"><code>title:install</code></a></dt><dd>Scope a term to one field: title, description, or text.</dd>
+        <dt><a class="syntax-example" href="?q=%22exact+phrase%22"><code>&quot;exact phrase"</code></a></dt><dd>Match words that appear together, in order.</dd>
+        <dt><a class="syntax-example" href="?q=cache+-go"><code>cache -go</code></a></dt><dd>Require a word; drop another with a leading minus.</dd>
+        <dt><a class="syntax-example" href="?q=tag%3Acache+OR+tag%3Abuild"><code>tag:cache OR tag:build</code></a></dt><dd>OR matches either; terms are ANDed by default.</dd>
+        <dt><a class="syntax-example" href="?q=tag%3A%28cache+OR+build%29"><code>tag:(cache OR build)</code></a></dt><dd>Group several values for one field.</dd>
+        <dt><a class="syntax-example" href="?q=title%3Amag%2A"><code>title:mag*</code></a></dt><dd>Wildcards: * stands for any run of characters.</dd>
+        <dt><a class="syntax-example" href="?q=%28tag%3Aa+OR+tag%3Ab%29+-tag%3Ac"><code>(tag:a OR tag:b) -tag:c</code></a></dt><dd>Parenthesize to group; combine with exclusion.</dd>
+    </dl>
+  </section>
+    </aside>
+  </div>
+  <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+</div>
+    </article>
+  </main>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

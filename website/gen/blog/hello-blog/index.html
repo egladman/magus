@@ -24,13 +24,17 @@
   <header class="site-header">
     <nav class="container">
       <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
-      <ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
         <li><a href="../../documentation/">Documentation</a></li>
         <li><a href="../../blog/" aria-current="page">Blog</a></li>
         <li><a href="../../download/">Download</a></li>
+        <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground.html">Playground</a></li>
-        <li><button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button></li>
-      </ul>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button>
+      </div>
     </nav>
   </header>
   <main id="main-content" class="container" tabindex="-1">
@@ -62,7 +66,8 @@ std.print(&quot;length is {greeting.len()}&quot;);
     </article>
   </main>
   <div class="page-provenance container">
-    <small>Last updated <time datetime="2026-07-02T01:12:14Z">July 2, 2026, 1:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a1ea5192f6b739777795d8ad9c63707c1317f3ce" data-tooltip="a1ea5192f6b739777795d8ad9c63707c1317f3ce" title="a1ea5192f6b739777795d8ad9c63707c1317f3ce">a1ea519</a>)</small><details><summary><small>Recent changes</small></summary><ul><li><a href="https://github.com/egladman/magus/commit/a1ea5192f6b739777795d8ad9c63707c1317f3ce"><code>a1ea519</code></a> <small><time datetime="2026-07-02T01:12:14Z">Jul 2, 2026</time></small> - site: Run ▶ on opt-in Buzz code blocks; playground docs-page safety (WS N + M fix)</li><li><a href="https://github.com/egladman/magus/commit/949a3d0ddcdc1dd01e69adb5f0b46fc5162cac7a"><code>949a3d0</code></a> <small><time datetime="2026-07-02T00:50:02Z">Jul 2, 2026</time></small> - site: first-class /blog subsystem (WS F)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/blog/2026-07-01-hello-blog.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/blog/2026-07-01-hello-blog.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22meta%22">meta</a><a class="tag" href="../../search/?q=tag%3A%22announcement%22">announcement</a></div>
+    <small>Last updated <time datetime="2026-07-02T01:12:14Z">July 2, 2026, 1:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a1ea5192f6b739777795d8ad9c63707c1317f3ce" data-tooltip="a1ea5192f6b739777795d8ad9c63707c1317f3ce" title="a1ea5192f6b739777795d8ad9c63707c1317f3ce">a1ea519</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/a1ea5192f6b739777795d8ad9c63707c1317f3ce"><code>a1ea519</code></a> <small><time datetime="2026-07-02T01:12:14Z">Jul 2, 2026</time></small> - site: Run ▶ on opt-in Buzz code blocks; playground docs-page safety (WS N + M fix)</li><li><a href="https://github.com/egladman/magus/commit/949a3d0ddcdc1dd01e69adb5f0b46fc5162cac7a"><code>949a3d0</code></a> <small><time datetime="2026-07-02T00:50:02Z">Jul 2, 2026</time></small> - site: first-class /blog subsystem (WS F)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/blog/2026-07-01-hello-blog.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/blog/2026-07-01-hello-blog.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
