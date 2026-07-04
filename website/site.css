@@ -11,10 +11,6 @@
    entire layout tightens proportionally to match. */
 :root {
   --pico-font-size: 100%;
-  /* Shared width for the app-like tool pages (search, playground editor) so they
-     occupy the same screen real estate instead of one being 78rem and the other
-     full-bleed. Wider than the prose container, but still capped. */
-  --content-wide: 78rem;
 }
 
 /* Skip-to-content link: the first focusable element on the page, hidden off the
@@ -64,7 +60,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  padding-block: 0.65rem; /* compact but breathable; overrides Pico's tall <header> padding */
+  padding-block: 0.3rem; /* compact bar; overrides Pico's tall <header> padding */
   background: var(--pico-card-background-color);
   border-bottom: 1px solid var(--pico-muted-border-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* subtle lift so it reads as a bar */
@@ -76,11 +72,7 @@
 /* Compact the theme-toggle button so it sits neatly in the nav bar (also used on
    the standalone playground page, which carries its own copy of this rule). */
 #theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  padding: 0.4rem; /* square icon button, matching the TOC toggle */
+  padding: 0.2rem 0.7rem;
 }
 /* Active top-nav item ("you are here"). Pico recolors aria-current links but
    also resets nav underlines (nav li a:not(:hover){text-decoration:none}), so
@@ -88,66 +80,6 @@
 .site-header nav a[aria-current]:not([aria-current="false"]) {
   text-decoration: underline;
   text-underline-offset: 0.2em;
-}
-
-/* Right cluster of the top bar: the section links (collapsible on mobile) plus the
-   always-visible theme toggle. */
-.nav-right {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  position: relative; /* anchors the mobile dropdown */
-}
-/* Section links: a horizontal row on desktop. The menu button is a Pico .outline
-   <button> - it inherits the same border+icon color as the theme toggle with zero
-   overrides (no <details> accordion styling to reset), and is hidden until mobile. */
-.nav-links {
-  display: flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.nav-links li { list-style: none; }
-.nav-toggle {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  padding: 0.4rem; /* square, matching the TOC + theme toggles */
-}
-
-@media (max-width: 800px) {
-  /* Mobile: show the menu button and collapse the links into a dropdown. Only .js gets
-     the collapse - the button needs nav.js to toggle it - so no-JS keeps the links in the
-     bar (wrapping) rather than trapping them behind a dead button. */
-  .js .nav-toggle { display: inline-flex; }
-  .js .nav-links {
-    display: none;
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 0;
-    z-index: 30;
-    min-width: 11rem;
-    padding: 0.35rem;
-    background: var(--pico-card-background-color);
-    border: 1px solid var(--pico-muted-border-color);
-    border-radius: var(--pico-border-radius);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
-  }
-  .js .nav-right.nav-open .nav-links { display: block; }
-  .js .nav-links li { display: block; margin: 0; } /* stack one per row */
-  .js .nav-links a {
-    display: block;
-    padding: 0.45rem 0.6rem;
-    border-radius: var(--pico-border-radius);
-  }
-  .js .nav-links a:hover,
-  .js .nav-links a:focus-visible {
-    background: var(--pico-card-sectioning-background-color);
-  }
-  /* No-JS fallback: the links stay visible and wrap to the right instead of hiding. */
-  .no-js .nav-links { flex-wrap: wrap; justify-content: flex-end; }
 }
 
 /* Small hat mark beside the "magus" wordmark in the nav. */
@@ -267,6 +199,7 @@
   width: auto;
   margin: 0;
   padding: 0.4rem;
+  line-height: 0;
 }
 /* Active state: when the TOC is shown (aria-expanded=true) the toggle fills with
    its own accent (the mascot teal, distinct from the blue links and rose code), so
@@ -311,32 +244,24 @@
   min-width: 0;
 }
 
-/* The search field's shared look - one aesthetic for both the header dropdown and
-   the /search/ page input: type=text (buttons' tight corners, not Pico's pill), a
-   left magnifier background image, compact type, angular radius. Both selectors are
-   scoped one level deep to outrank Pico's input rules without !important. */
-.page-tools .search-input,
-.search-page-inputwrap .search-input {
+/* Always-visible search field - the page's single search affordance (no separate
+   button). type=text (not search) so it gets the buttons' tight corners, not
+   Pico's pill; the magnifier is drawn as a left background image. Extra right
+   padding reserves space for the keybinding hint. Scoped under .page-tools to
+   outrank Pico's input rules without !important. */
+.page-tools .search-input {
+  width: 100%;
+  min-width: 0;
   margin: 0;
+  padding: 0.32rem 5rem 0.32rem 1.9rem;
   font-size: 0.875rem;
   line-height: 1.4;
   height: auto;
   border-radius: var(--pico-border-radius);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238891a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: 0.6rem center;
+  background-position: 0.55rem center;
   background-size: 1rem 1rem;
-}
-/* Header: extra right padding reserves space for the keybinding hint. */
-.page-tools .search-input {
-  width: 100%;
-  min-width: 0;
-  padding: 0.32rem 5rem 0.32rem 1.9rem;
-}
-/* Page: same field, a touch taller for a prominent bar; no kbd hint, so no right gap. */
-.search-page-inputwrap .search-input {
-  width: 100%;
-  padding: 0.5rem 0.9rem 0.5rem 2.1rem;
 }
 
 /* Right-aligned keybinding hint overlaid inside the input. Hidden on focus or
@@ -518,472 +443,6 @@ article :is(h2, h3, h4, h5, h6) {
   color: var(--pico-muted-color);
 }
 
-/* "Recent changes" disclosure in the provenance footer. Closed, it is a quiet summary
-   line; open, it becomes a bordered panel matching the Search Syntax block (shared
-   --syntax-panel-bg, angular border) so the revealed history reads as its own
-   discernible surface - one consistent "reference panel" aesthetic across the site. */
-.recent-changes {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  border-bottom: none; /* drop Pico's accordion rule; this is a self-contained panel */
-}
-.recent-changes > summary {
-  width: fit-content;
-  cursor: pointer;
-  color: var(--pico-muted-color);
-}
-.recent-changes[open] {
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  background: var(--syntax-panel-bg);
-}
-.recent-changes[open] > summary {
-  margin-bottom: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.recent-changes ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.recent-changes li {
-  padding: 0.25rem 0;
-  list-style: none;
-  color: var(--pico-muted-color);
-}
-.recent-changes li + li {
-  border-top: 1px solid var(--pico-muted-border-color);
-}
-.recent-changes > p {
-  margin: 0.6rem 0 0;
-}
-
-/* Frontmatter tags: outlined, non-interactive chips at the top of the provenance
-   footer. Built from Pico's muted border + muted text tokens so they read as quiet
-   metadata (not clickable buttons) and track the active theme. There are no tag-
-   archive pages yet, so tags are labels, not links - no hover/pointer affordance. */
-.post-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-bottom: 0.6rem;
-}
-.post-tags .tag {
-  font-size: 0.7rem;
-  line-height: 1;
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  color: var(--pico-muted-color);
-  white-space: nowrap;
-}
-/* The "Generated" status chip leads the tag row on mechanically generated pages
-   (module/spell/man-page references). Filled - not outlined - so it reads as a
-   status distinct from the topical tags beside it, and slightly stronger text so
-   it draws the eye first. cursor:help pairs with the tooltip. Still Pico tokens,
-   still angular, so it stays in the design language. */
-.post-tags .tag.generated {
-  background: var(--pico-muted-border-color);
-  color: var(--pico-color);
-  cursor: help;
-}
-/* Topical tags are links to the search page (tag:<name>). Inherit the chip look
-   from .post-tags .tag; drop the underline and fill on hover/focus so they read as
-   interactive without a permanent button look. */
-.post-tags a.tag {
-  text-decoration: none;
-  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-.post-tags a.tag:hover,
-.post-tags a.tag:focus-visible {
-  background: var(--pico-muted-border-color);
-  border-color: var(--pico-muted-border-color);
-  color: var(--pico-color);
-}
-
-/* Dedicated /search/ page: a prominent input over a full-width, static results
-   list (the header dropdown's .search-results is absolute; this is in-flow). Reuses
-   .search-title/.search-url for each hit. All Pico tokens, angular, light + dark. */
-.search-page-inputwrap {
-  position: relative; /* anchors the facet-suggestion dropdown */
-  margin: 0.5rem 0 0;
-}
-.search-page-status {
-  margin: 0 0 0.5rem;
-  color: var(--pico-muted-color);
-  font-size: 0.85rem;
-}
-
-/* The search page is a listing surface, not prose, so it widens past the reading-width
-   container to give the two columns room. Higher specificity than Pico's .container
-   breakpoints, so no !important needed. */
-.site-search main.container {
-  max-width: var(--content-wide);
-}
-/* Two-column layout: results in the main column, the syntax reference (and future facet
-   filters) in a left rail. Single column below the site's sidebar breakpoint - and since
-   .search-main precedes .search-side in the DOM, results stack ABOVE the reference there
-   rather than being pushed down by it. */
-.search-layout {
-  margin-top: 0.75rem;
-}
-@media (min-width: 1024px) {
-  .search-layout {
-    display: grid;
-    grid-template-columns: 17rem minmax(0, 1fr);
-    gap: 2.25rem;
-    align-items: start;
-  }
-  .search-side { grid-column: 1; grid-row: 1; }  /* rail on the left despite DOM order */
-  .search-main { grid-column: 2; grid-row: 1; }
-  /* The reference tracks the viewport as results scroll (mirrors the TOC sidebar). */
-  .search-side .search-syntax {
-    position: sticky;
-    top: 4.5rem;
-    margin: 0;
-  }
-}
-/* In the narrow rail the definition list stacks (example above its description) instead
-   of the wide page's two-column grid. */
-.search-side .search-syntax dl {
-  display: block;
-}
-.search-side .search-syntax dt {
-  margin-top: 0.55rem;
-}
-.search-side .search-syntax dt:first-of-type {
-  margin-top: 0;
-}
-.search-side .search-syntax dd {
-  margin: 0.1rem 0 0;
-  font-size: 0.8rem;
-}
-/* Keep result prose readable even in the wider main column: cap the text-heavy lines to
-   a comfortable measure rather than letting them run the full width. */
-.result-desc,
-.result-snippet {
-  max-width: 60rem;
-}
-
-/* Facet autocomplete: tag suggestions under the input while the caret is in a tag:
-   token. Same floating-dropdown treatment as the header search results. */
-.search-facets {
-  position: absolute;
-  top: calc(100% - 0.25rem);
-  left: 0;
-  z-index: 20;
-  width: min(24rem, 100%);
-  margin: 0;
-  padding: 0.3rem;
-  list-style: none;
-  max-height: 16rem;
-  overflow-y: auto;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
-}
-.search-facets[hidden] { display: none; }
-.search-facets li {
-  margin: 0;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--pico-border-radius);
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-.search-facets li:hover { background: var(--pico-card-sectioning-background-color); }
-.search-facets li[aria-selected="true"] { background: var(--pico-primary); color: var(--pico-primary-inverse); }
-.search-facets li[aria-selected="true"] .facet-key { color: var(--pico-primary-inverse); }
-.facet-key { color: var(--pico-muted-color); }
-
-/* Parsed-query chips: the live "here is how your query parsed" echo under the input.
-   Field facets read as bordered pills, operators as small muted connectives, so valid
-   logic visibly chunks together (the Datadog cue). All Pico tokens, angular. */
-.search-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem;
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
-}
-.search-chips[hidden] { display: none; }
-.qchip {
-  padding: 0.15rem 0.5rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  color: var(--pico-muted-color);
-  white-space: nowrap;
-}
-.qchip-field {
-  color: var(--pico-color);
-  background: var(--pico-card-sectioning-background-color);
-}
-.qchip-field b { font-weight: 600; }
-.qchip-phrase { font-style: italic; }
-.qop {
-  font-weight: 600;
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-  color: var(--pico-muted-color);
-}
-.qbracket {
-  font-weight: 600;
-  color: var(--pico-muted-color);
-}
-.search-page-results {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.search-page-results li {
-  margin: 0;
-  padding: 0.5rem 0.5rem 0.55rem;
-  list-style: none;
-  border-top: 1px solid var(--pico-muted-border-color);
-}
-.search-page-results li:last-child {
-  border-bottom: 1px solid var(--pico-muted-border-color);
-}
-/* Each hit is a dense stack: title + type badge, url, description, a marked body
-   snippet, then clickable tag chips (a sibling of the main link, since anchors
-   cannot nest). The main link fills the row for a generous click target. */
-.result-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  padding: 0.15rem 0.25rem;
-  margin: -0.15rem -0.25rem 0;
-  border-radius: var(--pico-border-radius);
-  text-decoration: none;
-}
-.result-main:hover,
-.result-main:focus-visible {
-  background: var(--pico-card-sectioning-background-color);
-}
-.result-head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-.result-type {
-  margin-left: auto;
-  flex: none;
-  font-size: 0.68rem;
-  color: var(--pico-muted-color);
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  padding: 0.05rem 0.4rem;
-  white-space: nowrap;
-}
-/* --pico-contrast, not --pico-color: Pico remaps --pico-color to the link color
-   inside <a>, so the description (which lives in the result link) would otherwise
-   render blue. --pico-contrast is the untouched body-text token. */
-.result-desc {
-  color: var(--pico-contrast);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-/* Body excerpt clamped to two lines so long pages stay one compact row. */
-.result-snippet {
-  color: var(--pico-muted-color);
-  font-size: 0.8rem;
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.result-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin: 0.35rem 0 0;
-}
-.result-tags a {
-  font-size: 0.68rem;
-  line-height: 1;
-  color: var(--pico-muted-color);
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  padding: 0.2rem 0.4rem;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.result-tags a:hover,
-.result-tags a:focus-visible {
-  background: var(--pico-muted-border-color);
-  color: var(--pico-color);
-}
-
-/* Search Syntax reference on the dedicated /search/ page: always open and forefront
-   (a bordered reference panel, not a disclosure) - the query language is first-class
-   here. The header dropdown carries only the compact .search-synhint instead.
-   Examples are clickable links (search.js runs them in place); Pico styles
-   <dl>/<code> natively. */
-.search-syntax {
-  margin: 0.75rem 0 0.25rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  background: var(--syntax-panel-bg);
-  font-size: 0.85rem;
-}
-/* "Search Syntax" label follows the site's small-section-heading convention (same as
-   .toc-title's "On this page"): uppercase, muted, tracked - not an ad-hoc bold line. */
-.search-syntax-title {
-  margin: 0 0 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--pico-muted-color);
-}
-.search-syntax-lead {
-  margin: 0 0 0.6rem;
-  color: var(--pico-muted-color);
-}
-.search-syntax dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.4rem 1rem;
-  margin: 0;
-  align-items: baseline;
-}
-.search-syntax dt,
-.search-syntax dd {
-  margin: 0;
-}
-.search-syntax dd {
-  color: var(--pico-muted-color);
-}
-/* Examples read as ordinary inline code (the site's neutral --pico-code-color, not a
-   link blue that clashes with every other <code> on the site); the clickable-to-run
-   affordance surfaces on hover/focus as a primary-colored underline. */
-.syntax-example {
-  text-decoration: none;
-}
-.syntax-example code {
-  color: var(--pico-code-color);
-}
-.syntax-example:hover code,
-.syntax-example:focus-visible code {
-  color: var(--pico-primary);
-  text-decoration: underline;
-}
-
-/* Guided Tour: a numbered card grid of curated, runnable examples. Cards are Pico-style
-   surfaces; the step number reads as a filled badge so the 1..N path is obvious. Each
-   card pins its "Open in Playground" link to the bottom so the cards line up. */
-.tour-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-  gap: var(--pico-spacing);
-  list-style: none;
-  margin: 1.5rem 0 0;
-  padding: 0;
-}
-.tour-card {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 1rem 1.1rem 1.1rem;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-}
-.tour-head {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-.tour-head h3 {
-  margin: 0;
-  font-size: 1.05rem;
-}
-.tour-num {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
-  border-radius: var(--pico-border-radius);
-  background: var(--pico-primary);
-  color: var(--pico-primary-inverse);
-  font-size: 0.85rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.tour-desc {
-  margin: 0.6rem 0 0.75rem;
-  color: var(--pico-muted-color);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-.tour-teaser {
-  margin: 0 0 0.9rem;
-  padding: 0.6rem 0.7rem;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  overflow-x: auto;
-}
-.tour-teaser code {
-  white-space: pre;
-}
-.tour-open {
-  margin-top: auto; /* pin to the card bottom so cards of differing height still align */
-  align-self: flex-start;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-.tour-open:hover,
-.tour-open:focus-visible {
-  text-decoration: underline;
-}
-
-/* Persistent header-dropdown footer: a compact syntax hint plus the explicit door to
-   the full /search/ page for the current query. This is what makes "dropdown = quick
-   preview, page = everything" read as deliberate rather than confusing. Separated
-   from the result options by a top rule; not a listbox option, so arrows skip it. */
-.search-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem 0.75rem;
-  /* Pinned to the bottom of the scrolling dropdown so the door to the full page and
-     the syntax hint stay visible no matter how many results scroll above them. */
-  position: sticky;
-  bottom: -0.35rem;
-  margin: 0.25rem -0.35rem -0.35rem;
-  padding: 0.45rem 0.6rem;
-  background: var(--pico-card-background-color);
-  border-top: 1px solid var(--pico-muted-border-color);
-  font-size: 0.75rem;
-}
-.search-seeall {
-  color: var(--pico-primary);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.search-seeall:hover,
-.search-seeall:focus-visible {
-  text-decoration: underline;
-}
-.search-synhint {
-  color: var(--pico-muted-color);
-}
-.search-synhint code {
-  font-size: 0.72rem;
-  padding: 0.05rem 0.3rem;
-}
-
 /* Site footer carries only attribution links; no border of its own - it flows
    naturally below the provenance line with a small gap. */
 .site-footer {
@@ -1015,6 +474,7 @@ article :is(h2, h3, h4, h5, h6) {
   width: auto;
   margin: 0;
   padding: 0.3rem;
+  line-height: 0;
   color: var(--pico-muted-color);
   background: var(--pico-card-background-color);
   border: 1px solid var(--pico-muted-border-color);

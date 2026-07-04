@@ -19,7 +19,14 @@
   <url><loc>https://eli.gladman.cc/magus/codes/sandbox/MGS2005/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/sandbox/MGS2006/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/sandbox/MGS2007/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/sandbox/MGS2008/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/sandbox/MGS2009/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/sandbox/MGS2010/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/sandbox/MGS3001/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/services/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5001/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5002/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5003/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/daemon/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/debugging/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/documentation/</loc></url>
@@ -67,6 +74,7 @@
   <url><loc>https://eli.gladman.cc/magus/modules/yaml/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/operations/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/remote-cache/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/services/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/spells/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/spells/bash/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/spells/buf/</loc></url>

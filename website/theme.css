@@ -49,12 +49,6 @@
   --pico-card-border-color: #e4e9e9;
   --pico-card-sectioning-background-color: #f1f4f4;
 
-  /* Search Syntax panel background. White in light so the inline-code examples stand
-     out exactly like inline code elsewhere on the site (the light sectioning grey is
-     too close to the code background); dark keeps the sectioning shade, which already
-     contrasts with the darker code background. */
-  --syntax-panel-bg: var(--pico-card-background-color);
-
   --pico-code-background-color: #eef1f1;
   --pico-code-color: #3a4149;
   --pico-code-kbd-background-color: #e7ebeb;
@@ -121,7 +115,6 @@
     --pico-card-background-color: #1c2029;
     --pico-card-border-color: #262c35;
     --pico-card-sectioning-background-color: #21262f;
-    --syntax-panel-bg: var(--pico-card-sectioning-background-color);
 
     --pico-code-background-color: #1a1e26;
     --pico-code-color: #c3cad2;
@@ -185,7 +178,6 @@
   --pico-card-background-color: #1c2029;
   --pico-card-border-color: #262c35;
   --pico-card-sectioning-background-color: #21262f;
-  --syntax-panel-bg: var(--pico-card-sectioning-background-color);
 
   --pico-code-background-color: #1a1e26;
   --pico-code-color: #c3cad2;

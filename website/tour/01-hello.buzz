@@ -1,9 +1,0 @@
-// Hello, magus. A magusfile is a build definition: a directory becomes a magus
-// project just by having one, and each EXPORTED function is a runnable target.
-// Try it in the console below - `ls` lists targets, `run greet` runs this one.
-
-import "magus";
-
-export fun greet(args: [str]) > void {
-    magus.info("hello from magus");
-}

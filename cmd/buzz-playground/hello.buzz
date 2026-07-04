@@ -1,8 +1,18 @@
-// A magusfile defines targets: exported functions magus can run. This is the
-// smallest one. Try it in the console below - type `ls`, then `run greet`.
+// The smallest useful magusfile. A directory becomes a magus project just by
+// having a magusfile; each exported function is a runnable target. Try `ls`,
+// then `run ci`, in the console below.
 
 import "magus";
 
+// A target is an exported function. magus.info prints a line; run this one with
+// `magus run greet`.
 export fun greet(args: [str]) > void {
     magus.info("hello from magus");
+}
+
+// Targets depend on other targets. magus.needs(magus.target.literal("name"))
+// declares the edge, and magus runs dependencies first. `ci` is the conventional
+// anchor your pipeline (and `magus affected ci`) keys off.
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("greet"));
 }

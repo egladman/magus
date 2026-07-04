@@ -17,10 +17,8 @@
   <script src="theme.js"></script>
   <style>
     :root { --pad: clamp(0.75rem, 2vw, 1.25rem); }
-    /* Cap the editor to the same width as the /search/ page (--content-wide, from
-       site.css) and center it, so the two app-like tool pages share one footprint
-       rather than the playground running edge-to-edge. */
-    main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
+    /* Keep the prose (title, callout, About) to a readable measure; the editor
+       panel itself sits in a .container-fluid below, so it runs full width. */
     .lede { color: var(--pico-muted-color); margin-top: -0.4rem; }
 
     /* The playground is one panel: the editor on top, an integrated console
@@ -50,6 +48,13 @@
       font-size: 0.8rem;
     }
     .file-bar .name { font-family: var(--pico-font-family-monospace); color: var(--pico-muted-color); }
+    /* The example picker: trim Pico's full-width, tall select to fit the bar. */
+    .file-bar #example-picker {
+      width: auto; margin: 0; height: auto;
+      padding: 0.15rem 1.6rem 0.15rem 0.55rem;
+      font-size: 0.75rem; line-height: 1.3;
+      background-position: right 0.5rem center; background-size: 0.6rem auto;
+    }
     .file-bar .badge { margin-left: auto; font-size: 0.72rem; }
     .badge.ok { color: var(--pico-ins-color); }
     .badge.err { color: var(--pico-del-color); }
@@ -212,30 +217,25 @@
   </style>
 </head>
 <body>
-    <header class="site-header">
+  <header class="site-header">
     <nav class="container">
       <ul><li><a href="index.html" class="contrast"><picture><source srcset="assets/hat.webp" type="image/webp"><img class="brand-mark" src="assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
-      <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
-        <ul class="nav-links" id="site-nav-links">
+      <ul>
         <li><a href="documentation/">Documentation</a></li>
         <li><a href="blog/">Blog</a></li>
         <li><a href="download/">Download</a></li>
-        <li><a href="tour/">Tour</a></li>
         <li><a href="playground.html" aria-current="page">Playground</a></li>
-        </ul>
-        <button id="theme-toggle" class="outline" aria-label="Color theme" data-tooltip="Cycle theme (auto / light / dark)" data-placement="bottom">◐</button>
-      </div>
+        <li><button id="theme-toggle" class="outline">◐</button></li>
+      </ul>
     </nav>
   </header>
-<!-- injected at build time by renderPlayground() in magusfile.buzz; edit siteNav there -->
 
   <main class="container-fluid">
     <h1 class="pg-title">Playground</h1>
-    <p class="lede">A scratchpad for magusfiles. New to magus? <a href="tour/">Take the tour</a> for guided, runnable examples.</p>
 
     <section class="panel">
       <header class="file-bar">
+        <select id="example-picker" aria-label="Example"></select>
         <span id="file-name" class="name">magusfile.buzz</span>
         <span id="parse-status" class="badge"></span>
         <button id="download-btn" class="outline" type="button" title="Save this magusfile to your machine">Download</button>
@@ -318,10 +318,9 @@
   <div class="page-provenance container">
     <small>Compiled with TinyGo to WebAssembly; the interpreter and your magusfile run entirely client-side.</small>
   </div>
-    <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/claude/peaceful-elbakyan-6bb406/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  <footer class="site-footer container">
+    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
-
 
   <!-- TinyGo runtime glue. Defines globalThis.Go. Committed alongside buzz.wasm. -->
   <script src="playground/wasm_exec.js"></script>
