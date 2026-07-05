@@ -34,7 +34,7 @@ magus.project({
     "spells": [magusfile, go, buzz, md],
     "outputs": [
         "host/gen/*.go",
-        "docs/modules/*.md",
+        "docs/buzz/modules/*.md",
         "docs/spells/*.md",
         "docs/spells.md",
         "docs/manpage/gen/*.md",
@@ -170,7 +170,7 @@ export fun config_generate(args: [str]) > void {
 
 // Regenerates the committed docs Markdown (module reference + man pages).
 export fun docs_generate(args: [str]) > void {
-    os.exec("go", ["run", "./cmd/magus-docs", "-out", "./docs/modules"]);
+    os.exec("go", ["run", "./cmd/magus-docs", "-out", "./docs/buzz/modules"]);
     os.exec("go", ["run", "./cmd/magus-spelldocs", "-out", "./docs/spells"]);
     os.exec("go", ["run", "./cmd/magus-manpage", "-format", "md", "-out", "./docs/manpage/gen"]);
 }
@@ -285,13 +285,27 @@ fun badge_color(pct: str) > str {
     return "red";
 }
 
-// Runs the suite with -coverprofile and writes the assets/coverage.svg badge.
+// coverage runs the suite with per-package coverage and rewrites the
+// assets/coverage.svg badge. Like `generate`, it then drift-gates: a clean checkout
+// only goes dirty if the committed badge was stale, so `ci` (which depends on this)
+// fails when the badge was not refreshed and committed. Run the `rw` charm
+// (`coverage:rw`) to keep the new badge instead.
+//
+// Per-package, not -coverpkg=./...: cross-package instrumentation rewrites std/*.go
+// with counter statements, which shifts the source line numbers the module-doc
+// generator embeds (it reads runtime source info), tripping TestModuleDocsUpToDate.
+// Per-package leaves dependencies un-instrumented, so those links stay stable.
 export fun coverage(args: [str]) > void {
+    final clean_before = vcs.isDirty([fs.join("assets", "coverage.svg")]) == false;
     go["go-test"]({"args": ["-covermode=atomic", "-coverprofile=coverage.out"]});
     final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
     final svg = os.exec("go", ["run", "./cmd/coverage-badge",
         "-label", "coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
     fs.writeFile(fs.join("assets", "coverage.svg"), svg);
+    if (magus.has_charm("rw")) { return; }
+    if (clean_before and vcs.isDirty([fs.join("assets", "coverage.svg")])) {
+        throw "coverage: assets/coverage.svg is stale; re-run `magus run coverage:rw` and commit the badge";
+    }
 }
 
 // Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).
@@ -325,9 +339,11 @@ export fun lint(args: [str])   > void { magus.needs(magus.target.literal("format
 // Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs.
 export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
 
-// Runs lint, build, and test read-only; the affected/pipeline anchor.
+// Runs lint, build, test, and the coverage-badge freshness gate read-only; the
+// affected/pipeline anchor. coverage drift-gates assets/coverage.svg, so a stale
+// badge fails ci instead of rotting silently.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"), magus.target.literal("coverage"));
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix

@@ -1,10 +1,12 @@
 // govulncheck scans the module's call graph for known vulnerabilities, run as a
-// `go tool` so it resolves from go.mod's tool block.
+// `go tool` so it resolves from go.mod's tool block. Security scanning is static
+// analysis, so it composes into the canonical `lint` target - not a bespoke
+// `audit`/`security` target. (A slow scan can instead be gated in `ci`.)
 import "magus";
 import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun audit(args: [str]) > void {
+export fun lint(args: [str]) > void {
     go["govulncheck"]();
 }

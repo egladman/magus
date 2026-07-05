@@ -1,9 +1,11 @@
-// Wire go-vet into a `vet` target. `magus run vet` forks `go vet ./...`.
+// go-vet is static analysis, so it composes into the canonical `lint` target
+// (alongside golangci-lint) rather than a bespoke `vet` target. `magus run lint`
+// forks `go vet ./...`.
 import "magus";
 import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun vet(args: [str]) > void {
+export fun lint(args: [str]) > void {
     go["go-vet"]();
 }

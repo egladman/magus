@@ -1,3 +1,8 @@
+# Dev shorthand: a bare `mgs` runs the in-tree build. Active in interactive shells
+# where `mise activate` is running (bash/zsh/fish), auto-set on entering this repo.
+[shell_alias]
+mgs = "go run ./cmd/magus"
+
 [tools]
 go = "1.26.4"
 # node + prettier + markdownlint-cli back the markdown spell (md.prettier /

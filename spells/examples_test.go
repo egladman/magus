@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
-	pg "github.com/egladman/magus/internal/playground"
+	"github.com/egladman/magus/internal/dry"
 )
 
 // TestExamplesParseAndRecord walks every spells/examples/**/*.buzz file and
@@ -20,7 +20,7 @@ import (
 //     catching a syntax typo before it ships in a docs page. Mirrors
 //     std/examples_test.go.
 //  2. It records at least one host op under the recording evaluator
-//     (playground.EvalBuzz with WithRecorder). This is the load-bearing guarantee for
+//     (dry.Eval with WithRecorder). This is the load-bearing guarantee for
 //     the Run button: an example must actually invoke its op inside a target, or
 //     the dry-run trace is empty and the button shows nothing. Catches an example
 //     that wires a spell but forgets to call it.
@@ -47,7 +47,7 @@ func TestExamplesParseAndRecord(t *testing.T) {
 			t.Errorf("%s: parse: %v", path, err)
 			return nil
 		}
-		r := pg.EvalBuzz(context.Background(), string(src), pg.WithRecorder())
+		r := dry.Eval(context.Background(), string(src), dry.WithTracer())
 		if !r.OK {
 			t.Errorf("%s: recorder eval failed: %v", path, r.Diag)
 			return nil
