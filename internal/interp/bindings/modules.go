@@ -13,21 +13,22 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 )
 
-// Host-module labels, the magus-side vocabulary beside gopherbuzz's
-// upstream/gopherbuzz origin labels (see gopherbuzz/module.go). labelHost marks a
-// magus host module; labelWASM additionally marks one safe in the browser
-// playground (pure compute, no filesystem/process/network/OS randomness).
+// Module labels, continuing gopherbuzz's origin classification (see
+// gopherbuzz/module.go, upstream/gopherbuzz) into magus's own third origin.
+// labelMagus marks a module that originates in magus; labelWASM additionally
+// marks one safe in the browser playground (pure compute, no
+// filesystem/process/network/OS randomness).
 const (
-	labelHost = "host"
-	labelWASM = "wasm"
+	labelMagus = "magus"
+	labelWASM  = "wasm"
 )
 
-// hostModules expresses magus's host surface as buzz.Modules: each wraps its
+// magusModules expresses magus's own modules as buzz.Modules: each wraps its
 // host/gen register trampoline in a Bind that builds the module map (plus any
 // byte-level companions) and layers it onto the stdlib module of the same name,
 // or installs it fresh when Buzz has no such module. Ordered by name so the bind
 // sequence is deterministic.
-func hostModules() []buzz.Module {
+func magusModules() []buzz.Module {
 	names := make([]string, 0, len(buzzgen.Modules))
 	for name := range buzzgen.Modules {
 		names = append(names, name)
@@ -38,7 +39,7 @@ func hostModules() []buzz.Module {
 	for _, name := range names {
 		name := name
 		reg := buzzgen.Modules[name]
-		labels := []string{labelHost}
+		labels := []string{labelMagus}
 		if reg.WASMCompatible {
 			labels = append(labels, labelWASM)
 		}
@@ -97,12 +98,12 @@ func mergeModuleMap(dst, src vm.Value) {
 // magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.
 func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
-	// Buzz's stdlib provides the base modules; the host modules then layer onto the
-	// same bare names (their Bind reads back and merges) or install fresh. One
-	// registration path: gopherbuzz's stdlib and magus's host surface are both
+	// Buzz's stdlib provides the base modules; the magus modules then layer onto
+	// the same bare names (their Bind reads back and merges) or install fresh. One
+	// registration path: gopherbuzz's stdlib and magus's own modules are both
 	// buzz.Modules applied through Session.Provide.
 	buzzstd.Register(sess)
-	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, hostModules()...)
+	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules()...)
 }
 
 func registerHostModules(ctx context.Context, sess *buzz.Session) {
