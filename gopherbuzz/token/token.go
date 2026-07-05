@@ -75,6 +75,7 @@ const (
 	ErrArrow   // !>
 	YieldArrow // *>
 	FatArrow   // =>
+	Arrow      // ->
 	Backslash  // \
 	Amp        // &
 
@@ -185,6 +186,8 @@ func (k Kind) String() string {
 		return "'='"
 	case FatArrow:
 		return "'=>'"
+	case Arrow:
+		return "'->'"
 	case Eq:
 		return "'=='"
 	case Neq:
@@ -481,6 +484,9 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		}
 		return simple(Question, size), nil
 	case '-':
+		if l.peekByte() == '>' {
+			return simple(Arrow, 2), nil
+		}
 		// Negative numeric literal vs minus operator is resolved by the parser
 		// (unary). Always emit minus here.
 		return simple(Minus, size), nil

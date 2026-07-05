@@ -73,6 +73,10 @@ type IfStmt struct {
 	Cond Node
 	Then *BlockStmt
 	Else Node
+	// BindName is set for optional-call narrowing, `if (opt -> name) { ... }`:
+	// Cond is the optional expression, and name is bound to its non-null value
+	// inside Then. Empty for an ordinary boolean if.
+	BindName string
 }
 
 // WhileStmt: while (cond) body

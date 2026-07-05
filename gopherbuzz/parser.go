@@ -606,15 +606,32 @@ func (p *parser) parseReturn() (*ast.ReturnStmt, error) {
 
 func (p *parser) parseIf() (*ast.IfStmt, error) {
 	t, _ := p.eat(token.If)
-	cond, err := p.parseParenCond()
+	// Parse `( cond )`, allowing the optional-call narrowing form
+	// `( opt -> name )` where name binds the non-null value inside the block.
+	if _, err := p.eat(token.LParen); err != nil {
+		return nil, err
+	}
+	cond, err := p.parseExpr()
 	if err != nil {
+		return nil, err
+	}
+	bindName := ""
+	if p.check(token.Arrow) {
+		p.advance()
+		id, err := p.eatBindingIdent()
+		if err != nil {
+			return nil, err
+		}
+		bindName = id.Val
+	}
+	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err
 	}
 	then, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
-	out := &ast.IfStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Then: then}
+	out := &ast.IfStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Then: then, BindName: bindName}
 	if p.check(token.Else) {
 		p.advance()
 		if p.check(token.If) {

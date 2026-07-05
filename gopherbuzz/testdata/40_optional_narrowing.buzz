@@ -1,0 +1,17 @@
+// @expect: v=7|none
+// Optional-call narrowing: `if (opt -> name) { ... }` binds name to opt's
+// non-null value inside the block (matching upstream Buzz's if-unwrap), and takes
+// the else path when opt is null. The bound name is a normal local (member access
+// like x.n works).
+import "std";
+
+object Box { n: int = 0 }
+
+fun describe(b: Box?) > str {
+    if (b -> x) {
+        return "v={x.n}";
+    }
+    return "none";
+}
+
+final __r = describe(Box{ n = 7 }) + "|" + describe(null);
