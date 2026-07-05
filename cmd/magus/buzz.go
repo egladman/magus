@@ -11,7 +11,9 @@ import (
 	"github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
 	vm "github.com/egladman/gopherbuzz/vm"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
+	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 )
 
 // buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the
@@ -24,6 +26,10 @@ import (
 // the main command (like `kubectl kustomize`) so a clean Buzz runner is always
 // present wherever magus is. The buzz spell's `run` op forks `magus buzz`, so the
 // spell needs no separately-installed binary.
+//
+// With no arguments on an interactive terminal it opens a REPL, matching upstream
+// `buzz`. A piped or redirected stdin still runs as a script (so `cat x | magus
+// buzz` and heredocs keep working), and `magus buzz -` forces stdin.
 func buzzCmd(ctx context.Context, args []string) error {
 	var eval string
 	var test bool
@@ -37,6 +43,12 @@ func buzzCmd(ctx context.Context, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// No code, no file/stdin argument, and an interactive terminal: open a REPL.
+	// A non-terminal stdin (pipe, redirect, heredoc) falls through to script mode.
+	if eval == "" && !test && len(rest) == 0 && stdinIsTerminal() {
+		return buzzRepl(ctx)
 	}
 
 	code, name, err := buzzSource(eval, rest)
@@ -67,6 +79,36 @@ func buzzCmd(ctx context.Context, args []string) error {
 		return runBuzzTests(ctx, sess, name)
 	}
 	return nil
+}
+
+// buzzRepl opens an interactive Buzz REPL with the same module surface as
+// `magus buzz` scripts (Buzz stdlib plus every magus host module), and without the
+// magus.* namespace (that needs a magusfile - use `magus repl` for it). It reuses
+// the shared REPL driver (internal/interp.Repl), the same one `magus repl` runs, so
+// line editing, multi-line input, and the .commands behave identically. The session
+// is embedded: a REPL is top-level statements by nature, so upstream strict mode
+// (which forbids them) never applies here.
+func buzzRepl(ctx context.Context) error {
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	bindings.RegisterModuleSurface(ctx, sess)
+	return interp.Repl(ctx, buzzengine.Wrap(sess), interp.ReplOptions{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		Banner: "magus buzz - Buzz REPL (.help for commands)",
+	})
+}
+
+// stdinIsTerminal reports whether stdin is an interactive terminal (a character
+// device) rather than a pipe, file, or heredoc. It gates the no-argument REPL so a
+// piped script still runs as a whole.
+func stdinIsTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 // runBuzzTests executes every `test "..." {}` block registered while executing the
@@ -163,11 +205,14 @@ func buzzResolveFile(path string) string {
 }
 
 func buzzUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus buzz [file | -]")
-	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>")
-	fmt.Fprintln(os.Stderr, "       magus buzz -t <file>   # run its test \"...\" {} blocks")
+	fmt.Fprintln(os.Stderr, "Usage: magus buzz              # open a REPL (interactive terminal)")
+	fmt.Fprintln(os.Stderr, "       magus buzz <file>       # run a script")
+	fmt.Fprintln(os.Stderr, "       magus buzz -            # run a script from stdin")
+	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>    # run an inline snippet")
+	fmt.Fprintln(os.Stderr, "       magus buzz -t <file>    # run its test \"...\" {} blocks")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Run Buzz source from a file, stdin, or an inline snippet.")
-	fmt.Fprintln(os.Stderr, "The Buzz language stdlib plus magus extras (markdown) are available, but")
-	fmt.Fprintln(os.Stderr, "no magus host bindings (use `magus repl --engine buzz` for the binding-rich shell).")
+	fmt.Fprintln(os.Stderr, "Run Buzz source from a REPL, file, stdin, or an inline snippet. With no")
+	fmt.Fprintln(os.Stderr, "argument on a terminal it opens a REPL; a piped or redirected stdin runs")
+	fmt.Fprintln(os.Stderr, "as a script. The Buzz stdlib plus every magus host module (fs, os, http,")
+	fmt.Fprintln(os.Stderr, "markdown, ...) are available; the magus.* namespace is not (use `magus repl`).")
 }
