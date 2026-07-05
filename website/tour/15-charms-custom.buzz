@@ -1,0 +1,32 @@
+// Charms you define: one flag, applied as a patch. Step 8 read a charm with
+// has_charm and branched by hand. The declarative form - the one built-in spells
+// use - lives in a SPELL: an op returns a Command with a `charms` table, each entry
+// an RFC 6902 JSON Patch over the base argv, built by the charm.* constructors so
+// you never count indices. magus splices the patch in when you attach the charm
+// with a colon suffix. Try `run lint` for the bare command, then `run lint:fix`
+// and `run lint:fix,verbose` to watch the argv grow.
+
+import "magus/target";
+import "magus/charm";
+
+export fun mgs_getName() > str { return "linter"; }
+
+// One op, one base command, two charms that reshape it. `after` splices values in
+// just past an anchor argument; `append` adds to the end. Both resolve to an index
+// now, at author time, so adding a charm later never shifts another's patch.
+fun lint(t: Target) > Command {
+    final args = ["run", "./..."];
+    return Command{
+        bin = "golangci-lint",
+        args = args,
+        charms = {
+            "fix":     after(args, "run", ["--fix"]),
+            "verbose": append(["-v"]),
+        },
+    };
+}
+
+// A spell lists its ops: a map of op name to handler.
+export fun mgs_listTargets() > any {
+    return {"lint": lint};
+}

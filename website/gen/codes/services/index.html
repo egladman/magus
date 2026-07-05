@@ -8,6 +8,13 @@
   <title>services diagnostics — magus</title>
   <meta name="description" content="Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/codes/services/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="services diagnostics — magus">
+  <meta property="og:description" content="Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/codes/services/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
   <link rel="manifest" href="../../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../index.html">Home</a></li>
         <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../../blog/">Blog</a></li>
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -38,7 +49,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Codes</li><li aria-current="page">Services</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Codes</li><li aria-current="page">services diagnostics</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
@@ -51,36 +62,21 @@ look like they should be one shared instance, and (later) op invocations that
 contradict their declared kind. Magus raises them at run time (as a typed
 <code>DiagnosticError</code>) and, where applicable, as a <code>magus doctor</code> health check so the
 gap is visible before the work runs.</p>
-<table>
-<thead>
-<tr>
-<th>Code</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>MGS5001</code></td>
-<td>near-duplicate services that will run as separate processes</td>
-</tr>
-<tr>
-<td><code>MGS5002</code></td>
-<td>a service op detaches, breaking foreground supervision</td>
-</tr>
-<tr>
-<td><code>MGS5003</code></td>
-<td>a command op runs a watcher and never exits</td>
-</tr>
-</tbody>
-</table>
+<h2 id="codes">Codes</h2>
+<ul>
+<li><a href="MGS5001/">MGS5001</a>: near-duplicate services that will run as separate processes.</li>
+<li><a href="MGS5002/">MGS5002</a>: a service op detaches, breaking foreground supervision.</li>
+<li><a href="MGS5003/">MGS5003</a>: a command op runs a watcher and never exits.</li>
+</ul>
     </article>
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../../search/?q=tag%3A%22error+codes%22">error codes</a><a class="tag" href="../../search/?q=tag%3A%22MGS5xxx%22">MGS5xxx</a><a class="tag" href="../../search/?q=tag%3A%22service+op%22">service op</a><a class="tag" href="../../search/?q=tag%3A%22doctor%22">doctor</a><a class="tag" href="../../search/?q=tag%3A%22sharing%22">sharing</a></div>
-    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/services/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/services/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details class="recent-changes"><summary>Recent changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/services/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/services/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>
 </body>

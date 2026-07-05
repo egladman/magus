@@ -8,6 +8,13 @@
   <title>magus Documentation — magus</title>
   <meta name="description" content="The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/documentation/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="magus Documentation — magus">
+  <meta property="og:description" content="The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/documentation/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="manifest" href="../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
         <li><a href="../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -48,17 +59,18 @@
       <nav>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#philosophy" title="Philosophy">Philosophy</a></li><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#core-concepts" title="Core concepts">Core concepts</a></li><li><a href="#going-further" title="Going further">Going further</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="documentation">Documentation</h1>
 <p>New to magus? <a href="../download/">Install it</a>, skim the two core ideas below (<a href="../targets/">Targets</a> and <a href="../spells/">Spells</a>), or <a href="../playground/">try it live in the playground</a> without installing anything.</p>
 <h2 id="philosophy">Philosophy</h2>
 <p>A build system sits in the hot path of development. You touch it constantly, so every small friction compounds; it earns its keep by staying out of the way.</p>
-<p>So magus does not try to define what &quot;build&quot;, &quot;test&quot;, or &quot;lint&quot; mean for your tools. That is the job of <a href="../spells/">spells</a>: libraries of tool-native operations. The <code>go</code> spell exposes <code>build</code>/<code>test</code>/<code>vet</code>/<code>fmt</code>/<code>lint</code>, the <code>rust</code> spell <code>build</code>/<code>test</code>/<code>clippy</code>/<code>fmt</code>, and your magusfile composes them into the targets you actually run. magus handles the orchestration around them: it computes the affected projects from a change, caches their results, and runs only the minimum.</p>
-<p>And it keeps that machinery transparent. The cache, the daemon socket, and the run log are all just files on disk; inspect them with <code>ls</code> and <code>cat</code>.</p>
+<p>magus does not try to define what &quot;build&quot;, &quot;test&quot;, or &quot;lint&quot; mean for your tools. That is the job of <a href="../spells/">spells</a>: libraries of tool-native operations. The <code>go</code> spell exposes ops like <code>go-build</code>, <code>go-test</code>, <code>go-vet</code>, <code>golangci-lint</code>, and <code>go-fmt</code>; the <code>rust</code> spell <code>cargo-build</code>, <code>cargo-test</code>, <code>cargo-clippy</code>, and <code>cargo-fmt</code>; and your magusfile composes them into the canonical targets you run (<code>build</code>, <code>test</code>, <code>lint</code>, <code>format</code>). magus handles the orchestration around them: it computes the affected projects from a change, caches their results, and runs only the minimum.</p>
+<p>That machinery stays transparent. The cache, the daemon socket, and the run log are all files on disk; inspect them with <code>ls</code> and <code>cat</code>.</p>
 <h2 id="getting-started">Getting started</h2>
 <p><strong>1. <a href="../download/">Install magus</a>.</strong> A single self-contained binary. The <a href="../download/">Download guide</a> covers install, verification, and updating.</p>
 <p><strong>2. Initialize your workspace.</strong> From the root of your repo:</p>
@@ -92,12 +104,13 @@ magus affected ci   # run ci only for the projects your changes touched
 <li><a href="../charms/">Charms</a> - execution modifiers attached with <code>:</code> (for example <code>lint:rw</code> to let a read-only target write).</li>
 <li><a href="../operations/">Operations and the work hierarchy</a> - how a run is scheduled and parallelized across projects.</li>
 <li><a href="../services/">Services</a> - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.</li>
+<li><a href="../wards/">Wards</a> - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).</li>
 <li><a href="../engines/">Engines</a> - how magus loads and evaluates a magusfile.</li>
 </ul>
 <h2 id="going-further">Going further</h2>
 <p>Once the basics click, these cover running magus at scale and in CI.</p>
 <ul>
-<li><a href="../ci/">CI</a> - compose a <code>ci</code> target with <code>magus.needs</code>, and the shared-cache trust model.</li>
+<li><a href="../targets/ci/">CI</a> - compose a <code>ci</code> target with <code>magus.needs</code>, and the shared-cache trust model.</li>
 <li><a href="../daemon/">Daemon and concurrency</a> - one persistent process, one shared pool across every client.</li>
 <li><a href="../remote-cache/">Remote caching</a> - share the build cache across machines and CI, with a signing-based trust model.</li>
 <li><a href="../debugging/">Debugging</a> - the interactive REPL, <code>magus.pry()</code> breakpoints, and stepping through a target.</li>
@@ -116,24 +129,27 @@ magus affected ci   # run ci only for the projects your changes touched
 </ul>
 <p>The magusfile API and diagnostics:</p>
 <ul>
-<li><a href="../modules/">Standard library modules</a> - <code>fs</code>, <code>os</code>, <code>http</code>, <code>json</code>, <code>crypto</code>, and the rest of the magusfile API.</li>
+<li><a href="../config/">Configuration</a> - every <code>magus.yaml</code> key with its <code>MAGUS_*</code> environment variable, CLI flag, and type.</li>
+<li><a href="../buzz/modules/">Standard library modules</a> - <code>fs</code>, <code>os</code>, <code>http</code>, <code>json</code>, <code>crypto</code>, and the rest of the magusfile API.</li>
 <li><a href="../spells/#built-in-spells">Spells reference</a> - the built-in spells (<code>go</code>, <code>rust</code>, <code>typescript</code>, <code>python</code>, <code>docker</code>, <code>buf</code>, <code>cosign</code>, <code>buzz</code>, <code>markdown</code>, <code>bash</code>), their ops, and paste-ready examples you can dry-run in place.</li>
-<li>Diagnostic codes - <a href="../codes/magusfile/">magusfile</a>, <a href="../codes/race/">race</a>, and <a href="../codes/sandbox/">sandbox</a> error explanations.</li>
+<li>Diagnostics and wards - every problem magus reports carries a stable <code>MGSxxxx</code> code with a dedicated explainer. Some are hard errors; others are <a href="../wards/"><em>wards</em></a>, guardrails that flag a risky op before it runs (for example a detached service op, <a href="../codes/services/MGS5002/">MGS5002</a>). Browse by family: <a href="../codes/magusfile/">magusfile</a>, <a href="../codes/race/">race</a>, <a href="../codes/sandbox/">sandbox</a>, and <a href="../codes/services/">services</a>.</li>
+<li><a href="../conventions/">Documentation conventions</a> - how placeholders, shell commands, runnable examples, and admonitions are written across these docs.</li>
 </ul>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../debugging/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Debugging magusfiles</span></a>
-      <a class="page-nav-next" href="../download/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Download magus</span></a>
+      <a class="page-nav-next" href="../download/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Download</span></a>
     </nav>
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22documentation%22">documentation</a><a class="tag" href="../search/?q=tag%3A%22docs%22">docs</a><a class="tag" href="../search/?q=tag%3A%22getting-started%22">getting-started</a><a class="tag" href="../search/?q=tag%3A%22guide%22">guide</a><a class="tag" href="../search/?q=tag%3A%22index%22">index</a><a class="tag" href="../search/?q=tag%3A%22overview%22">overview</a></div>
-    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li><li><a href="https://github.com/egladman/magus/commit/02e42fad63a52f1740add5ac8ec7d76e72b3156d"><code>02e42fa</code></a> <small><time datetime="2026-07-03T13:14:46Z">Jul 3, 2026</time></small> - document the command and service op model; document the cache-backend contract</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/911856b20e035614b41f02414945d66f6de0a761"><code>911856b</code></a> <small><time datetime="2026-07-01T04:31:23Z">Jul 1, 2026</time></small> - tighten documentation intro and reference</li><li><a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be"><code>72a3537</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - redesign docs site with search, TOC, and copy buttons</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/documentation.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/documentation.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details class="recent-changes"><summary>Recent changes on this page (6)</summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li><li><a href="https://github.com/egladman/magus/commit/02e42fad63a52f1740add5ac8ec7d76e72b3156d"><code>02e42fa</code></a> <small><time datetime="2026-07-03T13:14:46Z">Jul 3, 2026</time></small> - document the command and service op model; document the cache-backend contract</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/911856b20e035614b41f02414945d66f6de0a761"><code>911856b</code></a> <small><time datetime="2026-07-01T04:31:23Z">Jul 1, 2026</time></small> - tighten documentation intro and reference</li><li><a href="https://github.com/egladman/magus/commit/72a3537b0a6063e88e52727b3fe9ab5204dbd5be"><code>72a3537</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - redesign docs site with search, TOC, and copy buttons</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/documentation.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/documentation.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

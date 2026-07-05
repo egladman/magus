@@ -1,88 +1,22 @@
 ---
-title: Download magus
+title: Download
+page_type: overview
 description: Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.
 tags: [download, install, release, self-update, ed25519, verify, signing]
-aliases: [install]
 ---
 
 # Download
 
-magus ships as a single self-contained binary. Grab a release, verify the signature, put it on your `PATH`.
+magus ships as a single self-contained binary. Pick your platform for step-by-step install and PATH setup, then verify the signature before you run it.
 
 ## Install
 
-Grab your platform's tarball from [/public/release/](../public/release/) and extract it into a `PATH` directory you own. These instructions install into `~/.local/bin` on Linux/macOS and `%USERPROFILE%\bin` on Windows - no root, no `sudo`. Make sure that directory is on your `PATH` first (see [Verifying your PATH](#verifying-your-path) below if unsure).
+- [Linux](download/linux.md) - amd64 or arm64
+- [macOS](download/macos.md) - Apple Silicon or Intel
+- [Windows](download/windows.md) - amd64
+- [Docker](download/docker.md) - run in a container instead of installing a binary (any platform)
 
-### Linux
-
-```sh
-mkdir -p ~/.local/bin
-tar -xzf magus_*_linux_amd64.tar.gz    # or linux_arm64 on ARM
-mv magus ~/.local/bin/
-magus version
-```
-
-### macOS
-
-```sh
-mkdir -p ~/.local/bin
-tar -xzf magus_*_darwin_arm64.tar.gz   # or darwin_amd64 on Intel
-mv magus ~/.local/bin/
-magus version
-```
-
-If the binary is quarantined ("cannot be opened, unidentified developer"):
-
-```sh
-xattr -d com.apple.quarantine ~/.local/bin/magus
-```
-
-### Windows
-
-```powershell
-mkdir -Force $Env:USERPROFILE\bin | Out-Null
-tar -xzf magus_*_windows_amd64.tar.gz
-Move-Item magus.exe $Env:USERPROFILE\bin\magus.exe
-magus version
-```
-
-### Verifying your PATH
-
-If `magus version` prints `command not found`, the install directory is not on your `PATH`. Add it once per shell:
-
-```sh
-# Linux / macOS (bash or zsh): append to ~/.bashrc or ~/.zshrc
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-```powershell
-# Windows PowerShell (persist for the current user):
-[Environment]::SetEnvironmentVariable("Path", "$Env:USERPROFILE\bin;$Env:Path", "User")
-```
-
-Open a new shell after either change.
-
-### Shell completion
-
-```sh
-magus completion <shell>    # bash / zsh / fish / powershell (or pwsh)
-```
-
-See [`magus completion`](manpage/magus-completion/) for the exact source-and-persist recipe per shell.
-
-### `mgs` shorthand
-
-The de facto shorthand for `magus` is `mgs`: three left-hand keys, fast to type, and collision-free. Alias it in your shell:
-
-```sh
-alias mgs=magus
-```
-
-Or create a symlink:
-
-```sh
-ln -s "$(command -v magus)" ~/.local/bin/mgs
-```
+Every build is published at [/public/release/](../public/release/) alongside its `SHA256SUMS` manifest and signature. However you install, [verify the release](#verify-a-release) first.
 
 ## Update
 
@@ -97,7 +31,7 @@ ln -s "$(command -v magus)" ~/.local/bin/mgs
 | `--bin-dir <path>` | Install elsewhere instead of in place |
 | `-y` / `--yes` | Skip the confirmation prompt |
 
-Package-maintainer builds compiled with `-tags noselfupdate` disable this subcommand; fall back to [Install](#install).
+Package-maintainer builds compiled with `-tags noselfupdate` disable this subcommand; fall back to a manual [install](#install).
 
 ## Verify a release
 
@@ -111,7 +45,7 @@ magus self update --dry-run
 
 The trust chain runs through your already-trusted binary. Nothing else to do.
 
-**First install — verify by hand.** Do *not* verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.
+**First install - verify by hand.** Do *not* verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.
 
 1. Save the key. Either [download magus-release.pem](assets/magus-release.pem), or copy the PEM block below into `magus-release.pem`.
 
@@ -134,7 +68,7 @@ Order matters. Checking a hash against an unverified manifest proves nothing.
 
 ### Release signing key (Ed25519)
 
-```
+```text
 -----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 -----END PUBLIC KEY-----
@@ -142,11 +76,33 @@ MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 
 Raw base64 (32 bytes):
 
-```
+```text
 /7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 ```
 
 The key is embedded in every magus binary via `//go:embed`, so `magus self update` trusts it transitively. Rotating the key requires shipping a new release built with the new embedded key; older binaries continue to trust only the previous key.
+
+## Shell completion
+
+```sh
+magus completion <shell>    # bash / zsh / fish / powershell (or pwsh)
+```
+
+See [`magus completion`](manpage/magus-completion/) for the exact source-and-persist recipe per shell.
+
+## `mgs` shorthand
+
+The de facto shorthand for `magus` is `mgs`: three left-hand keys, fast to type, and collision-free. Alias it in your shell:
+
+```sh
+alias mgs=magus
+```
+
+Or create a symlink:
+
+```sh
+ln -s "$(command -v magus)" ~/.local/bin/mgs
+```
 
 ## Build from source
 

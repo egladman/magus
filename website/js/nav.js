@@ -10,6 +10,9 @@
   function setOpen(open) {
     right.classList.toggle("nav-open", open);
     btn.setAttribute("aria-expanded", open ? "true" : "false");
+    // Track the icon swap (hamburger -> X) so the label names the action the
+    // button now performs, not a fixed "Menu".
+    btn.setAttribute("aria-label", open ? "Close menu" : "Open menu");
   }
 
   btn.addEventListener("click", function () {

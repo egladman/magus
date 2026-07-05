@@ -8,6 +8,13 @@
   <title>Search — magus</title>
   <meta name="description" content="Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/search/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Search — magus">
+  <meta property="og:description" content="Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/search/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="manifest" href="../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
         <li><a href="../documentation/">Documentation</a></li>
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -79,7 +90,8 @@
     </article>
   </main>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

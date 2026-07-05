@@ -8,6 +8,13 @@
   <title>bash spell — magus</title>
   <meta name="description" content="Bash spell: shellcheck linting for shell scripts.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/spells/bash/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="bash spell — magus">
+  <meta property="og:description" content="Bash spell: shellcheck linting for shell scripts.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/spells/bash/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
   <link rel="manifest" href="../../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../index.html">Home</a></li>
         <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../../blog/">Blog</a></li>
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -38,7 +49,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Spells</li><li aria-current="page">bash spell</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../spells/">Spells</a></li><li aria-current="page">bash spell</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
@@ -48,6 +59,7 @@
       <nav>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#shellcheck" title="shellcheck">shellcheck</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
@@ -118,12 +130,22 @@ export fun lint(args: [str]) &gt; void {
       <a class="page-nav-next" href="../buf/"><span class="page-nav-dir">Next</span><span class="page-nav-title">buf spell</span></a>
     </nav>
   </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../spells/buf/"><span class="related-card-title">buf spell</span><span class="related-card-desc">Buf spell: protobuf build, lint, format, and code generation.</span></a>
+        <a class="related-card" href="../../spells/go/"><span class="related-card-title">go spell</span><span class="related-card-desc">Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.</span></a>
+        <a class="related-card" href="../../spells/md/"><span class="related-card-title">md spell</span><span class="related-card-desc">Markdown docs spell: markdownlint and prettier for linting and formatting prose.</span></a>
+    </div>
+  </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22bash%22">bash</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22shell%22">shell</a><a class="tag" href="../../search/?q=tag%3A%22shellcheck%22">shellcheck</a><a class="tag" href="../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-03T13:14:39Z">July 3, 2026, 1:14 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2" data-tooltip="3aebfbb216c4726a88921d2db2180609da7b3ca2" title="3aebfbb216c4726a88921d2db2180609da7b3ca2">3aebfbb</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/spells/bash.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/spells/bash.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-03T13:14:39Z">July 3, 2026, 1:14 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2" data-tooltip="3aebfbb216c4726a88921d2db2180609da7b3ca2" title="3aebfbb216c4726a88921d2db2180609da7b3ca2">3aebfbb</a>)</small><details class="recent-changes"><summary>Recent changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/spells/bash.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/spells/bash.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>
 </body>

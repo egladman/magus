@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Documentation conventions — magus</title>
+  <meta name="description" content="How to read the magus docs - placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/conventions/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Documentation conventions — magus">
+  <meta property="og:description" content="How to read the magus docs - placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/conventions/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Documentation conventions</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/conventions.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#placeholders" title="Placeholders">Placeholders</a></li><li><a href="#shell-commands" title="Shell commands">Shell commands</a></li><li><a href="#runnable-examples" title="Runnable examples">Runnable examples</a></li><li><a href="#admonitions" title="Admonitions">Admonitions</a></li><li><a href="#footnotes" title="Footnotes">Footnotes</a></li><li><a href="#code-block-titles" title="Code-block titles">Code-block titles</a></li><li><a href="#diffs" title="Diffs">Diffs</a></li><li><a href="#auto-generated-pages" title="Auto-generated pages">Auto-generated pages</a></li><li><a href="#reading-time" title="Reading time">Reading time</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
+-    magus.needs(magus.target.literal(&quot;lint&quot;));
++    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../buzz/modules/">module reference</a>, the
+<a href="../spells/">spell reference</a>, the <a href="../manpage/magus/">man pages</a>, and the
+<a href="../config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../config/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus.yaml configuration</span></a>
+      <a class="page-nav-next" href="../daemon/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Daemon and concurrency</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace's magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22conventions%22">conventions</a><a class="tag" href="../search/?q=tag%3A%22documentation%22">documentation</a><a class="tag" href="../search/?q=tag%3A%22placeholders%22">placeholders</a><a class="tag" href="../search/?q=tag%3A%22examples%22">examples</a><a class="tag" href="../search/?q=tag%3A%22style%22">style</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a></div>
+    <small>Last updated <time datetime="2026-07-04T03:04:11Z">July 4, 2026, 3:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4992301a69f66a3041365b693ce859424522861b" data-tooltip="4992301a69f66a3041365b693ce859424522861b" title="4992301a69f66a3041365b693ce859424522861b">4992301</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

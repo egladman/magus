@@ -236,13 +236,15 @@ export fun test(args: [str]) > void {
 
 <!-- run-recorder -->
 ```buzz
-// Wire go-vet into a `vet` target. `magus run vet` forks `go vet ./...`.
+// go-vet is static analysis, so it composes into the canonical `lint` target
+// (alongside golangci-lint) rather than a bespoke `vet` target. `magus run lint`
+// forks `go vet ./...`.
 import "magus";
 import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun vet(args: [str]) > void {
+export fun lint(args: [str]) > void {
     go["go-vet"]();
 }
 ```
@@ -316,13 +318,15 @@ Scans for known vulnerabilities in the module's call graph. Command as a `go too
 <!-- run-recorder -->
 ```buzz
 // govulncheck scans the module's call graph for known vulnerabilities, run as a
-// `go tool` so it resolves from go.mod's tool block.
+// `go tool` so it resolves from go.mod's tool block. Security scanning is static
+// analysis, so it composes into the canonical `lint` target - not a bespoke
+// `audit`/`security` target. (A slow scan can instead be gated in `ci`.)
 import "magus";
 import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun audit(args: [str]) > void {
+export fun lint(args: [str]) > void {
     go["govulncheck"]();
 }
 ```

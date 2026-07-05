@@ -12,7 +12,7 @@ Magus targets humans first. MCP is an optional layer you can omit from the binar
 
 ## Starting the daemon starts MCP
 
-No separate process is needed. Start the daemon as usual:
+You don't need a separate process. Start the daemon as usual:
 
 ```sh
 magus server start

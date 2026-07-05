@@ -1,0 +1,5 @@
+# URLs intentionally removed from the site, exempt from the abandoned-link gate
+# (see abandonedLinkCheck in magusfile.buzz). One clean URL per line. Prefer a
+# redirect (frontmatter aliases:) over retirement when old links should still land
+# somewhere; list a URL here only when it should genuinely 404.
+install/

@@ -8,6 +8,13 @@
   <title>MGS2009: outbound network request — magus</title>
   <meta name="description" content="Fires at info level for every outbound network request a spell makes through the http bindings while the sandbox is active. The sandbox audits egress but does not block it.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/codes/sandbox/MGS2009/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="MGS2009: outbound network request — magus">
+  <meta property="og:description" content="Fires at info level for every outbound network request a spell makes through the http bindings while the sandbox is active. The sandbox audits egress but does not block it.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/codes/sandbox/MGS2009/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
   <link rel="manifest" href="../../../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
         <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../../../blog/">Blog</a></li>
         <li><a href="../../../download/">Download</a></li>
         <li><a href="../../../tour/">Tour</a></li>
         <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -38,7 +49,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/sandbox/">Sandbox</a></li><li aria-current="page">MGS2009: outbound network request</li></ul>
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/sandbox/">sandbox diagnostics</a></li><li aria-current="page">MGS2009: outbound network request</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
@@ -84,12 +95,22 @@ the safe response is to stop running the untrusted spell.</p>
       <a class="page-nav-next" href="../MGS2010/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS2010: sandbox policy mismatch</span></a>
     </nav>
   </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace's magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../../../codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
+        <a class="related-card" href="../../../codes/sandbox/MGS2001/"><span class="related-card-title">MGS2001: path read denied</span><span class="related-card-desc">Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.</span></a>
+    </div>
+  </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS2009%22">MGS2009</a><a class="tag" href="../../../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../../../search/?q=tag%3A%22network%22">network</a><a class="tag" href="../../../search/?q=tag%3A%22egress%22">egress</a><a class="tag" href="../../../search/?q=tag%3A%22http%22">http</a><a class="tag" href="../../../search/?q=tag%3A%22audit%22">audit</a><a class="tag" href="../../../search/?q=tag%3A%22ssrf%22">ssrf</a></div>
-    <small>Last updated <time datetime="2026-07-03T20:04:47Z">July 3, 2026, 8:04 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" data-tooltip="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" title="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1">b68d6ff</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1"><code>b68d6ff</code></a> <small><time datetime="2026-07-03T20:04:47Z">Jul 3, 2026</time></small> - merge: document MGS2008, MGS2009, MGS2010</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/sandbox/MGS2009.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/sandbox/MGS2009.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-03T20:04:47Z">July 3, 2026, 8:04 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" data-tooltip="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" title="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1">b68d6ff</a>)</small><details class="recent-changes"><summary>Recent changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1"><code>b68d6ff</code></a> <small><time datetime="2026-07-03T20:04:47Z">Jul 3, 2026</time></small> - merge: document MGS2008, MGS2009, MGS2010</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/sandbox/MGS2009.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/sandbox/MGS2009.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../../main.js"></script>
 </body>

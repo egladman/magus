@@ -25,13 +25,13 @@ named after the CLI command it runs: `go-build`, `go-vet`, `golangci-lint`,
 `cargo-clippy`, `eslint`. It is the unit a [Target](targets.md) _composes_: a
 target body calls ops, ops do the tool work.
 
-An Operation is one of two declarative shapes, and the shape is its **kind**: a
+An Operation is one of two declarative shapes, and the shape is its **kind**. A
 **command** op returns a `Command` (`{bin, args, charms}`) magus forks directly
-(no shell, one process, run to completion) — the default; a **service** op returns a
+(no shell, one process, run to completion), the default. A **service** op returns a
 `Service` (`{command, readiness?, stop?, distinct?, idle?}`), a long-running process.
 Run directly (`magus run dev`) a service forks in the foreground and magus **blocks**
 on it; reached as a dependency (`magus.needs`) it is instead **supervised in the
-background** — started, readiness-gated, and shared across dependents (see
+background**: started, readiness-gated, and shared across dependents (see
 [services.md](services.md)). You author either as a function that returns it
 (`fun(Target) > Command` or `fun(Target) > Service`) or as a bare record; the kind is
 inferred from the return
@@ -39,7 +39,7 @@ inferred from the return
 Because both are declarative data, the argv is charm-patchable, cache-keyable, and
 previewable without running. The kind lives on the op, so one spell mixes command and
 service ops. In-VM work that magus neither forks nor blocks on (a remote cache
-backend) is not an op at all: it is a separate contract magus's core invokes by name.
+backend) is not an op at all; it is a separate contract magus's core invokes by name.
 
 An Operation is _how_ a tool performs an action; a [Target](targets.md) is _what_
 you run. You **bind** spells (which contribute ops) and **invoke** targets (which

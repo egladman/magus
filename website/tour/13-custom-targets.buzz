@@ -1,0 +1,35 @@
+// Custom targets: name your own phases. The names magus knows - build, test,
+// lint, format, generate, ci, clean - are conventions, not a closed set. Every
+// exported function is a runnable target, so name one for whatever your project
+// actually does: `release`, `deploy`, `smoke`. Nothing marks them as "custom";
+// the machinery is identical. Try `ls` to see them all, then `run deploy` to
+// watch one target drive another.
+
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun build(args: [str]) > void {
+    go["go-build"]();
+}
+
+// The conventional anchor, wired with magus.needs like always.
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("build"));
+}
+
+// A bespoke phase. It depends on ci through the same magus.needs edge the
+// canonical targets use, then does its own extra work.
+export fun release(args: [str]) > void {
+    magus.needs(magus.target.literal("ci"));
+    magus.info("tagging and publishing the release");
+}
+
+// A target can also invoke another imperatively with magus.run - the dynamic
+// alternative to a static magus.needs edge. `run deploy` records the nested
+// call in the plan.
+export fun deploy(args: [str]) > void {
+    magus.run(["release"]);
+    magus.info("rolling out to production");
+}

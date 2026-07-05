@@ -8,6 +8,13 @@
   <title>magus</title>
   <meta name="description" content="A fast cross-platform task orchestrator for polyglot monorepos. Single binary, code as configuration, statically typed, no second toolchain.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="magus">
+  <meta property="og:description" content="A fast cross-platform task orchestrator for polyglot monorepos. Single binary, code as configuration, statically typed, no second toolchain.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" type="application/atom+xml" title="magus blog" href="public/atom/blog.atom.xml">
   <link rel="preload" as="image" href="assets/gopher.webp" type="image/webp" fetchpriority="high">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
@@ -26,13 +33,17 @@
     <nav class="container">
       <ul><li><a href="index.html" class="contrast"><picture><source srcset="assets/hat.webp" type="image/webp"><img class="brand-mark" src="assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="index.html" aria-current="page">Home</a></li>
         <li><a href="documentation/">Documentation</a></li>
         <li><a href="blog/">Blog</a></li>
         <li><a href="download/">Download</a></li>
         <li><a href="tour/">Tour</a></li>
         <li><a href="playground/">Playground</a></li>
+        <li><a href="development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -46,11 +57,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li><li><a href="#contributing" title="Contributing">Contributing</a></li></ul></li><li><a href="#license" title="License">License</a></li></ul>
+        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li></ul></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
@@ -59,88 +71,78 @@
     <img alt="magus gopher mascot" width="400" height="300" fetchpriority="high" src="./assets/gopher.png">
   </picture>
 </p>
-<!-- Generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
-<img loading="lazy" decoding="async" alt="Coverage" width="113" height="20" src="./assets/coverage.svg">
+<!-- Coverage is generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
+<p><a href="https://github.com/egladman/magus/actions/workflows/ci.yaml" rel="noopener noreferrer" target="_blank" data-external><img loading="lazy" decoding="async" alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img loading="lazy" decoding="async" alt="Coverage" width="113" height="20" src="./assets/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus" rel="noopener noreferrer" target="_blank" data-external><img loading="lazy" decoding="async" alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a></p>
 <p>A fast cross-platform task orchestrator for polyglot (mono)repos.</p>
 <p>Magus computes affected projects from your changes, caches the results, and runs the minimum rebuild set after a change.</p>
-<p>Single binary. Code as configuration. Statically typed. No second toolchain.</p>
+<p>It is a single statically typed binary that takes its configuration as code, with no second toolchain to install.</p>
 <hr>
 <h2 id="documentation">Documentation</h2>
-<p>Full docs live at <strong><a href="https://eli.gladman.cc/magus/" rel="noopener noreferrer" target="_blank" data-external>https://eli.gladman.cc/magus/</a></strong> (<a href="documentation/">source</a>). Start there for targets, spells, charms, CI, remote caching, the daemon, MCP, telemetry, and the rest.</p>
+<p>Full docs live at <strong><a href="https://eli.gladman.cc/magus/" rel="noopener noreferrer" target="_blank" data-external>eli.gladman.cc/magus</a></strong>.<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> The major sections:</p>
+<ul>
+<li><strong>Core concepts</strong> - <a href="targets/">Targets</a>, <a href="spells/">Spells</a>, <a href="charms/">Charms</a>, <a href="operations/">Operations</a>, <a href="services/">Services</a></li>
+<li><strong>Running at scale</strong> - <a href="ci/">CI</a>, <a href="daemon/">Daemon</a>, <a href="remote-cache/">Remote caching</a>, <a href="mcp/">MCP</a>, <a href="telemetry/">Telemetry</a></li>
+<li><strong>Reference</strong> - <a href="manpage/magus/">Man pages</a>, <a href="buzz/modules/">Standard library modules</a>, <a href="debugging/">Debugging</a>, <a href="tips/">Tips and tricks</a></li>
+</ul>
 <h2 id="install">Install</h2>
 <p>magus ships as a single self-contained binary. See the <a href="download/">Download guide</a>.</p>
 <hr>
 <h2 id="development">Development</h2>
-<p>Building magus itself. Requires Go 1.25+; <a href="https://mise.jdx.dev/" rel="noopener noreferrer" target="_blank" data-external>mise</a> is recommended for the pinned toolchain (see <a href="https://github.com/egladman/magus/blob/main/mise.toml" rel="noopener noreferrer" target="_blank" data-external><code>mise.toml</code></a>).</p>
+<p>For the full contributor reference - the <a href="https://eli.gladman.cc/magus/development/contributing/" rel="noopener noreferrer" target="_blank" data-external>Contributing guide</a>, per-project target catalogs (run order + dependency graphs), and the config reference - see the <a href="https://eli.gladman.cc/magus/development/" rel="noopener noreferrer" target="_blank" data-external>Development page</a>.</p>
+<p>Building magus needs Go. The full toolchain - Go itself, plus Node and esbuild for the docs site and TinyGo for the WebAssembly playground - is pinned in <a href="https://github.com/egladman/magus/blob/main/mise.toml" rel="noopener noreferrer" target="_blank" data-external><code>mise.toml</code></a>; <a href="https://mise.jdx.dev/" rel="noopener noreferrer" target="_blank" data-external>mise</a> installs it in one step. From a fresh clone:</p>
 <pre><code class="language-sh">git clone https://github.com/egladman/magus
 cd magus
+mise install           # installs the pinned Go, Node, esbuild, and TinyGo
 go build -o magus ./cmd/magus
 </code></pre>
-<p>Run the tests:</p>
-<pre><code class="language-sh">go test ./...
-</code></pre>
-<p>Or, once magus is built, via its own targets:</p>
-<pre><code class="language-sh">magus run test
-magus run ci
+<p>Only building the <code>magus</code> binary? Go alone is enough and you can skip <code>mise install</code>; you need it for the docs site (<code>magus run generate website</code>) and the playground.</p>
+<p>Run the tests through magus itself - the whole point is that magus builds and tests magus:</p>
+<pre><code class="language-sh">magus run ci
 </code></pre>
 <h3 id="project-layout">Project layout</h3>
-<table>
-<thead>
-<tr>
-<th>Path</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/cmd/magus" rel="noopener noreferrer" target="_blank" data-external><code>cmd/magus/</code></a></td>
-<td>CLI entry point</td>
-</tr>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/cmd/magus-utils" rel="noopener noreferrer" target="_blank" data-external><code>cmd/magus-utils/</code></a></td>
-<td>release signing helper</td>
-</tr>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/internal" rel="noopener noreferrer" target="_blank" data-external><code>internal/</code></a></td>
-<td>core engine (affected set, cache, sandbox, daemon, MCP)</td>
-</tr>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/gopherbuzz" rel="noopener noreferrer" target="_blank" data-external><code>gopherbuzz/</code></a></td>
-<td>the embedded Buzz interpreter</td>
-</tr>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/std" rel="noopener noreferrer" target="_blank" data-external><code>std/</code></a></td>
-<td>magusfile stdlib (<code>fs</code>, <code>os</code>, <code>http</code>, ...)</td>
-</tr>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/spells" rel="noopener noreferrer" target="_blank" data-external><code>spells/</code></a></td>
-<td>built-in language spells (<code>go</code>, <code>rust</code>, <code>typescript</code>, ...)</td>
-</tr>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/docs" rel="noopener noreferrer" target="_blank" data-external><code>docs/</code></a></td>
-<td>documentation source (rendered by <code>magus run generate website</code>)</td>
-</tr>
-<tr>
-<td><a href="https://github.com/egladman/magus/tree/main/website" rel="noopener noreferrer" target="_blank" data-external><code>website/</code></a></td>
-<td>docs-site generator (Buzz-based static site)</td>
-</tr>
-</tbody>
-</table>
-<h3 id="contributing">Contributing</h3>
-<p>See <a href="https://github.com/egladman/magus/blob/main/CONTRIBUTING.md" rel="noopener noreferrer" target="_blank" data-external>CONTRIBUTING.md</a>. Larger changes are worth discussing first in <a href="https://github.com/egladman/magus/discussions" rel="noopener noreferrer" target="_blank" data-external>Discussions</a>.</p>
+<pre><code class="language-text">magus/
+├── cmd/
+│   ├── magus/            CLI entry point
+│   ├── magus-utils/      release signing + config-doc generators
+│   ├── magus-docs/       stdlib module doc generator
+│   └── magus-manpage/    man-page generator
+├── internal/             core engine (~30 packages), the notable ones:
+│   ├── depgraph/         affected-set computation over the project graph
+│   ├── cache/            content-addressed build cache
+│   ├── run/              target scheduling and the run hierarchy
+│   ├── sandbox/          filesystem + exec isolation for target runs
+│   ├── service/          long-running shared service ops (+ serviceident, serviceaudit)
+│   ├── ward/             coded op diagnostics (the MGSxxxx wards)
+│   ├── mcp/              Model Context Protocol server
+│   ├── workspace/        project + magusfile discovery
+│   ├── observability/    OpenTelemetry traces and metrics
+│   └── ...               (proc, retry, selfupdate, render, report, doctor, describe, ...)
+├── gopherbuzz/           the embedded Buzz interpreter
+├── std/                  magusfile stdlib (fs, os, http, json, crypto, ...)
+├── spells/               built-in language spells (go, rust, typescript, ...)
+├── schema/               generated magus.yaml / MAGUS_* config inventory
+├── docs/                 documentation source (rendered by `magus run generate website`)
+└── website/              docs-site generator (Buzz-based static site)
+</code></pre>
+<div class="footnotes" role="doc-endnotes">
 <hr>
-<h2 id="license">License</h2>
-<p>MIT - see <a href="https://github.com/egladman/magus/blob/main/LICENSE" rel="noopener noreferrer" target="_blank" data-external>LICENSE</a>.</p>
+<ol>
+<li id="fn:1">
+<p>Source: <a href="https://github.com/egladman/magus/tree/main/website" rel="noopener noreferrer" target="_blank" data-external>website/</a>.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
     </article>
     </div>
     </div>
   </main>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="search/?q=tag%3A%22task+orchestrator%22">task orchestrator</a><a class="tag" href="search/?q=tag%3A%22build+system%22">build system</a><a class="tag" href="search/?q=tag%3A%22monorepo%22">monorepo</a><a class="tag" href="search/?q=tag%3A%22polyglot%22">polyglot</a><a class="tag" href="search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="search/?q=tag%3A%22cache%22">cache</a></div>
-    <small>Last updated <time datetime="2026-07-02T22:09:42Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e" data-tooltip="d8ea25b3453a933c86ace2e52d64111fcf8abf0e" title="d8ea25b3453a933c86ace2e52d64111fcf8abf0e">d8ea25b</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/d311ef71b579c2cf433b35a59e238d3f1c158393"><code>d311ef7</code></a> <small><time datetime="2026-07-01T23:11:42Z">Jul 1, 2026</time></small> - site: optimize LCP images; CDN preconnect (WS A/B)</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/49399a3431ea33c0b0ba211fc19cfc9d8905046e"><code>49399a3</code></a> <small><time datetime="2026-06-23T14:31:07Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/d650d608f064844161cf1150ab284358c59f2cbe"><code>d650d60</code></a> <small><time datetime="2026-06-23T13:37:03Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/7f534d130a5cc47c79b7f1759780269410be4dc0"><code>7f534d1</code></a> <small><time datetime="2026-06-23T03:37:00Z">Jun 23, 2026</time></small> - fix two broken README toc anchors</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="search/?q=tag%3A%22readme%22">readme</a><a class="tag" href="search/?q=tag%3A%22task+orchestrator%22">task orchestrator</a><a class="tag" href="search/?q=tag%3A%22build+system%22">build system</a><a class="tag" href="search/?q=tag%3A%22monorepo%22">monorepo</a><a class="tag" href="search/?q=tag%3A%22polyglot%22">polyglot</a><a class="tag" href="search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="search/?q=tag%3A%22cache%22">cache</a></div>
+    <small>Last updated <time datetime="2026-07-02T22:09:42Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e" data-tooltip="d8ea25b3453a933c86ace2e52d64111fcf8abf0e" title="d8ea25b3453a933c86ace2e52d64111fcf8abf0e">d8ea25b</a>)</small><details class="recent-changes"><summary>Recent changes on this page (8)</summary><ul><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/d311ef71b579c2cf433b35a59e238d3f1c158393"><code>d311ef7</code></a> <small><time datetime="2026-07-01T23:11:42Z">Jul 1, 2026</time></small> - site: optimize LCP images; CDN preconnect (WS A/B)</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/49399a3431ea33c0b0ba211fc19cfc9d8905046e"><code>49399a3</code></a> <small><time datetime="2026-06-23T14:31:07Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/d650d608f064844161cf1150ab284358c59f2cbe"><code>d650d60</code></a> <small><time datetime="2026-06-23T13:37:03Z">Jun 23, 2026</time></small> - Update README.md</li><li><a href="https://github.com/egladman/magus/commit/7f534d130a5cc47c79b7f1759780269410be4dc0"><code>7f534d1</code></a> <small><time datetime="2026-06-23T03:37:00Z">Jun 23, 2026</time></small> - fix two broken README toc anchors</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="search/">Search</a> &middot; <a href="public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="main.js"></script>
 </body>

@@ -1,102 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" class="no-js">
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="generator" content="magus">
-  <title>CI — magus</title>
-  <meta name="description" content="Compose a ci target from your magusfile, wire the flow with magus.needs, and lock down shared-cache writes with Ed25519 trusted keys.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/ci/">
-  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
-  <link rel="manifest" href="../manifest.webmanifest">
-  <meta name="theme-color" content="#3178c6">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
-  <link rel="stylesheet" href="../theme.css">
-  <link rel="stylesheet" href="../site.css">
-  <script src="../theme.js"></script>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=../targets/ci/">
+<link rel="canonical" href="../targets/ci/">
+<title>Redirecting</title>
+<script>location.replace("../targets/ci/");</script>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="site-header">
-    <nav class="container">
-      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
-      <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
-        <ul class="nav-links" id="site-nav-links">
-        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
-        <li><a href="../blog/">Blog</a></li>
-        <li><a href="../download/">Download</a></li>
-        <li><a href="../tour/">Tour</a></li>
-        <li><a href="../playground/">Playground</a></li>
-        </ul>
-        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
-      </div>
-    </nav>
-  </header>
-  <main id="main-content" class="container" tabindex="-1">
-    <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">CI</li></ul>
-    </nav>
-    <div class="page-tools"></div>
-    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/ci.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
-    <article>
-<h1 id="ci">CI</h1>
-<p><code>ci</code> is an ordinary magusfile target; magus does not hardcode its steps. Export a <code>ci</code> function, wire the flow with <code>magus.needs</code>, and magus runs it read-only.</p>
-<pre><code class="language-buzz">export fun ci(args: [str]) &gt; void {
-    // declare the edges you want; independent steps run in parallel
-    magus.needs(
-        magus.target.literal(&quot;preflight&quot;),
-        magus.target.literal(&quot;generate&quot;),
-        magus.target.literal(&quot;format&quot;),
-        magus.target.literal(&quot;lint&quot;),
-        magus.target.literal(&quot;build&quot;),
-        magus.target.literal(&quot;test&quot;),
-    );
-}
-</code></pre>
-<h2 id="recommendations">Recommendations</h2>
-<p>We document this order; we don't enforce it. Chain steps with <code>magus.needs</code> where order matters (e.g. <code>test</code> depends on <code>build</code>).</p>
-<div class="mermaid-src"><pre><code class="language-mermaid">flowchart TD
-    cmd[&quot;magus affected ci&quot;] --&gt; preflight
-    subgraph targets[&quot;Targets (composed in your magusfile)&quot;]
-        preflight --&gt; generate
-        generate --&gt; format
-        format --&gt; lint
-        lint --&gt; build
-        build --&gt; test
-    end
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<h2 id="shared-cache-trust">Shared cache trust</h2>
-<p><strong>Who may write the cache is a trust boundary.</strong> The primary defense is Ed25519 signing: a consumer replays a remote artifact only if it carries a signature from a key in <code>cache.remote.trusted_keys</code>. Wiring a remote backend without a trust set is refused.</p>
-<pre><code class="language-yaml"># magus.yaml  -  bind the backend in magusfile.buzz via magus.cache.remote(github)
-cache:
-  remote:
-    trusted_keys:
-      - &quot;&lt;base64 Ed25519 public key&gt;&quot;   # magus config cache key generate
-</code></pre>
-<p>A complementary defense is to open the cache <strong>read-only on untrusted refs</strong>: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and flake detector read it): restore always, save only from trusted pushes.</p>
-<pre><code class="language-yaml"># PRs replay the cache and see main's history, but write neither
-MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
-</code></pre>
-<p>To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own backend) and generate signing keys, see <a href="../remote-cache/">Remote caching</a>.</p>
-    </article>
-    <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../charms/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Charms</span></a>
-      <a class="page-nav-next" href="../daemon/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Daemon and concurrency</span></a>
-    </nav>
-  </main>
-  <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../search/?q=tag%3A%22ci+target%22">ci target</a><a class="tag" href="../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../search/?q=tag%3A%22remote+cache%22">remote cache</a><a class="tag" href="../search/?q=tag%3A%22trusted+keys%22">trusted keys</a><a class="tag" href="../search/?q=tag%3A%22magus.needs%22">magus.needs</a><a class="tag" href="../search/?q=tag%3A%22github+actions%22">github actions</a></div>
-    <small>Last updated <time datetime="2026-07-02T22:09:42Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e" data-tooltip="d8ea25b3453a933c86ace2e52d64111fcf8abf0e" title="d8ea25b3453a933c86ace2e52d64111fcf8abf0e">d8ea25b</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/ci.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/ci.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
-  </div>
-  <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
-  </footer>
-  <script type="module" src="../main.js"></script>
+<p>This page moved. <a href="../targets/ci/">Continue to its new location</a>.</p>
 </body>
 </html>

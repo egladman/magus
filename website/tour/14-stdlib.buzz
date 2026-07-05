@@ -1,0 +1,21 @@
+// The standard library: batteries included. Step 4 was the language - branch,
+// loop, recurse. This is the other half: Buzz ships host modules you import and
+// call straight from a target - string casing, semver math, JSON and YAML,
+// base64, hashing, time - all in-process, no shelling out. They run live in this
+// tab. Try `eval strings.kebabCase("Build The App")` or
+// `eval semver.compare("1.10.0", ">", "1.4.0")`, then `run stamp`.
+
+import "magus";
+import "semver";
+import "strings";
+
+// A target assembling build config from the stdlib the way a real one would:
+// derive an artifact slug and compare two versions, then print them. `run stamp`
+// computes each value for real.
+export fun stamp(args: [str]) > void {
+    final slug = strings.kebabCase("Build The App");
+    final newer = semver.compare("1.10.0", ">", "1.4.0");   // true: 1.10.0 outranks 1.4.0
+    magus.info("artifact slug: {slug}");
+    magus.info("tag:           v1.4.0");
+    magus.info("1.10.0 newer than 1.4.0? {newer}");
+}

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Development — magus</title>
+  <meta name="description" content="Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/development/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Development — magus">
+  <meta property="og:description" content="Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/development/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../index.html">Home</a></li>
+        <li><a href="../../documentation/">Documentation</a></li>
+        <li><a href="../../blog/">Blog</a></li>
+        <li><a href="../../download/">Download</a></li>
+        <li><a href="../../tour/">Tour</a></li>
+        <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/" aria-current="page">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li aria-current="page">Development</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#contributing" title="Contributing">Contributing</a></li><li><a href="#project-graphs" title="Project graphs">Project graphs</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <article>
+<h1 id="development">Development</h1>
+<p>Reference for people working <em>on</em> magus rather than building with it. magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>Building the <code>magus</code> binary needs only Go. The docs site and WebAssembly playground also need the Node, esbuild, and TinyGo toolchain pinned in <code>mise.toml</code>, which <a href="https://mise.jdx.dev/">mise</a> installs in one step. From a fresh clone:</p>
+<pre><code class="language-sh">git clone https://github.com/egladman/magus
+cd magus
+mise install
+go build -o magus ./cmd/magus
+magus run ci</code></pre>
+<p><code>magus run ci</code> builds, formats, lints, and tests every affected project - the same pipeline continuous integration runs. Only need the binary? Go alone is enough; skip <code>mise install</code> and drop the docs and playground targets.</p>
+<h2 id="contributing">Contributing</h2>
+<p>The <a href="contributing/">Contributing guide</a> covers the conventions worth knowing before you open a pull request: run the suite with <code>magus run ci</code>, back any performance change with benchmark evidence, and regenerate the docs site (<code>magus run generate:rw website</code>) so the committed <code>gen/</code> tree never drifts from its source.</p>
+<h2 id="project-graphs">Project graphs</h2>
+<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>
+    <div class="related-grid">
+        <a class="related-card" href="magus/"><span class="related-card-title">magus</span><span class="related-card-desc">target catalog and dependency graph</span></a>
+        <a class="related-card" href="gopherbuzz/"><span class="related-card-title">gopherbuzz</span><span class="related-card-desc">target catalog and dependency graph</span></a>
+        <a class="related-card" href="website/"><span class="related-card-title">website</span><span class="related-card-desc">target catalog and dependency graph</span></a>
+    </div>
+<h2 id="reference">Reference</h2>
+<p>The deeper references a contributor reaches for once the build is running:</p>
+<ul>
+  <li><a href="../conventions/">Conventions</a> - the naming and layout rules magus expects of a workspace, and that this repository follows.</li>
+  <li><a href="../operations/">Operations</a> - the work hierarchy underneath a target: ops, plans, and the slots that bound concurrency.</li>
+  <li><a href="../config/">Configuration</a> - the <code>magus.yaml</code> keys and the <code>MAGUS_*</code> environment inventory.</li>
+  <li><a href="../wards/">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>
+  <li><a href="../debugging/">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>
+</ul>
+    </article>
+    </div>
+    </div>
+  </main>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../main.js"></script>
+</body>
+</html>

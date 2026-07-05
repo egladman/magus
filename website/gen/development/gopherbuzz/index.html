@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>gopherbuzz targets — magus</title>
+  <meta name="description" content="Target catalog and run-order graph for the gopherbuzz project, generated from its magusfile.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/development/gopherbuzz/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="gopherbuzz targets — magus">
+  <meta property="og:description" content="Target catalog and run-order graph for the gopherbuzz project, generated from its magusfile.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/development/gopherbuzz/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../development/" aria-current="page">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../development/">Development</a></li><li aria-current="page">gopherbuzz targets</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-gopherbuzz" title="Project: gopherbuzz">Project: gopherbuzz</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#pgo-generate" title="pgo-generate">pgo-generate</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <article>
+<h1 id="targets">Targets</h1>
+<!-- Generated by `magus describe graph -o markdown`. Do not edit by hand. -->
+<p>A <strong>target</strong> is a named operation (build, test, lint, …) declared as an <code>export fun</code> in a project's magusfile. This cheat sheet (the per-target catalog and run-order graph below) is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.</p>
+<h2 id="quick-start">Quick start</h2>
+<pre><code class="language-sh">magus run &lt;target&gt;            # from inside the project directory
+magus run &lt;target&gt; &lt;path&gt;     # from anywhere in the workspace
+magus run &lt;target&gt;:&lt;charm&gt;    # change HOW it runs (e.g. lint:rw)
+</code></pre>
+<p>Unfamiliar with a term? See the <a href="#glossary">Glossary</a>.</p>
+<h2 id="reading-the-graphs">Reading the graphs</h2>
+<div class="mermaid-src"><pre><code class="language-mermaid">graph LR
+  subgraph legend[&quot;Legend&quot;]
+    lg_anchor(&quot;Top-level target&quot;)
+    lg_target(&quot;Target&quot;)
+    lg_ext[[&quot;Other project&quot;]]
+    lg_spell{{&quot;Spell&quot;}}
+  end
+  %% no dependency edges
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
+  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
+  class lg_anchor anchor
+  class lg_target target
+  class lg_ext external
+  class lg_spell spell
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<ul>
+<li>Every rounded box is a <strong>target</strong> you can <code>magus run</code>. <strong>Blue</strong> is a top-level target (nothing else depends on it — a typical entry point); <strong>gray</strong> ones are pulled in as dependencies.</li>
+<li>Arrows show <strong>run order</strong>: a target's dependencies run before it, so the graph flows left → right (e.g. <code>preflight</code> runs first, <code>ci</code> last).</li>
+<li>A dotted arrow marks a <strong>cross-project dependency</strong> (the other project's target runs first).</li>
+<li>Each project's <strong>Toolchain</strong> graph (top-down) shows which <strong>spell</strong> each target drives.</li>
+</ul>
+<h2 id="project-gopherbuzz">Project: gopherbuzz</h2>
+<details>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>gopherbuzz</code></summary>
+<pre><code class="language-text">sources  **/*.go, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
+outputs  MAGUS.md
+spells   magusfile, go
+</code></pre>
+</details>
+<p><strong>Run order</strong></p>
+<div class="mermaid-src"><pre><code class="language-mermaid">---
+config:
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 80
+---
+graph LR
+  subgraph entry_cluster[&quot; &quot;]
+    ci(&quot;ci&quot;)
+    pgo_generate(&quot;pgo-generate&quot;)
+  end
+  preflight(&quot;preflight&quot;)
+  generate(&quot;generate&quot;)
+  md_generate(&quot;md-generate&quot;)
+  format(&quot;format&quot;)
+  lint(&quot;lint&quot;)
+  build(&quot;build&quot;)
+  test(&quot;test&quot;)
+  preflight --&gt; generate
+  md_generate --&gt; generate
+  generate --&gt; format
+  format --&gt; lint
+  format --&gt; build
+  format --&gt; test
+  lint --&gt; ci
+  build --&gt; ci
+  test --&gt; ci
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  class ci,pgo_generate anchor
+  class build,format,generate,lint,md_generate,preflight,test target
+  style entry_cluster fill:transparent,stroke:transparent
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<p><strong>Toolchain</strong></p>
+<p>Which spell each target drives; edge labels are the tool-native operations.</p>
+<div class="mermaid-src"><pre><code class="language-mermaid">graph TB
+  t_format(&quot;format&quot;)
+  sp_go{{&quot;go&quot;}}
+  t_lint(&quot;lint&quot;)
+  t_build(&quot;build&quot;)
+  t_test(&quot;test&quot;)
+  t_format --&gt;|&quot;go-fmt, go-mod-tidy&quot;| sp_go
+  t_lint --&gt;|&quot;go-vet&quot;| sp_go
+  t_build --&gt;|&quot;go-build&quot;| sp_go
+  t_test --&gt;|&quot;go-test&quot;| sp_go
+  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
+  class sp_go spell
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<h3 id="generate"><code>generate</code></h3>
+<p>Regenerates MAGUS.md and fails on drift.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run generate    # from the project directory
+magus run generate .  # from the workspace root
+</code></pre>
+<p><strong>Charms</strong></p>
+<pre><code class="language-sh">magus run generate:rw  # mutate in place instead of checking
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#preflight"><code>preflight</code></a></li>
+<li><a href="#md-generate"><code>md-generate</code></a></li>
+</ul>
+<p><strong>Details:</strong> uncached (always runs) · exclusive (runs alone, no concurrent targets)</p>
+<h3 id="format"><code>format</code></h3>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run format    # from the project directory
+magus run format .  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#generate"><code>generate</code></a></li>
+</ul>
+<h3 id="lint"><code>lint</code></h3>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run lint    # from the project directory
+magus run lint .  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#format"><code>format</code></a></li>
+</ul>
+<h3 id="build"><code>build</code></h3>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run build    # from the project directory
+magus run build .  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#format"><code>format</code></a></li>
+</ul>
+<h3 id="test"><code>test</code></h3>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run test    # from the project directory
+magus run test .  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#format"><code>format</code></a></li>
+</ul>
+<h3 id="ci"><code>ci</code></h3>
+<p>The anchor <code>magus affected ci</code> keys off; fans out lint/build/test after format.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run ci    # from the project directory
+magus run ci .  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#lint"><code>lint</code></a></li>
+<li><a href="#build"><code>build</code></a></li>
+<li><a href="#test"><code>test</code></a></li>
+</ul>
+<h3 id="pgo-generate"><code>pgo-generate</code></h3>
+<p>Regenerates default.pgo, the Buzz VM's PGO profile.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run pgo-generate    # from the project directory
+magus run pgo-generate .  # from the workspace root
+</code></pre>
+<p><strong>Details:</strong> uncached (always runs)</p>
+<h3 id="preflight"><code>preflight</code></h3>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run preflight    # from the project directory
+magus run preflight .  # from the workspace root
+</code></pre>
+<h3 id="md-generate"><code>md-generate</code></h3>
+<p>Renders MAGUS.md (target catalog plus graph) from this magusfile.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run md-generate    # from the project directory
+magus run md-generate .  # from the workspace root
+</code></pre>
+<h2 id="glossary">Glossary</h2>
+<ul>
+<li><strong>Workspace</strong>: the magus root directory that owns a set of projects and shared config; the unit magus operates over.</li>
+<li><strong>Project</strong>: a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.</li>
+<li><strong>Magusfile</strong>: the <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and binds its spells.</li>
+<li><strong>Target</strong>: a named operation (<code>build</code>, <code>test</code>, …) you invoke with <code>magus run &lt;target&gt;</code>; it may compose a spell's tool-native operations and depend on other targets.</li>
+<li><strong>Spell</strong>: a language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a toolchain's real commands.</li>
+<li><strong>Charm</strong>: an execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in place, and <code>ci</code> always strips it.</li>
+<li><strong>Module</strong>: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.</li>
+<li><strong>Buzz</strong>: the language magusfiles are written in (the <code>.buzz</code> engine).</li>
+</ul>
+    </article>
+    </div>
+    </div>
+  </main>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

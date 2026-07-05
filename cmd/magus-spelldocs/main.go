@@ -1,18 +1,17 @@
 // Command magus-spelldocs generates Markdown reference documentation for every
-// built-in spell in the internal/spell registry. It mirrors cmd/magus-docs (the
-// stdlib-module generator): walk the registry, emit one page per spell to
-// docs/spells/<name>.md (injecting a per-op example from
-// spells/examples/<name>/<op>.buzz), and refresh the built-in-spell table on the
-// /spells/ landing page (docs/spells.md) between its marker comments.
+// built-in spell in the internal/spell registry. It mirrors cmd/magus-docs: walk
+// the registry, emit one page per spell to docs/spells/<name>.md (injecting a
+// per-op example from spells/examples/<name>/<op>.buzz), and refresh the
+// built-in-spell table on the /spells/ landing (docs/spells.md) between its marker
+// comments.
 //
 //	go run ./cmd/magus-spelldocs -out ./docs/spells
 //
 // The output under docs/spells is committed; re-run this (via `magus run
-// docs_generate`) after changing a spell so the docs stay in sync. Spell examples
-// are marked runnable-as-dry-run (<!-- run-recorder -->): the playground's
-// recorder (EvalBuzz + WithRecorder) records the tool invocations a target would
-// trigger instead of executing them, so a reader can see the plan without the
-// toolchain installed.
+// docs_generate`) after changing a spell. Spell examples are marked runnable as
+// dry-run (<!-- run-recorder -->): the playground's recorder (Eval + WithTracer)
+// records the tool invocations a target would trigger instead of executing them,
+// so a reader sees the plan without the toolchain installed.
 package main
 
 import (
@@ -33,10 +32,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// spellInfo is the authored metadata for a built-in spell: the bits that are
-// editorial (a one-line purpose, the intro paragraph, the tag set, the source
-// directory) rather than derivable from the Descriptor. The ops table and per-op
-// detail are generated; this map only supplies the prose around them.
+// spellInfo is the authored, editorial metadata for a built-in spell (purpose,
+// intro, tags, source directory) that isn't derivable from the Descriptor. The
+// ops table and per-op detail are generated; this only supplies the prose.
 type spellInfo struct {
 	dir         string   // source directory under spells/ (e.g. "golang" for the "go" spell)
 	language    string   // human language/toolchain label, or "" for language-agnostic tools
@@ -147,9 +145,9 @@ func main() {
 	}
 	// The at-a-glance list of all spells lives on the concept page (docs/spells.md,
 	// the /spells/ landing) rather than a separate index, so /spells/ both explains
-	// what a spell is and lists every one. It is injected between markers so it
-	// stays generated (drift-gated), not hand-maintained. docs/spells.md is the
-	// sibling of the per-spell output dir.
+	// what a spell is and lists every one. Injected between markers so it stays
+	// generated (drift-gated), not hand-maintained. docs/spells.md is the sibling
+	// of the per-spell output dir.
 	spellsMd := filepath.Join(filepath.Dir(*outDir), "spells.md")
 	if err := injectSpellList(spellsMd, builtins, names); err != nil {
 		fmt.Fprintf(os.Stderr, "magus-spelldocs: inject spell list: %v\n", err)
@@ -160,8 +158,8 @@ func main() {
 }
 
 // resolvedArgv joins an op's command and arguments into the shell-free argv a
-// target actually forks (`go tool golangci-lint run ./...`). Empty for a marker op
-// with no command (an opaque spell's aggregate target).
+// target forks (`go tool golangci-lint run ./...`). Empty for a marker op with no
+// command (an opaque spell's aggregate target).
 func resolvedArgv(op types.SpellOp) string {
 	if op.Bin == "" {
 		return ""
@@ -175,7 +173,11 @@ func renderSpell(d ispell.Descriptor) string {
 
 	tags := append([]string{d.Name, "spell"}, meta.tags...)
 	tags = append(tags, "tools")
-	docs.WriteFrontmatter(&b, d.Name+" spell", meta.description, dedupe(tags))
+	docs.WriteFrontmatter(&b, docs.Frontmatter{
+		Title:       d.Name + " spell",
+		Description: meta.description,
+		Tags:        dedupe(tags),
+	})
 
 	fmt.Fprintf(&b, "# %s\n\n", d.Name)
 	fmt.Fprintf(&b, "%s\n\n", meta.intro)
@@ -212,7 +214,7 @@ func renderSpell(d ispell.Descriptor) string {
 			fmt.Fprintf(&b, "**Command:** none; this op composes the spell's other ops (see the intro).\n\n")
 		}
 		// Each charm gets its own subheading (### <name>) with a plain-English
-		// summary of what it does to the argv, then a collapsible block exposing the
+		// summary of what it does to the argv, then a collapsible block with the
 		// exact JSON Patch for readers who want the raw notation.
 		for _, cn := range sortedCharmNames(op.Charms) {
 			charm := op.Charms[cn]
@@ -233,7 +235,7 @@ func renderSpell(d ispell.Descriptor) string {
 			fmt.Fprintln(&b)
 			// The recorder marker turns this block into a Run button that dry-runs
 			// the example under the playground's recording host (see
-			// playground.EvalBuzz + WithRecorder), tracing the ops the target would
+			// dry.Eval + WithTracer), tracing the ops the target would
 			// fork rather than executing them.
 			fmt.Fprintln(&b, "<!-- run-recorder -->")
 			fmt.Fprintln(&b, "```buzz")
@@ -252,9 +254,9 @@ func renderSpell(d ispell.Descriptor) string {
 // writeArgsSection emits the "Passing arguments to ops" reference: the options
 // map every op invocation accepts, keyed by type. invoker is the binding a caller
 // writes before the op index - a spell's own name on its page (`go["<op>"]`), or
-// the generic `spell` on the index. Kept in one helper so the per-spell pages and
-// the index stay identical (mirroring the real contract in
-// internal/interp/bindings.spellOptsFromBuzz).
+// the generic `spell` on the index. One helper keeps the per-spell pages and the
+// index identical, mirroring the real contract in
+// internal/interp/bindings.spellOptsFromBuzz.
 func writeArgsSection(b *strings.Builder, invoker string) {
 	// src links a key to the line in spell_object.go where it is parsed, mirroring
 	// the source links on the module docs' method signatures.
@@ -333,7 +335,7 @@ func injectSpellList(path string, builtins map[string]ispell.Descriptor, names [
 // bytecode strips it), so the source is the only place the handler comments
 // survive. It maps each op key to its handler via the mgs_listTargets return map,
 // then reads that handler's FunDecl.Doc. Any read/parse miss yields an empty map,
-// so a spell with no source-side docs simply renders no op descriptions.
+// so a spell with no source-side docs renders no op descriptions.
 func parseOpDocs(dir string) map[string]string {
 	src, err := os.ReadFile(filepath.Join("spells", dir, "spell.buzz"))
 	if err != nil {
@@ -369,9 +371,8 @@ func parseOpDocs(dir string) map[string]string {
 }
 
 // collectOpHandlers walks mgs_listTargets's body for its `return {"op": handler}`
-// map and records each op key -> handler function name. It reads only the string
-// key + identifier value pairs; non-identifier values (none exist in the built-ins)
-// are skipped.
+// map and records each op key -> handler function name. Non-identifier values
+// (none exist in the built-ins) are skipped.
 func collectOpHandlers(fd *ast.FunDecl, out map[string]string) {
 	if fd.Body == nil {
 		return
@@ -400,20 +401,20 @@ func collectOpHandlers(fd *ast.FunDecl, out map[string]string) {
 }
 
 // cleanDoc normalizes a Buzz doc comment (already stripped of // markers by the
-// lexer) into a single flowed paragraph: it joins wrapped lines with spaces and
-// collapses blank-line-separated paragraphs into one, so it drops cleanly into a
-// Markdown sentence. Plain ASCII in, plain ASCII out.
+// lexer) into a single flowed paragraph: it joins wrapped lines and collapses
+// blank-line-separated paragraphs into one, so it drops cleanly into a Markdown
+// sentence. Plain ASCII in, plain ASCII out.
 func cleanDoc(doc string) string {
 	fields := strings.Fields(strings.ReplaceAll(doc, "\n", " "))
 	return strings.Join(fields, " ")
 }
 
 // describeCharm renders a one-sentence, human summary of a charm's JSON-Patch ops
-// against the op's base argv (args), so a reader sees what the charm does to the
-// command without reading JSON Patch. It resolves each patch's target index back to
-// the original argument (e.g. "replaces `-l` with `-w`") when it can. It keeps to
-// the shapes the built-ins actually use (add/remove/replace on argv indices);
-// anything unusual falls back to naming the op count.
+// against the op's base argv (args), so a reader sees what the charm does without
+// reading JSON Patch. It resolves each patch's target index back to the original
+// argument (e.g. "replaces `-l` with `-w`") when it can. It handles only the shapes
+// the built-ins use (add/remove/replace on argv indices); anything unusual falls
+// back to naming the op count.
 func describeCharm(c types.Charm, args []string) string {
 	parts := make([]string, 0, len(c.Ops))
 	for _, p := range c.Ops {

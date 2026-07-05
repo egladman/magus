@@ -39,6 +39,16 @@
       background: var(--pico-card-background-color);
       box-shadow: var(--pico-card-box-shadow);
     }
+    /* Fullscreen: the panel becomes the whole viewport for an IDE-like editing
+       surface. The API hands it the screen; drop the rounded card framing and let
+       height:100% fill it (the flex children - editor + console - grow as usual).
+       The opaque background is required: fullscreen elements are transparent by
+       default and would show through to black. */
+    .panel:fullscreen {
+      height: 100%; width: 100%;
+      border: 0; border-radius: 0; box-shadow: none;
+      background: var(--pico-background-color);
+    }
 
     /* The file label strip above the editor. */
     .file-bar {
@@ -59,7 +69,12 @@
     .file-bar button {
       width: auto; margin: 0; padding: 0.2rem 0.7rem;
       font-size: 0.72rem; line-height: 1.3;
+      display: inline-flex; align-items: center; gap: 0.35rem;
     }
+    /* Small leading glyph on each action button. Sized in em so it tracks the
+       button's own font-size, and inheriting currentColor so it follows the
+       outline button's muted/hover states without extra rules. */
+    .file-bar button .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 
     /* Editor: a textarea with a syntax-highlight overlay and a line gutter.
        The textarea (transparent text, visible caret) sits over a <pre> that Go
@@ -192,23 +207,14 @@
     /* The page title above the editor. */
     .pg-title { margin-bottom: var(--pad); }
 
-    /* Explanatory panes below the editor + console: a responsive grid of cards
-       that fills the full width and stacks on narrow screens. Same width as the
-       editor (everything sits in one container-fluid), so nothing looks squished. */
-    .pg-panes {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-      gap: var(--pad);
-      margin-top: var(--pad);
+    /* One-line orienting note between the lede and the editor: what the playground
+       is (the WASM Buzz interpreter) and its one caveat (build tools don't run),
+       consolidated from the old explanatory cards into a single muted sentence. */
+    .pg-note {
+      margin: -0.15rem 0 var(--pad); font-size: 0.85rem;
+      color: var(--pico-muted-color);
     }
-    .pg-panes article { margin: 0; }
-    .pg-panes h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
-    .pg-panes p { margin: 0 0 0.6rem; color: var(--pico-muted-color); }
-    .pg-panes p:last-child { margin-bottom: 0; }
-    .pg-panes ul { margin: 0; padding-left: 1.1rem; color: var(--pico-muted-color); }
-    .pg-panes li { margin: 0.2rem 0; }
-    .pg-panes strong { color: var(--pico-color); font-weight: 600; }
-    .pg-panes code { font-size: 0.85em; }
+    .pg-note code { font-size: 0.85em; }
   </style>
 </head>
 <body>
@@ -217,13 +223,15 @@
   <main class="container-fluid">
     <h1 class="pg-title">Playground</h1>
     <p class="lede">A scratchpad for magusfiles. New to magus? <a href="../tour/">Take the tour</a> for guided, runnable examples.</p>
+    <p class="pg-note">Runs <a href="https://github.com/egladman/magus/tree/main/gopherbuzz">gopherbuzz</a>, the <a href="https://buzz-lang.dev/">Buzz</a> interpreter magus reads magusfiles with, compiled to WebAssembly entirely in your browser - nothing leaves this tab. Build tools don't run here, so <code>run</code> shows a target's plan (like <code>--dry-run</code>) instead of invoking them; <a href="../download/">install magus</a> to run these targets for real.</p>
 
     <section class="panel">
       <header class="file-bar">
         <span id="file-name" class="name">magusfile.buzz</span>
         <span id="parse-status" class="badge"></span>
-        <button id="download-btn" class="outline" type="button" title="Save this magusfile to your machine">Download</button>
-        <button id="share-btn" class="outline" type="button" title="Copy a link that reopens this code">Share</button>
+        <button id="download-btn" class="outline" type="button" title="Save this magusfile to your machine"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="btn-label">Download</span></button>
+        <button id="share-btn" class="outline" type="button" title="Copy a link that reopens this code"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="btn-label">Share</span></button>
+        <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the editor to fill the screen"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg><span class="btn-label">Fullscreen</span></button>
       </header>
 
       <div class="editor">
@@ -271,30 +279,6 @@
       </noscript>
     </section>
 
-    <section class="pg-panes">
-      <article>
-        <h2>About this interpreter</h2>
-        <p>
-          This is <a href="https://github.com/egladman/magus/tree/main/gopherbuzz">gopherbuzz</a>, the
-          <a href="https://buzz-lang.dev/">Buzz</a> interpreter magus uses to read magusfiles, compiled to
-          WebAssembly. It runs entirely in your browser: no server, no network, nothing leaves this tab.
-        </p>
-        <p>
-          Installed on your machine, <code>magus</code> runs these targets for real. See the
-          <a href="../documentation/">documentation</a> or how to <a href="../download/">download it</a>.
-        </p>
-      </article>
-
-      <article>
-        <h2>What runs, what doesn't</h2>
-        <ul>
-          <li><strong>Build tools don't run.</strong> A browser has no shell or filesystem, so <code>run</code>
-            shows a target's plan (like <code>magus run --dry-run</code>) instead of invoking
-            <code>go-build</code>, <code>git</code>, and friends.</li>
-          <li><strong>It stays local.</strong> Your edits never leave the tab; reload to start over.</li>
-        </ul>
-      </article>
-    </section>
   </main>
 
   <div class="page-provenance container">
@@ -337,6 +321,81 @@
         window.addEventListener("resize", sync);
       }
       sync();
+    })();
+  </script>
+  <!-- Draft persistence: the editor is a scratchpad, so keep the last edit across
+       reloads and offline visits in localStorage. Pure page-layer concern - the
+       WASM owns #src, we just mirror its value. Precedence on load: a #source= deep
+       link (shared / "Open in Playground") wins, else a saved draft replaces the
+       default example, else the seeded example stands. Restore fires once the WASM
+       has finished booting (it removes #loading when done). Degrades to a no-op if
+       storage is unavailable (private mode / disabled). -->
+  <script>
+    (function () {
+      var KEY = "magus:playground:src";
+      var src = document.getElementById("src");
+      if (!src) return;
+      var store;
+      try { store = window.localStorage; store.getItem(KEY); } catch (e) { return; }
+
+      // Save real edits (debounced). Programmatic value sets by the WASM don't fire
+      // "input", so the seeded example and deep-link source never masquerade as a
+      // user draft - only typing is persisted.
+      var t;
+      src.addEventListener("input", function () {
+        clearTimeout(t);
+        t = setTimeout(function () { try { store.setItem(KEY, src.value); } catch (e) {} }, 300);
+      });
+
+      // Restore the saved draft once the WASM has seeded its default, unless a deep
+      // link is present (that wins). Dispatch "input" so the WASM re-parses,
+      // re-highlights, and re-gutters via its own handler.
+      var restored = false;
+      function restore() {
+        if (restored) return;
+        if (/(^|[#&])source=/.test(location.hash)) { restored = true; return; }
+        var saved;
+        try { saved = store.getItem(KEY); } catch (e) { return; }
+        restored = true;
+        if (saved == null || saved === src.value) return;
+        src.value = saved;
+        src.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      var loading = document.getElementById("loading");
+      if (loading && loading.parentNode && window.MutationObserver) {
+        var obs = new MutationObserver(function () {
+          if (!document.getElementById("loading")) { obs.disconnect(); restore(); }
+        });
+        obs.observe(loading.parentNode, { childList: true });
+      }
+      // Fallback in case the overlay was already gone or never observed.
+      setTimeout(function () { if (!document.getElementById("loading")) restore(); }, 1500);
+    })();
+  </script>
+  <!-- Fullscreen toggle: expand the editor panel to fill the screen for an
+       IDE-like surface. Pure page-layer concern (the WASM owns the editor, not the
+       chrome), so it lives here. Native fullscreen already exits on Esc; the button
+       label + aria-pressed follow fullscreenchange so both entry paths stay in sync.
+       Hidden when the browser lacks the Fullscreen API rather than showing a dead
+       button. -->
+  <script>
+    (function () {
+      var btn = document.getElementById("fullscreen-btn");
+      var panel = document.querySelector(".panel");
+      if (!btn || !panel || !panel.requestFullscreen) { if (btn) btn.hidden = true; return; }
+      btn.addEventListener("click", function () {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else panel.requestFullscreen();
+      });
+      // Update only the label span, not the whole button - textContent would drop
+      // the leading SVG glyph along with the old text.
+      var label = btn.querySelector(".btn-label");
+      document.addEventListener("fullscreenchange", function () {
+        var on = document.fullscreenElement === panel;
+        if (label) label.textContent = on ? "Exit fullscreen" : "Fullscreen";
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.title = on ? "Return to the page" : "Expand the editor to fill the screen";
+      });
     })();
   </script>
   <!-- Shared feature bundle (code-copy etc.); each module guards on its own DOM

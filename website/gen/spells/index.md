@@ -1,5 +1,6 @@
 ---
 title: Spells
+page_type: overview
 description: A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.
 tags: [spells, operations, toolchain, cache, targets, go, rust, magusfile]
 ---
@@ -88,10 +89,10 @@ Binding a spell contributes its `needs`/`claims`/`provides` to that project's ca
 
 An op is one of two declarative shapes, and the shape it returns is its **kind**:
 
-- A **command op** returns a `Command` — a `{bin, args, charms}` object naming a program on PATH, its argument vector, and any charm modifiers. magus forks it directly (no shell, no variable expansion) and runs it to completion. This is the default and the vast majority of ops.
-- A **service op** returns a `Service` — a long-running process. `command` (required) is the process; `readiness` (a probe polled until it exits 0, the Kubernetes exec-probe model) and `stop` (a graceful-shutdown command) are **optional**, as are `distinct` and `idle` (see [services.md](services.md)). A service run **directly** (`magus run dev`) is forked in the **foreground** and blocked on (Ctrl-C signals it). A service reached as a **dependency** (via `magus.needs`) is instead **supervised in the background** — started, gated on its readiness probe, and shared by configuration fingerprint so several dependents run one instance — and, when a daemon is running, kept warm across invocations. (`Service` is a distinct return type so the op's kind is inferred from what it returns.) A service op's target is **inherently uncached** — magus never replays or snapshots it, so a re-run restarts the process instead of a cache hit doing nothing.
+- A **command op** returns a `Command`: a `{bin, args, charms}` object naming a program on PATH, its argument vector, and any charm modifiers. magus forks it directly (no shell, no variable expansion) and runs it to completion. This is the default and the vast majority of ops.
+- A **service op** returns a `Service`, a long-running process. `command` (required) is the process; `readiness` (a probe polled until it exits 0, the Kubernetes exec-probe model) and `stop` (a graceful-shutdown command) are **optional**, as are `distinct` and `idle` (see [services.md](services.md)). A service run **directly** (`magus run dev`) is forked in the **foreground** and blocked on (Ctrl-C signals it). A service reached as a **dependency** (via `magus.needs`) is instead **supervised in the background**: started, gated on its readiness probe, and shared by configuration fingerprint so several dependents run one instance, and, when a daemon is running, kept warm across invocations. (`Service` is a distinct return type so the op's kind is inferred from what it returns.) A service op's target is **uncached**: magus never replays or snapshots it, so a re-run restarts the process instead of a cache hit doing nothing.
 
-Either way the op is declarative _data_, so its argv is charm-patchable, hashes into the cache key, and previews under `magus describe` without executing. The kind lives on the **op**, not the spell: one spell freely mixes command ops and service ops under one name (a `node` spell builds _and_ serves). This is not the imperative two-op-kinds split magus removed — both shapes are static data, differing only in lifecycle (run-to-completion vs long-running).
+Either way the op is declarative _data_, so its argv is charm-patchable, hashes into the cache key, and previews under `magus describe` without executing. The kind lives on the **op**, not the spell: one spell freely mixes command ops and service ops under one name (a `node` spell builds _and_ serves). Both shapes are static data, unlike the imperative two-op-kinds split magus removed; they differ only in lifecycle (run-to-completion vs long-running).
 
 You author an op as a function (the usual form) or a bare record; the kind is inferred from what it returns. `magus doctor` enforces a doc comment on each function-authored op, captured by the Buzz parser at compile time.
 
@@ -111,7 +112,7 @@ fun nodeServe(target: Target) > Service {
 export fun mgs_listTargets() > any { return {"go-fmt": goFmt, "serve": nodeServe}; }
 ```
 
-**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on — HTTP, signing, a remote cache backend's get/put — is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see [Remote caching](remote-cache.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`os.exec`, `http`, `crypto`).
+**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on (HTTP, signing, a remote cache backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see [Remote caching](remote-cache.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`os.exec`, `http`, `crypto`).
 
 ## Binding a spell to a project
 
@@ -253,8 +254,8 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 | **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                      |
 | **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                             |
 | **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`), for affected-set attribution.                                                                                                                                                         |
-| **Op**             | A command op forks a `Command` (`{bin, args, charms}`) to completion; a service op is a long-running `Service` (`{command, readiness?, stop?, distinct?, idle?}`) — foregrounded when run directly, supervised in the background when reached as a dependency.                                                   |
-| **Op kind**        | Whether an op is a `command` (returns a `Command`, run to completion — the default) or a `service` (returns a `Service`, a long-running process). Inferred from the return type; lives on the op, so one spell mixes both. |
+| **Op**             | A command op forks a `Command` (`{bin, args, charms}`) to completion; a service op is a long-running `Service` (`{command, readiness?, stop?, distinct?, idle?}`): foregrounded when run directly, supervised in the background when reached as a dependency.                                                   |
+| **Op kind**        | Whether an op is a `command` (returns a `Command`, run to completion, the default) or a `service` (returns a `Service`, a long-running process). Inferred from the return type; lives on the op, so one spell mixes both. |
 | **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                   |
 
 ## Worked examples in this repo
@@ -274,4 +275,4 @@ Read these spells under [`spells/`](../spells) when you outgrow a plain fork spe
 - [Charms](charms.md): execution modifiers that spell ops and targets both honor.
 - [Engines](engines.md): how a magusfile runs on the embedded Buzz VM and the `mgs_` spell contract.
 - [Spells (README)](../README.md#spells): built-ins list, extending a built-in, and custom-spell best practices.
-- [`magus` module API](modules/magus.md): `magus.project.register`, `magus.cache.remote`.
+- [`magus` module API](buzz/modules/magus.md): `magus.project.register`, `magus.cache.remote`.

@@ -1,9 +1,9 @@
 // Command magus-docs generates Markdown documentation for every module
 // registered in the host package. Run it manually to refresh the committed docs:
 //
-//	go run ./cmd/magus-docs -out ./docs/modules
+//	go run ./cmd/magus-docs -out ./docs/buzz/modules
 //
-// The output under docs/modules is committed; re-run this tool after
+// The output under docs/buzz/modules is committed; re-run this tool after
 // changing a host module's bindings to keep the docs in sync.
 package main
 
@@ -17,25 +17,25 @@ import (
 
 	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/docs"
+	"github.com/egladman/magus/internal/dry"
 	"github.com/egladman/magus/std"
 
 	// Blank imports so all module init() functions run, populating std.All().
 	_ "github.com/egladman/magus/std"
 )
 
-// repoBlob is the GitHub source base for inline type links. It is pinned to the
-// default branch rather than a commit hash on purpose: the committed docs embed
-// these links, so a raw HEAD hash would rewrite on every commit and trip the
-// `generate` drift gate (regenerated docs would never match the tree). There are
-// no release tags to pin to yet; when there are, this can point at the tag.
+// repoBlob is the GitHub source base for inline type links. Pinned to the default
+// branch rather than a commit hash: the committed docs embed these links, so a raw
+// HEAD hash would rewrite on every commit and trip the `generate` drift gate
+// (regenerated docs would never match the tree). No release tags to pin to yet;
+// when there are, this can point at the tag.
 const repoBlob = "https://github.com/egladman/magus/blob/main"
 
 // callbackURL is the source link for the Callback type; repoRoot is the module
 // root. Both are resolved in init() rather than main() so the docs the tests
-// generate via renderModule match the ones `go run` writes: `go test` runs with
-// the package directory as its working directory and never calls main(), so
-// anything resolved there (or read via a repo-relative path) would silently
-// differ under test and trip the drift gate.
+// generate via renderModule match the ones `go run` writes: `go test` runs from
+// the package directory and never calls main(), so anything resolved there would
+// silently differ under test and trip the drift gate.
 var callbackURL string
 var repoRoot string
 
@@ -65,9 +65,9 @@ func findRepoRoot() string {
 }
 
 // moduleCategories groups the modules for the index page so the reference reads
-// as sections (each an h2, so the table of contents has real entries) instead of
-// one flat table. Any module not listed here is collected under "Other" so a
-// newly added module is never silently dropped from the index.
+// as sections (each an h2, so the TOC has real entries) instead of one flat table.
+// Any module not listed here is collected under "Other" so a newly added module is
+// never silently dropped from the index.
 var moduleCategories = []struct {
 	Title   string
 	Modules []string
@@ -78,12 +78,13 @@ var moduleCategories = []struct {
 	{"Serialization and encoding", []string{"json", "yaml", "encoding"}},
 	{"Cryptography", []string{"crypto"}},
 	{"Networking", []string{"http"}},
-	{"Time and versioning", []string{"time", "semver", "vcs"}},
+	{"Time", []string{"time"}},
+	{"Versioning and version control", []string{"semver", "vcs"}},
 	{"Magus internals", []string{"magus", "charm"}},
 }
 
 func main() {
-	outDir := flag.String("out", "docs/modules", "output directory for module docs")
+	outDir := flag.String("out", "docs/buzz/modules", "output directory for module docs")
 	flag.Parse()
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
@@ -132,8 +133,7 @@ func sourceURL(path, prefix string) string {
 
 // typeMarkdown renders a type for a table cell: a backticked code span, linked to
 // its source definition when it is a host-defined type. Primitive types (string,
-// int, []string, ...) are language builtins and stay unlinked, the way godoc only
-// links named types.
+// int, []string, ...) stay unlinked, the way godoc only links named types.
 func typeMarkdown(t std.TypeTag) string {
 	name := t.GoType()
 	if t == std.TypeFunc { // GoType() == "Callback"
@@ -142,10 +142,10 @@ func typeMarkdown(t std.TypeTag) string {
 	return "`" + name + "`"
 }
 
-// methodSourceLink renders a " · [source](…)" suffix linking a method to its
+// methodSourceLink renders a " · [source](...)" suffix linking a method to its
 // Impl's definition on GitHub (godoc-style), or "" when unresolvable. It rides
-// the Signature line rather than the heading: a link in the heading gets folded
-// into the auto-generated slug, which would break the in-page #method anchors.
+// the Signature line, not the heading: a link in the heading would fold into the
+// auto-generated slug and break the in-page #method anchors.
 func methodSourceLink(meth std.Method) string {
 	src, line := host.MethodSource(meth, repoRoot)
 	if src == "" {
@@ -172,6 +172,18 @@ func readExample(module, method string) string {
 		return ""
 	}
 	return string(data)
+}
+
+// moduleHasExample reports whether any of m's methods carries a per-method example
+// file under std/examples/<module>/. It gates the reference-only note so the note
+// appears only where a reader would actually meet a Run-less example.
+func moduleHasExample(m std.Module) bool {
+	for _, meth := range m.Methods {
+		if readExample(m.Name, meth.Name) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // frontmatterDesc trims a module's doc string down to a single-sentence
@@ -206,11 +218,14 @@ type stdlibNote struct {
 func renderModule(m std.Module) string {
 	var b strings.Builder
 
-	docs.WriteFrontmatter(&b,
-		m.Name+" module",
-		frontmatterDesc(m),
-		[]string{m.Name, "module", "stdlib", "magusfile"},
-	)
+	docs.WriteFrontmatter(&b, docs.Frontmatter{
+		Title:       m.Name + " module",
+		Description: frontmatterDesc(m),
+		// The module reference moved from /modules/ to /buzz/modules/; keep the old
+		// URL alive with a redirect so inbound links and bookmarks still land.
+		Aliases: []string{"modules/" + m.Name},
+		Tags:    []string{m.Name, "module", "stdlib", "magusfile"},
+	})
 	fmt.Fprintf(&b, "# %s\n\n", m.Name)
 	if m.Doc != "" {
 		fmt.Fprintf(&b, "%s\n\n", m.Doc)
@@ -221,6 +236,18 @@ func renderModule(m std.Module) string {
 	fmt.Fprintf(&b, "> **Naming convention:** import the module under its bare name "+
 		"(`import \"%s\"`) and call methods in `camelCase` (`%s.someMethod`).\n\n",
 		m.Name, m.Name)
+
+	// Runnability note. Browser-safe modules (dry.BrowserSafeHostModules) get
+	// Run-clickable examples; the IO leaves cannot, so where such a module carries
+	// examples, explain the missing Run button rather than leaving it unexplained.
+	if _, browserSafe := dry.BrowserSafeHostModules[m.Name]; !browserSafe && moduleHasExample(m) {
+		fmt.Fprintf(&b, "> [!NOTE]\n"+
+			"> The examples below are reference-only. `%s` performs real IO "+
+			"(filesystem, process, network, or environment access) that the in-browser "+
+			"playground's sandbox cannot provide, so it is not registered there and its "+
+			"examples have no Run button. Pure-compute modules such as `strings` and "+
+			"`json` run their examples live in the page.\n\n", m.Name)
+	}
 
 	if len(m.Fields) > 0 {
 		fmt.Fprintf(&b, "## Fields\n\n")
@@ -233,8 +260,7 @@ func renderModule(m std.Module) string {
 	}
 
 	// notes accumulates the Buzz-stdlib footnotes; each method that duplicates a
-	// stdlib call gets a "*" marker on its name linking to an entry rendered after
-	// all the methods (see the footnote block below).
+	// stdlib call gets a "*" marker linking to an entry rendered after the methods.
 	var notes []stdlibNote
 
 	if len(m.Methods) > 0 {
@@ -289,16 +315,18 @@ func renderModule(m std.Module) string {
 			}
 			// Per-method example, if one exists at
 			//   std/examples/<module>/<method>.buzz
-			// Rendered as a plain fenced buzz block (reference-only). Making
-			// these Run ▶-clickable requires the WASM playground to register
-			// magus host modules, which needs a std/hostgen restructure so
-			// TinyGo can compile the browser-safe subset without dragging in
-			// the IO-heavy leaves (fs, os, http, archive, ...). See
-			// playground.BrowserSafeHostModules for the intended allowlist
-			// once that lands.
+			// Browser-safe modules (dry.BrowserSafeHostModules) get a
+			// "<!-- run -->" marker so the site generator makes the block
+			// Run-clickable, evaluating it in the in-page WASM playground.
+			// The IO-heavy leaves (fs, os, http, archive, env, vcs, magus) do
+			// real filesystem/network/process IO the browser sandbox can't
+			// provide, so their examples stay plain reference-only fences.
 			if ex := readExample(m.Name, meth.Name); ex != "" {
 				fmt.Fprintln(&b, "**Example:**")
 				fmt.Fprintln(&b)
+				if _, ok := dry.BrowserSafeHostModules[m.Name]; ok {
+					fmt.Fprintln(&b, "<!-- run -->")
+				}
 				fmt.Fprintln(&b, "```buzz")
 				fmt.Fprint(&b, ex)
 				if !strings.HasSuffix(ex, "\n") {
@@ -310,10 +338,10 @@ func renderModule(m std.Module) string {
 		}
 	}
 
-	// Footnote definitions for the methods that are also in Buzz's stdlib. The
-	// Footnote extension moves these into an anchored section at the foot of the
-	// page and links each method's marker to its note. The magus form is kept
-	// because it is sandbox-aware where Buzz's bare stdlib is not.
+	// Footnote definitions for methods also in Buzz's stdlib. The Footnote
+	// extension moves these into an anchored section at the page foot and links
+	// each method's marker to its note. The magus form is kept because it is
+	// sandbox-aware where Buzz's bare stdlib is not.
 	for _, n := range notes {
 		fmt.Fprintf(&b, "[^%s]: `%s` is also in Buzz's standard library (`%s`); "+
 			"the magus form is sandbox-aware.\n", n.label, n.method, n.equiv)
@@ -343,17 +371,18 @@ func renderIndex(modules []std.Module) string {
 	}
 
 	var b strings.Builder
-	docs.WriteFrontmatter(&b,
-		"magus stdlib",
-		"Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.",
-		[]string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},
-	)
+	docs.WriteFrontmatter(&b, docs.Frontmatter{
+		Title:       "magus stdlib",
+		PageType:    "overview",
+		Aliases:     []string{"modules"}, // redirect the old /modules/ URL to /buzz/modules/
+		Description: "Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.",
+		Tags:        []string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},
+	})
 	fmt.Fprintf(&b, "# Magusfile Module Reference\n\n")
 	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name — `import \"fs\"`, then `fs.glob(...)` — with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.\n\n")
 
 	// Render each category as its own section so the page has real headings (and
-	// thus a useful table of contents). Track what's been placed so nothing is
-	// dropped.
+	// thus a useful TOC). Track what's placed so nothing is dropped.
 	placed := make(map[string]bool)
 	emit := func(title string, names []string) {
 		var rows []std.Module
@@ -390,9 +419,9 @@ func renderIndex(modules []std.Module) string {
 	emit("Other", leftover)
 
 	fmt.Fprintf(&b, "## See also\n\n")
-	fmt.Fprintf(&b, "- [Targets](../targets.md): the runnable units whose magusfiles call these modules.\n")
-	fmt.Fprintf(&b, "- [Spells](../spells.md): language and toolchain adapters that compose these modules into operations.\n")
-	fmt.Fprintf(&b, "- [Charms](../charms.md): the execution modifiers the `charm` module constructs.\n")
-	fmt.Fprintf(&b, "- [Playground](../playground.html): exercise these modules live in the browser.\n")
+	fmt.Fprintf(&b, "- [Targets](../../targets.md): the runnable units whose magusfiles call these modules.\n")
+	fmt.Fprintf(&b, "- [Spells](../../spells.md): language and toolchain adapters that compose these modules into operations.\n")
+	fmt.Fprintf(&b, "- [Charms](../../charms.md): the execution modifiers the `charm` module constructs.\n")
+	fmt.Fprintf(&b, "- [Playground](../../playground.html): exercise these modules live in the browser.\n")
 	return b.String()
 }

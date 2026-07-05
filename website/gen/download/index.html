@@ -5,9 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <title>Download magus — magus</title>
+  <title>Download — magus</title>
   <meta name="description" content="Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/download/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Download — magus">
+  <meta property="og:description" content="Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/download/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="manifest" href="../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
         <li><a href="../documentation/">Documentation</a></li>
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../download/" aria-current="page">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -38,7 +49,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Download magus</li></ul>
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Download</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
@@ -47,57 +58,23 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#install" title="Install">Install</a><ul><li><a href="#linux" title="Linux">Linux</a></li><li><a href="#macos" title="macOS">macOS</a></li><li><a href="#windows" title="Windows">Windows</a></li><li><a href="#verifying-your-path" title="Verifying your PATH">Verifying your PATH</a></li><li><a href="#shell-completion" title="Shell completion">Shell completion</a></li><li><a href="#mgs-shorthand" title="mgs shorthand">mgs shorthand</a></li></ul></li><li><a href="#update" title="Update">Update</a></li><li><a href="#verify-a-release" title="Verify a release">Verify a release</a><ul><li><a href="#release-signing-key-ed25519" title="Release signing key (Ed25519)">Release signing key (Ed25519)</a></li></ul></li><li><a href="#build-from-source" title="Build from source">Build from source</a></li><li><a href="#changelog" title="Changelog">Changelog</a></li></ul>
+        <ul><li><a href="#install" title="Install">Install</a></li><li><a href="#update" title="Update">Update</a></li><li><a href="#verify-a-release" title="Verify a release">Verify a release</a><ul><li><a href="#release-signing-key-ed25519" title="Release signing key (Ed25519)">Release signing key (Ed25519)</a></li></ul></li><li><a href="#shell-completion" title="Shell completion">Shell completion</a></li><li><a href="#mgs-shorthand" title="mgs shorthand">mgs shorthand</a></li><li><a href="#build-from-source" title="Build from source">Build from source</a></li><li><a href="#changelog" title="Changelog">Changelog</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="download">Download</h1>
-<p>magus ships as a single self-contained binary. Grab a release, verify the signature, put it on your <code>PATH</code>.</p>
+<p>magus ships as a single self-contained binary. Pick your platform for step-by-step install and PATH setup, then verify the signature before you run it.</p>
 <h2 id="install">Install</h2>
-<p>Grab your platform's tarball from <a href="../public/release">/public/release/</a> and extract it into a <code>PATH</code> directory you own. These instructions install into <code>~/.local/bin</code> on Linux/macOS and <code>%USERPROFILE%\bin</code> on Windows - no root, no <code>sudo</code>. Make sure that directory is on your <code>PATH</code> first (see <a href="#verifying-your-path">Verifying your PATH</a> below if unsure).</p>
-<h3 id="linux">Linux</h3>
-<pre><code class="language-sh">mkdir -p ~/.local/bin
-tar -xzf magus_*_linux_amd64.tar.gz    # or linux_arm64 on ARM
-mv magus ~/.local/bin/
-magus version
-</code></pre>
-<h3 id="macos">macOS</h3>
-<pre><code class="language-sh">mkdir -p ~/.local/bin
-tar -xzf magus_*_darwin_arm64.tar.gz   # or darwin_amd64 on Intel
-mv magus ~/.local/bin/
-magus version
-</code></pre>
-<p>If the binary is quarantined (&quot;cannot be opened, unidentified developer&quot;):</p>
-<pre><code class="language-sh">xattr -d com.apple.quarantine ~/.local/bin/magus
-</code></pre>
-<h3 id="windows">Windows</h3>
-<pre><code class="language-powershell">mkdir -Force $Env:USERPROFILE\bin | Out-Null
-tar -xzf magus_*_windows_amd64.tar.gz
-Move-Item magus.exe $Env:USERPROFILE\bin\magus.exe
-magus version
-</code></pre>
-<h3 id="verifying-your-path">Verifying your PATH</h3>
-<p>If <code>magus version</code> prints <code>command not found</code>, the install directory is not on your <code>PATH</code>. Add it once per shell:</p>
-<pre><code class="language-sh"># Linux / macOS (bash or zsh): append to ~/.bashrc or ~/.zshrc
-export PATH=&quot;$HOME/.local/bin:$PATH&quot;
-</code></pre>
-<pre><code class="language-powershell"># Windows PowerShell (persist for the current user):
-[Environment]::SetEnvironmentVariable(&quot;Path&quot;, &quot;$Env:USERPROFILE\bin;$Env:Path&quot;, &quot;User&quot;)
-</code></pre>
-<p>Open a new shell after either change.</p>
-<h3 id="shell-completion">Shell completion</h3>
-<pre><code class="language-sh">magus completion &lt;shell&gt;    # bash / zsh / fish / powershell (or pwsh)
-</code></pre>
-<p>See <a href="../manpage/magus-completion"><code>magus completion</code></a> for the exact source-and-persist recipe per shell.</p>
-<h3 id="mgs-shorthand"><code>mgs</code> shorthand</h3>
-<p>The de facto shorthand for <code>magus</code> is <code>mgs</code>: three left-hand keys, fast to type, and collision-free. Alias it in your shell:</p>
-<pre><code class="language-sh">alias mgs=magus
-</code></pre>
-<p>Or create a symlink:</p>
-<pre><code class="language-sh">ln -s &quot;$(command -v magus)&quot; ~/.local/bin/mgs
-</code></pre>
+<ul>
+<li><a href="linux/">Linux</a> - amd64 or arm64</li>
+<li><a href="macos/">macOS</a> - Apple Silicon or Intel</li>
+<li><a href="windows/">Windows</a> - amd64</li>
+<li><a href="docker/">Docker</a> - run in a container instead of installing a binary (any platform)</li>
+</ul>
+<p>Every build is published at <a href="../public/release">/public/release/</a> alongside its <code>SHA256SUMS</code> manifest and signature. However you install, <a href="#verify-a-release">verify the release</a> first.</p>
 <h2 id="update">Update</h2>
 <p><code>magus self update</code> fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: <a href="../manpage/magus-self"><code>magus self</code></a>.</p>
 <table>
@@ -134,14 +111,14 @@ export PATH=&quot;$HOME/.local/bin:$PATH&quot;
 </tr>
 </tbody>
 </table>
-<p>Package-maintainer builds compiled with <code>-tags noselfupdate</code> disable this subcommand; fall back to <a href="#install">Install</a>.</p>
+<p>Package-maintainer builds compiled with <code>-tags noselfupdate</code> disable this subcommand; fall back to a manual <a href="#install">install</a>.</p>
 <h2 id="verify-a-release">Verify a release</h2>
 <p>Alongside the binary tarballs, each release ships <code>SHA256SUMS</code> (the manifest) and <code>SHA256SUMS.sig</code> (its Ed25519 signature). All artifacts, plus the signing key, are listed at <a href="../public/release">/public/release/</a>.</p>
 <p><strong>Already running magus?</strong> Use the built-in verifier:</p>
 <pre><code class="language-sh">magus self update --dry-run
 </code></pre>
 <p>The trust chain runs through your already-trusted binary. Nothing else to do.</p>
-<p><strong>First install — verify by hand.</strong> Do <em>not</em> verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.</p>
+<p><strong>First install - verify by hand.</strong> Do <em>not</em> verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.</p>
 <ol>
 <li>
 <p>Save the key. Either <a href="../assets/magus-release.pem">download magus-release.pem</a>, or copy the PEM block below into <code>magus-release.pem</code>.</p>
@@ -162,14 +139,25 @@ export PATH=&quot;$HOME/.local/bin:$PATH&quot;
 </ol>
 <p>Order matters. Checking a hash against an unverified manifest proves nothing.</p>
 <h3 id="release-signing-key-ed25519">Release signing key (Ed25519)</h3>
-<pre><code>-----BEGIN PUBLIC KEY-----
+<pre><code class="language-text">-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 -----END PUBLIC KEY-----
 </code></pre>
 <p>Raw base64 (32 bytes):</p>
-<pre><code>/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
+<pre><code class="language-text">/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 </code></pre>
 <p>The key is embedded in every magus binary via <code>//go:embed</code>, so <code>magus self update</code> trusts it transitively. Rotating the key requires shipping a new release built with the new embedded key; older binaries continue to trust only the previous key.</p>
+<h2 id="shell-completion">Shell completion</h2>
+<pre><code class="language-sh">magus completion &lt;shell&gt;    # bash / zsh / fish / powershell (or pwsh)
+</code></pre>
+<p>See <a href="../manpage/magus-completion"><code>magus completion</code></a> for the exact source-and-persist recipe per shell.</p>
+<h2 id="mgs-shorthand"><code>mgs</code> shorthand</h2>
+<p>The de facto shorthand for <code>magus</code> is <code>mgs</code>: three left-hand keys, fast to type, and collision-free. Alias it in your shell:</p>
+<pre><code class="language-sh">alias mgs=magus
+</code></pre>
+<p>Or create a symlink:</p>
+<pre><code class="language-sh">ln -s &quot;$(command -v magus)&quot; ~/.local/bin/mgs
+</code></pre>
 <h2 id="build-from-source">Build from source</h2>
 <pre><code class="language-sh">git clone https://github.com/egladman/magus
 cd magus
@@ -188,10 +176,11 @@ go build -o magus ./cmd/magus
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22download%22">download</a><a class="tag" href="../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../search/?q=tag%3A%22release%22">release</a><a class="tag" href="../search/?q=tag%3A%22self-update%22">self-update</a><a class="tag" href="../search/?q=tag%3A%22ed25519%22">ed25519</a><a class="tag" href="../search/?q=tag%3A%22verify%22">verify</a><a class="tag" href="../search/?q=tag%3A%22signing%22">signing</a></div>
-    <small>Last updated <time datetime="2026-07-02T22:09:42Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/1df6283ce593c9779ca9ac6decb7865efd61923c" data-tooltip="1df6283ce593c9779ca9ac6decb7865efd61923c" title="1df6283ce593c9779ca9ac6decb7865efd61923c">1df6283</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/1df6283ce593c9779ca9ac6decb7865efd61923c"><code>1df6283</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: rename install page to download; unprivileged install steps; ship release signing PEM</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/download.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/download.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T22:09:42Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/1df6283ce593c9779ca9ac6decb7865efd61923c" data-tooltip="1df6283ce593c9779ca9ac6decb7865efd61923c" title="1df6283ce593c9779ca9ac6decb7865efd61923c">1df6283</a>)</small><details class="recent-changes"><summary>Recent changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/1df6283ce593c9779ca9ac6decb7865efd61923c"><code>1df6283</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: rename install page to download; unprivileged install steps; ship release signing PEM</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/download.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/download.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

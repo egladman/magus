@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Run magus in Docker — magus</title>
+  <meta name="description" content="Pull and run the official magus container images from GHCR - a multi-arch static image and a glibc variant - mounting your workspace, plus how to verify the cosign signature.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/download/docker/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Run magus in Docker — magus">
+  <meta property="og:description" content="Pull and run the official magus container images from GHCR - a multi-arch static image and a glibc variant - mounting your workspace, plus how to verify the cosign signature.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/download/docker/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../index.html">Home</a></li>
+        <li><a href="../../documentation/">Documentation</a></li>
+        <li><a href="../../blog/">Blog</a></li>
+        <li><a href="../../download/" aria-current="page">Download</a></li>
+        <li><a href="../../tour/">Tour</a></li>
+        <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../download/">Download</a></li><li aria-current="page">Run magus in Docker</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/download/docker.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#variants" title="Variants">Variants</a></li><li><a href="#tags" title="Tags">Tags</a></li><li><a href="#verify-the-signature" title="Verify the signature">Verify the signature</a></li><li><a href="#next-steps" title="Next steps">Next steps</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <article>
+<h1 id="run-magus-in-docker">Run magus in Docker</h1>
+<p>Official images are published to the GitHub Container Registry at
+<strong><code>ghcr.io/egladman/magus</code></strong>. They are a drop-in alternative to installing the
+binary - handy for CI runners and throwaway environments.</p>
+<p>Each image runs magus as its entrypoint against <code>/workspace</code>, as a non-root user.
+Mount your repository there and pass a magus command:</p>
+<pre><code class="language-sh">docker run --rm -v &quot;$PWD&quot;:/workspace ghcr.io/egladman/magus:latest ls
+docker run --rm -v &quot;$PWD&quot;:/workspace ghcr.io/egladman/magus:latest run ci
+</code></pre>
+<p>The default command is <code>ls</code> (list projects and targets), so a bare
+<code>docker run --rm -v &quot;$PWD&quot;:/workspace ghcr.io/egladman/magus:latest</code> is a quick smoke
+test.</p>
+<h2 id="variants">Variants</h2>
+<table>
+<thead>
+<tr>
+<th>Image</th>
+<th>Base</th>
+<th>Platforms</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ghcr.io/egladman/magus:latest</code></td>
+<td>distroless/static</td>
+<td>linux/amd64, linux/arm64</td>
+<td>Pure-Go static build. The default; use this unless you have a reason not to.</td>
+</tr>
+<tr>
+<td><code>ghcr.io/egladman/magus:latest-cgo</code></td>
+<td>distroless/cc (glibc)</td>
+<td>linux/amd64</td>
+<td>glibc build that bundles <code>inotify-tools</code>, so <code>magus watch</code> / <code>fs.watch</code> work inside the container.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="tags">Tags</h2>
+<ul>
+<li><code>latest</code> / <code>latest-cgo</code> - the most recent release.</li>
+<li><code>&lt;version&gt;</code> / <code>&lt;version&gt;-cgo</code> - a specific release, e.g. <code>v0.4.2</code> or <code>v0.4.2-cgo</code>. Pin these in CI so a run is reproducible.</li>
+</ul>
+<pre><code class="language-sh">docker pull ghcr.io/egladman/magus:v0.4.2
+</code></pre>
+<h2 id="verify-the-signature">Verify the signature</h2>
+<p>Every pushed image digest is signed with <a href="https://github.com/sigstore/cosign" rel="noopener noreferrer" target="_blank" data-external>cosign</a>
+keyless (Sigstore OIDC) at release time - no long-lived key. Verify that an image was
+built by this project's release workflow:</p>
+<pre><code class="language-sh">cosign verify ghcr.io/egladman/magus:latest \
+  --certificate-identity-regexp '^https://github.com/egladman/magus/.github/workflows/cd.yaml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+</code></pre>
+<p>A missing or mismatched signature means the image is not an official build - do not
+run it.</p>
+<h2 id="next-steps">Next steps</h2>
+<ul>
+<li>New to magus? Start with <a href="../../targets/">Targets</a> and <a href="../../spells/">Spells</a>.</li>
+<li>Prefer a native binary? See the <a href="../#install">install guides</a>.</li>
+</ul>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-next" href="../linux/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Install on Linux</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
+        <a class="related-card" href="../../spells/docker/"><span class="related-card-title">docker spell</span><span class="related-card-desc">Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.</span></a>
+        <a class="related-card" href="../../download/linux/"><span class="related-card-title">Install on Linux</span><span class="related-card-desc">Download, verify, and install the magus binary on Linux (amd64 or arm64) and put it on your PATH - no root, no sudo.</span></a>
+        <a class="related-card" href="../../download/macos/"><span class="related-card-title">Install on macOS</span><span class="related-card-desc">Download, verify, and install the magus binary on macOS (Apple Silicon or Intel), clear the quarantine flag, and put it on your PATH.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22docker%22">docker</a><a class="tag" href="../../search/?q=tag%3A%22container%22">container</a><a class="tag" href="../../search/?q=tag%3A%22image%22">image</a><a class="tag" href="../../search/?q=tag%3A%22ghcr%22">ghcr</a><a class="tag" href="../../search/?q=tag%3A%22cosign%22">cosign</a><a class="tag" href="../../search/?q=tag%3A%22install%22">install</a></div>
+    <small>Last updated <time datetime="2026-07-04T03:04:11Z">July 4, 2026, 3:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4992301a69f66a3041365b693ce859424522861b" data-tooltip="4992301a69f66a3041365b693ce859424522861b" title="4992301a69f66a3041365b693ce859424522861b">4992301</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../main.js"></script>
+</body>
+</html>

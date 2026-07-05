@@ -1,0 +1,3400 @@
+// scribe.buzz - the static site generator ("scribe") for the magus docs site.
+//
+// All the rendering machinery lives here as a self-contained library: the page
+// template, shared nav/footer, per-page renderers, the /public/ autoindex tree, the
+// sitemap and Atom feeds, the search index, and the build-time gates (asset
+// integrity, reachability, abandoned-link). magusfile.buzz imports this module and
+// its targets call the exported entry points - site_render() (which sets the input
+// paths on the Site object) and updateUrlLock(). Split out of
+// magusfile.buzz so the generator is its own module (a flat sibling, resolvable
+// since magus adopted buzz's project-relative import search paths).
+import "markdown";
+import "fs";
+import "io";
+import "os";
+import "std";
+import "serialize";
+import "encoding";
+
+// Path config, set by site_render() from the arguments the magusfile passes in - the
+// generator does not hardcode where the workspace, docs, or output live, so it stays
+// a config-agnostic library rather than owning project layout the caller reaches into.
+// PICO is pinned to an EXACT version so PICO_SRI stays valid (the @2 moving
+// range would silently invalidate the integrity hash on a Pico release). Bump
+// both together; the SRI hash is:
+//   curl -sL <PICO> | openssl dgst -sha384 -binary | openssl base64 -A
+final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css";
+final PICO_SRI = "sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU";
+final GH   = "https://github.com/egladman/magus";
+
+// SITE_URL is the site's public base (with trailing slash), used for the canonical
+// link, sitemap, and (later) the Atom feeds. Set non-empty to enable them; leave ""
+// to ship those surfaces dark until the host is confirmed. SITE_DESC is the
+// belt-and-suspenders page description when a page has neither a frontmatter
+// description nor a derivable first paragraph.
+final SITE_URL  = "https://eli.gladman.cc/magus/";
+final SITE_DESC = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.";
+
+final MONTHS: {str: str} = {
+    "01": "January", "02": "February", "03": "March",    "04": "April",
+    "05": "May",     "06": "June",     "07": "July",     "08": "August",
+    "09": "September", "10": "October", "11": "November", "12": "December",
+};
+// Short month names for compact date formats (page-history list).
+final MONTHS_SHORT: {str: str} = {
+    "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+    "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+    "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
+};
+final HOUR12: {str: str} = {
+    "00": "12", "01": "1",  "02": "2",  "03": "3",  "04": "4",  "05": "5",
+    "06": "6",  "07": "7",  "08": "8",  "09": "9",  "10": "10", "11": "11",
+    "12": "12", "13": "1",  "14": "2",  "15": "3",  "16": "4",  "17": "5",
+    "18": "6",  "19": "7",  "20": "8",  "21": "9",  "22": "10", "23": "11",
+};
+final AMPM: {str: str} = {
+    "00": "AM", "01": "AM", "02": "AM", "03": "AM", "04": "AM", "05": "AM",
+    "06": "AM", "07": "AM", "08": "AM", "09": "AM", "10": "AM", "11": "AM",
+    "12": "PM", "13": "PM", "14": "PM", "15": "PM", "16": "PM", "17": "PM",
+    "18": "PM", "19": "PM", "20": "PM", "21": "PM", "22": "PM", "23": "PM",
+};
+
+// Value objects. They must precede Site, which holds arrays of them - Buzz has no
+// forward references to types.
+
+// BlogPost is one blog entry's index record, built by renderBlogPost() as the walk
+// visits each post; the blog index, the Atom feed, and the prev/next pager consume
+// it. base is the source filename (sort tiebreak + commit key); urlPath is the
+// date-scoped clean path (YYYY/MM/DD/slug).
+object BlogPost {
+    base: str = "",
+    slug: str = "",
+    urlPath: str = "",
+    title: str = "",
+    date: str = "",
+    description: str = "",
+    url: str = "",
+}
+
+// DocPage is one docs page's relatedness metadata. tags is ||-joined (split back out
+// by sharedTagCount); overview is true for a landing/index page (page_type: overview).
+// renderRelated() scores these to fill each page's "Related" cards, and
+// renderBreadcrumb() looks one up by url for its title.
+object DocPage {
+    url: str = "",
+    title: str = "",
+    desc: str = "",
+    tags: str = "",
+    section: str = "",
+    overview: bool = false,
+    srcRel: str = "",
+}
+
+// Release is one parsed CHANGELOG entry: version + date (from the "## [x] - date"
+// heading) + its body (the section up to the next release).
+object Release {
+    version: str = "",
+    date: str = "",
+    body: str = "",
+}
+
+// Site holds ALL the generator's state on one object instead of a scatter of module
+// globals: the input paths (set once by site_render), the per-page commit metadata,
+// the search-index records, the URL-alias / written-URL bookkeeping, and the
+// blog/doc/release collections. A single module-global instance (`site`) carries it;
+// the walk-scoped parts are reset per site_render().
+object Site {
+    // Input paths, set once by site_render(). root is the magus/ workspace dir
+    // (relative to this project); docs and blog are source subtrees under root; out
+    // is the generated site output under this project.
+    root: str = "",
+    docs: str = "",
+    blog: str = "",
+    outDir: str = "",
+
+    // Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
+    // magusfile load - these shell out to git, and a magusfile is parsed on every
+    // `magus ls`). metaHistory maps a repo-relative path to the last N commits that
+    // touched it ("full|short|stamp|subject" each), from one git-log pass.
+    metaPrefix: str = "",
+    metaBranch: str = "",
+    metaFull: str = "",
+    metaShort: str = "",
+    metaStamp: str = "",
+    metaCommits: {str: str} = mut {},
+    metaHistory: {str: [str]} = mut {},
+    metaLoaded: bool = false,
+
+    // One JSON-encoded search record per rendered page, joined into
+    // gen/search-index.json at the end of a render, in the sorted walk order so the
+    // index is deterministic and the drift gate stays stable.
+    searchRecords: [str] = mut [<str>],
+
+    // URL-alias bookkeeping. aliasTarget maps a declared old path (frontmatter
+    // aliases:) to the clean URL of the page that owns it; pageUrls is the set of
+    // real written page URLs. Both feed the alias pass after the walk, which writes a
+    // redirect stub per alias and throws on a collision.
+    aliasTarget: {str: str} = mut {},
+    pageUrls: {str: bool} = mut {},
+
+    // Blog posts (consumed by the blog index, Atom feed, and pager). hasBlogPosts is
+    // precomputed before the walk so an early page (README) can decide whether to
+    // advertise the blog Atom feed in <head>.
+    blogPosts: [BlogPost] = mut [<BlogPost>],
+    hasBlogPosts: bool = false,
+
+    // Docs relatedness corpus, built pre-walk by collectDocPages so each page can
+    // pick its Related neighbors.
+    docPages: [DocPage] = mut [<DocPage>],
+
+    // Parsed CHANGELOG releases, for the releases Atom feed and the announcement bar.
+    releases: [Release] = mut [<Release>],
+
+    // --- Methods that manage this state (pure helpers stay free functions below) ---
+
+    // addRecord appends one page's search-index record and marks its URL as written
+    // (so the alias pass can catch a redirect that shadows a real page). Called once
+    // per rendered page.
+    fun addRecord(url: str, title: str, desc: str, md: str) > void {
+        this.pageUrls[url] = true;
+        final rec = mut {<str: any>};
+        rec["url"] = url;
+        rec["title"] = title;
+        rec["text"] = cleanBody(markdown.stripFrontmatter(md));
+        rec["tags"] = parseTags(md);
+        if (desc != "") { rec["description"] = desc; }
+        this.searchRecords.append(serialize.jsonEncode(serialize.Boxed.init(rec)));
+    }
+
+    // collectAlias records that the clean old path `alias` should redirect to
+    // `target`. It throws if two pages claim the same alias, so a rename can never
+    // silently shadow another page's redirect. Leading/trailing slashes normalize away.
+    fun collectAlias(alias: str, target: str) > void {
+        var a = alias;
+        while (a.startsWith("/")) { a = a.sub(1); }
+        while (a.endsWith("/")) { a = a.sub(0, a.len() - 1); }
+        if (a == "") { return; }
+        final owner = this.aliasTarget[a];
+        if (owner != null and owner != target) {
+            throw "alias \"" + a + "\" is claimed by two pages (" + owner + " and " + target + ")";
+        }
+        this.aliasTarget[a] = target;
+    }
+
+    // writeAliases writes one redirect stub per collected alias (after the walk, so
+    // every real page URL is known for the collision guard). It throws if an alias
+    // would shadow a real generated page.
+    fun writeAliases() > void {
+        foreach (a in this.aliasTarget.keys()) {
+            if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
+                throw "alias \"" + a + "\" collides with a real page at the same path";
+            }
+            fs.makeDirectory(this.outDir + "/" + a);
+            fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(relativize(a, this.aliasTarget[a])));
+        }
+    }
+
+    // collectDocPage reads one docs page's frontmatter into a DocPage on docPages
+    // (the relatedness/breadcrumb corpus). rel is the path under docs/.
+    fun collectDocPage(rel: str) > void {
+        final f = io.File.open(this.root + "/" + this.docs + "/" + rel, io.FileMode.read);
+        final md = f.readAll();
+        f.close();
+        final fm = serialize.jsonDecode(markdown.frontmatter(md));
+        var title = fm.q("title").stringValue();
+        if (title == "") { title = deriveTitle(md, rel); }
+        final desc = fm.q("description").stringValue();
+        final url = cleanUrl(rel);
+        // Join tags with "||" (never present in a tag) so the record stays flat;
+        // sharedTagCount splits it back out.
+        var joined = "";
+        var first = true;
+        foreach (t in parseTags(md)) {
+            if (first) { joined = t; first = false; }
+            else { joined = joined + "||" + t; }
+        }
+        this.docPages.append(DocPage{
+            url = url,
+            title = title,
+            desc = desc,
+            tags = joined,
+            section = sectionFromUrl(url),
+            overview = pageType(md) == "overview",
+            srcRel = this.docs + "/" + rel,
+        });
+    }
+
+    // collectDocPages walks the docs/ subtree (same order as walk()) filling docPages
+    // before any page renders, so renderRelated() sees the whole corpus.
+    fun collectDocPages(rel: str) > void {
+        var dir = this.root + "/" + this.docs;
+        if (rel != "") { dir = this.root + "/" + this.docs + "/" + rel; }
+        foreach (name in fs.list(dir)) {
+            var childRel = name;
+            if (rel != "") { childRel = rel + "/" + name; }
+            if (isDir(this.root + "/" + this.docs + "/" + childRel)) {
+                this.collectDocPages(childRel);
+            } else {
+                if (name.endsWith(".md")) { this.collectDocPage(childRel); }
+            }
+        }
+    }
+
+    // renderBreadcrumb builds the breadcrumb <nav> for one page. Blog, search, tour,
+    // /public/, and /development/ get their own flat trails; docs pages hang off the
+    // documentation index, each intermediate crumb showing the linked page's real
+    // title (looked up in docPages via titleForUrl).
+    fun renderBreadcrumb(srcRel: str, title: str, root: str) > str {
+        if (srcRel == "README.md") { return ""; }
+        var rel = srcRel;
+        if (rel.startsWith(this.docs + "/")) { rel = rel.sub((this.docs + "/").len()); }
+        final segsRaw = rel.split("/");
+
+        var li = "<li><a href=\"" + root + "index.html\">Home</a></li>";
+
+        // Blog pages have their own root: Home / Blog / <post> (the blog index itself
+        // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
+        // the listing page.
+        if (srcRel == this.blog + "/index.md") {
+            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+                + li + "<li aria-current=\"page\">Blog</li></ul>\n    </nav>\n";
+        }
+        // The search page is a top-level tool surface: Home / Search (no Documentation
+        // root, it does not hang off the documentation index).
+        if (srcRel == "search/index.md") {
+            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+                + li + "<li aria-current=\"page\">Search</li></ul>\n    </nav>\n";
+        }
+        // The tour page is a top-level onboarding surface: Home / Tour.
+        if (srcRel == "tour/index.md") {
+            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+                + li + "<li aria-current=\"page\">Tour</li></ul>\n    </nav>\n";
+        }
+        if (srcRel.startsWith(this.blog + "/")) {
+            li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
+                + "<li aria-current=\"page\">" + title + "</li>";
+            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+        }
+        // The /public/ autoindex tree also skips the Documentation root; each level
+        // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
+        // link in its own body, so the breadcrumb stays flat).
+        if (srcRel.startsWith("public/")) {
+            li = li + "<li aria-current=\"page\">" + title + "</li>";
+            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+        }
+
+        // /development/ contributor surface. Home / Development for the landing; Home /
+        // Development / <page> for a direct child (Contributing or a per-project target
+        // catalog). Its own root, not the documentation index.
+        if (srcRel.startsWith("development/")) {
+            if (srcRel == "development/_index.md") {
+                li = li + "<li aria-current=\"page\">Development</li>";
+            } else {
+                li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
+                    + "<li aria-current=\"page\">" + title + "</li>";
+            }
+            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+        }
+
+        // The documentation index roots every docs trail; on that page itself it is
+        // the current leaf rather than a link back to where you already are.
+        if (rel == "documentation.md") {
+            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
+                + li + "<li aria-current=\"page\">Documentation</li></ul>\n    </nav>\n";
+        }
+        li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
+
+        // Drop the build-artifact "gen" segment so a manpage trail reads
+        // Documentation / Manpage / <cmd>, not / Gen / <cmd> (matches the flattened URL).
+        var segs: [str] = mut [<str>];
+        foreach (s in segsRaw) { if (s != "gen") { segs.append(s); } }
+        final base = segs[segs.len() - 1];
+
+        final landing = (base == "index.md" or base == "README.md");
+        var dirCount = segs.len() - 1;                              // directory segments before the file
+        if (landing and dirCount > 0) { dirCount = dirCount - 1; }  // a landing's own dir is the leaf
+
+        // Each intermediate crumb reads as the exact title of the page it links to
+        // (looked up in docPages by URL), so the trail is consistent with the site's
+        // own naming instead of a first-letter-capped URL segment. A crumb links when a
+        // real page owns that URL - whether from an in-dir index (codes/race/README.md)
+        // or a sibling-file landing (targets.md next to the targets/ subtree). Segments
+        // with no page (e.g. the bare "codes/" grouping) fall back to a capitalized label.
+        var acc = "";
+        var i = 0;
+        while (i < dirCount) {
+            final seg = segs[i];
+            if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
+            var label = cap(seg);
+            final t = titleForUrl(acc + "/");
+            if (t != "") {
+                li = li + "<li><a href=\"" + root + acc + "/\">" + t + "</a></li>";
+            } else {
+                li = li + "<li>" + label + "</li>";
+            }
+            i = i + 1;
+        }
+
+        // The leaf is the current page's own title (faithful for both a landing and a
+        // regular page), matching how the intermediate crumbs now read.
+        li = li + "<li aria-current=\"page\">" + title + "</li>";
+        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+    }
+
+    // renderRelated builds the "Related" card grid for the page whose source is
+    // srcRel, or "" when it is not a docs page or is an overview page (those
+    // enumerate their children in the body). Scores docPages: shared tags (x3),
+    // same section (+4), overview (+3), the documentation index (+1); leads with the
+    // nearest-ancestor overview. Up to four cards, ties broken by URL for stability.
+    fun renderRelated(srcRel: str, root: str) > str {
+        var curTags = "";
+        var curSection = "";
+        var curUrl = "";
+        var curOverview = false;
+        var found = false;
+        foreach (p in this.docPages) {
+            if (p.srcRel == srcRel) {
+                curTags = p.tags;
+                curSection = p.section;
+                curUrl = p.url;
+                curOverview = p.overview;
+                found = true;
+                break;
+            }
+        }
+        if (found == false) { return ""; }
+        if (curOverview) { return ""; }
+
+        // picks is the final ordered card list; used dedups by URL (a page never links
+        // to itself or lists the same neighbor twice).
+        var picks: [{str: str}] = mut [<{str: str}>];
+        var used: {str: bool} = mut {};
+        used[curUrl] = true;
+
+        // Stage 1: lead with the nearest-ancestor overview - the overview page whose
+        // URL is the longest prefix of this page's URL.
+        var leadUrl = "";
+        var leadTitle = "";
+        var leadDesc = "";
+        foreach (p in this.docPages) {
+            if (p.overview and p.url != curUrl and curUrl.startsWith(p.url)) {
+                if (p.url.len() > leadUrl.len()) {
+                    leadUrl = p.url;
+                    leadTitle = p.title;
+                    leadDesc = p.desc;
+                }
+            }
+        }
+        if (leadUrl != "") {
+            picks.append(mut {"url": leadUrl, "title": leadTitle, "desc": leadDesc});
+            used[leadUrl] = true;
+        }
+
+        // Stage 2: score every remaining page and fill up to four cards.
+        var scored: [{str: str}] = mut [<{str: str}>];
+        foreach (p in this.docPages) {
+            if (used[p.url] == null) {
+                var score = 3 * sharedTagCount(curTags, p.tags);
+                if (curSection != "" and p.section == curSection) { score = score + 4; }
+                if (p.overview) { score = score + 3; }
+                if (p.srcRel == this.docs + "/documentation.md") { score = score + 1; }
+                if (score > 0) {
+                    scored.append(mut {
+                        "key": pad4(score), "url": p.url, "title": p.title, "desc": p.desc
+                    });
+                }
+            }
+        }
+        // Highest score first; ties by URL ascending. Padded keys compare lexically
+        // the same as numerically, so strLess on the key is a numeric compare.
+        final sorted = scored.sort(fun (a: {str: str}, b: {str: str}) > bool {
+            if (a["key"] != b["key"]) { return strLess(b["key"], a["key"]); }
+            return strLess(a["url"], b["url"]);
+        });
+        foreach (r in sorted) {
+            if (picks.len() < 4) {
+                picks.append(mut {"url": r["url"], "title": r["title"], "desc": r["desc"]});
+            }
+        }
+
+        if (picks.len() == 0) { return ""; }
+
+        var cards = "";
+        foreach (r in picks) {
+            var descHtml = "";
+            if (r["desc"] != "") {
+                descHtml = "<span class=\"related-card-desc\">" + escapeAttr(r["desc"]) + "</span>";
+            }
+            cards = cards
+                + "        <a class=\"related-card\" href=\"" + root + r["url"] + "\">"
+                + "<span class=\"related-card-title\">" + escapeAttr(r["title"]) + "</span>"
+                + descHtml + "</a>\n";
+        }
+        return "  <section class=\"related container\" aria-labelledby=\"related-heading\">\n"
+            + "    <h2 id=\"related-heading\" class=\"related-heading\">Related</h2>\n"
+            + "    <div class=\"related-grid\">\n"
+            + cards
+            + "    </div>\n"
+            + "  </section>\n";
+    }
+
+    // loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
+    // to the default branch so deployed links stay stable across feature-branch renders.
+    fun loadMeta() > void {
+        if (this.metaLoaded) { return; }
+        this.metaPrefix = capture("git -C " + this.root + " rev-parse --show-prefix");
+        this.metaBranch = "main";
+        this.metaFull = capture("git -C " + this.root + " rev-parse HEAD");
+        this.metaShort = capture("git -C " + this.root + " rev-parse --short HEAD");
+        this.metaStamp = capture("TZ=UTC git -C " + this.root + " show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd HEAD");
+        this.metaCommits = buildCommits();
+        this.metaLoaded = true;
+    }
+
+    // assetIntegrityCheck throws on any dangling href/src in the written output, so a
+    // renamed bundle or forgotten alias fails the build instead of shipping a 404.
+    fun assetIntegrityCheck() > void {
+        var files: [str] = mut [<str>];
+        walkGen("", files);
+        foreach (f in files) {
+            if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
+                // Non-textual asset: nothing to scan for refs.
+            } else {
+                final fh = io.File.open(this.outDir + "/" + f, io.FileMode.read);
+                final html = fh.readAll();
+                fh.close();
+                final parts = f.split("/");
+                var pageDir = "";
+                if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
+                foreach (target in scanRefsInHtml(html, pageDir)) {
+                    if (checkPathExists(target) == false) {
+                        throw "asset integrity: " + f + " references missing " + target;
+                    }
+                }
+            }
+        }
+    }
+
+    // orphanCheck proves every docs page is reachable by BFS from the nav roots, so a
+    // page with no inbound link fails the build instead of shipping unreachable.
+    fun orphanCheck() > void {
+        // Every written page, keyed the way pageKey() yields, so BFS can tell a page
+        // link from an asset link.
+        var files: [str] = mut [<str>];
+        walkGen("", files);
+        var isPage: {str: bool} = mut {};
+        foreach (f in files) {
+            if (f == "index.html") { isPage[""] = true; }
+            else { if (f.endsWith("/index.html")) { isPage[f.sub(0, f.len() - 11)] = true; } }
+        }
+
+        var visited: {str: bool} = mut {};
+        var queue: [str] = mut [<str>];
+        foreach (r in ["", "documentation", "blog", "download", "tour", "playground", "search", "public", "development"]) {
+            if (isPage[r] != null and visited[r] == null) { visited[r] = true; queue.append(r); }
+        }
+        var head = 0;
+        while (head < queue.len()) {
+            final key = queue[head];
+            head = head + 1;
+            var path = this.outDir + "/index.html";
+            if (key != "") { path = this.outDir + "/" + key + "/index.html"; }
+            final fh = io.File.open(path, io.FileMode.read);
+            final html = fh.readAll();
+            fh.close();
+            foreach (ref in scanRefsInHtml(html, key)) {
+                final k = pageKey(ref);
+                if (isPage[k] != null and visited[k] == null) {
+                    visited[k] = true;
+                    queue.append(k);
+                }
+            }
+        }
+
+        var orphans: [str] = mut [<str>];
+        foreach (p in this.docPages) {
+            var dk = p.url;
+            if (dk.endsWith("/")) { dk = dk.sub(0, dk.len() - 1); }
+            if (visited[dk] == null) { orphans.append(p.url); }
+        }
+        if (orphans.len() > 0) {
+            throw "orphaned pages: {orphans.len()} docs page(s) unreachable from site navigation (add a link from an overview page): " + orphans.join(", ");
+        }
+    }
+}
+var site: Site = mut Site{};
+
+// (The per-page reading-time and tags are no longer module globals: they are passed
+// straight into page() as the `reading` / `tags` arguments, so there is no
+// set-before-call / clear-after temporal coupling to get wrong.)
+
+fun capture(cmd: str) > str {
+    final tmp = os.tmpFilename("sitegen");
+    final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
+    if (code != 0) {
+        fs.delete(tmp);
+        return "";
+    }
+    final f = io.File.open(tmp, io.FileMode.read);
+    final result = f.readAll();
+    f.close();
+    fs.delete(tmp);
+    return result.trim();
+}
+
+// Map of repo-root-relative source path -> "full|short|date" of the most recent
+// commit that touched it, built from ONE git log (newest-first, so a file's first
+// sighting wins) instead of a git call per page. ">>>" can't begin a repo path,
+// so it cleanly marks each commit header; the file names follow until the next.
+// Run with `git -C ..` so the pathspecs (README.md, docs) and written paths are
+// magus/-relative, matching site.metaPrefix.
+// HISTORY_MAX caps the per-file history depth in the "History" disclosure. The
+// full log is one git spawn, so pushing this higher is cheap; a low cap keeps
+// the rendered <details> panel from bloating on hot-edit files.
+final HISTORY_MAX = 8;
+
+// buildCommits parses one git-log pass:
+//   - metaCommits: path -> "full|short|stamp" of the FIRST (newest) sighting.
+//     Drives the always-visible "Last updated" footer line.
+//   - metaHistory: path -> list of up to HISTORY_MAX "full|short|stamp|subject"
+//     entries in newest-first order. Drives the collapsed WS R history panel.
+// The log prints "SUBJ:<one-line subject>" after each ">>>" header so the two
+// fields ride together without a second git spawn.
+fun buildCommits() > {str: str} {
+    var m: {str: str} = mut {};
+    site.metaHistory = mut {};
+    final log = capture("TZ=UTC git -C " + site.root + " log --first-parent --diff-merges=first-parent --name-only "
+        + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
+        + "--format='>>>%H|%h|%cd%nSUBJ:%s' -- README.md docs blog CHANGELOG.md");
+    var curHeader = "";
+    var curSubject = "";
+    foreach (line in log.split("\n")) {
+        if (line.startsWith(">>>")) {
+            curHeader = line.sub(3);
+            curSubject = "";
+        } else if (line.startsWith("SUBJ:")) {
+            curSubject = line.sub(5);
+        } else if (line != "" and curHeader != "") {
+            // Newest sighting wins for the "last updated" line.
+            if (m[line] == null) { m[line] = curHeader; }
+            // Append to per-file history (newest-first) until HISTORY_MAX.
+            var hist = site.metaHistory[line];
+            if (hist == null) { hist = mut [<str>]; }
+            if (hist.len() < HISTORY_MAX) {
+                hist.append(curHeader + "|" + curSubject);
+            }
+            site.metaHistory[line] = hist;
+        }
+    }
+    return m;
+}
+
+
+// deriveTitle reads a page title from the first H1, stripping the code backticks a
+// markdown heading like `# `fs`` carries so the title reads cleanly as plain text
+// in <title>, the breadcrumb, the pager, and the search index. (Frontmatter
+// titles bypass this and are used verbatim.)
+fun deriveTitle(md: str, rel: str) > str {
+    foreach (line in md.split("\n")) {
+        if (line.startsWith("# ")) { return $"`".replaceAll(line.sub(2).trim(), ""); }
+    }
+    return rel;
+}
+
+// escapeAttr makes s safe to drop inside a double-quoted HTML attribute.
+fun escapeAttr(s: str) > str {
+    return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
+}
+
+// parseTags reads the frontmatter `tags:` list from raw markdown as [str], empty when
+// the field is absent. The one place tags are extracted so the rendered chips and
+// the search index draw from the same source (markdown.frontmatter returns the
+// YAML as JSON; serialize navigates it).
+fun parseTags(md: str) > [str] {
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final tags: [str] = mut [];
+    foreach (t in fm.q("tags").listValue()) {
+        final tag = t.stringValue();
+        // A "magus" tag narrows nothing - it is the whole project. Drop it site-wide so it
+        // never renders as a chip or clutters the search index (a few docs, plus the magus
+        // module/command pages, carry it in frontmatter).
+        if (tag.lower() != "magus") { tags.append(tag); }
+    }
+    return tags;
+}
+
+// pageType reads the frontmatter `page_type:` marker (empty when absent). The one
+// value that matters today is "overview": a landing/index page whose job is to
+// orient and route to others (the documentation index, a section index like spells.md or
+// modules/, a diagnostics-family README). Overview pages are the hubs the Related
+// ranking favors and the roots the reachability gate trusts, so declaring the type
+// in frontmatter beats guessing it from a URL shape.
+fun pageType(md: str) > str {
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    return fm.q("page_type").stringValue();
+}
+
+// isGenerated reports whether a page is mechanically generated rather than hand-
+// written. Generated references live under three fixed docs/ subtrees that the doc
+// generators overwrite wholesale: modules/ (cmd/magus-docs), spells/*.md
+// (cmd/magus-spelldocs; the spells.md landing itself is hand-written), and
+// manpage/ (cmd/magus-manpage). srcRel is the docs/-prefixed source path. Kept as
+// a path convention because the generated .md carries no frontmatter marker.
+fun isGenerated(srcRel: str) > bool {
+    return srcRel.startsWith(site.docs + "/buzz/modules/")
+        or srcRel.startsWith(site.docs + "/spells/")
+        or srcRel.startsWith(site.docs + "/manpage/")
+        or srcRel == site.docs + "/config.md";
+}
+
+// cleanBody turns a page's raw markdown body into compact prose for the search index:
+// it drops fenced code / mermaid blocks (everything between ``` fences), removes a few
+// inline markdown markers, and collapses whitespace. The text field is ~94% of the index
+// by size, so this both shrinks the download and hands the client clean snippet text (no
+// per-load client-side cleanup). Trade-off: body-text search/snippets no longer include
+// fenced code - title, tags, description, and prose still do.
+fun cleanBody(md: str) > str {
+    // Keep only the segments OUTSIDE ``` fences (even-numbered split pieces).
+    var buf = "";
+    var inside = false;
+    foreach (p in md.split("```")) {
+        if (inside == false) { buf = buf + " " + p; }
+        inside = (inside == false);
+    }
+    // Newlines / tabs -> spaces; drop inline markers that only add snippet noise.
+    while (buf.indexOf("\n") != null) { buf = buf.replace("\n", " "); }
+    while (buf.indexOf("\t") != null) { buf = buf.replace("\t", " "); }
+    while (buf.indexOf("#") != null) { buf = buf.replace("#", " "); }
+    while (buf.indexOf("*") != null) { buf = buf.replace("*", " "); }
+    while (buf.indexOf("|") != null) { buf = buf.replace("|", " "); }
+    while (buf.indexOf("`") != null) { buf = buf.replace("`", " "); }
+    // Collapse runs of spaces via split/join (avoids a quadratic replace loop).
+    final words: [str] = mut [<str>];
+    foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
+    return words.join(" ");
+}
+
+fun outName(base: str) > str {
+    if (base == "README.md") { return "index.html"; }
+    return base.sub(0, base.len() - 3) + ".html";
+}
+
+// cleanUrl maps a docs-relative source path to its clean, extensionless gen-root
+// URL: drop the .md, drop a trailing index/README landing basename, drop any
+// build-artifact "gen" segment (so docs/manpage/gen/magus-run.md surfaces at
+// manpage/magus-run/, not manpage/gen/magus-run/), and end with a trailing slash.
+// "" for the home page (README.md). Every written page becomes <cleanUrl>index.html.
+//   "documentation.md"          -> "documentation/"
+//   "modules/fs.md"             -> "modules/fs/"
+//   "codes/race/README.md"      -> "codes/race/"
+//   "manpage/gen/magus-run.md"  -> "manpage/magus-run/"
+fun cleanUrl(rel: str) > str {
+    // Blog posts are date-scoped: blog/2026-07-01-slug.md -> blog/2026/07/01/slug/.
+    // The blog index (blog/index.md) is not a post, so it falls through to the
+    // generic landing rule below and stays at blog/.
+    if (rel.startsWith(site.blog + "/") and rel != site.blog + "/index.md") {
+        return site.blog + "/" + blogUrlPath(rel.sub((site.blog + "/").len())) + "/";
+    }
+    var base = rel;
+    if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
+    final parts = base.split("/");
+    var segs: [str] = mut [<str>];
+    var i = 0;
+    while (i < parts.len()) {
+        final p = parts[i];
+        final isLast = (i == parts.len() - 1);
+        if (p != "gen") {
+            if (isLast and (p == "index" or p == "README")) {
+                // a landing basename becomes its directory's URL; drop it
+            } else {
+                segs.append(p);
+            }
+        }
+        i = i + 1;
+    }
+    if (segs.len() == 0) { return ""; }
+    return segs.join("/") + "/";
+}
+
+// cleanDepth is the number of path segments in a page's clean URL — its directory
+// depth below gen/'s root, i.e. how many "../" reach the root from it.
+fun cleanDepth(rel: str) > int {
+    final u = cleanUrl(rel);
+    if (u == "") { return 0; }
+    return u.split("/").len() - 1;   // "modules/fs/" -> ["modules","fs",""] -> 2
+}
+
+// climb builds n repetitions of "../".
+fun climb(n: int) > str {
+    var s = "";
+    var i = 0;
+    while (i < n) { s = s + "../"; i = i + 1; }
+    return s;
+}
+
+// rewriteHref transforms one in-content link href for the directory-index layout.
+// Every page moved into its own directory, so a relative link needs `addDepth`
+// extra "../" to climb back out, and every internal .html target became a directory
+// (drop .html, drop a trailing index/README, drop the "gen" build segment, add a
+// trailing slash). External/anchor/asset links pass through untouched; a #fragment
+// is preserved.
+// splitPath splits a gen-root-relative path into its non-empty segments, dropping
+// "." segments (a trailing slash yields no empty tail segment).
+fun splitPath(p: str) > [str] {
+    var segs: [str] = mut [<str>];
+    foreach (s in p.split("/")) {
+        if (s != "" and s != ".") { segs.append(s); }
+    }
+    return segs;
+}
+
+// resolvePath resolves a relative link against a gen-root-relative directory,
+// returning the normalized gen-root-relative target path ("" for the root). ".."
+// pops a segment; "." and empty segments are ignored.
+fun resolvePath(fromDir: str, link: str) > str {
+    var segs = splitPath(fromDir);
+    foreach (part in link.split("/")) {
+        if (part != "" and part != ".") {
+            if (part == "..") {
+                if (segs.len() > 0) {
+                    var nw: [str] = mut [<str>];
+                    var i = 0;
+                    while (i < segs.len() - 1) { nw.append(segs[i]); i = i + 1; }
+                    segs = nw;
+                }
+            } else {
+                segs.append(part);
+            }
+        }
+    }
+    return segs.join("/");
+}
+
+// cleanTarget maps an OLD flat gen-root path (e.g. "manpage/gen/magus-ls.html",
+// "codes/race/index.html", "install.html", "index.html") to its NEW clean URL
+// ("manpage/magus-ls/", "codes/race/", "install/", ""): drop .html, drop a trailing
+// index/README landing, drop the "gen" build segment, add a trailing slash.
+// playground.html directorifies like any other page (a link to it lands on
+// "playground/", matching its written gen/playground/index.html).
+fun cleanTarget(oldPath: str) > str {
+    final segs = splitPath(oldPath);
+    if (segs.len() == 0) { return ""; }
+    var keep: [str] = mut [<str>];
+    var i = 0;
+    while (i < segs.len()) {
+        var p = segs[i];
+        final isLast = (i == segs.len() - 1);
+        if (isLast and p.endsWith(".html")) { p = p.sub(0, p.len() - 5); }
+        if (p != "gen") {
+            if (isLast and (p == "index" or p == "README")) {
+                // landing basename -> its directory
+            } else {
+                keep.append(p);
+            }
+        }
+        i = i + 1;
+    }
+    if (keep.len() == 0) { return ""; }
+    return keep.join("/") + "/";
+}
+
+// relativize returns the relative link from fromDir (gen-root-relative) to toUrl
+// (gen-root-relative). A toUrl ending in "/" — or "" for the home page — is a
+// directory (its link keeps the trailing slash); anything else is a file
+// (an asset like main.js or an image). "./" when they resolve to the same place.
+fun relativize(fromDir: str, toUrl: str) > str {
+    final fromSegs = splitPath(fromDir);
+    final toSegs = splitPath(toUrl);
+    final dirLike = (toUrl == "" or toUrl.endsWith("/"));
+    var i = 0;
+    while (i < fromSegs.len() and i < toSegs.len() and fromSegs[i] == toSegs[i]) { i = i + 1; }
+    var rel = "";
+    var j = i;
+    while (j < fromSegs.len()) { rel = rel + "../"; j = j + 1; }
+    var k = i;
+    while (k < toSegs.len()) {
+        rel = rel + toSegs[k];
+        if (k < toSegs.len() - 1 or dirLike) { rel = rel + "/"; }
+        k = k + 1;
+    }
+    if (rel == "") { rel = "./"; }
+    return rel;
+}
+
+// rewriteHref transforms one in-content link for the directory-index layout by full
+// path resolution: resolve it against the page's OLD flat directory to the old
+// target, map that target to its NEW clean URL, then re-express it relative to the
+// page's NEW directory. This is correct for siblings, cross-level links, landing
+// pages, and the gen-flatten uniformly (a naive fixed "../" count is not, because
+// the flatten changes depth). External/anchor/mailto links pass through; a
+// #fragment is preserved; asset (non-.html) links are re-based but not cleaned.
+fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
+    if (h.startsWith("http://") or h.startsWith("https://") or h.startsWith("//")
+        or h.startsWith("#") or h.startsWith("mailto:")) { return h; }
+    var path = h;
+    var frag = "";
+    final hash = h.indexOf("#");
+    if (hash != null) { path = h.sub(0, hash); frag = h.sub(hash); }
+    if (path == "") { return h; }   // pure fragment already handled; be safe
+
+    final oldTarget = resolvePath(oldDir, path);
+    if (path.endsWith(".html")) {
+        return relativize(newDir, cleanTarget(oldTarget)) + frag;
+    }
+    // Non-page (asset) link: keep the file as-is, only re-base for the moved page.
+    return relativize(newDir, oldTarget) + frag;
+}
+
+// rewriteLinks applies rewriteHref to every href="..." in a rendered content
+// fragment. It runs on the markdown-rendered body only (before the page template
+// wraps it), so the nav/breadcrumb/pager hrefs — built separately with clean URLs —
+// are never double-processed. oldDir/newDir are the page's old flat directory and
+// new clean directory (both gen-root-relative, "" for the home page).
+// tagRunnable is a post-process pass over rendered markdown that finds
+// "<!-- run -->" comments the author placed above a Buzz code fence and swaps
+// the following <pre> with <pre data-runnable="true">, so the client-side Run ▶
+// mechanism (run-example.js) can find opt-in blocks without an author-visible
+// info-string extension goldmark doesn't natively surface. The comment itself
+// is dropped from the output.
+fun tagRunnable(html: str) > str {
+    // Two opt-in markers, each tagging the following <pre> with the attributes a
+    // client mode reads. "<!-- run -->" is the plain evalBuzz path (module
+    // examples: print output). "<!-- run-recorder -->" is the dry-run path
+    // (spell examples: `import "magus/spell/go"; go["go-build"]()` records a
+    // trace instead of executing), which run-example.js routes to
+    // evalBuzzWithRecorder on seeing data-recorder. run-recorder is matched first
+    // so its longer marker isn't mistaken for a bare run marker.
+    final recTagged = tagRunnableWith(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
+    return tagRunnableWith(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
+}
+
+// tagRunnableWith swaps the <pre> that follows each marker comment with openTag
+// (the marker is dropped). A marker not immediately followed by a fence is simply
+// removed, so the block renders normally.
+fun tagRunnableWith(html: str, marker: str, openTag: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(marker);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx + marker.len());
+        // Skip whitespace after the comment (typically a newline). The next
+        // non-whitespace token should be "<pre>" or "<pre ..."; tag it.
+        var i = 0;
+        while (i < rest.len()) {
+            final b = rest.byte(i);
+            if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
+            i = i + 1;
+        }
+        if (rest.sub(i, 5) == "<pre>") {
+            buf = buf + rest.sub(0, i) + openTag;
+            rest = rest.sub(i + 5);
+        } else {
+            // Not immediately followed by a fence — drop the marker; the block
+            // renders normally.
+            buf = buf + rest.sub(0, i);
+            rest = rest.sub(i);
+        }
+        idx = rest.indexOf(marker);
+    }
+    return buf + rest;
+}
+
+// renderContentHtml is the ONE post-processing pipeline every page render runs: it
+// rewrites a rendered-markdown fragment's in-content links from the page's old flat
+// directory (oldDir) to its new clean directory (newDir), then applies the ordered
+// content transforms - runnable markers, admonitions, code titles, lazy images,
+// external-link marks, and mermaid. Routing renderRoot, renderFile, and
+// renderBlogPost through this is what keeps a transform (like the runnable Run
+// buttons) from being applied on one path and silently forgotten on another.
+fun renderContentHtml(rawHtml: str, oldDir: str, newDir: str) > str {
+    return tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir)))))));
+}
+
+// externalLinks adds rel="noopener noreferrer" and target="_blank" to every
+// http(s) link that doesn't already have them, and marks the anchor with a
+// data-external attribute so CSS can add a small "leaves this site" glyph via
+// ::after. Skips GitHub source links inside the article? No - they're external
+// too. Deterministic transform over rendered HTML.
+fun externalLinks(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("<a href=\"http");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx);
+        // Locate the closing ">" of the opening tag.
+        final closeIdx = rest.indexOf(">");
+        if (closeIdx == null) { return buf + rest; }
+        var tag = rest.sub(0, closeIdx + 1);
+        var attrs = "";
+        if (tag.indexOf("rel=") == null) { attrs = attrs + " rel=\"noopener noreferrer\""; }
+        if (tag.indexOf("target=") == null) { attrs = attrs + " target=\"_blank\""; }
+        if (tag.indexOf("data-external") == null) { attrs = attrs + " data-external"; }
+        if (attrs != "") {
+            // Insert before the closing ">".
+            tag = tag.sub(0, tag.len() - 1) + attrs + ">";
+        }
+        buf = buf + tag;
+        rest = rest.sub(closeIdx + 1);
+        idx = rest.indexOf("<a href=\"http");
+    }
+    return buf + rest;
+}
+
+// lazyImages adds loading="lazy" decoding="async" to every in-content <img>
+// tag that doesn't already carry a loading attribute. The homepage hero stays
+// eager because renderRoot's markup carries loading="high"/fetchpriority (WS A)
+// which this pass leaves alone. Deterministic transform.
+fun lazyImages(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("<img ");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx);
+        final closeIdx = rest.indexOf(">");
+        if (closeIdx == null) { return buf + rest; }
+        var tag = rest.sub(0, closeIdx + 1);
+        // Only add if not already present (author markup wins).
+        if (tag.indexOf("loading=") == null and tag.indexOf("fetchpriority=") == null) {
+            tag = "<img loading=\"lazy\" decoding=\"async\" " + tag.sub(5);
+        }
+        buf = buf + tag;
+        rest = rest.sub(closeIdx + 1);
+        idx = rest.indexOf("<img ");
+    }
+    return buf + rest;
+}
+
+// tagCodeTitle finds "<!-- code-title: FILENAME -->" comments and prepends a
+// <figcaption> title bar to the following <pre> block, wrapping both in a
+// <figure class="code-block-titled">. Authoring:
+//   <!-- code-title: magusfile.buzz -->
+//   ```buzz
+//   ...
+//   ```
+// Goldmark drops multi-word fence info strings, so the marker lives in HTML
+// space rather than in the fence itself. The comment is dropped from output.
+fun tagCodeTitle(html: str) > str {
+    final open = "<!-- code-title:";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx + open.len());
+        // Read the title text up to the marker's closing "-->".
+        final closeMarker = rest.indexOf("-->");
+        if (closeMarker == null) { return buf + open + rest; }
+        final title = rest.sub(0, closeMarker).trim();
+        rest = rest.sub(closeMarker + 3);
+        // Skip whitespace, then wrap the next <pre>...</pre> in a figure.
+        var i = 0;
+        while (i < rest.len()) {
+            final b = rest.byte(i);
+            if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
+            i = i + 1;
+        }
+        // Check for <pre with any attributes.
+        if (rest.sub(i, 4) == "<pre") {
+            final endPre = rest.indexOf("</pre>");
+            if (endPre != null) {
+                final preBlock = rest.sub(i, endPre + 6 - i);
+                buf = buf + rest.sub(0, i)
+                    + "<figure class=\"code-block-titled\"><figcaption>" + title + "</figcaption>"
+                    + preBlock + "</figure>";
+                rest = rest.sub(endPre + 6);
+                idx = rest.indexOf(open);
+                continue;
+            }
+        }
+        buf = buf + rest.sub(0, i);
+        rest = rest.sub(i);
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
+// tagAdmonition converts GitHub-alert-syntax blockquotes to styled callouts:
+// each "<blockquote>\n<p>[!TYPE]\n..." becomes a <div class="admonition
+// admonition-<type>"> with a heading and the rest of the paragraph. Recognized
+// TYPES: NOTE / TIP / IMPORTANT / WARNING / CAUTION (the GitHub set). Anything
+// else passes through as a normal blockquote. Fully static, no JS.
+fun tagAdmonition(html: str) > str {
+    var buf = "";
+    var rest = html;
+    while (true) {
+        final open = rest.indexOf("<blockquote>\n<p>[!");
+        if (open == null) { return buf + rest; }
+        buf = buf + rest.sub(0, open);
+        rest = rest.sub(open);
+        final tagEnd = rest.indexOf("]");
+        if (tagEnd == null) { return buf + rest; }
+        // rest starts at "<blockquote>\n<p>[!"; the type name runs from index 18
+        // (past "<blockquote>\n<p>[!") to tagEnd.
+        final typ = rest.sub(18, tagEnd - 18);
+        var kind = "";
+        if (typ == "NOTE") { kind = "note"; }
+        if (typ == "TIP") { kind = "tip"; }
+        if (typ == "IMPORTANT") { kind = "important"; }
+        if (typ == "WARNING") { kind = "warning"; }
+        if (typ == "CAUTION") { kind = "caution"; }
+        if (kind == "") {
+            // Unrecognized type; leave the blockquote alone and advance past it.
+            buf = buf + rest.sub(0, 12);   // len("<blockquote>")
+            rest = rest.sub(12);
+        } else {
+            final closeBq = rest.indexOf("</blockquote>");
+            if (closeBq == null) { return buf + rest; }
+            // Inner content: everything between the opening blockquote and the
+            // marker's line-ending newline, up to </blockquote>. Strip the
+            // marker paragraph's leading "[!TYPE]\n" from the first <p>.
+            var inner = rest.sub(12, closeBq - 12);        // between <blockquote> and </blockquote>
+            // Drop the leading "\n<p>[!TYPE]\n" so what's left starts with the
+            // real prose the author wrote.
+            final prefix = "\n<p>[!" + typ + "]\n";
+            if (inner.startsWith(prefix)) {
+                inner = "\n<p>" + inner.sub(prefix.len());
+            }
+            var label = typ.sub(0, 1) + typ.sub(1).lower();  // Note / Tip / ...
+            buf = buf + "<div class=\"admonition admonition-" + kind + "\">"
+                + "<p class=\"admonition-title\">" + label + "</p>"
+                + inner
+                + "</div>";
+            rest = rest.sub(closeBq + 13);   // len("</blockquote>")
+        }
+    }
+    return buf + rest;
+}
+
+// tagMermaid finds each Mermaid code fence in the rendered HTML (goldmark produces
+// them as <pre><code class="language-mermaid">) and wraps them in a <div class=
+// "mermaid-src"> with a small no-JS-visible label. With JS on, mermaid-init.js
+// replaces the block with a rendered SVG, so the label sits behind the diagram
+// and never shows; with JS off the reader sees the raw DSL plus a "Diagram
+// source - renders with JavaScript enabled" caption, so the block reads as
+// intentional prose rather than mystery text.
+fun tagMermaid(html: str) > str {
+    final open = "<pre><code class=\"language-mermaid\">";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        // Find the matching </code></pre>.
+        rest = rest.sub(idx);
+        final close = rest.indexOf("</code></pre>");
+        if (close == null) { return buf + rest; }
+        final block = rest.sub(0, close + 13);   // 13 = len("</code></pre>")
+        buf = buf + "<div class=\"mermaid-src\">"
+            + block
+            + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span>"
+            + "</div>";
+        rest = rest.sub(close + 13);
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
+fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("href=\"");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx + 6);   // through the opening href="
+        rest = rest.sub(idx + 6);
+        final end = rest.indexOf("\"");
+        if (end == null) {
+            buf = buf + rest;
+            rest = "";
+            idx = null;
+        } else {
+            buf = buf + rewriteHref(rest.sub(0, end), oldDir, newDir) + "\"";
+            rest = rest.sub(end + 1);
+            idx = rest.indexOf("href=\"");
+        }
+    }
+    return buf + rest;
+}
+
+// oldFlatDir / newCleanDir give a docs page's directory before and after the
+// directory-index move, for rewriteLinks. Old: the source subdir (one .html per
+// dir). New: the clean URL without its trailing slash.
+fun oldFlatDir(rel: str) > str {
+    final parts = rel.split("/");
+    if (parts.len() <= 1) { return ""; }
+    return parts.sub(0, parts.len() - 1).join("/");
+}
+fun newCleanDir(rel: str) > str {
+    final u = cleanUrl(rel);
+    if (u == "") { return ""; }
+    return u.sub(0, u.len() - 1);
+}
+
+// aliasStub is the tiny redirect page written at each alias location. Static hosts
+// (GitHub Pages) can't do server redirects, so this uses the standard HTML stub:
+// an instant meta-refresh + a canonical link back to the real page + a scripted
+// location.replace, and a plain <a> so it still works with JavaScript disabled.
+// rel is the target's path relative to the alias's own directory.
+fun aliasStub(rel: str) > str {
+    return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+        + "<meta http-equiv=\"refresh\" content=\"0; url=" + rel + "\">\n"
+        + "<link rel=\"canonical\" href=\"" + rel + "\">\n"
+        + "<title>Redirecting</title>\n"
+        + "<script>location.replace(\"" + rel + "\");</script>\n"
+        + "</head>\n<body>\n"
+        + "<p>This page moved. <a href=\"" + rel + "\">Continue to its new location</a>.</p>\n"
+        + "</body>\n</html>\n";
+}
+
+// writeSeoFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
+// byte-stable), each as an absolute SITE_URL loc — the home page's "index.html" URL
+// maps to the bare site root. Aliases are deliberately absent (only canonical pages
+// belong in a sitemap). Gated on SITE_URL so the site can ship dark until the host
+// is confirmed. robots points crawlers at the sitemap.
+fun writeSeoFiles() > void {
+    if (SITE_URL == "") { return; }
+    var urls: [str] = mut [<str>];
+    foreach (u in site.pageUrls.keys()) { urls.append(u); }
+    final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+    foreach (u in sorted) {
+        var loc = u;
+        if (loc == "index.html") { loc = ""; }
+        body = body + "  <url>" + xmlEl("loc", SITE_URL + loc) + "</url>\n";
+    }
+    body = body + "</urlset>\n";
+    fs.writeFile(site.outDir + "/sitemap.xml", body);
+    fs.writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + SITE_URL + "sitemap.xml\n");
+}
+
+// escapeXml is the XML-safe form of escapeAttr for feed content (Atom entries,
+// autoindex descriptions): the same five-entity substitution but with & handled
+// last so pre-encoded entities don't get double-encoded.
+fun escapeXml(s: str) > str {
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&apos;");
+}
+
+// Minimal XML construction for the sitemap and Atom feeds. Every text body and
+// attribute value funnels through escapeXml, so a stray "&" or "<" in a URL, title,
+// or changelog body can't produce malformed XML (the old hand-concatenation escaped
+// title/summary but left href/id/loc raw). Container tags with their own namespaces
+// (<feed>, <urlset>, <entry>, <url>) stay written inline; these cover the leaves.
+//   xmlAttr("rel", "self")                 -> ` rel="self"`  (leading space; escaped)
+//   xmlEl("title", "magus blog")           -> `<title>magus blog</title>`
+//   xmlElA("summary", xmlAttr("type","text"), body) -> `<summary type="text">body</summary>`
+//   xmlSelfClose("link", xmlAttr("href", u)) -> `<link href="u"/>`
+fun xmlAttr(name: str, value: str) > str {
+    return " " + name + "=\"" + escapeXml(value) + "\"";
+}
+fun xmlElA(tag: str, attrs: str, text: str) > str {
+    return "<" + tag + attrs + ">" + escapeXml(text) + "</" + tag + ">";
+}
+fun xmlEl(tag: str, text: str) > str {
+    return xmlElA(tag, "", text);
+}
+fun xmlSelfClose(tag: str, attrs: str) > str {
+    return "<" + tag + attrs + "/>";
+}
+
+// atomDate normalizes a frontmatter date (YYYY-MM-DD or full RFC3339) to the
+// RFC3339 UTC form Atom requires. A bare date becomes T00:00:00Z; anything
+// already containing "T" passes through (buildCommits produces full RFC3339).
+fun atomDate(d: str) > str {
+    if (d == "") { return ""; }
+    if (d.indexOf("T") == null) { return d + "T00:00:00Z"; }
+    return d;
+}
+
+// renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of
+// site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),
+// updated (post date), summary (description), author. Feed-level updated = newest
+// post's date. Gated on SITE_URL so it can ship dark until the host is confirmed.
+fun renderBlogAtom() > void {
+    if (SITE_URL == "") { return; }
+    if (site.blogPosts.len() == 0) { return; }
+    final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
+        if (a.date != b.date) { return strLess(b.date, a.date); }
+        return strLess(a.base, b.base);
+    });
+    final feedUpdated = atomDate(sorted[0].date);
+    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
+        + "  " + xmlEl("title", "magus blog") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttr("href", SITE_URL + "blog/") + xmlAttr("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttr("href", SITE_URL + "public/atom/blog.atom.xml") + xmlAttr("rel", "self")) + "\n"
+        + "  " + xmlEl("id", SITE_URL + "blog/") + "\n"
+        + "  " + xmlEl("updated", feedUpdated) + "\n";
+    foreach (p in sorted) {
+        final entryUrl = SITE_URL + p.url;
+        body = body + "  <entry>\n"
+            + "    " + xmlEl("title", p.title) + "\n"
+            + "    " + xmlSelfClose("link", xmlAttr("href", entryUrl)) + "\n"
+            + "    " + xmlEl("id", entryUrl) + "\n"
+            + "    " + xmlEl("updated", atomDate(p.date)) + "\n"
+            + "    " + xmlEl("summary", p.description) + "\n"
+            + "  </entry>\n";
+    }
+    body = body + "</feed>\n";
+    fs.makeDirectory(site.outDir + "/public/atom");
+    fs.writeFile(site.outDir + "/public/atom/blog.atom.xml", body);
+}
+
+
+// parseChangelog reads CHANGELOG.md (Keep-a-Changelog form) and extracts every
+// "## [<version>] - <date>" heading and its body. "[Unreleased]" is skipped: the
+// feed is for released versions only. Deterministic: reads a committed file, no
+// network. Ordering follows the file, which authors keep newest-first.
+fun parseChangelog() > void {
+    site.releases = mut [<Release>];
+    if (os.execute(["test", "-f", site.root + "/CHANGELOG.md"]) != 0) { return; }
+    final f = io.File.open(site.root + "/CHANGELOG.md", io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    var curVer = "";
+    var curDate = "";
+    var have = false;
+    var body = "";
+    foreach (line in md.split("\n")) {
+        if (line.startsWith("## ")) {
+            // Flush the previous release before starting a new one.
+            if (have) {
+                site.releases.append(Release{ version = curVer, date = curDate, body = body });
+            }
+            curVer = "";
+            curDate = "";
+            have = false;
+            body = "";
+            // "## [1.2.3] - 2026-07-01"  or  "## [Unreleased]"
+            var rest = line.sub(3);
+            if (rest.startsWith("[")) {
+                final close = rest.indexOf("]");
+                if (close != null) {
+                    final ver = rest.sub(1, close - 1);
+                    if (ver != "Unreleased" and ver != "unreleased") {
+                        curVer = ver;
+                        // After the "]": " - <date>" (may be missing on WIP entries).
+                        final rem = rest.sub(close + 1);
+                        var date = "";
+                        final dash = rem.indexOf("-");
+                        if (dash != null) { date = rem.sub(dash + 1).trim(); }
+                        curDate = date;
+                        have = true;
+                    }
+                }
+            }
+        } else if (have) {
+            body = body + line + "\n";
+        }
+    }
+    if (have) {
+        site.releases.append(Release{ version = curVer, date = curDate, body = body });
+    }
+}
+
+// renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed
+// releases (newest first as authored). Per <entry>: title = version, link =
+// GH/releases/tag/<ver>, id = same, updated = release date, summary = the section
+// body. Feed-level updated = newest release's date. Gated on SITE_URL and on
+// having at least one released version.
+fun renderReleasesAtom() > void {
+    if (SITE_URL == "") { return; }
+    if (site.releases.len() == 0) { return; }
+    final feedUpdated = atomDate(site.releases[0].date);
+    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
+        + "  " + xmlEl("title", "magus releases") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttr("href", GH + "/releases") + xmlAttr("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttr("href", SITE_URL + "public/atom/releases.atom.xml") + xmlAttr("rel", "self")) + "\n"
+        + "  " + xmlEl("id", GH + "/releases") + "\n"
+        + "  " + xmlEl("updated", feedUpdated) + "\n";
+    foreach (r in site.releases) {
+        final ver = r.version;
+        final link = GH + "/releases/tag/" + ver;
+        body = body + "  <entry>\n"
+            + "    " + xmlEl("title", ver) + "\n"
+            + "    " + xmlSelfClose("link", xmlAttr("href", link)) + "\n"
+            + "    " + xmlEl("id", link) + "\n"
+            + "    " + xmlEl("updated", atomDate(r.date)) + "\n"
+            + "    " + xmlElA("summary", xmlAttr("type", "text"), r.body.trim()) + "\n"
+            + "  </entry>\n";
+    }
+    body = body + "</feed>\n";
+    fs.makeDirectory(site.outDir + "/public/atom");
+    fs.writeFile(site.outDir + "/public/atom/releases.atom.xml", body);
+}
+
+// autoindex renders one Apache-`mod_autoindex`-styled listing at path (a gen-
+// root-relative dir, without trailing slash; "" for the root of the /public/
+// tree, "atom" or "release" for a subdir). entries is a list of records with
+// {name, href, size?, modified?, desc}. Every level brackets the listing with a
+// leading and trailing rule, like a real mirror index. Themed with Pico via the shared page() template
+// (no bespoke color palette), so light/dark follow the site theme. rootDepth is
+// how many "../" the caller needs to reach gen/'s root, used only to preload the
+// hat asset in the shared head.
+fun autoindex(path: str, entries: [{str: str}], parentHref: str) > void {
+    // Displayed path: /public or /public/atom, always absolute with leading + trailing slash.
+    var displayPath = "/public";
+    if (path != "public") { displayPath = "/" + path; }
+    displayPath = displayPath + "/";
+
+    var body = "<h1>Index of " + displayPath + "</h1>\n"
+        + "<pre class=\"autoindex\">"
+        + "<span class=\"autoindex-head\">Name                          Last modified      Size  Description</span>\n"
+        + "<hr>\n";
+    if (parentHref != "") {
+        body = body + "<a href=\"" + parentHref + "\">Parent Directory</a>                                        -   \n";
+    }
+    // Sort entries by name so listings are byte-stable.
+    final sorted = entries.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["name"], b["name"]); });
+    foreach (e in sorted) {
+        final name = e["name"];
+        final href = e["href"];
+        final size = e["size"];
+        final modified = e["modified"];
+        final desc = e["desc"];
+        var nameCell = "<a href=\"" + href + "\">" + name + "</a>";
+        // Pad to a 30-char column so alignment stays stable across variable-length names.
+        var padName = nameCell;
+        var i = name.len();
+        while (i < 30) { padName = padName + " "; i = i + 1; }
+        var padMod = modified;
+        var j = modified.len();
+        while (j < 19) { padMod = padMod + " "; j = j + 1; }
+        var padSize = size;
+        var k = size.len();
+        while (k < 5) { padSize = " " + padSize; k = k + 1; }
+        body = body + padName + " " + padMod + "  " + padSize + "  " + desc + "\n";
+    }
+    body = body + "<hr>\n"
+        + "</pre>\n";
+
+    fs.makeDirectory(site.outDir + "/" + path);
+    // srcMarker matches the written directory depth so rootPrefix computes the
+    // right "../" climb (public/x.md -> "../", public/atom/x.md -> "../../").
+    final srcMarker = path + "/_index.md";
+    // Alias the marker's commit footer to a real content source so it stays stable
+    // (not HEAD, which advances every commit and would break the drift gate). Use
+    // CHANGELOG.md, which the /public/ tree derives from. If not yet committed,
+    // fall back to HEAD - not a drift-gate failure, just a stale footer once, then
+    // stable.
+    final chLog = site.metaCommits[site.metaPrefix + "CHANGELOG.md"];
+    if (chLog != null) {
+        site.metaCommits[site.metaPrefix + srcMarker] = chLog;
+    } else {
+        site.metaCommits[site.metaPrefix + srcMarker] = site.metaFull + "|" + site.metaShort + "|" + site.metaStamp;
+    }
+    final doc = page("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/", "", mut []);
+    final of = io.File.open(site.outDir + "/" + path + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // Register the URL for sitemap purposes.
+    site.pageUrls[path + "/"] = true;
+}
+
+// renderPublic writes the nested /public/ autoindex tree: the root at /public/
+// lists atom/ + release/ subdirs plus the machine files that live at their
+// canonical spec locations (/sitemap.xml, /robots.txt); /public/atom/ lists the
+// two Atom feeds; /public/release/ is a placeholder browsing entry (populated in
+// WS U with the release-artifacts matrix). Deterministic (no network at build).
+fun renderPublic() > void {
+    if (SITE_URL == "") { return; }
+
+    // /public/atom/ - the two feeds (if they were written).
+    var atomEntries: [{str: str}] = mut [<{str: str}>];
+    if (site.blogPosts.len() > 0) {
+        atomEntries.append(mut {
+            "name": "blog.atom.xml", "href": "blog.atom.xml",
+            "size": "-", "modified": atomDate(site.blogPosts[0].date),
+            "desc": "Blog posts (Atom 1.0)"
+        });
+    }
+    if (site.releases.len() > 0) {
+        atomEntries.append(mut {
+            "name": "releases.atom.xml", "href": "releases.atom.xml",
+            "size": "-", "modified": atomDate(site.releases[0].date),
+            "desc": "Releases (Atom 1.0)"
+        });
+    }
+    if (atomEntries.len() > 0) { autoindex("public/atom", atomEntries, "../"); }
+
+    // /public/release/  - per-version tree. Each released version (parsed from
+    // CHANGELOG.md by parseChangelog) gets its own subdirectory listing the 8
+    // artifacts that ship with every release. Deep-links to individual assets
+    // are safe here: the version is known at build time, so hrefs resolve to
+    // GH/releases/download/<ver>/<file> directly. The signing-key PEM links to
+    // the local /assets/ copy (three levels up from /public/release/<ver>/).
+    // Size stays "-" (GitHub-hosted byte counts would require a network fetch,
+    // which would break the drift gate); modified is the release date from
+    // the CHANGELOG entry.
+    foreach (rel in site.releases) {
+        final ver = rel["version"];
+        final date = rel["date"];
+        final assetBase = GH + "/releases/download/" + ver;
+        var verEntries: [{str: str}] = mut [<{str: str}>];
+        verEntries.append(mut {"name": "magus_" + ver + "_linux_amd64.tar.gz",   "href": assetBase + "/magus_" + ver + "_linux_amd64.tar.gz",   "size": "-", "modified": date, "desc": "Linux amd64 binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_linux_arm64.tar.gz",   "href": assetBase + "/magus_" + ver + "_linux_arm64.tar.gz",   "size": "-", "modified": date, "desc": "Linux arm64 binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_darwin_amd64.tar.gz",  "href": assetBase + "/magus_" + ver + "_darwin_amd64.tar.gz",  "size": "-", "modified": date, "desc": "macOS Intel binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_darwin_arm64.tar.gz",  "href": assetBase + "/magus_" + ver + "_darwin_arm64.tar.gz",  "size": "-", "modified": date, "desc": "macOS Apple Silicon binary"});
+        verEntries.append(mut {"name": "magus_" + ver + "_windows_amd64.tar.gz", "href": assetBase + "/magus_" + ver + "_windows_amd64.tar.gz", "size": "-", "modified": date, "desc": "Windows amd64 binary"});
+        verEntries.append(mut {"name": "SHA256SUMS",         "href": assetBase + "/SHA256SUMS",     "size": "-", "modified": date, "desc": "SHA-256 manifest"});
+        verEntries.append(mut {"name": "SHA256SUMS.sig",     "href": assetBase + "/SHA256SUMS.sig", "size": "-", "modified": date, "desc": "Ed25519 signature of SHA256SUMS"});
+        verEntries.append(mut {"name": "magus-release.pem",  "href": "../../../assets/magus-release.pem", "size": "-", "modified": "-", "desc": "Release signing key (SPKI PEM)"});
+        autoindex("public/release/" + ver, verEntries, "../");
+    }
+
+    // /public/release/  - parent index listing every version as a subdirectory.
+    // Empty when no releases have shipped yet; just the bracketing rules remain.
+    var releaseParent: [{str: str}] = mut [<{str: str}>];
+    foreach (rel in site.releases) {
+        final ver = rel["version"];
+        releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel["date"], "desc": "Release " + ver});
+    }
+    autoindex("public/release", releaseParent, "../");
+
+    // /public/ root.
+    var rootEntries: [{str: str}] = mut [<{str: str}>];
+    // Modified timestamps: content-derived where possible (a feed's newest entry
+    // stamp), "-" otherwise (release matrix is deferred; robots/sitemap are
+    // deterministic outputs whose only "mod time" would be build time, which would
+    // drift on every commit and break the drift gate).
+    if (atomEntries.len() > 0) {
+        rootEntries.append(mut {"name": "atom/", "href": "atom/", "size": "-", "modified": atomDate(site.blogPosts[0].date), "desc": "Atom feeds"});
+    }
+    rootEntries.append(mut {"name": "release/", "href": "release/", "size": "-", "modified": "-", "desc": "Release artifacts"});
+    rootEntries.append(mut {"name": "sitemap.xml", "href": "../sitemap.xml", "size": "-", "modified": "-", "desc": "XML sitemap"});
+    rootEntries.append(mut {"name": "robots.txt", "href": "../robots.txt", "size": "-", "modified": "-", "desc": "Robots policy"});
+    autoindex("public", rootEntries, "../");
+}
+
+// render404 writes gen/404.html - the themed "warped off the map" page GitHub
+// Pages serves for any unmatched path. GitHub Pages keeps the deep 404 URL in
+// the address bar, so the site's ordinary relative paths would break here; this
+// page therefore uses root-absolute paths (/<basePath>/site.css, /<basePath>/
+// main.js, etc.) - the ONE deliberate exception to the relative-link scheme in
+// WS0b. basePath is derived from SITE_URL (e.g. https://eli.gladman.cc/magus/
+// -> "/magus/"); when SITE_URL is empty, fall back to "/" so the page still
+// renders locally with absolute paths from the server root.
+fun render404() > void {
+    // Extract the path component of SITE_URL: after "://<host>", everything
+    // from the first "/" onwards. e.g. https://eli.gladman.cc/magus/ -> /magus/
+    var basePath = "/";
+    if (SITE_URL != "") {
+        final noScheme = SITE_URL.split("://");
+        if (noScheme.len() > 1) {
+            final rest = noScheme[1];
+            final firstSlash = rest.indexOf("/");
+            if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+        }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final title = "Page not found - magus";
+    final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
+    // Duplicate the head + nav template (rather than call page()) because every
+    // asset/link here must be root-absolute, not relative.
+    final doc = "<!DOCTYPE html>\n"
+        + "<html lang=\"en\" class=\"no-js\">\n"
+        + "<head>\n"
+        + "  <meta charset=\"utf-8\">\n"
+        + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        + "  <meta name=\"color-scheme\" content=\"light dark\">\n"
+        + "  <meta name=\"generator\" content=\"magus\">\n"
+        + "  <title>" + title + "</title>\n"
+        + "  <meta name=\"description\" content=\"" + escapeAttr(desc) + "\">\n"
+        + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + basePath + "assets/favicon-32.png\">\n"
+        + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + basePath + "assets/apple-touch-icon.png\">\n"
+        + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
+        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\" integrity=\"" + PICO_SRI + "\" crossorigin=\"anonymous\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + basePath + "theme.css\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + basePath + "site.css\">\n"
+        + "  <script src=\"" + basePath + "theme.js\"></script>\n"
+        + "</head>\n"
+        + "<body>\n"
+        + siteNav(basePath, "")
+        + "  <main class=\"container\">\n"
+        + "    <article>\n"
+        + "      <h1>You have warped off the map.</h1>\n"
+        + "      <p><em>No such target.</em> Let us get you back:</p>\n"
+        + "      <ul>\n"
+        + "        <li><a href=\"" + basePath + "\">Home</a></li>\n"
+        + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
+        + "        <li><a href=\"" + basePath + "download/\">Download</a></li>\n"
+        + "        <li><a href=\"" + basePath + "tour/\">Tour</a></li>\n"
+        + "        <li><a href=\"" + basePath + "playground/\">Playground</a></li>\n"
+        + "      </ul>\n"
+        + "    </article>\n"
+        + "  </main>\n"
+        + siteFooter(basePath)
+        + "  <script type=\"module\" src=\"" + basePath + "main.js\"></script>\n"
+        + "</body>\n"
+        + "</html>\n";
+    fs.writeFile(site.outDir + "/404.html", doc);
+}
+
+// writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
+// (mostly on Android and Windows) read to allow "install this site". Icons
+// reuse the hat mark (WS A/V); scope/start_url match the deploy base so a
+// nested install stays inside /magus/. Gated on SITE_URL so a same-origin
+// scope is well-defined; without it we'd default to "/" and mis-scope.
+fun writeManifest() > void {
+    if (SITE_URL == "") { return; }
+    // basePath extraction mirrors render404's derivation.
+    var basePath = "/";
+    final noScheme = SITE_URL.split("://");
+    if (noScheme.len() > 1) {
+        final rest = noScheme[1];
+        final firstSlash = rest.indexOf("/");
+        if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
+    // (see gopherbuzz/testdata/54_raw_string.buzz).
+    final body = "\{\n"
+        + "  \"name\": \"magus\",\n"
+        + "  \"short_name\": \"magus\",\n"
+        + "  \"description\": \"" + escapeAttr(SITE_DESC) + "\",\n"
+        + "  \"start_url\": \"" + basePath + "\",\n"
+        + "  \"scope\": \"" + basePath + "\",\n"
+        + "  \"display\": \"standalone\",\n"
+        + "  \"background_color\": \"#ffffff\",\n"
+        + "  \"theme_color\": \"#3178c6\",\n"
+        + "  \"icons\": [\n"
+        + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \}\n"
+        + "  ]\n"
+        + "\}\n";
+    fs.writeFile(site.outDir + "/manifest.webmanifest", body);
+}
+
+// writeServiceWorker writes gen/sw.js - a conservative worker that keeps HTML
+// network-first (never stale docs) and static hashed assets cache-first, and
+// precaches the search index + playground WASM so those two heavy features
+// survive an offline reload. The source lives in website/sw.js.tmpl (Buzz
+// interpolates { ... } inside strings, so embedding JS with arrow functions
+// as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
+// short commit hash so a new build purges old caches on activate) and
+// __BASE__ (SITE_URL's path prefix).
+fun writeServiceWorker() > void {
+    if (SITE_URL == "") { return; }
+    var basePath = "/";
+    final noScheme = SITE_URL.split("://");
+    if (noScheme.len() > 1) {
+        final rest = noScheme[1];
+        final firstSlash = rest.indexOf("/");
+        if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
+    var body = tmplFile.readAll();
+    tmplFile.close();
+    // .replace only touches the first match; the markers appear both in the file
+    // header comment and in the code, so replaceAll it is.
+    body = $"__VERSION__".replaceAll(body, "magus-" + site.metaShort);
+    body = $"__BASE__".replaceAll(body, basePath);
+    fs.writeFile(site.outDir + "/sw.js", body);
+}
+
+
+// formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
+// human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
+// date library. Used as the no-JS fallback; client-side JS rewrites it to the
+// viewer's local timezone via Intl.DateTimeFormat.
+fun formatISO(iso: str) > str {
+    final dt    = iso.split("T");
+    final date  = dt[0].split("-");        // ["2026", "06", "29"]
+    final time  = dt[1].replace("Z", "").split(":"); // ["01", "41", "51"]
+    final month = date[1];
+    final hour  = time[0];
+    var   day   = date[2];
+    if (day.startsWith("0")) { day = day.sub(1); }
+    return MONTHS[month] + " " + day + ", " + date[0]
+        + ", " + HOUR12[hour] + ":" + time[1] + " " + AMPM[hour] + " UTC";
+}
+
+// blogDate renders a post's frontmatter date (date-only "2026-07-01" or a full
+// RFC3339 timestamp) as a plain calendar byline: "July 1, 2026" - full month, no
+// time-of-day. Blog dates are calendar days, not instants, so the paired <time>
+// carries the date-only "YYYY-MM-DD" form and theme.js formats it in UTC (a
+// midnight-UTC instant would otherwise slip to the previous day west of GMT).
+fun blogDate(d: str) > str {
+    final date = d.split("T")[0].split("-");   // ["2026", "07", "01"]
+    if (date.len() < 3) { return d; }
+    var day = date[2];
+    if (day.startsWith("0")) { day = day.sub(1); }
+    return MONTHS[date[1]] + " " + day + ", " + date[0];
+}
+
+// blogDateAttr is the date-only "YYYY-MM-DD" that pairs with blogDate() in a
+// <time datetime> attribute (theme.js keys off its 10-char length to format in
+// UTC rather than the viewer's local zone).
+fun blogDateAttr(d: str) > str {
+    return d.split("T")[0];
+}
+
+// Compact form used by the recent-changes list; the full timestamp stays in the
+// <time datetime="..."> attribute for tooltips and screen readers.
+fun formatISOShort(iso: str) > str {
+    final dt   = iso.split("T");
+    final date = dt[0].split("-");
+    var   day  = date[2];
+    if (day.startsWith("0")) { day = day.sub(1); }
+    return MONTHS_SHORT[date[1]] + " " + day + ", " + date[0];
+}
+
+// Footer crediting the last commit that touched a page's source (a magus/-relative
+// path), falling back to HEAD for a not-yet-committed file. Keying off the file's
+// own history means a page changes when its source does, not when any commit lands.
+fun commitFooter(path: str) > str {
+    var cFull = site.metaFull;
+    var cShort = site.metaShort;
+    var cStamp = site.metaStamp;
+    final rec = site.metaCommits[site.metaPrefix + path];
+    if (rec != null) {
+        final parts = rec.split("|");
+        cFull = parts[0];
+        cShort = parts[1];
+        cStamp = parts[2];
+    }
+    // "Last updated" line: the always-visible provenance. Emitted as a <small>
+    // paragraph so Pico's own typography sets the muted look; no custom classes.
+    var line = "<small>Last updated <time datetime=\"" + cStamp + "\">" + formatISO(cStamp) + "</time>"
+        + " (<a href=\"" + GH + "/commit/" + cFull + "\" data-tooltip=\"" + cFull + "\" title=\"" + cFull + "\">" + cShort + "</a>)</small>";
+
+    // <details> disclosure of the last N commits that touched this page. Semantic
+    // markup only - Pico styles <details>/<summary>/<table>/<code>/<small>/<a>
+    // natively (see MEMORY: "classless Pico, minimize custom classes"). The two
+    // deep-links live inside the panel so the closed state stays quiet. Works
+    // without JS via native <details>/<summary>. Gated on the file having a real
+    // history entry - synthesized pages (blog index) fall back to the "Last
+    // updated" line alone.
+    final histKey = site.metaPrefix + path;
+    final hist = site.metaHistory[histKey];
+    if (hist != null and hist.len() > 0) {
+        // The count is the number of recent commits listed (capped at HISTORY_MAX),
+        // so the reader knows how much the disclosure holds before opening it.
+        line = line + "<details class=\"recent-changes\"><summary>Recent changes on this page ({hist.len()})</summary>";
+        // Plain <ul> - Pico styles it natively and it reflows on any width, no
+        // wrapper or overflow rule needed. Row shape: <code>hash</code> <time>
+        // date</time> - subject. Both hash and date get Pico's monospace/muted
+        // treatment through <code>/<small>; separator (em-dash) reads as prose.
+        line = line + "<ul>";
+        foreach (row in hist) {
+            final parts = row.split("|");
+            if (parts.len() >= 3) {
+                final rowFull = parts[0];
+                final rowShort = parts[1];
+                final rowStamp = parts[2];
+                var rowSubj = "";
+                if (parts.len() >= 4) { rowSubj = parts[3]; }
+                line = line + "<li>"
+                    + "<a href=\"" + GH + "/commit/" + rowFull + "\"><code>" + rowShort + "</code></a>"
+                    + " <small><time datetime=\"" + rowStamp + "\">" + formatISOShort(rowStamp) + "</time></small>"
+                    + " - " + escapeAttr(rowSubj)
+                    + "</li>";
+            }
+        }
+        line = line + "</ul>";
+        line = line + "<p><small>"
+            + "<a href=\"" + GH + "/commits/" + site.metaBranch + "/" + histKey + "\" data-tooltip=\"All commits that touched this page\" title=\"All commits that touched this page\">Full history &#x2197;</a>"
+            + " &middot; "
+            + "<a href=\"" + GH + "/blame/" + site.metaBranch + "/" + histKey + "\" data-tooltip=\"Line-by-line commit attribution on GitHub\" title=\"Line-by-line commit attribution on GitHub\">Blame source &#x2197;</a>"
+            + "</small></p>";
+        line = line + "</details>";
+    }
+    return line;
+}
+
+// rootPrefix returns the relative path from a generated page back up to gen/'s
+// root ("" for spells.html, "../" for modules/fs.html, "../../" for
+// codes/sandbox/X.html), so the shared nav links and theme.js resolve at any
+// page depth and the site still works when served under a project subpath.
+fun rootPrefix(srcRel: str) > str {
+    var rel = srcRel;
+    if (rel.startsWith(site.docs + "/")) { rel = rel.sub((site.docs + "/").len()); }
+    return climb(cleanDepth(rel));
+}
+
+// stripTags removes HTML tags from a fragment, leaving its text. The text keeps
+// the HTML-encoded entities goldmark produced, so it drops straight into a
+// double-quoted attribute (TOC link tooltips) without re-escaping.
+fun stripTags(s: str) > str {
+    var r = s;
+    var lt = r.indexOf("<");
+    while (lt != null) {
+        final gt = r.indexOf(">");
+        if (gt == null) { return r; }
+        r = r.sub(0, lt) + r.sub(gt + 1);
+        lt = r.indexOf("<");
+    }
+    return r;
+}
+
+// collapseWs turns any run of whitespace (newlines/tabs/spaces goldmark left in the
+// markup) into single spaces, so a derived description reads as one clean line.
+fun collapseWs(s: str) > str {
+    var r = s.replace("\n", " ").replace("\t", " ").replace("\r", " ");
+    while (r.indexOf("  ") != null) { r = r.replace("  ", " "); }
+    return r.trim();
+}
+
+// decodeEntities turns the HTML entities goldmark produces back into their characters
+// for a plain-text description. &amp; is decoded LAST so an entity like "&amp;lt;"
+// does not get double-decoded into "<".
+fun decodeEntities(s: str) > str {
+    return s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+        .replace("&#39;", "'").replace("&#34;", "\"").replace("&amp;", "&");
+}
+
+// truncateWords caps s at about n characters, cutting on a word boundary so the
+// description never ends mid-word. Short paragraphs (the common case) pass through.
+fun truncateWords(s: str, n: int) > str {
+    if (s.len() <= n) { return s; }
+    final head = s.sub(0, n);
+    var i = head.len() - 1;
+    while (i > 0) {
+        if (head.sub(i, 1) == " ") { return head.sub(0, i); }
+        i = i - 1;
+    }
+    return head;
+}
+
+// readingTime estimates minutes-to-read by weighting content by type rather than
+// blindly counting words: prose reads at 220 wpm, but a fenced code block is
+// parsed line by line (not skimmed like prose) and an image or diagram costs a
+// few seconds of looking. So a page that is mostly code or figures gets a truer
+// estimate than a raw word count, which would badly under- or over-shoot it.
+// Frontmatter is stripped so YAML doesn't skew the count. Returns "" for pages too
+// short to be worth labeling. Deterministic: a pure function of the committed source.
+fun readingTime(md: str) > str {
+    final text = markdown.stripFrontmatter(md);
+    final WPM = 220;               // prose words per minute
+    final CODE_SEC_PER_LINE = 2;   // a code line is read deliberately, not skimmed
+    final IMG_SEC = 10;            // time to take in one image or diagram
+
+    // Walk line by line so fenced code (``` or ~~~) is measured by line count while
+    // prose is measured by word count. A fence marker line itself is chrome, not
+    // content; blank lines inside a fence are skipped so whitespace doesn't inflate.
+    var proseWords = 0;
+    var codeLines = 0;
+    var inFence = false;
+    var fence = "";                // the marker (``` or ~~~) that opened the fence
+    foreach (line in text.split("\n")) {
+        final t = line.trim();
+        if (inFence) {
+            if (t.startsWith(fence)) { inFence = false; fence = ""; }
+            else { if (t != "") { codeLines = codeLines + 1; } }
+        } else {
+            if (t.startsWith("```")) { inFence = true; fence = "```"; }
+            else { if (t.startsWith("~~~")) { inFence = true; fence = "~~~"; }
+            else {
+                // Prose line: count runs of non-whitespace as words.
+                var inWord = false;
+                var i = 0;
+                while (i < line.len()) {
+                    final b = line.byte(i);
+                    final isSpace = (b == 32 or b == 9 or b == 10 or b == 13);
+                    if (isSpace) { inWord = false; }
+                    else { if (inWord == false) { proseWords = proseWords + 1; } inWord = true; }
+                    i = i + 1;
+                }
+            } }
+        }
+    }
+
+    // Images/diagrams: markdown "![alt](src)" plus raw <img>. A split-count is cheap
+    // and order-independent; a stray "![" in prose is rare enough to ignore.
+    final images = (text.split("![").len() - 1) + (text.split("<img").len() - 1);
+
+    final seconds = (proseWords * 60) / WPM + codeLines * CODE_SEC_PER_LINE + images * IMG_SEC;
+    if (seconds < 45) { return ""; }   // too short to be worth a chip (~under a minute)
+    var mins = (seconds + 30) / 60;    // round to the nearest minute
+    if (mins < 1) { mins = 1; }
+    return "{mins} min read";
+}
+
+// deriveDescription is the belt-and-suspenders page description: the first
+// substantive paragraph of the rendered HTML, tags stripped, whitespace collapsed,
+// entities decoded, truncated on a word boundary. A leading image-only paragraph
+// (the hero) yields empty text and is skipped. "" when no paragraph has text, so
+// the caller can fall back to SITE_DESC. Runs before escapeAttr re-encodes, so the
+// decode here avoids the double-encoding the plan's risk register flags.
+fun deriveDescription(html: str) > str {
+    var rest = html;
+    var open = rest.indexOf("<p>");
+    while (open != null) {
+        final close = rest.indexOf("</p>");
+        if (close == null) { return ""; }
+        // sub(start, length): the inner-paragraph text runs from just past "<p>"
+        // to just before "</p>", so its length is (close - (open + 3)).
+        final inner = rest.sub(open + 3, close - (open + 3));
+        final text = decodeEntities(collapseWs(stripTags(inner)));
+        if (text != "") { return truncateWords(text, 155); }
+        rest = rest.sub(close + 4);
+        open = rest.indexOf("<p>");
+    }
+    return "";
+}
+
+// strLess is lexicographic string ordering by byte; buzz has no `<` on str, so
+// the sibling pager spells it out to sort filenames deterministically.
+fun strLess(a: str, b: str) > bool {
+    final n = a.len();
+    final m = b.len();
+    var i = 0;
+    while (i < n and i < m) {
+        if (a.byte(i) != b.byte(i)) { return a.byte(i) < b.byte(i); }
+        i = i + 1;
+    }
+    return n < m;
+}
+
+// renderToc builds the "On this page" sidebar from a rendered page's h2/h3 headings
+// (goldmark produces each on its own line with a slug id); h3s nest under their h2.
+// Returns "" with fewer than three headings — too little to warrant a sidebar (a
+// module page with one "Methods" h2 over many h3 methods still qualifies) — so
+// page() falls back to a full-width article. toc.js layers scroll-spy + the
+// collapse toggle onto this markup, so the list must already exist for it to find.
+fun renderToc(content: str) > str {
+    final lines = content.split("\n");
+    var nHead = 0;
+    foreach (line in lines) {
+        if (line.startsWith("<h2 id=\"") or line.startsWith("<h3 id=\"")) { nHead = nHead + 1; }
+    }
+    if (nHead < 3) { return ""; }
+
+    var ul = "<ul>";
+    var haveLi = false;   // an h2 <li> is open, awaiting its </li>
+    var inSub = false;    // an h3 sublist <ul> is open
+    foreach (line in lines) {
+        var lvl = 0;
+        if (line.startsWith("<h2 id=\"")) { lvl = 2; }
+        if (line.startsWith("<h3 id=\"")) { lvl = 3; }
+        if (lvl != 0) {
+            final after = line.sub(8);                 // past `<hN id="`
+            final q = after.indexOf("\"");
+            final gt = line.indexOf(">");
+            if (q != null) {
+                if (gt != null) {
+                    final id = after.sub(0, q);
+                    final inner = line.sub(gt + 1);
+                    final end = inner.indexOf("</h");
+                    var label = inner;
+                    if (end != null) { label = inner.sub(0, end); }
+                    // TOC entries render as plain text - drop inline <code>,
+                    // <strong>, <em> etc from the heading so nothing in the
+                    // sidebar looks bold, italic, or code-styled.
+                    final plain = stripTags(label);
+                    final link = "<a href=\"#" + id + "\" title=\"" + plain + "\">" + plain + "</a>";
+                    if (lvl == 2) {
+                        if (inSub) { ul = ul + "</ul>"; inSub = false; }
+                        if (haveLi) { ul = ul + "</li>"; }
+                        ul = ul + "<li>" + link;
+                        haveLi = true;
+                    } else {
+                        if (haveLi == false) {
+                            ul = ul + "<li>" + link + "</li>";
+                        } else {
+                            if (inSub == false) { ul = ul + "<ul>"; inSub = true; }
+                            ul = ul + "<li>" + link + "</li>";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (inSub) { ul = ul + "</ul>"; }
+    if (haveLi) { ul = ul + "</li>"; }
+    ul = ul + "</ul>";
+    // A muted closing hint at the foot of the list, mirroring the nav dropdown's
+    // .nav-menu-hint: it only shows when the TOC is a mobile bottom sheet (dismissed
+    // by tapping the backdrop or pressing Esc), and is hidden on the desktop sidebar.
+    return "    <aside class=\"toc\">\n      <nav>\n        <p class=\"toc-title\">On this page</p>\n        "
+        + ul + "\n        <p class=\"toc-hint\" aria-hidden=\"true\">Tap outside or press Esc to close</p>\n      </nav>\n    </aside>\n";
+}
+
+// dirLabel maps a docs subdirectory name to its breadcrumb label.
+// cap upper-cases the first character of a slug for a breadcrumb label.
+fun cap(s: str) > str {
+    if (s == "") { return s; }
+    return s.sub(0, 1).upper() + s.sub(1);
+}
+
+// navLink renders one top-nav item, marking it aria-current when it is the page
+// the visitor is currently on (key == active).
+fun navLink(href: str, label: str, key: str, active: str) > str {
+    var attr = "";
+    if (key == active) { attr = " aria-current=\"page\""; }
+    return "        <li><a href=\"" + href + "\"" + attr + ">" + label + "</a></li>\n";
+}
+
+// siteNav renders the shared top bar (brand + section links + theme toggle). One
+// definition for every page - docs pages via page(), the 404, and the playground
+// (build-time injected via renderPlayground) - so adding a nav item lands everywhere
+// at once. root is the relative prefix back to gen/'s root; active is the current
+// section's key (or "" for none).
+fun siteNav(root: str, active: str) > str {
+    // On mobile the five section links collapse behind a menu button. That button is a
+    // plain Pico .outline <button> (like the theme toggle) - NOT a <details>, whose Pico
+    // accordion styling we kept having to fight - so it inherits the button look for free
+    // and nav.js toggles the dropdown. Brand + theme toggle stay outside it, always shown.
+    return "  <header class=\"site-header\">\n"
+        + "    <nav class=\"container\">\n"
+        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><picture><source srcset=\"" + root + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
+        + "      <div class=\"nav-right\">\n"
+        // The icon swaps hamburger -> X when the menu is open (CSS keys off
+        // .nav-right.nav-open), giving an explicit close target at the button the
+        // user just tapped on top of the tap-outside/Esc dismissals. Both glyphs
+        // ship in the button; only one shows at a time.
+        + "        <button class=\"nav-toggle outline\" type=\"button\" aria-label=\"Open menu\" aria-expanded=\"false\" aria-controls=\"site-nav-links\"><svg class=\"icon-menu\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><line x1=\"4\" y1=\"7\" x2=\"20\" y2=\"7\"/><line x1=\"4\" y1=\"12\" x2=\"20\" y2=\"12\"/><line x1=\"4\" y1=\"17\" x2=\"20\" y2=\"17\"/></svg><svg class=\"icon-close\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><line x1=\"6\" y1=\"6\" x2=\"18\" y2=\"18\"/><line x1=\"18\" y1=\"6\" x2=\"6\" y2=\"18\"/></svg></button>\n"
+        + "        <ul class=\"nav-links\" id=\"site-nav-links\">\n"
+        // A "MENU" caption at the top of the mobile dropdown, mirroring the TOC
+        // sheet's "On this page" title (same uppercase muted style). Hidden on
+        // desktop and for no-JS visitors (it only reads as a heading inside the
+        // popup); text-transform handles the all-caps so the markup stays plain.
+        + "          <li class=\"nav-menu-label\" aria-hidden=\"true\">Menu</li>\n"
+        // Home is an explicit, redundant path to the landing page: the brand mark
+        // already links home, but its accessible name is "magus", so a plain "Home"
+        // link is clearer for screen readers and more discoverable for everyone.
+        + navLink(root + "index.html", "Home", "home", active)
+        + navLink(root + "documentation/", "Documentation", "documentation", active)
+        + navLink(root + "blog/", "Blog", "blog", active)
+        + navLink(root + "download/", "Download", "download", active)
+        + navLink(root + "tour/", "Tour", "tour", active)
+        + navLink(root + "playground/", "Playground", "playground", active)
+        + navLink(root + "development/", "Development", "development", active)
+        // A muted closing hint so the tap-outside/Esc dismissals are discoverable,
+        // not just guessable - one line, styled like the label, mobile-popup only.
+        + "          <li class=\"nav-menu-hint\" aria-hidden=\"true\">Tap outside or press Esc to close</li>\n"
+        + "        </ul>\n"
+        + "        <button id=\"theme-toggle\" class=\"outline\" aria-label=\"Cycle theme (auto / light / dark)\" title=\"Cycle theme (auto / light / dark)\">◐</button>\n"
+        + "      </div>\n"
+        + "    </nav>\n"
+        + "  </header>\n";
+}
+
+// siteFooter renders the shared one-line attribution footer. It leads with two
+// root-relative site links (the Search tool and the /public/ file tree) so those
+// surfaces are reachable from every page, then the absolute GitHub/Buzz links; the
+// License link points at the pinned site.metaBranch (main) like the other GitHub links.
+// root is the relative prefix back to gen/'s root (so the site links resolve at any
+// page depth), matching siteNav's root argument.
+fun siteFooter(root: str) > str {
+    // Two clusters spread across the footer's width: this site's own surfaces on
+    // the left, the project/external links on the right. Dots separate items within
+    // a cluster; the clusters divide the row without adding a second line on desktop.
+    return "  <footer class=\"site-footer container\">\n"
+        + "    <small class=\"footer-group\"><a href=\"" + root + "search/\">Search</a> &middot; <a href=\"" + root + "public/\">Files</a></small>\n"
+        + "    <small class=\"footer-group\"><a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"" + GH + "/blob/" + site.metaBranch + "/LICENSE\">License</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
+        + "  </footer>\n";
+}
+
+// announcementBar renders a dismissible top strip announcing the newest shipped
+// release, or "" when none has shipped yet (so it stays dormant until then). The
+// version comes from parseChangelog (the committed CHANGELOG), so it is drift-stable;
+// announcement.js hides it once the reader dismisses that version and re-shows it on
+// the next release. The GitHub tag link mirrors the releases Atom feed's convention.
+fun announcementBar() > str {
+    if (site.releases.len() == 0) { return ""; }
+    final ver = site.releases[0].version;
+    return "  <div id=\"announcement-bar\" data-version=\"" + escapeAttr(ver) + "\">\n"
+        + "    <div class=\"container\">\n"
+        + "      <span>magus <strong>" + escapeAttr(ver) + "</strong> is out. <a href=\"" + GH + "/releases/tag/" + ver + "\">See what's new</a></span>\n"
+        + "      <button class=\"announcement-close\" type=\"button\" aria-label=\"Dismiss announcement\">&times;</button>\n"
+        + "    </div>\n"
+        + "  </div>\n";
+}
+
+// renderPlayground writes gen/playground/index.html from the hand-authored source, injecting
+// the shared nav + footer at its <!-- site-nav --> / <!-- site-footer --> placeholders.
+// The playground is a standalone page (custom head, wasm, its own scripts) so it does
+// not go through page(); templating only the chrome keeps its top bar and footer in
+// lockstep with every other page. It sits at gen/'s root, so its nav prefix is "".
+fun renderPlayground() > void {
+    final f = io.File.open("playground.html", io.FileMode.read);
+    var html = f.readAll();
+    f.close();
+    // The page ships at /playground/ (a directory index like every other page), so
+    // its injected nav climbs one level to reach the site root.
+    html = html.replace("<!-- site-nav -->", siteNav("../", "playground"));
+    html = html.replace("<!-- site-footer -->", siteFooter("../"));
+    fs.makeDirectory(site.outDir + "/playground");
+    fs.writeFile(site.outDir + "/playground/index.html", html);
+}
+
+// titleForUrl returns the title of the docs page at a clean gen-root URL (e.g.
+// "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
+// renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
+fun titleForUrl(url: str) > str {
+    foreach (p in site.docPages) {
+        if (p.url == url) { return p.title; }
+    }
+    return "";
+}
+
+
+// pagerLink renders one prev/next card, reading the sibling's source so it credits
+// the same title (frontmatter title, else first H1) the sibling page renders with.
+fun pagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str {
+    final f = io.File.open(srcDir + "/" + name, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, name); }
+    // Siblings are directory-index pages under the same parent dir. A regular page
+    // lives in its own <slug>/ subdir, so it climbs one level to reach a sibling
+    // (../<slug>/); an index.md landing sits directly in the parent, so it does not.
+    final slug = name.sub(0, name.len() - 3);   // drop ".md"
+    return "      <a class=\"" + cls + "\" href=\"" + climbPrefix + slug + "/\">"
+        + "<span class=\"page-nav-dir\">" + dir + "</span>"
+        + "<span class=\"page-nav-title\">" + title + "</span></a>\n";
+}
+
+// renderPager renders the previous/next links among a page's siblings — the other
+// rendered docs in the same source directory, ordered by filename (README/index
+// and underscore-prefixed fixtures excluded). Links are bare basenames, since a
+// sibling lives in the same output directory. "" when there is no sibling on
+// either side. rel is docs-relative (e.g. "modules/fs.md").
+fun renderPager(rel: str) > str {
+    final parts = rel.split("/");
+    final base = parts[parts.len() - 1];
+    var srcDir = site.root + "/" + site.docs;
+    if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
+
+    var sibs: [str] = mut [<str>];
+    foreach (name in fs.list(srcDir)) {
+        // README.md/index.md are the directory's landing page, reached via the
+        // breadcrumb and nav — not a prev/next peer — so they stay out of the pager
+        // (and their clean URL is the parent dir, which a sibling link can't express).
+        if (name.endsWith(".md") and name != "README.md" and name != "index.md"
+            and name.startsWith("_") == false) {
+            sibs.append(name);
+        }
+    }
+    if (sibs.len() < 2) { return ""; }
+    final ordered = sibs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+
+    var pos = -1;
+    var i = 0;
+    while (i < ordered.len()) {
+        if (ordered[i] == base) { pos = i; }
+        i = i + 1;
+    }
+    if (pos < 0) { return ""; }
+
+    // Every pageable sibling now lives in its own <slug>/ subdir, so a page climbs
+    // one level to reach a peer (../<slug>/). Landings are excluded above.
+    final climbPrefix = "../";
+
+    var body = "";
+    if (pos > 0) { body = body + pagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
+    if (pos < ordered.len() - 1) { body = body + pagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
+    if (body == "") { return ""; }
+    return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
+}
+
+// sectionFromUrl returns a clean URL's first path segment - the section a page belongs
+// to for the "same-section" relatedness signal. "spells/" and "spells/go/" both
+// return "spells"; a top-level page like "targets/" returns "targets"; "" (home)
+// returns "".
+fun sectionFromUrl(url: str) > str {
+    if (url == "") { return ""; }
+    final i = url.indexOf("/");
+    if (i == null) { return url; }
+    return url.sub(0, i);
+}
+
+// sharedTagCount counts tags common to two ||-joined tag strings - the strongest
+// relatedness signal (two pages carrying the same topical tags are about the same
+// thing). O(n*m) over short lists, which is fine for a handful of tags per page.
+fun sharedTagCount(aJoined: str, bJoined: str) > int {
+    if (aJoined == "" or bJoined == "") { return 0; }
+    final aList = aJoined.split("||");
+    final bList = bJoined.split("||");
+    var n = 0;
+    foreach (t in aList) {
+        if (t != "") {
+            foreach (u in bList) {
+                if (t == u) { n = n + 1; break; }
+            }
+        }
+    }
+    return n;
+}
+
+// pad4 zero-pads a small non-negative int to four digits so scores compare
+// lexically the same way they compare numerically (renderRelated sorts by a string
+// key). Scores stay well under 1000, so four digits is ample headroom.
+fun pad4(n: int) > str {
+    var s = "{n}";
+    while (s.len() < 4) { s = "0" + s; }
+    return s;
+}
+
+
+
+// srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
+// it drives both the per-page commit footer and the "Suggest an edit" link.
+// description is the resolved page description (frontmatter, else derived, else the
+// site default) — always non-empty, so the meta tag always fires. canonUrl is the
+// page's clean gen-root URL ("" for home) for the canonical link. pager is the
+// prev/next nav (may be ""); the home page and lone pages pass "".
+fun page(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str]) > str {
+    final root = rootPrefix(srcRel);
+    // Which top-nav item to mark current. Every rendered docs page hangs off the
+    // documentation index, except the dedicated install page; the home page (README)
+    // highlights nothing (its wordmark is the home link).
+    var active = "documentation";
+    if (srcRel == "README.md") { active = "home"; }
+    if (srcRel == site.docs + "/download.md" or srcRel.startsWith(site.docs + "/download/")) { active = "download"; }
+    // Blog posts and the blog index live under the "Blog" nav item.
+    if (srcRel.startsWith(site.blog + "/") or srcRel == site.blog + "/index.md") { active = "blog"; }
+    // /public/ autoindex pages are meta surfaces; no nav item is current.
+    if (srcRel.startsWith("public/")) { active = ""; }
+    // The search page is a tool surface with no nav home of its own.
+    if (srcRel == "search/index.md") { active = ""; }
+    // The tour page is its own top-nav item.
+    if (srcRel == "tour/index.md") { active = "tour"; }
+    // /development/ is a contributor surface reached from the footer, not the top nav.
+    if (srcRel.startsWith("development/")) { active = "development"; }
+    var descMeta = "";
+    if (description != "") {
+        descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
+    }
+    // Canonical URL (absolute), gated on a configured SITE_URL so the site can ship
+    // dark until the host is confirmed. SITE_URL carries the trailing slash, canonUrl
+    // is the slashed clean path ("" for home -> canonical is the site root).
+    var canon = "";
+    var feedDiscovery = "";
+    if (SITE_URL != "") {
+        canon = "  <link rel=\"canonical\" href=\"" + SITE_URL + canonUrl + "\">\n";
+        // Atom <link rel="alternate"> discovery: home + blog pages advertise both
+        // feeds so a reader auto-detects them. Gate each on the feed having been
+        // written: renderReleasesAtom only writes releases.atom.xml when at least
+        // one released version exists; renderBlogAtom only writes blog.atom.xml
+        // when at least one post exists. Advertising a missing file would trip
+        // WS L's asset-integrity check.
+        if (site.releases.len() > 0) {
+            feedDiscovery = "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus releases\" href=\"" + root + "public/atom/releases.atom.xml\">\n";
+        }
+        if (site.hasBlogPosts and (srcRel == "README.md" or srcRel.startsWith(site.blog + "/"))) {
+            feedDiscovery = feedDiscovery
+                + "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus blog\" href=\"" + root + "public/atom/blog.atom.xml\">\n";
+        }
+    }
+    // Preload the LCP hero image on the home page only (README's gopher), so the
+    // browser fetches it in parallel with the CSS instead of discovering it after
+    // layout. Modern browsers take the WebP; the <picture> PNG fallback still works.
+    var heroPreload = "";
+    if (srcRel == "README.md") {
+        heroPreload = "  <link rel=\"preload\" as=\"image\" href=\"" + root + "assets/gopher.webp\" type=\"image/webp\" fetchpriority=\"high\">\n";
+    }
+    // Reading-time chip (module var, set by the renderX() caller). Rendered as
+    // a sibling ABOVE the <article> card but INSIDE its column - a chip that
+    // hovers above the card, aligned with the card's left edge, not floating
+    // far-left above the TOC sidebar. Passed in per call (reading), so a page that
+    // wants none passes "".
+    var readingHtml = "";
+    if (reading != "") {
+        readingHtml = "    <small class=\"reading-time\" title=\"Estimated reading time\">" + reading + "</small>\n";
+    }
+    // Frontmatter tags (passed in per call) render as outlined, non-interactive chips
+    // in the provenance footer (there are no tag-archive pages to link to yet).
+    // Generated pages (module/spell/man-page references) lead with a filled
+    // "Generated" status chip so readers know the source of truth is code, not the
+    // page - and that its "Suggest an edit" link points at generated output.
+    final gen = isGenerated(srcRel);
+    var tagsHtml = "";
+    if (gen or tags.len() > 0) {
+        var chips = "";
+        if (gen) {
+            chips = chips + "<span class=\"tag generated\" data-tooltip=\"Auto-generated from source; edit the generator, not this page\" title=\"Auto-generated from source; edit the generator, not this page\">auto-generated</span>";
+        }
+        foreach (t in tags) {
+            // Topical tags are links into the search page, scoped to that exact tag
+            // (tag:"<name>"), so a click lists every page carrying it. The value is
+            // quoted so multi-word tags survive as one token; url_encode makes the
+            // whole thing querystring-safe. The generated status chip stays a span.
+            final tagQuery = encoding.urlEncode("tag:\"" + t + "\"");
+            chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
+        }
+        tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips + "</div>\n";
+    }
+    // Headings drive the TOC sidebar; without enough of them the article goes
+    // full-width (no .with-toc grid) and toc.js simply finds nothing to enhance.
+    // With TOC: wrap reading-time + article in a div so both share the article
+    // grid cell (TOC in col 1, [chip + article] in col 2).
+    final toc = renderToc(content);
+    var contentBlock = "" + readingHtml + "    <article>\n" + content + "    </article>\n";
+    if (toc != "") {
+        contentBlock = "    <div class=\"with-toc\">\n" + toc
+            + "    <div>\n" + readingHtml + "    <article>\n" + content + "    </article>\n    </div>\n"
+            + "    </div>\n";
+    }
+    // Page tools: two plain links on the right of the secondary row, separated
+    // by a middle-dot. "View source" only appears for pages backed by a real
+    // .md on disk (synthesized pages like the blog index and /public/* have no
+    // source). "Report an issue" was dropped - GitHub's edit flow is one click
+    // from Issues, and readers who just want to file a bug rarely start from
+    // a docs page.
+    final hasSource = srcRel.endsWith(".md") and srcRel.startsWith("public/") == false
+        and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md";
+    var edit = "<small class=\"page-tools-edit\">";
+    if (hasSource) {
+        edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View source</a> &middot; ";
+    }
+    edit = edit + "<a href=\"" + GH + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
+    // Second row under the search box: "Suggest an edit" hugging the right edge
+    // via margin-left:auto (reading-time now lives inside the article, above). The
+    // search page is a generated tool surface with no editable source, so it skips
+    // the row entirely (a "Suggest an edit" link there would 404 on GitHub).
+    var secondaryRow = "    <div class=\"page-tools-secondary\">" + edit + "</div>\n";
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { secondaryRow = ""; }
+    // Consistent "<page title> - magus" suffix everywhere. Home just says
+    // "magus" (its H1-derived title is the wordmark, no need to duplicate).
+    var fullTitle = title + " — magus";
+    if (srcRel == "README.md") { fullTitle = "magus"; }
+    // OpenGraph + Twitter Card meta so a link shared to Slack/Discord/X/iMessage
+    // renders a title/description/image card instead of a bare URL. Gated on
+    // SITE_URL (og:url/og:image must be absolute); Twitter reads the og:* tags for
+    // everything but the card type. Default card image is the gopher mascot - no
+    // per-page image pipeline. og:type is "website" for the home page, else "article".
+    var og = "";
+    if (SITE_URL != "") {
+        var ogType = "article";
+        if (srcRel == "README.md") { ogType = "website"; }
+        var ogDesc = "";
+        if (description != "") {
+            ogDesc = "  <meta property=\"og:description\" content=\"" + escapeAttr(description) + "\">\n";
+        }
+        og = "  <meta property=\"og:type\" content=\"" + ogType + "\">\n"
+            + "  <meta property=\"og:site_name\" content=\"magus\">\n"
+            + "  <meta property=\"og:title\" content=\"" + escapeAttr(fullTitle) + "\">\n"
+            + ogDesc
+            + "  <meta property=\"og:url\" content=\"" + SITE_URL + canonUrl + "\">\n"
+            + "  <meta property=\"og:image\" content=\"" + SITE_URL + "assets/gopher.png\">\n"
+            + "  <meta name=\"twitter:card\" content=\"summary_large_image\">\n";
+    }
+    // Body class marks the /public/ file-tree pages. They keep the full page
+    // chrome (nav, breadcrumb, article card, footer) and only drop the doc-only
+    // controls with nothing to act on here - the page-tools row and the per-page
+    // provenance strip (CSS in site.css keys off .site-public).
+    var bodyTag = "<body>\n";
+    if (srcRel.startsWith("public/")) { bodyTag = "<body class=\"site-public\">\n"; }
+    // The search page keeps the full chrome but widens the container: it is a listing
+    // surface (a syntax rail beside results), not prose, so the reading-width cap wastes
+    // space. site-search only raises the container width; CSS lays out the two columns.
+    if (srcRel == "search/index.md") { bodyTag = "<body class=\"site-search\">\n"; }
+    // Per-page provenance strip (footer tags + "Last updated" commit line). The
+    // search page is a generated tool surface with no source commit; writing it
+    // would make commitFooter fall back to HEAD, drifting the output every commit
+    // and tripping the generate drift gate. So omit the whole strip there.
+    var provenance = "  <div class=\"page-provenance container\">\n"
+        + tagsHtml
+        + "    " + commitFooter(srcRel) + "\n"
+        + "  </div>\n";
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { provenance = ""; }
+    return "<!DOCTYPE html>\n"
+        + "<html lang=\"en\" class=\"no-js\">\n"
+        + "<head>\n"
+        + "  <meta charset=\"utf-8\">\n"
+        + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        + "  <meta name=\"color-scheme\" content=\"light dark\">\n"
+        + "  <meta name=\"generator\" content=\"magus\">\n"
+        + "  <title>" + fullTitle + "</title>\n"
+        + descMeta
+        + canon
+        + og
+        + feedDiscovery
+        + heroPreload
+        // Favicon set - reuses the optimized hat mark (WS A). SVG isn't written
+        // yet; the PNG icons + apple-touch cover every real client.
+        + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + root + "assets/favicon-32.png\">\n"
+        + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + root + "assets/apple-touch-icon.png\">\n"
+        + "  <link rel=\"manifest\" href=\"" + root + "manifest.webmanifest\">\n"
+        + "  <meta name=\"theme-color\" content=\"#3178c6\">\n"
+        // Warm the CDN connection before the render-blocking Pico <link> below, so
+        // the TLS handshake overlaps HTML parsing; the same origin also serves the
+        // lazily-imported hljs/mermaid, so this preconnect covers them too.
+        + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
+        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\" integrity=\"" + PICO_SRI + "\" crossorigin=\"anonymous\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + root + "theme.css\">\n"
+        + "  <link rel=\"stylesheet\" href=\"" + root + "site.css\">\n"
+        + "  <script src=\"" + root + "theme.js\"></script>\n"
+        + "</head>\n"
+        + bodyTag
+        + "  <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>\n"
+        + announcementBar()
+        + siteNav(root, active)
+        + "  <main id=\"main-content\" class=\"container\" tabindex=\"-1\">\n"
+        + site.renderBreadcrumb(srcRel, title, root)
+        + "    <div class=\"page-tools\"></div>\n"
+        // With JS off, the search input, TOC toggle, code-copy, and heading
+        // anchors never get injected; explain the search absence so it reads as
+        // deliberate. The <noscript> element is stripped by the browser when JS
+        // is enabled, so JS users never see this.
+        + "    <noscript><p class=\"noscript-notice\">Search needs JavaScript. Browse the <a href=\"" + root + "documentation/\">documentation</a>, or use GitHub's code search on the <a href=\"" + GH + "\">source repo</a>.</p></noscript>\n"
+        + secondaryRow
+        + contentBlock
+        + pager
+        + "  </main>\n"
+        // "Related" card grid: the most relevant other docs pages, ranked by
+        // renderRelated(). Sits right below the article's prev/next pager and above the
+        // provenance strip (empty string, so no markup, for non-docs pages like
+        // home/blog/search/tour/public).
+        + site.renderRelated(srcRel, root)
+        + provenance
+        // Small one-line footer: attribution only. Kept intentionally sparse -
+        // the site is one project, not a portal; deeper links (blog, changelog,
+        // security.txt, feeds) are reachable from Documentation and via the
+        // <link rel="alternate"> discovery tags in <head>, not by crowding the
+        // footer with a directory.
+        + siteFooter(root)
+        // One deferred module bundle (esbuild) replaces the nine flat scripts; the
+        // head-critical theme.js stays separate above. type=module defers by spec.
+        + "  <script type=\"module\" src=\"" + root + "main.js\"></script>\n"
+        + "</body>\n"
+        + "</html>\n";
+}
+
+// Render the repo's top-level README.md as the site landing page (index.html).
+// Links of the form href="docs/X" (relative from the repo root) resolve from
+// gen/index.html as href="X" — strip the docs/ prefix.
+fun renderRoot() > void {
+    final f = io.File.open(site.root + "/README.md", io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    var html = markdown.toHtml(md);
+    while (html.indexOf("href=\"./docs/") != null) {
+        html = html.replace("href=\"./docs/", "href=\"");
+    }
+    while (html.indexOf("href=\"docs/") != null) {
+        html = html.replace("href=\"docs/", "href=\"");
+    }
+    // The home page stays at gen/index.html (gen root), so its in-content links are
+    // rewritten from the root directory to the root directory.
+    html = renderContentHtml(html, "", "");
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, "README.md"); }
+    // Resolve the description: authored frontmatter, else the first real paragraph,
+    // else the site default — always non-empty so the meta tag always fires.
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    final doc = page(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md));
+    final of = io.File.open(site.outDir + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    fs.writeFile(site.outDir + "/index.md", md);
+    site.addRecord("index.html", title, desc, md);
+    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), "index.html"); }
+    std.print("  README.md -> " + site.outDir + "/index.html");
+}
+
+// Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
+// docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
+fun renderFile(rel: str) > void {
+    final f = io.File.open(site.root + "/" + site.docs + "/" + rel, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, rel); }
+
+    final html = renderContentHtml(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel));
+
+    // Resolve the description: authored frontmatter, else the first real paragraph,
+    // else the site default — always non-empty so the meta tag always fires.
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    final url = cleanUrl(rel);
+    final doc = page(title, desc, html, site.docs + "/" + rel, renderPager(rel), url, readingTime(md), parseTags(md));
+
+    // Directory-index output: every page is <cleanUrl>index.html (extensionless,
+    // with the build-artifact "gen" segment flattened out). url is gen/-root-
+    // relative and ends in a slash, matching what search.js/sitemap/canonical use.
+    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
+    fs.makeDirectory(dir);
+
+    final of = io.File.open(dir + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+
+    // Emit the page's source Markdown next to its HTML so a reader can "View
+    // source" (or copy-as-markdown) directly. Powers llms-full.txt too - a
+    // committed .md-per-page is the single input that later WS T slices reuse.
+    fs.writeFile(dir + "/index.md", md);
+
+    site.addRecord(url, title, desc, md);
+    // Redirect stubs for any old paths this page declares (frontmatter aliases:).
+    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
+
+    std.print("  " + rel + " -> " + dir + "/index.html");
+}
+
+// allDigits reports whether every byte of s is an ASCII digit (and s is non-empty).
+fun allDigits(s: str) > bool {
+    if (s.len() == 0) { return false; }
+    var i = 0;
+    while (i < s.len()) {
+        final b = s.byte(i);
+        if (b < 48 or b > 57) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// hasDatePrefix detects a leading YYYY-MM-DD- date prefix on a slugged filename
+// (the ".md" already stripped): 11 chars of 4-digit year, "-", 2-digit month, "-",
+// 2-digit day, "-". Buzz str.sub is (start, length), so sub(4, 1) is one char at 4.
+fun hasDatePrefix(s: str) > bool {
+    if (s.len() < 11) { return false; }
+    return allDigits(s.sub(0, 4)) and allDigits(s.sub(5, 2)) and allDigits(s.sub(8, 2))
+        and s.sub(4, 1) == "-" and s.sub(7, 1) == "-" and s.sub(10, 1) == "-";
+}
+
+// blogSlug drops the leading YYYY-MM-DD- date prefix (if present), leaving the
+// title portion of the URL. The date is not discarded - it re-enters the URL as
+// its own nested scope via blogDateDir/blogUrlPath, so two posts that share a
+// title stay distinct by date (/blog/2026/07/01/hello/ vs /blog/2026/07/02/hello/).
+fun blogSlug(base: str) > str {
+    var s = base;
+    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    if (hasDatePrefix(s)) { s = s.sub(11); }
+    return s;
+}
+
+// blogDateDir parses a blog filename's YYYY-MM-DD- prefix into nested "YYYY/MM/DD"
+// URL segments, or null when the file carries no date prefix. The filename prefix
+// is the canonical URL date; renderBlogPost validates it against the frontmatter
+// `date` so the human-facing byline and the permalink can never drift apart.
+fun blogDateDir(base: str) > str? {
+    var s = base;
+    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    if (!hasDatePrefix(s)) { return null; }
+    return s.sub(0, 4) + "/" + s.sub(5, 2) + "/" + s.sub(8, 2);
+}
+
+// blogUrlPath is a post's gen-root-relative URL path below blog/: the date scope
+// followed by the title slug ("2026/07/01/hello-blog"), or just the slug for an
+// undated file. cleanUrl and renderBlogPost both route through this so the depth
+// they compute (for climb-relative links) and the directory they write agree.
+fun blogUrlPath(base: str) > str {
+    final slug = blogSlug(base);
+    final dd = blogDateDir(base);
+    if (dd != null) { return dd + "/" + slug; }
+    return slug;
+}
+
+// renderBlogPost renders one blog/<file>.md as its own directory-index page. base
+// is the file's basename (e.g. "2026-07-01-hello-blog.md"); the written URL is
+// blog/<blogSlug(base)>/ so posts stay readable regardless of the source's date
+// prefix. Post metadata (title/date/description) is captured into site.blogPosts for
+// the index page (and, later, the Atom feed).
+fun renderBlogPost(base: str) > void {
+    final rel = site.blog + "/" + base;
+    final f = io.File.open(site.root + "/" + rel, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, base); }
+    final date = fm.q("date").stringValue();
+
+    // Frontmatter `date` is the human-facing byline; the filename's YYYY-MM-DD-
+    // prefix is the canonical URL scope. Require them to agree so the permalink and
+    // the printed date can never drift. A post with a date but no filename prefix
+    // (or a mismatched one) is a hard error, not a silent divergence.
+    final dateDir = blogDateDir(base);
+    if (date != "") {
+        // Frontmatter dates decode as full RFC3339 ("2026-07-01T00:00:00Z"); take
+        // the calendar day and re-slash it to compare against the filename's
+        // "YYYY/MM/DD" scope. (str.replace is first-match only, so build by split.)
+        final fp = date.split("T")[0].split("-");   // ["2026","07","01"]
+        var fmDir = "";
+        if (fp.len() >= 3) { fmDir = fp[0] + "/" + fp[1] + "/" + fp[2]; }
+        if (dateDir == null) {
+            throw "blog: " + rel + " has frontmatter date " + date
+                + " but the filename lacks a matching YYYY-MM-DD- prefix";
+        }
+        if (dateDir != fmDir) {
+            throw "blog: " + rel + " frontmatter date " + date
+                + " disagrees with the filename date prefix";
+        }
+    }
+
+    final slug = blogSlug(base);
+    final urlPath = blogUrlPath(base);        // "2026/07/01/hello-blog"
+    final url = site.blog + "/" + urlPath + "/";
+    // Blog posts sit at gen/blog/<urlPath>/index.html. Their old flat directory was
+    // "blog"; their new clean directory is "blog/<urlPath>" (date-scoped). The link
+    // rewriter needs both so cross-references (../../documentation/) resolve at the
+    // post's real depth.
+    final html = renderContentHtml(markdown.toHtml(md), site.blog, site.blog + "/" + urlPath);
+
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    // Dateline: a scoped byline injected directly under the post's H1 - publish
+    // date (calendar day; see blogDate), author, and a permalink to the post's
+    // own canonical URL. Sitting inside the <article> right after the title, it
+    // reads as the post's metadata rather than free-floating page chrome. Guarded
+    // on there being an H1 and a date; a title-less or undated post just skips it.
+    var article = html;
+    final h1End = html.indexOf("</h1>");
+    if (h1End != null and date != "") {
+        final author = fm.q("author").stringValue();
+        var meta = "<p class=\"blog-post-meta\"><time datetime=\"" + blogDateAttr(date)
+            + "\">" + blogDate(date) + "</time>";
+        if (author != "") { meta = meta + " &middot; " + author; }
+        meta = meta + " &middot; <a href=\"" + SITE_URL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
+        final cut = h1End + 5;   // length of "</h1>"
+        article = html.sub(0, cut) + "\n" + meta + html.sub(cut);
+    }
+
+    // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
+    final pager = renderBlogPager(base);
+
+    final doc = page(title, desc, article, rel, pager, url, readingTime(md), parseTags(md));
+    fs.makeDirectory(site.outDir + "/" + site.blog + "/" + urlPath);
+    final of = io.File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    fs.writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md", md);
+
+    site.addRecord(url, title, desc, md);
+    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
+
+    site.blogPosts.append(BlogPost{
+        base = base, slug = slug, urlPath = urlPath, title = title,
+        date = date, description = desc, url = url,
+    });
+
+    std.print("  " + rel + " -> " + site.outDir + "/" + site.blog + "/" + urlPath + "/index.html");
+}
+
+// renderBlogPager renders the previous/next links between posts, ordered by date
+// (newest to oldest so "next" is older and "prev" is newer, matching timeline
+// intuition). Falls back to filename order when a post lacks a date. Reuses
+// pagerLink's climb-relative sibling link form.
+fun renderBlogPager(base: str) > str {
+    // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
+    // during the walk). Newest first.
+    var posts: [BlogPost] = mut [<BlogPost>];
+    foreach (name in fs.list(site.root + "/" + site.blog)) {
+        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+            final f = io.File.open(site.root + "/" + site.blog + "/" + name, io.FileMode.read);
+            final md = f.readAll();
+            f.close();
+            final fm = serialize.jsonDecode(markdown.frontmatter(md));
+            var t = fm.q("title").stringValue();
+            if (t == "") { t = deriveTitle(md, name); }
+            posts.append(BlogPost{ base = name, date = fm.q("date").stringValue(), title = t });
+        }
+    }
+    if (posts.len() < 2) { return ""; }
+    // Sort by date DESC, tiebreak by filename ASC so ordering is stable when two
+    // posts share a date.
+    final ordered = posts.sort(fun (a: BlogPost, b: BlogPost) > bool {
+        if (a.date != b.date) { return strLess(b.date, a.date); }
+        return strLess(a.base, b.base);
+    });
+
+    var pos = -1;
+    var i = 0;
+    while (i < ordered.len()) {
+        if (ordered[i].base == base) { pos = i; }
+        i = i + 1;
+    }
+    if (pos < 0) { return ""; }
+
+    // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link is no longer
+    // a flat "../<slug>/"; relativize walks from this post's dir to the target's URL
+    // and writes the minimal climb, correct across any shared date prefix.
+    final fromDir = site.blog + "/" + blogUrlPath(base);
+    var body = "";
+    // Previous = newer post (earlier in ordered), Next = older post (later).
+    if (pos > 0) {
+        final prev = ordered[pos - 1];
+        final href = relativize(fromDir, site.blog + "/" + blogUrlPath(prev.base) + "/");
+        body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
+            + "<span class=\"page-nav-dir\">Newer</span>"
+            + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
+    }
+    if (pos < ordered.len() - 1) {
+        final nxt = ordered[pos + 1];
+        final href = relativize(fromDir, site.blog + "/" + blogUrlPath(nxt.base) + "/");
+        body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
+            + "<span class=\"page-nav-dir\">Older</span>"
+            + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
+    }
+    if (body == "") { return ""; }
+    return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
+}
+
+// renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the
+// collected blog posts. It runs AFTER renderBlogPost has populated site.blogPosts for
+// every post in the walk. The listing is a plain <ul> under the shared page()
+// template, so it inherits nav/breadcrumb/footer for free.
+fun renderBlogIndex() > void {
+    // Newest first, tiebreak by base for determinism.
+    final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
+        if (a.date != b.date) { return strLess(b.date, a.date); }
+        return strLess(a.base, b.base);
+    });
+
+    var body = "<h1>Blog</h1>\n";
+    if (sorted.len() == 0) {
+        body = body + "<p>No posts yet.</p>\n";
+    } else {
+        body = body + "<ul class=\"blog-index\">\n";
+        foreach (p in sorted) {
+            body = body + "  <li><a href=\"" + p.urlPath + "/\"><span class=\"blog-index-title\">"
+                + p.title + "</span></a>";
+            if (p.date != "") {
+                body = body + " <time class=\"blog-index-date\" datetime=\"" + blogDateAttr(p.date) + "\">"
+                    + blogDate(p.date) + "</time>";
+            }
+            if (p.description != "") {
+                body = body + "<p class=\"blog-index-desc\">" + p.description + "</p>";
+            }
+            body = body + "</li>\n";
+        }
+        body = body + "</ul>\n";
+    }
+
+    final title = "Blog";
+    final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
+    final url = site.blog + "/";
+    // srcRel for the index page: a blog/index.md marker so page() picks the "blog"
+    // active-nav key and the breadcrumb roots correctly, even though there is no
+    // source file. Alias the marker's commit-footer key to the newest post's own
+    // commit so the "Last updated" line is a stable snapshot instead of tracking
+    // HEAD (which would drift every commit and break the drift gate).
+    if (sorted.len() > 0) {
+        final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
+        if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
+    }
+    final doc = page(title, desc, body, site.blog + "/index.md", "", url, "", mut []);
+    fs.makeDirectory(site.outDir + "/" + site.blog);
+    final of = io.File.open(site.outDir + "/" + site.blog + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // The index is a real page, so it belongs in the search index and sitemap.
+    // No frontmatter tags/description — the resolved desc above rides through.
+    site.pageUrls[url] = true;
+    // Build a fake mini record so addRecord's shape stays consistent.
+    final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";
+    site.addRecord(url, title, desc, recStub);
+    std.print("  blog index -> " + site.outDir + "/" + site.blog + "/index.html");
+}
+
+// renderSearchPage writes gen/search/index.html: the dedicated, deep-linkable search
+// surface. It is a tool page (no markdown source; kept out of the search index and
+// sitemap, and out of the provenance/edit chrome via the srcRel guards in page()).
+// The #search-page container is the signal search.js keys off to switch from the
+// header dropdown to full-page, URL-synced (?q=) results. Emitted after the walk so
+// it is a peer of renderPublic()/render404().
+// syntaxRow renders one Search Syntax entry: a clickable example that runs itself
+// (search.js intercepts the ?q= link) beside a plain-language description. The query
+// is url-encoded for the href and entity-escaped for its <code> display.
+fun syntaxRow(q: str, desc: str) > str {
+    return "        <dt><a class=\"syntax-example\" href=\"?q=" + encoding.urlEncode(q)
+        + "\"><code>" + escapeAttr(q) + "</code></a></dt><dd>" + desc + "</dd>\n";
+}
+
+fun renderSearchPage() > void {
+    final root = rootPrefix("search/index.md");
+    // Always-open, forefront syntax reference: on the dedicated page the query
+    // language is a first-class part of the surface, not a disclosure to hunt for
+    // (the header dropdown carries only a compact hint). Each example is a real ?q=
+    // link, so it works without JS and doubles as teach-by-doing once search.js runs
+    // it in place.
+    final syntax = "  <section class=\"search-syntax\" aria-label=\"Search syntax\">\n"
+        + "    <p class=\"search-syntax-title\">Search Syntax</p>\n"
+        + "    <p class=\"search-syntax-lead\">Terms are combined with AND and matched case-insensitively. Click an example to run it.</p>\n"
+        + "    <dl>\n"
+        + syntaxRow("tag:build", "Pages carrying the exact tag \"build\".")
+        + syntaxRow("-tag:spell", "Exclude pages with a tag.")
+        + syntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.")
+        + syntaxRow("title:install", "Scope a term to one field: title, description, or text.")
+        + syntaxRow("\"exact phrase\"", "Match words that appear together, in order.")
+        + syntaxRow("cache -go", "Require a word; drop another with a leading minus.")
+        + syntaxRow("tag:cache OR tag:build", "OR matches either; terms are ANDed by default.")
+        + syntaxRow("tag:(cache OR build)", "Group several values for one field.")
+        + syntaxRow("title:mag*", "Wildcards: * stands for any run of characters.")
+        + syntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.")
+        + "    </dl>\n"
+        + "  </section>\n";
+    final body = "<h1>Search</h1>\n"
+        + "<div id=\"search-page\">\n"
+        + "  <div class=\"search-page-inputwrap\">\n"
+        + "    <input id=\"search-page-input\" class=\"search-input\" type=\"text\" placeholder=\"Search docs... (try tag:cache)\" autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Search the documentation\" aria-controls=\"search-page-results\">\n"
+        + "    <ul id=\"search-facets\" class=\"search-facets\" role=\"listbox\" aria-label=\"Tag suggestions\" hidden></ul>\n"
+        + "  </div>\n"
+        + "  <div id=\"search-chips\" class=\"search-chips\" aria-hidden=\"true\" hidden></div>\n"
+        // Two columns on wide screens: results in the main column, the syntax reference
+        // (and, later, facet filters) in a left rail. Results come FIRST in the DOM so
+        // that when the grid collapses on narrow screens they stack above the reference
+        // rather than being pushed down by it; the grid reorders the rail to the left.
+        + "  <div class=\"search-layout\">\n"
+        + "    <div class=\"search-main\">\n"
+        + "      <p id=\"search-page-status\" class=\"search-page-status\" role=\"status\" aria-live=\"polite\"></p>\n"
+        + "      <ul id=\"search-page-results\" class=\"search-page-results\"></ul>\n"
+        + "    </div>\n"
+        + "    <aside class=\"search-side\">\n"
+        + syntax
+        + "    </aside>\n"
+        + "  </div>\n"
+        + "  <noscript><p class=\"noscript-notice\">Search needs JavaScript. Browse the <a href=\"" + root + "documentation/\">documentation</a>, or use GitHub's code search on the <a href=\"" + GH + "\">source repo</a>.</p></noscript>\n"
+        + "</div>\n";
+    final title = "Search";
+    final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
+    final doc = page(title, desc, body, "search/index.md", "", "search/", "", mut []);
+    fs.makeDirectory(site.outDir + "/search");
+    final of = io.File.open(site.outDir + "/search/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    std.print("  search page -> " + site.outDir + "/search/index.html");
+}
+
+// codeTeaser pulls a short code preview from a tour example: skip the leading comment
+// block and blank lines, then take the first several real lines. Gives each card a
+// code snippet at a glance instead of the descriptive header comment.
+fun codeTeaser(src: str) > str {
+    var started = false;
+    final kept: [str] = mut [<str>];
+    foreach (line in src.split("\n")) {
+        if (started == false) {
+            final t = line.trim();
+            if (t == "" or t.startsWith("//")) { continue; }
+            started = true;
+        }
+        if (kept.len() >= 7) { break; }
+        kept.append(line);
+    }
+    return kept.join("\n");
+}
+
+// tourSrc reads one curated example from the tour/ dir (cwd-relative; build-time only,
+// the files are not written - their content rides into the page as teaser + deep-link).
+fun tourSrc(file: str) > str {
+    final f = io.File.open("tour/" + file, io.FileMode.read);
+    final s = f.readAll();
+    f.close();
+    return s;
+}
+
+// playgroundLink deep-links src into the playground editor. The raw source is url-safe
+// base64 (unpadded, matching js/run-example.js and the wasm's applyHashSource decoder)
+// in the #source= fragment, so the code stays client-side (never hits the server/CDN).
+fun playgroundLink(root: str, src: str) > str {
+    var enc = encoding.base64urlEncode(src);
+    while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
+    return root + "playground/#source=" + enc;
+}
+
+// TourStep is one tour card: the .buzz example file, its copy, and a cross-link to
+// the concept doc a newcomer should read next (docSlug is the clean-URL directory,
+// e.g. "targets"). It renders its own numbered card - the first of scribe's typed
+// value objects, putting presentation on the data it presents instead of a
+// stringly-typed {str: str} map juggled by the caller.
+object TourStep {
+    file: str = "",
+    title: str = "",
+    desc: str = "",
+    docLabel: str = "",
+    docSlug: str = "",
+
+    // card renders this step's numbered <li>: the code teaser, an Open-in-Playground
+    // deep link, and the concept cross-link, all resolved against root.
+    fun card(root: str, num: int) > str {
+        final src = tourSrc(this.file);
+        // The concept cross-link rides at the end of the description as an inline
+        // link, not a separate "Read up:" line under the footer - that broke up the
+        // warm "Open in Playground" call to action and read as clutter.
+        return "      <li class=\"tour-card\">\n"
+            + "        <div class=\"tour-head\"><span class=\"tour-num\">{num}</span><h3>" + this.title + "</h3></div>\n"
+            + "        <p class=\"tour-desc\">" + this.desc + " <a class=\"tour-learn\" href=\"" + root + this.docSlug + "/\">" + this.docLabel + " &rarr;</a></p>\n"
+            + "        <pre class=\"tour-teaser\"><code class=\"language-buzz\">" + escapeAttr(codeTeaser(src)) + "</code></pre>\n"
+            + "        <div class=\"tour-foot\">\n"
+            + "          <a class=\"tour-open\" href=\"" + playgroundLink(root, src) + "\">Open in Playground &rarr;</a>\n"
+            + "        </div>\n"
+            + "      </li>\n";
+    }
+}
+
+// renderTourPage writes gen/tour/index.html: a numbered card grid that walks a newcomer
+// through magusfiles and Buzz. Each card carries a step number, title, one-liner, a code
+// teaser, and an Open-in-Playground deep-link. A synthesized page like the search page -
+// no .md source - so page()'s srcRel guards drop its provenance/edit chrome.
+fun renderTourPage() > void {
+    final root = rootPrefix("tour/index.md");
+    final steps: [TourStep] = mut [<TourStep>];
+    steps.append(TourStep{ file = "01-hello.buzz", title = "Magusfiles: write your first target",
+        desc = "A magusfile is a build definition; each exported function is a runnable target.",
+        docLabel = "Targets", docSlug = "targets" });
+    steps.append(TourStep{ file = "02-targets.buzz", title = "Targets: wire the dependencies",
+        desc = "Wire a pipeline with magus.needs; ci is the conventional anchor it all keys off.",
+        docLabel = "Targets", docSlug = "targets" });
+    steps.append(TourStep{ file = "03-spells.buzz", title = "Spells: bind a real toolchain",
+        desc = "Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops.",
+        docLabel = "Spells", docSlug = "spells" });
+    steps.append(TourStep{ file = "04-buzz.buzz", title = "Buzz: branch, loop, recurse",
+        desc = "Variables, functions, recursion, closures - evaluated live in your browser.",
+        docLabel = "Engines", docSlug = "engines" });
+    steps.append(TourStep{ file = "05-slots.buzz", title = "Slots: taming a greedy target",
+        desc = "A target starts with one slot; reserve more so a parallel tool cannot starve the rest.",
+        docLabel = "Operations", docSlug = "operations" });
+    steps.append(TourStep{ file = "06-cache.buzz", title = "Cache: replay, and catch drift",
+        desc = "Targets replay from cache and run once per plan; skipCache opts a check out.",
+        docLabel = "Caching", docSlug = "remote-cache" });
+    steps.append(TourStep{ file = "07-globs.buzz", title = "Globs: gather a target family",
+        desc = "Name targets by a shared suffix and gather them with one glob; regex for the rest.",
+        docLabel = "Targets", docSlug = "targets" });
+    steps.append(TourStep{ file = "08-charms.buzz", title = "Charms: check, then apply",
+        desc = "A charm rides down the plan; the built-in rw flips read-only checks to rewrites.",
+        docLabel = "Charms", docSlug = "charms" });
+    steps.append(TourStep{ file = "09-services.buzz", title = "Services: share one across runs",
+        desc = "Author a spell whose op returns a Service; magus supervises one, shared across runs.",
+        docLabel = "Services", docSlug = "services" });
+    steps.append(TourStep{ file = "10-wards.buzz", title = "Wards: catch the contradiction",
+        desc = "A detached service trips MGS5002 at resolution, before anything forks.",
+        docLabel = "Wards", docSlug = "wards" });
+    steps.append(TourStep{ file = "11-workspace.buzz", title = "Workspaces: run only what changed",
+        desc = "Projects wire cross-project order with depends_on; affected runs only what changed.",
+        docLabel = "CI and affected", docSlug = "targets/ci" });
+    steps.append(TourStep{ file = "12-magusfile.buzz", title = "Pipelines: assemble the whole build",
+        desc = "The full multi-toolchain pipeline: generate, format, lint, build, test, release.",
+        docLabel = "CI", docSlug = "targets/ci" });
+    steps.append(TourStep{ file = "13-custom-targets.buzz", title = "Custom targets: name your own phases",
+        desc = "The canonical names are conventions, not a closed set; export a release or deploy target and drive one from another.",
+        docLabel = "Targets", docSlug = "targets" });
+    steps.append(TourStep{ file = "14-stdlib.buzz", title = "Standard library: batteries included",
+        desc = "Buzz ships host modules - string casing, semver math, JSON, hashing - you import and call straight from a target.",
+        docLabel = "Buzz modules", docSlug = "buzz/modules" });
+    steps.append(TourStep{ file = "15-charms-custom.buzz", title = "Custom charms: patch the argv",
+        desc = "Declare your own charm as a JSON Patch over a spell op's argv; run op:charm to watch the flag splice in.",
+        docLabel = "Charms", docSlug = "charms" });
+
+    var cards = "";
+    var n = 1;
+    foreach (step in steps) {
+        cards = cards + step.card(root, n);
+        n = n + 1;
+    }
+
+    final body = "<h1>Tour</h1>\n"
+        + "<p class=\"lede\">A guided walk through magusfiles and Buzz, step by step. Open any example in the Playground to run and edit it.</p>\n"
+        + "    <ol class=\"tour-grid\">\n"
+        + cards
+        + "    </ol>\n";
+    final title = "Tour";
+    final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
+    final doc = page(title, desc, body, "tour/index.md", "", "tour/", "", mut []);
+    fs.makeDirectory(site.outDir + "/tour");
+    final of = io.File.open(site.outDir + "/tour/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // addRecord uses the desc arg directly and only parses this stub for tags, so the
+    // stub carries just a valid tags list (a description: line with colons would break
+    // the YAML). The body text seeds a few search terms for the page.
+    site.addRecord("tour/", title, desc,
+        "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
+    std.print("  tour page -> " + site.outDir + "/tour/index.html");
+}
+
+// walkBlog visits every blog/*.md post file (excluding index.md and _underscored
+// fixtures), in fs.list's sorted order — so the walk is deterministic. Posts are
+// flat: no nested subdirectories under blog/.
+fun walkBlog() > void {
+    if (isDir(site.root + "/" + site.blog) == false) { return; }
+    foreach (name in fs.list(site.root + "/" + site.blog)) {
+        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+            renderBlogPost(name);
+        }
+    }
+    renderBlogIndex();
+}
+
+// True if path is a directory.
+fun isDir(path: str) > bool {
+    return os.execute(["test", "-d", path]) == 0;
+}
+
+// Recursively walk ../docs (the output lives outside it, under gen).
+fun walk(rel: str) > void {
+    var dir = site.root + "/" + site.docs;
+    if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
+
+    foreach (name in fs.list(dir)) {
+        var childRel = name;
+        if (rel != "") { childRel = rel + "/" + name; }
+
+        if (isDir(site.root + "/" + site.docs + "/" + childRel)) {
+            walk(childRel);
+        } else {
+            if (name.endsWith(".md")) { renderFile(childRel); }
+        }
+    }
+}
+
+// renderDevPage renders one /development/ page from markdown through the shared
+// page() pipeline (nav, TOC, theme, search index), skipping the doc-only chrome
+// page() already strips for this srcRel prefix (provenance, edit link, nav
+// highlight). url ends in "/"; srcRel uses the "<dir>/_index.md" marker convention
+// so rootPrefix/renderBreadcrumb derive the right depth and trail.
+fun renderDevPage(title: str, desc: str, md: str, url: str, srcRel: str) > void {
+    final html = renderContentHtml(markdown.toHtml(md), "", "");
+    final doc = page(title, desc, html, srcRel, "", url, "", mut []);
+    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    fs.makeDirectory(dir);
+    fs.writeFile(dir + "/index.html", doc);
+    site.addRecord(url, title, desc, md);
+    site.pageUrls[url] = true;
+}
+
+// renderDevPageRaw is renderDevPage for pages whose body is already final HTML
+// (the /development/ landing and projects index, built by hand). It skips
+// renderContentHtml - the markdown/link-rewrite pipeline that strips the trailing
+// slash off relative links - so card hrefs like "magus/" stay slash-terminated and
+// resolve without a directory redirect. searchText is the plain text indexed for
+// search (the HTML carries no useful prose otherwise).
+fun renderDevPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str) > void {
+    final doc = page(title, desc, html, srcRel, "", url, "", mut []);
+    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    fs.makeDirectory(dir);
+    fs.writeFile(dir + "/index.html", doc);
+    site.addRecord(url, title, desc, searchText);
+    site.pageUrls[url] = true;
+}
+
+// renderDevelopment writes the /development/ contributor section: one themed page per
+// project rendering that project's committed MAGUS.md (the target catalog + run-order
+// graph md_generate produces), plus a /development/ landing that links straight to
+// them. There is no separate projects index; the retired /development/projects/ URLs
+// redirect to their flattened locations. Projects are discovered as site.root plus any immediate subdir
+// carrying a MAGUS.md; fs.list is sorted, so the set and its ordering are byte-stable
+// for the drift gate. The MAGUS.md files stay committed (they serve the offline and
+// agent read paths); this renders the same source for the online reader, where the
+// Mermaid graphs and theming beat a raw file view.
+fun renderDevelopment() > void {
+    var projects: [{str: str}] = mut [<{str: str}>];
+    if (os.execute(["test", "-f", site.root + "/MAGUS.md"]) == 0) {
+        projects.append(mut {"name": "magus", "path": site.root + "/MAGUS.md"});
+    }
+    foreach (name in fs.list(site.root)) {
+        if (name.startsWith(".") == false and isDir(site.root + "/" + name)) {
+            if (os.execute(["test", "-f", site.root + "/" + name + "/MAGUS.md"]) == 0) {
+                projects.append(mut {"name": name, "path": site.root + "/" + name + "/MAGUS.md"});
+            }
+        }
+    }
+    if (projects.len() == 0) { return; }
+
+    foreach (proj in projects) {
+        final f = io.File.open(proj["path"], io.FileMode.read);
+        final md = f.readAll();
+        f.close();
+        final name = proj["name"];
+        renderDevPage(name + " targets",
+            "Target catalog and run-order graph for the " + name + " project, generated from its magusfile.",
+            md, "development/" + name + "/", "development/" + name + "/_index.md");
+        // The old nested URL redirects to the flattened one so inbound links survive.
+        site.collectAlias("development/projects/" + name, "development/" + name + "/");
+    }
+
+    // Project cards (reusing the Related card look), one per magus project. Built as
+    // raw HTML with slash-terminated hrefs so each card links straight to the project
+    // page. They sit directly on the /development/ landing now; the old projects index
+    // is gone and its URL redirects here.
+    var projectCards = "";
+    foreach (proj in projects) {
+        final name = proj["name"];
+        projectCards = projectCards
+            + "        <a class=\"related-card\" href=\"" + name + "/\">"
+            + "<span class=\"related-card-title\">" + escapeAttr(name) + "</span>"
+            + "<span class=\"related-card-desc\">target catalog and dependency graph</span></a>\n";
+    }
+    site.collectAlias("development/projects", "development/");
+
+    // CONTRIBUTING.md (repo root) rendered as its own page under /development/.
+    var haveContributing = false;
+    if (os.execute(["test", "-f", site.root + "/CONTRIBUTING.md"]) == 0) {
+        final cf = io.File.open(site.root + "/CONTRIBUTING.md", io.FileMode.read);
+        final contributingMd = cf.readAll();
+        cf.close();
+        renderDevPage("Contributing",
+            "How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.",
+            contributingMd, "development/contributing/", "development/contributing/_index.md");
+        haveContributing = true;
+    }
+
+    // Contributing is a plain prose section (a heading and a sentence linking to its
+    // page), not a card - only the per-project graphs keep the card grid below.
+    var contributingSection = "";
+    if (haveContributing) {
+        contributingSection = "<h2 id=\"contributing\">Contributing</h2>\n"
+            + "<p>The <a href=\"contributing/\">Contributing guide</a> covers the conventions worth knowing before you open a pull request: run the suite with <code>magus run ci</code>, back any performance change with benchmark evidence, and regenerate the docs site (<code>magus run generate:rw website</code>) so the committed <code>gen/</code> tree never drifts from its source.</p>\n";
+    }
+    // Development is the contributor landing page the root README points at as the "full
+    // contributor reference", so it carries the orientation a newcomer to the codebase
+    // needs: the dogfooding framing, a build/test quickstart, the contributing rules, the
+    // per-project graphs, and a jumping-off list to the deeper reference docs. Built as
+    // raw HTML (renderDevPageRaw skips the markdown pipeline) so the card hrefs keep their
+    // trailing slash; the language-sh code block is picked up by the client highlighter.
+    final devHtml = "<h1 id=\"development\">Development</h1>\n"
+        + "<p>Reference for people working <em>on</em> magus rather than building with it. magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too.</p>\n"
+        + "<h2 id=\"getting-started\">Getting started</h2>\n"
+        + "<p>Building the <code>magus</code> binary needs only Go. The docs site and WebAssembly playground also need the Node, esbuild, and TinyGo toolchain pinned in <code>mise.toml</code>, which <a href=\"https://mise.jdx.dev/\">mise</a> installs in one step. From a fresh clone:</p>\n"
+        + "<pre><code class=\"language-sh\">git clone https://github.com/egladman/magus\n"
+        + "cd magus\n"
+        + "mise install\n"
+        + "go build -o magus ./cmd/magus\n"
+        + "magus run ci</code></pre>\n"
+        + "<p><code>magus run ci</code> builds, formats, lints, and tests every affected project - the same pipeline continuous integration runs. Only need the binary? Go alone is enough; skip <code>mise install</code> and drop the docs and playground targets.</p>\n"
+        + contributingSection
+        + "<h2 id=\"project-graphs\">Project graphs</h2>\n"
+        + "<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>\n"
+        + "    <div class=\"related-grid\">\n" + projectCards + "    </div>\n"
+        + "<h2 id=\"reference\">Reference</h2>\n"
+        + "<p>The deeper references a contributor reaches for once the build is running:</p>\n"
+        + "<ul>\n"
+        + "  <li><a href=\"../conventions/\">Conventions</a> - the naming and layout rules magus expects of a workspace, and that this repository follows.</li>\n"
+        + "  <li><a href=\"../operations/\">Operations</a> - the work hierarchy underneath a target: ops, plans, and the slots that bound concurrency.</li>\n"
+        + "  <li><a href=\"../config/\">Configuration</a> - the <code>magus.yaml</code> keys and the <code>MAGUS_*</code> environment inventory.</li>\n"
+        + "  <li><a href=\"../wards/\">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>\n"
+        + "  <li><a href=\"../debugging/\">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>\n"
+        + "</ul>\n";
+    renderDevPageRaw("Development", "Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.",
+        devHtml, "Development contributing getting started build test project target catalogs conventions operations configuration diagnostic codes debugging reference", "development/", "development/_index.md");
+}
+
+// site_render rebuilds gen/ from ../docs and the root README. Pure function of
+// git history (footers) and the source tree — reproducible and gate-stable.
+export fun site_render(root: str, docs: str, blog: str, outDir: str) > void {
+    // Adopt the caller's paths as module state; every renderer below reads these.
+    // (outDir, not out: `out` is a reserved word in buzz.)
+    site.root = root;
+    site.docs = docs;
+    site.blog = blog;
+    site.outDir = outDir;
+    site.loadMeta();
+    site.searchRecords = mut [];
+    site.aliasTarget = mut {};
+    site.pageUrls = mut {};
+    site.docPages = mut [<DocPage>];
+    site.blogPosts = mut [<BlogPost>];
+    site.hasBlogPosts = false;
+    if (isDir(site.root + "/" + site.blog)) {
+        foreach (name in fs.list(site.root + "/" + site.blog)) {
+            if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+                site.hasBlogPosts = true;
+            }
+        }
+    }
+    fs.delete(site.outDir);
+    fs.makeDirectory(site.outDir);
+    std.print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
+
+    // Copy static assets referenced by the root README (images, badges).
+    os.execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets " + site.outDir + "/ || true"]);
+
+    // Bundle + minify the client-side assets with esbuild (pinned in mise.toml).
+    // The nine flat scripts became a js/ ES-module tree (feature modules + lib/);
+    // esbuild writes two outputs: theme.js (head, critical, minified — no bundle
+    // needed, it has no imports) and main.js (the deferred bundle of every feature
+    // module). The heavy hljs/mermaid CDN libs stay lazy dynamic import()s, which
+    // esbuild leaves as external runtime imports. CSS is minified per-file (not
+    // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
+    os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + site.outDir + "/site.css"]);
+    os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
+    os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + site.outDir + "/theme.js"]);
+    os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
+
+    // Emit the WebAssembly playground page at gen/playground/index.html (injecting the
+    // shared nav/footer into the hand-authored playground.html), then copy the committed
+    // buzz.wasm + TinyGo glue into that same directory. renderPlayground creates the dir
+    // and writes index.html first, so the copy merges the assets in (cp of `playground/.`
+    // into the existing dir, not `playground` which would nest a subdir). The wasm is a
+    // source artifact (rebuilt by build-playground), not rendered from docs, so it is
+    // only copied; that keeps the drift gate stable.
+    renderPlayground();
+    os.execute(["sh", "-c", "[ -d playground ] && cp -r playground/. " + site.outDir + "/playground/ || true"]);
+
+    // Parse the changelog BEFORE the walk so page() knows whether the releases
+    // Atom feed will be written and can gate its <link rel=alternate> discovery
+    // tag accordingly (advertising a missing file would trip WS L's asset check).
+    parseChangelog();
+
+    // Pre-pass: gather every docs page's relatedness metadata before rendering, so
+    // each page's "Related" cards can rank against the full corpus (the render walk
+    // below is single-pass and can't see pages it hasn't reached yet).
+    site.collectDocPages("");
+
+    renderRoot();
+    walk("");
+    walkBlog();
+
+    // Build the /development/ section before writeAliases so its pages are in site.pageUrls
+    // for the collision guard and its collectAlias redirects (the retired
+    // /development/projects/ URLs) get stubs written in the same pass.
+    renderDevelopment();
+
+    // Emit a redirect stub per declared frontmatter alias (after the walk, so every
+    // real page URL is known for the collision guard). Aliases stay out of the
+    // search index/sitemap/feeds — only the real page they point to appears there.
+    site.writeAliases();
+    writeSeoFiles();
+    renderBlogAtom();
+    renderReleasesAtom();
+    renderPublic();
+    render404();
+    renderSearchPage();
+    renderTourPage();
+    writeManifest();
+    writeServiceWorker();
+
+    // Flat {url, title, text, tags, description?} record per page; search.js
+    // fetches this lazily on first focus. Keys are sorted by serialize, and the
+    // walk order is fs.list's (sorted), so the file is byte-stable across runs.
+    fs.writeFile(site.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
+
+    // Reproducibility guard: throw on any dangling href/src reference. Runs after
+    // every asset + page has been written, so a missing file (renamed bundle,
+    // deleted image, forgotten alias fix) fails the build here rather than
+    // shipping a silent 404. See docs/engines.md.
+    site.assetIntegrityCheck();
+
+    // Orphan gate: after every page exists, prove each docs page is reachable by
+    // clicking from the site's front door. Runs after assetIntegrityCheck so link
+    // targets are already known-good.
+    site.orphanCheck();
+
+    // Parity gate: no previously-shipped URL may silently start 404-ing.
+    abandonedLinkCheck();
+
+    std.print("done");
+}
+
+// checkPathExists returns true when target (gen-root-relative, no leading slash)
+// resolves to a real file under gen/. Directory refs (URL ending in "/" or a plain
+// slugged path) resolve to their index.html; assets pass through verbatim.
+fun checkPathExists(target: str) > bool {
+    // Empty target = gen/'s root, always the index.html landing. This shows up
+    // when a page links to "../" (Parent Directory in an autoindex root) and the
+    // resolver pops back to the root.
+    if (target == "") { return os.execute(["test", "-f", site.outDir + "/index.html"]) == 0; }
+    if (os.execute(["test", "-f", site.outDir + "/" + target]) == 0) { return true; }
+    if (os.execute(["test", "-d", site.outDir + "/" + target]) == 0) {
+        return os.execute(["test", "-f", site.outDir + "/" + target + "/index.html"]) == 0;
+    }
+    if (target.endsWith("/")) {
+        return os.execute(["test", "-f", site.outDir + "/" + target + "index.html"]) == 0;
+    }
+    return false;
+}
+
+// scanRefsInHtml pulls every href="..." and src="..." out of html, skipping
+// external URLs, mailto:, javascript:, data:, and pure fragments. Each reference
+// is returned as a gen-root-relative path (resolved against pageDir).
+fun scanRefsInHtml(html: str, pageDir: str) > [str] {
+    var refs: [str] = mut [<str>];
+    var seen: {str: bool} = mut {};
+    var rest = html;
+    while (true) {
+        final iHref = rest.indexOf("href=\"");
+        final iSrc = rest.indexOf("src=\"");
+        var i: int = -1;
+        var advance = 0;
+        if (iHref != null and iSrc != null) {
+            if (iHref < iSrc) { i = iHref; advance = 6; } else { i = iSrc; advance = 5; }
+        } else if (iHref != null) { i = iHref; advance = 6; }
+        else if (iSrc != null) { i = iSrc; advance = 5; }
+        else { i = -1; }
+        if (i < 0) { return refs; }
+        rest = rest.sub(i + advance);
+        final end = rest.indexOf("\"");
+        if (end == null) { return refs; }
+        final raw = rest.sub(0, end);
+        rest = rest.sub(end + 1);
+        if (raw == "") { continue; }
+        if (raw.startsWith("http://") or raw.startsWith("https://") or raw.startsWith("//")
+            or raw.startsWith("#") or raw.startsWith("mailto:") or raw.startsWith("javascript:")
+            or raw.startsWith("data:") or raw.startsWith("tel:")) { continue; }
+        // Root-absolute paths (leading /) are the deploy-time reference form
+        // (WS0b's ONE deliberate exception on 404.html, WS S's manifest, etc.);
+        // they resolve at the deploy base, not against gen/'s root, so we can't
+        // check them locally without threading SITE_URL's basePath in. Skip.
+        if (raw.startsWith("/")) { continue; }
+        // References to repo source files (.go/.buzz) point at their GitHub
+        // location relative to the repo root, not to a generated site asset.
+        // magus's `markdown` module rewrites .md links but leaves .go/.buzz
+        // untouched, matching author intent. Skip so the check stays focused on
+        // real page/asset breakage.
+        if (raw.endsWith(".go") or raw.endsWith(".buzz")) { continue; }
+        // Strip a URL #fragment; the file only needs to exist, the fragment is
+        // client-side.
+        var path = raw;
+        final hash = path.indexOf("#");
+        if (hash != null) { path = path.sub(0, hash); }
+        if (path == "") { continue; }
+        // Also drop a query string.
+        final q = path.indexOf("?");
+        if (q != null) { path = path.sub(0, q); }
+        if (path == "") { continue; }
+        final resolved = resolvePath(pageDir, path);
+        if (seen[resolved] == null) {
+            seen[resolved] = true;
+            refs.append(resolved);
+        }
+    }
+    return refs;
+}
+
+// walkGen recursively enumerates every written file under gen/ so the integrity
+// check reads each once. Skips buzz.wasm (binary; slow file test suffices).
+fun walkGen(rel: str, acc: [str]) > void {
+    var dir = site.outDir;
+    if (rel != "") { dir = site.outDir + "/" + rel; }
+    foreach (name in fs.list(dir)) {
+        var childRel = name;
+        if (rel != "") { childRel = rel + "/" + name; }
+        if (os.execute(["test", "-d", site.outDir + "/" + childRel]) == 0) {
+            walkGen(childRel, acc);
+        } else {
+            acc.append(childRel);
+        }
+    }
+}
+
+
+// pageKey normalizes a scanRefsInHtml result (a gen-root-relative path with no
+// trailing slash - "spells/go", "index.html", "assets/x.png") to a page key: "" for
+// the home page, else the directory that holds the page's index.html. Asset paths
+// pass through unchanged and simply never match a real page key.
+fun pageKey(resolved: str) > str {
+    var r = resolved;
+    if (r.endsWith("/index.html")) { r = r.sub(0, r.len() - 11); }  // len("/index.html") == 11
+    if (r == "index.html") { return ""; }
+    if (r.endsWith("/")) { r = r.sub(0, r.len() - 1); }
+    return r;
+}
+
+
+// URL_LOCK is the committed, append-only ledger of every URL the site has ever
+// shipped (one per line, sorted). RETIRED_URLS lists URLs intentionally removed,
+// exempting them from the abandoned-link gate.
+final URL_LOCK = "urls.lock";
+final RETIRED_URLS = "retired-urls.txt";
+
+// readUrlSet reads a newline-delimited URL file into a set, skipping blanks and
+// "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
+fun readUrlSet(path: str) > {str: bool} {
+    var set: {str: bool} = mut {};
+    if (os.execute(["test", "-f", path]) != 0) { return set; }
+    final f = io.File.open(path, io.FileMode.read);
+    final content = f.readAll();
+    f.close();
+    foreach (line in content.split("\n")) {
+        final t = line.trim();
+        if (t != "" and t.startsWith("#") == false) { set[t] = true; }
+    }
+    return set;
+}
+
+// abandonedLinkCheck is the parity gate: every URL the site has shipped before
+// (recorded in URL_LOCK) must still resolve, so a renamed or deleted page can't
+// silently start 404-ing on inbound links and bookmarks. To retire a URL on
+// purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old
+// URL resolving) or list it in retired-urls.txt. Runs every render; the lock only
+// grows (updateUrlLock, under the rw charm).
+fun abandonedLinkCheck() > void {
+    final locked = readUrlSet(URL_LOCK);
+    final retired = readUrlSet(RETIRED_URLS);
+    var abandoned: [str] = mut [<str>];
+    foreach (url in locked.keys()) {
+        if (retired[url] == null and checkPathExists(url) == false) {
+            abandoned.append(url);
+        }
+    }
+    if (abandoned.len() > 0) {
+        final sorted = abandoned.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        throw "abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in website/retired-urls.txt: " + sorted.join(", ");
+    }
+}
+
+// updateUrlLock folds this build's URLs into URL_LOCK and rewrites it sorted. It
+// only adds - a URL that drops out of the build stays in the ledger so the gate
+// keeps demanding a redirect or an explicit retirement for it. Called under the rw
+// charm so a plain (checking) render never mutates the tree.
+export fun updateUrlLock() > void {
+    var set = readUrlSet(URL_LOCK);
+    foreach (u in site.pageUrls.keys()) { set[u] = true; }
+    var lines: [str] = mut [<str>];
+    foreach (u in set.keys()) { lines.append(u); }
+    final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    var body = "";
+    foreach (u in sorted) { body = body + u + "\n"; }
+    fs.writeFile(URL_LOCK, body);
+}
+
+// Tests for the pure helpers. Run them with the `buzz-test` target
+// (`magus buzz -t --embedded scribe.buzz`); living in this module, they reach its
+// internal functions directly. They register but do not run during a normal render.
+test "sectionFromUrl takes the first path segment" {
+    std.assert(sectionFromUrl("spells/go/") == "spells", message: "spells/go/ -> spells");
+    std.assert(sectionFromUrl("targets") == "targets", message: "no slash -> whole string");
+    std.assert(sectionFromUrl("") == "", message: "empty -> empty");
+}
+
+test "pad4 left-pads to width four" {
+    std.assert(pad4(7) == "0007", message: "7 -> 0007");
+    std.assert(pad4(1234) == "1234", message: "1234 unchanged");
+    std.assert(pad4(12345) == "12345", message: "wider than four is kept");
+}
+
+test "escapeAttr escapes the attribute-dangerous characters" {
+    std.assert(escapeAttr("a & b") == "a &amp; b", message: "ampersand");
+    std.assert(escapeAttr("x\"y<z") == "x&quot;y&lt;z", message: "quote and less-than");
+}
+
+test "sharedTagCount counts common bar-joined tags" {
+    std.assert(sharedTagCount("a||b||c", "b||c||d") == 2, message: "b and c shared");
+    std.assert(sharedTagCount("a", "b") == 0, message: "none shared");
+    std.assert(sharedTagCount("", "a||b") == 0, message: "empty side -> 0");
+}
+
+test "relativize walks from a dir to a target URL" {
+    std.assert(relativize("a/b", "a/c/") == "../c/", message: "sibling directory");
+    std.assert(relativize("development/projects", "development/") == "../", message: "up one level");
+}
+
+// Buzz's == is identity (not structural) for maps/lists/objects, and std.assert
+// takes a boolean, so the idiomatic form - matching upstream tests/behavior - is to
+// assert the fields that matter joined with `and`, not a serialized whole.
+test "Site.collectAlias trims slashes and records every alias" {
+    final s = mut Site{};
+    s.collectAlias("/old-path/", "new-path/");
+    s.collectAlias("same", "same/");
+    std.assert(s.aliasTarget["old-path"] == "new-path/" and s.aliasTarget["same"] == "same/", message: "both aliases recorded with slashes trimmed");
+}
+
+test "Site.addRecord marks the URL written and appends one search record" {
+    final s = mut Site{};
+    s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
+    std.assert(s.pageUrls["guide/"] == true and s.searchRecords.len() == 1, message: "url marked written and one record appended");
+}

@@ -99,6 +99,8 @@ A target name is one of the seven canonical operations. The type is `project.Tar
 
 There is also `ci`: a composite pipeline (preflight → generate → format → lint → build → test) handled specially by `Magus.RunCI`. It is not in the `project.Targets` list and is not a valid name for `ParseTarget`.
 
+Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - and security scanning (`govulncheck`) belong under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `security` target. A slow security scan can instead be gated in `ci`. Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
+
 Custom target names must use the target-name charset: letters, digits, `-`, `_` (`types.ValidateTargetName`). `:`, `@`, and `/` are reserved for the grammar above.
 
 ### Name normalization (casing & delimiters)

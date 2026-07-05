@@ -8,6 +8,13 @@
   <title>Tips and tricks — magus</title>
   <meta name="description" content="Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, and recursive invocation.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/tips/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Tips and tricks — magus">
+  <meta property="og:description" content="Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, and recursive invocation.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/tips/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="manifest" href="../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
         <li><a href="../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -48,6 +59,7 @@
       <nav>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#live-pool-snapshot-in-a-multiplexer-sidebar" title="Live pool snapshot in a multiplexer sidebar">Live pool snapshot in a multiplexer sidebar</a></li><li><a href="#step-through-a-target-to-diagnose-a-flaky-build" title="Step through a target to diagnose a flaky build">Step through a target to diagnose a flaky build</a></li><li><a href="#re-run-only-affected-projects-on-each-save" title="Re-run only affected projects on each save">Re-run only affected projects on each save</a></li><li><a href="#one-shot-daemon-health-probe" title="One-shot daemon health probe">One-shot daemon health probe</a></li><li><a href="#interactive-debugging-entry-points" title="Interactive debugging entry points">Interactive debugging entry points</a></li><li><a href="#recursive-invocation" title="Recursive invocation">Recursive invocation</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
@@ -104,14 +116,25 @@ magus status -o json   # machine-readable output
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../telemetry/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Telemetry</span></a>
+      <a class="page-nav-next" href="../wards/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Wards</span></a>
     </nav>
   </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
+        <a class="related-card" href="../manpage/magus-status/"><span class="related-card-title">magus status</span><span class="related-card-desc">Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.</span></a>
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+    </div>
+  </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22tips%22">tips</a><a class="tag" href="../search/?q=tag%3A%22status%22">status</a><a class="tag" href="../search/?q=tag%3A%22step%22">step</a><a class="tag" href="../search/?q=tag%3A%22watch%22">watch</a><a class="tag" href="../search/?q=tag%3A%22repl%22">repl</a><a class="tag" href="../search/?q=tag%3A%22recursion%22">recursion</a><a class="tag" href="../search/?q=tag%3A%22magus.cmd%22">magus.cmd</a><a class="tag" href="../search/?q=tag%3A%22magus+status%22">magus status</a></div>
-    <small>Last updated <time datetime="2026-07-02T22:09:42Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e" data-tooltip="d8ea25b3453a933c86ace2e52d64111fcf8abf0e" title="d8ea25b3453a933c86ace2e52d64111fcf8abf0e">d8ea25b</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/tips.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/tips.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-02T22:09:42Z">July 2, 2026, 10:09 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e" data-tooltip="d8ea25b3453a933c86ace2e52d64111fcf8abf0e" title="d8ea25b3453a933c86ace2e52d64111fcf8abf0e">d8ea25b</a>)</small><details class="recent-changes"><summary>Recent changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/tips.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/tips.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

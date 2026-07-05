@@ -84,6 +84,13 @@
   --accent-teal-hover: #0a5c64;
   --accent-teal-inverse: #ffffff;
 
+  /* Warm accent: reserved for primary "run/try this" calls to action (the Run
+     button, Open in Playground) so the one thing we want clicked pops against the
+     blue links and quiet gray chrome. Warm orange, one job. */
+  --accent-warm: #ea580c;
+  --accent-warm-hover: #c2410c;
+  --accent-warm-inverse: #ffffff;
+
   /* Syntax tokens (muted, all >=4.5:1 on the code surface). */
   --syn-comment: #636d76;
   --syn-keyword: #715bb0;
@@ -92,6 +99,7 @@
   --syn-function: #2f6aad;
   --syn-type: #0d7680;
   --syn-operator: #5a656d;
+  --syn-removed: #b0332c; /* red for a removed (-) diff line */
 }
 
 /* ---- Dark (auto via OS preference, unless the user forced light) ---------- */
@@ -149,6 +157,10 @@
     --accent-teal-hover: #7fd0da;
     --accent-teal-inverse: #0b0e12;
 
+    --accent-warm: #fb923c;
+    --accent-warm-hover: #fdba74;
+    --accent-warm-inverse: #0b0e12;
+
     --syn-comment: #838e98;
     --syn-keyword: #b79ae6;
     --syn-string: #8fc79b;
@@ -156,6 +168,7 @@
     --syn-function: #7fb2e6;
     --syn-type: #64c1cd;
     --syn-operator: #9aa4af;
+    --syn-removed: #f0a3a0; /* lighter red so a removed line stays legible on the dark surface */
   }
 }
 
@@ -213,6 +226,10 @@
   --accent-teal-hover: #7fd0da;
   --accent-teal-inverse: #0b0e12;
 
+  --accent-warm: #fb923c;
+  --accent-warm-hover: #fdba74;
+  --accent-warm-inverse: #0b0e12;
+
   --syn-comment: #838e98;
   --syn-keyword: #b79ae6;
   --syn-string: #8fc79b;
@@ -268,8 +285,7 @@ article a:visited:hover {
 .hljs-string,
 .hljs-regexp,
 .hljs-char.escape_,
-.hljs-meta .hljs-string,
-.hljs-addition {
+.hljs-meta .hljs-string {
   color: var(--syn-string);
 }
 .hljs-number,
@@ -277,9 +293,26 @@ article a:visited:hover {
 .hljs-bullet,
 .hljs-selector-class,
 .hljs-selector-attr,
-.hljs-selector-pseudo,
-.hljs-deletion {
+.hljs-selector-pseudo {
   color: var(--syn-number);
+}
+
+/* Diff blocks (```diff): GitHub-style full-line bands rather than the generic token
+   colors, so an added line reads green and a removed line red at a glance. highlight.js
+   wraps each whole line in .hljs-addition / .hljs-deletion; display:block makes the tint
+   fill the line, and the translucent backgrounds sit legibly on both the light and dark
+   code surface. --syn-string is already the green; --syn-removed adds the red. */
+.hljs-addition,
+.hljs-deletion {
+  display: block;
+}
+.hljs-addition {
+  background: rgba(63, 185, 80, 0.16);
+  color: var(--syn-string);
+}
+.hljs-deletion {
+  background: rgba(248, 81, 73, 0.16);
+  color: var(--syn-removed);
 }
 .hljs-title,
 .hljs-title.function_,

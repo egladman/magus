@@ -8,6 +8,13 @@
   <title>Services — magus</title>
   <meta name="description" content="How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/services/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Services — magus">
+  <meta property="og:description" content="How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/services/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="manifest" href="../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
         <li><a href="../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -48,14 +59,15 @@
       <nav>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#directly-run-vs-as-a-dependency" title="Directly run vs. as a dependency">Directly run vs. as a dependency</a></li><li><a href="#shared-instances" title="Shared instances">Shared instances</a><ul><li><a href="#readiness" title="Readiness">Readiness</a></li><li><a href="#idle-and-teardown" title="Idle and teardown">Idle and teardown</a></li></ul></li><li><a href="#guarding-against-foot-guns" title="Guarding against foot-guns">Guarding against foot-guns</a><ul><li><a href="#near-duplicate-services-mgs5001codesservicesmgs5001md" title="Near-duplicate services (MGS5001)">Near-duplicate services (MGS5001)</a></li><li><a href="#kind-coherence-wards-mgs5002codesservicesmgs5002md-mgs5003codesservicesmgs5003md" title="Kind-coherence wards (MGS5002, MGS5003)">Kind-coherence wards (MGS5002, MGS5003)</a></li></ul></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="services">Services</h1>
-<p>A <strong>service op</strong> returns a <code>Service</code> — a long-running process such as a dev server,
-a watcher, or a database container — rather than a <code>Command</code> that runs to completion
+<p>A <strong>service op</strong> returns a <code>Service</code>, a long-running process such as a dev server,
+a watcher, or a database container, rather than a <code>Command</code> that runs to completion
 (see <a href="../operations/#what-an-operation-is">Operations</a>). This page covers how magus
 runs services, shares them, and keeps you from the two foot-guns that come with
 long-running processes: accidental sprawl and misuse.</p>
@@ -74,11 +86,11 @@ long-running processes: accidental sprawl and misuse.</p>
 <strong>blocks</strong> on it; Ctrl-C signals the process. This is the &quot;run my dev server&quot; case.</li>
 <li><strong>Reached as a dependency</strong> (some target's <code>magus.needs</code> pulls it in) it is
 <strong>supervised in the background</strong>: magus starts it, waits for its readiness probe to
-pass, then lets the dependent run against it — it does not block. The service stops
+pass, then lets the dependent run against it. It does not block. The service stops
 when the run ends (or stays warm on the daemon, below).</li>
 </ul>
 <h2 id="shared-instances">Shared instances</h2>
-<p>Services are deduplicated by a <strong>configuration fingerprint</strong> — a content hash of the
+<p>Services are deduplicated by a <strong>configuration fingerprint</strong>: a content hash of the
 resolved command (image, ports, volumes, environment). Several targets that need the
 same service get <strong>one</strong> instance, even across different projects that each declare
 their own copy, as long as the configuration matches. This is what stops N projects
@@ -88,7 +100,7 @@ across invocations</strong>: <code>magus run test:a</code> starts Postgres, and 
 service is hosted in-process for the single run. A service the daemon cannot reach
 falls back to in-process rather than failing the run.</p>
 <h3 id="readiness">Readiness</h3>
-<p><code>readiness</code> is an optional probe polled until it exits 0 — the Kubernetes exec-probe
+<p><code>readiness</code> is an optional probe polled until it exits 0, the Kubernetes exec-probe
 model. Dependents wait on the probe passing, so &quot;the service is up&quot; is a real ordering
 edge, not a <code>sleep</code>. Keep the probe distinct from the service process itself: the
 process never exits, the probe does.</p>
@@ -97,10 +109,10 @@ process never exits, the probe does.</p>
 <strong>idle window</strong> (30 minutes by default; override per service with <code>idle = &quot;45m&quot;</code>) and
 then reaps it. Teardown has three layers:</p>
 <ul>
-<li><strong>automatic</strong> — the idle timeout above, plus a crash reaper (below);</li>
-<li><strong>all services</strong> — <code>magus server stop --services</code> stops every hosted service (to
+<li><strong>automatic</strong>: the idle timeout above, plus a crash reaper (below);</li>
+<li><strong>all services</strong>: <code>magus server stop --services</code> stops every hosted service (to
 drop stale state or free held ports) without shutting the daemon down;</li>
-<li><strong>whole daemon</strong> — <code>magus server stop</code> tears the daemon and its services down.</li>
+<li><strong>whole daemon</strong>: <code>magus server stop</code> tears the daemon and its services down.</li>
 </ul>
 <p>If the daemon is killed uncleanly, a new daemon replays each hosted service's <code>stop</code>
 command on startup to <strong>reap orphans</strong> the dead one left behind. Give a container
@@ -109,8 +121,8 @@ service a <code>stop</code> command (e.g. <code>docker stop &lt;name&gt;</code>)
 <p>magus is proactive about the two ways services go wrong. Both surface as
 <a href="../codes/services/">diagnostics</a>.</p>
 <h3 id="near-duplicate-services-mgs5001codesservicesmgs5001md">Near-duplicate services (<a href="../codes/services/MGS5001/">MGS5001</a>)</h3>
-<p>When two or more services look like copies of one another — same image and container
-port but differing in some detail — magus will not silently merge them (the difference
+<p>When two or more services look like copies of one another (same image and container
+port but differing in some detail), magus will not silently merge them (the difference
 may be load-bearing, like a different database name). Instead it <strong>warns</strong> at run time,
 scoped to the services actually in that run, and <code>magus doctor</code> reports the same across
 the whole workspace. If the divergence is intentional, mark the service <code>distinct</code> with
@@ -123,9 +135,9 @@ opt-outs get pruned.</p>
 <h3 id="kind-coherence-wards-mgs5002codesservicesmgs5002md-mgs5003codesservicesmgs5003md">Kind-coherence wards (<a href="../codes/services/MGS5002/">MGS5002</a>, <a href="../codes/services/MGS5003/">MGS5003</a>)</h3>
 <p>magus rejects an op whose argv contradicts its kind, at resolution time:</p>
 <ul>
-<li>a <strong>service</strong> op that <strong>detaches</strong> (<code>docker run -d</code>) — the process forks away from
+<li>a <strong>service</strong> op that <strong>detaches</strong> (<code>docker run -d</code>): the process forks away from
 magus, so foreground supervision, readiness, and stop all become meaningless;</li>
-<li>a <strong>command</strong> op that runs a <strong>watcher</strong> (<code>tsc --watch</code>) — a run-to-completion op
+<li>a <strong>command</strong> op that runs a <strong>watcher</strong> (<code>tsc --watch</code>): a run-to-completion op
 that never exits hangs the run.</li>
 </ul>
 <p>Both are the same bug from opposite ends (the argv lies about the kind), so they are
@@ -139,12 +151,22 @@ the check.</p>
       <a class="page-nav-next" href="../spells/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Spells</span></a>
     </nav>
   </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../codes/services/"><span class="related-card-title">services diagnostics</span><span class="related-card-desc">Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.</span></a>
+        <a class="related-card" href="../codes/services/MGS5001/"><span class="related-card-title">MGS5001: near-duplicate services</span><span class="related-card-desc">Fires when two or more service ops in a run look like copies of the same service (same image and container port) but differ subtly, so they will run as separate processes instead of one shared instance.</span></a>
+        <a class="related-card" href="../codes/services/MGS5002/"><span class="related-card-title">MGS5002: service op detaches</span><span class="related-card-desc">Fires when a service op's process command detaches (docker run -d), which forks the process away from magus and breaks foreground supervision, stdout capture, readiness probing, and graceful stop.</span></a>
+        <a class="related-card" href="../daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
+    </div>
+  </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../search/?q=tag%3A%22service+op%22">service op</a><a class="tag" href="../search/?q=tag%3A%22shared+services%22">shared services</a><a class="tag" href="../search/?q=tag%3A%22readiness%22">readiness</a><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../search/?q=tag%3A%22keep-warm%22">keep-warm</a><a class="tag" href="../search/?q=tag%3A%22MGS5001%22">MGS5001</a><a class="tag" href="../search/?q=tag%3A%22MGS5002%22">MGS5002</a></div>
-    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/services.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/services.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284</a>)</small><details class="recent-changes"><summary>Recent changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/services.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/services.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

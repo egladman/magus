@@ -40,7 +40,7 @@ benchstat before.txt after.txt
 
 Put the benchstat rows in the commit message, not the tree. Leave an inline
 `optimization:` comment at the hot path, in the form used in
-[`internal/cache/mtime.go`](internal/cache/mtime.go):
+[`internal/cache/mtime.go`](https://github.com/egladman/magus/blob/main/internal/cache/mtime.go):
 
 ```go
 // optimization: <what changed in one line>.
@@ -50,7 +50,7 @@ Put the benchstat rows in the commit message, not the tree. Leave an inline
 ```
 
 so the trade-off is reviewable without re-running the bench. Per-OS fast paths
-(see [`internal/cache/reflink/`](internal/cache/reflink/)) always keep a portable
+(see [`internal/cache/reflink/`](https://github.com/egladman/magus/tree/main/internal/cache/reflink/)) always keep a portable
 fallback; never gate behavior on a fast path.
 
 ## Docs site

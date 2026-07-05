@@ -13,7 +13,7 @@ Charms replace the one-off boolean flags (`--write`, `--fix`, `--verbose`) that 
 ## Design intent
 
 - **Shared.** A charm name means the same thing everywhere: `rw` means "mutate in place" for `format`, `generate`, or `lint`. A charm useful only with one target is a smell; that is a one-off tool flag, not a charm.
-- **Intent over implementation.** A charm says _what_ you want; each target maps it to its own tool invocation (`gofmt -w`, `prettier --write`, `golangci-lint --fix`). The caller never memorizes per-tool flags.
+- **Intent over implementation.** A charm says _what_ you want; each target maps it to its own tool invocation (`gofmt -w`, `prettier --write`, `golangci-lint --fix`). You never memorize per-tool flags.
 - **Composable.** Charms stack: orthogonal intents like `rw` and `debug` combine without special-casing.
 - **Bounded.** A charm edits arguments only; it cannot swap the command or replace the whole argv. See [Charm vs Target](#charm-vs-target-the-command-boundary).
 
@@ -34,7 +34,7 @@ Each operation is `{ op, path, value?, from? }`:
 
 `path` and `from` are **JSON Pointers** (RFC 6901): `"/0"`, `"/1"`, ... for a specific index; `"/-"` for append (valid only as target of `add`/`move`/`copy`).
 
-Most authors use the [`charm` constructors](#the-charm-constructor-reference) instead of writing raw patches; they resolve a _value anchor_ to an index at author time so you never count indices.
+Most authors use the [`charm` constructors](#the-charm-constructor-reference) instead of writing raw patches: they resolve a _value anchor_ to an index at author time so you never count indices.
 
 ## Applying charms on the CLI
 
@@ -64,7 +64,7 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 ## Defaulting charms per workspace (`default_charms`)
 
-Every run is read-only by default. A workspace can opt into a different baseline with `default_charms` in `magus.yaml` — charms applied to every `magus run` and `magus x` automatically, so a team that wants local autofix does not type `:rw` each time:
+Every run is read-only by default. A workspace can opt into a different baseline with `default_charms` in `magus.yaml`: charms applied to every `magus run` and `magus x` automatically, so a team that wants local autofix does not type `:rw` each time:
 
 ```yaml
 # magus.yaml
@@ -125,7 +125,7 @@ A charm only does something for a target that declares it. Declarations live in 
 
 ### 1. Built-in command spells (`import "magus/charm"`)
 
-A built-in command spell is **self-contained**: it imports only the pure-Buzz modules `magus/target` and `magus/charm`, so it compiles to bare bytecode with no host bindings. `magus/charm` exports the core constructors as **bare functions** (the same flat-import idiom `magus/target` uses for `Target`), each resolving a _value anchor_ to an index so you never count positions:
+A built-in command spell is **self-contained**: it imports only the pure-Buzz modules `magus/target` and `magus/charm`, so it compiles to bare bytecode with no host bindings. `magus/charm` exports the core constructors as **bare functions** (the same flat-import idiom `magus/target` uses for `Target`). Each resolves a _value anchor_ to an index so you never count positions:
 
 ```buzz
 import "magus/target";
@@ -140,7 +140,7 @@ fun lint(target: Target) > Command {
 }
 ```
 
-`magus/charm` ships the **core** constructors: `append`, `prepend`, `after`, `before`, `set`, `drop`. For the advanced set (`move`/`copy`/`test`, the predicate `*Func` variants, `path`) reach the host `charm` module from a non-built-in spell (next section). The constructors return the same `{ops: [...]}` record the raw form below produces, so the two interoperate.
+`magus/charm` ships the **core** constructors: `append`, `prepend`, `after`, `before`, `set`, `drop`. For the advanced set (`move`/`copy`/`test`, the predicate `*Func` variants, `path`) reach the host `charm` module from a non-built-in spell (below). The constructors return the same `{ops: [...]}` record the raw form below produces, so the two interoperate.
 
 ### 2. Workspace spells & magusfiles (`import "charm"`)
 
@@ -156,7 +156,7 @@ charms = {
 };
 ```
 
-> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and the built-in map `.remove()` method would shadow `remove`. This is a _constructor name only_: `charm.drop` emits the standard RFC 6902 `{"op": "remove", ...}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
+> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and the built-in map `.remove()` method would shadow `remove`. This is a _constructor name only_. `charm.drop` emits the standard RFC 6902 `{"op": "remove", ...}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
 
 ### 3. Raw RFC 6902 data (the lowest level)
 
@@ -169,7 +169,7 @@ final args = ["tool", "golangci-lint", "run", "./..."];
 "rw": {"ops": [{"op": "add", "path": "/3", "value": "--fix"}]},   // ≡ the record it returns
 ```
 
-You can **declare the patch notation explicitly** for an op no constructor covers (several edits in one charm), for full control, or just by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: `"/3"` is a counted index that silently breaks if an earlier arg moves, whereas `after(args, "run", ...)` recomputes it. That index-proofing is why the bundled spells prefer the helper.
+You can **declare the patch notation explicitly** for an op no constructor covers (several edits in one charm), for full control, or by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: `"/3"` is a counted index that silently breaks if an earlier arg moves, whereas `after(args, "run", ...)` recomputes it. That index-proofing is why the bundled spells prefer the helper.
 
 The six ops are exactly RFC 6902's (`add`/`remove`/`replace`/`move`/`copy`/`test`); see [the patch model](#reference-the-patch-model). magus adds no ops and renames none; the constructors are sugar over this vocabulary.
 
@@ -196,13 +196,13 @@ export fun build(args: [str]) > void {
 
 Because the toggled targets are reached by nested dispatch (not the top-level selection), `build:container` trips the soft typo-guard warning. That is expected here, since a function target legitimately reads a charm no spell declares (see [Discovery](#discovery)).
 
-Spell op methods receive the active charm set as `opts.charms` (a lookup table: `if opts.charms.rw then`). **Charms a spell does not declare or test for are simply ignored.**
+Spell op methods receive the active charm set as `opts.charms` (a lookup table: `if opts.charms.rw then`). **Charms a spell does not declare or test for are ignored.**
 
 ## The `charm` constructor reference
 
 Both charm modules build a charm's patch; every constructor returns `{ ops = [...] }`. The `argv`-taking constructors resolve a _value anchor_ (or predicate for the `*Func` variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.
 
-The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm.after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare, as `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
+The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm.after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare as `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
 
 | Constructor                          | Builds                                                                                       |
 | ------------------------------------ | -------------------------------------------------------------------------------------------- |
@@ -427,4 +427,4 @@ type Charm struct {
 - [operations.md](operations.md): the Operation whose argv a charm patches, and where charms sit in the hierarchy.
 - [targets.md](targets.md): what a Target is, and the CLI grammar charms attach to.
 - [spells.md](spells.md): what a Spell is, and [Spells vs Targets](spells.md#spells-vs-targets).
-- [modules/charm.md](modules/charm.md): the generated `charm` module API reference.
+- [modules/charm.md](buzz/modules/charm.md): the generated `charm` module API reference.

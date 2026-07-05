@@ -22,7 +22,7 @@ When a [daemon](#daemon) is running, all clients share a single concurrency pool
 
 ## Daemon
 
-By default every `magus run` is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A daemon fixes this: it holds workspace state in memory and enforces **one** concurrency pool across all clients.
+By default every `magus run` is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A daemon holds workspace state in memory and enforces **one** concurrency pool across all clients.
 
 ```sh
 magus server start &        # foreground process; & or a supervisor backgrounds it

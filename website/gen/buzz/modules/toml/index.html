@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>toml module — magus</title>
+  <meta name="description" content="TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/buzz/modules/toml/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="toml module — magus">
+  <meta property="og:description" content="TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/buzz/modules/toml/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Buzz</li><li><a href="../../../buzz/modules/">magus stdlib</a></li><li aria-current="page">toml module</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/buzz/modules/toml.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#parse" title="parse">parse</a></li><li><a href="#stringify" title="stringify">stringify</a></li></ul></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <article>
+<h1 id="toml">toml</h1>
+<p>TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).</p>
+<blockquote>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;toml&quot;</code>) and call methods in <code>camelCase</code> (<code>toml.someMethod</code>).</p>
+</blockquote>
+<h2 id="methods">Methods</h2>
+<h3 id="parse">parse</h3>
+<p>Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.</p>
+<p><strong>Signature:</strong> <code>toml.parse(source) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/toml.go#L43" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td><code>string</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> any</p>
+<h3 id="stringify">stringify</h3>
+<p>Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.</p>
+<p><strong>Signature:</strong> <code>toml.stringify(value) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/toml.go#L52" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td><code>any</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> string</p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../time/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">time module</span></a>
+      <a class="page-nav-next" href="../uuid/"><span class="page-nav-dir">Next</span><span class="page-nav-title">uuid module</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../../../buzz/modules/archive/"><span class="related-card-title">archive module</span><span class="related-card-desc">Archive creation and extraction with automatic format detection.</span></a>
+        <a class="related-card" href="../../../buzz/modules/charm/"><span class="related-card-title">charm module</span><span class="related-card-desc">Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).</span></a>
+        <a class="related-card" href="../../../buzz/modules/crypto/"><span class="related-card-title">crypto module</span><span class="related-card-desc">Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22toml%22">toml</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
+    <small>Last updated <time datetime="2026-07-04T03:04:11Z">July 4, 2026, 3:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4992301a69f66a3041365b693ce859424522861b" data-tooltip="4992301a69f66a3041365b693ce859424522861b" title="4992301a69f66a3041365b693ce859424522861b">4992301</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

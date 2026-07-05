@@ -2,8 +2,30 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://eli.gladman.cc/magus/blog/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/blog/2026/07/01/hello-blog/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/archive/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/charm/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/crypto/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/encoding/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/env/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/fmt/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/fs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/http/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/json/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/magus/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/markdown/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/os/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/path/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/platform/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/semver/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/strings/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/template/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/time/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/toml/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/uuid/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/vcs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/buzz/modules/yaml/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/charms/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/ci/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/race/</loc></url>
@@ -27,10 +49,21 @@
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5002/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5003/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/config/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/conventions/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/daemon/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/debugging/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/development/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/development/contributing/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/development/gopherbuzz/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/development/magus/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/development/website/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/documentation/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/download/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/download/docker/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/download/linux/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/download/macos/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/download/windows/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/engines/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-affected/</loc></url>
@@ -52,26 +85,6 @@
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-x/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/mcp/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/archive/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/charm/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/crypto/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/encoding/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/env/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/fmt/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/fs/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/http/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/json/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/magus/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/markdown/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/os/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/path/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/platform/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/semver/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/strings/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/time/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/vcs/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/modules/yaml/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/operations/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/remote-cache/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/services/</loc></url>
@@ -87,6 +100,8 @@
   <url><loc>https://eli.gladman.cc/magus/spells/rs/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/spells/ts/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/targets/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/targets/ci/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/telemetry/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/tips/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/wards/</loc></url>
 </urlset>

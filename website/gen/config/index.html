@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>magus.yaml configuration — magus</title>
+  <meta name="description" content="Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/config/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="magus.yaml configuration — magus">
+  <meta property="og:description" content="Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/config/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">magus.yaml configuration</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/config.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#cache" title="cache">cache</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#daemon" title="daemon">daemon</a></li><li><a href="#flake" title="flake">flake</a></li><li><a href="#general" title="general">general</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#hints" title="hints">hints</a></li><li><a href="#log" title="log">log</a></li><li><a href="#mcp" title="mcp">mcp</a></li><li><a href="#report" title="report">report</a></li><li><a href="#sandbox" title="sandbox">sandbox</a></li><li><a href="#telemetry" title="telemetry">telemetry</a></li><li><a href="#vcs" title="vcs">vcs</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <article>
+<h1 id="configuration">Configuration</h1>
+<p>magus resolves configuration from three layers, highest precedence first: a CLI flag, a <code>MAGUS_*</code> environment variable, then the <code>magus.yaml</code> file at the workspace root. This page is the complete inventory of config keys, each with its <code>magus.yaml</code> path, environment variable, CLI flag, and value type.</p>
+<h2 id="cache">cache</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cache.dir</code></td>
+<td><code>MAGUS_CACHE_DIR</code></td>
+<td><code>--cache-dir</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>cache.immutable</code></td>
+<td><code>MAGUS_CACHE_IMMUTABLE</code></td>
+<td><code>--cache-immutable</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>cache.remote.insecure</code></td>
+<td><code>MAGUS_CACHE_REMOTE_INSECURE</code></td>
+<td><code>--cache-remote-insecure</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>cache.remote.trusted_keys</code></td>
+<td><code>MAGUS_CACHE_REMOTE_TRUSTED_KEYS</code></td>
+<td><em>(env only)</em></td>
+<td>list <em>(comma-separated, env only)</em></td>
+</tr>
+<tr>
+<td><code>cache.size_mb</code></td>
+<td><code>MAGUS_CACHE_SIZE_MB</code></td>
+<td><code>--cache-size-mb</code></td>
+<td>int</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ci">ci</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ci.max_shards</code></td>
+<td><code>MAGUS_CI_MAX_SHARDS</code></td>
+<td><code>--ci-max-shards</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>ci.runner_pool_budget</code></td>
+<td><code>MAGUS_CI_RUNNER_POOL_BUDGET</code></td>
+<td><code>--ci-runner-pool-budget</code></td>
+<td>int</td>
+</tr>
+</tbody>
+</table>
+<h2 id="daemon">daemon</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>daemon.address</code></td>
+<td><code>MAGUS_DAEMON_ADDRESS</code></td>
+<td><code>--daemon-address</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>daemon.idle_ttl</code></td>
+<td><code>MAGUS_DAEMON_IDLE_TTL</code></td>
+<td><code>--daemon-idle-ttl</code></td>
+<td>duration</td>
+</tr>
+<tr>
+<td><code>daemon.socket</code></td>
+<td><code>MAGUS_DAEMON_SOCKET</code></td>
+<td><code>--daemon-socket</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>daemon.workspaces</code></td>
+<td><code>MAGUS_DAEMON_WORKSPACES</code></td>
+<td><em>(env only)</em></td>
+<td>list <em>(comma-separated, env only)</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="flake">flake</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>flake.annotate_gha</code></td>
+<td><code>MAGUS_FLAKE_ANNOTATE_GHA</code></td>
+<td><code>--flake-annotate-gha</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>flake.bootstrap_samples</code></td>
+<td><code>MAGUS_FLAKE_BOOTSTRAP_SAMPLES</code></td>
+<td><code>--flake-bootstrap-samples</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>flake.enabled</code></td>
+<td><code>MAGUS_FLAKE_ENABLED</code></td>
+<td><code>--flake-enabled</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>flake.min_samples</code></td>
+<td><code>MAGUS_FLAKE_MIN_SAMPLES</code></td>
+<td><code>--flake-min-samples</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>flake.threshold</code></td>
+<td><code>MAGUS_FLAKE_THRESHOLD</code></td>
+<td><code>--flake-threshold</code></td>
+<td>float</td>
+</tr>
+</tbody>
+</table>
+<h2 id="general">general</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>assume_interactive</code></td>
+<td><code>MAGUS_ASSUME_INTERACTIVE</code></td>
+<td><code>--assume-interactive</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>concurrency</code></td>
+<td><code>MAGUS_CONCURRENCY</code></td>
+<td><code>-j</code>, <code>--concurrency</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>default_charms</code></td>
+<td><code>MAGUS_DEFAULT_CHARMS</code></td>
+<td><em>(env only)</em></td>
+<td>list <em>(comma-separated, env only)</em></td>
+</tr>
+<tr>
+<td><code>dry_run</code></td>
+<td><code>MAGUS_DRY_RUN</code></td>
+<td><code>-u</code>, <code>--dry-run</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>history_path</code></td>
+<td><code>MAGUS_HISTORY_PATH</code></td>
+<td><code>--history-path</code></td>
+<td>string</td>
+</tr>
+</tbody>
+</table>
+<h2 id="graph">graph</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>graph.depth</code></td>
+<td><code>MAGUS_GRAPH_DEPTH</code></td>
+<td><code>--graph-depth</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>graph.direction</code></td>
+<td><code>MAGUS_GRAPH_DIRECTION</code></td>
+<td><code>--graph-direction</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>graph.roots</code></td>
+<td><code>MAGUS_GRAPH_ROOTS</code></td>
+<td><code>--graph-roots</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>graph.spell</code></td>
+<td><code>MAGUS_GRAPH_SPELL</code></td>
+<td><code>--graph-spell</code></td>
+<td>string</td>
+</tr>
+</tbody>
+</table>
+<h2 id="hints">hints</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hints.enabled</code></td>
+<td><code>MAGUS_HINTS_ENABLED</code></td>
+<td><em>(env only)</em></td>
+<td>bool <em>(env only)</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="log">log</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log.format</code></td>
+<td><code>MAGUS_LOG_FORMAT</code></td>
+<td><code>--log-format</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>log.level</code></td>
+<td><code>MAGUS_LOG_LEVEL</code></td>
+<td><code>--log-level</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>log.silent</code></td>
+<td><code>MAGUS_LOG_SILENT</code></td>
+<td><em>(env only)</em></td>
+<td>bool <em>(env only)</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="mcp">mcp</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mcp.address</code></td>
+<td><code>MAGUS_MCP_ADDRESS</code></td>
+<td><code>--mcp-address</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>mcp.enabled</code></td>
+<td><code>MAGUS_MCP_ENABLED</code></td>
+<td><em>(env only)</em></td>
+<td>bool <em>(env only)</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="report">report</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>report.filter</code></td>
+<td><code>MAGUS_REPORT_FILTER</code></td>
+<td><em>(env only)</em></td>
+<td>list <em>(comma-separated, env only)</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="sandbox">sandbox</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sandbox.enabled</code></td>
+<td><code>MAGUS_SANDBOX_ENABLED</code></td>
+<td><code>--sandbox-enabled</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>sandbox.env.passthrough</code></td>
+<td><code>MAGUS_SANDBOX_ENV_PASSTHROUGH</code></td>
+<td><em>(env only)</em></td>
+<td>list <em>(comma-separated, env only)</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="telemetry">telemetry</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>telemetry.enabled</code></td>
+<td><code>MAGUS_TELEMETRY_ENABLED</code></td>
+<td><code>--telemetry-enabled</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>telemetry.endpoint</code></td>
+<td><code>MAGUS_TELEMETRY_ENDPOINT</code></td>
+<td><code>--telemetry-endpoint</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>telemetry.insecure</code></td>
+<td><code>MAGUS_TELEMETRY_INSECURE</code></td>
+<td><code>--telemetry-insecure</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>telemetry.protocol</code></td>
+<td><code>MAGUS_TELEMETRY_PROTOCOL</code></td>
+<td><code>--telemetry-protocol</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>telemetry.sample_ratio</code></td>
+<td><code>MAGUS_TELEMETRY_SAMPLE_RATIO</code></td>
+<td><code>--telemetry-sample-ratio</code></td>
+<td>float</td>
+</tr>
+<tr>
+<td><code>telemetry.service_name</code></td>
+<td><code>MAGUS_TELEMETRY_SERVICE_NAME</code></td>
+<td><code>--telemetry-service-name</code></td>
+<td>string</td>
+</tr>
+</tbody>
+</table>
+<h2 id="vcs">vcs</h2>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vcs.base_ref</code></td>
+<td><code>MAGUS_VCS_BASE_REF</code></td>
+<td><code>--vcs-base-ref</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>vcs.enabled</code></td>
+<td><code>MAGUS_VCS_ENABLED</code></td>
+<td><em>(env only)</em></td>
+<td>bool <em>(env only)</em></td>
+</tr>
+<tr>
+<td><code>vcs.name</code></td>
+<td><code>MAGUS_VCS_NAME</code></td>
+<td><code>--vcs-name</code></td>
+<td>string</td>
+</tr>
+</tbody>
+</table>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../charms/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Charms</span></a>
+      <a class="page-nav-next" href="../conventions/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Documentation conventions</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../codes/sandbox/MGS2004/"><span class="related-card-title">MGS2004: sandbox.allow unresolved</span><span class="related-card-desc">Fires when a sandbox.allow path in magus.yaml references an env var or path that magus cannot resolve, so the rule is skipped rather than fatal.</span></a>
+        <a class="related-card" href="../manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../search/?q=tag%3A%22config%22">config</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22configuration%22">configuration</a><a class="tag" href="../search/?q=tag%3A%22environment+variables%22">environment variables</a><a class="tag" href="../search/?q=tag%3A%22flags%22">flags</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a></div>
+    <small>Last updated <time datetime="2026-07-04T03:04:11Z">July 4, 2026, 3:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4992301a69f66a3041365b693ce859424522861b" data-tooltip="4992301a69f66a3041365b693ce859424522861b" title="4992301a69f66a3041365b693ce859424522861b">4992301</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

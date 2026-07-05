@@ -8,6 +8,13 @@
   <title>Charms — magus</title>
   <meta name="description" content="Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target's argument vector at run time.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/charms/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Charms — magus">
+  <meta property="og:description" content="Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target's argument vector at run time.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/charms/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="manifest" href="../manifest.webmanifest">
@@ -24,13 +31,17 @@
     <nav class="container">
       <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="nav-toggle outline" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav-links"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
         <li><a href="../documentation/" aria-current="page">Documentation</a></li>
         <li><a href="../blog/">Blog</a></li>
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
@@ -48,6 +59,7 @@
       <nav>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#design-intent" title="Design intent">Design intent</a></li><li><a href="#the-mechanism-a-json-patch-over-the-argv" title="The mechanism: a JSON Patch over the argv">The mechanism: a JSON Patch over the argv</a></li><li><a href="#applying-charms-on-the-cli" title="Applying charms on the CLI">Applying charms on the CLI</a></li><li><a href="#the-rw-charm" title="The rw charm">The rw charm</a></li><li><a href="#defaulting-charms-per-workspace-default-charms" title="Defaulting charms per workspace (default_charms)">Defaulting charms per workspace (default_charms)</a></li><li><a href="#stacking-and-composition" title="Stacking and composition">Stacking and composition</a></li><li><a href="#previewing-the-rendered-command" title="Previewing the rendered command">Previewing the rendered command</a></li><li><a href="#declaring-what-a-charm-does" title="Declaring what a charm does">Declaring what a charm does</a><ul><li><a href="#1-built-in-command-spells-import-maguscharm" title="1. Built-in command spells (import &quot;magus/charm&quot;)">1. Built-in command spells (import &quot;magus/charm&quot;)</a></li><li><a href="#2-workspace-spells--magusfiles-import-charm" title="2. Workspace spells &amp; magusfiles (import &quot;charm&quot;)">2. Workspace spells &amp; magusfiles (import &quot;charm&quot;)</a></li><li><a href="#3-raw-rfc-6902-data-the-lowest-level" title="3. Raw RFC 6902 data (the lowest level)">3. Raw RFC 6902 data (the lowest level)</a></li><li><a href="#4-function-targets--ops-branch-in-code" title="4. Function targets &amp; ops (branch in code)">4. Function targets &amp; ops (branch in code)</a></li></ul></li><li><a href="#the-charm-constructor-reference" title="The charm constructor reference">The charm constructor reference</a></li><li><a href="#use-case-cookbook" title="Use-case cookbook">Use-case cookbook</a></li><li><a href="#charm-vs-target-the-command-boundary" title="Charm vs Target: the command boundary">Charm vs Target: the command boundary</a><ul><li><a href="#decision-guide" title="Decision guide">Decision guide</a></li><li><a href="#why-the-boundary-exists" title="Why the boundary exists">Why the boundary exists</a></li><li><a href="#when-youve-left-the-charm-layer" title="When you've left the charm layer">When you've left the charm layer</a></li></ul></li><li><a href="#dynamic-values-no-interpolation-use-the-language" title="Dynamic values: no interpolation, use the language">Dynamic values: no interpolation, use the language</a></li><li><a href="#how-a-charm-reaches-a-spell" title="How a charm reaches a spell">How a charm reaches a spell</a></li><li><a href="#discovery" title="Discovery">Discovery</a></li><li><a href="#naming" title="Naming">Naming</a></li><li><a href="#what-is-not-a-charm" title="What is not a charm">What is not a charm</a></li><li><a href="#reference-the-patch-model" title="Reference: the patch model">Reference: the patch model</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
@@ -59,7 +71,7 @@
 <h2 id="design-intent">Design intent</h2>
 <ul>
 <li><strong>Shared.</strong> A charm name means the same thing everywhere: <code>rw</code> means &quot;mutate in place&quot; for <code>format</code>, <code>generate</code>, or <code>lint</code>. A charm useful only with one target is a smell; that is a one-off tool flag, not a charm.</li>
-<li><strong>Intent over implementation.</strong> A charm says <em>what</em> you want; each target maps it to its own tool invocation (<code>gofmt -w</code>, <code>prettier --write</code>, <code>golangci-lint --fix</code>). The caller never memorizes per-tool flags.</li>
+<li><strong>Intent over implementation.</strong> A charm says <em>what</em> you want; each target maps it to its own tool invocation (<code>gofmt -w</code>, <code>prettier --write</code>, <code>golangci-lint --fix</code>). You never memorize per-tool flags.</li>
 <li><strong>Composable.</strong> Charms stack: orthogonal intents like <code>rw</code> and <code>debug</code> combine without special-casing.</li>
 <li><strong>Bounded.</strong> A charm edits arguments only; it cannot swap the command or replace the whole argv. See <a href="#charm-vs-target-the-command-boundary">Charm vs Target</a>.</li>
 </ul>
@@ -108,7 +120,7 @@
 </tbody>
 </table>
 <p><code>path</code> and <code>from</code> are <strong>JSON Pointers</strong> (RFC 6901): <code>&quot;/0&quot;</code>, <code>&quot;/1&quot;</code>, ... for a specific index; <code>&quot;/-&quot;</code> for append (valid only as target of <code>add</code>/<code>move</code>/<code>copy</code>).</p>
-<p>Most authors use the <a href="#the-charm-constructor-reference"><code>charm</code> constructors</a> instead of writing raw patches; they resolve a <em>value anchor</em> to an index at author time so you never count indices.</p>
+<p>Most authors use the <a href="#the-charm-constructor-reference"><code>charm</code> constructors</a> instead of writing raw patches: they resolve a <em>value anchor</em> to an index at author time so you never count indices.</p>
 <h2 id="applying-charms-on-the-cli">Applying charms on the CLI</h2>
 <p>Charms attach to a target name after <code>:</code>, comma-separated:</p>
 <pre><code class="language-sh">magus run format:rw                 # the `rw` charm on `format`
@@ -147,7 +159,7 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 <p><code>rw</code> carries no special flag. Like every other charm, you activate it with a <code>:rw</code> suffix (<code>magus run format:rw</code>). There is no <code>-w</code>/<code>--write</code> shortcut and no <code>--write</code> flag: the suffix is the one way to ask for it.</p>
 <p><strong>CI is always read-only.</strong> <code>Magus.RunCI</code> strips the <code>rw</code> charm before dispatch, so the composite <code>ci</code> pipeline can never mutate the tree even if a caller requests it (e.g. <code>ci:rw</code>). <code>rw</code> is the only charm with this strip status; the other built-in (<code>cd</code>) and every workspace charm you define are ordinary vocabulary that survive into <code>ci</code>.</p>
 <h2 id="defaulting-charms-per-workspace-default-charms">Defaulting charms per workspace (<code>default_charms</code>)</h2>
-<p>Every run is read-only by default. A workspace can opt into a different baseline with <code>default_charms</code> in <code>magus.yaml</code> — charms applied to every <code>magus run</code> and <code>magus x</code> automatically, so a team that wants local autofix does not type <code>:rw</code> each time:</p>
+<p>Every run is read-only by default. A workspace can opt into a different baseline with <code>default_charms</code> in <code>magus.yaml</code>: charms applied to every <code>magus run</code> and <code>magus x</code> automatically, so a team that wants local autofix does not type <code>:rw</code> each time:</p>
 <pre><code class="language-yaml"># magus.yaml
 default_charms: [rw] # `magus run format` now writes; no :rw needed
 </code></pre>
@@ -187,7 +199,7 @@ project: .  target: lint
 <h2 id="declaring-what-a-charm-does">Declaring what a charm does</h2>
 <p>A charm only does something for a target that declares it. Declarations live in a spell's <code>charms</code> table, keyed by charm name. Two charm-construction modules exist (pick by where the spell runs), plus the raw-data escape hatch.</p>
 <h3 id="1-built-in-command-spells-import-maguscharm">1. Built-in command spells (<code>import &quot;magus/charm&quot;</code>)</h3>
-<p>A built-in command spell is <strong>self-contained</strong>: it imports only the pure-Buzz modules <code>magus/target</code> and <code>magus/charm</code>, so it compiles to bare bytecode with no host bindings. <code>magus/charm</code> exports the core constructors as <strong>bare functions</strong> (the same flat-import idiom <code>magus/target</code> uses for <code>Target</code>), each resolving a <em>value anchor</em> to an index so you never count positions:</p>
+<p>A built-in command spell is <strong>self-contained</strong>: it imports only the pure-Buzz modules <code>magus/target</code> and <code>magus/charm</code>, so it compiles to bare bytecode with no host bindings. <code>magus/charm</code> exports the core constructors as <strong>bare functions</strong> (the same flat-import idiom <code>magus/target</code> uses for <code>Target</code>). Each resolves a <em>value anchor</em> to an index so you never count positions:</p>
 <pre><code class="language-buzz">import &quot;magus/target&quot;;
 import &quot;magus/charm&quot;;
 
@@ -199,7 +211,7 @@ fun lint(target: Target) &gt; Command {
     }};
 }
 </code></pre>
-<p><code>magus/charm</code> ships the <strong>core</strong> constructors: <code>append</code>, <code>prepend</code>, <code>after</code>, <code>before</code>, <code>set</code>, <code>drop</code>. For the advanced set (<code>move</code>/<code>copy</code>/<code>test</code>, the predicate <code>*Func</code> variants, <code>path</code>) reach the host <code>charm</code> module from a non-built-in spell (next section). The constructors return the same <code>{ops: [...]}</code> record the raw form below produces, so the two interoperate.</p>
+<p><code>magus/charm</code> ships the <strong>core</strong> constructors: <code>append</code>, <code>prepend</code>, <code>after</code>, <code>before</code>, <code>set</code>, <code>drop</code>. For the advanced set (<code>move</code>/<code>copy</code>/<code>test</code>, the predicate <code>*Func</code> variants, <code>path</code>) reach the host <code>charm</code> module from a non-built-in spell (below). The constructors return the same <code>{ops: [...]}</code> record the raw form below produces, so the two interoperate.</p>
 <h3 id="2-workspace-spells--magusfiles-import-charm">2. Workspace spells &amp; magusfiles (<code>import &quot;charm&quot;</code>)</h3>
 <p>A workspace spell (imported by path) or a magusfile runs with host bindings, so it imports the host <strong><code>charm</code></strong> module, which carries the <strong>full</strong> constructor set as namespaced methods:</p>
 <pre><code class="language-buzz">import &quot;charm&quot;;
@@ -211,7 +223,7 @@ charms = {
 };
 </code></pre>
 <blockquote>
-<p>The argument-removing constructor is named <strong><code>drop</code></strong> (<code>charm.drop</code>), not <code>remove</code>: a charm module is a Buzz map, and the built-in map <code>.remove()</code> method would shadow <code>remove</code>. This is a <em>constructor name only</em>: <code>charm.drop</code> emits the standard RFC 6902 <code>{&quot;op&quot;: &quot;remove&quot;, ...}</code> op. The patch vocabulary does not change; magus never deviates from RFC 6902.</p>
+<p>The argument-removing constructor is named <strong><code>drop</code></strong> (<code>charm.drop</code>), not <code>remove</code>: a charm module is a Buzz map, and the built-in map <code>.remove()</code> method would shadow <code>remove</code>. This is a <em>constructor name only</em>. <code>charm.drop</code> emits the standard RFC 6902 <code>{&quot;op&quot;: &quot;remove&quot;, ...}</code> op. The patch vocabulary does not change; magus never deviates from RFC 6902.</p>
 </blockquote>
 <h3 id="3-raw-rfc-6902-data-the-lowest-level">3. Raw RFC 6902 data (the lowest level)</h3>
 <p>The constructors are pure convenience: they only <strong>build the <code>{ops: [...]}</code> record</strong>, a plain RFC 6902 JSON Patch. That record <em>is</em> the underlying type a charm declares (<code>Charm{Ops: []PatchOp}</code>, see <a href="#reference-the-patch-model">the patch model</a>). A constructor resolves the anchor to an index and returns the same record you could type by hand. The two forms are interchangeable; the helper used by the bundled spells and the literal it returns are the same value:</p>
@@ -220,7 +232,7 @@ charms = {
 &quot;rw&quot;: after(args, &quot;run&quot;, [&quot;--fix&quot;]),                       // helper: anchors on &quot;run&quot;
 &quot;rw&quot;: {&quot;ops&quot;: [{&quot;op&quot;: &quot;add&quot;, &quot;path&quot;: &quot;/3&quot;, &quot;value&quot;: &quot;--fix&quot;}]},   // ≡ the record it returns
 </code></pre>
-<p>You can <strong>declare the patch notation explicitly</strong> for an op no constructor covers (several edits in one charm), for full control, or just by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: <code>&quot;/3&quot;</code> is a counted index that silently breaks if an earlier arg moves, whereas <code>after(args, &quot;run&quot;, ...)</code> recomputes it. That index-proofing is why the bundled spells prefer the helper.</p>
+<p>You can <strong>declare the patch notation explicitly</strong> for an op no constructor covers (several edits in one charm), for full control, or by preference. The raw form is first-class, not a fallback. What you give up by hand is the anchoring: <code>&quot;/3&quot;</code> is a counted index that silently breaks if an earlier arg moves, whereas <code>after(args, &quot;run&quot;, ...)</code> recomputes it. That index-proofing is why the bundled spells prefer the helper.</p>
 <p>The six ops are exactly RFC 6902's (<code>add</code>/<code>remove</code>/<code>replace</code>/<code>move</code>/<code>copy</code>/<code>test</code>); see <a href="#reference-the-patch-model">the patch model</a>. magus adds no ops and renames none; the constructors are sugar over this vocabulary.</p>
 <h3 id="4-function-targets--ops-branch-in-code">4. Function targets &amp; ops (branch in code)</h3>
 <p>When the argv needs to be computed, branch in code. A magusfile function target receives the forwarded CLI args:</p>
@@ -237,10 +249,10 @@ charms = {
 }
 </code></pre>
 <p>Because the toggled targets are reached by nested dispatch (not the top-level selection), <code>build:container</code> trips the soft typo-guard warning. That is expected here, since a function target legitimately reads a charm no spell declares (see <a href="#discovery">Discovery</a>).</p>
-<p>Spell op methods receive the active charm set as <code>opts.charms</code> (a lookup table: <code>if opts.charms.rw then</code>). <strong>Charms a spell does not declare or test for are simply ignored.</strong></p>
+<p>Spell op methods receive the active charm set as <code>opts.charms</code> (a lookup table: <code>if opts.charms.rw then</code>). <strong>Charms a spell does not declare or test for are ignored.</strong></p>
 <h2 id="the-charm-constructor-reference">The <code>charm</code> constructor reference</h2>
 <p>Both charm modules build a charm's patch; every constructor returns <code>{ ops = [...] }</code>. The <code>argv</code>-taking constructors resolve a <em>value anchor</em> (or predicate for the <code>*Func</code> variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.</p>
-<p>The table is the <strong>full</strong> set, available on the host <code>charm</code> module (<code>import &quot;charm&quot;</code>, called <code>charm.after(...)</code>). The pure-Buzz <code>magus/charm</code> module (<code>import &quot;magus/charm&quot;</code>, called bare, as <code>after(...)</code>) exports the <strong>core</strong> rows (append, prepend, after, before, set, drop) for self-contained built-in spells.</p>
+<p>The table is the <strong>full</strong> set, available on the host <code>charm</code> module (<code>import &quot;charm&quot;</code>, called <code>charm.after(...)</code>). The pure-Buzz <code>magus/charm</code> module (<code>import &quot;magus/charm&quot;</code>, called bare as <code>after(...)</code>) exports the <strong>core</strong> rows (append, prepend, after, before, set, drop) for self-contained built-in spells.</p>
 <table>
 <thead>
 <tr>
@@ -523,21 +535,31 @@ type Charm struct {
 <li><a href="../operations/">operations.md</a>: the Operation whose argv a charm patches, and where charms sit in the hierarchy.</li>
 <li><a href="../targets/">targets.md</a>: what a Target is, and the CLI grammar charms attach to.</li>
 <li><a href="../spells/">spells.md</a>: what a Spell is, and <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</li>
-<li><a href="../modules/charm/">modules/charm.md</a>: the generated <code>charm</code> module API reference.</li>
+<li><a href="../buzz/modules/charm/">modules/charm.md</a>: the generated <code>charm</code> module API reference.</li>
 </ul>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-next" href="../ci/"><span class="page-nav-dir">Next</span><span class="page-nav-title">CI</span></a>
+      <a class="page-nav-next" href="../config/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus.yaml configuration</span></a>
     </nav>
   </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
+        <a class="related-card" href="../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace's magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+    </div>
+  </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22charms%22">charms</a><a class="tag" href="../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../search/?q=tag%3A%22argv%22">argv</a><a class="tag" href="../search/?q=tag%3A%22json-patch%22">json-patch</a><a class="tag" href="../search/?q=tag%3A%22rfc-6902%22">rfc-6902</a><a class="tag" href="../search/?q=tag%3A%22modifiers%22">modifiers</a><a class="tag" href="../search/?q=tag%3A%22cli%22">cli</a></div>
-    <small>Last updated <time datetime="2026-07-03T13:14:46Z">July 3, 2026, 1:14 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/02e42fad63a52f1740add5ac8ec7d76e72b3156d" data-tooltip="02e42fad63a52f1740add5ac8ec7d76e72b3156d" title="02e42fad63a52f1740add5ac8ec7d76e72b3156d">02e42fa</a>)</small><details class="recent-changes"><summary>Recent changes</summary><ul><li><a href="https://github.com/egladman/magus/commit/02e42fad63a52f1740add5ac8ec7d76e72b3156d"><code>02e42fa</code></a> <small><time datetime="2026-07-03T13:14:46Z">Jul 3, 2026</time></small> - document the command and service op model; document the cache-backend contract</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a"><code>ca6bb4b</code></a> <small><time datetime="2026-06-18T23:50:00Z">Jun 18, 2026</time></small> - strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/charms.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/charms.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-03T13:14:46Z">July 3, 2026, 1:14 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/02e42fad63a52f1740add5ac8ec7d76e72b3156d" data-tooltip="02e42fad63a52f1740add5ac8ec7d76e72b3156d" title="02e42fad63a52f1740add5ac8ec7d76e72b3156d">02e42fa</a>)</small><details class="recent-changes"><summary>Recent changes on this page (8)</summary><ul><li><a href="https://github.com/egladman/magus/commit/02e42fad63a52f1740add5ac8ec7d76e72b3156d"><code>02e42fa</code></a> <small><time datetime="2026-07-03T13:14:46Z">Jul 3, 2026</time></small> - document the command and service op model; document the cache-backend contract</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb47</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/17631981fcbe83bcd83bcceb0658f35f876845ca"><code>1763198</code></a> <small><time datetime="2026-06-29T01:37:10Z">Jun 29, 2026</time></small> - apply magus.yaml default_charms to run/x; add --no-default-charms to opt out</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a4519</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1d36f071a3fa991a8d60e1454d3ea653d8f0d489"><code>1d36f07</code></a> <small><time datetime="2026-06-19T00:28:50Z">Jun 19, 2026</time></small> - pre-size the lexer; pool foreach iterators; allocation-lean strings</li><li><a href="https://github.com/egladman/magus/commit/ca6bb4b55d810c7962c1c35bb259c117bfa3c10a"><code>ca6bb4b</code></a> <small><time datetime="2026-06-18T23:50:00Z">Jun 18, 2026</time></small> - strict upstream parity by default; typed params, labeled args, reserved-word checks; differential conformance suite; doctor magusfile syntax check</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -> opaque; charm becomes a pure-buzz inlinable module</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/charms.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/charms.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
-    <small><a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
 </body>

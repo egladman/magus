@@ -1,5 +1,6 @@
 ---
 title: sandbox diagnostics
+page_type: overview
 description: Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.
 tags: [sandbox, diagnostics, error codes, MGS2xxx, security, permissions, landlock, supply chain]
 ---
@@ -89,17 +90,15 @@ Two layers run together:
    message and is the only enforcement on macOS, Windows, or older Linux
    kernels (see `MGS2005.md`).
 
-## Diagnostic codes
+## Codes
 
-| Code      | Meaning                                              |
-| --------- | ---------------------------------------------------- |
-| `MGS2001` | path read denied                                     |
-| `MGS2002` | path write denied                                    |
-| `MGS2003` | env vars stripped from child                         |
-| `MGS2004` | sandbox.allow entry failed to resolve                |
-| `MGS2005` | landlock unavailable; interpreter-level only         |
-| `MGS2006` | likely PATH-shim manager (mise/asdf/direnv) stripped |
-| `MGS2007` | exec denied                                          |
-| `MGS2008` | daemon socket withheld from sandboxed children       |
-| `MGS2009` | outbound network request (audited, not blocked)      |
-| `MGS2010` | sandbox policy mismatch (undeclared / fingerprint)   |
+- [MGS2001](MGS2001.md): path read denied.
+- [MGS2002](MGS2002.md): path write denied.
+- [MGS2003](MGS2003.md): env vars stripped from child.
+- [MGS2004](MGS2004.md): sandbox.allow entry failed to resolve.
+- [MGS2005](MGS2005.md): landlock unavailable; interpreter-level only.
+- [MGS2006](MGS2006.md): likely PATH-shim manager (mise/asdf/direnv) stripped.
+- [MGS2007](MGS2007.md): exec denied.
+- [MGS2008](MGS2008.md): daemon socket withheld from sandboxed children.
+- [MGS2009](MGS2009.md): outbound network request (audited, not blocked).
+- [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).

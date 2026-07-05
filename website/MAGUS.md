@@ -74,6 +74,7 @@ graph LR
   format("format")
   lint("lint")
   build("build")
+  buzz_test("buzz-test")
   test("test")
   preflight --> generate
   md_generate --> generate
@@ -81,6 +82,7 @@ graph LR
   format --> lint
   generate --> build
   format --> test
+  buzz_test --> test
   lint --> ci
   build --> ci
   test --> ci
@@ -88,7 +90,7 @@ graph LR
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
   class build_playground,ci,serve anchor
-  class build,format,generate,lint,md_generate,preflight,test target
+  class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 ```
 
@@ -167,6 +169,7 @@ magus run test .  # from the workspace root
 **Depends on:**
 
 - [`format`](#format)
+- [`buzz-test`](#buzz-test)
 
 ### `ci`
 
@@ -233,6 +236,17 @@ md-generate renders MAGUS.md (the target catalog + dependency graph) via `magus 
 ```sh
 magus run md-generate    # from the project directory
 magus run md-generate .  # from the workspace root
+```
+
+### `buzz-test`
+
+buzz-test runs scribe's unit tests (the `test "..." {}` blocks in scribe.buzz) through `magus buzz`, in --embedded mode with the pure magus modules registered so scribe's markdown/encoding imports resolve.
+
+**Defaults**
+
+```sh
+magus run buzz-test    # from the project directory
+magus run buzz-test .  # from the workspace root
 ```
 
 ## Glossary

@@ -29,7 +29,7 @@ any machine will replay.
 
 magus itself knows nothing about S3 or GitHub. A backend is a
 [spell](spells.md) that declares no operations and instead exports the cache
-contract — three functions the remote-cache subsystem detects by name and invokes:
+contract: three functions the remote-cache subsystem detects by name and invokes:
 
 | function                   | when                             | does                                            |
 | -------------------------- | -------------------------------- | ----------------------------------------------- |

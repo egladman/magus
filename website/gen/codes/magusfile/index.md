@@ -1,5 +1,6 @@
 ---
 title: magusfile diagnostics
+page_type: overview
 description: Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace's magusfile, such as missing targets or unresolved declarations.
 tags: [magusfile, diagnostics, error codes, MGS1xxx, targets, doctor, authoring]
 ---
@@ -12,6 +13,6 @@ resolve, and similar. Magus raises them at run time (as a typed
 `DiagnosticError`) and, where applicable, as a `magus doctor` health check so the
 gap is visible before CI runs.
 
-| Code      | Meaning                                           |
-| --------- | ------------------------------------------------- |
-| `MGS1001` | no `ci` target defined in the selected project(s) |
+## Codes
+
+- [MGS1001](MGS1001.md): no `ci` target defined in the selected project(s).

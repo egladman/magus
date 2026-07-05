@@ -6,8 +6,8 @@ tags: [services, service op, shared services, readiness, daemon, keep-warm, MGS5
 
 # Services
 
-A **service op** returns a `Service` — a long-running process such as a dev server,
-a watcher, or a database container — rather than a `Command` that runs to completion
+A **service op** returns a `Service`, a long-running process such as a dev server,
+a watcher, or a database container, rather than a `Command` that runs to completion
 (see [Operations](operations.md#what-an-operation-is)). This page covers how magus
 runs services, shares them, and keeps you from the two foot-guns that come with
 long-running processes: accidental sprawl and misuse.
@@ -30,12 +30,12 @@ A service behaves differently depending on how it is reached:
   **blocks** on it; Ctrl-C signals the process. This is the "run my dev server" case.
 - **Reached as a dependency** (some target's `magus.needs` pulls it in) it is
   **supervised in the background**: magus starts it, waits for its readiness probe to
-  pass, then lets the dependent run against it — it does not block. The service stops
+  pass, then lets the dependent run against it. It does not block. The service stops
   when the run ends (or stays warm on the daemon, below).
 
 ## Shared instances
 
-Services are deduplicated by a **configuration fingerprint** — a content hash of the
+Services are deduplicated by a **configuration fingerprint**: a content hash of the
 resolved command (image, ports, volumes, environment). Several targets that need the
 same service get **one** instance, even across different projects that each declare
 their own copy, as long as the configuration matches. This is what stops N projects
@@ -49,7 +49,7 @@ falls back to in-process rather than failing the run.
 
 ### Readiness
 
-`readiness` is an optional probe polled until it exits 0 — the Kubernetes exec-probe
+`readiness` is an optional probe polled until it exits 0, the Kubernetes exec-probe
 model. Dependents wait on the probe passing, so "the service is up" is a real ordering
 edge, not a `sleep`. Keep the probe distinct from the service process itself: the
 process never exits, the probe does.
@@ -60,10 +60,10 @@ Once a shared service's last dependent releases it, the daemon keeps it warm for
 **idle window** (30 minutes by default; override per service with `idle = "45m"`) and
 then reaps it. Teardown has three layers:
 
-- **automatic** — the idle timeout above, plus a crash reaper (below);
-- **all services** — `magus server stop --services` stops every hosted service (to
+- **automatic**: the idle timeout above, plus a crash reaper (below);
+- **all services**: `magus server stop --services` stops every hosted service (to
   drop stale state or free held ports) without shutting the daemon down;
-- **whole daemon** — `magus server stop` tears the daemon and its services down.
+- **whole daemon**: `magus server stop` tears the daemon and its services down.
 
 If the daemon is killed uncleanly, a new daemon replays each hosted service's `stop`
 command on startup to **reap orphans** the dead one left behind. Give a container
@@ -76,8 +76,8 @@ magus is proactive about the two ways services go wrong. Both surface as
 
 ### Near-duplicate services ([MGS5001](codes/services/MGS5001.md))
 
-When two or more services look like copies of one another — same image and container
-port but differing in some detail — magus will not silently merge them (the difference
+When two or more services look like copies of one another (same image and container
+port but differing in some detail), magus will not silently merge them (the difference
 may be load-bearing, like a different database name). Instead it **warns** at run time,
 scoped to the services actually in that run, and `magus doctor` reports the same across
 the whole workspace. If the divergence is intentional, mark the service `distinct` with
@@ -95,9 +95,9 @@ opt-outs get pruned.
 
 magus rejects an op whose argv contradicts its kind, at resolution time:
 
-- a **service** op that **detaches** (`docker run -d`) — the process forks away from
+- a **service** op that **detaches** (`docker run -d`): the process forks away from
   magus, so foreground supervision, readiness, and stop all become meaningless;
-- a **command** op that runs a **watcher** (`tsc --watch`) — a run-to-completion op
+- a **command** op that runs a **watcher** (`tsc --watch`): a run-to-completion op
   that never exits hangs the run.
 
 Both are the same bug from opposite ends (the argv lies about the kind), so they are

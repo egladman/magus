@@ -47,8 +47,8 @@
   // swapping the icon. aria-label/title still spell out the action for hover and
   // screen readers.
   // Two modes, chosen by viewport. Desktop: the toggle collapses the sidebar and
-  // the article reflows to full width (persisted). Mobile: the toggle slides a
-  // bottom-sheet tray up over a dimming backdrop.
+  // the article reflows to full width (persisted). Mobile: the toggle drops a
+  // top-sheet tray down over a dimming backdrop.
   var mq = window.matchMedia("(max-width: 1023px)");
   var tocAside = grid.querySelector(".toc");
   var backdrop = null;

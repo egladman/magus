@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Wards — magus</title>
+  <meta name="description" content="Wards are coded guardrails that inspect a resolved op before it runs and reject an argv that contradicts the op's declared kind, so a misconfigured service or command op fails fast with a fix.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/wards/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Wards — magus">
+  <meta property="og:description" content="Wards are coded guardrails that inspect a resolved op before it runs and reject an argv that contradicts the op's declared kind, so a misconfigured service or command op fails fast with a fix.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/wards/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Wards</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/wards.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <article>
+<h1 id="wards">Wards</h1>
+<p>A <strong>ward</strong> is a guardrail magus runs against a <em>resolved op</em> - after a target's
+operation is fully assembled but before it executes. The ward inspects the op's
+argv and rejects it when the command contradicts the op's declared <em>kind</em>, so a
+misconfigured op fails immediately with a coded, actionable diagnostic instead of
+misbehaving at run time.</p>
+<p>Wards share the <code>MGSxxxx</code> diagnostic rail with the rest of magus's <a href="../codes/services/">diagnostics and
+error codes</a>: each ward raises a typed error with a stable
+code, a plain-language explanation, and a suggested fix.</p>
+<h2 id="kind-coherence">Kind coherence</h2>
+<p>magus ops carry a <em>kind</em> - a <strong>service</strong> op is a long-running process magus
+supervises in the foreground; a <strong>command</strong> op runs to completion. A ward fires when
+the argv lies about that kind:</p>
+<ul>
+<li><strong>A service op that detaches</strong> (<a href="../codes/services/MGS5002/">MGS5002</a>) - <code>docker run -d</code>,
+a <code>--detach</code> flag, and friends fork the process away from magus, so foreground
+supervision, readiness, and stop all stop working. Drop the detach flag, or make it
+a command op if detaching is what you want.</li>
+<li><strong>A command op that never exits</strong> (<a href="../codes/services/MGS5003/">MGS5003</a>) - a watcher
+like <code>tsc --watch</code> in a run-to-completion op hangs the run. Make it a service op, or
+drop the watch flag.</li>
+</ul>
+<p>Both are mirror images of the same bug: the argv and the kind disagree. Catching it
+at resolution time turns a confusing hang or a lost log into a one-line fix.</p>
+<p>See <a href="../services/#kind-coherence-wards">Services</a> for the full rationale, and
+<a href="../operations/">Operations</a> for how op kinds fit the work hierarchy.</p>
+<h2 id="where-wards-fit">Where wards fit</h2>
+<p>Wards are one family in magus's diagnostics. The complete catalog, grouped by area,
+lives under the diagnostic codes:</p>
+<ul>
+<li><a href="../codes/magusfile/">magusfile</a> - authoring and configuration problems.</li>
+<li><a href="../codes/race/">race</a> - concurrency and ordering hazards.</li>
+<li><a href="../codes/sandbox/">sandbox</a> - filesystem and exec isolation violations.</li>
+<li><a href="../codes/services/">services</a> - service-op problems, including the kind-coherence wards above.</li>
+</ul>
+    </article>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../tips/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Tips and tricks</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../codes/services/"><span class="related-card-title">services diagnostics</span><span class="related-card-desc">Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.</span></a>
+        <a class="related-card" href="../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace's magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
+        <a class="related-card" href="../codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22wards%22">wards</a><a class="tag" href="../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../search/?q=tag%3A%22operations%22">operations</a><a class="tag" href="../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../search/?q=tag%3A%22kind%22">kind</a><a class="tag" href="../search/?q=tag%3A%22MGSxxxx%22">MGSxxxx</a><a class="tag" href="../search/?q=tag%3A%22guardrails%22">guardrails</a></div>
+    <small>Last updated <time datetime="2026-07-04T03:04:11Z">July 4, 2026, 3:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4992301a69f66a3041365b693ce859424522861b" data-tooltip="4992301a69f66a3041365b693ce859424522861b" title="4992301a69f66a3041365b693ce859424522861b">4992301</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

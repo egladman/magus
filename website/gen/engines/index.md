@@ -9,7 +9,7 @@ tags: [engines, buzz, vm, interpreter, runtime, magusfile, plugin, session]
 A **magusfile** is written in [Buzz](https://buzz-lang.dev/) and runs on the
 embedded Buzz VM through a small internal seam. A `magusfile.buzz` exposes the
 `magus.*` API and composes [spells](spells.md), [targets](targets.md), and
-[charms](charms.md). This document explains the seam and how a new language
+[charms](charms.md). This page covers the seam and how a new language
 would plug in.
 
 ## The engine interface
@@ -93,7 +93,7 @@ additions (`os.exec`, `os.which`, ...); `import "fs"` carries Buzz's `fs` plus
 Where a method overlaps a Buzz stdlib call, the magus form is **sandbox-aware**
 while the bare stdlib is not. For example, `env.get`/`lookup` honor the env
 allowlist, whereas Buzz's `os.env` is raw. Those overlaps are noted per-method in the
-[module reference](modules/index.md) (either works); the cross-reference lives in
+[module reference](buzz/modules/index.md) (either works); the cross-reference lives in
 `host/overlap.go`.
 
 A few entries are _not_ treated as duplicates because the magus behavior the
@@ -142,4 +142,4 @@ are visible rather than surprising.
 
 - [spells.md](spells.md): the `mgs_` spell contract and how spells compose.
 - [targets.md](targets.md): the runnable unit and its CLI grammar.
-- [modules/index.md](modules/index.md): the `magus.*` host module reference.
+- [modules/index.md](buzz/modules/index.md): the `magus.*` host module reference.

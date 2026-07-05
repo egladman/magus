@@ -16,7 +16,7 @@ live in the [playground](../../playground.html).
 
 ## Try a runnable snippet
 
-Click **Run** to execute this Buzz snippet in your browser — the WebAssembly
+Click **Run** to execute this Buzz snippet in your browser. The WebAssembly
 interpreter is fetched lazily on the first click, so unopened pages stay light:
 
 <!-- run -->

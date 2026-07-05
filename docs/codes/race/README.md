@@ -1,5 +1,6 @@
 ---
 title: race diagnostics
+page_type: overview
 description: Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.
 tags: [race, diagnostics, error codes, MGS4xxx, concurrency, determinism, watch, replay]
 ---
@@ -32,3 +33,10 @@ at graph construction time, with zero runtime cost, no flag required.
 `watch` is safe to leave on for every CI run. `replay` re-executes the
 affected set sequentially with the cache bypassed, so reserve it for nightly CI
 or a manual audit rather than every push.
+
+## Codes
+
+- [MGS4001](MGS4001.md): filesystem race condition.
+- [MGS4002](MGS4002.md): declared output overlap.
+- [MGS4003](MGS4003.md): non-deterministic output.
+- [MGS4004](MGS4004.md): potential undeclared dependency.

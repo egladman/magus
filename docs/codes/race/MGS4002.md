@@ -55,7 +55,7 @@ In Go registration: `WithOutputs("**/*.gen.go")` anchors to the project root.
 
 ### 2. Assign the shared output to exactly one project
 
-If `shared/types/generated.go` is genuinely produced by one project and
+If `shared/types/generated.go` is produced by one project and
 consumed by another, declare the output only on the producer:
 
 ```yaml
@@ -86,7 +86,7 @@ relationship instead.
 - **Not always a real race.** If the two projects are ordered (one's
   `dependsOn` the other), they never run concurrently and the overlap is
   harmless. The check fires on static declarations; it does not verify ordering.
-  Run with `--race` to confirm whether a concurrent write actually occurs at
+  Run with `--race` to confirm whether a concurrent write occurs at
   runtime.
 - **Not a build failure.** The warning is advisory; magus does not block the
   build.

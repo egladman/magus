@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Contributing — magus</title>
+  <meta name="description" content="How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/development/contributing/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Contributing — magus">
+  <meta property="og:description" content="How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/development/contributing/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../development/" aria-current="page">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../development/">Development</a></li><li aria-current="page">Contributing</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#build-and-test" title="Build and test">Build and test</a></li><li><a href="#performance-changes-need-evidence" title="Performance changes need evidence">Performance changes need evidence</a></li><li><a href="#docs-site" title="Docs site">Docs site</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <article>
+<h1 id="contributing-to-magus">Contributing to magus</h1>
+<p>magus is a one-person project. Issues and PRs are welcome; responses may be slow.
+Open an issue before a large change so neither of us wastes the effort.</p>
+<h2 id="build-and-test">Build and test</h2>
+<pre><code class="language-sh">git clone https://github.com/egladman/magus
+cd magus
+go build ./cmd/magus
+go test -race ./...
+</code></pre>
+<p>Integration tests sit behind <code>//go:build integration</code> and are named
+<code>TestIntegration*</code>. <code>go test ./...</code> runs the fast unit tests; <code>go test -tags=integration ./...</code> runs everything.</p>
+<p>Lint and the vuln check live in a separate <code>go.tool.mod</code>, so the linter's large
+dependency tree stays out of magus's library module graph:</p>
+<pre><code class="language-sh">go tool -modfile=go.tool.mod golangci-lint run
+go tool -modfile=go.tool.mod govulncheck ./...
+</code></pre>
+<h2 id="performance-changes-need-evidence">Performance changes need evidence</h2>
+<p>This is the rule I care about most. Any change that claims to be faster ships
+with a checked-in <code>Benchmark*</code> and the benchstat numbers behind it. No
+speculative micro-opts.</p>
+<p>Capture a baseline, make the change, then compare:</p>
+<pre><code class="language-sh">go test -run=^$ -bench=. -benchmem -benchtime=2s -count=10 ./PKG &gt; before.txt
+# ... your change ...
+benchstat before.txt after.txt
+</code></pre>
+<p>Put the benchstat rows in the commit message, not the tree. Leave an inline
+<code>optimization:</code> comment at the hot path, in the form used in
+<a href="https://github.com/egladman/magus/blob/main/internal/cache/mtime.go" rel="noopener noreferrer" target="_blank" data-external><code>internal/cache/mtime.go</code></a>:</p>
+<pre><code class="language-go">// optimization: &lt;what changed in one line&gt;.
+//   measured: &lt;BenchmarkName&gt; &lt;delta&gt; (benchstat, n=N).
+//   trade-off: &lt;legibility/portability cost&gt;.
+//   assumes: &lt;platform/kernel/build constraint&gt;.
+</code></pre>
+<p>so the trade-off is reviewable without re-running the bench. Per-OS fast paths
+(see <a href="https://github.com/egladman/magus/tree/main/internal/cache/reflink/" rel="noopener noreferrer" target="_blank" data-external><code>internal/cache/reflink/</code></a>) always keep a portable
+fallback; never gate behavior on a fast path.</p>
+<h2 id="docs-site">Docs site</h2>
+<p>The docs site under <code>website/</code> is generated into the committed <code>website/gen/</code>
+tree; regenerate and commit it after any doc change:</p>
+<pre><code class="language-sh">magus run generate:rw website   # re-render, keep the output
+# review `git status website/gen`, then commit gen/ alongside your source edit
+</code></pre>
+<p>A plain <code>magus run generate website</code> gates on drift and fails if <code>gen/</code> was not
+re-rendered, so CI catches a forgotten regen.</p>
+<p>Pages use extensionless URLs (<code>/magus/documentation/</code>, served from
+<code>documentation/index.html</code>). If you rename or move a page, keep the old URL alive
+by listing it under <code>aliases:</code> in the page's frontmatter, so external links do
+not die:</p>
+<pre><code class="language-yaml">---
+title: Download
+aliases: [install]      # clean, gen-root-relative old paths
+---
+</code></pre>
+<p>The build emits a redirect stub at each alias and fails if an alias collides with
+a real page or is claimed twice.</p>
+    </article>
+    </div>
+    </div>
+  </main>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

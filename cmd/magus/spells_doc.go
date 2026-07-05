@@ -1,11 +1,10 @@
 package main
 
 // Spell registration: built-in spells are authored in Buzz under
-// spells/<name>/spell.buzz, compiled to bytecode and embedded at build
-// time (see cmd/magus-utils spells), and exposed to magusfiles as the import
-// "magus/spell/<name>". No blank-import or project.RegisterSpell call is
-// required; the bindings layer discovers all spells from the embedded
-// filesystem at startup.
+// spells/<name>/spell.buzz, compiled to bytecode and embedded at build time (see
+// cmd/magus-utils spells), and exposed to magusfiles as the import
+// "magus/spell/<name>". No blank-import or project.RegisterSpell call is required;
+// the bindings layer discovers all spells from the embedded filesystem at startup.
 //
 // To attach a spell to a project from a magusfile.buzz:
 //
@@ -27,7 +26,8 @@ package main
 //
 //	magus run spells-generate
 //
-// Host utility modules are imported per file off the magus/extra aggregate:
+// Host utility modules are imported directly, one bare import per module:
 //
-//	import "magus/extra";  // extra.os.exec (direct) / extra.os.exec_sh (shell),
-//	                       // extra.fs (filesystem), extra.vcs (VCS introspection)
+//	import "os";   // os.exec (direct) / os.execSh (shell)
+//	import "fs";   // filesystem
+//	import "vcs";  // VCS introspection
