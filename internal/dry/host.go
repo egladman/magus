@@ -27,7 +27,7 @@ import (
 // or third-party spell's example traces like a built-in's.
 func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
-	registerWASMCompatibleHostModules(ctx, sess)
+	registerWASMCompatibleMagusModules(ctx, sess)
 
 	sess.SetGlobal("magus", buildMagus(sess, tr))
 	for name, ops := range spells {
@@ -35,7 +35,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	}
 
 	// Register the canonical value-type modules as embedded SOURCE modules, mirroring
-	// the real runtime (internal/interp/bindings.registerHostModules), so a SPELL
+	// the real runtime (internal/interp/bindings.registerMagusModules), so a SPELL
 	// buffer's `import "magus/target"` resolves the Target/Command/Service object types
 	// instead of failing with `undefined type "Service"`. The session's import lookup
 	// order (synthetic, then source, then resolver) means these are never shadowed by

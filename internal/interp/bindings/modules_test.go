@@ -12,14 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSupersetModules verifies that registerHostModules exposes the magus host
+// TestSupersetModules verifies that registerMagusModules exposes the magus host
 // methods under the same bare names as Buzz's stdlib (a superset), and that the
 // old magus/extra aggregate is gone.
 func TestSupersetModules(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerHostModules(ctx, sess)
+	registerMagusModules(ctx, sess)
 
 	hasKey := func(t *testing.T, module, key string) {
 		t.Helper()
@@ -70,7 +70,7 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerHostModules(ctx, sess)
+	registerMagusModules(ctx, sess)
 
 	for _, m := range std.All() {
 		// "magus" is not a bare import; it is wired as the magus.* namespace in

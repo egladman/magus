@@ -62,7 +62,7 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 func extractDescriptorWithModules(ctx context.Context, src string) (ispell.Descriptor, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerHostModules(ctx, sess)
+	registerMagusModules(ctx, sess)
 	if err := sess.Exec(ctx, src); err != nil {
 		return ispell.Descriptor{}, err
 	}
@@ -99,7 +99,7 @@ func newBuzzSpellInvoker(spec ispell.Descriptor, src string) func(context.Contex
 func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequest) (any, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerHostModules(ctx, sess)
+	registerMagusModules(ctx, sess)
 	if err := sess.Exec(ctx, src); err != nil {
 		return nil, fmt.Errorf("spell handler op %q: exec: %w", fn, err)
 	}

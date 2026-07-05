@@ -13,7 +13,7 @@ import (
 	hostgen "github.com/egladman/magus/host/gen"
 )
 
-// WASMCompatibleHostModules is the allowlist of magus host modules the browser
+// WASMCompatibleMagusModules is the allowlist of magus modules the browser
 // playground registers: the WASMCompatible entries of the one host-module registry
 // (hostgen.Modules), each pure computation with no filesystem, network, process,
 // or randomness access under WASM. IO modules (fs / os / http / vcs / archive) and
@@ -22,9 +22,9 @@ import (
 // Derived from the registry rather than hand-listed, so a new pure module is
 // covered automatically. The docs generator (cmd/magus-docs) reads this map so the
 // runnable-marker and actually-runs-in-browser decisions use the same source.
-var WASMCompatibleHostModules = wasmCompatibleHostModules()
+var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 
-func wasmCompatibleHostModules() map[string]func(context.Context, *buzz.Session) vm.Value {
+func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
 	for name, reg := range hostgen.Modules {
 		if reg.WASMCompatible {
@@ -34,10 +34,10 @@ func wasmCompatibleHostModules() map[string]func(context.Context, *buzz.Session)
 	return out
 }
 
-// registerWASMCompatibleHostModules installs every module in WASMCompatibleHostModules
+// registerWASMCompatibleMagusModules installs every module in WASMCompatibleMagusModules
 // on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
-func registerWASMCompatibleHostModules(ctx context.Context, sess *buzz.Session) {
-	for name, register := range WASMCompatibleHostModules {
+func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session) {
+	for name, register := range WASMCompatibleMagusModules {
 		sess.SetSyntheticModule(name, register(ctx, sess))
 	}
 }
@@ -159,7 +159,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	var out bytes.Buffer
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
-	registerWASMCompatibleHostModules(ctx, sess)
+	registerWASMCompatibleMagusModules(ctx, sess)
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {

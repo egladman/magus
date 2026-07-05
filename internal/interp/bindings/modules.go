@@ -83,16 +83,16 @@ func mergeModuleMap(dst, src vm.Value) {
 	}
 }
 
-// registerHostModules installs the host module surface a Buzz session sees: Buzz's
+// registerMagusModules installs the magus module surface a Buzz session sees: Buzz's
 // own stdlib under bare names (so a magusfile or spell may `import "std"` /
-// `import "serialize"` / `import "io"`), with the magus host modules layered on top
+// `import "serialize"` / `import "io"`), with the magus modules layered on top
 // of those same bare names — `import "os"` carries Buzz's os plus os.exec/which/…,
 // and modules Buzz's stdlib lacks (http, vcs, archive, env, time, …) become new
 // bare imports. The result is one superset surface, no separate `magus/extra`
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
 // handler op path (callBuzzSpellFunc), so both surfaces stay in lock-step.
 // RegisterModuleSurface installs the shared Buzz module surface: Buzz's own
-// stdlib, the magus testing extensions (assert/suite), and every magus host module
+// stdlib, the magus testing extensions (assert/suite), and every magus module
 // (buzzgen.Modules) layered on top of the same bare names. It is the full surface
 // a standalone script sees, shared by the magusfile engine (which then adds the
 // magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
@@ -106,7 +106,7 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules()...)
 }
 
-func registerHostModules(ctx context.Context, sess *buzz.Session) {
+func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 	RegisterModuleSurface(ctx, sess)
 	// Canonical value types (Target/Charm) plus the generated TargetQuery as a
 	// flat-importable source module, so a spell's mgs_listTargets can be typed

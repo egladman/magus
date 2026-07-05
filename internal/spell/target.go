@@ -9,7 +9,7 @@ import (
 // A spell does `import "magus/target";` to bring Target into scope so its
 // mgs_listTargets can be typed as a map of fun(Target, fun(any)) handlers instead
 // of `any`. The runtime registers the module as embedded source (see the buzz
-// bindings' registerHostModules); the built-in spell generator inlines it so each
+// bindings' registerMagusModules); the built-in spell generator inlines it so each
 // compiled built-in is self-contained.
 const TargetModulePath = "magus/target"
 
@@ -18,7 +18,7 @@ const TargetModulePath = "magus/target"
 // both at runtime (as part of the magus/target source module) and at built-in
 // generation time (inlined into each built-in via SelfContainedBuiltinSource). The
 // other value types (TargetQuery/ExecResult/OpResult/TargetResult) are appended at
-// runtime registration only (see registerHostModules), since built-ins don't use
+// runtime registration only (see registerMagusModules), since built-ins don't use
 // them.
 //
 //go:generate go run ../../cmd/magus-utils types -type Target -out buzzlib/target.gen.buzz
