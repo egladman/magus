@@ -128,7 +128,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.Record()), nil
+		return host.AnyMapVal(ret0.ToMap()), nil
 	}))
 	m.MapSet("copyFile", vm.DirectValue("fs.copyFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := host.Str(bzArgs, 0)

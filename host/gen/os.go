@@ -28,7 +28,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.Record()), nil
+		return host.AnyMapVal(ret0.ToMap()), nil
 	}))
 	m.MapSet("execSh", vm.DirectValue("os.execSh", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		line := host.Str(bzArgs, 0)
@@ -38,7 +38,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.Record()), nil
+		return host.AnyMapVal(ret0.ToMap()), nil
 	}))
 	m.MapSet("withEnv", vm.DirectValue("os.withEnv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		env := host.StrMap(bzArgs, 0)

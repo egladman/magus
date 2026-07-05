@@ -33,7 +33,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.Record()), nil
+		return host.AnyMapVal(ret0.ToMap()), nil
 	}))
 	return m
 }

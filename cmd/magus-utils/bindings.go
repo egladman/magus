@@ -1,7 +1,6 @@
 // Subcommand `bindings` emits per-VM trampoline code from std.Module
 // declarations. The generated file registers the module's methods on a backend
-// Session by decoding args, calling the Impl in the host package, and encoding
-// results.
+// Session: decode args, call the Impl in the host package, encode results.
 package main
 
 import (
@@ -18,19 +17,24 @@ import (
 )
 
 // wasmExcludedModules names the host modules whose generated trampolines are
-// tagged //go:build !wasm. These are the IO leaves (process, filesystem, network,
-// env, vcs, and the magus meta-module) whose std Impls don't compile for wasm; the
+// tagged //go:build !wasm: the IO leaves (process, filesystem, network, env, vcs,
+// and the magus meta-module) whose std Impls don't compile for wasm, so the
 // browser playground never registers them. Keep in sync with the //go:build !wasm
-// tags on the matching std/<name>.go files and with playground.BrowserSafeHostModules
+// tags on the matching std/<name>.go files and with dry.BrowserSafeHostModules
 // (whose complement this is).
 var wasmExcludedModules = map[string]bool{
 	"fs":      true,
 	"os":      true,
 	"http":    true,
 	"archive": true,
-	"env":     true,
 	"vcs":     true,
 	"magus":   true,
+	// toml, uuid, and template are host-only for now: their libraries' TinyGo
+	// compatibility is unverified (and uuid's randomness shouldn't run in the
+	// dry-run playground). Each can graduate to the browser set later.
+	"toml":     true,
+	"uuid":     true,
+	"template": true,
 }
 
 func runBindings(args []string) error {
@@ -99,19 +103,19 @@ func goLiteral(v any) string {
 	return fmt.Sprintf("%#v", v)
 }
 
-// emitBuzz emits the Buzz trampolines for module m into package gen
-// (host/gen). It emits one Register<Module>(ctx, sess) that builds a
-// buzz map of DirectValue closures; Buzz closures return (Value, error) natively,
-// so host errors propagate as a Buzz runtime error instead of a panic. Method
-// names stay snake_case to match the magusfile DSL; multi-return Impls yield a list.
+// emitBuzz emits the Buzz trampolines for module m into package gen (host/gen):
+// one Register<Module>(ctx, sess) that builds a buzz map of DirectValue closures.
+// Buzz closures return (Value, error) natively, so host errors propagate as a Buzz
+// runtime error instead of a panic. Method names stay snake_case to match the
+// magusfile DSL; multi-return Impls yield a list.
 //
-// This emits directly against the concrete magus/gopherbuzz value system, calling
-// the marshalling helpers in the parent host package; see the registerAllBuzz
-// doc in interp/bindings/buzz.go for the full rationale.
+// It emits directly against the concrete magus/gopherbuzz value system, calling
+// the marshalling helpers in the parent host package; see the registerAllBuzz doc
+// in interp/bindings/buzz.go for the full rationale.
 func emitBuzz(m std.Module) ([]byte, error) {
 	// Build the func body first, then derive the import set from what it uses:
-	// std (Impls/resolvers) and host (marshalling) appear only when the module
-	// has matching content, so a no-op import can't sneak in.
+	// std (Impls/resolvers) and host (marshalling) appear only when the body
+	// references them, so an unused import can't sneak in.
 	var body bytes.Buffer
 
 	regFn := registerName(m.Name)
@@ -135,11 +139,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&body, "}")
 
 	var b bytes.Buffer
-	// The IO-heavy modules (fs/os/http/archive/env/vcs/magus) call into std
-	// functions that are themselves excluded from the wasm build, so their
-	// trampolines can't compile there. Tag them off wasm to match: the browser
-	// playground registers only the pure-compute modules (see
-	// playground.BrowserSafeHostModules), which stay in every build.
+	// The IO-heavy modules (fs/os/http/archive/env/vcs/magus) call std functions
+	// that are themselves excluded from the wasm build, so their trampolines can't
+	// compile there; tag them off wasm to match. The browser playground registers
+	// only the pure-compute modules (dry.BrowserSafeHostModules), which stay in
+	// every build.
 	if wasmExcludedModules[m.Name] {
 		fmt.Fprintln(&b, "//go:build !wasm")
 		fmt.Fprintln(&b)
@@ -172,8 +176,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 }
 
 // emitBuzzField resolves a static field once and stores it on the module map.
-// The key is camelCased: Buzz's convention is camelCase, while the std descriptor
-// is snake_case.
+// The key is camelCased (Buzz convention) though the std descriptor is snake_case.
 func emitBuzzField(w *bytes.Buffer, f std.Field) {
 	callArgs := ""
 	if host.FieldResolverTakesCtx(f) {
@@ -265,7 +268,7 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 		}
 		fmt.Fprintf(w, "\t\t%s := host.Float(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeIndex:
-		// Buzz lists are 0-based, matching the Go Impl — no offset.
+		// Buzz lists are 0-based, matching the Go Impl; no offset.
 		fmt.Fprintf(w, "\t\t%s := host.Int(bzArgs, %d, 0)\n", a.Name, idx)
 	case std.TypeBool:
 		def := "false"
@@ -288,20 +291,20 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 	}
 }
 
-// recorderType is the interface a typed record return implements (Record() map[string]any).
-var recorderType = reflect.TypeOf((*interface{ Record() map[string]any })(nil)).Elem()
+// fielderType is the interface a typed record return implements (ToMap() map[string]any).
+var fielderType = reflect.TypeOf((*interface{ ToMap() map[string]any })(nil)).Elem()
 
 // returnConv returns the Go expression that converts a method's single return
-// (src) to a vm.Value. When the Impl returns a typed record (or a slice of
-// them) — i.e. its Go type implements Record — it marshals via Record so the Buzz
-// boundary stays the same map a magusfile reads, while the Go SDK gets the struct.
-// Otherwise it falls back to the TypeTag-driven conversion.
+// (src) to a vm.Value. When the Impl returns a typed record (or a slice of them),
+// i.e. its Go type implements ToMap, it marshals via ToMap so the Buzz boundary
+// stays the same map a magusfile reads while the Go SDK gets the struct. Otherwise
+// it falls back to the TypeTag-driven conversion.
 func returnConv(tag std.TypeTag, goType reflect.Type, src string) string {
 	switch {
-	case goType.Implements(recorderType):
-		return "host.AnyMapVal(" + src + ".Record())"
-	case goType.Kind() == reflect.Slice && goType.Elem().Implements(recorderType):
-		return "host.RecordsVal(" + src + ")"
+	case goType.Implements(fielderType):
+		return "host.AnyMapVal(" + src + ".ToMap())"
+	case goType.Kind() == reflect.Slice && goType.Elem().Implements(fielderType):
+		return "host.MapsVal(" + src + ")"
 	default:
 		return buzzValConv(tag, src)
 	}
