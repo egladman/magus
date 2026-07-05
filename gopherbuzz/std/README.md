@@ -33,7 +33,7 @@ this package:
   program (and `cmd/buzz`) stay portable. The one sanctioned exception is
   gopherbuzz's own test surface (`assertcore`/`assert`/`suite`/`testing`), which
   has no upstream counterpart; those register through `std.Modules` tagged
-  `Kind == Extension`, so a caller can filter to the upstream-only surface, and
+  the `buzz.LabelExtra` label, so a caller can filter to the upstream-only surface, and
   conformance fixtures never import them.
 - **Match signatures and return shapes** to the upstream reference. When in
   doubt, the reference at buzz-lang.dev is the source of truth.

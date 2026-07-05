@@ -48,8 +48,8 @@ const (
 	// LabelUpstream marks a clean-room reimplementation of a module in upstream
 	// Buzz's standard library (names, signatures, and semantics track upstream).
 	LabelUpstream = "upstream"
-	// LabelExtension marks a gopherbuzz-original module with no upstream counterpart.
-	LabelExtension = "extension"
+	// LabelExtra marks a gopherbuzz-original module with no upstream counterpart.
+	LabelExtra = "extra"
 )
 
 // HasLabel reports whether m carries label.

@@ -12,7 +12,7 @@ import (
 
 // This file backs the gopherbuzz-original test surface: modules NOT part of
 // upstream Buzz's standard library. They register through std.Modules tagged
-// buzz.LabelExtension (so a caller wanting only the upstream-faithful surface can
+// buzz.LabelExtra (so a caller wanting only the upstream-faithful surface can
 // filter them out), and conformance fixtures never import them. The surface
 // exists because Buzz's == is reference identity for maps, lists, and objects
 // (matching upstream), so `{a: 1} == {a: 1}` is false and test code has no way to
@@ -30,7 +30,7 @@ var suiteSource string
 var testingSource string
 
 // The test surface — assertcore, assert, suite, and testing — installs through
-// std.Modules (each labeled buzz.LabelExtension), not a separate RegisterExtensions
+// std.Modules (each labeled buzz.LabelExtra), not a separate RegisterExtensions
 // entry point. assertcore is the native primitive layer; assert/suite/testing are
 // buzz-authored libraries that build on it. assertCoreModule, assertSource,
 // suiteSource, and testingSource above are referenced from that table.

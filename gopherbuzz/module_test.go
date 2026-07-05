@@ -49,6 +49,6 @@ func TestModule_HasLabel(t *testing.T) {
 	m := buzz.Module{Name: "x", Labels: []string{buzz.LabelUpstream, "wasm"}}
 	assert.True(t, m.HasLabel(buzz.LabelUpstream))
 	assert.True(t, m.HasLabel("wasm"))
-	assert.False(t, m.HasLabel(buzz.LabelExtension))
+	assert.False(t, m.HasLabel(buzz.LabelExtra))
 	assert.False(t, buzz.Module{Name: "y"}.HasLabel("anything"))
 }
