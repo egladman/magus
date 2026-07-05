@@ -190,6 +190,140 @@ export fun lazyImages(html: str) > str {
     return buf + rest;
 }
 
+// tagMermaid finds each Mermaid code fence in the rendered HTML (goldmark produces
+// them as <pre><code class="language-mermaid">) and wraps them in a <div class=
+// "mermaid-src"> with a small no-JS-visible label. With JS on, mermaid-init.js
+// replaces the block with a rendered SVG, so the label sits behind the diagram
+// and never shows; with JS off the reader sees the raw DSL plus a "Diagram
+// source - renders with JavaScript enabled" caption, so the block reads as
+// intentional prose rather than mystery text.
+export fun tagMermaid(html: str) > str {
+    final open = "<pre><code class=\"language-mermaid\">";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        // Find the matching </code></pre>.
+        rest = rest.sub(idx);
+        final close = rest.indexOf("</code></pre>");
+        if (close == null) { return buf + rest; }
+        final block = rest.sub(0, close + 13);   // 13 = len("</code></pre>")
+        buf = buf + "<div class=\"mermaid-src\">"
+            + block
+            + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span>"
+            + "</div>";
+        rest = rest.sub(close + 13);
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
+// rewriteLinks applies rewriteHref to every href="..." in a rendered content
+// fragment, rebasing in-content links for the page's move from its old flat
+// directory to its new clean one.
+export fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("href=\"");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx + 6);   // through the opening href="
+        rest = rest.sub(idx + 6);
+        final end = rest.indexOf("\"");
+        if (end == null) {
+            buf = buf + rest;
+            rest = "";
+            idx = null;
+        } else {
+            buf = buf + rewriteHref(rest.sub(0, end), oldDir, newDir) + "\"";
+            rest = rest.sub(end + 1);
+            idx = rest.indexOf("href=\"");
+        }
+    }
+    return buf + rest;
+}
+
+// oldFlatDirectory gives a docs page's directory before the directory-index move
+// (the source subdir, one .html per dir), for rewriteLinks. The new-directory
+// counterpart (newCleanDirectory) reads site state, so it stays in scribe.buzz.
+export fun oldFlatDirectory(rel: str) > str {
+    final parts = rel.split("/");
+    if (parts.len() <= 1) { return ""; }
+    return parts.sub(0, parts.len() - 1).join("/");
+}
+
+// cleanBody turns a page's raw markdown body into compact prose for the search index:
+// it drops fenced code / mermaid blocks (everything between ``` fences), removes a few
+// inline markdown markers, and collapses whitespace. The text field is ~94% of the index
+// by size, so this both shrinks the download and hands the client clean snippet text (no
+// per-load client-side cleanup). Trade-off: body-text search/snippets no longer include
+// fenced code - title, tags, description, and prose still do.
+export fun cleanBody(md: str) > str {
+    // Keep only the segments OUTSIDE ``` fences (even-numbered split pieces).
+    var buf = "";
+    var inside = false;
+    foreach (p in md.split("```")) {
+        if (inside == false) { buf = buf + " " + p; }
+        inside = (inside == false);
+    }
+    // Newlines / tabs -> spaces; drop inline markers that only add snippet noise.
+    while (buf.indexOf("\n") != null) { buf = buf.replace("\n", " "); }
+    while (buf.indexOf("\t") != null) { buf = buf.replace("\t", " "); }
+    while (buf.indexOf("#") != null) { buf = buf.replace("#", " "); }
+    while (buf.indexOf("*") != null) { buf = buf.replace("*", " "); }
+    while (buf.indexOf("|") != null) { buf = buf.replace("|", " "); }
+    while (buf.indexOf("`") != null) { buf = buf.replace("`", " "); }
+    // Collapse runs of spaces via split/join (avoids a quadratic replace loop).
+    final words: [str] = mut [<str>];
+    foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
+    return words.join(" ");
+}
+
+// aliasStub is the tiny redirect page written at each alias location. Static hosts
+// (GitHub Pages) can't do server redirects, so this uses the standard HTML stub:
+// an instant meta-refresh + a canonical link back to the real page + a scripted
+// location.replace, and a plain <a> so it still works with JavaScript disabled.
+// rel is the target's path relative to the alias's own directory.
+export fun aliasStub(rel: str) > str {
+    return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+        + "<meta http-equiv=\"refresh\" content=\"0; url=" + rel + "\">\n"
+        + "<link rel=\"canonical\" href=\"" + rel + "\">\n"
+        + "<title>Redirecting</title>\n"
+        + "<script>location.replace(\"" + rel + "\");</script>\n"
+        + "</head>\n<body>\n"
+        + "<p>This page moved. <a href=\"" + rel + "\">Continue to its new location</a>.</p>\n"
+        + "</body>\n</html>\n";
+}
+
+test "tagMermaid wraps a mermaid fence and passes other html through" {
+    assert.equal(tagMermaid("<pre><code class=\"language-mermaid\">graph</code></pre>"),
+        "<div class=\"mermaid-src\"><pre><code class=\"language-mermaid\">graph</code></pre>"
+        + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span></div>",
+        "wraps the fence");
+    assert.equal(tagMermaid("<p>hi</p>"), "<p>hi</p>", "non-mermaid unchanged");
+}
+
+test "rewriteLinks rewrites in-content hrefs" {
+    assert.equal(rewriteLinks("<a href=\"other.html\">x</a>", "docs", "docs/page"),
+        "<a href=\"../other/\">x</a>", "internal link resolved and re-relativized");
+    assert.equal(rewriteLinks("<a href=\"https://x\">y</a>", "d", "d"),
+        "<a href=\"https://x\">y</a>", "external link untouched");
+}
+
+test "oldFlatDirectory returns the parent directory" {
+    assert.equal(oldFlatDirectory("docs/guide/page.md"), "docs/guide", "nested page");
+    assert.equal(oldFlatDirectory("top.md"), "", "top-level has no parent");
+}
+
+test "cleanBody strips fences and markers for the search index" {
+    assert.equal(cleanBody("# Hi\n`x`"), "Hi x", "drops #, `, collapses");
+    assert.equal(cleanBody("a ```fenced``` c"), "a c", "drops fenced content");
+}
+
+test "aliasStub is a redirect page to rel" {
+    assert.equal(aliasStub("/new/").sub(0, 15), "<!DOCTYPE html>", "html stub");
+}
+
 test "tagRunnable tags a fenced block after a run marker" {
     assert.equal(tagRunnable("<!-- run -->\n<pre>code</pre>"),
         "\n<pre data-runnable=\"true\">code</pre>", "marker dropped, pre tagged");

@@ -637,32 +637,6 @@ fun isGenerated(srcRel: str) > bool {
         or srcRel == site.docs + "/config.md";
 }
 
-// cleanBody turns a page's raw markdown body into compact prose for the search index:
-// it drops fenced code / mermaid blocks (everything between ``` fences), removes a few
-// inline markdown markers, and collapses whitespace. The text field is ~94% of the index
-// by size, so this both shrinks the download and hands the client clean snippet text (no
-// per-load client-side cleanup). Trade-off: body-text search/snippets no longer include
-// fenced code - title, tags, description, and prose still do.
-fun cleanBody(md: str) > str {
-    // Keep only the segments OUTSIDE ``` fences (even-numbered split pieces).
-    var buf = "";
-    var inside = false;
-    foreach (p in md.split("```")) {
-        if (inside == false) { buf = buf + " " + p; }
-        inside = (inside == false);
-    }
-    // Newlines / tabs -> spaces; drop inline markers that only add snippet noise.
-    while (buf.indexOf("\n") != null) { buf = buf.replace("\n", " "); }
-    while (buf.indexOf("\t") != null) { buf = buf.replace("\t", " "); }
-    while (buf.indexOf("#") != null) { buf = buf.replace("#", " "); }
-    while (buf.indexOf("*") != null) { buf = buf.replace("*", " "); }
-    while (buf.indexOf("|") != null) { buf = buf.replace("|", " "); }
-    while (buf.indexOf("`") != null) { buf = buf.replace("`", " "); }
-    // Collapse runs of spaces via split/join (avoids a quadratic replace loop).
-    final words: [str] = mut [<str>];
-    foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
-    return words.join(" ");
-}
 
 fun outputName(base: str) > str {
     if (base == "README.md") { return "index.html"; }
@@ -795,85 +769,16 @@ fun tagAdmonition(html: str) > str {
     return buf + rest;
 }
 
-// tagMermaid finds each Mermaid code fence in the rendered HTML (goldmark produces
-// them as <pre><code class="language-mermaid">) and wraps them in a <div class=
-// "mermaid-src"> with a small no-JS-visible label. With JS on, mermaid-init.js
-// replaces the block with a rendered SVG, so the label sits behind the diagram
-// and never shows; with JS off the reader sees the raw DSL plus a "Diagram
-// source - renders with JavaScript enabled" caption, so the block reads as
-// intentional prose rather than mystery text.
-fun tagMermaid(html: str) > str {
-    final open = "<pre><code class=\"language-mermaid\">";
-    var buf = "";
-    var rest = html;
-    var idx = rest.indexOf(open);
-    while (idx != null) {
-        buf = buf + rest.sub(0, idx);
-        // Find the matching </code></pre>.
-        rest = rest.sub(idx);
-        final close = rest.indexOf("</code></pre>");
-        if (close == null) { return buf + rest; }
-        final block = rest.sub(0, close + 13);   // 13 = len("</code></pre>")
-        buf = buf + "<div class=\"mermaid-src\">"
-            + block
-            + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span>"
-            + "</div>";
-        rest = rest.sub(close + 13);
-        idx = rest.indexOf(open);
-    }
-    return buf + rest;
-}
-
-fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
-    var buf = "";
-    var rest = html;
-    var idx = rest.indexOf("href=\"");
-    while (idx != null) {
-        buf = buf + rest.sub(0, idx + 6);   // through the opening href="
-        rest = rest.sub(idx + 6);
-        final end = rest.indexOf("\"");
-        if (end == null) {
-            buf = buf + rest;
-            rest = "";
-            idx = null;
-        } else {
-            buf = buf + rewriteHref(rest.sub(0, end), oldDir, newDir) + "\"";
-            rest = rest.sub(end + 1);
-            idx = rest.indexOf("href=\"");
-        }
-    }
-    return buf + rest;
-}
-
-// oldFlatDirectory / newCleanDirectory give a docs page's directory before and after the
-// directory-index move, for rewriteLinks. Old: the source subdir (one .html per
-// dir). New: the clean URL without its trailing slash.
-fun oldFlatDirectory(rel: str) > str {
-    final parts = rel.split("/");
-    if (parts.len() <= 1) { return ""; }
-    return parts.sub(0, parts.len() - 1).join("/");
-}
+// newCleanDirectory gives a docs page's directory after the directory-index move -
+// its clean URL without the trailing slash - for rewriteLinks. It reads site state
+// (the blog dir, via cleanURL), so it stays here; the pure old-directory counterpart
+// (oldFlatDirectory) lives in scribe_html.
 fun newCleanDirectory(rel: str) > str {
     final u = cleanURL(rel, site.blog);
     if (u == "") { return ""; }
     return u.sub(0, u.len() - 1);
 }
 
-// aliasStub is the tiny redirect page written at each alias location. Static hosts
-// (GitHub Pages) can't do server redirects, so this uses the standard HTML stub:
-// an instant meta-refresh + a canonical link back to the real page + a scripted
-// location.replace, and a plain <a> so it still works with JavaScript disabled.
-// rel is the target's path relative to the alias's own directory.
-fun aliasStub(rel: str) > str {
-    return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
-        + "<meta http-equiv=\"refresh\" content=\"0; url=" + rel + "\">\n"
-        + "<link rel=\"canonical\" href=\"" + rel + "\">\n"
-        + "<title>Redirecting</title>\n"
-        + "<script>location.replace(\"" + rel + "\");</script>\n"
-        + "</head>\n<body>\n"
-        + "<p>This page moved. <a href=\"" + rel + "\">Continue to its new location</a>.</p>\n"
-        + "</body>\n</html>\n";
-}
 
 // writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
 // byte-stable), each as an absolute SITE_URL loc — the home page's "index.html" URL
