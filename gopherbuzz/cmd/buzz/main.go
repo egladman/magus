@@ -110,6 +110,7 @@ func run(argv []string) error {
 	sess := buzz.NewSession(ctx, sessOpts...)
 	defer func() { _ = sess.Close() }()
 	buzzstd.Register(sess)
+	buzzstd.RegisterExtensions(sess)
 	if dirs := libDirs(o); len(dirs) > 0 {
 		sess.SetIncludeDirs(dirs)
 	}
@@ -159,19 +160,34 @@ func runTests(ctx context.Context, sess *buzz.Session, name string) error {
 		return nil
 	}
 	failed := 0
+	skipped := 0
 	for _, tc := range tests {
-		if _, err := sess.CallValue(ctx, tc.Fn, nil); err != nil {
-			failed++
-			fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
-		} else {
+		_, err := sess.CallValue(ctx, tc.Fn, nil)
+		if err == nil {
 			fmt.Printf("ok    test %q\n", tc.Name)
+			continue
 		}
+		if reason, ok := buzzstd.SkipMessage(err); ok {
+			skipped++
+			fmt.Printf("skip  test %q%s\n", tc.Name, skipReason(reason))
+			continue
+		}
+		failed++
+		fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
 	}
-	fmt.Printf("---\n%d passed, %d failed\n", len(tests)-failed, failed)
+	fmt.Printf("---\n%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d tests failed", failed, len(tests))
 	}
 	return nil
+}
+
+// skipReason formats a non-empty skip reason as " (reason)" for the test line.
+func skipReason(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return " (" + reason + ")"
 }
 
 // parseArgs parses the upstream-style flag set by hand: every option accepts

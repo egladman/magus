@@ -1,0 +1,284 @@
+namespace suite;
+
+/// The `suite` module: a grouped, stateful test runner in the spirit of Go's
+/// testify/suite, and a refinement of upstream Buzz's `testing.Tester`. Related
+/// tests that share fixtures run together, with setup/teardown hooks around them.
+///
+/// A Suite differs from a bare `test "..." {}` block in two ways: it runs EVERY
+/// case and reports all failures at the end (rather than stopping at the first),
+/// and its matchers are SOFT -- a failed check records the failure and the test
+/// continues. Reach for a Suite when several tests share setup or accumulated
+/// state; use a `test` block plus the `assert` module for standalone checks.
+///
+/// A Suite drives a normal script (run it with `buzz file.buzz`), not a `test`
+/// block: build the Suite, run cases with `it`, then call `summary`, which exits
+/// non-zero when any test failed.
+///
+/// This is a magus extension to Buzz, not part of upstream Buzz's standard library.
+import "assertcore";
+import "io";
+import "os";
+
+/// Creates a Suite with optional lifecycle hooks (pass null to skip one). Buzz has
+/// no static methods, so a Suite is built through this free function rather than a
+/// constructor.
+/// @param setupAll Hook run once before the first test
+/// @param setupEach Hook run before each test
+/// @param teardownAll Hook run once after the last test
+/// @param teardownEach Hook run after each test
+/// @return A new Suite
+export fun new(
+    setupAll: fun () > void?,
+    setupEach: fun () > void?,
+    teardownAll: fun () > void?,
+    teardownEach: fun () > void?
+) > mut Suite {
+    // Buzz has no if-let narrowing for calling an optional, so a skipped hook
+    // becomes a no-op function; `it`/`summary` then just call the field.
+    return mut Suite{
+        passed = mut [],
+        failed = mut [],
+        skipped = mut [],
+        logs = mut [],
+        cleanups = mut [],
+        setupAll = setupAll ?? noop,
+        setupEach = setupEach ?? noop,
+        teardownAll = teardownAll ?? noop,
+        teardownEach = teardownEach ?? noop,
+    };
+}
+
+/// A hook that does nothing, substituted for a null lifecycle hook.
+fun noop() > void {}
+
+/// A grouped test runner with lifecycle hooks and soft assertions.
+export object Suite {
+    /// Names of tests that passed.
+    passed: mut [str],
+    /// Names of tests that failed (one or more assertions failed).
+    failed: mut [str],
+    /// Names of tests that were skipped.
+    skipped: mut [str],
+    /// The current test's buffered log lines, flushed to stderr only on failure.
+    logs: mut [str],
+    /// The current test's cleanup functions, run LIFO after it finishes.
+    cleanups: mut [fun () > void],
+    /// The name of the test currently running.
+    currentName: str = "",
+    /// Whether the current test called skip().
+    currentSkipped: bool = false,
+    /// Number of assertions that failed during the current test.
+    failsInTest: int = 0,
+    /// Whether setupAll has run yet.
+    started: bool = false,
+    /// Hook run once before the first test.
+    setupAll: fun () > void,
+    /// Hook run before each test.
+    setupEach: fun () > void,
+    /// Hook run once after the last test, by summary().
+    teardownAll: fun () > void,
+    /// Hook run after each test.
+    teardownEach: fun () > void,
+
+    /// Runs one test case: setupEach, the body, its cleanups (LIFO), then
+    /// teardownEach. The case passes when no assertion failed and it was not
+    /// skipped. Buffered logs are printed only when the case fails.
+    /// @param name The test description
+    /// @param fn The test body (usually closes over this Suite for its matchers)
+    mut fun it(name: str, fn: fun () > void) > void {
+        if (!this.started) {
+            this.started = true;
+            this.setupAll();
+        }
+
+        this.setupEach();
+
+        this.currentName = name;
+        this.currentSkipped = false;
+        this.failsInTest = 0;
+        this.logs = mut [];
+        this.cleanups = mut [];
+
+        // skip() and fatal() throw to abort the body; any other throw is an
+        // unexpected error. runBody returns true only when the body completes.
+        final completed = this.runBody(fn) catch false;
+
+        this.runCleanups();
+        this.teardownEach();
+
+        if (this.currentSkipped) {
+            this.skipped.append(name);
+        } else if (this.failsInTest > 0 or !completed) {
+            if (!completed and this.failsInTest == 0) {
+                io\stderr.write("  FAIL: {name} raised an unexpected error\n");
+            }
+            this.flushLogs();
+            this.failed.append(name);
+        } else {
+            this.passed.append(name);
+        }
+    }
+
+    /// Calls the test body and reports completion; a raised error (including
+    /// skip/fatal) propagates to it()'s catch.
+    /// @param fn The test body
+    /// @return true when fn returns normally
+    mut fun runBody(fn: fun () > void) > bool {
+        fn();
+
+        return true;
+    }
+
+    /// Runs the current test's cleanups in reverse registration order.
+    mut fun runCleanups() > void {
+        var i = this.cleanups.len() - 1;
+        while (i >= 0) {
+            this.cleanups[i]();
+            i = i - 1;
+        }
+    }
+
+    /// Prints the current test's buffered logs to stderr.
+    fun flushLogs() > void {
+        foreach (line in this.logs) {
+            io\stderr.write("    {line}\n");
+        }
+    }
+
+    /// Returns the name of the test currently running (Go's t.Name).
+    /// @return The current test name
+    fun name() > str {
+        return this.currentName;
+    }
+
+    /// Buffers a log line shown only if the current test fails (Go's t.Log).
+    /// @param message The line to buffer
+    mut fun log(message: str) > void {
+        this.logs.append(message);
+    }
+
+    /// Registers a cleanup to run after the current test, in reverse order, whether
+    /// it passes or fails (Go's t.Cleanup).
+    /// @param fn The cleanup function
+    mut fun cleanup(fn: fun () > void) > void {
+        this.cleanups.append(fn);
+    }
+
+    /// Marks the current test skipped and stops its body (Go's t.Skip).
+    /// @param message Why the test was skipped
+    mut fun skip(message: str) > void !> str {
+        this.currentSkipped = true;
+        io\stdout.write("  SKIP: {this.currentName}{tail(message)}\n");
+
+        throw "suite: skip";
+    }
+
+    /// Records a failure and stops the current test's body (Go's t.Fatal). Use it
+    /// for a broken precondition where continuing is pointless; the soft matchers
+    /// record and continue.
+    /// @param message Why the test cannot continue
+    mut fun fatal(message: str) > void !> str {
+        this.report("fatal", message: message);
+
+        throw "suite: fatal";
+    }
+
+    /// Records a failure: prints detail to stderr and marks the current test failed.
+    /// @param detail What went wrong
+    /// @param message The assertion message
+    mut fun report(detail: str, message: str) > void {
+        this.failsInTest = this.failsInTest + 1;
+        io\stderr.write("  FAIL{tail(message)}: {detail}\n");
+    }
+
+    /// Soft-asserts structural (deep) equality; records a failure on mismatch.
+    /// @param got The value under test
+    /// @param want The expected value
+    /// @param message The assertion message
+    mut fun equal(got: any, want: any, message: str) > void {
+        if (!assertcore\deepEqual(got, want)) {
+            this.report("expected `{want}` got `{got}`", message: message);
+        }
+    }
+
+    /// Soft-asserts structural inequality; records a failure when equal.
+    /// @param got The value under test
+    /// @param want The value it should differ from
+    /// @param message The assertion message
+    mut fun notEqual(got: any, want: any, message: str) > void {
+        if (assertcore\deepEqual(got, want)) {
+            this.report("both values are `{got}`", message: message);
+        }
+    }
+
+    /// Soft-asserts that got is true.
+    /// @param got The value under test
+    /// @param message The assertion message
+    mut fun isTrue(got: bool, message: str) > void {
+        if (!got) {
+            this.report("expected true", message: message);
+        }
+    }
+
+    /// Soft-asserts that got is false.
+    /// @param got The value under test
+    /// @param message The assertion message
+    mut fun isFalse(got: bool, message: str) > void {
+        if (got) {
+            this.report("expected false", message: message);
+        }
+    }
+
+    /// Soft-asserts that got is null.
+    /// @param got The value under test
+    /// @param message The assertion message
+    mut fun isNull(got: any, message: str) > void {
+        if (got != null) {
+            this.report("expected null, got `{got}`", message: message);
+        }
+    }
+
+    /// Soft-asserts that got is not null.
+    /// @param got The value under test
+    /// @param message The assertion message
+    mut fun notNull(got: any, message: str) > void {
+        if (got == null) {
+            this.report("expected non-null", message: message);
+        }
+    }
+
+    /// Records an unconditional failure for the current test.
+    /// @param message Why the test failed
+    mut fun fail(message: str) > void {
+        this.report("fail", message: message);
+    }
+
+    /// Prints a summary and exits non-zero when any test failed. Call once, after
+    /// the last `it`.
+    fun summary() > void {
+        this.teardownAll();
+
+        final total = this.passed.len() + this.failed.len() + this.skipped.len();
+        io\stdout.write(
+            "\n{this.passed.len()}/{total} tests passed, {this.failed.len()} failed, {this.skipped.len()} skipped\n"
+        );
+
+        if (this.failed.len() > 0) {
+            foreach (name in this.failed) {
+                io\stdout.write("  FAILED: {name}\n");
+            }
+            os\exit(1);
+        }
+    }
+}
+
+/// Renders the message as " (message)", or "" when empty.
+/// @param message The assertion message
+/// @return The bracketed suffix, or ""
+fun tail(message: str) > str {
+    if (message == "") {
+        return "";
+    }
+
+    return " ({message})";
+}
