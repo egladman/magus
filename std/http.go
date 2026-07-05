@@ -37,7 +37,7 @@ const defaultHTTPTimeout = 30 * time.Second
 // transient errors and curl-style per-request control over retry and failure.
 //
 // Security note: outbound requests are audited but NOT blocked when the sandbox
-// is active. There is no SSRF guard — any URL a magusfile passes is fetched,
+// is active. There is no SSRF guard: any URL a magusfile passes is fetched,
 // including localhost, internal services, and the cloud metadata endpoint. Only
 // pass URLs you trust.
 var HTTP = Module{
@@ -165,14 +165,14 @@ func httpListen(port int) (net.Listener, error) {
 }
 
 func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts map[string]any) (types.HTTPResponse, error) {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return types.HTTPResponse{}, nil
 	}
-	// Outbound egress is AUDITED BUT NOT BLOCKED: when the sandbox is active the
-	// request is logged, but every URL is still fetched — including localhost,
-	// RFC1918 ranges, and the cloud metadata endpoint (169.254.169.254). There is
-	// no SSRF allow/deny enforcement here yet; treat URLs reachable from a
-	// magusfile as trusted. See the http module Doc for the current guarantee.
+	// Outbound egress is AUDITED BUT NOT BLOCKED: with the sandbox active the
+	// request is logged, but every URL is still fetched, including localhost,
+	// RFC1918 ranges, and the cloud metadata endpoint (169.254.169.254). No SSRF
+	// enforcement yet; treat any URL a magusfile reaches as trusted. See the http
+	// module Doc.
 	if p := sandbox.FromContext(ctx); p != nil {
 		p.RecordConnect(ctx, method, url)
 	}
@@ -205,9 +205,9 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 		return types.HTTPResponse{}, fmt.Errorf("http.%s %s: read body: %w", strings.ToLower(method), url, err)
 	}
 
-	// curl --fail / --fail-with-body: a >= 400 status is reported as an error
-	// rather than a result. --fail-with-body still surfaces the body (in the
-	// error message), --fail omits it.
+	// curl --fail / --fail-with-body: a >= 400 status becomes an error rather
+	// than a result. --fail-with-body keeps the body in the error message;
+	// --fail omits it.
 	if (o.fail || o.failWithBody) && resp.StatusCode >= 400 {
 		if o.failWithBody {
 			return types.HTTPResponse{}, fmt.Errorf("http.%s %s: server returned %d: %s",
@@ -232,7 +232,7 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 }
 
 // httpOpts is the parsed curl-style options map. Zero value means "use the
-// default client" — see custom.
+// default client" (see custom).
 type httpOpts struct {
 	fail         bool // --fail: >= 400 status becomes an error (no body)
 	failWithBody bool // --fail-with-body: >= 400 status becomes an error, body kept
@@ -248,7 +248,7 @@ type httpOpts struct {
 
 // custom reports whether any retry-affecting option was set, i.e. whether the
 // request needs a per-call client instead of the shared default. fail and
-// fail_with_body alone do not — they are applied after the response.
+// fail_with_body alone do not; they are applied after the response.
 func (o httpOpts) custom() bool {
 	return o.failEarly || o.retry >= 0 || o.retryDelay > 0 || o.retryMaxTime > 0 ||
 		o.retryAllErrs || o.retryConnRef || o.timeout > 0

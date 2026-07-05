@@ -12,7 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
 
@@ -103,14 +103,14 @@ var Magus = Module{
 
 // MagusHasCharm reports whether the execution charm name is active in ctx. It
 // backs magus.has_charm, the read side of the charm system: a function target
-// publishes conditionally on has_charm("rw"), or branches on a custom charm.
+// can publish conditionally on has_charm("rw") or branch on a custom charm.
 func MagusHasCharm(ctx context.Context, name string) (bool, error) {
 	return types.HasCharm(ctx, name), nil
 }
 
 // MagusBustCache invalidates cached build entries. When projectPath is empty
 // all manifests are cleared; otherwise only entries for that project are removed.
-// A structured warning is always emitted — this is an escape hatch, not routine.
+// A structured warning is always emitted: this is an escape hatch, not routine.
 func MagusBustCache(ctx context.Context, projectPath string) error {
 	slog.Warn("magus.bust_cache called — consider modeling the missing input as a Source instead",
 		"project_path", projectPath)
@@ -132,18 +132,17 @@ var typedMagusSubcommands = map[string]bool{
 }
 
 // MagusCmd is the escape hatch: it runs `magus <args>` for any subcommand. It
-// stays for subcommands without a dedicated wrapper (status, affected, ...), but
-// warns when args[0] names one that does, so the typed method is preferred. Like
+// serves subcommands without a dedicated wrapper (status, affected, ...) but
+// warns when args[0] names one that has, nudging toward the typed method. Like
 // the typed methods it runs in the contextual project dir; see runMagus.
 func MagusCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
 	warnIfTypedSubcommand(ctx, args)
 	return runMagus(ctx, "cmd", args, opts)
 }
 
-// warnIfTypedSubcommand emits a warning when args[0] names a subcommand that has
-// a dedicated magus.<name>(...) method, nudging authors off the escape hatch. It
-// is the pure decision half of MagusCmd, split out so it can be tested without
-// the nested exec.
+// warnIfTypedSubcommand warns when args[0] names a subcommand with a dedicated
+// magus.<name>(...) method, nudging authors off the escape hatch. It is the pure
+// decision half of MagusCmd, split out so it can be tested without the nested exec.
 func warnIfTypedSubcommand(ctx context.Context, args []string) {
 	if len(args) > 0 && typedMagusSubcommands[args[0]] {
 		slog.WarnContext(ctx, "magus.cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
@@ -188,10 +187,9 @@ func runMagusSub(ctx context.Context, sub string, args []string, opts map[string
 // names the calling method for error messages.
 //
 // The child runs in the working directory carried by ctx (WithCwd), so a nested
-// project describes/insights its own project rather than the root workspace — the
-// same contextual-cwd contract every other magus stdlib primitive honors. opts may
-// carry "root" (string), emitted as the global --root flag (which must precede the
-// subcommand).
+// project describes/insights its own project rather than the root workspace (the
+// contextual-cwd contract every magus stdlib primitive honors). opts may carry
+// "root" (string), emitted as the global --root flag (which precedes the subcommand).
 func runMagus(ctx context.Context, label string, args []string, opts map[string]any) (types.ExecResult, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -206,16 +204,16 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	full = append(full, args...)
 
 	// Re-inject the daemon socket vars: childEnv withholds them from subprocesses
-	// (the socket is unauthenticated — MGS2008), but a nested magus is a legitimate
+	// (the socket is unauthenticated - MGS2008), but a nested magus is a legitimate
 	// recursive invocation that needs daemon access. Passed as Env overrides, which
 	// childEnv layers last so they win; MAGUS/MAGUS_LEVEL are added by childEnv.
 	var env []string
 	for _, k := range []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"} {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
-			// Debug, not Info: this fires on every recursive magus invocation (and a
-			// fan-out can spawn many), so at default verbosity it is pure noise. It is
-			// an internal correctness note, not user-actionable; surface it only at -v.
+			// Debug, not Info: this fires on every recursive invocation (a fan-out can
+			// spawn many), so at default verbosity it is noise. An internal correctness
+			// note, not user-actionable; surface it only at -v.
 			slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
 				"daemon socket injected into recursive magus invocation"), "var", k)
 		}
@@ -225,7 +223,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	// behavior for magusfile targets that run under a process chdir).
 	dir, _ := CwdFromContext(ctx)
 
-	// opts.quiet captures the output without echoing it to the console — for a
+	// opts.quiet captures the output without echoing it to the console, for a
 	// command whose stdout is consumed (e.g. written to a file), not displayed.
 	quiet, _ := opts["quiet"].(bool)
 
@@ -239,7 +237,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 			cmdErr = err
 		case res.Code != 0 && !res.Started:
 			// The child never launched (binary not found, permission, ctx cancelled
-			// before exec) — surface the real cause, not a fabricated "code -1".
+			// before exec); surface the real cause, not a fabricated "code -1".
 			// Mirrors os.exec's runResult.
 			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
 		case res.Code != 0:

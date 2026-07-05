@@ -9,18 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExitRecorder(t *testing.T) {
-	ctx, read := WithExitRecorder(context.Background())
+func TestExitCapture(t *testing.T) {
+	ctx, read := WithExitCapture(context.Background())
 	_, ok := read()
-	require.False(t, ok, "recorder set before RecordExit")
+	require.False(t, ok, "capture empty before CaptureExit")
 
-	RecordExit(ctx, 5)
+	CaptureExit(ctx, 5)
 	code, ok := read()
 	assert.True(t, ok)
 	assert.Equal(t, 5, code)
 
-	// RecordExit on a ctx without a recorder is a no-op (must not panic).
-	assert.NotPanics(t, func() { RecordExit(context.Background(), 9) })
+	// CaptureExit on a ctx without a capture is a no-op (must not panic).
+	assert.NotPanics(t, func() { CaptureExit(context.Background(), 9) })
 }
 
 func TestExitError(t *testing.T) {
@@ -28,7 +28,7 @@ func TestExitError(t *testing.T) {
 	assert.Equal(t, "exit 3", err.Error())
 
 	// Must be recoverable via errors.As so the CLI/daemon can read the code
-	// after it propagates (wrapped) up from a target.
+	// after it propagates wrapped up from a target.
 	wrapped := errors.Join(errors.New("magusfile: target ci"), ExitError{Code: 2})
 	var ex ExitError
 	require.ErrorAs(t, wrapped, &ex)

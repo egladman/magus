@@ -2,30 +2,38 @@ package spell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
+
+	"github.com/egladman/magus/types"
 )
 
-// Resolve calls a Buzz spell module's exported mgs_ functions
-// once and assembles the definition map the shared decoder reads (keyed by the
-// decoder's field names), returning the decoded Descriptor. Centralizing it here
-// keeps the mgs_ naming in one place and lets the decoder, bind-time handles, and
-// the embedded built-ins all read plain data uniformly.
+// ErrNotASpell signals that a Buzz module is simply not a spell - it exports no
+// mgs_getName - rather than a malformed one. Speculative discovery (a local import
+// tried as a spell before falling back to a plain module) treats this as a quiet
+// "not a spell, move on"; an explicit spell load still surfaces it as an error.
+var ErrNotASpell = errors.New("magus/spell: a spell module must `export fun mgs_getName`")
+
+// Resolve calls a Buzz spell module's exported mgs_ functions once and assembles the
+// definition map the shared decoder reads (keyed by the decoder's field names),
+// returning the decoded Descriptor. Centralizing it here keeps the mgs_ naming in one
+// place and lets the decoder, bind-time handles, and embedded built-ins all read plain
+// data uniformly.
 //
 // It takes an already-executed session so a caller whose spell body imports host
-// modules can register those modules and run its own Exec before resolving;
-// Extract-style helpers in the buzz engine wrap it for the bare-session case. Each
-// function-valued op in mgs_listTargets is reduced to its declared command (see
-// resolveOps); a spell that does in-VM work (a cache backend) exports plain
-// functions and declares no ops.
+// modules can register them and run its own Exec before resolving; Extract-style
+// helpers in the buzz engine wrap it for the bare-session case. Each function-valued
+// op in mgs_listTargets is reduced to its declared command (see resolveOps); a spell
+// that does in-VM work (a cache backend) exports plain functions and declares no ops.
 func Resolve(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
 	ex := sess.Exports()
 
 	nameFn, ok := ex["mgs_getName"]
 	if !ok {
-		return Descriptor{}, fmt.Errorf("magus/spell: a spell module must `export fun mgs_getName`")
+		return Descriptor{}, ErrNotASpell
 	}
 	def := vm.NewMap()
 	nv, err := sess.CallValue(ctx, nameFn, nil)
@@ -34,7 +42,7 @@ func Resolve(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
 	}
 	def.MapSet("name", nv)
 
-	// Optional mgs_ functions → resolved values under the decoder's keys.
+	// Optional mgs_ functions to resolved values under the decoder's keys.
 	// OptionalContract is the canonical list this loop stays in sync with.
 	for _, f := range OptionalContract {
 		fn, ok := ex[f.Name]
@@ -62,9 +70,9 @@ func Resolve(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
 	return Decode(buzzSpellObj{v: def})
 }
 
-// resolveOps reduces a function-valued mgs_listTargets — the op handlers a spell
+// resolveOps reduces a function-valued mgs_listTargets - the op handlers a spell
 // returns by value, each `fun(Target) > Run` (or the legacy
-// `fun(Target, fun(Run)) void`) — into the {cmd, args, charms} records the shared
+// `fun(Target, fun(Run)) void`) - into the {cmd, args, charms} records the shared
 // decoder reads. Each handler is called once (recordCommandRun) to capture the
 // command it declares, so the built-in command path, BuiltinsHash, and charm
 // enumeration all read plain data. Record-shaped entries (a bare {cmd, args} map)
@@ -105,7 +113,7 @@ func resolveOps(ctx context.Context, sess *buzz.Session, ops vm.Value) (vm.Value
 // must not branch on or read the Target (passed as null here, so a value pulled from
 // it would be null). A Service op is recognized by its `command` field (the process);
 // a Command op by validating directly. Bin/Args, when present, must be strings (an
-// empty Command is allowed — a no-op marker op), so a null value read from the Target
+// empty Command is allowed - a no-op marker op), so a null value read from the Target
 // fails at resolution rather than silently caching a wrong command.
 func recordOp(ctx context.Context, sess *buzz.Session, fn vm.Value) (vm.Value, error) {
 	rv, err := sess.CallValue(ctx, fn, []vm.Value{vm.Null})
@@ -159,17 +167,26 @@ func validateCmdFields(m vm.Value) error {
 	return nil
 }
 
-// DecodeHandle decodes a bind-time spell handle — a map of resolved native data
-// built by a workspace-local spell import — into a Descriptor, so a workspace-local
+// DecodeHandle decodes a bind-time spell handle - a map of resolved native data
+// built by a workspace-local spell import - into a Descriptor, so a workspace-local
 // Buzz spell can be registered by value at bind time.
 func DecodeHandle(v vm.Value) (Descriptor, error) {
 	return Decode(buzzSpellObj{v: v})
 }
 
+// DecodeCommandValue decodes a single Buzz Command value (bin + args + the charm
+// JSON-Patch table) into a types.Command, reusing the same reader the engine uses
+// for a spell op. It is the by-value entrypoint for a caller holding a raw Command
+// map - the playground's dry run - so the sandbox and the engine agree on a
+// command's shape without a second decoder. v must be a map or object instance
+// (MapView'd form); an invalid charm patch is an error, as it is for the engine.
+func DecodeCommandValue(v vm.Value) (types.Command, error) {
+	return decodeCommand("", "", buzzSpellObj{v: v})
+}
+
 // buzzSpellObj adapts a Buzz data map (a resolved definition or a bound handle)
-// to Obj. All fields are plain data — needs/provides/ops were already resolved
-// by Resolve or marshalled into the handle — so there is no
-// function-calling here.
+// to Obj. All fields are plain data - needs/provides/ops were already resolved by
+// Resolve or marshalled into the handle - so there is no function-calling here.
 type buzzSpellObj struct {
 	v vm.Value
 }
@@ -195,7 +212,7 @@ func (o buzzSpellObj) Obj(key string) (Obj, bool) {
 		return nil, false
 	}
 	// MapView accepts both a map and an object instance (a Run/Charm/PatchOp literal
-	// a command handler built), yielding the field map either way — so the decoder reads
+	// a command handler built), yielding the field map either way, so the decoder reads
 	// the typed-object and bare-record forms identically.
 	mv, ok := x.MapView()
 	if !ok {

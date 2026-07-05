@@ -1,8 +1,8 @@
 // Package docs holds the shared rendering helpers the docs generators
 // (cmd/magus-docs, cmd/magus-spelldocs) use to emit the committed Markdown under
-// docs/**. Keeping the frontmatter block in one place means both generators write
-// the same YAML the site's front-matter parser expects, so a fix here (quoting
-// rules, key order) lands in every generated page at once.
+// docs/**. Keeping the frontmatter block in one place means both generators emit
+// the same YAML the site's parser expects, so a fix here (quoting rules, key
+// order) lands in every generated page at once.
 package docs
 
 import (
@@ -10,15 +10,39 @@ import (
 	"strings"
 )
 
-// WriteFrontmatter emits the site's YAML frontmatter block at the top of a
-// generated docs page. Values that contain a colon are quoted to keep YAML
-// parsers from reading the second half as a nested mapping.
-func WriteFrontmatter(b *strings.Builder, title, description string, tags []string) {
+// Frontmatter is the frontmatter a generated docs page carries. Title and Tags are
+// always emitted; PageType and Aliases only when set. Key order is fixed (title,
+// page_type, aliases, description, tags) so regenerated output stays byte-stable.
+type Frontmatter struct {
+	Title       string
+	PageType    string   // "overview" for hub/index pages; "" otherwise
+	Aliases     []string // old clean URLs that should redirect here (parity on a move)
+	Description string
+	Tags        []string
+}
+
+// WriteFrontmatter emits the site's YAML frontmatter block. Values containing a
+// colon, quote, or edge whitespace are quoted so a YAML parser can't misread
+// them. A page with no page_type/aliases leaves those fields zero.
+func WriteFrontmatter(b *strings.Builder, f Frontmatter) {
 	b.WriteString("---\n")
-	fmt.Fprintf(b, "title: %s\n", YAMLScalar(title))
-	fmt.Fprintf(b, "description: %s\n", YAMLScalar(description))
+	fmt.Fprintf(b, "title: %s\n", YAMLScalar(f.Title))
+	if f.PageType != "" {
+		fmt.Fprintf(b, "page_type: %s\n", YAMLScalar(f.PageType))
+	}
+	if len(f.Aliases) > 0 {
+		b.WriteString("aliases: [")
+		for i, a := range f.Aliases {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(YAMLScalar(a))
+		}
+		b.WriteString("]\n")
+	}
+	fmt.Fprintf(b, "description: %s\n", YAMLScalar(f.Description))
 	b.WriteString("tags: [")
-	for i, t := range tags {
+	for i, t := range f.Tags {
 		if i > 0 {
 			b.WriteString(", ")
 		}

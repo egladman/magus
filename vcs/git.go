@@ -35,11 +35,11 @@ func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 // against the working tree, not base...HEAD. The three-dot form is commit-to-commit
 // and silently ignores uncommitted work, so editing files without committing (or
 // committing straight onto the base branch, where HEAD == base) reported an empty
-// set and "0 projects affected". Using the merge-base keeps changes that landed on
-// base after the branch point out of the set; diffing against the work tree (no
-// ...HEAD) folds in staged and unstaged edits, matching the jj and hg drivers and
-// the module's "current working tree" contract. With a clean tree this still equals
-// base...HEAD, so CI behavior is unchanged.
+// set and "0 projects affected". The merge-base keeps changes that landed on base
+// after the branch point out of the set; diffing against the work tree folds in
+// staged and unstaged edits, matching the jj and hg drivers and the module's
+// "current working tree" contract. With a clean tree this still equals base...HEAD,
+// so CI behavior is unchanged.
 func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err
@@ -53,8 +53,8 @@ func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 		return nil, fmt.Errorf("git diff: %w", err)
 	}
 	files := splitLines([]byte(out))
-	// Untracked-but-not-ignored files (new source files) are part of the working
-	// tree conceptually, but git diff omits them. List them explicitly so a brand-new
+	// Untracked-but-not-ignored files (new source files) are conceptually part of
+	// the working tree, but git diff omits them. List them explicitly so a brand-new
 	// file seeds its project the same way a modified one does. --exclude-standard
 	// honors .gitignore, so build artifacts stay out.
 	untracked, err := vcsOutput(ctx, dir, "git", "ls-files", "--others", "--exclude-standard")
@@ -116,8 +116,8 @@ func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions
 }
 
 // isAncestor, commitBeforeTime and commitInfo run via `git -C dir` so they target
-// the repository under bisect, not the process cwd — the dir-scoping the
-// VCSDriver contract requires for correctness under concurrent runs.
+// the repository under bisect, not the process cwd: the dir-scoping the VCSDriver
+// contract requires for correctness under concurrent runs.
 func (v gitVCS) isAncestor(ctx context.Context, dir, sha string) error {
 	return exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", sha, "HEAD").Run()
 }
@@ -213,6 +213,11 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 // Dirty reports whether the working tree (optionally scoped to paths) has
 // uncommitted changes, via `git status --porcelain`. Non-empty output = dirty.
 func (v gitVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {
+	files, err := v.DirtyFiles(ctx, dir, paths)
+	return len(files) > 0, err
+}
+
+func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
 	args := []string{"status", "--porcelain"}
 	if len(paths) > 0 {
 		args = append(args, "--")
@@ -220,9 +225,19 @@ func (v gitVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, er
 	}
 	out, err := vcsOutput(ctx, dir, "git", args...)
 	if err != nil {
-		return false, fmt.Errorf("git status: %w", err)
+		return nil, fmt.Errorf("git status: %w", err)
 	}
-	return out != "", nil
+	return splitStatusLines(out), nil
+}
+
+// splitStatusLines splits VCS status/diff output into non-empty lines (one changed
+// entry each), or nil when the tree is clean. Shared by the git/hg/jj DirtyFiles.
+func splitStatusLines(out string) []string {
+	out = strings.TrimRight(out, "\n")
+	if out == "" {
+		return nil
+	}
+	return strings.Split(out, "\n")
 }
 
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
@@ -232,8 +247,8 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 }
 
 // gitCommitFormat emits the NUL-delimited fields parseCommit expects: id, short,
-// author name/email, the commit (record) date as strict ISO 8601 / RFC 3339
-// (%cI), parents, and the raw message (%B).
+// author name/email, the commit (record) date as strict ISO 8601 / RFC 3339 (%cI),
+// parents, and the raw message (%B).
 const gitCommitFormat = "%H%x00%h%x00%an%x00%ae%x00%cI%x00%P%x00%B"
 
 func (v gitVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
@@ -243,8 +258,7 @@ func (v gitVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, 
 	if err := checkRef(rev); err != nil {
 		return types.Commit{}, err
 	}
-	// `--` separates the rev from any path-like positional args git might otherwise
-	// treat the rev as.
+	// `--` keeps git from treating a path-like rev as a positional path arg.
 	out, err := vcsOutput(ctx, dir, "git", "log", "-1", "--format="+gitCommitFormat, rev, "--")
 	if err != nil {
 		return types.Commit{}, fmt.Errorf("git log %s: %w", rev, err)
@@ -274,9 +288,9 @@ const gitChurnFormat = "%x00%H%x00%an%x00%cI"
 // ChangesByCommit implements types.ChurnReporter. --name-only lists each commit's
 // files, one per line. --no-merges keeps a merge's combined diff (often empty or
 // sprawling) from skewing edit-frequency attribution. The `-- .` pathspec scopes the
-// log to dir's subtree (git runs in dir), so history is contextual to the working
-// dir rather than the whole repository — both the commit limit and the listed files
-// then reflect only that subtree. since, when set, bounds the scan by commit date.
+// log to dir's subtree (git runs in dir), so both the commit limit and the listed
+// files reflect only that subtree, not the whole repository. since, when set, bounds
+// the scan by commit date.
 func (gitVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
 	if commits <= 0 {
 		commits = 1

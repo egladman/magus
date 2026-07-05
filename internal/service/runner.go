@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
 
@@ -26,12 +26,12 @@ const (
 // MGS5002 ward enforces that.
 //
 // Process control (group setup, graceful terminate, hard group-kill) is delegated to
-// internal/run's platform primitives so grandchildren of a wrapper like `docker run`
+// internal/proc/run's platform primitives so grandchildren of a wrapper like `docker run`
 // are reaped, not orphaned, on every OS - the same handling magus uses for ordinary
 // forked commands.
 //
-// The zero value is ready to use with sane defaults; the timing fields are for
-// tuning (and for keeping tests fast). Any field left 0 uses its default.
+// The zero value is ready to use; the timing fields are for tuning (and for keeping
+// tests fast). Any field left 0 uses its default.
 type ExecRunner struct {
 	StopGrace     time.Duration // wait for a graceful stop before a hard kill
 	ReadyTimeout  time.Duration // total time a readiness probe may take to pass
@@ -107,7 +107,7 @@ func (ExecRunner) Stop(h Handle) {
 // stopProc shuts a service down: prefer its graceful Stop command, else SIGTERM the
 // process group; either way escalate to a hard group kill if it does not exit within
 // the grace window, and wait for it to be reaped. Signalling and killing target the
-// whole group (via internal/run) so a wrapper's grandchildren are not orphaned.
+// whole group (via internal/proc/run) so a wrapper's grandchildren are not orphaned.
 func stopProc(h *execHandle) {
 	select {
 	case <-h.done:

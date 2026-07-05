@@ -220,8 +220,8 @@ var Fs = Module{
 // sandbox policy permits reading.
 func FsGlob(ctx context.Context, pattern string) ([]string, error) {
 	// Glob against the project dir (resolvePath is a no-op without a context cwd),
-	// then report matches relative to it so the returned paths read the same as
-	// the pattern the caller passed — independent of the process working directory.
+	// then report matches relative to it so the returned paths read like the
+	// pattern the caller passed, independent of the process working directory.
 	base := cwdFromContext(ctx)
 	matches, err := doublestar.FilepathGlob(resolvePath(ctx, pattern))
 	if err != nil {
@@ -258,10 +258,9 @@ func FsBasename(_ context.Context, path string) (string, error) {
 func FsExists(ctx context.Context, path string) (bool, error) {
 	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
-		// Treat a sandbox-denied path as "does not exist" rather than
-		// raising — many magusfiles call fs.exists as a probe and a hard
-		// error would break unrelated checks for paths the spell is
-		// allowed to touch.
+		// Report a sandbox-denied path as "does not exist" rather than raising:
+		// fs.exists is often a probe, and a hard error would break unrelated
+		// checks for paths the spell is allowed to touch.
 		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
 	}
 	_, err := os.Stat(path)
@@ -283,7 +282,7 @@ func FsReadFile(ctx context.Context, path string) (string, error) {
 
 // FsWriteFile writes content to path (mode 0644), subject to the sandbox write policy.
 func FsWriteFile(ctx context.Context, path string, content string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -298,7 +297,7 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 
 // FsMkdirAll creates path and any missing parents with the given mode, subject to the sandbox write policy.
 func FsMkdirAll(ctx context.Context, path string, perm int) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -318,7 +317,7 @@ func FsJoin(_ context.Context, parts ...string) (string, error) {
 
 // FsRemoveAll recursively removes path (no error if missing), subject to the sandbox write policy.
 func FsRemoveAll(ctx context.Context, path string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -402,7 +401,7 @@ func FsStat(ctx context.Context, path string) (types.FileInfo, error) {
 // FsCopyFile copies src to dst (overwriting), preserving src's permission bits.
 // Both ends are subject to the sandbox policy: src must be readable, dst writable.
 func FsCopyFile(ctx context.Context, src, dst string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
@@ -422,7 +421,7 @@ func FsCopyFile(ctx context.Context, src, dst string) error {
 // permission bits. Each source entry is checked for read and each destination
 // for write, so a sandbox-denied path stops the copy with a diag error.
 func FsCopyDir(ctx context.Context, src, dst string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
@@ -511,14 +510,14 @@ func checkWrite(ctx context.Context, path string) error {
 	return nil
 }
 
-// FsWatch is BLOCKING: it watches paths (directories, recursively) for changes
-// and invokes cb with each debounced batch of changed paths — relative to the
-// current directory — until cb returns true or the run is cancelled (Ctrl-C).
-// Editor/VCS noise (.git, build caches, …) is filtered by the built-in ignore
-// set. It returns nil on a clean stop; a watcher setup error or an error raised
-// by the callback propagates. Because it holds its session for its whole life,
-// the idiomatic use is a reactive loop (rebuild on change) run as its own
-// target; parallelism comes from magus running other targets concurrently.
+// FsWatch is BLOCKING: it watches paths (directories, recursively) and invokes
+// cb with each debounced batch of changed paths (relative to the current
+// directory) until cb returns true or the run is cancelled (Ctrl-C). Editor/VCS
+// noise (.git, build caches, ...) is filtered by the built-in ignore set. It
+// returns nil on a clean stop; a watcher setup error or an error raised by the
+// callback propagates. Because it holds its session for its whole life, the
+// idiomatic use is a reactive loop (rebuild on change) run as its own target,
+// with parallelism coming from magus running other targets concurrently.
 func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("fs.watch: at least one path is required")
@@ -585,8 +584,8 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 			}
 			return nil // sandbox-denied path silently skipped
 		}
-		// The callback sees paths relative to the project dir, matching the root
-		// it passed in; the sandbox check above used the absolute path.
+		// The callback sees project-relative paths matching the root it passed
+		// in; the sandbox check above used the absolute path.
 		cbPath := path
 		if base != "" {
 			if rel, rerr := filepath.Rel(base, path); rerr == nil {
@@ -607,7 +606,7 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 // FsAppendFile appends content to path (creating the file if absent, mode 0644),
 // subject to the sandbox write policy.
 func FsAppendFile(ctx context.Context, path, content string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -630,7 +629,7 @@ func FsAppendFile(ctx context.Context, path, content string) error {
 
 // FsChmod changes the permission bits of path, subject to the sandbox write policy.
 func FsChmod(ctx context.Context, path string, mode int) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -646,7 +645,7 @@ func FsChmod(ctx context.Context, path string, mode int) error {
 // FsSymlink creates a symbolic link at link pointing to target, subject to the
 // sandbox write policy on link.
 func FsSymlink(ctx context.Context, target, link string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	// Only link (the path being created) is resolved against the project dir;
@@ -694,7 +693,7 @@ func FsReadLines(ctx context.Context, path string) ([]string, error) {
 // subject to the sandbox write policy. An empty list writes an empty file, so
 // write_lines(p, read_lines(p)) round-trips a newline-terminated file.
 func FsWriteLines(ctx context.Context, path string, lines []string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	content := ""
@@ -707,9 +706,9 @@ func FsWriteLines(ctx context.Context, path string, lines []string) error {
 // FsTempDir creates a new temporary directory in os.TempDir() with an optional
 // name prefix and returns its path.
 func FsTempDir(ctx context.Context, prefix string) (string, error) {
-	if types.Recording(ctx) {
-		// Dry run: return a plausible, non-empty path without creating it. Writes into
-		// it are themselves recorded (skipped), so the directory never needs to exist.
+	if types.Tracing(ctx) {
+		// Dry run: return a plausible path without creating it. Writes into it are
+		// themselves recorded (skipped), so the directory never needs to exist.
 		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
 	}
 	dir, err := os.MkdirTemp("", prefix)
@@ -734,8 +733,8 @@ func relToCwd(base string, abs []string) []string {
 }
 
 // callbackTruthy reports whether a callback's first return value is truthy,
-// matching the host predicate convention (nil/false → false; a bool → its value;
-// any other value → true).
+// matching the host predicate convention (nil/false is false; a bool is its
+// value; any other value is true).
 func callbackTruthy(ret []any) bool {
 	if len(ret) == 0 {
 		return false

@@ -10,7 +10,7 @@ import (
 
 // ApplyPatch applies an RFC 6902 JSON Patch to argv, treating argv as a JSON
 // array of strings. Ops run in order; each sees the result of the previous, per
-// the spec's sequential semantics. The input is never mutated — a fresh slice is
+// the spec's sequential semantics. The input is never mutated - a fresh slice is
 // returned. An out-of-range index, a failed `test`, or a malformed pointer is an
 // error naming the offending op.
 //
@@ -28,6 +28,39 @@ func ApplyPatch(argv []string, ops []types.PatchOp) ([]string, error) {
 		out = next
 	}
 	return out, nil
+}
+
+// ApplyCharms reshapes argv by the active charms declared in charms: every charm named
+// in activeNames contributes its ops, concatenated in sorted charm-name order and
+// applied as one sequential RFC 6902 patch, so the result is deterministic and immune
+// to activation order or duplicate names. A name not declared in charms (or absent from
+// activeNames) contributes nothing. The result is always a fresh slice. This is the one
+// place the "which charms, in what order, over which argv" rule lives; both the engine's
+// command binding and the dry run route through it.
+func ApplyCharms(argv []string, charms map[string]types.Charm, activeNames []string) ([]string, error) {
+	if len(charms) == 0 || len(activeNames) == 0 {
+		return slices.Clone(argv), nil
+	}
+	on := make(map[string]bool, len(activeNames))
+	for _, name := range activeNames {
+		on[name] = true
+	}
+	names := make([]string, 0, len(charms))
+	for name := range charms {
+		if on[name] {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+
+	var ops []types.PatchOp
+	for _, name := range names {
+		ops = append(ops, charms[name].Ops...)
+	}
+	if len(ops) == 0 {
+		return slices.Clone(argv), nil
+	}
+	return ApplyPatch(argv, ops)
 }
 
 // applyOp applies a single op to argv (already a private copy ApplyPatch owns).
@@ -90,7 +123,7 @@ func applyOp(argv []string, op types.PatchOp) ([]string, error) {
 }
 
 // argvIndex resolves a single-token JSON Pointer into an array index. "/-" yields
-// length (the append position) when allowDash is set — its only legal use, per
+// length (the append position) when allowDash is set - its only legal use, per
 // RFC 6901, is the add target. "/N" yields N, bounds-checked: add/move/copy
 // targets accept [0,length] (length appends); remove/replace/test/from accept
 // [0,length). Leading zeros and non-numeric tokens are rejected.

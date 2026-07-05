@@ -23,7 +23,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/codec"
-	runPkg "github.com/egladman/magus/internal/run"
+	runPkg "github.com/egladman/magus/internal/proc/run"
 )
 
 // Cache is an on-disk content-addressed build cache handle.
@@ -44,9 +44,9 @@ type Cache struct {
 	evictMu        sync.Mutex    // serialises evictLRU so concurrent Runs don't over-evict each other's fresh manifests
 	remote         RemoteBackend // optional remote backend; nil = local-only
 
-	// Remote-artifact signing: signer signs on push, verifier authenticates on import.
-	// signingSeed/trustedKeys hold the raw option inputs until Open builds the keys,
-	// so option application stays error-free and keys are validated once.
+	// Remote-artifact signing: signer signs on push, verifier authenticates on
+	// import. signingSeed/trustedKeys hold the raw option inputs until Open builds
+	// the keys, so option application stays error-free and keys validate once.
 	signer         *signer
 	verifier       *verifier
 	signingSeed    []byte
@@ -77,9 +77,9 @@ type Step struct {
 	Charms          []string // active charm names (sorted), mixed into key so charm-variant runs differ
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
-	NoCache         bool     // when true, always run fn — never replay or snapshot (long-running targets)
-	Exclusive       bool     // RunAll only: when true, runs alone; no other step in the batch runs concurrently with it (ignored by Run, which has no batch)
-	Slots           int      // RunAll only: concurrency slots this step holds while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	NoCache         bool     // when true, always run fn; never replay or snapshot (long-running targets)
+	Exclusive       bool     // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
+	Slots           int      // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 }
 
@@ -170,7 +170,7 @@ func (c *Cache) initSigning() error {
 	}
 	// Defense in depth: the cache package is the trust boundary, so it enforces its
 	// own invariant rather than relying on a caller to. A remote backend with no
-	// verifier imports unsigned artifacts — refuse it unless explicitly opted in.
+	// verifier imports unsigned artifacts, so refuse it unless explicitly opted in.
 	if c.remote != nil && c.verifier == nil && !c.insecureRemote {
 		return errors.New("magus/cache: remote backend configured without a trust set; " +
 			"pass WithTrustedKeys, or WithInsecureRemote to accept unsigned artifacts")
@@ -216,7 +216,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	}
 	result.Hash = hash
 
-	// The inputs that produced the cache key, summarised — the starting point for
+	// The inputs that produced the cache key, summarised: the starting point for
 	// "why did this rebuild?". Counts (not per-file hashes) keep it cheap and off
 	// the pinned hashStep hot path; -vv surfaces it for every step. Diagnostics go
 	// to the default logger (stderr), not c.log (stdout cache-result events).
@@ -271,7 +271,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			}
 		}
 		if mErr == nil {
-			// Cache hit — local, or just populated from the remote backend.
+			// Cache hit: local, or just populated from the remote backend.
 			replayCtx, endReplay := tracer.StartSpan(ctx, "magus.cache.replay")
 			paths, err := c.replay(replayCtx, manifest, s.WorkspaceRoot)
 			endReplay(err)
@@ -383,7 +383,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 }
 
 // reproTarget renders the step's target with its active charms the way the CLI
-// spells it — "name" or "name:charm1,charm2" — so the pretty reporter can print a
+// spells it ("name" or "name:charm1,charm2"), so the pretty reporter can print a
 // copy-pasteable `magus run <target> <project>` for the just-run project.
 func reproTarget(s Step) string {
 	if len(s.Charms) == 0 {
@@ -395,10 +395,10 @@ func reproTarget(s Step) string {
 // RunAll schedules steps concurrently (bounded by WithConcurrency/WithLimiter).
 // Step.DependsOn imposes scheduling order for in-scope steps only; out-of-scope
 // deps are ignored. A cyclic DependsOn graph is rejected before any goroutine
-// launches. Upstream cache keys are folded into dependent Step.Deps transitively
-// (happens-before: markDone writes the key before waitForDeps returns in dependents).
-// Every goroutine is launched immediately and blocks on deps without holding a
-// slot, so the pool never deadlocks and g.Wait() always drains cleanly.
+// launches. Upstream cache keys fold into dependent Step.Deps transitively
+// (happens-before: markDone writes the key before waitForDeps returns in
+// dependents). Every goroutine launches immediately and blocks on deps without
+// holding a slot, so the pool never deadlocks and g.Wait() always drains cleanly.
 func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Context, Step) error, opts ...RunOption) ([]Result, error) {
 	rc := &runCtx{}
 	for _, o := range opts {
@@ -427,15 +427,15 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	// exclusive step takes the write lock (runs alone); every other step takes the
 	// read lock (runs in parallel with peers but never alongside an exclusive step).
 	//
-	// Ordering is load-bearing: the lock is taken *after* waitForDeps (so an exclusive
+	// Ordering is load-bearing: take the lock *after* waitForDeps (so an exclusive
 	// step's own deps aren't blocked by its own writer intent) and *before* the
-	// limiter slot (so a pending writer never holds a slot, which would let it
-	// starve a dependent of the slot it needs). That ordering is also why the lock
-	// necessarily spans the *whole* c.Run below, not just fn: moving it inside
-	// c.Run would put it after the slot and reintroduce the starvation it avoids.
-	// The cost is that an exclusive *cache hit* also serializes its replay, which is
-	// fine: exclusive targets are rare and typically NoCache. A batch with no
-	// exclusive steps only ever takes uncontended read locks.
+	// limiter slot (so a pending writer never holds a slot and starves a dependent
+	// of the slot it needs). That ordering is also why the lock spans the *whole*
+	// c.Run below, not just fn: moving it inside c.Run would put it after the slot
+	// and reintroduce the starvation it avoids. The cost is that an exclusive
+	// *cache hit* also serializes its replay, which is fine: exclusive targets are
+	// rare and typically NoCache. A batch with no exclusive steps only ever takes
+	// uncontended read locks.
 	var isolationMu sync.RWMutex
 	acquireIsolation := func(exclusive bool) func() {
 		if exclusive {
@@ -449,7 +449,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	// optimization: coalesce the mtime-store flush to once per batch instead of once
 	// per step. A per-step flush rewrites every shard a completing step shares with
 	// earlier steps, so a cold N-step build's shard writes grow super-linearly.
-	//   measured: BenchmarkRunAllColdMtime (24 projects × 64 files) -44.9% sec/op,
+	//   measured: BenchmarkRunAllColdMtime (24 projects x 64 files) -44.9% sec/op,
 	//   -81.0% B/op, -28.7% allocs/op (benchstat, n=10, p=0.000).
 	//   trade-off: a build killed mid-flight persists the memo once at the end
 	//   (WithoutCancel below) rather than incrementally per spell; equivalent net
@@ -464,7 +464,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// markDone on every exit so a failing upstream cascades cancellation.
 			defer barrier.markDone(stepKey(s))
 
-			// Trace the DAG progression — blocked-on-deps, then admitted — so a
+			// Trace the DAG progression (blocked-on-deps, then admitted) so a
 			// "why is this serialized / what is it waiting on?" question can be read
 			// off the log at -vvv without a profiler.
 			if len(s.DependsOn) > 0 && slog.Default().Enabled(gctx, levelTrace) {
@@ -480,20 +480,20 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			defer acquireIsolation(s.Exclusive)()
 			// acquireIsolation's Lock/RLock is not ctx-aware, so a goroutine can
 			// park there uninterruptibly while a sibling fails. Re-check after it
-			// returns and bail before running fn — lim.Acquire below would catch a
+			// returns and bail before running fn. lim.Acquire below would catch a
 			// cancelled gctx too, except on an unlimited limiter, where it returns
 			// nil without consulting ctx.
 			if err := gctx.Err(); err != nil {
 				return err
 			}
-			// A heavy step can request extra slots (Step.Slots) so it throttles
-			// parallel work around itself. Clamp to [1, budget]: 0 means one slot,
-			// and a request above the whole budget would exceed capacity and error, so
-			// cap it at the budget. A request >= the budget holds every slot, so no
-			// peer can enter fn while it runs (it does not take the isolation lock, so
-			// unlike an exclusive step it does not also serialize replays). On an unlimited
-			// limiter (budget <= 0) there is nothing to throttle against, so the
-			// request is a no-op: AcquireN returns immediately.
+			// A heavy step can request extra slots (Step.Slots) to throttle parallel
+			// work around itself. Clamp to [1, budget]: 0 means one slot, and a
+			// request above the budget would exceed capacity and error, so cap it. A
+			// request >= the budget holds every slot, so no peer can enter fn while it
+			// runs (it does not take the isolation lock, so unlike an exclusive step it
+			// does not also serialize replays). On an unlimited limiter (budget <= 0)
+			// there is nothing to throttle against, so the request is a no-op:
+			// AcquireN returns immediately.
 			slots := s.Slots
 			if slots < 1 {
 				slots = 1
@@ -545,7 +545,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	}
 	err := g.Wait()
 	// Flush the shared mtime memo once for the whole batch. WithoutCancel so a
-	// cancelled run still persists the hashing already done (the per-step flush it
+	// cancelled run still persists the hashing already done (the per-step flush this
 	// replaced also persisted completed steps before cancellation).
 	c.mtimes.flush(context.WithoutCancel(ctx))
 	return results, err
@@ -814,7 +814,7 @@ func (c *Cache) logPath(projectPath, hash string) string {
 
 // captureRun runs fn while teeing stdout/stderr to logPath via context writers.
 // Quiet mode (logLevel >= Error) suppresses live terminal output; on failure it
-// dumps the captured log to stderr. On failure the log file is removed (not replayable).
+// dumps the captured log to stderr and removes the log file (not replayable).
 //
 // Silent mode (WithSilent) bubbles up only target-marked notice lines, and on
 // failure dumps just the log's tail and retains the full log so its printed path
@@ -823,8 +823,8 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn 
 	quiet := c.logLevel >= slog.LevelError
 	// Collapse withholds live output the same way quiet does, but at default
 	// verbosity: a passing project shows only its status line; a failing one has its
-	// captured output replayed below (see the failure handling). Silent has its own
-	// stricter rules, so it takes precedence and collapse stays off under it.
+	// captured output replayed below. Silent has its own stricter rules, so it takes
+	// precedence and collapse stays off under it.
 	collapse := c.collapse && !c.silent && !quiet
 	withhold := quiet || collapse
 
@@ -850,7 +850,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn 
 		runErr = cerr
 	}
 
-	// Silent mode bubbles up only the lines the target marked as notices — the
+	// Silent mode bubbles up only the lines the target marked as notices, the
 	// sole output for an otherwise-silent passing run.
 	if c.silent {
 		for _, msg := range extractNotices(logPath) {
@@ -874,7 +874,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath string, fn 
 		case collapse:
 			// The live view (status + indented stage lines) went to stderr while the
 			// project ran. On failure replay the raw, unindented subprocess output to
-			// stdout, so it stays copy/paste and pipe friendly (2>/dev/null yields just
+			// stdout so it stays copy/paste and pipe friendly (2>/dev/null yields just
 			// the failures). The header is part of the live view, hence stderr.
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)

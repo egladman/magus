@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
 
@@ -32,7 +32,7 @@ func init() { Register(Os) }
 var magusWarnOnce sync.Once
 
 // warnIfMagusBinary emits a one-shot slog warning when cmd resolves to the
-// magus binary. Execution is not blocked — the escape hatch stays open.
+// magus binary. Execution is not blocked; the escape hatch stays open.
 func warnIfMagusBinary(cmd string) {
 	if filepath.Base(cmd) != "magus" {
 		return
@@ -46,7 +46,7 @@ func warnIfMagusBinary(cmd string) {
 // The cwd/path helpers (cwdKey, WithCwd, cwdFromContext, CwdFromContext,
 // resolvePath, EffectiveCwd) live in cwd.go so the pure-compute modules can share
 // them without pulling this IO-heavy file into the wasm build. resolveDir stays
-// here because only the exec primitives use it.
+// here since only the exec primitives use it.
 
 // resolveDir computes the effective working directory for an exec primitive:
 // an explicit dir argument wins (joined onto the context cwd when relative);
@@ -223,15 +223,14 @@ func OsSleep(ctx context.Context, ms float64) error {
 	}
 }
 
-// OsExit aborts the current run by returning a types.ExitError carrying code.
-// It deliberately does not call os.Exit: a magusfile target may run inside a
-// daemon serving other workspaces, where os.Exit would kill unrelated work. The
-// error propagates to the CLI (and daemon), which translate it into the process
-// exit status. It also records the code on ctx (types.RecordExit) so the code
-// survives even when the engine stringifies the error type away; the
-// interpreter reads it back. See types.ExitError.
+// OsExit aborts the current run by returning a types.ExitError carrying code. It
+// deliberately does not call os.Exit: a target may run inside a daemon serving
+// other workspaces, where os.Exit would kill unrelated work. The error propagates
+// to the CLI (and daemon), which translate it into the process exit status. It
+// also records the code on ctx (types.CaptureExit) so it survives when the engine
+// stringifies the error type away; the interpreter reads it back. See types.ExitError.
 func OsExit(ctx context.Context, code int) error {
-	types.RecordExit(ctx, code)
+	types.CaptureExit(ctx, code)
 	return types.ExitError{Code: code}
 }
 
@@ -267,8 +266,8 @@ func optStringDefault(opts map[string]any, key, def string) string {
 	return def
 }
 
-// runResult forks name+args through run.Exec — sharing the fork/sandbox/env/cancel
-// core with fork spell targets — capturing output for the returned {stdout,
+// runResult forks name+args through run.Exec (sharing the fork/sandbox/env/cancel
+// core with fork spell targets), capturing output for the returned {stdout,
 // stderr} record while still streaming it to `magus tail` and the report. Per-call
 // os.with_env overrides ride ctx (withEnvKey). label/cmd name the command in the
 // raise message. A non-zero exit raises unless opts.allow_failure is true, which
@@ -288,9 +287,9 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		if !res.Started {
 			// Process never started. Common footgun: os.exec runs a single program
 			// with no shell, so a command line ("a | b", "cd x", "$VAR") fails to
-			// start as a literal program name. Nudge toward os.exec_sh. (os.exec is
-			// the right, more performant default for a plain program; this only
-			// fires on the not-found failure of a shell-shaped command.)
+			// start as a literal program name. Nudge toward os.exec_sh, but only on
+			// the not-found failure of a shell-shaped command (os.exec stays the
+			// right, faster default for a plain program).
 			if label == "os.exec" && looksLikeShellCommand(cmd) {
 				interactive.Emit(os.Stderr, fmt.Sprintf(
 					"%q looks like a shell command line, but os.exec runs a single program directly with no shell; "+
@@ -309,12 +308,12 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 }
 
 // looksLikeShellCommand reports whether cmd looks like a shell command line
-// (shell metacharacters or a shell builtin) rather than a single program name —
+// (shell metacharacters or a shell builtin) rather than a single program name:
 // the signature of an os.exec call that should have been os.exec_sh.
 func looksLikeShellCommand(cmd string) bool {
-	// A space (a command line, not a program name), a pipe/redirect/sequence
-	// operator, glob, variable, subshell, or brace expansion — all things a
-	// shell interprets that os.exec passes literally as a program name.
+	// A space (a command line, not a program name), pipe/redirect/sequence
+	// operator, glob, variable, subshell, or brace expansion: things a shell
+	// interprets that os.exec passes literally as a program name.
 	if strings.ContainsAny(cmd, " \t|&;<>$`*?(){}\n") {
 		return true
 	}
@@ -355,7 +354,7 @@ func OsExecSh(ctx context.Context, line string, dir string, opts map[string]any)
 }
 
 // shellExe returns the shell program and its command flag. The default is
-// hardcoded — /bin/sh on unix, cmd on Windows — deliberately NOT $SHELL, so a
+// hardcoded (/bin/sh on unix, cmd on Windows), deliberately NOT $SHELL, so a
 // magusfile runs the same shell on every machine (the user's interactive shell
 // varies and its dialect may not be POSIX). An override (opts.shell) wins and is
 // declared in the magusfile, keeping the choice reproducible; bare names resolve
@@ -373,7 +372,7 @@ func shellExe(override string) (string, string) {
 }
 
 // shellFlag returns the "run this command string" flag for shell: /c for cmd,
-// -c for every POSIX-style shell (sh, bash, zsh, dash, …).
+// -c for every POSIX-style shell (sh, bash, zsh, dash, ...).
 func shellFlag(shell string) string {
 	base := strings.TrimSuffix(strings.ToLower(filepath.Base(shell)), ".exe")
 	if base == "cmd" {
@@ -464,15 +463,15 @@ func retryFloat(v any) (float64, bool) {
 }
 
 // OsWithSlots reserves n slots from magus's concurrency limiter for the duration
-// of cb, so a callback that runs its own internally-parallel work (make -j, a
-// test runner) does not oversubscribe the global budget. With no limiter on ctx
-// (e.g. a standalone run) it simply invokes cb. Mirrors archive.*: the build
-// slot already held is handed back while the n are reserved so peak in-flight
-// stays within the cap rather than cap+n.
+// of cb, so a callback running its own internally-parallel work (make -j, a test
+// runner) does not oversubscribe the global budget. With no limiter on ctx (e.g. a
+// standalone run) it just invokes cb. Mirrors archive.*: the build slot already
+// held is handed back while the n are reserved, so peak in-flight stays within the
+// cap rather than cap+n.
 func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
-		// reserving n cannot deadlock on slots we are pinning ourselves.
+		// reserving n cannot deadlock on slots we pin ourselves.
 		if held := cache.SlotsHeld(ctx); held > 0 {
 			lim.ReleaseN(held)
 			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()

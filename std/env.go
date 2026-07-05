@@ -1,5 +1,3 @@
-//go:build !wasm
-
 package std
 
 import (
@@ -7,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
@@ -84,26 +83,46 @@ var Env = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    EnvRequire,
 		},
+		{
+			Name:    "parse_dotenv",
+			Doc:     "Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export `, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
+			Args:    []Arg{{Name: "content", Type: TypeString}},
+			Returns: []Ret{{Type: TypeStringMap}},
+			Impl:    EnvParseDotenv,
+		},
+		{
+			Name:    "read_dotenv",
+			Doc:     "Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeStringMap}},
+			Impl:    EnvReadDotenv,
+		},
+		{
+			Name:    "load_dotenv",
+			Doc:     "Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: nil,
+			Impl:    EnvLoadDotenv,
+		},
 	},
 }
 
 // EnvGet returns the value of the named variable, or "" if unset or stripped by the sandbox policy.
 func EnvGet(ctx context.Context, name string) (string, error) {
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
-		// Return empty string rather than error: env.get is widely used
-		// as a "did the user set X?" probe. A hard error would break
-		// otherwise-innocuous magusfiles in the sandbox.
+		// Empty string, not an error: env.get is widely used as a "did the user
+		// set X?" probe, and a hard error would break innocuous magusfiles in
+		// the sandbox.
 		return "", nil
 	}
 	return os.Getenv(name), nil
 }
 
-// EnvLookup returns (value, found) for the named variable. Unlike EnvGet it
-// distinguishes "set but empty" ("", true) from "unset" ("", false) — the
-// distinction Go's os.LookupEnv exposes and os.Getenv collapses. A variable the
-// sandbox policy strips reports ("", false): a stripped secret is
-// indistinguishable from an absent one, so a spell cannot probe for its
-// existence (mirrors EnvGet's information-hiding).
+// EnvLookup returns (value, found) for the named variable, distinguishing "set
+// but empty" ("", true) from "unset" ("", false) as os.LookupEnv does and
+// os.Getenv does not. A sandbox-stripped variable reports ("", false) so a
+// stripped secret is indistinguishable from an absent one and cannot be probed
+// for (mirrors EnvGet's information-hiding).
 func EnvLookup(ctx context.Context, name string) (string, bool, error) {
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
 		return "", false, nil
@@ -114,14 +133,13 @@ func EnvLookup(ctx context.Context, name string) (string, bool, error) {
 
 // EnvSet sets name to value in the current process environment, unless the sandbox policy strips name.
 func EnvSet(ctx context.Context, name, value string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	slog.Debug("env.set", "name", name)
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
-		// Refuse re-introduction of names the policy strips. Without this
-		// a spell could set GITHUB_TOKEN back into magus's env so the
-		// next os.exec carries it.
+		// Refuse to re-introduce a stripped name; otherwise a spell could set
+		// GITHUB_TOKEN back into magus's env so the next os.exec carries it.
 		slog.Warn("env.set blocked by the sandbox", "name", name)
 		return nil
 	}
@@ -132,7 +150,7 @@ func EnvSet(ctx context.Context, name, value string) error {
 // policy strips name (in which case it is already invisible and the call is a
 // no-op, mirroring EnvSet's refusal to touch stripped names).
 func EnvUnset(ctx context.Context, name string) error {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return nil
 	}
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
@@ -166,7 +184,7 @@ func EnvHome(_ context.Context) (string, error) {
 }
 
 // EnvGetOr returns the value of name, or def if the variable is unset or stripped
-// by the sandbox. A variable that is set but empty returns its empty value — def
+// by the sandbox. A variable that is set but empty returns its empty value; def
 // is only the fallback for absence.
 func EnvGetOr(ctx context.Context, name, def string) (string, error) {
 	v, ok, err := EnvLookup(ctx, name)
@@ -194,7 +212,7 @@ func EnvRequire(ctx context.Context, name string) (string, error) {
 	return v, nil
 }
 
-// EnvList returns all environment variables as a name→value map, omitting any the sandbox policy strips.
+// EnvList returns all environment variables as a name-value map, omitting any the sandbox policy strips.
 func EnvList(ctx context.Context) (map[string]string, error) {
 	raw := os.Environ()
 	p := sandbox.FromContext(ctx)
@@ -212,4 +230,89 @@ func EnvList(ctx context.Context) (map[string]string, error) {
 		}
 	}
 	return m, nil
+}
+
+// EnvParseDotenv parses .env-format content into a name->value map. It is pure
+// (no process-environment access), so it is browser-safe.
+func EnvParseDotenv(_ context.Context, content string) (map[string]string, error) {
+	return parseDotenv(content), nil
+}
+
+// EnvReadDotenv reads a .env file and parses it.
+func EnvReadDotenv(_ context.Context, path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("env.read_dotenv: %w", err)
+	}
+	return parseDotenv(string(data)), nil
+}
+
+// EnvLoadDotenv reads a .env file and sets each variable into the process
+// environment. Existing names win (the dotenv convention), sandbox-stripped names
+// are skipped (matching EnvSet), and a recording/dry-run is a no-op.
+func EnvLoadDotenv(ctx context.Context, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("env.load_dotenv: %w", err)
+	}
+	if types.Tracing(ctx) {
+		return nil
+	}
+	p := sandbox.FromContext(ctx)
+	for k, v := range parseDotenv(string(data)) {
+		if _, exists := os.LookupEnv(k); exists {
+			continue
+		}
+		if p != nil && !p.AllowEnv(k) {
+			slog.Warn("env.load_dotenv skipped a sandbox-stripped name", "name", k)
+			continue
+		}
+		if err := os.Setenv(k, v); err != nil {
+			return fmt.Errorf("env.load_dotenv: set %s: %w", k, err)
+		}
+	}
+	return nil
+}
+
+// parseDotenv parses .env-format text: KEY=VALUE lines, with blank lines and
+// #-comments ignored, an optional leading "export ", and single/double-quoted
+// values. Double-quoted values honor a small escape set; single-quoted are
+// literal; unquoted values drop an inline " #" comment and surrounding space.
+func parseDotenv(content string) map[string]string {
+	out := map[string]string{}
+	for _, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:eq])
+		if key == "" {
+			continue
+		}
+		out[key] = unquoteDotenv(strings.TrimSpace(line[eq+1:]))
+	}
+	return out
+}
+
+// unquoteDotenv resolves a single .env value's quoting.
+func unquoteDotenv(v string) string {
+	if len(v) >= 2 {
+		if v[0] == '"' && v[len(v)-1] == '"' {
+			return strings.NewReplacer(
+				`\n`, "\n", `\t`, "\t", `\r`, "\r", `\"`, `"`, `\\`, `\`,
+			).Replace(v[1 : len(v)-1])
+		}
+		if v[0] == '\'' && v[len(v)-1] == '\'' {
+			return v[1 : len(v)-1]
+		}
+	}
+	if i := strings.Index(v, " #"); i >= 0 {
+		v = strings.TrimSpace(v[:i])
+	}
+	return v
 }

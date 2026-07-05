@@ -18,8 +18,8 @@ type kebabTargetNormalizer struct{}
 func (kebabTargetNormalizer) NormalizeTargetName(s string) string { return kebabCase(s) }
 
 // kebabCaseSplitWord / kebabCaseSplitNumberLetter mirror the word-boundary
-// regexes that samber/lo's KebabCase uses, so kebabCase produces identical
-// output for identifier-like inputs (FooBar->foo-bar, HTTPServer->http-server,
+// regexes samber/lo's KebabCase uses, so kebabCase produces identical output
+// for identifier-like inputs (FooBar->foo-bar, HTTPServer->http-server,
 // build2->build-2) without the lo dependency.
 var (
 	kebabCaseSplitWord         = regexp.MustCompile(`([a-z])([A-Z0-9])|([a-zA-Z])([0-9])|([0-9])([a-zA-Z])|([A-Z])([A-Z])([a-z])`)
@@ -50,8 +50,8 @@ var DefaultTargetNameNormalizer TargetNameNormalizer = kebabTargetNormalizer{}
 
 // TargetCI is the one reserved built-in target: the affected-set anchor that
 // `magus affected ci` and `magus affected --plan` key off. It lives in the
-// magusfile (composed via magus.needs), never in a spell. Compare against
-// it only after normalizing the candidate name (see DefaultTargetNameNormalizer).
+// magusfile (composed via magus.needs), never in a spell. Compare against it
+// only after normalizing the candidate name (see DefaultTargetNameNormalizer).
 const TargetCI = "ci"
 
 // targetNameRe constrains target names to alphanumerics plus '-' and '_'.
@@ -83,34 +83,33 @@ func ValidateCharmName(name string) error {
 // normalized (see DefaultTargetNameNormalizer), so a charm declared by a spell
 // and one typed in a "target:charm" suffix can never drift on casing or
 // separators: write, Write, and WRITE all resolve to the same charm, as do
-// no_cache and no-cache. Applied symmetrically at both ends — when a charm
-// enters from the CLI suffix (ParseTarget) and when it is matched (HasCharm).
+// no_cache and no-cache. Applied symmetrically when a charm enters from the CLI
+// suffix (ParseTarget) and when it is matched (HasCharm).
 func NormalizeCharmName(name string) string {
 	return DefaultTargetNameNormalizer.NormalizeTargetName(name)
 }
 
-// Target identifies one unit of work (project × target name).
+// Target identifies one unit of work (project x target name).
 // An empty Path means all projects.
 //
-// Target plays a dual role and the meaningful subset of fields differs by use:
+// Target plays a dual role, and the meaningful subset of fields differs by use:
 //   - As a work-unit it carries identity: Path/Name/Charms/Files describe which
-//     project×target to run and against which changed files.
-//   - As a policy bag it carries per-target execution policy:
-//     SkipCache/Exclusive/FailOnDrift/RetryOnFlake. When a Target is used purely
-//     as policy (Project.TargetPolicies values, EvaluatedTargetEntry.Policy) only
-//     these policy fields are meaningful; the identity fields are unset/ignored.
+//     project x target to run and against which changed files.
+//   - As a policy bag it carries per-target execution policy
+//     (SkipCache/Exclusive/FailOnDrift/RetryOnFlake). When used purely as policy
+//     (Project.TargetPolicies values, EvaluatedTargetEntry.Policy) only the policy
+//     fields are meaningful; the identity fields are unset/ignored.
 type Target struct {
 	Path   string   `buzz:"projectPath"` // workspace-relative project path; empty = all projects
 	Name   string   // e.g. "build", "test"
 	Charms []string // execution charms parsed from the "target:charm,..." suffix
 	Files  []string // changed files within project; populated by affected expansion
 
-	// Per-target execution policy (formerly the TargetPolicy struct, inlined here).
-	// SkipCache, Exclusive, and Slots are author-facing — serialized into the Buzz
-	// object Target. FailOnDrift and RetryOnFlake are CI-only hooks set via the Go
-	// registration API, excluded from the Buzz object (buzz:"-").
+	// Per-target execution policy. SkipCache, Exclusive, and Slots are author-facing,
+	// serialized into the Buzz object Target. FailOnDrift and RetryOnFlake are CI-only
+	// hooks set via the Go registration API, excluded from the Buzz object (buzz:"-").
 	SkipCache    bool `json:"skipCache,omitempty"`             // opt out of the cache: always run, never replay/snapshot
-	Exclusive    bool `json:"exclusive,omitempty"`             // run alone — no other target runs concurrently while this one does
+	Exclusive    bool `json:"exclusive,omitempty"`             // run alone: no other target runs concurrently
 	Slots        int  `json:"slots,omitempty"`                 // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
 	FailOnDrift  bool `json:"failOnDrift,omitempty" buzz:"-"`  // fail the run if the working tree is dirty after this target (drift gate)
 	RetryOnFlake bool `json:"retryOnFlake,omitempty" buzz:"-"` // route through flake detection + auto-retry
@@ -121,8 +120,8 @@ func (t Target) String() string { return t.Path + ":" + t.Name }
 
 // ParseTarget parses a target reference of the form "target[:charm[,charm...]]".
 // The project is supplied separately (positional), not embedded in the reference;
-// ':' introduces a comma-separated list of execution charms. Both the target and each
-// charm are constrained to the target-name charset.
+// ':' introduces a comma-separated list of execution charms. Both the target and
+// each charm are constrained to the target-name charset.
 func ParseTarget(s string) (Target, error) {
 	if s == "" {
 		return Target{}, fmt.Errorf("magus: target string is empty")
@@ -158,14 +157,13 @@ const (
 
 // TargetQuery is an unresolved dependency edge: a query that, resolved against a
 // project's registered targets, produces zero or more Targets. It is what
-// magus.target.literal/glob/regex return and what magus.needs consumes — the recipe
-// (a match Mode plus a Pattern), as distinct from Target, which is one resolved
-// work-unit. A literal query is the degenerate 1→1 case; glob/regex are 1→N.
+// magus.target.literal/glob/regex return and what magus.needs consumes (a match
+// Mode plus a Pattern), as distinct from Target, which is one resolved work-unit.
+// A literal query is the degenerate 1-to-1 case; glob/regex are 1-to-N.
 //
 // The canonical Buzz `object TargetQuery` mirror is generated from this struct by
-// cmd/magus-utils types (go:generate) and shipped in the magus/target module, so the
-// Go and Buzz shapes can never drift. Keep them in lockstep through the generator,
-// never by hand.
+// cmd/magus-utils types (go:generate) and shipped in the magus/target module, so
+// the Go and Buzz shapes can't drift. Keep them in lockstep through the generator.
 type TargetQuery struct {
 	Mode    string // QueryLiteral | QueryGlob | QueryRegex
 	Pattern string // exact name for literal; the glob/regex pattern otherwise
@@ -189,11 +187,11 @@ type ExecResult struct {
 	OK     bool `buzz:"ok"`
 }
 
-// Record is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
+// ToMap is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
 // {stdout, stderr, code, ok}. The exec surfaces space-trim Stdout/Stderr before
 // building the struct (the captured-output convention), so this is a plain field
-// map. The generated trampoline calls it (see host.Recorder).
-func (r ExecResult) Record() map[string]any {
+// map.
+func (r ExecResult) ToMap() map[string]any {
 	return map[string]any{
 		"stdout": r.Stdout,
 		"stderr": r.Stderr,

@@ -61,15 +61,15 @@ func TestSupersetModules(t *testing.T) {
 
 // TestMagusModulesSharesDescribeCore is the parity lock for the native query
 // methods: magus.modules() (host) and `magus describe modules` (CLI) are two thin
-// adapters over the one typed core, host.ModulesOutput. This asserts the
-// records the host method marshals are exactly that core — same names, same docs,
-// same per-method Buzz signatures — so the two surfaces can't drift.
+// adapters over the one typed core, host.ModulesOutput. This asserts the records
+// the host method marshals are exactly that core (same names, docs, per-method Buzz
+// signatures) so the two surfaces can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	core := host.ModulesOutput("") // what `magus describe modules` formats
 	require.NotEmpty(t, core.Modules)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := host.ValueToAny(host.RecordsVal(core.Modules)).([]any)
+	got, ok := host.ValueToAny(host.MapsVal(core.Modules)).([]any)
 	require.True(t, ok)
 	require.Len(t, got, len(core.Modules))
 	for i, m := range core.Modules {

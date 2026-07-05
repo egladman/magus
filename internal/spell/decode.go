@@ -8,10 +8,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Obj is a read view over a spell record — a Buzz map, wrapped in a small adapter
-// (buzzSpellObj). Decoupling Decode from the concrete value type keeps the
-// marshalling in one place: Obj is the single boundary that knows a spell's shape,
-// and is the seam a second authoring backend would implement.
+// Obj is a read view over a spell record (a Buzz map, wrapped in the buzzSpellObj
+// adapter). Decoupling Decode from the concrete value type keeps the marshalling in
+// one place: Obj is the single boundary that knows a spell's shape, and the seam a
+// second authoring backend would implement.
 type Obj interface {
 	// Str returns the string at key and whether it was present as a string.
 	Str(key string) (string, bool)
@@ -27,7 +27,7 @@ type Obj interface {
 	// Keys returns this record's keys, for iterating ops and charms.
 	Keys() []string
 	// CallStrs resolves the field at key to a []string. It accepts either form
-	// the field takes across a spell's life: a function (in a definition —
+	// the field takes across a spell's life: a function (in a definition,
 	// needs()/provides() are called with args) or an already-resolved list (in a
 	// bound handle, where define/load marshalled the result back as data so
 	// magus.project can decode the spell by value at bind time). Absent yields
@@ -88,9 +88,8 @@ func Decode(src Obj) (Descriptor, error) {
 			// A service op is recognized by its `command` field: a Service whose
 			// `command` is the long-running process, with optional `readiness` and
 			// `stop` commands. The op's embedded Command mirrors `command` so the
-			// fork/render/cache paths read every op uniformly; `magus run` forks it in
-			// the foreground and blocks. A command op (the default) decodes its Command
-			// directly.
+			// fork/render/cache paths read every op uniformly. A command op (the
+			// default) decodes its Command directly.
 			if cmdObj, ok := spec.Obj("command"); ok {
 				cmd, err := decodeCommand(name, op, cmdObj)
 				if err != nil {
@@ -180,7 +179,14 @@ func decodeCommand(spellName, opName string, o Obj) (types.Command, error) {
 			ch.Ops = append(ch.Ops, po)
 		}
 		if err := ValidatePatch(ch.Ops); err != nil {
-			return types.Command{}, fmt.Errorf("spell %q op %q charm %q: %w", spellName, opName, cn, err)
+			// Qualify with spell/op only when named. The by-value entrypoint
+			// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix
+			// would read as a bug in the surfaced message; the engine path always names both.
+			where := ""
+			if spellName != "" || opName != "" {
+				where = fmt.Sprintf("spell %q op %q ", spellName, opName)
+			}
+			return types.Command{}, fmt.Errorf("%scharm %q: %w", where, cn, err)
 		}
 		cm[cn] = ch
 	}

@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	runPkg "github.com/egladman/magus/internal/run"
+	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,8 +36,8 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
-// TestCaptureRunCollapseSuppressesOutputOnSuccess verifies that a passing project's
-// subprocess output is withheld (collapsed) rather than streamed to stderr.
+// TestCaptureRunCollapseSuppressesOutputOnSuccess verifies a passing project's
+// subprocess output is withheld rather than streamed to stderr.
 func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	c := collapseCache(t)
 	lp := c.logPath("svc/api", "deadbeef")
@@ -54,9 +54,9 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	assert.Empty(t, out, "collapse mode should withhold subprocess output on success")
 }
 
-// TestCaptureRunCollapseReplaysOnFailure verifies that on failure the withheld output
-// is replayed raw on stdout (copy/paste friendly) with an attributing header on the
-// stderr live view, so the error is not lost to the collapse.
+// TestCaptureRunCollapseReplaysOnFailure verifies that on failure the withheld
+// output is replayed raw on stdout (copy/paste friendly), with an attributing
+// header on the stderr live view, so the error is not lost to the collapse.
 func TestCaptureRunCollapseReplaysOnFailure(t *testing.T) {
 	c := collapseCache(t)
 	lp := c.logPath("svc/api", "cafef00d")

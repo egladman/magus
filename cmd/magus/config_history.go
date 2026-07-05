@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 
+	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
@@ -39,10 +39,10 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 }
 
 // runHistoryImport folds one or more runtime-history JSON files into --history
-// (created if absent), per (project, target) freshest-wins. Passing several files
-// merges them — how the per-shard histories of one sharded CI run combine into the
-// single history the next run's forecaster and flake detector read. Each input is
-// the history `magus run` wrote; there is no separate "merge" mode.
+// (created if absent), freshest-wins per (project, target). Passing several files
+// merges them: this is how the per-shard histories of one sharded CI run combine
+// into the single history the next run's forecaster and flake detector read. Each
+// input is the history `magus run` wrote; there is no separate "merge" mode.
 func runHistoryImport(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history import", flag.ContinueOnError)
 	historyPath := fs.String("history", cfg.HistoryPath, "Path to the history JSON to write (default: configured history_path)")
@@ -108,9 +108,9 @@ type missBuild struct {
 }
 
 // runHistoryDedup reads per-shard JSONL report files and measures cross-shard
-// redundant builds: when the same (project, target, hash) is a cache miss on
-// more than one shard, those extra builds are waste that a shared remote cache
-// would eliminate. Outputs a summary including total redundant build-seconds.
+// redundant builds: when the same (project, target, hash) is a cache miss on more
+// than one shard, those extra builds are waste a shared remote cache would
+// eliminate. Outputs a summary including total redundant build-seconds.
 func runHistoryDedup(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("config history dedup", flag.ContinueOnError)
 	fs.Usage = func() {
@@ -132,21 +132,9 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		return errors.New("magus config history dedup: pass at least one report path")
 	}
 
-	// Per hash: list of misses (one per shard that built it, keyed by file path
-	// to avoid double-counting within a single shard's report).
-	type dedupKey struct {
-		project string
-		target  string
-		hash    string
-	}
-	type shardMiss struct {
-		durationMs int64
-		file       string
-	}
-	byKey := make(map[dedupKey][]shardMiss)
-
-	var totalMisses int
-
+	// Read every shard report into a flat miss list (tagged with its file), then
+	// hand the pure cross-shard aggregation to ci.Dedup.
+	var misses []ci.MissBuild
 	for _, p := range reportPaths {
 		matches, err := filepath.Glob(p)
 		if err != nil {
@@ -156,91 +144,46 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 			matches = []string{p}
 		}
 		for _, m := range matches {
-			misses, err := readMisses(ctx, m)
+			ms, err := readMisses(ctx, m)
 			if err != nil {
 				return fmt.Errorf("config history dedup: read %q: %w", m, err)
 			}
-			totalMisses += len(misses)
-			for _, miss := range misses {
-				k := dedupKey{miss.project, miss.target, miss.hash}
-				byKey[k] = append(byKey[k], shardMiss{miss.durationMs, m})
+			for _, miss := range ms {
+				misses = append(misses, ci.MissBuild{
+					Project: miss.project, Target: miss.target, Hash: miss.hash,
+					DurationMs: miss.durationMs, File: m,
+				})
 			}
 		}
 	}
 
-	// Count redundant builds: for each key with N>1 misses across different files,
-	// (N-1) builds were redundant. If hash is empty (old reports without Hash field),
-	// fall back to (project,target) grouping but flag it as approximate.
-	var (
-		redundantBuilds int
-		redundantMs     int64
-		approx          bool
-	)
-	type topEntry struct {
-		key         dedupKey
-		extraBuilds int
-		extraMs     int64
-	}
-	var top []topEntry
-
-	for k, misses := range byKey {
-		if k.hash == "" {
-			approx = true
-		}
-		// Deduplicate within a single file (a target can appear once per shard run).
-		seen := make(map[string]int64, len(misses))
-		for _, sm := range misses {
-			if _, ok := seen[sm.file]; !ok {
-				seen[sm.file] = sm.durationMs
-			}
-		}
-		if len(seen) <= 1 {
-			continue
-		}
-		// First build is necessary; rest are redundant.
-		extra := len(seen) - 1
-		var maxMs int64
-		var totalMs int64
-		for _, d := range seen {
-			totalMs += d
-			if d > maxMs {
-				maxMs = d
-			}
-		}
-		// Redundant ms = total - max (keep the longest as the "necessary" one).
-		extraMs := totalMs - maxMs
-		redundantBuilds += extra
-		redundantMs += extraMs
-		top = append(top, topEntry{k, extra, extraMs})
-	}
-
-	sort.Slice(top, func(i, j int) bool { return top[i].extraMs > top[j].extraMs })
+	res := ci.Dedup(misses)
 
 	approxNote := ""
-	if approx {
+	if res.Approx {
 		approxNote = " (approximate: some events missing hash field — upgrade magus to get exact dedup)"
 	}
 
 	fmt.Printf("cross-shard dedup analysis%s\n", approxNote)
 	fmt.Printf("  report files:    %d\n", len(reportPaths))
-	fmt.Printf("  total misses:    %d\n", totalMisses)
-	fmt.Printf("  unique keys:     %d\n", len(byKey))
-	fmt.Printf("  redundant builds: %d\n", redundantBuilds)
-	fmt.Printf("  redundant time:  %dms (%.1fs)\n", redundantMs, float64(redundantMs)/1000)
+	fmt.Printf("  total misses:    %d\n", res.TotalMisses)
+	fmt.Printf("  unique keys:     %d\n", res.UniqueKeys)
+	fmt.Printf("  redundant builds: %d\n", res.RedundantBuilds)
+	fmt.Printf("  redundant time:  %dms (%.1fs)\n", res.RedundantMs, float64(res.RedundantMs)/1000)
 
-	if len(top) > 0 {
+	if len(res.Top) > 0 {
 		limit := 10
-		if len(top) < limit {
-			limit = len(top)
+		if len(res.Top) < limit {
+			limit = len(res.Top)
 		}
 		fmt.Printf("\n  top %d redundant builds by wasted time:\n", limit)
-		for _, e := range top[:limit] {
-			hashDisp := e.key.hash
+		for _, e := range res.Top[:limit] {
+			hashDisp := e.Hash
 			if len(hashDisp) > 8 {
 				hashDisp = hashDisp[:8]
 			}
 			fmt.Printf("    %s %s (%s): +%d builds, %dms wasted\n",
-				e.key.project, e.key.target, hashDisp, e.extraBuilds, e.extraMs)
+				e.Project, e.Target, hashDisp, e.ExtraBuilds, e.ExtraMs)
 		}
 	}
 

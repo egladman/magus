@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/serviceident"
 	ispell "github.com/egladman/magus/internal/spell"
@@ -17,14 +17,13 @@ import (
 )
 
 // commandOpts carries the per-invocation options a magusfile passes to a command
-// spell target (e.g. go.build({...})). cwd is the directory to run in (empty
-// means the process cwd, "."). args append as raw tokens after the target's base
-// command — so a build the op's bare base can't express (custom -ldflags, -o, a
-// single package) is reachable through the spell rather than os.exec, with the
-// linker flags passed as ordinary args. env overlays the subprocess
-// environment (KEY=value; later entries win per Go's exec duplicate-key rule).
-// hasArgs distinguishes "no args key" (fall back to project.ExtraArgs) from an
-// explicit empty list; consulted only on the Buzz path.
+// spell target (e.g. go.build({...})). cwd is the directory to run in (empty means
+// the process cwd, "."). args append as raw tokens after the target's base command -
+// so a build the op's bare base can't express (custom -ldflags, -o, a single package)
+// is reachable through the spell rather than os.exec. env overlays the subprocess
+// environment (KEY=value; later entries win per Go's exec duplicate-key rule). hasArgs
+// distinguishes "no args key" (fall back to project.ExtraArgs) from an explicit empty
+// list; consulted only on the Buzz path.
 type commandOpts struct {
 	cwd     string
 	args    []string
@@ -70,36 +69,24 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 }
 
 // resolveCharmArgs reshapes base by the charms active on ctx. Each active charm
-// contributes an RFC 6902 JSON Patch over the argv; the patches are concatenated
-// in sorted-name order — so the result is deterministic and immune to CLI
-// activation order or duplicate charms — and applied as one sequential patch.
-// Because charms are element-level (no root replace), disjoint edits compose
-// freely; overlapping positions resolve by name order. The result is always a
-// fresh slice (callers may mutate it; base is the shared cached spec).
+// contributes an RFC 6902 JSON Patch over the argv; the patches are concatenated in
+// sorted-name order (so the result is deterministic and immune to CLI activation order
+// or duplicate charms) and applied as one sequential patch. Because charms are
+// element-level (no root replace), disjoint edits compose freely; overlapping
+// positions resolve by name order. The result is always a fresh slice (callers may
+// mutate it; base is the shared cached spec).
 func resolveCharmArgs(ctx context.Context, base []string, charms map[string]types.Charm) ([]string, error) {
-	if len(charms) == 0 {
-		return slices.Clone(base), nil
-	}
-	names := make([]string, 0, len(charms))
+	var activeNames []string
 	for name := range charms {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
-	var ops []types.PatchOp
-	for _, name := range names {
 		if types.HasCharm(ctx, name) {
-			ops = append(ops, charms[name].Ops...)
+			activeNames = append(activeNames, name)
 		}
 	}
-	if len(ops) == 0 {
-		return slices.Clone(base), nil
-	}
-	return ispell.ApplyPatch(base, ops)
+	return ispell.ApplyCharms(base, charms, activeNames)
 }
 
 // directMagusBinaryWarnOnce is process-global so the "use magus.cmd/..." hint fires
-// at most once per process, not once per command — avoids log spam in a wide run.
+// at most once per process, not once per command - avoids log spam in a wide run.
 var directMagusBinaryWarnOnce sync.Once
 
 // execCommand runs cmd with args in dir, inheriting stdio and sandbox policy. When
@@ -109,7 +96,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 	if filepath.Base(cmd) == "magus" {
 		directMagusBinaryWarnOnce.Do(func() {
 			slog.Warn("magus: command spell target called with 'magus' binary",
-				"hint", "use magus.cmd(...) or a typed magus.run/describe/insight/doctor(...) instead — contextual cwd, version-pinned, no arg-quoting issues")
+				"hint", "use magus.cmd(...) or a typed magus.run/describe/insight/doctor(...) instead; contextual cwd, version-pinned, no arg-quoting issues")
 		})
 	}
 	// Sort the per-call env overrides so the subprocess environment is deterministic

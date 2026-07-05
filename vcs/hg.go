@@ -121,6 +121,11 @@ func (v hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 // Dirty reports whether the working directory (optionally scoped to paths) has
 // changes, via `hg status`. Non-empty output = dirty.
 func (v hgVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {
+	files, err := v.DirtyFiles(ctx, dir, paths)
+	return len(files) > 0, err
+}
+
+func (v hgVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
 	args := []string{"status"}
 	if len(paths) > 0 {
 		args = append(args, "--")
@@ -128,9 +133,9 @@ func (v hgVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, err
 	}
 	out, err := vcsOutput(ctx, dir, "hg", args...)
 	if err != nil {
-		return false, fmt.Errorf("hg status: %w", err)
+		return nil, fmt.Errorf("hg status: %w", err)
 	}
-	return out != "", nil
+	return splitStatusLines(out), nil
 }
 
 // Describe returns the working revision's latest reachable tag (Mercurial's
@@ -153,7 +158,7 @@ func (v hgVCS) Describe(ctx context.Context, dir string) (string, error) {
 
 // hgCommitTemplate emits the NUL-delimited fields parseCommit expects: node,
 // short node, author name/email, the record date (RFC 3339), parents, and the
-// full message. \0 is the field delimiter; Mercurial converts it to NUL.
+// full message. \0 is the field delimiter Mercurial converts to NUL.
 const hgCommitTemplate = `{node}\0{node|short}\0{person(author)}\0{email(author)}\0{date|rfc3339date}\0{parents % "{node} "}\0{desc}`
 
 func (v hgVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
@@ -187,8 +192,8 @@ func (v hgVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 }
 
 // isAncestor, commitBeforeTime and commitInfo run via `hg -R dir` so they target
-// the repository under bisect, not the process cwd — the dir-scoping the
-// VCSDriver contract requires for correctness under concurrent runs.
+// the repository under bisect, not the process cwd: the dir-scoping the VCSDriver
+// contract requires for correctness under concurrent runs.
 func (v hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
 	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log",
 		"-r", "("+sha+") and (ancestors(.) or .)",

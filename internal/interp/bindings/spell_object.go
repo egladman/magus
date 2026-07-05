@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/gopherbuzz/vm"
-	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/proc/run"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -12,9 +12,9 @@ import (
 
 // spellHandleFromMeta builds the MagusSpell handle a workspace-local spell import
 // returns. It marshals the resolved spec back as native data so
-// magus.project can decode and register the spell by value at bind time —
-// needed because the spell is evaluated in a throwaway session whose functions are
-// gone by then.
+// magus.project can decode and register the spell by value at bind time, needed
+// because the spell is evaluated in a throwaway session whose functions are gone by
+// then.
 func spellHandleFromMeta(m ispell.Descriptor) vm.Value {
 	h := vm.NewMap()
 	h.MapSet("name", vm.StrValue(m.Name))
@@ -30,12 +30,12 @@ func spellHandleFromMeta(m ispell.Descriptor) vm.Value {
 
 // bindBuzzTargetDispatch wires a Buzz spell handle's runnable surface:
 //
-//   - spell.<target>(opts?) — a callable per fork target. This is the way to
+//   - spell.<target>(opts?): a callable per fork target. This is the way to
 //     invoke an op: docker.build({cwd: "..", args: ["-t", tag, "."]}), go.generate().
-//   - listTargets() — returns the runnable target names, for introspection.
+//   - listTargets(): returns the runnable target names, for introspection.
 //
 // A method's optional {cwd=, args=[...], env={...}} table appends opts.args to
-// the target's base argv and overlays opts.env on the subprocess — so
+// the target's base argv and overlays opts.env on the subprocess, so
 // flag-carrying and cross-compile invocations need no os.exec. With no opts.args
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
 func bindBuzzTargetDispatch(h vm.Value, targets map[string]types.SpellOp) {
@@ -57,7 +57,7 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt types.SpellOp) {
 			return vm.Null, err
 		}
 		if tgt.Capture {
-			return execRecordToBuzz(res.Record()), nil
+			return execRecordToBuzz(res.ToMap()), nil
 		}
 		return vm.Null, nil
 	}))

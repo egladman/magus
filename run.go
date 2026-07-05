@@ -1,13 +1,11 @@
 package magus
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // RunOption configures a [Magus.Run], [Magus.RunCI], or [Magus.RunAffected] invocation.
@@ -143,7 +142,7 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 
 // RunCI runs the ci target(s) with write mode forced off. "ci" is an ordinary
 // magusfile-defined target; magus keeps it only as the affected-set anchor,
-// not a hardcoded preflight→…→test chain. The magusfile composes the pipeline
+// not a hardcoded preflight...test chain. The magusfile composes the pipeline
 // order via magus.needs.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
@@ -153,14 +152,13 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
 	// targets fan out and skip projects that lack them, but ci is the anchor that
-	// `magus affected ci` and `magus affected --plan` key off — a missing ci would
-	// otherwise exit 0 having run nothing, a green gate that gated nothing. When
+	// `magus affected ci` and `magus affected --plan` key off: a missing ci would
+	// otherwise exit 0 having run nothing, a green gate that gated nothing. So when
 	// the run scope has projects but none declare ci, fail with an actionable
-	// message and a hint. (An empty scope — e.g. affected with no changes — is a
-	// legitimate no-op and is left alone.)
-	// Only block when we definitely scanned the scope and found no ci — a scan
-	// error (unreadable magusfile) must not masquerade as "no ci" and abort the
-	// gate; let runResolved surface the real read failure instead.
+	// message and hint. (An empty scope, e.g. affected with no changes, is a
+	// legitimate no-op and is left alone.) Only block when we definitely scanned the
+	// scope and found no ci: a scan error (unreadable magusfile) must not masquerade
+	// as "no ci" and abort the gate; let runResolved surface the real read failure.
 	if projects := m.targetProjects(targets); len(projects) > 0 {
 		if has, scanErr := anyProjectDeclaresCI(projects); !has && scanErr == nil {
 			interactive.Emit(os.Stderr, "define a ci target in your magusfile to compose the gate, e.g.  "+
@@ -177,10 +175,10 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
 // ci lives in the magusfile (composed via magus.needs), never in a spell, so it
 // extracts each project's declared target nodes statically (the same AST extractor
-// DescribeGraph uses — never a raw text scan, so `ci` in a comment or string can't
+// DescribeGraph uses, never a raw text scan, so `ci` in a comment or string can't
 // false-positive) and short-circuits on the first ci found. The returned error is
 // non-nil if a source couldn't be located, so a (false, err) result means "couldn't
-// determine" rather than "definitely no ci" — the caller must not block on it.
+// determine", not "definitely no ci" - the caller must not block on it.
 func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 	var scanErr error
 	for _, p := range projects {
@@ -219,7 +217,7 @@ func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOptio
 }
 
 // undeclaredCharms returns the active charms that no selected target declares,
-// excluding magus's reserved built-in charms (write, cd) — candidates for a
+// excluding magus's reserved built-in charms (write, cd); candidates for a
 // soft typo warning.
 func undeclaredCharms(active []string, declared map[string]struct{}) []string {
 	var out []string
@@ -245,12 +243,22 @@ func (m *Magus) targetProjects(targets []types.Target) []*types.Project {
 	return out
 }
 
+// TargetHandler runs one target on one resolved project. It is the single executor
+// seam the run pipeline schedules: the same handler serves both a real run and a dry
+// run - types.WithTrace(ctx) switches it, so under a tracing context the effect
+// boundary (proc/run.Exec, fs, net) records each op's intent and skips it instead of
+// executing. One path, two modes: no separate dry-run executor, just a tracing
+// context over this one contract. (The in-browser evaluator in internal/dry is a
+// different thing - it takes raw source, never a resolved *Project, so it sits before
+// this seam and cannot implement it; see that package's doc.)
+type TargetHandler func(context.Context, *types.Project) error
+
 // stage is one target to run across a project set. afterTarget orders this stage
 // after the named target for the same project (CI step ordering).
 type stage struct {
 	target      string
 	afterTarget string
-	handler     func(context.Context, *types.Project) error
+	handler     TargetHandler
 	projects    []*types.Project
 }
 
@@ -305,7 +313,7 @@ func toolVersionMode() string {
 	}
 }
 
-// toolVersionsByProject returns ProjectPath → "spell:version" entries for cache keys.
+// toolVersionsByProject returns ProjectPath to "spell:version" entries for cache keys.
 // Probes are memoized by (spell, dir); failures record "spell:UNPROBED".
 func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) map[string][]string {
 	mode := toolVersionMode()
@@ -349,7 +357,7 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 }
 
 // executeOnProjects runs handler for every project for a single target.
-func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts run, handler func(context.Context, *types.Project) error) error {
+func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts run, handler TargetHandler) error {
 	return m.executeStages(ctx, []stage{{target: target, handler: handler, projects: projects}}, scopeLabel, opts)
 }
 
@@ -357,12 +365,11 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // afterTarget edges keep each project's CI steps sequential.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) error {
 	if opts.DryRun {
-		// Deep dry run: evaluate each target body under a recording context, so
+		// Deep dry run: evaluate each target body under a tracing context, so
 		// effectful host ops (exec, fs writes, network, env) record their intent and
-		// skip instead of running. The commands surface as `$ cmd` echoes (run.Exec logs
-		// them at info under record). Sequential, so each project's commands stay grouped
+		// skip instead of running. Sequential, so each project's commands stay grouped
 		// under its [dry] line. Reads still work, so the plan reflects real conditionals.
-		recCtx := types.WithRecord(ctx)
+		recCtx := types.WithTrace(ctx)
 		if m.cache != nil {
 			m.cache.LogDryBanner()
 		} else {
@@ -377,7 +384,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 					fmt.Printf("[dry] %s %s\n", label, st.target)
 				}
 				// Fresh memo per target so a shared dependency (e.g. format -> generate)
-				// records once, mirroring the real run's pool dedup.
+				// records once, matching the real run's pool dedup.
 				stepCtx := buzz.WithTargetMemo(recCtx, buzz.NewTargetMemo())
 				if err := st.handler(stepCtx, p); err != nil {
 					slog.WarnContext(ctx, "dry-run: target evaluation stopped early",
@@ -411,7 +418,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	var steps []cache.Step
 	byPath := make(map[string]*types.Project)
-	handlerOf := make(map[string]func(context.Context, *types.Project) error, len(stages))
+	handlerOf := make(map[string]TargetHandler, len(stages))
 	active := make(map[string]struct{})
 	declaredCharms := map[string]struct{}{}
 	trackFlake := false
@@ -646,7 +653,7 @@ func (m *Magus) buildRaceRuntime() *race.Runtime {
 // runReplay re-executes projects and compares output content hashes to detect
 // non-determinism (MGS4003). Bypasses cache so spells actually re-execute.
 func runReplay(ctx context.Context, projects []*types.Project, target string,
-	byPath map[string]*types.Project, handler func(context.Context, *types.Project) error,
+	byPath map[string]*types.Project, handler TargetHandler,
 	w *report.Writer,
 ) {
 	var replayable []*types.Project
@@ -856,31 +863,39 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 	return err
 }
 
-// checkCleanAfter runs fn then fails if the working tree is dirty. Skipped when git is unavailable.
-func checkCleanAfter(ctx context.Context, dir, target string, fn func() error) error {
+// verifyReadOnly runs fn - a target expected to be read-only (preflight/generate
+// without the rw charm) - then fails if it left uncommitted changes in dir, i.e. it
+// wrote when it should only have checked (the error points the user at the rw charm).
+// Skipped when dir has no VCS, so the guard never blocks a non-repo checkout.
+func verifyReadOnly(ctx context.Context, dir, target string, fn func() error) error {
 	if err := fn(); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain", "--", ".")
-	cmd.Dir = dir
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return nil //nolint:nilerr // git unavailable: skip the post-write cleanliness check
+	// Resolve the active VCS (git/hg/jj) rather than shelling out to git, so the
+	// cleanliness gate works under any backend. No VCS or a failed probe skips the
+	// check, matching the prior "skip when git is unavailable" behavior.
+	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return nil
 	}
-	if dirty := strings.TrimSpace(out.String()); dirty != "" {
-		return fmt.Errorf("%s: %s produced uncommitted changes; re-run with the rw charm (%s:rw) to apply:\n%s", dir, target, target, dirty)
+	files, err := res.VCS.DirtyFiles(ctx, dir, []string{"."})
+	if err != nil {
+		return nil //nolint:nilerr // VCS status unavailable: skip the post-write cleanliness check
+	}
+	if len(files) > 0 {
+		return fmt.Errorf("%s: %s produced uncommitted changes; re-run with the rw charm (%s:rw) to apply:\n%s",
+			dir, target, target, strings.Join(files, "\n"))
 	}
 	return nil
 }
 
-func (m *Magus) makeHandler(name string) func(context.Context, *types.Project) error {
+func (m *Magus) makeHandler(name string) TargetHandler {
 	if name == "preflight" || name == "generate" {
 		return func(ctx context.Context, p *types.Project) error {
 			run := func() error { return runTarget(ctx, p, name) }
 			pol := p.TargetPolicies[name]
 			if pol.FailOnDrift && !types.HasCharm(ctx, types.CharmReadWrite) {
-				return checkCleanAfter(ctx, p.Dir, name, run)
+				return verifyReadOnly(ctx, p.Dir, name, run)
 			}
 			return run()
 		}
@@ -891,7 +906,7 @@ func (m *Magus) makeHandler(name string) func(context.Context, *types.Project) e
 }
 
 // makeSpellFilteredHandler returns a handler that runs name on a single named spell.
-func (*Magus) makeSpellFilteredHandler(name, spellName string) func(context.Context, *types.Project) error {
+func (*Magus) makeSpellFilteredHandler(name, spellName string) TargetHandler {
 	return func(ctx context.Context, p *types.Project) error {
 		return forSpellNamed(ctx, p, name, spellName, func(ctx context.Context, s *types.Spell) error {
 			return invokeSpell(ctx, p, name, s)

@@ -24,6 +24,11 @@ type VCSDriver interface {
 	// dir, the same as the VCS's own CLI); empty checks the whole repository. It is
 	// the path-scoped counterpart to Metadata's repo-wide IsDirty.
 	Dirty(ctx context.Context, dir string, paths []string) (bool, error)
+	// DirtyFiles is Dirty with the detail: the changed entries as the backend's
+	// status lines (git porcelain, hg status, jj diff --name-only), one per line,
+	// nil when clean. Dirty is defined in terms of this; callers that report *what*
+	// changed use these lines.
+	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 	// FindCommit looks up a revision (a VCS-native rev expression; empty means
 	// the current revision) and returns its normalized Commit.
 	FindCommit(ctx context.Context, dir, rev string) (Commit, error)
@@ -32,9 +37,9 @@ type VCSDriver interface {
 	// Describe returns a human-readable version string derived from the nearest
 	// tag (git's `describe --tags --always --dirty`: tag, else short id, with a
 	// -dirty suffix for a modified tree). Tags are a git-shaped concept; a backend
-	// without an equivalent returns "" rather than faking one — callers treat ""
-	// as "no describe available" and fall back (e.g. to a short hash), and a magus
-	// author needing backend-specific behavior reaches for vcs.exe().
+	// without an equivalent returns "" rather than faking one. Callers treat "" as
+	// "no describe available" and fall back (e.g. to a short hash); a magus author
+	// needing backend-specific behavior reaches for vcs.exe().
 	Describe(ctx context.Context, dir string) (string, error)
 }
 
@@ -45,8 +50,8 @@ type Person struct {
 }
 
 // Commit is a VCS-agnostic snapshot of one revision. Every field is meaningful
-// for every backend (git, hg, jj) — concepts a single VCS lacks (jj's change id,
-// git's author/committer split) are deliberately not modeled here; reach for
+// for every backend (git, hg, jj); concepts a single VCS lacks (jj's change id,
+// git's author/committer split) are deliberately not modeled here. Reach for
 // vcs.exe() for VCS-specific work.
 type Commit struct {
 	// ID is the content/revision identifier: git SHA, hg node, jj commit_id.
@@ -55,21 +60,20 @@ type Commit struct {
 	// Author wrote the change.
 	Author Person
 	// Date is when the revision was recorded in the repository (git/jj commit
-	// date, hg's date) — the reproducible "when," distinct from any author date.
+	// date, hg's date): the reproducible "when", distinct from any author date.
 	// Zero if the VCS reported no timestamp.
 	Date time.Time
 	// Subject is the message's first line; Body is the remainder.
 	Subject string
 	Body    string
-	// Parents are parent IDs — more than one for a merge.
+	// Parents are parent IDs; more than one for a merge.
 	Parents []string
 }
 
-// Record is the Buzz boundary map vcs.commit / vcs.history entries return:
+// ToMap is the Buzz boundary map vcs.commit / vcs.history entries return:
 // {id, short, author {name, email}, date, subject, body, parents}. date is
-// RFC3339, empty when the VCS reported no timestamp. The generated trampoline
-// calls it (see host.Recorder).
-func (c Commit) Record() map[string]any {
+// RFC3339, empty when the VCS reported no timestamp.
+func (c Commit) ToMap() map[string]any {
 	date := ""
 	if !c.Date.IsZero() {
 		date = c.Date.Format(time.RFC3339)
@@ -94,7 +98,7 @@ type CommitAuthor struct {
 }
 
 // CommitRecord is the boundary mirror of the record vcs.commit / vcs.history
-// return — the serializable, every-field-present view of a Commit (Date as an
+// return: the serializable, every-field-present view of a Commit (Date as an
 // RFC3339 string, not time.Time). A magusfile annotates `> Commit` to get
 // compile-checked field access on a commit record; the runtime value is the
 // matching map (see commitToMap). The Buzz `object Commit` mirror is generated
@@ -179,7 +183,7 @@ type MergeDriverInstaller interface {
 }
 
 // CommitChange reduces one commit to who made it, when, and the repo-relative
-// paths it touched — the input to churn attribution (no message or diff content).
+// paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
 	ID     string
 	Author string

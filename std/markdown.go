@@ -53,21 +53,22 @@ var Markdown = Module{
 
 // converter renders GitHub-Flavored Markdown to semantic HTML. GFM brings
 // tables, strikethrough, autolinks, and task lists; DefinitionList renders
-// PHP-Markdown-style `term\n: body` blocks (used by the generated man pages) to
-// <dl>/<dt>/<dd>; WithAutoHeadingID stamps an id on every heading so in-page
-// `#fragment` links resolve; mdLinkRewriter turns relative links between docs
-// (`foo.md`, `dir/README.md#x`) into their generated `.html` equivalents so the
-// rendered site stays navigable.
+// PHP-Markdown-style `term\n: body` blocks (used by the generated man pages);
+// Footnote renders `text[^id]` references and `[^id]: ...` definitions to a
+// linked endnotes section (GFM has none); WithAutoHeadingID stamps an id on
+// every heading so `#fragment` links resolve; mdLinkRewriter rewrites relative
+// doc links (`foo.md`, `dir/README.md#x`) to their generated `.html` equivalents
+// so the rendered site stays navigable.
 var converter = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, extension.DefinitionList),
+	goldmark.WithExtensions(extension.GFM, extension.DefinitionList, extension.Footnote),
 	goldmark.WithParserOptions(
 		parser.WithAutoHeadingID(),
 		parser.WithASTTransformers(util.Prioritized(mdLinkRewriter{}, 100)),
 	),
-	// WithUnsafe passes raw HTML in the source through instead of dropping it.
-	// magus renders first-party Markdown (the repo's own README and docs/), which
-	// uses raw HTML for things Markdown can't express - e.g. the centered hero
-	// image on the landing page. Safe here because the input is trusted.
+	// WithUnsafe passes raw HTML through instead of dropping it. magus renders
+	// first-party Markdown (the repo's own README and docs/), which uses raw HTML
+	// for things Markdown can't express, e.g. the centered hero image on the
+	// landing page. Safe because the input is trusted.
 	goldmark.WithRendererOptions(html.WithUnsafe()),
 )
 
@@ -83,10 +84,10 @@ func MarkdownToHTML(_ context.Context, source string) (string, error) {
 }
 
 // MarkdownFrontmatter parses the leading YAML frontmatter block and returns it
-// as a JSON object string (so Buzz callers decode it with serialize.jsonDecode);
-// "{}" when the document carries no frontmatter. The YAML is parsed here rather
-// than in to_html so a malformed header surfaces as an error only to callers
-// that actually read the metadata, never breaking a page render.
+// as a JSON object string (Buzz callers decode it with serialize.jsonDecode);
+// "{}" when there is none. The YAML is parsed here rather than in to_html so a
+// malformed header only errors for callers that read the metadata, never
+// breaking a page render.
 func MarkdownFrontmatter(_ context.Context, source string) (string, error) {
 	fm, _, ok := splitFrontmatter(source)
 	if !ok || strings.TrimSpace(fm) == "" {
@@ -116,11 +117,11 @@ func MarkdownStripFrontmatter(_ context.Context, source string) (string, error) 
 }
 
 // splitFrontmatter separates an optional leading YAML frontmatter block from the
-// Markdown body. A block is a "---" line at the very top of the document, its
-// YAML content, and a closing "---" (or "...") line; everything after is the
-// body. ok is false when no well-formed block is present, in which case fm is ""
-// and body is the source unchanged. The fence content is returned raw (unparsed)
-// so callers that only need the body never pay for a YAML parse.
+// Markdown body. A block is a "---" line at the very top, its YAML content, and a
+// closing "---" (or "...") line; everything after is the body. When no well-formed
+// block is present ok is false, fm is "", and body is the source unchanged. The
+// fence content is returned raw so callers that only need the body never pay for a
+// YAML parse.
 func splitFrontmatter(source string) (fm, body string, ok bool) {
 	// The opening fence must be the document's first line and exactly "---".
 	nl := strings.IndexByte(source, '\n')

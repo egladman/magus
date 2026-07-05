@@ -94,7 +94,7 @@ func newVersionProbe(argv []string) func(context.Context, string) (string, error
 
 // newCommandRenderer returns the command preview used by `magus describe`: it
 // reports cmd plus the argv as reshaped by the active charms, executing nothing. A
-// no-op marker op (empty Cmd) returns ok=false — there is no command to show.
+// no-op marker op (empty Cmd) returns ok=false, since there is no command to show.
 func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string) (string, []string, bool) {
 	return func(target string, charms []string) (string, []string, bool) {
 		op, ok := targets[target]
@@ -109,11 +109,11 @@ func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string)
 	}
 }
 
-// noResult is the invoker's no-op outcome — no Data, no error — for a request that
+// noResult is the invoker's no-op outcome (no Data, no error) for a request that
 // fans out to a spell with nothing to contribute: an unknown target, or a handler
 // op on a built-in spell (no script body to run). nil Data is an ordinary invoker
 // result (a command op returns it on success too; see types.Spell.Invoke), so this
-// is a real result rather than a sentinel — the helper names the intent and keeps
+// is a real result rather than a sentinel; the helper names the intent and keeps
 // the nilnil suppression in one documented place.
 func noResult() (any, error) {
 	return nil, nil //nolint:nilnil // documented invoker no-op: nil Data, nil error
@@ -170,7 +170,7 @@ func loadLocalSpell(ctx context.Context, path string) (ispell.Descriptor, bool) 
 }
 
 // loadSpellFile loads a spell file as a function-op-capable SpellDriver and
-// registers it — the in-package entry point the remote cache backend uses to
+// registers it: the in-package entry point the remote cache backend uses to
 // resolve a backend selected by a file path. A .buzz spell loads through the Buzz
 // path (registering a function-op spell eagerly, capturing its source for in-VM
 // dispatch).
@@ -186,12 +186,11 @@ func loadSpellFile(ctx context.Context, path string) (types.SpellDriver, error) 
 }
 
 // loadLocalBuzzSpell compiles a workspace-local Buzz spell at path, returning its
-// spec and ok=false on any failure. Extract routes through the same
-// ispell.Decode a built-in uses, so a .buzz workspace spell and a built-in are
-// read and validated identically. Errors are logged, not raised, since discovery
-// paths cannot route an error back to the caller. Registration is deferred to
-// magus.project; the handle the caller builds carries the resolved spec
-// so it registers by value there.
+// spec and ok=false on any failure. Extract routes through the same ispell.Decode
+// a built-in uses, so a .buzz workspace spell and a built-in are read and validated
+// identically. Errors are logged, not raised, since discovery paths cannot route an
+// error back to the caller. Registration is deferred to magus.project; the handle
+// the caller builds carries the resolved spec so it registers by value there.
 func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, bool) {
 	// loadBuzzSpell registers the spell with the function-op invoker (capturing its
 	// source), so an imported Buzz spell carries function-ops whether it is later
@@ -199,7 +198,12 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, bo
 	// it already registered and binds it by name.
 	m, _, err := loadBuzzSpell(ctx, path)
 	if err != nil {
-		slog.Error("load local spell: buzz", "path", path, "err", err)
+		// A plain Buzz library imported by name (not a spell) is expected here:
+		// resolution falls through to a normal module import. Only a genuinely
+		// malformed spell is worth logging.
+		if !errors.Is(err, ispell.ErrNotASpell) {
+			slog.Error("load local spell: buzz", "path", path, "err", err)
+		}
 		return ispell.Descriptor{}, false
 	}
 	return m, true
@@ -207,7 +211,7 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, bo
 
 // localSpellBaseOptions builds the SpellOptions common to every workspace-local
 // spell registration (cache metadata, command renderer, charm/doc discovery),
-// minus the invoker — each registration path supplies its own.
+// minus the invoker, which each registration path supplies itself.
 func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 	opts := []types.SpellOption{
 		types.WithSources(m.Needs...),
@@ -232,8 +236,8 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 // registerLocalSpell registers a decoded fork-only workspace-local spell into the
 // default registry. The shared ispell.Decode produces m for the imported Buzz
 // spell by-value path, so this is the single deferred registration point (called at
-// magus.project bind time). A function-op spell instead registers eagerly
-// at load via loadBuzzSpell.
+// magus.project bind time). A function-op spell instead registers eagerly at load
+// via loadBuzzSpell.
 func registerLocalSpell(m ispell.Descriptor) {
 	opts := append(localSpellBaseOptions(m), types.WithInvoker(newSpellInvoker(m.Ops)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(types.NewSpell(m.Name, opts...))
@@ -274,7 +278,7 @@ func checkSpellImports(handles []string) error {
 }
 
 // isRegisteredSpell reports whether name is a handle reachable as
-// `import "magus/spell/<name>"` — a compiled built-in or a host-registered spell.
+// `import "magus/spell/<name>"`: a compiled built-in or a host-registered spell.
 // This mirrors the synthetic modules registerAllBuzz installs, so the check can
 // never reject a handle the import would actually resolve.
 func isRegisteredSpell(name string) bool {

@@ -11,7 +11,7 @@ import (
 
 	buzzstd "github.com/egladman/gopherbuzz/std"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ func TestOsExecTeesToOutputWriters(t *testing.T) {
 	assert.Contains(t, tee.String(), "hello", "output was not teed to the run writer")
 }
 
-// TestOsExecStdin verifies opts.stdin is fed to the process — the plumbing under
+// TestOsExecStdin verifies opts.stdin is fed to the process: the plumbing under
 // pipe-style chaining (a prior call's stdout becomes the next call's stdin).
 func TestOsExecStdin(t *testing.T) {
 	res, err := OsExec(context.Background(), "cat", nil, "", map[string]any{"stdin": "piped-input"})
@@ -92,7 +92,7 @@ func TestOsExecResolvesCwd(t *testing.T) {
 	sub := filepath.Join(base, "nested")
 	require.NoError(t, os.MkdirAll(sub, 0o755))
 	// Resolve symlinks so the comparison holds on platforms (e.g. macOS) where
-	// TempDir lives under a symlinked /var → /private/var.
+	// TempDir lives under a symlinked /var -> /private/var.
 	baseReal, err := filepath.EvalSymlinks(base)
 	require.NoError(t, err)
 	subReal := filepath.Join(baseReal, "nested")
@@ -248,12 +248,12 @@ func TestJSONStringify(t *testing.T) {
 	ctx := context.Background()
 	val := map[string]any{"a": 1.0}
 
-	// No indent → compact (single line).
+	// No indent: compact (single line).
 	compact, err := JSONStringify(ctx, val, "")
 	require.NoError(t, err)
 	assert.NotContains(t, compact, "\n", "no-indent output should be compact")
 
-	// A non-empty indent → pretty, multi-line with that indent.
+	// A non-empty indent: pretty, multi-line with that indent.
 	tabbed, err := JSONStringify(ctx, val, "\t")
 	require.NoError(t, err)
 	assert.Contains(t, tabbed, "\n", "indented output should be multi-line")

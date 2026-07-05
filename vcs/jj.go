@@ -57,7 +57,7 @@ func (v jjVCS) Bisect(_ context.Context, _ string, _ types.BisectOptions) (types
 }
 
 // jjCommitTemplate emits the NUL-delimited fields parseCommit expects: commit_id
-// (the agnostic id — jj's stable change_id is intentionally not surfaced), short
+// (the agnostic id; jj's stable change_id is intentionally not surfaced), short
 // id, author name/email, the record date as RFC 3339 (the committer timestamp),
 // parents, and the description. \0 is the field delimiter.
 const jjCommitTemplate = `commit_id ++ "\0" ++ commit_id.short() ++ "\0" ++ ` +
@@ -96,10 +96,10 @@ func (v jjVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
 }
 
-// Describe reports "" — jj has no native tag-describe (tags live in the colocated
-// git backend, with no first-class jj command for the git-describe shape). Per
-// the interface contract a backend without the concept returns "" rather than
-// faking it; a jj user needing tag info reaches for vcs.exe().
+// Describe reports "": jj has no native tag-describe (tags live in the colocated
+// git backend, with no first-class jj command for the git-describe shape). Per the
+// interface contract a backend without the concept returns "" rather than faking
+// it; a jj user needing tag info reaches for vcs.exe().
 func (v jjVCS) Describe(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
@@ -133,6 +133,11 @@ func (v jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 // Dirty reports whether the working copy (optionally scoped to paths) has
 // changes, via `jj diff --name-only`. Non-empty output = dirty.
 func (v jjVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {
+	files, err := v.DirtyFiles(ctx, dir, paths)
+	return len(files) > 0, err
+}
+
+func (v jjVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
 	args := []string{"diff", "--name-only"}
 	if len(paths) > 0 {
 		args = append(args, "--")
@@ -140,7 +145,7 @@ func (v jjVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, err
 	}
 	out, err := vcsOutput(ctx, dir, "jj", args...)
 	if err != nil {
-		return false, fmt.Errorf("jj diff: %w", err)
+		return nil, fmt.Errorf("jj diff: %w", err)
 	}
-	return out != "", nil
+	return splitStatusLines(out), nil
 }

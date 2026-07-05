@@ -14,7 +14,7 @@ import (
 const TargetModulePath = "magus/target"
 
 // TargetModuleSource is the generated Buzz `object Target` mirror of types.Target
-// (see cmd/magus-utils types) — the canonical work-unit value type. It is consumed
+// (see cmd/magus-utils types), the canonical work-unit value type. It is consumed
 // both at runtime (as part of the magus/target source module) and at built-in
 // generation time (inlined into each built-in via SelfContainedBuiltinSource). The
 // other value types (TargetQuery/ExecResult/OpResult/TargetResult) are appended at
@@ -26,7 +26,7 @@ const TargetModulePath = "magus/target"
 var TargetModuleSource string
 
 // PatchOpSource / CharmTypeSource / CommandSource are the generated Buzz `object`
-// mirrors of types.PatchOp, types.Charm, and types.Run — the {cmd, args, charms}
+// mirrors of types.PatchOp, types.Charm, and types.Run: the {cmd, args, charms}
 // command a command target's handler hands to its cb callback, down to the RFC 6902
 // ops. Unlike the other record mirrors they are inlined into self-contained
 // built-ins (every command spell references Run), so they ship in the magus/target
@@ -45,7 +45,7 @@ var CharmTypeSource string
 //go:embed buzzlib/command.gen.buzz
 var CommandSource string
 
-// ServiceSource is the generated Buzz `object Service` mirror of types.Service - the
+// ServiceSource is the generated Buzz `object Service` mirror of types.Service: the
 // {command, readiness, stop} a service op returns, each field a Command (command is the
 // process; readiness/stop are optional). It ships in the magus/target bundle so a spell
 // can author a service op; it must follow CommandSource there (Service's fields are
@@ -117,7 +117,7 @@ const CharmModulePath = "magus/charm"
 // type mirrors it is hand-written (charm's constructors are logic, not a struct),
 // kept in lockstep with the Go module by charm_parity_test. A self-contained
 // built-in command spell imports it (`import "magus/charm"`) to build patches with
-// charm.after / charm.set / … instead of hand-written positional pointers; it is
+// charm.after / charm.set / ... instead of hand-written positional pointers; it is
 // pure Buzz with no host calls, so it compiles into a bare built-in.
 //
 //go:embed buzzlib/charm.buzz
@@ -140,8 +140,8 @@ var builtinModuleSources = map[string]string{
 // SelfContainedBuiltinSource prepares a spell source for a bare compile into an
 // embedded built-in. A built-in may import only the inlinable pure-Buzz modules
 // (magus/target, magus/charm): each such import is stripped and the module's
-// source prepended, so the compiled chunk carries the symbols itself. It returns
-// ok=false if the source imports any other module — such a spell needs host
+// source prepended, so the compiled chunk carries the symbols itself. Returns
+// ok=false if the source imports any other module - such a spell needs host
 // bindings a bare compile can't provide and is not a built-in. Shared by the
 // built-in generator and the bytecode-parity test so both compile built-ins
 // identically.
@@ -158,11 +158,11 @@ func SelfContainedBuiltinSource(src string) (string, bool) {
 
 // inlineBuiltinImports strips every inlinable import from src and returns src's
 // remaining body plus the ordered, deduped module sources to prepend in their
-// place. It recurses — an inlinable module may itself import another (magus/charm
-// imports magus/target for the Charm type) — expanding a module's own imports
+// place. It recurses (an inlinable module may itself import another: magus/charm
+// imports magus/target for the Charm type), expanding a module's own imports
 // before the module, so a dependency is always defined before its dependent. seen
-// carries the dedup set across the recursion (à la filepath.WalkDir threading its
-// state); ok is false if src imports a non-inlinable host module.
+// carries the dedup set across the recursion; ok is false if src imports a
+// non-inlinable host module.
 func inlineBuiltinImports(src string, seen map[string]bool) (body string, prepend []string, ok bool) {
 	var kept []string
 	for _, line := range strings.Split(src, "\n") {
@@ -173,7 +173,7 @@ func inlineBuiltinImports(src string, seen map[string]bool) (body string, prepen
 		path := importPath(line)
 		modSrc, inlinable := builtinModuleSources[path]
 		if !inlinable {
-			return "", nil, false // imports a host module → not a built-in
+			return "", nil, false // imports a host module, not a built-in
 		}
 		if seen[path] {
 			continue // already prepended; strip the duplicate import
@@ -189,12 +189,12 @@ func inlineBuiltinImports(src string, seen map[string]bool) (body string, prepen
 	return strings.Join(kept, "\n"), prepend, true
 }
 
-// IsSelfContained reports whether src is a command spell — one that imports only the
+// IsSelfContained reports whether src is a command spell: one that imports only the
 // pure-types magus/target module (or nothing). Such a spell's op handlers run a
 // declared command via the injected run-callback and carry no host side effects,
-// so their specs can be extracted once at spec-resolution time (see
-// resolveOps). A spell importing host modules (e.g. magus/extra/http) is a
-// handler op spell whose handlers must be dispatched at invoke time instead.
+// so their specs can be extracted once at spec-resolution time (see resolveOps). A
+// spell importing host modules (e.g. http) is a handler op spell whose handlers must
+// be dispatched at invoke time instead.
 func IsSelfContained(src string) bool {
 	_, ok := SelfContainedBuiltinSource(src)
 	return ok

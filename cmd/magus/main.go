@@ -1,4 +1,4 @@
-// Command magus is the magus CLI — a standalone build orchestrator and
+// Command magus is the magus CLI: a standalone build orchestrator and
 // content-addressed cache for multi-language monorepos, and an evolution of
 // Mage.
 //
@@ -31,6 +31,7 @@
 // Run any subcommand with -h/--help for its own flag list.
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
+//go:generate go run ../magus-configdocs -out ../../docs/config.md
 package main
 
 import (
@@ -117,7 +118,7 @@ type dispatchProfile struct {
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
 	case "help", "version", "buzz":
-		// buzz is a standalone Buzz runner — no workspace, config, or daemon.
+		// buzz is a standalone Buzz runner; no workspace, config, or daemon.
 		return dispatchProfile{}
 	case "completion", "self":
 		return dispatchProfile{needsConfig: true}
@@ -146,7 +147,7 @@ var globalValueFlags = map[string]bool{
 }
 
 // peekSub returns the subcommand and trailing args, scanning past global flags.
-// Intentionally approximate: disagreement with fs.Parse costs unnecessary work, not correctness.
+// Intentionally approximate: disagreement with fs.Parse costs extra work, not correctness.
 func peekSub(args []string) (sub string, subArgs []string) {
 	i := 0
 	for i < len(args) {
@@ -208,7 +209,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	configgen.ApplyEnv(&cfg, os.Getenv)
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
-	// Wire hints enabled from config (default true when Hints.Enabled is nil).
+	// Hints default on when Hints.Enabled is nil.
 	hintsOn := cfg.Hints.Enabled == nil || *cfg.Hints.Enabled
 	interactive.SetEnabled(hintsOn)
 
@@ -226,7 +227,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 
 	// parentLive records whether a parent daemon is alive and reachable: true only
 	// when a forward reached it but it declined this subcommand (ErrNotAdoptable).
-	// It gates leaf behavior below — a nested process suppresses its own server
+	// It gates leaf behavior below: a nested process suppresses its own server
 	// only while it has a live parent to forward to.
 	parentLive := false
 	if profile.needsDaemonFwd {
@@ -264,7 +265,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			// MAGUS_DAEMON_SOCKET pointed at it: this process runs the command locally
 			// as a leaf, but deeper adoptable calls still forward to the single
 			// top-level pool and probes (e.g. doctor's daemon check) see the real
-			// daemon. On a transport failure the daemon is gone — clear the pointer so
+			// daemon. On a transport failure the daemon is gone: clear the pointer so
 			// nothing keeps dialing a corpse, and fall through to hosting our own pool.
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
@@ -325,12 +326,12 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		}
 		lim := cache.NewLimiter(concurrency)
 		// Host our own proc server only when there's no live daemon to forward to.
-		// Any process — nested OR top-level — with a reachable daemon (parentLive)
+		// Any process (nested OR top-level) with a reachable daemon (parentLive)
 		// runs locally as a leaf and forwards adoptable calls to that single daemon,
 		// rather than standing up a second socket that fragments the concurrency pool
 		// and trips doctor's `sockets` check ("multiple daemons running"). The earlier
 		// `CurrentLevel() > 0` guard left a gap: a top-level non-adoptable command
-		// (describe, ls, watch, …) still hosted its own daemon even when the stable
+		// (describe, ls, watch, ...) still hosted its own daemon even when the stable
 		// `magus server start` daemon was alive. A process with no daemon to forward
 		// to (parentLive == false: a true top-level, or an orphaned nested one whose
 		// parent is gone) hosts its own pool. loadMagus wires the limiter into the
@@ -546,8 +547,8 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 
 	// The daemon hosts shared services so they stay warm across separate `magus run`
 	// invocations. Only the stable daemon does this (a per-process proc server leaves
-	// ServiceHost nil), which is why cross-invocation sharing needs the daemon.
-	// A journal records each hosted service's stop command so this daemon can reap
+	// ServiceHost nil), which is why cross-invocation sharing needs the daemon. A
+	// journal records each hosted service's stop command so this daemon can reap
 	// orphans left by a previous one that crashed; sweep them before hosting anything.
 	svcJournal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
 	if jerr != nil {
@@ -661,7 +662,7 @@ func exitCodeOf(err error) int {
 		return silent.exitCode
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
-	// generic error line — the magusfile already logged whatever it wanted to.
+	// generic error line; the magusfile already logged whatever it wanted to.
 	var exitErr types.ExitError
 	if errors.As(err, &exitErr) {
 		return exitErr.Code

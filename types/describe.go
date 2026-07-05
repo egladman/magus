@@ -16,9 +16,9 @@ type SpellEntry struct {
 	Claims  []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
 	Targets []string `json:"targets,omitempty" yaml:"targets,omitempty"`
 	Opaque  bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
-	// TargetDocs maps a target name to its handler's doc comment, for the targets
-	// that have one. Populated for Buzz spells (built-in docs are not serialized in
-	// bytecode, so only workspace-local Buzz spells carry them here).
+	// TargetDocs maps a target name to its handler's doc comment, where one
+	// exists. Populated only for workspace-local Buzz spells (built-in docs are
+	// not serialized in bytecode).
 	TargetDocs map[string]string `json:"target_docs,omitempty" yaml:"target_docs,omitempty"`
 }
 
@@ -58,12 +58,11 @@ const TargetGraphDefinition = "The target dependency graph is the magus.needs " 
 	"source, so it shows every edge — including both arms of a runtime branch — and " +
 	"flags any dependency cycle (which the run path rejects during dispatch)."
 
-// TargetGraphNode is one target in the graph: its run name, its doc comment, the
-// names of the targets it depends on, and the charm names its body branches on.
-// This is the single node type: the static extractor (internal/describe)
-// populates it directly, and `magus describe graph` serializes it. Wire keys
-// mirror the field names in snake_case (dependencies, not the abbreviated deps),
-// matching the project-level depends_on and the rest of this file.
+// TargetGraphNode is one target in the graph: its run name, doc comment, the
+// targets it depends on, and the charm names its body branches on. The static
+// extractor (internal/describe) populates it directly and `magus describe graph`
+// serializes it. Wire keys are snake_case field names (dependencies, not the
+// abbreviated deps), matching the project-level depends_on and the rest of this file.
 type TargetGraphNode struct {
 	Name         string   `json:"name"                   yaml:"name"`
 	Doc          string   `json:"doc,omitempty"          yaml:"doc,omitempty"`
@@ -72,12 +71,12 @@ type TargetGraphNode struct {
 	// Spells are the spell ops the target's body invokes, captured statically from
 	// the bracket (`go["go-test"]()`) and dotted (`md.markdownlint()`) call forms,
 	// grouped by spell in first-appearance order. It shows which toolchain a
-	// composite target actually drives — the part `deps` (sibling targets) omits.
+	// composite target drives - the part `deps` (sibling targets) omits.
 	Spells []TargetSpellUse `json:"spells,omitempty" yaml:"spells,omitempty"`
 	// CrossDependencies are dependencies on specific targets in *other* projects,
-	// declared via a project import (<alias>.<target>). Unlike Dependencies (same-project target
-	// names), each carries the other project's path, so the graph can draw a target →
-	// target edge across project boundaries instead of a coarse project → project one.
+	// declared via a project import (<alias>.<target>). Unlike Dependencies (same-project
+	// target names), each carries the other project's path, so the graph can draw a
+	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
 }
 
@@ -104,7 +103,7 @@ type TargetGraphProject struct {
 	Cycle  []string          `json:"cycle,omitempty"  yaml:"cycle,omitempty"`
 	// DependsOn are the workspace-relative paths of the projects this project
 	// depends on (its project-level deps, declared in magus.project).
-	// They draw the project → project arrows in the combined workspace graph;
+	// They draw the project -> project arrows in the combined workspace graph;
 	// intra-project target edges live on each node's Dependencies.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	// RelPath is Path expressed relative to the VCS (repo) root, used only for an
@@ -161,8 +160,8 @@ type ModuleMethodEntry struct {
 	BuzzStdlib string `json:"buzz_stdlib,omitempty" yaml:"buzz_stdlib,omitempty"`
 }
 
-// Record is the Buzz boundary map for a method entry (magus.module's methods).
-func (m ModuleMethodEntry) Record() map[string]any {
+// ToMap is the Buzz boundary map for a method entry (magus.module's methods).
+func (m ModuleMethodEntry) ToMap() map[string]any {
 	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "buzzStdlib": m.BuzzStdlib}
 }
 
@@ -173,8 +172,8 @@ type ModuleFieldEntry struct {
 	Doc  string `json:"doc,omitempty" yaml:"doc,omitempty"`
 }
 
-// Record is the Buzz boundary map for a field entry (magus.module's fields).
-func (f ModuleFieldEntry) Record() map[string]any {
+// ToMap is the Buzz boundary map for a field entry (magus.module's fields).
+func (f ModuleFieldEntry) ToMap() map[string]any {
 	return map[string]any{"name": f.Name, "type": f.Type, "doc": f.Doc}
 }
 
@@ -186,17 +185,17 @@ type ModuleEntry struct {
 	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
 }
 
-// Record is the Buzz boundary map magus.modules / magus.module return:
+// ToMap is the Buzz boundary map magus.modules / magus.module return:
 // {name, doc, fields, methods}. fields/methods are always present (empty in the
-// summary view). The generated/hand-written bindings marshal it via host.Recorder.
-func (e ModuleEntry) Record() map[string]any {
+// summary view). The generated/hand-written bindings marshal it via host.Mapper.
+func (e ModuleEntry) ToMap() map[string]any {
 	fields := make([]any, len(e.Fields))
 	for i, f := range e.Fields {
-		fields[i] = f.Record()
+		fields[i] = f.ToMap()
 	}
 	methods := make([]any, len(e.Methods))
 	for i, m := range e.Methods {
-		methods[i] = m.Record()
+		methods[i] = m.ToMap()
 	}
 	return map[string]any{"name": e.Name, "doc": e.Doc, "fields": fields, "methods": methods}
 }
@@ -223,7 +222,7 @@ type EvaluatedSpellEntry struct {
 	ClaimWeight     int      `json:"claim_weight,omitempty"      yaml:"claim_weight,omitempty"`
 	// Command is the fork command this spell's op would run for the target, with
 	// the requested charms applied (cmd as element 0). Empty for function-op or
-	// no-op targets, whose argv isn't statically knowable. Preview only — `magus
+	// no-op targets, whose argv isn't statically knowable. Preview only: `magus
 	// describe` renders it; nothing is executed.
 	Command []string `json:"command,omitempty"           yaml:"command,omitempty"`
 }

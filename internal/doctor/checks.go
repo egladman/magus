@@ -27,11 +27,11 @@ import (
 )
 
 // checkNearDuplicateServices is the static, whole-workspace half of MGS5001: it
-// reports service targets across projects that look like copies of the same
-// service (same image and container port) but differ subtly, so they will run as
-// separate processes instead of one shared instance. Unlike the runtime warning
-// (scoped to a single run's graph) this audit is repo-wide, so it is "potential
-// overlap": some clusters may never co-occur in one run.
+// reports service targets across projects that look like copies of one service
+// (same image and container port) but differ subtly, so they run as separate
+// processes instead of one shared instance. Unlike the runtime warning (scoped to
+// a single run's graph) this audit is repo-wide, so it is "potential overlap":
+// some clusters may never co-occur in one run.
 func (*runner) checkNearDuplicateServices(projects []*types.Project) Check {
 	const name = "service duplication"
 	clusters := serviceaudit.NearDuplicates(projects, nil)
@@ -92,12 +92,11 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 
 // checkCITarget fails when no project in the workspace declares a `ci` target.
 // ci is the anchor `magus ci` / `magus affected ci` / `magus affected --plan`
-// key off; a workspace that defines none would run that gate as a silent no-op
-// (exit 0 having gated nothing). The run-time path enforces the same rule (it
-// returns MGS1001); this surfaces it as a workspace health check so the gap is
-// visible before CI runs. Detection reuses the magusfile source scan
-// (magusfileSourcesInDir/declaredTargetNames); ci lives in the magusfile, never
-// in a spell. Name matching is case-insensitive because magus normalizes CI/Ci to ci.
+// key off; a workspace defining none would run that gate as a silent no-op (exit
+// 0 having gated nothing). The runtime path enforces the same rule (MGS1001);
+// this surfaces it as a health check so the gap is visible before CI runs.
+// Detection reuses the magusfile source scan (ci lives in the magusfile, never a
+// spell). Matching is case-insensitive because magus normalizes CI/Ci to ci.
 func (*runner) checkCITarget(projects []*types.Project) Check {
 	const name = "ci target"
 	if len(projects) == 0 {
@@ -107,9 +106,8 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
 			for _, decl := range declaredTargetNames(f) {
-				// Normalize the raw identifier the same way the runtime does
-				// (CI/Ci → ci) before comparing, so a magusfile that declares
-				// the ci target in any casing is recognized.
+				// Normalize the raw identifier as the runtime does (CI/Ci -> ci)
+				// so a ci target declared in any casing is recognized.
 				if norm(decl) == types.TargetCI {
 					return Check{Name: name, Status: StatusOK, Message: "ci target is defined"}
 				}
@@ -129,10 +127,10 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 }
 
 // checkSpellDocs requires a doc comment on every function-handler target of each
-// workspace-local Buzz spell. Only those targets opt in (DocRequiredTargets) —
-// built-ins and record-style {cmd,args} ops, whose handler comments
-// aren't captured, are skipped — so the check enforces the convention exactly
-// where the Buzz interpreter can verify it.
+// workspace-local Buzz spell. Only those targets opt in (DocRequiredTargets);
+// built-ins and record-style {cmd,args} ops, whose handler comments aren't
+// captured, are skipped - so the check enforces the convention exactly where the
+// Buzz interpreter can verify it.
 func (*runner) checkSpellDocs(spells []*types.Spell) Check {
 	const name = "spell target docs"
 	var undocumented []string
@@ -413,9 +411,9 @@ func (*runner) checkEnvVars() Check {
 		if _, ok := KnownEnvVars[key]; ok {
 			continue
 		}
-		// MAGUS_LEVEL is injected by magus into every subprocess (the recursion
-		// depth, à la GNU Make's MAKELEVEL; see internal/run SelfVars). It's a
-		// runtime signal, not a config field, so it won't be in KnownEnvVars — a
+		// MAGUS_LEVEL is injected into every subprocess (the recursion
+		// depth, like GNU Make's MAKELEVEL; see internal/proc/run SelfVars). It's a
+		// runtime signal, not a config field, so it won't be in KnownEnvVars - a
 		// nested magus legitimately sees it.
 		if key == "MAGUS_LEVEL" {
 			continue
@@ -441,13 +439,12 @@ func (*runner) checkEnvVars() Check {
 
 // checkTargetNameConventions fails when a workspace declares target functions
 // using more than one naming convention (snake_case, camelCase, PascalCase).
-// magus normalizes every target name, so a target can be invoked in any casing;
-// this check does not restrict which casing you use. It only requires the
-// workspace to pick ONE convention and stay consistent, which keeps invocations
-// greppable. Single-word, all-lowercase names (build, test) are
-// convention-neutral and ignored.
+// magus normalizes every target name, so this doesn't restrict which casing you
+// use; it only requires the workspace to pick ONE convention and stay consistent,
+// which keeps invocations greppable. Single-word, all-lowercase names (build,
+// test) are convention-neutral and ignored.
 func (r *runner) checkTargetNameConventions(projects []*types.Project) Check {
-	conventions := map[string]string{} // convention → first "name (file)" example
+	conventions := map[string]string{} // convention -> first "name (file)" example
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
 			for _, name := range declaredTargetNames(f) {
@@ -537,16 +534,14 @@ func declaredTargetNames(path string) []string {
 // checkMagusfileSyntax parses every magusfile in the workspace with the
 // gopherbuzz checker and reports all syntax / strict-parity errors at once.
 // Magusfiles are parsed in embedded mode (ParseEmbedded) because they
-// legitimately use embedding-only constructs — top-level statements and
-// unlabeled host calls — that upstream-strict parsing rejects; the check still
-// catches the unconditional strict-parity errors (untyped params, reserved-word
-// bindings, omitted return arrows, non-optional fiber yields) and plain syntax
-// errors.
+// legitimately use embedding-only constructs (top-level statements, unlabeled
+// host calls) that upstream-strict parsing rejects; the check still catches the
+// unconditional strict-parity errors (untyped params, reserved-word bindings,
+// omitted return arrows, non-optional fiber yields) and plain syntax errors.
 //
-// Every magusfile is parsed before the check returns, so a single run yields a
-// comprehensive report of everything wrong rather than stopping at the first
-// failure. This is what makes it useful in the CI preflight target: one `magus
-// doctor` surfaces all magusfile problems in one pass.
+// Every magusfile is parsed before returning, so one run reports everything wrong
+// rather than stopping at the first failure - what makes it useful in the CI
+// preflight target: one `magus doctor` surfaces all magusfile problems at once.
 func (r *runner) checkMagusfileSyntax(projects []*types.Project) Check {
 	const name = "magusfile syntax"
 	var problems []string
@@ -590,15 +585,14 @@ func (r *runner) relPath(path string) string {
 }
 
 // checkCharmTargetCollision warns when a charm name also names a target. Charms
-// attach to a target with a ":" suffix (magus run lint:rw), so a charm that
-// shares a target name makes invocations ambiguous to read and a pain to debug:
-// `magus run cd` (the target) versus `magus run build:cd` (the charm).
-// The charm set is magus's reserved built-ins (write, cd) plus every charm a
-// target body branches on via has_charm; collisions are compared on the canonical
-// name both sides normalize to.
+// attach to a target with a ":" suffix (magus run lint:rw), so a charm sharing a
+// target name makes invocations ambiguous to read and debug: `magus run cd` (the
+// target) versus `magus run build:cd` (the charm). The charm set is magus's
+// reserved built-ins (write, cd) plus every charm a target body branches on via
+// has_charm; collisions are compared on the canonical name both sides normalize to.
 func (r *runner) checkCharmTargetCollision(projects []*types.Project) Check {
-	targets := map[string]string{} // normalized name → first raw name seen
-	charms := map[string]string{}  // normalized name → first raw name seen
+	targets := map[string]string{} // normalized name -> first raw name seen
+	charms := map[string]string{}  // normalized name -> first raw name seen
 	for _, c := range types.ReservedCharms() {
 		charms[types.NormalizeCharmName(c)] = c
 	}
@@ -641,7 +635,7 @@ func (r *runner) checkCharmTargetCollision(projects []*types.Project) Check {
 		Name:   "charm/target name collisions",
 		Status: StatusFail,
 		Message: fmt.Sprintf("%d charm name(s) also name a target; the `target:charm` suffix "+
-			"makes these ambiguous to read and debug — rename one side", len(details)),
+			"makes these ambiguous to read and debug; rename one side", len(details)),
 		Details: details,
 	}
 }
@@ -664,7 +658,7 @@ func declaredCharmNames(path string) []string {
 
 // checkWorkspaceRegistration reports whether this workspace is currently
 // loaded in the multi-workspace daemon and how many other workspaces are
-// present. Informational only — a workspace not yet loaded is normal (it
+// present. Informational only - a workspace not yet loaded is normal (it
 // loads on first use).
 func (r *runner) checkWorkspaceRegistration() Check {
 	d := r.opts.daemonInfo

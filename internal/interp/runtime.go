@@ -37,8 +37,8 @@ func SourceFromContext(ctx context.Context) *Source {
 }
 
 // WithProjectPath stores the workspace-relative path of the project whose
-// magusfile is being parsed, so magus.project(fn) — the contextual
-// form with no explicit path — can default to "this project".
+// magusfile is being parsed, so magus.project(fn) (the contextual form with no
+// explicit path) can default to "this project".
 func WithProjectPath(ctx context.Context, path string) context.Context {
 	return context.WithValue(ctx, projectPathCtxKey{}, path)
 }
@@ -85,11 +85,10 @@ func Run(ctx context.Context, src *Source, target string, extraArgs []string, wo
 // RunDir runs target for the project in dir. Returns ErrNoMagusfile or
 // ErrUnknownTarget when not found.
 //
-// Buzz is the only engine today, so FindAll yields a single source and this
-// resolves to one execution. The loop is the seam a second engine would extend:
-// each source is fully executed (including top-level declarations such as
-// magus.project) before its target registry is consulted, and an unknown target
-// falls through to the next source.
+// Buzz is the only engine today, so FindAll yields a single source. The loop is
+// the seam a second engine would extend: each source is fully executed (including
+// top-level declarations such as magus.project) before its target registry is
+// consulted, and an unknown target falls through to the next source.
 func RunDir(ctx context.Context, dir, target string, extraArgs []string) error {
 	srcs, err := FindAll(dir)
 	if err != nil {
@@ -109,9 +108,9 @@ func RunDir(ctx context.Context, dir, target string, extraArgs []string) error {
 // Parse executes src in parse mode (stubs magus.target) and returns discovered targets.
 func Parse(ctx context.Context, src *Source) ([]Target, error) {
 	// Carry the source so bindings resolve paths relative to the magusfile's own
-	// directory (local-spell require/import), not the process cwd — the same
-	// context Run establishes. Without this, preloading a magusfile from outside
-	// its dir fails to find its ./spells.
+	// directory (local-spell require/import), not the process cwd, the same context
+	// Run establishes. Without this, preloading a magusfile from outside its dir
+	// fails to find its ./spells.
 	ctx = WithSource(ctx, src)
 	return parseBuzz(ctx, src)
 }
@@ -149,13 +148,13 @@ func RegisterBuzzSpellImportCheck(fn func(handles []string) error) {
 // statement in src. It reads the parsed AST, not the raw text, so a commented-out
 // or string-literal import never counts.
 //
-// It parses with ParseEmbedded — the same lenient mode magusfiles load under
-// (Exec uses WithEmbedded). Strict buzz.Parse rejects top-level statements, which
-// real magusfiles use freely (the repo's own has a top-level `if`), so parsing
-// strict here would error and silently skip the check on exactly those files.
-// A parse error still yields nil: Exec re-parses and reports the real syntax error
-// with position. The substring gate skips the parse entirely for the common
-// magusfile that imports no spell — Exec is about to parse the source anyway.
+// It parses with ParseEmbedded, the same lenient mode magusfiles load under (Exec
+// uses WithEmbedded). Strict buzz.Parse rejects top-level statements, which real
+// magusfiles use freely (the repo's own has a top-level `if`), so parsing strict
+// here would error and silently skip the check on exactly those files. A parse
+// error still yields nil: Exec re-parses and reports the real syntax error with
+// position. The substring gate skips the parse for the common magusfile that
+// imports no spell (Exec is about to parse the source anyway).
 func spellImportNames(src string) []string {
 	if !strings.Contains(src, "magus/spell/") {
 		return nil
@@ -181,8 +180,8 @@ func spellImportNames(src string) []string {
 func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
 	// Carry the target's directory on the context instead of os.Chdir-ing the whole
 	// process. The host modules (std.*) resolve relative paths against this cwd, so
-	// magusfile targets across projects — including a cross-project magus.needs that
-	// re-enters the interpreter — execute concurrently without corrupting a shared
+	// magusfile targets across projects (including a cross-project magus.needs that
+	// re-enters the interpreter) execute concurrently without corrupting a shared
 	// process working directory.
 	if workDir != "" {
 		ctx = std.WithCwd(ctx, workDir)
@@ -211,7 +210,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	for i, s := range extraArgs {
 		buzzArgs[i] = vm.StrValue(s)
 	}
-	ctx, exitCode := types.WithExitRecorder(ctx)
+	ctx, exitCode := types.WithExitCapture(ctx)
 	ctx = WithSource(ctx, src)
 	_, err = fn(ctx, buzzArgs)
 	if code, ok := exitCode(); ok {
@@ -257,14 +256,14 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	// Carry the magusfile source on the context for the whole load, so the module
 	// resolver registered below (which captures this ctx) can resolve top-level
 	// `import "project/<path>"` cross-project handles during execution. Run mode
-	// otherwise reaches here with a nil source — runBuzz sets it only for target
-	// dispatch — and such an import would resolve to nothing. Parse mode already sets
+	// otherwise reaches here with a nil source (runBuzz sets it only for target
+	// dispatch), and such an import would resolve to nothing. Parse mode already sets
 	// it upstream; re-setting is idempotent.
 	ctx = WithSource(ctx, src)
-	// The buzz path uses the standalone interpreter's concrete API (Exec,
-	// Targets, CallVal) directly; the engine.Session adapter is only for generic
-	// registry consumers, so there's no need to round-trip through engine.Lookup.
-	// Confine imports to the magusfiles layout (see magusSearchPaths); WithSearchPaths
+	// The buzz path uses the standalone interpreter's concrete API (Exec, Targets,
+	// CallVal) directly; the engine.Session adapter is only for generic registry
+	// consumers, so there's no need to round-trip through engine.Lookup. Confine
+	// imports to the magusfiles layout (see magusSearchPaths); WithSearchPaths
 	// replaces gopherbuzz's upstream default so a magusfile resolves siblings the same
 	// way regardless of the process cwd, and cannot escape via BUZZ_INCLUDE_PATH.
 	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
@@ -275,7 +274,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	// non-captured top-level var is chunk-private and can use a fast stack slot
 	// instead of an Env binding. The cross-file/cross-target surface is `export`ed
 	// functions, which stay Env-bound. The REPL (NewBuzzReplSession) deliberately
-	// does not enable this — there a later line must resolve earlier names.
+	// does not enable this: there a later line must resolve earlier names.
 	buzzSess.SetPromoteTopLevel(true)
 
 	targetMap := buzzSess.Targets()
@@ -287,7 +286,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		// rel names the offending file relative to its project dir, so a magusfiles/
 		// directory (several files) is unambiguous; the project itself is already in
 		// the surrounding "preload <project>" context. path is built from src.Dir, so
-		// Rel is a pure-lexical relativize with no I/O and no symlink/escape pitfalls.
+		// Rel is a pure-lexical relativize with no I/O and no symlink/escape pitfall.
 		rel, relErr := filepath.Rel(src.Dir, path)
 		if relErr != nil {
 			rel = path
@@ -300,8 +299,8 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		code := string(data)
 		// Validate spell handles before Exec: an unknown `magus/spell/<handle>`
 		// resolves to nothing (gopherbuzz skips an unresolved import) and would
-		// otherwise surface much later as a disconnected "undefined" error. Fail
-		// fast, naming the file, with a did-you-mean instead.
+		// otherwise surface much later as a disconnected "undefined" error. Fail fast,
+		// naming the file, with a did-you-mean instead.
 		if buzzSpellImportCheckFn != nil {
 			if err := buzzSpellImportCheckFn(spellImportNames(code)); err != nil {
 				_ = buzzSess.Close()
@@ -315,7 +314,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	}
 
 	// Discover targets from exported functions (export fun name ...). The
-	// normalizer is many-to-one (go_build, goBuild, GoBuild → go-build), so two
+	// normalizer is many-to-one (go_build, goBuild, GoBuild all give go-build), so two
 	// exports that normalize to the same canonical name are a hard error rather
 	// than a silent last-write-wins clobber. Iterate in sorted order so the
 	// reported pair is deterministic.
@@ -326,7 +325,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		names = append(names, name)
 	}
 	slices.Sort(names)
-	seen := make(map[string]string, len(names)) // canonical key → source name
+	seen := make(map[string]string, len(names)) // canonical key -> source name
 	for _, name := range names {
 		val := exports[name]
 		if !val.IsFun() {
@@ -348,8 +347,8 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 }
 
 // NewBuzzWorkerFunc returns the buzz.WorkerFunc that creates a pre-warmed Buzz
-// session for src. The returned WorkerFunc is safe to call from multiple goroutines because
-// execBuzzSrc reads sources by absolute path and does not acquire chdirMu.
+// session for src. Safe to call from multiple goroutines because execBuzzSrc reads
+// sources by absolute path and does not acquire chdirMu.
 func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 	return func(ctx context.Context) (*buzz.Session, map[string]vm.Callable, error) {
 		return execBuzzSrc(ctx, src, false)
@@ -390,21 +389,44 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 }
 
 // magusSearchPaths returns the import search path templates a magusfile resolves
-// against (see buzz.WithSearchPaths). magus deliberately does not adopt gopherbuzz's
-// upstream default; an `import "<name>"` resolves only to a magusfiles/ sibling,
-// looked up — in order — relative to the process cwd, the project root, and the
-// workspace root. `?` is the import name (filled in by the resolver). The
-// workspace root is read from ctx (types.WithWorkspace) and is omitted when absent
-// or identical to the project dir, so the common single-project case yields no
-// duplicate entry.
+// against (see buzz.WithSearchPaths). `?` is the import name, filled in by the
+// resolver. Each of gopherbuzz's upstream PROJECT-RELATIVE layouts (a sibling
+// file, or a library directory) is searched, plus magus's own magusfiles/
+// convention, in order relative to the process cwd, the project root, and the
+// workspace root. The workspace root is read from ctx (types.WithWorkspace) and
+// omitted when absent or identical to the project dir, so the common single-project
+// case yields no duplicate entry.
+//
+// gopherbuzz's SYSTEM paths (/usr/share/buzz, /usr/local/share/buzz, $BUZZ_PATH)
+// are deliberately NOT adopted, and BUZZ_INCLUDE_PATH is cleared at the call sites:
+// a magusfile resolves imports only within the workspace, so a build stays hermetic
+// and can't pull in arbitrary machine-installed buzz code. Note: an imported
+// sibling is not auto-tracked for affected/drift; declare it in the project's
+// `sources` so an edit marks the project dirty.
 func magusSearchPaths(ctx context.Context, projectDir string) []string {
-	paths := []string{
-		filepath.Join("magusfiles", "?.buzz"),
-		filepath.Join(projectDir, "magusfiles", "?.buzz"),
-	}
+	// Roots searched, in order. "" is the process cwd (a bare, cwd-relative template).
+	roots := []string{"", projectDir}
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		if root := ws.Root(); root != "" && root != projectDir {
-			paths = append(paths, filepath.Join(root, "magusfiles", "?.buzz"))
+			roots = append(roots, root)
+		}
+	}
+	// Per root: the upstream project-relative layouts, then magus's magusfiles/ form.
+	templates := []string{
+		"?.buzz",
+		filepath.Join("?", "main.buzz"),
+		filepath.Join("?", "src", "main.buzz"),
+		filepath.Join("?", "src", "?.buzz"),
+		filepath.Join("magusfiles", "?.buzz"),
+	}
+	paths := make([]string, 0, len(roots)*len(templates))
+	for _, r := range roots {
+		for _, t := range templates {
+			if r == "" {
+				paths = append(paths, t)
+			} else {
+				paths = append(paths, filepath.Join(r, t))
+			}
 		}
 	}
 	return paths

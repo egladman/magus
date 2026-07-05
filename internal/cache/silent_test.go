@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	runPkg "github.com/egladman/magus/internal/run"
+	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

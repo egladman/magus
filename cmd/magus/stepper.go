@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/egladman/magus/internal/run"
+	"github.com/egladman/magus/internal/proc/run"
 )
 
 // withStepGate installs a TTY step gate on ctx.
@@ -31,7 +31,7 @@ func newStepGate() run.StepGate {
 			fd := int(os.Stderr.Fd())
 			oldState, err := term.MakeRaw(fd)
 			if err != nil {
-				// Can't go raw — fall back to step-always so the user still sees commands.
+				// Can't go raw: fall back to step-always so the user still sees commands.
 				fmt.Fprintln(os.Stderr, "(terminal unavailable, stepping)")
 				return run.StepActionStep
 			}

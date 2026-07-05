@@ -1,6 +1,6 @@
-// helpers.go — intentionally hand-maintained: shared conversion primitives that
-// the generated trampolines (the gen subpackage) call into. Do not add generated
-// code here. (The package doc lives in doc.go.)
+// helpers.go: hand-maintained shared conversion primitives that the generated
+// trampolines (the gen subpackage) call into. Do not add generated code here.
+// (The package doc lives in doc.go.)
 
 package host
 
@@ -260,8 +260,8 @@ func valToAny(v vm.Value) any {
 		}
 		return out
 	case v.IsObject():
-		// An object instance (e.g. a Run/Charm/PatchOp literal a spell builds) marshals
-		// to its field map; MapView yields the {field: value} view.
+		// An object instance (e.g. a Run/Charm/PatchOp literal a spell builds)
+		// marshals to its {field: value} map via MapView.
 		mv, ok := v.MapView()
 		if !ok {
 			return nil
@@ -278,8 +278,8 @@ func valToAny(v vm.Value) any {
 }
 
 // AnyToValue converts a Go value to a Buzz Value (unknown types become null).
-// Exported for host code outside this package that marshals across the boundary,
-// e.g. spell function-op Params; it shares one implementation with the generated
+// Exported for host code outside this package that marshals across the boundary
+// (e.g. spell function-op Params); it shares one implementation with the generated
 // trampolines so the two can't drift.
 func AnyToValue(v any) vm.Value { return AnyVal(v) }
 
@@ -287,18 +287,18 @@ func AnyToValue(v any) vm.Value { return AnyVal(v) }
 // [AnyToValue]; see its note for why this is exported.
 func ValueToAny(v vm.Value) any { return valToAny(v) }
 
-// Recorder is a host value that marshals to its Buzz boundary map via Record.
-// The typed record returns (types.ExecResult, types.FileInfo, types.Commit, …)
-// implement it; the generated trampolines call Record so a magusfile sees the
+// Mapper is a host value that renders itself as its Buzz boundary map via ToMap.
+// The typed record returns (types.ExecResult, types.FileInfo, types.Commit, ...)
+// implement it; the generated trampolines call ToMap so a magusfile sees the
 // same {field: value} map the Impl used to return directly.
-type Recorder interface{ Record() map[string]any }
+type Mapper interface{ ToMap() map[string]any }
 
-// RecordsVal marshals a slice of records to a Buzz list of their boundary maps —
+// MapsVal marshals a slice of field-records to a Buzz list of their boundary maps,
 // the return form for list-of-record Impls like vcs.history.
-func RecordsVal[T Recorder](rs []T) vm.Value {
+func MapsVal[T Mapper](rs []T) vm.Value {
 	items := make([]vm.Value, len(rs))
 	for i, r := range rs {
-		items[i] = AnyMapVal(r.Record())
+		items[i] = AnyMapVal(r.ToMap())
 	}
 	return vm.ListValue(items)
 }
@@ -310,8 +310,8 @@ type buzzCallback struct {
 }
 
 // Call invokes the Buzz function and returns its result as a plain Go value.
-// Predicate helpers (fs.walk, charm.*_func, …) derive truthiness from it via
-// callbackTruthy/callPredicate (nil/false → false, any other value → true), so
+// Predicate helpers (fs.walk, charm.*_func, ...) derive truthiness from it via
+// callbackTruthy/callPredicate (nil/false -> false, anything else -> true), so
 // returning the marshalled value rather than a pre-reduced bool keeps those
 // callers correct while also letting value-returning callbacks (os.retry, which
 // hands back fn's result on success) see what the callback actually produced.

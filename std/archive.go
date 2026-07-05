@@ -63,11 +63,10 @@ var Archive = Module{
 	},
 }
 
-// defaultArchiveThreads returns the auto-calculated thread count for archive
-// operations. It uses half the available parallelism (GOMAXPROCS, which respects
-// cgroup CPU limits on Go 1.22+), capped by the limiter's capacity so we never
-// request more slots than the pool holds. Leaves headroom for other concurrent
-// spell work.
+// defaultArchiveThreads returns the auto thread count for archive operations:
+// half the available parallelism (GOMAXPROCS, which respects cgroup CPU limits
+// on Go 1.22+), capped by the limiter's capacity so we never request more slots
+// than the pool holds. Half leaves headroom for other concurrent spell work.
 func defaultArchiveThreads(lim *cache.Limiter) int {
 	cpus := runtime.GOMAXPROCS(0)
 	cap := cpus
@@ -85,8 +84,8 @@ func defaultArchiveThreads(lim *cache.Limiter) int {
 }
 
 // resolveThreads returns the effective thread count for an archive operation.
-// opts["threads"] > 0 overrides auto-calculation. The result is always clamped
-// to [1, GOMAXPROCS] and, when a limiter is present, to [1, limiter.cap].
+// opts["threads"] > 0 overrides the auto count. The result is clamped to
+// [1, GOMAXPROCS] and, when a limiter is present, to [1, limiter.cap].
 func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
 	explicit := archiveOptInt(opts, "threads", 0)
 	var n int
@@ -111,7 +110,7 @@ func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
 }
 
 func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return map[string]any{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
@@ -131,11 +130,11 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	threads := resolveThreads(opts, lim)
 
 	if lim != nil {
-		// If we hold build slots, give them all back while we hold `threads` slots
-		// so peak in-flight stays within the budget (cap) rather than
-		// cap+threads-1. A weighted step holds more than one, and giving back only
-		// one would deadlock the AcquireN below on slots we pin ourselves. Reclaim
-		// them uncancellably after the work completes.
+		// Hand back every build slot we hold while we hold `threads`, so peak
+		// in-flight stays within the budget (cap) rather than cap+threads-1. A
+		// weighted step holds more than one, so giving back only one would
+		// deadlock the AcquireN below on slots we pin ourselves. Reclaim them
+		// uncancellably after the work completes.
 		if held := cache.SlotsHeld(ctx); held > 0 {
 			lim.ReleaseN(held)
 			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
@@ -154,7 +153,7 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	}
 	// Resolve dest after creating it so archiveSafePath's containment check and
 	// the returned relative paths share one canonical base (macOS /var ->
-	// /private/var). Mirrors ArchiveCompress.
+	// /private/var).
 	if real, err := filepath.EvalSymlinks(dest); err == nil {
 		dest = real
 	}
@@ -183,7 +182,7 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 }
 
 func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
-	if types.Recording(ctx) {
+	if types.Tracing(ctx) {
 		return map[string]any{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
@@ -200,9 +199,9 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 		}
 	}
 
-	// Resolve dest via EvalSymlinks to defeat pre-planted symlink pivots on
-	// the output side (an attacker who can pre-create dest as a symlink to
-	// /etc/secrets would otherwise have the archive written there).
+	// Resolve dest via EvalSymlinks to defeat a pre-planted symlink pivot: an
+	// attacker who can pre-create dest as a symlink to /etc/secrets would
+	// otherwise have the archive written there.
 	destDir := filepath.Dir(dest)
 	destReal, err := filepath.EvalSymlinks(destDir)
 	if err != nil {
@@ -214,11 +213,11 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 	threads := resolveThreads(opts, lim)
 
 	if lim != nil {
-		// If we hold build slots, give them all back while we hold `threads` slots
-		// so peak in-flight stays within the budget (cap) rather than
-		// cap+threads-1. A weighted step holds more than one, and giving back only
-		// one would deadlock the AcquireN below on slots we pin ourselves. Reclaim
-		// them uncancellably after the work completes.
+		// Hand back every build slot we hold while we hold `threads`, so peak
+		// in-flight stays within the budget (cap) rather than cap+threads-1. A
+		// weighted step holds more than one, so giving back only one would
+		// deadlock the AcquireN below on slots we pin ourselves. Reclaim them
+		// uncancellably after the work completes.
 		if held := cache.SlotsHeld(ctx); held > 0 {
 			lim.ReleaseN(held)
 			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
@@ -285,8 +284,8 @@ func compressDispatch(ctx context.Context, src, dest, format string, threads, le
 	return nil, 0, 0, fmt.Errorf("unsupported format %q", format)
 }
 
-// compressCollect walks src and returns a list of file entries to archive.
-// Each entry holds the path relative to srcBase and the absolute path.
+// archiveEntry is one file to archive: its path relative to the source root and
+// its absolute path.
 type archiveEntry struct {
 	rel string
 	abs string
@@ -445,10 +444,9 @@ func compressTarGz(ctx context.Context, src, dest string, threads, level int, ma
 		if err != nil {
 			return nil, err
 		}
-		// pgzip fans out internally; SetConcurrency controls block size and
-		// goroutine count. Default block size (256 KiB) balances memory vs
-		// throughput. threads=1 still uses pgzip for code uniformity; pgzip
-		// serialises gracefully with SetConcurrency(blockSize, 1).
+		// pgzip fans out internally; SetConcurrency sets block size and goroutine
+		// count. 256 KiB blocks balance memory vs throughput. threads=1 still uses
+		// pgzip (it serialises gracefully) for code uniformity.
 		_ = gw.SetConcurrency(256<<10, threads)
 		return gw, nil
 	})
@@ -601,10 +599,9 @@ func archiveDispatch(ctx context.Context, hdr []byte, f *os.File, dest string, s
 	return nil, 0, fmt.Errorf("unrecognized archive format")
 }
 
-// openTarInStream peeks the first 262 bytes of r to detect an inner tar
-// header. If found, returns a *tar.Reader over a stitched reader. If not,
-// returns (nil, stitched_reader, nil) so the caller can treat r as a single
-// compressed file.
+// openTarInStream peeks the first 262 bytes of r for a tar header. If found, it
+// returns a *tar.Reader over a stitched reader; otherwise (nil, stitched, nil)
+// so the caller can treat r as a single compressed file.
 func openTarInStream(r io.Reader) (*tar.Reader, io.Reader, error) {
 	peek := make([]byte, 262)
 	n, _ := io.ReadFull(r, peek)
@@ -619,9 +616,9 @@ func openTarInStream(r io.Reader) (*tar.Reader, io.Reader, error) {
 }
 
 func extractGzipped(ctx context.Context, f *os.File, dest string, strip int, maxSize int64, threads int) ([]string, int64, error) {
-	// pgzip.NewReaderN sets the read-ahead block size and parallel goroutine
-	// count for multi-stream gzip decompression. For single-stream .tar.gz
-	// files (the common case) it falls back to serial decompression.
+	// pgzip.NewReaderN sets the read-ahead block size and goroutine count for
+	// multi-stream gzip. Single-stream .tar.gz files (the common case) fall back
+	// to serial decompression.
 	gr, err := pgzip.NewReaderN(f, 256<<10, threads)
 	if err != nil {
 		return nil, 0, fmt.Errorf("gzip: %w", err)
@@ -827,12 +824,11 @@ func extractZip(ctx context.Context, f *os.File, dest string, strip int, maxSize
 					resultCh <- result{err: err}
 					continue
 				}
-				// Bound the copy to the entry's declared size, mirroring extractTar.
-				// The pre-extraction loop already capped the sum of declared sizes
-				// at maxSize, so enforcing actual <= declared per entry keeps the
-				// total bounded even though entries extract in parallel. A header
-				// that under-declares (decompressing to more) is caught here rather
-				// than allowed to write up to the whole budget (gosec G110).
+				// Bound the copy to the entry's declared size (mirrors extractTar).
+				// The pre-extraction loop capped the sum of declared sizes at
+				// maxSize, so enforcing actual <= declared per entry keeps the total
+				// bounded even under parallel extraction. A header that under-declares
+				// is caught here rather than allowed the whole budget (gosec G110).
 				n, copyErr := io.Copy(out, io.LimitReader(rc, j.size+1))
 				out.Close()
 				rc.Close()
