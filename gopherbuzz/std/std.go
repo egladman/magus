@@ -30,50 +30,50 @@ import (
 	"github.com/egladman/gopherbuzz/vm"
 )
 
-// Kind classifies a bundled module by provenance. It replaces the old
-// Register/RegisterExtensions split: rather than two entry points, there is one
-// table of modules each tagged with a Kind, and one Register that installs them
-// all. A surface that wants only a subset (e.g. a strict-conformance run that
-// wants the upstream-faithful surface) filters Modules by Kind itself.
-type Kind int
-
-const (
-	// Upstream is a clean-room reimplementation of a module in upstream Buzz's
-	// standard library; its names, signatures, and semantics track upstream.
-	Upstream Kind = iota
-	// Extension is a gopherbuzz-original module with no upstream counterpart
-	// (the value-aware test surface: assertcore, assert, suite, testing).
-	Extension
-)
-
-// Module is one bundled module: the bare name a Buzz program imports, its
-// provenance Kind, and how to install it on a session. out is std.print's sink;
-// modules that do not print ignore it.
-type Module struct {
-	Name    string
-	Kind    Kind
-	install func(sess *buzz.Session, out io.Writer)
+// Modules is the single source of truth for the modules gopherbuzz bundles: the
+// upstream-faithful stdlib (buzz.LabelUpstream) plus gopherbuzz's own test surface
+// (buzz.LabelExtension). Register provides every entry; a caller filters by label
+// for a subset. Edit this table to add a module. The registration shape is
+// buzz.Module (see gopherbuzz/module.go), shared with host embedders.
+var Modules = []buzz.Module{
+	{Name: "std", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
+		s.SetSyntheticModule("std", coreModule(env.Out)) // std.print targets env.Out
+		return nil
+	}},
+	{Name: "math", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("math", mathModule)},
+	{Name: "fs", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("fs", fsModule)},
+	{Name: "os", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("os", osModule)},
+	{Name: "crypto", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("crypto", cryptoModule)},
+	{Name: "gc", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("gc", gcModule)},
+	{Name: "debug", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("debug", debugModule)},
+	{Name: "io", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetSyntheticModule("io", ioModule(s)) // io binds against the session
+		return nil
+	}},
+	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("serialize", serializeModule)},
+	{Name: "buffer", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("buffer", bufferModule)},
+	{Name: "ffi", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("ffi", ffiModule)},
+	{Name: "assertcore", Labels: []string{buzz.LabelExtension}, Bind: synthetic("assertcore", assertCoreModule)},
+	{Name: "assert", Labels: []string{buzz.LabelExtension}, Bind: source("assert", assertSource)},
+	{Name: "suite", Labels: []string{buzz.LabelExtension}, Bind: source("suite", suiteSource)},
+	{Name: "testing", Labels: []string{buzz.LabelExtension}, Bind: source("testing", testingSource)},
 }
 
-// Modules is the single source of truth for the modules gopherbuzz bundles: the
-// upstream-faithful stdlib plus gopherbuzz's own test surface, each tagged with
-// its Kind. Register installs every entry; edit this table to add a module.
-var Modules = []Module{
-	{"std", Upstream, func(s *buzz.Session, out io.Writer) { s.SetSyntheticModule("std", coreModule(out)) }},
-	{"math", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("math", mathModule()) }},
-	{"fs", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("fs", fsModule()) }},
-	{"os", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("os", osModule()) }},
-	{"crypto", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("crypto", cryptoModule()) }},
-	{"gc", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("gc", gcModule()) }},
-	{"debug", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("debug", debugModule()) }},
-	{"io", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("io", ioModule(s)) }},
-	{"serialize", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("serialize", serializeModule()) }},
-	{"buffer", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("buffer", bufferModule()) }},
-	{"ffi", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("ffi", ffiModule()) }},
-	{"assertcore", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("assertcore", assertCoreModule()) }},
-	{"assert", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSourceModule("assert", assertSource) }},
-	{"suite", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSourceModule("suite", suiteSource) }},
-	{"testing", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSourceModule("testing", testingSource) }},
+// synthetic returns a Bind that installs a synthetic (host-value) module built by
+// make -- the common case, where the module needs nothing from the ModuleEnv.
+func synthetic(name string, make func() vm.Value) func(*buzz.Session, buzz.ModuleEnv) error {
+	return func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetSyntheticModule(name, make())
+		return nil
+	}
+}
+
+// source returns a Bind that installs an embedded .buzz source module.
+func source(name, src string) func(*buzz.Session, buzz.ModuleEnv) error {
+	return func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetSourceModule(name, src)
+		return nil
+	}
 }
 
 // Register installs every bundled module on sess. std.print writes to os.Stdout;
@@ -84,9 +84,9 @@ func Register(sess *buzz.Session) { RegisterWithOutput(sess, os.Stdout) }
 // that captures a program's textual output (e.g. the WebAssembly playground)
 // passes its own writer so print lands in a buffer instead of the host stdout.
 func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
-	for _, m := range Modules {
-		m.install(sess, out)
-	}
+	// std modules never fail to bind; the (always-nil) error is dropped to keep
+	// this a void call. A host that provides fallible modules uses sess.Provide.
+	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), Out: out}, Modules...)
 }
 
 func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
