@@ -78,11 +78,11 @@
   --pico-secondary-inverse: #ffffff;
   --pico-blockquote-border-color: #a04f66;
 
-  /* Tertiary accent: the mascot teal, reserved for the TOC toggle so that control
-     has an identity of its own (and no longer competes with the blue links). */
-  --accent-teal: #0d7680;
-  --accent-teal-hover: #0a5c64;
-  --accent-teal-inverse: #ffffff;
+  /* Tertiary accent: violet, reserved for the TOC toggle so that control has an
+     identity of its own; distinct from the blue links and the teal-green mascot. */
+  --accent-violet: #7a5cc0;
+  --accent-violet-hover: #6a4bb0;
+  --accent-violet-inverse: #ffffff;
 
   /* Warm accent: reserved for primary "run/try this" calls to action (the Run
      button, Open in Playground) so the one thing we want clicked pops against the
@@ -153,9 +153,9 @@
     --pico-secondary-inverse: #1a0e12;
     --pico-blockquote-border-color: #df97a7;
 
-    --accent-teal: #64c1cd;
-    --accent-teal-hover: #7fd0da;
-    --accent-teal-inverse: #0b0e12;
+    --accent-violet: #a78bda;
+    --accent-violet-hover: #b8a6e6;
+    --accent-violet-inverse: #0b0e12;
 
     --accent-warm: #fb923c;
     --accent-warm-hover: #fdba74;
@@ -222,9 +222,9 @@
   --pico-secondary-inverse: #1a0e12;
   --pico-blockquote-border-color: #df97a7;
 
-  --accent-teal: #64c1cd;
-  --accent-teal-hover: #7fd0da;
-  --accent-teal-inverse: #0b0e12;
+  --accent-violet: #a78bda;
+  --accent-violet-hover: #b8a6e6;
+  --accent-violet-inverse: #0b0e12;
 
   --accent-warm: #fb923c;
   --accent-warm-hover: #fdba74;

@@ -9,14 +9,6 @@
    whole UI read noticeably larger than a typical 16px site (e.g. github.com).
    Pin it to 100% so 1rem == 16px at every width; spacing is rem-based, so the
    entire layout tightens proportionally to match. */
-/* Reserve the vertical scrollbar's space so the layout width is the same whether or
-   not a page scrolls. Without this, when the scrollbar appears it narrows the
-   viewport and the centered container reflows - left and right gutters stop matching
-   (most visible on always-shown scrollbars, e.g. Windows / "always show" on macOS).
-   No-op where scrollbars overlay. */
-html {
-  scrollbar-gutter: stable;
-}
 
 :root {
   --pico-font-size: 100%;
@@ -372,17 +364,17 @@ html {
    with !important; without it the filled active state can't take. */
 .toc-toggle[aria-expanded="false"] {
   background-color: transparent !important;
-  border-color: var(--accent-teal);
-  color: var(--accent-teal);
+  border-color: var(--accent-violet);
+  color: var(--accent-violet);
 }
 .toc-toggle[aria-expanded="true"] {
-  background-color: var(--accent-teal) !important;
-  border-color: var(--accent-teal);
-  color: var(--accent-teal-inverse, #fff);
+  background-color: var(--accent-violet) !important;
+  border-color: var(--accent-violet);
+  color: var(--accent-violet-inverse, #fff);
 }
 .toc-toggle[aria-expanded="true"]:hover {
-  background-color: var(--accent-teal-hover, var(--accent-teal)) !important;
-  border-color: var(--accent-teal-hover, var(--accent-teal));
+  background-color: var(--accent-violet-hover, var(--accent-violet)) !important;
+  border-color: var(--accent-violet-hover, var(--accent-violet));
 }
 
 /* Secondary tool row below the search bar: reading-time chip on the left,
@@ -682,6 +674,16 @@ article li {
 }
 .recent-changes[open] > summary {
   margin-bottom: 0.5rem;
+}
+/* Hold the label muted in every state. Opening, focusing, or hovering must not
+   recolor it (Pico's accordion focus/open summary rules would otherwise tint it);
+   the .page-provenance prefix lifts specificity above those Pico rules. */
+.page-provenance .recent-changes > summary:not([role]),
+.page-provenance .recent-changes > summary:not([role]):hover,
+.page-provenance .recent-changes > summary:not([role]):focus,
+.page-provenance .recent-changes > summary:not([role]):focus-visible,
+.page-provenance .recent-changes[open] > summary:not([role]) {
+  color: var(--pico-muted-color);
 }
 .recent-changes[open] > ul {
   padding: 0.6rem 0.75rem;
@@ -1714,7 +1716,7 @@ a code {
   margin: 0.4rem 0 1rem;
   padding: 0.6rem 0.75rem;
   background: var(--pico-card-sectioning-background-color);
-  border-left: 3px solid var(--accent-teal, var(--pico-primary));
+  border-left: 3px solid var(--accent-violet, var(--pico-primary));
   font-size: 0.9rem;
   white-space: pre-wrap;
 }
