@@ -1,19 +1,11 @@
-// scribe_html.buzz - link rewriting for the directory-index layout, extracted from
-// scribe.buzz. These transform in-content link hrefs (resolve, map old->new URL,
-// re-relativize) and are pure string functions, so the module is self-contained and
-// unit-tested. It flat-imports scribe_text for splitPath/relativePath. scribe.buzz
-// flat-imports this module, so rewriteLinks and renderContentHTML call rewriteHref
-// unqualified as before.
-//
-// The goldmark-output taggers (externalLinks, tagAdmonition, tagMermaid, ...) stay
-// in scribe.buzz for now: they are regex passes over rendered HTML with no unit
-// coverage, so they want the full-render gate before moving.
+// scribe_html.buzz - link rewriting and goldmark-output post-processing for the
+// directory-index layout. Pure string transforms; unit-tested and golden-gated.
 import "assert";
 import "scribe_text" as _;
+import "scribe_dom" as _;
 
-// resolvePath resolves a relative link against a gen-root-relative directory,
-// returning the normalized gen-root-relative target path ("" for the root). ".."
-// pops a segment; "." and empty segments are ignored.
+// resolvePath resolves a relative link against a gen-root-relative dir, normalizing
+// ".." and dropping "." / empty segments ("" for the root).
 export fun resolvePath(fromDir: str, link: str) > str {
     var segs = splitPath(fromDir);
     foreach (part in link.split("/")) {
@@ -33,12 +25,8 @@ export fun resolvePath(fromDir: str, link: str) > str {
     return segs.join("/");
 }
 
-// cleanTarget maps an OLD flat gen-root path (e.g. "manpage/gen/magus-ls.html",
-// "codes/race/index.html", "install.html", "index.html") to its NEW clean URL
-// ("manpage/magus-ls/", "codes/race/", "install/", ""): drop .html, drop a trailing
-// index/README landing, drop the "gen" build segment, add a trailing slash.
-// playground.html directorifies like any other page (a link to it lands on
-// "playground/", matching its written gen/playground/index.html).
+// cleanTarget maps an old flat gen-root path to its clean URL: drop .html, drop a
+// trailing index/README landing, drop the "gen" build segment, add a trailing slash.
 export fun cleanTarget(oldPath: str) > str {
     final segs = splitPath(oldPath);
     if (segs.len() == 0) { return ""; }
@@ -61,13 +49,9 @@ export fun cleanTarget(oldPath: str) > str {
     return keep.join("/") + "/";
 }
 
-// rewriteHref transforms one in-content link for the directory-index layout by full
-// path resolution: resolve it against the page's OLD flat directory to the old
-// target, map that target to its NEW clean URL, then re-express it relative to the
-// page's NEW directory. This is correct for siblings, cross-level links, landing
-// pages, and the gen-flatten uniformly (a naive fixed "../" count is not, because
-// the flatten changes depth). External/anchor/mailto links pass through; a
-// #fragment is preserved; asset (non-.html) links are re-based but not cleaned.
+// rewriteHref rebases one in-content link for the move: resolve against the old flat
+// dir, map to the new clean URL, re-relativize to the new dir. External/anchor/mailto
+// pass through; #fragment preserved; asset (non-.html) links re-based but not cleaned.
 export fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
     if (h.startsWith("http://") or h.startsWith("https://") or h.startsWith("//")
         or h.startsWith("#") or h.startsWith("mailto:")) { return h; }
@@ -75,37 +59,23 @@ export fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
     var frag = "";
     final hash = h.indexOf("#");
     if (hash != null) { path = h.sub(0, hash); frag = h.sub(hash); }
-    if (path == "") { return h; }   // pure fragment already handled; be safe
-
+    if (path == "") { return h; }
     final oldTarget = resolvePath(oldDir, path);
     if (path.endsWith(".html")) {
         return relativePath(newDir, cleanTarget(oldTarget)) + frag;
     }
-    // Non-page (asset) link: keep the file as-is, only re-base for the moved page.
     return relativePath(newDir, oldTarget) + frag;
 }
 
-// tagRunnable is a post-process pass over rendered markdown that finds
-// "<!-- run -->" comments the author placed above a Buzz code fence and swaps
-// the following <pre> with <pre data-runnable="true">, so the client-side Run
-// mechanism (run-example.js) can find opt-in blocks without an author-visible
-// info-string extension goldmark doesn't natively surface. The comment itself
-// is dropped from the output.
+// tagRunnable swaps the <pre> after a "<!-- run -->" / "<!-- run-recorder -->" marker
+// with a data-runnable <pre> so run-example.js can find opt-in blocks; drops the marker.
 export fun tagRunnable(html: str) > str {
-    // Two opt-in markers, each tagging the following <pre> with the attributes a
-    // client mode reads. "<!-- run -->" is the plain evalBuzz path (module
-    // examples: print output). "<!-- run-recorder -->" is the dry-run path
-    // (spell examples: `import "magus/spell/go"; go["go-build"]()` records a
-    // trace instead of executing), which run-example.js routes to
-    // evalBuzzWithRecorder on seeing data-recorder. run-recorder is matched first
-    // so its longer marker isn't mistaken for a bare run marker.
     final recTagged = tagRunnableMarker(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
     return tagRunnableMarker(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
 }
 
-// tagRunnableMarker swaps the <pre> that follows each marker comment with openTag
-// (the marker is dropped). A marker not immediately followed by a fence is simply
-// removed, so the block renders normally.
+// tagRunnableMarker replaces the <pre> following each marker with openTag; a marker
+// not immediately before a fence is just dropped.
 export fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
     var buf = "";
     var rest = html;
@@ -113,8 +83,6 @@ export fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
     while (idx != null) {
         buf = buf + rest.sub(0, idx);
         rest = rest.sub(idx + marker.len());
-        // Skip whitespace after the comment (typically a newline). The next
-        // non-whitespace token should be "<pre>" or "<pre ..."; tag it.
         var i = 0;
         while (i < rest.len()) {
             final b = rest.byte(i);
@@ -125,8 +93,6 @@ export fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
             buf = buf + rest.sub(0, i) + openTag;
             rest = rest.sub(i + 5);
         } else {
-            // Not immediately followed by a fence — drop the marker; the block
-            // renders normally.
             buf = buf + rest.sub(0, i);
             rest = rest.sub(i);
         }
@@ -135,10 +101,7 @@ export fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
     return buf + rest;
 }
 
-// externalLinks adds rel="noopener noreferrer" and target="_blank" to every
-// http(s) link that doesn't already have them, and marks the anchor with a
-// data-external attribute so CSS can add a small "leaves this site" glyph via
-// ::after. Deterministic transform over rendered HTML.
+// externalLinks adds rel/target/data-external to every http(s) anchor that lacks them.
 export fun externalLinks(html: str) > str {
     var buf = "";
     var rest = html;
@@ -146,7 +109,6 @@ export fun externalLinks(html: str) > str {
     while (idx != null) {
         buf = buf + rest.sub(0, idx);
         rest = rest.sub(idx);
-        // Locate the closing ">" of the opening tag.
         final closeIdx = rest.indexOf(">");
         if (closeIdx == null) { return buf + rest; }
         var tag = rest.sub(0, closeIdx + 1);
@@ -154,10 +116,7 @@ export fun externalLinks(html: str) > str {
         if (tag.indexOf("rel=") == null) { attrs = attrs + " rel=\"noopener noreferrer\""; }
         if (tag.indexOf("target=") == null) { attrs = attrs + " target=\"_blank\""; }
         if (tag.indexOf("data-external") == null) { attrs = attrs + " data-external"; }
-        if (attrs != "") {
-            // Insert before the closing ">".
-            tag = tag.sub(0, tag.len() - 1) + attrs + ">";
-        }
+        if (attrs != "") { tag = tag.sub(0, tag.len() - 1) + attrs + ">"; }
         buf = buf + tag;
         rest = rest.sub(closeIdx + 1);
         idx = rest.indexOf("<a href=\"http");
@@ -165,10 +124,8 @@ export fun externalLinks(html: str) > str {
     return buf + rest;
 }
 
-// lazyImages adds loading="lazy" decoding="async" to every in-content <img>
-// tag that doesn't already carry a loading attribute. The homepage hero stays
-// eager because renderRoot's markup carries loading="high"/fetchpriority which
-// this pass leaves alone. Deterministic transform.
+// lazyImages adds loading="lazy" decoding="async" to every <img> without a loading
+// or fetchpriority attribute (author markup wins, so the hero stays eager).
 export fun lazyImages(html: str) > str {
     var buf = "";
     var rest = html;
@@ -179,7 +136,6 @@ export fun lazyImages(html: str) > str {
         final closeIdx = rest.indexOf(">");
         if (closeIdx == null) { return buf + rest; }
         var tag = rest.sub(0, closeIdx + 1);
-        // Only add if not already present (author markup wins).
         if (tag.indexOf("loading=") == null and tag.indexOf("fetchpriority=") == null) {
             tag = "<img loading=\"lazy\" decoding=\"async\" " + tag.sub(5);
         }
@@ -190,13 +146,8 @@ export fun lazyImages(html: str) > str {
     return buf + rest;
 }
 
-// tagMermaid finds each Mermaid code fence in the rendered HTML (goldmark produces
-// them as <pre><code class="language-mermaid">) and wraps them in a <div class=
-// "mermaid-src"> with a small no-JS-visible label. With JS on, mermaid-init.js
-// replaces the block with a rendered SVG, so the label sits behind the diagram
-// and never shows; with JS off the reader sees the raw DSL plus a "Diagram
-// source - renders with JavaScript enabled" caption, so the block reads as
-// intentional prose rather than mystery text.
+// tagMermaid wraps each mermaid fence in a <div class="mermaid-src"> carrying a
+// no-JS caption (mermaid-init.js renders it to SVG when JS is on).
 export fun tagMermaid(html: str) > str {
     final open = "<pre><code class=\"language-mermaid\">";
     var buf = "";
@@ -204,30 +155,26 @@ export fun tagMermaid(html: str) > str {
     var idx = rest.indexOf(open);
     while (idx != null) {
         buf = buf + rest.sub(0, idx);
-        // Find the matching </code></pre>.
         rest = rest.sub(idx);
         final close = rest.indexOf("</code></pre>");
         if (close == null) { return buf + rest; }
         final block = rest.sub(0, close + 13);   // 13 = len("</code></pre>")
-        buf = buf + "<div class=\"mermaid-src\">"
-            + block
-            + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span>"
-            + "</div>";
+        buf = buf + el("div", attr("class", "mermaid-src"),
+            block + el("span", attr("class", "noscript-inline mermaid-src-caption"),
+                "Diagram source - renders with JavaScript enabled."));
         rest = rest.sub(close + 13);
         idx = rest.indexOf(open);
     }
     return buf + rest;
 }
 
-// rewriteLinks applies rewriteHref to every href="..." in a rendered content
-// fragment, rebasing in-content links for the page's move from its old flat
-// directory to its new clean one.
+// rewriteLinks applies rewriteHref to every href="..." in a rendered fragment.
 export fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
     var buf = "";
     var rest = html;
     var idx = rest.indexOf("href=\"");
     while (idx != null) {
-        buf = buf + rest.sub(0, idx + 6);   // through the opening href="
+        buf = buf + rest.sub(0, idx + 6);
         rest = rest.sub(idx + 6);
         final end = rest.indexOf("\"");
         if (end == null) {
@@ -243,67 +190,49 @@ export fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
     return buf + rest;
 }
 
-// oldFlatDirectory gives a docs page's directory before the directory-index move
-// (the source subdir, one .html per dir), for rewriteLinks. The new-directory
-// counterpart (newCleanDirectory) reads site state, so it stays in scribe.buzz.
+// oldFlatDirectory is a docs page's pre-move directory (its source subdir).
 export fun oldFlatDirectory(rel: str) > str {
     final parts = rel.split("/");
     if (parts.len() <= 1) { return ""; }
     return parts.sub(0, parts.len() - 1).join("/");
 }
 
-// cleanBody turns a page's raw markdown body into compact prose for the search index:
-// it drops fenced code / mermaid blocks (everything between ``` fences), removes a few
-// inline markdown markers, and collapses whitespace. The text field is ~94% of the index
-// by size, so this both shrinks the download and hands the client clean snippet text (no
-// per-load client-side cleanup). Trade-off: body-text search/snippets no longer include
-// fenced code - title, tags, description, and prose still do.
+// cleanBody reduces a raw markdown body to compact prose for the search index:
+// drop fenced blocks, strip a few inline markers, collapse whitespace.
 export fun cleanBody(md: str) > str {
-    // Keep only the segments OUTSIDE ``` fences (even-numbered split pieces).
     var buf = "";
     var inside = false;
     foreach (p in md.split("```")) {
         if (inside == false) { buf = buf + " " + p; }
         inside = (inside == false);
     }
-    // Newlines / tabs -> spaces; drop inline markers that only add snippet noise.
     while (buf.indexOf("\n") != null) { buf = buf.replace("\n", " "); }
     while (buf.indexOf("\t") != null) { buf = buf.replace("\t", " "); }
     while (buf.indexOf("#") != null) { buf = buf.replace("#", " "); }
     while (buf.indexOf("*") != null) { buf = buf.replace("*", " "); }
     while (buf.indexOf("|") != null) { buf = buf.replace("|", " "); }
     while (buf.indexOf("`") != null) { buf = buf.replace("`", " "); }
-    // Collapse runs of spaces via split/join (avoids a quadratic replace loop).
     final words: [str] = mut [<str>];
     foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
     return words.join(" ");
 }
 
-// aliasStub is the tiny redirect page written at each alias location. Static hosts
-// (GitHub Pages) can't do server redirects, so this uses the standard HTML stub:
-// an instant meta-refresh + a canonical link back to the real page + a scripted
-// location.replace, and a plain <a> so it still works with JavaScript disabled.
-// rel is the target's path relative to the alias's own directory.
+// aliasStub is the redirect page written at each alias: meta-refresh + canonical +
+// scripted replace + a plain <a>, so it works with or without JavaScript.
 export fun aliasStub(rel: str) > str {
-    return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
-        + "<meta http-equiv=\"refresh\" content=\"0; url=" + rel + "\">\n"
-        + "<link rel=\"canonical\" href=\"" + rel + "\">\n"
-        + "<title>Redirecting</title>\n"
-        + "<script>location.replace(\"" + rel + "\");</script>\n"
+    return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
+        + voidEl("meta", attr("charset", "utf-8")) + "\n"
+        + voidEl("meta", attr("http-equiv", "refresh") + attr("content", "0; url=" + rel)) + "\n"
+        + voidEl("link", attr("rel", "canonical") + attr("href", rel)) + "\n"
+        + el("title", "", "Redirecting") + "\n"
+        + el("script", "", "location.replace(\"" + rel + "\");") + "\n"
         + "</head>\n<body>\n"
-        + "<p>This page moved. <a href=\"" + rel + "\">Continue to its new location</a>.</p>\n"
+        + el("p", "", "This page moved. " + el("a", attr("href", rel), "Continue to its new location") + ".") + "\n"
         + "</body>\n</html>\n";
 }
 
-// tagCodeTitle finds "<!-- code-title: FILENAME -->" comments and prepends a
-// <figcaption> title bar to the following <pre> block, wrapping both in a
-// <figure class="code-block-titled">. Authoring:
-//   <!-- code-title: magusfile.buzz -->
-//   ```buzz
-//   ...
-//   ```
-// Goldmark drops multi-word fence info strings, so the marker lives in HTML
-// space rather than in the fence itself. The comment is dropped from output.
+// tagCodeTitle wraps the <pre> after a "<!-- code-title: NAME -->" marker in a
+// <figure class="code-block-titled"> with a <figcaption>; drops the marker.
 export fun tagCodeTitle(html: str) > str {
     final open = "<!-- code-title:";
     var buf = "";
@@ -312,26 +241,22 @@ export fun tagCodeTitle(html: str) > str {
     while (idx != null) {
         buf = buf + rest.sub(0, idx);
         rest = rest.sub(idx + open.len());
-        // Read the title text up to the marker's closing "-->".
         final closeMarker = rest.indexOf("-->");
         if (closeMarker == null) { return buf + open + rest; }
         final title = rest.sub(0, closeMarker).trim();
         rest = rest.sub(closeMarker + 3);
-        // Skip whitespace, then wrap the next <pre>...</pre> in a figure.
         var i = 0;
         while (i < rest.len()) {
             final b = rest.byte(i);
             if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
             i = i + 1;
         }
-        // Check for <pre with any attributes.
         if (rest.sub(i, 4) == "<pre") {
             final endPre = rest.indexOf("</pre>");
             if (endPre != null) {
                 final preBlock = rest.sub(i, endPre + 6 - i);
                 buf = buf + rest.sub(0, i)
-                    + "<figure class=\"code-block-titled\"><figcaption>" + title + "</figcaption>"
-                    + preBlock + "</figure>";
+                    + el("figure", attr("class", "code-block-titled"), el("figcaption", "", title) + preBlock);
                 rest = rest.sub(endPre + 6);
                 idx = rest.indexOf(open);
                 continue;
@@ -344,11 +269,8 @@ export fun tagCodeTitle(html: str) > str {
     return buf + rest;
 }
 
-// tagAdmonition converts GitHub-alert-syntax blockquotes to styled callouts:
-// each "<blockquote>\n<p>[!TYPE]\n..." becomes a <div class="admonition
-// admonition-<type>"> with a heading and the rest of the paragraph. Recognized
-// TYPES: NOTE / TIP / IMPORTANT / WARNING / CAUTION (the GitHub set). Anything
-// else passes through as a normal blockquote. Fully static, no JS.
+// tagAdmonition turns GitHub-alert blockquotes ("<blockquote>\n<p>[!TYPE]\n...") into
+// <div class="admonition admonition-<type>"> callouts. Unknown types pass through.
 export fun tagAdmonition(html: str) > str {
     var buf = "";
     var rest = html;
@@ -359,9 +281,7 @@ export fun tagAdmonition(html: str) > str {
         rest = rest.sub(open);
         final tagEnd = rest.indexOf("]");
         if (tagEnd == null) { return buf + rest; }
-        // rest starts at "<blockquote>\n<p>[!"; the type name runs from index 18
-        // (past "<blockquote>\n<p>[!") to tagEnd.
-        final typ = rest.sub(18, tagEnd - 18);
+        final typ = rest.sub(18, tagEnd - 18);   // 18 = len("<blockquote>\n<p>[!")
         var kind = "";
         if (typ == "NOTE") { kind = "note"; }
         if (typ == "TIP") { kind = "tip"; }
@@ -369,40 +289,28 @@ export fun tagAdmonition(html: str) > str {
         if (typ == "WARNING") { kind = "warning"; }
         if (typ == "CAUTION") { kind = "caution"; }
         if (kind == "") {
-            // Unrecognized type; leave the blockquote alone and advance past it.
-            buf = buf + rest.sub(0, 12);   // len("<blockquote>")
+            buf = buf + rest.sub(0, 12);   // 12 = len("<blockquote>")
             rest = rest.sub(12);
         } else {
             final closeBq = rest.indexOf("</blockquote>");
             if (closeBq == null) { return buf + rest; }
-            // Inner content: everything between the opening blockquote and the
-            // marker's line-ending newline, up to </blockquote>. Strip the
-            // marker paragraph's leading "[!TYPE]\n" from the first <p>.
-            var inner = rest.sub(12, closeBq - 12);        // between <blockquote> and </blockquote>
-            // Drop the leading "\n<p>[!TYPE]\n" so what's left starts with the
-            // real prose the author wrote.
-            final prefix = "\n<p>[!" + typ + "]\n";
+            var inner = rest.sub(12, closeBq - 12);
+            final prefix = "\n<p>[!" + typ + "]\n";   // strip the marker paragraph
             if (inner.startsWith(prefix)) {
                 inner = "\n<p>" + inner.sub(prefix.len());
             }
-            var label = typ.sub(0, 1) + typ.sub(1).lower();  // Note / Tip / ...
-            buf = buf + "<div class=\"admonition admonition-" + kind + "\">"
-                + "<p class=\"admonition-title\">" + label + "</p>"
-                + inner
-                + "</div>";
-            rest = rest.sub(closeBq + 13);   // len("</blockquote>")
+            var label = typ.sub(0, 1) + typ.sub(1).lower();
+            buf = buf + el("div", attr("class", "admonition admonition-" + kind),
+                el("p", attr("class", "admonition-title"), label) + inner);
+            rest = rest.sub(closeBq + 13);   // 13 = len("</blockquote>")
         }
     }
     return buf + rest;
 }
 
-// renderContentHTML is the ONE post-processing pipeline every page render runs: it
-// rewrites a rendered-markdown fragment's in-content links from the page's old flat
-// directory (oldDir) to its new clean directory (newDir), then applies the ordered
-// content transforms - runnable markers, admonitions, code titles, lazy images,
-// external-link marks, and mermaid. Routing renderRoot, renderFile, and
-// renderBlogPost through this is what keeps a transform (like the runnable Run
-// buttons) from being applied on one path and silently forgotten on another.
+// renderContentHTML is the one post-processing pipeline every page runs: rewrite
+// links, then the ordered content transforms. Routing every render through it keeps
+// a transform from being applied on one path and forgotten on another.
 export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
     return tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir)))))));
 }
@@ -434,6 +342,14 @@ test "cleanBody strips fences and markers for the search index" {
 
 test "aliasStub is a redirect page to rel" {
     assert.equal(aliasStub("/new/").sub(0, 15), "<!DOCTYPE html>", "html stub");
+}
+
+test "tagAdmonition builds a callout div" {
+    assert.equal(tagAdmonition("<blockquote>\n<p>[!NOTE]\nbody</p>\n</blockquote>"),
+        "<div class=\"admonition admonition-note\"><p class=\"admonition-title\">Note</p>\n<p>body</p>\n</div>",
+        "note callout");
+    assert.equal(tagAdmonition("<blockquote>\n<p>hi</p>\n</blockquote>"),
+        "<blockquote>\n<p>hi</p>\n</blockquote>", "no marker, unchanged");
 }
 
 test "tagRunnable tags a fenced block after a run marker" {

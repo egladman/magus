@@ -1,0 +1,33 @@
+// scribe_dom.buzz - a small HTML builder. Attribute values are escaped; element
+// bodies are inserted raw (they are already-built HTML). Attrs are ordered by the
+// caller, so output matches hand-written markup byte for byte.
+import "assert";
+import "scribe_text" as _;
+
+// attr renders one escaped attribute with a leading space: ` name="value"`.
+export fun attr(name: str, value: str) > str {
+    return " " + name + "=\"" + escapeAttr(value) + "\"";
+}
+
+// el wraps raw body in <tag attrs>...</tag>. attrs is "" or a run of attr() calls.
+export fun el(tag: str, attrs: str, body: str) > str {
+    return "<" + tag + attrs + ">" + body + "</" + tag + ">";
+}
+
+// voidEl is an unclosed element: <tag attrs> (meta, link, img).
+export fun voidEl(tag: str, attrs: str) > str {
+    return "<" + tag + attrs + ">";
+}
+
+// esc escapes text for HTML element content (& < >).
+export fun esc(s: str) > str {
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+}
+
+test "attr escapes and el/voidEl wrap" {
+    assert.equal(attr("class", "a & b"), " class=\"a &amp; b\"", "escaped attribute");
+    assert.equal(el("p", attr("id", "x"), "hi"), "<p id=\"x\">hi</p>", "element with attr");
+    assert.equal(el("div", "", "raw"), "<div>raw</div>", "no attrs");
+    assert.equal(voidEl("meta", attr("charset", "utf-8")), "<meta charset=\"utf-8\">", "void element");
+    assert.equal(esc("<a & b>"), "&lt;a &amp; b&gt;", "text escape");
+}
