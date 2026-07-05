@@ -940,6 +940,14 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	}
 	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		// `static fun` declares a method called on the type (Foo.make()), with no
+		// receiver. `static` is not a keyword here (it lexes as an identifier), so
+		// match it by value only in the leading `static fun` shape.
+		isStatic := false
+		if p.check(token.Ident) && p.peek().Val == "static" && p.peekAt(1).Kind == token.Fun {
+			p.advance()
+			isStatic = true
+		}
 		// `mut fun` declares a method that mutates the receiver. Mutation is enforced
 		// on the receiver value at runtime (an immutable instance rejects field
 		// writes), so the modifier is consumed here and the method parsed normally.
@@ -951,6 +959,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			if err != nil {
 				return nil, err
 			}
+			method.IsStatic = isStatic
 			decl.Methods = append(decl.Methods, method)
 			p.optSemicolon()
 			continue

@@ -181,6 +181,9 @@ type objectDefObj struct {
 	Name    string
 	Fields  []ast.ObjField
 	Methods []methodEntry
+	// Statics are `static fun` methods, dispatched on the type value (Foo.make())
+	// rather than an instance, so they are kept out of the instance vtable above.
+	Statics []methodEntry
 	Env     *Env
 }
 
@@ -192,6 +195,17 @@ func (d *objectDefObj) fieldIndex(name string) int {
 		}
 	}
 	return -1
+}
+
+// staticMethod resolves a `static fun` by name via linear scan, returning it and
+// ok=true, or (nil, false) if the type has no such static method.
+func (d *objectDefObj) staticMethod(name string) (*funObj, bool) {
+	for i := range d.Statics {
+		if d.Statics[i].Name == name {
+			return d.Statics[i].Fn, true
+		}
+	}
+	return nil, false
 }
 
 // method resolves a method by name via linear scan, returning it and ok=true, or

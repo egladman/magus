@@ -1,0 +1,13 @@
+// @expect: 7
+// Static object methods: `static fun` is called on the type value (Point.at(...))
+// with no receiver, matching upstream Buzz. Instance methods (sum) still bind
+// this. This fixture is also round-tripped through bytecode by
+// TestBytecodeRoundTrip, which verifies IsStatic survives serialization.
+object Point {
+    x: int = 0,
+    y: int = 0,
+    static fun at(x: int, y: int) > Point { return Point{ x = x, y = y }; }
+    fun sum() > int { return this.x + this.y; }
+}
+
+final __r = Point.at(x: 3, y: 4).sum();

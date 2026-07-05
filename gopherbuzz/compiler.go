@@ -1252,7 +1252,12 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		thisFields[f.Name] = int32(i)
 	}
 	for _, m := range v.Methods {
-		idx, err := c.compileFunChunkThis(v.Name+"."+m.Name, m.Doc, m.Params, m.Body.Stmts, thisFields)
+		// A static method has no receiver, so it compiles without this-field access.
+		tf := thisFields
+		if m.IsStatic {
+			tf = nil
+		}
+		idx, err := c.compileFunChunkThis(v.Name+"."+m.Name, m.Doc, m.Params, m.Body.Stmts, tf)
 		if err != nil {
 			return err
 		}

@@ -113,7 +113,10 @@ type ContinueStmt struct{ Pos }
 // FunDecl: fun name(params) rettype { body } — a named function statement/method.
 type FunDecl struct {
 	Pos
-	IsExported  bool
+	IsExported bool
+	// IsStatic marks an object's `static fun` method: it is called on the type
+	// itself (Foo.make(...)), takes no receiver, and cannot access this.
+	IsStatic    bool
 	Name        string
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
