@@ -27,15 +27,21 @@ var assertSource string
 //go:embed ext_suite.buzz
 var suiteSource string
 
+//go:embed testing.buzz
+var testingSource string
+
 // RegisterExtensions installs the magus Buzz testing extensions on sess: the
 // assertcore primitive module and the buzz-authored libraries that build on it -
-// `assert` (matchers for `test` blocks) and `suite` (a grouped, stateful test
-// runner). Callers that want the upstream-faithful stdlib only should not call
-// this; callers that want the magus testing surface call it alongside Register.
+// `assert` (matchers for `test` blocks), `suite` (a grouped, stateful test
+// runner), and `testing` (gopherbuzz's rendition of upstream Buzz's Tester, which
+// depends on assertcore for a runtime type name). Callers that want the
+// upstream-faithful stdlib only should not call this; callers that want the magus
+// testing surface call it alongside Register.
 func RegisterExtensions(sess *buzz.Session) {
 	sess.SetSyntheticModule("assertcore", assertCoreModule())
 	sess.SetSourceModule("assert", assertSource)
 	sess.SetSourceModule("suite", suiteSource)
+	sess.SetSourceModule("testing", testingSource)
 }
 
 // assertCoreModule is the native primitive layer the buzz-authored require library

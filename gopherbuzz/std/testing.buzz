@@ -1,0 +1,308 @@
+namespace testing;
+
+// gopherbuzz's rendition of upstream Buzz's `testing` library (src/lib/testing.buzz):
+// the `Tester` object -- a runner with lifecycle hooks and value-aware assertions,
+// used inside a script or a `test "..." {}` block. It tracks results and prints a
+// summary, exiting non-zero when any test failed.
+//
+// Deliberate divergences from upstream, forced by gopherbuzz's current language:
+//   - The ANSI Color set is a flat set of int constants, not an `enum<int>`
+//     (gopherbuzz has no typed-enum backing / `.value`).
+//   - failedAsserts/failedTests/succeededTests use a `foreach` fold, not
+//     `list.reduce::<int>` (no generic method calls).
+//   - assertOfType takes the expected type as a NAME (assertOfType(v, "int", ...)),
+//     not upstream's assertOfType::<int>(v): gopherbuzz erases generics, so a
+//     reified type parameter is not available at runtime. assertThrows /
+//     assertDoesNotThrow keep upstream's call shape (a `::<T>` type arg is simply
+//     erased) but do not filter on the error's type.
+import "buzz:std";
+import "buzz:os";
+import "buzz:io";
+import "assertcore";
+
+// ANSI SGR codes (upstream's Color enum, flattened to constants).
+final RESET = 0;
+final BRIGHT = 1;
+final DIM = 2;
+final UNDERSCORE = 4;
+final RED = 31;
+final GREEN = 32;
+final YELLOW = 33;
+
+// color wraps text in an SGR escape, unless color is disabled (Windows or
+// NO_COLOR). The ESC byte is built with std\char(27): gopherbuzz string literals
+// do not interpret octal/hex escapes, so upstream's "\027[" cannot be spelled.
+fun color(text: str, code: int) > str {
+    if (os\env("OS") == "Windows_NT" or os\env("NO_COLOR") != null) {
+        return text;
+    }
+    final esc = std\char(27);
+    return esc + "[{code}m" + text + esc + "[0m";
+}
+
+fun bright(text: str) => color(text, BRIGHT);
+fun dim(text: str) => color(text, DIM);
+fun underscore(text: str) => color(text, UNDERSCORE);
+fun red(text: str) => color(text, RED);
+fun green(text: str) => color(text, GREEN);
+fun yellow(text: str) => color(text, YELLOW);
+
+/// Test runner with assertion helpers.
+export object Tester {
+    /// Test results (one bool per `it`: true = passed).
+    tests: mut [bool],
+    /// Assertion results (one bool per assertion: true = passed).
+    asserts: mut [bool],
+    /// Elapsed test time in milliseconds.
+    elapsed: double = 0.0,
+    /// Hook run once before all tests.
+    beforeAll: fun (t: Tester) > void?,
+    /// Hook run before each test.
+    beforeEach: fun (t: Tester) > void?,
+    /// Hook run once after all tests.
+    afterAll: fun (t: Tester) > void?,
+    /// Hook run after each test.
+    afterEach: fun (t: Tester) > void?,
+
+    /// Creates a new tester and runs the `beforeAll` hook when provided.
+    /// @param beforeAll Hook run once before all tests
+    /// @param beforeEach Hook run before each test
+    /// @param afterAll Hook run once after all tests
+    /// @param afterEach Hook run after each test
+    /// @return A new `Tester`
+    static fun init(
+        beforeAll: fun (t: Tester) > void?,
+        beforeEach: fun (t: Tester) > void?,
+        afterAll: fun (t: Tester) > void?,
+        afterEach: fun (t: Tester) > void?
+    ) > mut Tester {
+        final t = mut Tester{
+            tests = mut [],
+            asserts = mut [],
+            beforeAll = beforeAll,
+            beforeEach = beforeEach,
+            afterAll = afterAll,
+            afterEach = afterEach,
+        };
+
+        if (t.beforeAll -> before) {
+            before(t);
+        }
+
+        return t;
+    }
+
+    /// Clears test results and elapsed time.
+    mut fun reset() > void {
+        this.tests = mut [];
+        this.asserts = mut [];
+        this.elapsed = 0.0;
+    }
+
+    /// @return number of failed assertions
+    fun failedAsserts() > int {
+        var n = 0;
+        foreach (success in this.asserts) {
+            if (!success) {
+                n = n + 1;
+            }
+        }
+        return n;
+    }
+
+    /// @return number of failed tests
+    fun failedTests() > int {
+        var n = 0;
+        foreach (success in this.tests) {
+            if (!success) {
+                n = n + 1;
+            }
+        }
+        return n;
+    }
+
+    /// @return number of succeeded tests
+    fun succeededTests() > int {
+        var n = 0;
+        foreach (success in this.tests) {
+            if (success) {
+                n = n + 1;
+            }
+        }
+        return n;
+    }
+
+    /// Runs a test case.
+    /// @param message Test description
+    /// @param fn Test body
+    mut fun it(message: str, fn: fun () > void) > void {
+        final startTime = os\time();
+
+        io\stdout.write(yellow("> Test: {message}\n"));
+
+        if (this.beforeEach -> beforeEach) {
+            beforeEach(this);
+        }
+
+        final previousFailCount = this.failedAsserts();
+        fn();
+
+        if (this.afterEach -> afterEach) {
+            afterEach(this);
+        }
+
+        this.tests.append(previousFailCount == this.failedAsserts());
+
+        this.elapsed = this.elapsed + (os\time() - startTime);
+    }
+
+    /// Prints a test summary and exits with a failure code when any test failed.
+    fun summary() > void {
+        if (this.afterAll -> afterAll) {
+            afterAll(this);
+        }
+
+        final failed = this.failedTests();
+
+        io\stdout.write("\n");
+
+        io\stdout.write(
+            green("{this.succeededTests()}") + dim(" successes, ")
+                + yellow("{failed}") + dim(" failures in ")
+                + "{this.elapsed / 1000.0}" + dim(" seconds\n")
+        );
+
+        if (failed > 0) {
+            os\exit(1);
+        }
+    }
+
+    /// Reports an assertion failure to stderr.
+    /// @param error Error details
+    /// @param message Assertion message
+    fun report(error: str?, message: str?) > void {
+        io\stderr.write(
+            red("  Assert failed: {message ?? ""}") + dim("\n    {error ?? ""}\n")
+        );
+    }
+
+    /// Records whether an assertion condition succeeded.
+    /// @param condition Condition that must be true
+    /// @param error Error details printed when false
+    /// @param message Assertion message
+    mut fun assert(condition: bool, error: str?, message: str?) > void {
+        if (!condition) {
+            this.report(error, message: message);
+            this.asserts.append(false);
+        } else {
+            this.asserts.append(true);
+        }
+    }
+
+    /// Asserts that two values are equal.
+    /// @param actual Actual value
+    /// @param expected Expected value
+    /// @param message Assertion message
+    mut fun assertEqual(actual: any, expected: any, message: str?) > void {
+        this.assert(
+            actual == expected,
+            error: "expected `{expected}` got `{actual}`",
+            message: message
+        );
+    }
+
+    /// Asserts that two values are not equal.
+    /// @param actual Actual value
+    /// @param expected Value that should differ
+    /// @param message Assertion message
+    mut fun assertNotEqual(actual: any, expected: any, message: str?) > void {
+        this.assert(
+            actual != expected,
+            error: "expected `{expected}` got `{actual}`",
+            message: message
+        );
+    }
+
+    /// Asserts that all values are equal.
+    /// @param values Values to compare
+    /// @param message Assertion message
+    mut fun assertAreEqual(values: [any], message: str?) > void {
+        if (values.len() < 2) {
+            return;
+        }
+
+        var equal = true;
+        var previous = values[0];
+        foreach (value in values) {
+            if (value != previous) {
+                equal = false;
+                break;
+            }
+            previous = value;
+        }
+
+        this.assert(equal, error: "one element is not equal", message: message);
+    }
+
+    /// Asserts that adjacent values are not equal.
+    /// @param values Values to compare
+    /// @param message Assertion message
+    mut fun assertAreNotEqual(values: [any], message: str?) > void {
+        if (values.len() < 2) {
+            return;
+        }
+
+        var equal = true;
+        var previous = values[0];
+        foreach (i, value in values) {
+            if (i > 0 and value == previous) {
+                equal = false;
+                break;
+            }
+            previous = value;
+        }
+
+        this.assert(equal, error: "one element is equal", message: message);
+    }
+
+    /// Asserts that a value has the named type (e.g. "int", "str", "bool", or an
+    /// object type name). Passed by name rather than upstream's assertOfType::<T>
+    /// because gopherbuzz erases generics (no reified type parameter at runtime).
+    /// @param value Value to check
+    /// @param typeName Expected type name
+    /// @param message Assertion message
+    mut fun assertOfType(value: any, typeName: str, message: str?) > void {
+        this.assert(
+            assertcore\typeName(value) == typeName,
+            error: "expected type `{typeName}` got `{assertcore\typeName(value)}`",
+            message: message
+        );
+    }
+
+    /// Asserts that a function raises. gopherbuzz erases generics, so the error's
+    /// type is not inspected (a `::<T>` type arg on the call is simply erased).
+    /// @param fn Function expected to throw
+    /// @param message Assertion message
+    mut fun assertThrows(fn: fun () > void, message: str?) > void {
+        var threw = false;
+        try {
+            fn();
+        } catch (error: any) {
+            threw = true;
+        }
+        this.assert(threw, error: "did not throw", message: message);
+    }
+
+    /// Asserts that a function does not raise.
+    /// @param fn Function expected not to throw
+    /// @param message Assertion message
+    mut fun assertDoesNotThrow(fn: fun () > void, message: str?) > void {
+        var threw = false;
+        try {
+            fn();
+        } catch (error: any) {
+            threw = true;
+        }
+        this.assert(!threw, error: "did throw", message: message);
+    }
+}
