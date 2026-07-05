@@ -13,34 +13,31 @@ import (
 	hostgen "github.com/egladman/magus/host/gen"
 )
 
-// BrowserSafeHostModules is the allowlist of magus host modules the browser
-// playground registers. Each is pure computation: no filesystem, network, or
-// process/env access - safe under WASM. IO modules (fs / os / http / env /
-// archive / vcs / magus) are deliberately excluded; their examples render as
-// reference-only code blocks in the docs.
+// WASMCompatibleHostModules is the allowlist of magus host modules the browser
+// playground registers: the WASMCompatible entries of the one host-module registry
+// (hostgen.Modules), each pure computation with no filesystem, network, process,
+// or randomness access under WASM. IO modules (fs / os / http / vcs / archive) and
+// uuid stay out; their examples render as reference-only code blocks in the docs.
 //
-// The docs generator (cmd/magus-docs) imports this map so the runnable-marker
-// decision and the actually-runs-in-browser decision use the same list.
-var BrowserSafeHostModules = map[string]func(context.Context, *buzz.Session) vm.Value{
-	"strings":  hostgen.RegisterStrings,
-	"env":      hostgen.RegisterEnv,
-	"encoding": hostgen.RegisterEncoding,
-	"fmt":      hostgen.RegisterFmt,
-	"path":     hostgen.RegisterPath,
-	"semver":   hostgen.RegisterSemver,
-	"platform": hostgen.RegisterPlatform,
-	"crypto":   hostgen.RegisterCrypto,
-	"json":     hostgen.RegisterJson,
-	"yaml":     hostgen.RegisterYaml,
-	"time":     hostgen.RegisterTime,
-	"charm":    hostgen.RegisterCharm,
-	"markdown": hostgen.RegisterMarkdown,
+// Derived from the registry rather than hand-listed, so a new pure module is
+// covered automatically. The docs generator (cmd/magus-docs) reads this map so the
+// runnable-marker and actually-runs-in-browser decisions use the same source.
+var WASMCompatibleHostModules = wasmCompatibleHostModules()
+
+func wasmCompatibleHostModules() map[string]func(context.Context, *buzz.Session) vm.Value {
+	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
+	for name, reg := range hostgen.Modules {
+		if reg.WASMCompatible {
+			out[name] = reg.Register
+		}
+	}
+	return out
 }
 
-// registerBrowserSafeHostModules installs every module in BrowserSafeHostModules
+// registerWASMCompatibleHostModules installs every module in WASMCompatibleHostModules
 // on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
-func registerBrowserSafeHostModules(ctx context.Context, sess *buzz.Session) {
-	for name, register := range BrowserSafeHostModules {
+func registerWASMCompatibleHostModules(ctx context.Context, sess *buzz.Session) {
+	for name, register := range WASMCompatibleHostModules {
 		sess.SetSyntheticModule(name, register(ctx, sess))
 	}
 }
@@ -66,7 +63,7 @@ type EvalResult struct {
 }
 
 // evalConfig is the resolved configuration for an Eval call. The zero value is
-// the plain language playground: Buzz stdlib plus the browser-safe host modules,
+// the plain language playground: Buzz stdlib plus the WASM-compatible host modules,
 // evaluated once for its Result. Options layer on the tracing magusfile host.
 type evalConfig struct {
 	// tracer switches from the eval-once path (return a Result) to the dry-run
@@ -109,7 +106,7 @@ func WithSpells(spells map[string][]string) EvalOption {
 }
 
 // Eval evaluates Buzz source in a fresh sandboxed session. With no options it
-// is the language playground: Buzz stdlib plus the browser-safe host modules
+// is the language playground: Buzz stdlib plus the WASM-compatible host modules
 // (strings / json / crypto / ...), evaluated once, returning the trailing value's
 // Result and any print Output. This runs the stdlib-module doc examples.
 //
@@ -162,7 +159,8 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	var out bytes.Buffer
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
-	registerBrowserSafeHostModules(ctx, sess)
+	buzzstd.RegisterExtensions(sess)
+	registerWASMCompatibleHostModules(ctx, sess)
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {

@@ -23,34 +23,17 @@ import (
 // reaches a whole domain through one import — crypto.hmacSha256 and http.download
 // sit alongside crypto.sha256Hex and http.get.
 func magusModules(ctx context.Context, sess *buzz.Session) map[string]vm.Value {
-	cryptoNS := buzzgen.RegisterCrypto(ctx, sess)
-	mergeModuleMap(cryptoNS, registerCryptoBytes())
-
-	httpNS := buzzgen.RegisterHttp(ctx, sess)
-	mergeModuleMap(httpNS, registerHTTPBytes())
-
-	return map[string]vm.Value{
-		"os":       buzzgen.RegisterOs(ctx, sess),
-		"platform": buzzgen.RegisterPlatform(ctx, sess),
-		"fs":       buzzgen.RegisterFs(ctx, sess),
-		"vcs":      buzzgen.RegisterVcs(ctx, sess),
-		"archive":  buzzgen.RegisterArchive(ctx, sess),
-		"crypto":   cryptoNS,
-		"env":      buzzgen.RegisterEnv(ctx, sess),
-		// json's parse/stringify duplicate Buzz's serialize.jsonDecode/jsonEncode,
-		// but stringify_pretty (indented output) has no serialize equivalent.
-		"json":     buzzgen.RegisterJson(ctx, sess),
-		"http":     httpNS,
-		"time":     buzzgen.RegisterTime(ctx, sess),
-		"fmt":      buzzgen.RegisterFmt(ctx, sess),
-		"markdown": buzzgen.RegisterMarkdown(ctx, sess),
-		"charm":    buzzgen.RegisterCharm(ctx, sess),
-		"encoding": buzzgen.RegisterEncoding(ctx, sess),
-		"path":     buzzgen.RegisterPath(ctx, sess),
-		"strings":  buzzgen.RegisterStrings(ctx, sess),
-		"semver":   buzzgen.RegisterSemver(ctx, sess),
-		"yaml":     buzzgen.RegisterYaml(ctx, sess),
+	out := make(map[string]vm.Value, len(buzzgen.Modules))
+	for name, reg := range buzzgen.Modules {
+		out[name] = reg.Register(ctx, sess)
 	}
+	// Byte-level companions merged in so a script reaches a whole domain through
+	// one import: crypto.hmacSha256 beside crypto.sha256Hex, http.download beside
+	// http.get. (json also carries stringify_pretty, which Buzz's serialize lacks;
+	// that ships in the generated trampoline already.)
+	mergeModuleMap(out["crypto"], registerCryptoBytes())
+	mergeModuleMap(out["http"], registerHTTPBytes())
+	return out
 }
 
 // mergeModuleMap copies all keys from src into dst. On a key both define, src
@@ -71,8 +54,15 @@ func mergeModuleMap(dst, src vm.Value) {
 // bare imports. The result is one superset surface, no separate `magus/extra`
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
 // handler op path (callBuzzSpellFunc), so both surfaces stay in lock-step.
-func registerHostModules(ctx context.Context, sess *buzz.Session) {
+// RegisterModuleSurface installs the shared Buzz module surface: Buzz's own
+// stdlib, the magus testing extensions (assert/suite), and every magus host module
+// (buzzgen.Modules) layered on top of the same bare names. It is the full surface
+// a standalone script sees, shared by the magusfile engine (which then adds the
+// magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
+// runner, so the two never drift.
+func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
 	buzzstd.Register(sess)
+	buzzstd.RegisterExtensions(sess)
 	for name, mod := range magusModules(ctx, sess) {
 		if base, ok := sess.SyntheticModule(name); ok {
 			// Buzz's stdlib already owns this bare name (os, fs, crypto): overlay
@@ -84,6 +74,10 @@ func registerHostModules(ctx context.Context, sess *buzz.Session) {
 			sess.SetSyntheticModule(name, mod)
 		}
 	}
+}
+
+func registerHostModules(ctx context.Context, sess *buzz.Session) {
+	RegisterModuleSurface(ctx, sess)
 	// Canonical value types (Target/Charm) plus the generated TargetQuery as a
 	// flat-importable source module, so a spell's mgs_listTargets can be typed
 	// {str: fun(Target, fun(any)) void/bool} instead of `any`, and a magusfile can name or

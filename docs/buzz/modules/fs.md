@@ -106,7 +106,7 @@ if (fs.exists("go.mod")) { std.print("Go module"); }
 
 Return the contents of path as a string.
 
-**Signature:** `fs.readFile(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L272)
+**Signature:** `fs.readFile(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L271)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -128,7 +128,7 @@ std.print(version);
 
 Write content to path (mode 0644).
 
-**Signature:** `fs.writeFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L285)
+**Signature:** `fs.writeFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L284)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -147,7 +147,7 @@ fs.writeFile("dist/manifest.txt", "artifact list here\n");
 
 Create path and parents (default mode 0755).
 
-**Signature:** `fs.mkdirall(path, [perm])`[^buzz-stdlib-fs-mkdirall] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L300)
+**Signature:** `fs.mkdirall(path, [perm])`[^buzz-stdlib-fs-mkdirall] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L299)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -167,7 +167,7 @@ fs.mkdirall("dist/reports", 493);
 
 Join path elements with the OS separator.
 
-**Signature:** `fs.join(parts...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L315)
+**Signature:** `fs.join(parts...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L314)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -189,7 +189,7 @@ std.print(fs.join(["cmd", "magus", "main.go"]));
 
 Recursively remove path (no error if missing).
 
-**Signature:** `fs.removeAll(path)`[^buzz-stdlib-fs-remove_all] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L320)
+**Signature:** `fs.removeAll(path)`[^buzz-stdlib-fs-remove_all] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L319)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -207,7 +207,7 @@ fs.removeAll("dist/");
 
 Return directory entries; empty if path does not exist.
 
-**Signature:** `fs.listDir(path) → []string`[^buzz-stdlib-fs-list_dir] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L335)
+**Signature:** `fs.listDir(path) → []string`[^buzz-stdlib-fs-list_dir] · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L334)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -228,7 +228,7 @@ foreach (name in fs.listDir("cmd")) { std.print(name); }
 
 File-name extension of path, including the leading dot ("" if none).
 
-**Signature:** `fs.ext(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L355)
+**Signature:** `fs.ext(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L354)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -250,7 +250,7 @@ std.print(fs.ext("archive.tar.gz"));
 
 True iff path exists and is a directory (a sandbox-denied path reads as false).
 
-**Signature:** `fs.isDir(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L362)
+**Signature:** `fs.isDir(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L361)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -271,7 +271,7 @@ if (fs.isDir("internal")) { std.print("internal is a directory"); }
 
 True iff path exists and is a regular file (a sandbox-denied path reads as false).
 
-**Signature:** `fs.isFile(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L373)
+**Signature:** `fs.isFile(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L372)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -292,7 +292,7 @@ if (fs.isFile("go.mod")) { std.print("go.mod is a file"); }
 
 Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.
 
-**Signature:** `fs.stat(path) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L385)
+**Signature:** `fs.stat(path) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L384)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -315,7 +315,7 @@ std.print(info.modTime);
 
 Copy the file at src to dst (overwriting), preserving its permission bits.
 
-**Signature:** `fs.copyFile(src, dst)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L404)
+**Signature:** `fs.copyFile(src, dst)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L403)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -334,7 +334,7 @@ fs.copyFile("dist/magus", "/usr/local/bin/magus");
 
 Recursively copy the directory tree at src to dst, preserving permission bits.
 
-**Signature:** `fs.copyDir(src, dst)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L424)
+**Signature:** `fs.copyDir(src, dst)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L423)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -354,7 +354,7 @@ fs.copyDir("assets/", "dist/assets/");
 
 Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.
 
-**Signature:** `fs.watch(paths, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L522)
+**Signature:** `fs.watch(paths, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L521)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -378,7 +378,7 @@ fs.watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
 
 Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.
 
-**Signature:** `fs.walk(root, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L572)
+**Signature:** `fs.walk(root, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L571)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -404,7 +404,7 @@ fs.walk(".", fun (path: str, isDir: bool) > bool {
 
 Append content to path (creating if absent, mode 0644).
 
-**Signature:** `fs.appendFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L609)
+**Signature:** `fs.appendFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L608)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -423,7 +423,7 @@ fs.appendFile("dist/build.log", "compile done\n");
 
 Change the permission bits of path to mode (octal integer, e.g. 0755).
 
-**Signature:** `fs.chmod(path, mode)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L632)
+**Signature:** `fs.chmod(path, mode)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L631)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -444,7 +444,7 @@ fs.chmod("dist/magus", 493);
 
 Create a symbolic link at link pointing to target.
 
-**Signature:** `fs.symlink(target, link)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L648)
+**Signature:** `fs.symlink(target, link)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L647)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -463,7 +463,7 @@ fs.symlink("dist/magus", "/usr/local/bin/magus");
 
 Return the target of the symbolic link at path.
 
-**Signature:** `fs.readlink(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L666)
+**Signature:** `fs.readlink(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L665)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -484,7 +484,7 @@ std.print(fs.readlink("/usr/local/bin/magus"));
 
 Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.
 
-**Signature:** `fs.tempDir([prefix]) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L709)
+**Signature:** `fs.tempDir([prefix]) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L708)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -507,7 +507,7 @@ std.print(tmp);
 
 Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.
 
-**Signature:** `fs.readLines(path) → []string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L682)
+**Signature:** `fs.readLines(path) → []string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L681)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -528,7 +528,7 @@ foreach (line in fs.readLines("targets.txt")) { std.print(line); }
 
 Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.
 
-**Signature:** `fs.writeLines(path, lines)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L696)
+**Signature:** `fs.writeLines(path, lines)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L695)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

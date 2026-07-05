@@ -7,6 +7,7 @@ import (
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,6 +60,40 @@ func TestSupersetModules(t *testing.T) {
 	}
 }
 
+// TestEveryHostModuleIsWired guards against a std host module being declared (and
+// documented) but never exposed to Buzz sessions - the gap that left template,
+// toml, and uuid unreachable after they were added to std/ with host/gen
+// trampolines but omitted from magusModules. Every module std.All() reports, save
+// the hand-assembled "magus" namespace, must resolve as a synthetic module with
+// its first declared method present.
+func TestEveryHostModuleIsWired(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+	registerHostModules(ctx, sess)
+
+	for _, m := range std.All() {
+		// "magus" is not a bare import; it is wired as the magus.* namespace in
+		// buzz.go, not through magusModules.
+		if m.Name == "magus" {
+			continue
+		}
+		mod, ok := sess.SyntheticModule(m.Name)
+		if !assert.Truef(t, ok, "host module %q is declared in std but not wired into a Buzz session; add it to magusModules", m.Name) {
+			continue
+		}
+		if len(m.Methods) == 0 {
+			continue
+		}
+		key := host.CamelCase(m.Methods[0].Name)
+		if bn := m.Methods[0].BuzzName; bn != "" {
+			key = bn
+		}
+		_, ok = mod.MapGet(key)
+		assert.Truef(t, ok, "host module %q is registered but missing method %q", m.Name, key)
+	}
+}
+
 // TestMagusModulesSharesDescribeCore is the parity lock for the native query
 // methods: magus.modules() (host) and `magus describe modules` (CLI) are two thin
 // adapters over the one typed core, host.ModulesOutput. This asserts the records
@@ -103,4 +138,26 @@ export fun check(args: [str]) > void {
 	srcs, err := interp.FindAll(dir)
 	require.NoError(t, err)
 	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "magus.modules/module end-to-end")
+}
+
+// TestTemplatePartialsEndToEnd drives the template module from a real magusfile,
+// proving import "template" resolves and renderPartials expands {{>name}} includes,
+// interpolates the shared context, and HTML-escapes {{var}} values. Backtick raw
+// strings carry the Mustache verbatim (a double-quoted "{{x}}" would collide with
+// Buzz's own {expr} interpolation).
+func TestTemplatePartialsEndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeFile(t, dir, "magusfile.buzz", "import \"magus\";\n"+
+		"import \"template\";\n"+
+		"export fun check(args: [str]) > void {\n"+
+		"    final page = `{{>header}}[{{body}}]{{>footer}}`;\n"+
+		"    final partials = {\"header\": `<h>{{title}}</h>`, \"footer\": `<f/>`};\n"+
+		"    final got = template.renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n"+
+		"    final want = \"<h>magus</h>[hi &amp; &lt;b&gt;]<f/>\";\n"+
+		"    if (got != want) { magus.fatal(\"renderPartials mismatch: got \" + got); }\n"+
+		"}")
+	srcs, err := interp.FindAll(dir)
+	require.NoError(t, err)
+	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "template.renderPartials end-to-end")
 }
