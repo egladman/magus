@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"strings"
 
 	buzz "github.com/egladman/gopherbuzz"
@@ -12,28 +13,63 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 )
 
-// magusModules builds every magus host module (os/platform/fs/vcs/env/crypto/
-// http/archive/charm/semver/yaml/…) via the magus-utils bindings-emitted host/gen
-// trampolines, keyed by the bare import name each is exposed under. The closures
-// capture sess so host callbacks (e.g. arg.index_func, os.with_env) can call back
-// into the VM.
-//
-// The byte-level crypto (hmac, keyed base64) and http (download, upload_chunked,
-// byteSize) companions are merged into their respective module maps so a script
-// reaches a whole domain through one import — crypto.hmacSha256 and http.download
-// sit alongside crypto.sha256Hex and http.get.
-func magusModules(ctx context.Context, sess *buzz.Session) map[string]vm.Value {
-	out := make(map[string]vm.Value, len(buzzgen.Modules))
-	for name, reg := range buzzgen.Modules {
-		out[name] = reg.Register(ctx, sess)
+// Host-module labels, the magus-side vocabulary beside gopherbuzz's
+// upstream/gopherbuzz origin labels (see gopherbuzz/module.go). labelHost marks a
+// magus host module; labelWASM additionally marks one safe in the browser
+// playground (pure compute, no filesystem/process/network/OS randomness).
+const (
+	labelHost = "host"
+	labelWASM = "wasm"
+)
+
+// hostModules expresses magus's host surface as buzz.Modules: each wraps its
+// host/gen register trampoline in a Bind that builds the module map (plus any
+// byte-level companions) and layers it onto the stdlib module of the same name,
+// or installs it fresh when Buzz has no such module. Ordered by name so the bind
+// sequence is deterministic.
+func hostModules() []buzz.Module {
+	names := make([]string, 0, len(buzzgen.Modules))
+	for name := range buzzgen.Modules {
+		names = append(names, name)
 	}
-	// Byte-level companions merged in so a script reaches a whole domain through
-	// one import: crypto.hmacSha256 beside crypto.sha256Hex, http.download beside
-	// http.get. (json also carries stringify_pretty, which Buzz's serialize lacks;
-	// that ships in the generated trampoline already.)
-	mergeModuleMap(out["crypto"], registerCryptoBytes())
-	mergeModuleMap(out["http"], registerHTTPBytes())
-	return out
+	sort.Strings(names)
+
+	mods := make([]buzz.Module, 0, len(names))
+	for _, name := range names {
+		name := name
+		reg := buzzgen.Modules[name]
+		labels := []string{labelHost}
+		if reg.WASMCompatible {
+			labels = append(labels, labelWASM)
+		}
+		mods = append(mods, buzz.Module{
+			Name:   name,
+			Labels: labels,
+			Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
+				mod := reg.Register(env.Ctx, s)
+				// Byte-level companions so a script reaches a whole domain through
+				// one import: crypto.hmacSha256 beside crypto.sha256Hex,
+				// http.download beside http.get.
+				switch name {
+				case "crypto":
+					mergeModuleMap(mod, registerCryptoBytes())
+				case "http":
+					mergeModuleMap(mod, registerHTTPBytes())
+				}
+				// Buzz's stdlib may already own this bare name (os, fs, crypto):
+				// overlay the magus methods onto it so callers see the union (magus
+				// wins on the few shared keys, e.g. os.exit/fs.exists, its forms
+				// being sandbox- and context-aware). Otherwise install fresh.
+				if base, ok := s.SyntheticModule(name); ok {
+					mergeModuleMap(base, mod)
+				} else {
+					s.SetSyntheticModule(name, mod)
+				}
+				return nil
+			},
+		})
+	}
+	return mods
 }
 
 // mergeModuleMap copies all keys from src into dst. On a key both define, src
@@ -61,18 +97,12 @@ func mergeModuleMap(dst, src vm.Value) {
 // magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.
 func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
+	// Buzz's stdlib provides the base modules; the host modules then layer onto the
+	// same bare names (their Bind reads back and merges) or install fresh. One
+	// registration path: gopherbuzz's stdlib and magus's host surface are both
+	// buzz.Modules applied through Session.Provide.
 	buzzstd.Register(sess)
-	for name, mod := range magusModules(ctx, sess) {
-		if base, ok := sess.SyntheticModule(name); ok {
-			// Buzz's stdlib already owns this bare name (os, fs, crypto): overlay
-			// the magus methods onto it so callers see the union. magus wins on the
-			// few shared keys (os.exit/os.sleep, fs.exists) — its forms are sandbox-
-			// and context-aware where the bare stdlib is not.
-			mergeModuleMap(base, mod)
-		} else {
-			sess.SetSyntheticModule(name, mod)
-		}
-	}
+	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, hostModules()...)
 }
 
 func registerHostModules(ctx context.Context, sess *buzz.Session) {
