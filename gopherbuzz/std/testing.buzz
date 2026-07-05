@@ -1,5 +1,13 @@
 namespace testing;
 
+// Derived from upstream Buzz's src/lib/testing.buzz.
+//   Copyright (c) 2021-present Benoit Giannangeli
+//   https://github.com/buzz-language/buzz -- MIT License.
+// Adapted for gopherbuzz (see divergences below). Unlike the rest of gopherbuzz's
+// stdlib -- clean-room Go reimplementations that copy no upstream source -- this
+// module is a port of the upstream Buzz source, so it carries upstream's MIT
+// notice. The full license text is vendored alongside as testing.buzz.LICENSE.
+//
 // gopherbuzz's rendition of upstream Buzz's `testing` library (src/lib/testing.buzz):
 // the `Tester` object -- a runner with lifecycle hooks and value-aware assertions,
 // used inside a script or a `test "..." {}` block. It tracks results and prints a
