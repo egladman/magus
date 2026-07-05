@@ -42,6 +42,22 @@ func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session)
 	}
 }
 
+// PlaygroundHostModules names every magus host module the browser playground makes
+// available: the WASM-compatible bare imports (registered above) plus "magus", which
+// installHost wires as a global (sess.SetGlobal("magus", ...)) rather than a registry
+// module. It is the single truth for what runs in the playground - kept next to the
+// wiring so the two can't drift - and the langservice manifest diffs against it to
+// decide which modules are reference-only there. Because magus is listed here (it is
+// genuinely wired), it is never reported as excluded: no special-casing downstream.
+func PlaygroundHostModules() []string {
+	out := make([]string, 0, len(WASMCompatibleMagusModules)+1)
+	for name := range WASMCompatibleMagusModules {
+		out = append(out, name)
+	}
+	out = append(out, "magus")
+	return out
+}
+
 // Diag is a structured evaluation error: the message plus a 1-based source
 // position when one could be recovered from it (0 when not).
 type Diag struct {

@@ -191,7 +191,7 @@ func wordCompletions(src, before string) []Completion {
 		add(s.Name, completionKindFor(s.Kind), s.Sig, "")
 	}
 	for _, imp := range scanImports(src) {
-		if m, ok := LookupModule(pathBase(imp.Path)); ok {
+		if m, ok := LookupModule(moduleBase(imp.Path)); ok {
 			add(imp.Name, KindModule, "", m.Doc)
 		} else {
 			add(imp.Name, KindModule, "", "")
@@ -225,15 +225,6 @@ func lineStart(s string) int {
 		return i + 1
 	}
 	return 0
-}
-
-// pathBase is strings-only path.Base for a module path's last segment, avoiding a
-// path import here (kept trivial and OS-independent).
-func pathBase(p string) string {
-	if i := strings.LastIndexByte(p, '/'); i >= 0 {
-		return p[i+1:]
-	}
-	return p
 }
 
 func sortByLabel(c []Completion) {

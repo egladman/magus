@@ -440,6 +440,29 @@ func exposeDataAPI() {
 		}
 		return map[string]any{"title": h.Title, "doc": h.Doc}
 	}))
+	// signature is call-signature help: given the cursor inside a call's arg list, it
+	// returns the callee's signature and doc for the editor to float above the line.
+	api.Set("signature", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) < 2 {
+			return nil
+		}
+		s := langservice.SignatureAt(args[0].String(), args[1].Int())
+		if s == nil {
+			return nil
+		}
+		return map[string]any{"label": s.Label, "doc": s.Doc}
+	}))
+	// excludedModules lists the host modules that do NOT run in this build: the ones
+	// needing a process, filesystem, or network the browser can't provide. The page
+	// renders it into a collapsible notice, so that list is never hand-kept in HTML.
+	api.Set("excludedModules", js.FuncOf(func(js.Value, []js.Value) any {
+		mods := langservice.ExcludedModules(dry.PlaygroundHostModules())
+		out := make([]any, len(mods))
+		for i, m := range mods {
+			out[i] = map[string]any{"name": m.Name, "doc": m.Doc}
+		}
+		return out
+	}))
 	js.Global().Set("buzz", api)
 }
 

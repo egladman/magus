@@ -28,7 +28,8 @@ type Field struct {
 // Module is one importable magus host module and its surface, as captured by the
 // manifest generator. The manifest is the full authoring surface - every module a
 // magusfile may reference - independent of which modules actually execute in the
-// browser sandbox (that allowlist lives in internal/dry.BrowserSafeHostModules).
+// browser. Which ones run there is decided at runtime by ExcludedModules against the
+// interpreter's real registration, not baked in here.
 type Module struct {
 	Name    string
 	Doc     string
@@ -53,4 +54,25 @@ func Modules() []Module { return modules }
 func LookupModule(name string) (Module, bool) {
 	m, ok := moduleIndex[name]
 	return m, ok
+}
+
+// ExcludedModules returns the manifest modules NOT in available - the host modules
+// a magusfile can name but that don't run in the browser playground (they need a
+// process, filesystem, or network). The caller passes the set the interpreter
+// actually registered (dry.PlaygroundHostModules), so the excluded list is derived
+// from real wiring rather than a hand-kept flag - a module wired into the playground
+// simply never appears here. The playground renders the result as a "not available
+// here" notice.
+func ExcludedModules(available []string) []Module {
+	inPlayground := make(map[string]bool, len(available))
+	for _, name := range available {
+		inPlayground[name] = true
+	}
+	var out []Module
+	for _, m := range modules {
+		if !inPlayground[m.Name] {
+			out = append(out, m)
+		}
+	}
+	return out
 }

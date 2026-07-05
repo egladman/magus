@@ -73,6 +73,16 @@ func TestComplete_AliasedImport(t *testing.T) {
 	assert.True(t, ok, "fs.glob should be offered under alias f")
 }
 
+func TestComplete_BuzzSchemeImport(t *testing.T) {
+	// Upstream's `buzz:` package scheme binds the bare module name, so member
+	// completion must resolve past the scheme.
+	src := "import \"buzz:fs\";\nfs."
+	got := Complete(src, len(src))
+	require.NotEmpty(t, got, "buzz: scheme import should resolve fs members")
+	_, ok := findLabel(got, "glob")
+	assert.True(t, ok, "fs.glob should be offered when imported via buzz:fs")
+}
+
 func TestComplete_Word_KeywordsModulesSymbols(t *testing.T) {
 	src := "import \"fs\";\nexport fun build(args: [str]) > void {}\nbu"
 	got := Complete(src, len(src))

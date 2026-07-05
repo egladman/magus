@@ -227,6 +227,7 @@ var modules = []Module{
 		Doc:  "Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache).",
 		Methods: []Method{
 			{Name: "render", Doc: "Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.", Sig: "template.render(template, data) → string"},
+			{Name: "render_partials", Doc: "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.", Sig: "template.renderPartials(template, data, partials) → string"},
 		},
 	},
 	{

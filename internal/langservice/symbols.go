@@ -130,7 +130,7 @@ func scanImports(src string) []importBinding {
 		if p == "" {
 			continue
 		}
-		name := path.Base(p)
+		name := moduleBase(p)
 		// An explicit alias (`import "x" as y`) rebinds the name; `_` means flat.
 		if after := strings.TrimLeft(rest[end+1:], " \t"); strings.HasPrefix(after, "as ") {
 			if alias := leadingIdent(after[len("as "):]); alias != "" {
@@ -151,10 +151,23 @@ func scanImports(src string) []importBinding {
 func resolveModule(base, src string) (Module, bool) {
 	for _, imp := range scanImports(src) {
 		if imp.Name == base {
-			if m, ok := LookupModule(path.Base(imp.Path)); ok {
+			if m, ok := LookupModule(moduleBase(imp.Path)); ok {
 				return m, true
 			}
 		}
 	}
 	return LookupModule(base)
+}
+
+// moduleBase returns the bare import name a module path binds under: its last path
+// segment, after stripping an optional URI-style scheme. Upstream Buzz's `buzz:`
+// package scheme names a stdlib module (`import "buzz:std"` binds `std`, exactly
+// like `import "std"`), so the scheme must not leak into the bound name.
+func moduleBase(p string) string {
+	if c := strings.IndexByte(p, ':'); c >= 0 {
+		if slash := strings.IndexByte(p, '/'); slash < 0 || c < slash {
+			p = p[c+1:]
+		}
+	}
+	return path.Base(p)
 }
