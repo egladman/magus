@@ -25,11 +25,16 @@ The project-wide rule (see the top-level [README](../README.md)) is **"match
 capabilities, diverge only where a concrete reason forces it."** Concretely, for
 this package:
 
-- **Do not add modules or methods here that upstream Buzz does not have.** A
-  capability magus wants - running a subprocess, querying git, hashing a file -
-  is a _host_ concern and belongs in [`magus/std`](../../std/README.md), layered
-  on top (see below). Keeping this package upstream-shaped is what lets a
-  standalone `.buzz` program (and `cmd/buzz`) stay portable.
+- **Do not add upstream-shaped modules or methods here that upstream Buzz does
+  not have.** A capability magus wants - running a subprocess, querying git,
+  hashing a file - is a _host_ concern and belongs in
+  [`magus/std`](../../std/README.md), layered on top (see below). Keeping the
+  upstream-faithful surface upstream-shaped is what lets a standalone `.buzz`
+  program (and `cmd/buzz`) stay portable. The one sanctioned exception is
+  gopherbuzz's own test surface (`assertcore`/`assert`/`suite`/`testing`), which
+  has no upstream counterpart; those register through `std.Modules` tagged
+  `Kind == Extension`, so a caller can filter to the upstream-only surface, and
+  conformance fixtures never import them.
 - **Match signatures and return shapes** to the upstream reference. When in
   doubt, the reference at buzz-lang.dev is the source of truth.
 - **Document any deliberate divergence.** Where gopherbuzz intentionally differs

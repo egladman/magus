@@ -27,7 +27,6 @@ import (
 // or third-party spell's example traces like a built-in's.
 func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
-	buzzstd.RegisterExtensions(sess)
 	registerWASMCompatibleHostModules(ctx, sess)
 
 	sess.SetGlobal("magus", buildMagus(sess, tr))

@@ -62,7 +62,6 @@ func mergeModuleMap(dst, src vm.Value) {
 // runner, so the two never drift.
 func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
 	buzzstd.Register(sess)
-	buzzstd.RegisterExtensions(sess)
 	for name, mod := range magusModules(ctx, sess) {
 		if base, ok := sess.SyntheticModule(name); ok {
 			// Buzz's stdlib already owns this bare name (os, fs, crypto): overlay

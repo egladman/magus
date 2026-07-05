@@ -107,7 +107,6 @@ func run(argv []string) error {
 	sess := buzz.NewSession(ctx, sessOpts...)
 	defer func() { _ = sess.Close() }()
 	buzzstd.Register(sess)
-	buzzstd.RegisterExtensions(sess)
 	if dirs := libDirs(o); len(dirs) > 0 {
 		sess.SetIncludeDirs(dirs)
 	}

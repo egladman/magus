@@ -159,7 +159,6 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	var out bytes.Buffer
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
-	buzzstd.RegisterExtensions(sess)
 	registerWASMCompatibleHostModules(ctx, sess)
 
 	v, err := sess.Eval(ctx, src)

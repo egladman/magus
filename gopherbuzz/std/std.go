@@ -30,7 +30,53 @@ import (
 	"github.com/egladman/gopherbuzz/vm"
 )
 
-// Register installs every std module on sess. std.print writes to os.Stdout;
+// Kind classifies a bundled module by provenance. It replaces the old
+// Register/RegisterExtensions split: rather than two entry points, there is one
+// table of modules each tagged with a Kind, and one Register that installs them
+// all. A surface that wants only a subset (e.g. a strict-conformance run that
+// wants the upstream-faithful surface) filters Modules by Kind itself.
+type Kind int
+
+const (
+	// Upstream is a clean-room reimplementation of a module in upstream Buzz's
+	// standard library; its names, signatures, and semantics track upstream.
+	Upstream Kind = iota
+	// Extension is a gopherbuzz-original module with no upstream counterpart
+	// (the value-aware test surface: assertcore, assert, suite, testing).
+	Extension
+)
+
+// Module is one bundled module: the bare name a Buzz program imports, its
+// provenance Kind, and how to install it on a session. out is std.print's sink;
+// modules that do not print ignore it.
+type Module struct {
+	Name    string
+	Kind    Kind
+	install func(sess *buzz.Session, out io.Writer)
+}
+
+// Modules is the single source of truth for the modules gopherbuzz bundles: the
+// upstream-faithful stdlib plus gopherbuzz's own test surface, each tagged with
+// its Kind. Register installs every entry; edit this table to add a module.
+var Modules = []Module{
+	{"std", Upstream, func(s *buzz.Session, out io.Writer) { s.SetSyntheticModule("std", coreModule(out)) }},
+	{"math", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("math", mathModule()) }},
+	{"fs", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("fs", fsModule()) }},
+	{"os", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("os", osModule()) }},
+	{"crypto", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("crypto", cryptoModule()) }},
+	{"gc", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("gc", gcModule()) }},
+	{"debug", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("debug", debugModule()) }},
+	{"io", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("io", ioModule(s)) }},
+	{"serialize", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("serialize", serializeModule()) }},
+	{"buffer", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("buffer", bufferModule()) }},
+	{"ffi", Upstream, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("ffi", ffiModule()) }},
+	{"assertcore", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSyntheticModule("assertcore", assertCoreModule()) }},
+	{"assert", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSourceModule("assert", assertSource) }},
+	{"suite", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSourceModule("suite", suiteSource) }},
+	{"testing", Extension, func(s *buzz.Session, _ io.Writer) { s.SetSourceModule("testing", testingSource) }},
+}
+
+// Register installs every bundled module on sess. std.print writes to os.Stdout;
 // use RegisterWithOutput to redirect it.
 func Register(sess *buzz.Session) { RegisterWithOutput(sess, os.Stdout) }
 
@@ -38,17 +84,9 @@ func Register(sess *buzz.Session) { RegisterWithOutput(sess, os.Stdout) }
 // that captures a program's textual output (e.g. the WebAssembly playground)
 // passes its own writer so print lands in a buffer instead of the host stdout.
 func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
-	sess.SetSyntheticModule("std", coreModule(out))
-	sess.SetSyntheticModule("math", mathModule())
-	sess.SetSyntheticModule("fs", fsModule())
-	sess.SetSyntheticModule("os", osModule())
-	sess.SetSyntheticModule("crypto", cryptoModule())
-	sess.SetSyntheticModule("gc", gcModule())
-	sess.SetSyntheticModule("debug", debugModule())
-	sess.SetSyntheticModule("io", ioModule(sess))
-	sess.SetSyntheticModule("serialize", serializeModule())
-	sess.SetSyntheticModule("buffer", bufferModule())
-	sess.SetSyntheticModule("ffi", ffiModule())
+	for _, m := range Modules {
+		m.install(sess, out)
+	}
 }
 
 func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {

@@ -19,7 +19,6 @@ func TestTesterModule(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	Register(sess)
-	RegisterExtensions(sess)
 
 	src := `
 import "testing";

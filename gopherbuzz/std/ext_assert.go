@@ -7,19 +7,18 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
 )
 
-// This file and its companion ext_require.buzz are a magus-authored EXTENSION to
-// Buzz, NOT part of upstream Buzz's standard library. They are installed by
-// RegisterExtensions (never by RegisterWithOutput), so the upstream-mirrored std
-// surface stays byte-for-byte faithful and the conformance suite is unaffected.
-// The extension exists because Buzz's == is reference identity for maps, lists,
-// and objects (matching upstream), so `{a: 1} == {a: 1}` is false and test code
-// has no way to assert by value. deepEqual supplies the structural comparison a
-// logic-less script can't express (an `any` is not field-accessible), and the
-// require module layers readable, raise-on-failure assertions on top of it.
+// This file backs the gopherbuzz-original test surface: modules NOT part of
+// upstream Buzz's standard library. They register through std.Modules tagged
+// Kind == Extension (so a caller wanting only the upstream-faithful surface can
+// filter them out), and conformance fixtures never import them. The surface
+// exists because Buzz's == is reference identity for maps, lists, and objects
+// (matching upstream), so `{a: 1} == {a: 1}` is false and test code has no way to
+// assert by value. deepEqual supplies the structural comparison a logic-less
+// script can't express (an `any` is not field-accessible); assert/suite/testing
+// layer readable assertions on top of it.
 
 //go:embed ext_assert.buzz
 var assertSource string
@@ -30,19 +29,11 @@ var suiteSource string
 //go:embed testing.buzz
 var testingSource string
 
-// RegisterExtensions installs the magus Buzz testing extensions on sess: the
-// assertcore primitive module and the buzz-authored libraries that build on it -
-// `assert` (matchers for `test` blocks), `suite` (a grouped, stateful test
-// runner), and `testing` (gopherbuzz's own Tester, API-compatible with upstream
-// Buzz's testing module; it uses assertcore for a runtime type name). Callers
-// that want the upstream-faithful stdlib only should not call this; callers that
-// want the magus testing surface call it alongside Register.
-func RegisterExtensions(sess *buzz.Session) {
-	sess.SetSyntheticModule("assertcore", assertCoreModule())
-	sess.SetSourceModule("assert", assertSource)
-	sess.SetSourceModule("suite", suiteSource)
-	sess.SetSourceModule("testing", testingSource)
-}
+// The test surface — assertcore, assert, suite, and testing — installs through
+// std.Modules (each tagged Kind == Extension), not a separate RegisterExtensions
+// entry point. assertcore is the native primitive layer; assert/suite/testing are
+// buzz-authored libraries that build on it. assertCoreModule, assertSource,
+// suiteSource, and testingSource above are referenced from that table.
 
 // assertCoreModule is the native primitive layer the buzz-authored require library
 // imports. It exposes only what a logic-less script cannot do for itself:
