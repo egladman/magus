@@ -200,10 +200,11 @@ func (s *Console) help() []Line {
 	}, "\n")}}
 }
 
-// Banner is the terminal's opening message: a one-line build/runtime header (like a
-// REPL's startup banner) followed by an unmissable note that the playground is a
-// sandbox where nothing executes. The `about` command reprints it; `status` prints
-// the full build detail.
+// Banner is the terminal's opening message: a single build/runtime header line
+// (like a REPL's startup banner) - gopherbuzz, the Buzz language version, the
+// compiler, and the target. The page's intro copy already explains what the
+// playground is, so the banner stays terse and doesn't repeat it. The `about`
+// command reprints this line; `version` prints the full build detail.
 func (s *Console) Banner() []Line {
 	dot := `<span class="muted"> · </span>`
 	head := `<span class="ok">●</span> <b>gopherbuzz</b>` + dot + `Buzz ` + buzzLangVersion
@@ -213,17 +214,7 @@ func (s *Console) Banner() []Line {
 	if s.info.Target != "" {
 		head += dot + esc(s.info.Target)
 	}
-	head += dot + `<b>sandbox</b>`
-
-	return []Line{
-		{HTML: head},
-		{HTML: ``},
-		{HTML: `<span class="muted">  The interpreter is compiled to <b>WebAssembly</b> and runs in this browser tab:</span>`},
-		{HTML: `<span class="muted">  no server, no shell, no filesystem. A magusfile or spell is </span><b>planned, not run</b><span class="muted">:</span>`},
-		{HTML: `<span class="muted">  build steps are recorded so you can read the plan, but </span><b>no command is executed.</b>`},
-		{HTML: ``},
-		{HTML: `<span class="muted">  New here? Type </span><b>help</b><span class="muted"> to see the commands, or </span><b>ls</b><span class="muted"> to list this file's targets.</span>`},
-	}
+	return []Line{{HTML: head}}
 }
 
 func (s *Console) about() []Line { return s.Banner() }

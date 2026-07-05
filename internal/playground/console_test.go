@@ -34,10 +34,15 @@ export fun build(args: [str]) > void { magus.needs(magus.target.literal("format"
 export fun ci(args: [str]) > void { magus.needs(magus.target.literal("lint"), magus.target.literal("build")); }
 `
 
-func TestBanner_conveysSandbox(t *testing.T) {
+func TestBanner_showsBuildLine(t *testing.T) {
 	got := joinHTML(NewConsole(testInfo).Banner())
-	for _, want := range []string{"sandbox", "WebAssembly", "executed", "tinygo 0.40.0", "js/wasm"} {
-		assert.Contains(t, got, want, "banner should mention %q", want)
+	for _, want := range []string{"gopherbuzz", "Buzz", "tinygo 0.40.0", "js/wasm"} {
+		assert.Contains(t, got, want, "banner should report %q", want)
+	}
+	// The sandbox explanation lives in the page's intro copy now; the banner stays a
+	// terse build/runtime line and does not repeat it.
+	for _, gone := range []string{"sandbox", "WebAssembly", "executed"} {
+		assert.NotContains(t, got, gone, "banner should not repeat the page intro (%q)", gone)
 	}
 }
 
