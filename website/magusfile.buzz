@@ -71,11 +71,12 @@ export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
     final clean_before = vcs.isDirty([OUT, "MAGUS.md"]) == false;
     magus.needs(magus.target.literal("md-generate"));
-    scribe.site_render(ROOT, DOCS, BLOG, OUT);
+    final site = scribe.site_render(ROOT, DOCS, BLOG, OUT);
     if (magus.has_charm("rw")) {
         // Record this build's URLs in the append-only ledger the abandoned-link
         // gate checks against. Only under rw, so a checking render never mutates.
-        scribe.updateUrlLock();
+        // The render's populated state is threaded in explicitly (no module global).
+        scribe.updateUrlLock(site);
         return;
     }
 

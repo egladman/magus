@@ -328,7 +328,7 @@ object Site {
             final seg = segs[i];
             if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
             var label = capitalizeFirst(seg);
-            final t = lookupTitle(acc + "/");
+            final t = lookupTitle(acc + "/", this);
             if (t != "") {
                 li = li + "<li><a href=\"" + root + acc + "/\">" + t + "</a></li>";
             } else {
@@ -441,7 +441,7 @@ object Site {
         this.metaFull = capture("git -C " + this.root + " rev-parse HEAD");
         this.metaShort = capture("git -C " + this.root + " rev-parse --short HEAD");
         this.metaStamp = capture("TZ=UTC git -C " + this.root + " show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd HEAD");
-        this.metaCommits = buildCommits();
+        this.metaCommits = buildCommits(this);
         this.metaLoaded = true;
     }
 
@@ -449,7 +449,7 @@ object Site {
     // renamed bundle or forgotten alias fails the build instead of shipping a 404.
     fun assetIntegrityCheck() > void {
         var files: [str] = mut [<str>];
-        walkGen("", files);
+        walkGen("", files, this);
         foreach (f in files) {
             if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
                 // Non-textual asset: nothing to scan for refs.
@@ -461,7 +461,7 @@ object Site {
                 var pageDir = "";
                 if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
                 foreach (target in scanReferencesInHTML(html, pageDir)) {
-                    if (checkPathExists(target) == false) {
+                    if (checkPathExists(target, this) == false) {
                         throw "asset integrity: " + f + " references missing " + target;
                     }
                 }
@@ -475,7 +475,7 @@ object Site {
         // Every written page, keyed the way pageKey() yields, so BFS can tell a page
         // link from an asset link.
         var files: [str] = mut [<str>];
-        walkGen("", files);
+        walkGen("", files, this);
         var isPage: {str: bool} = mut {};
         foreach (f in files) {
             if (f == "index.html") { isPage[""] = true; }
@@ -516,7 +516,6 @@ object Site {
         }
     }
 }
-var site: Site = mut Site{};
 
 // (The per-page reading-time and tags are no longer module globals: they are passed
 // straight into renderPage() as the `reading` / `tags` arguments, so there is no
@@ -554,7 +553,7 @@ final HISTORY_MAX = 8;
 //     entries in newest-first order. Drives the collapsed WS R history panel.
 // The log prints "SUBJ:<one-line subject>" after each ">>>" header so the two
 // fields ride together without a second git spawn.
-fun buildCommits() > {str: str} {
+fun buildCommits(site: Site) > {str: str} {
     var m: {str: str} = mut {};
     site.metaHistory = mut {};
     final log = capture("TZ=UTC git -C " + site.root + " log --first-parent --diff-merges=first-parent --name-only "
@@ -630,7 +629,7 @@ fun pageType(md: str) > str {
 // (cmd/magus-spelldocs; the spells.md landing itself is hand-written), and
 // manpage/ (cmd/magus-manpage). srcRel is the docs/-prefixed source path. Kept as
 // a path convention because the generated .md carries no frontmatter marker.
-fun isGenerated(srcRel: str) > bool {
+fun isGenerated(srcRel: str, site: Site) > bool {
     return srcRel.startsWith(site.docs + "/buzz/modules/")
         or srcRel.startsWith(site.docs + "/spells/")
         or srcRel.startsWith(site.docs + "/manpage/")
@@ -773,7 +772,7 @@ fun tagAdmonition(html: str) > str {
 // its clean URL without the trailing slash - for rewriteLinks. It reads site state
 // (the blog dir, via cleanURL), so it stays here; the pure old-directory counterpart
 // (oldFlatDirectory) lives in scribe_html.
-fun newCleanDirectory(rel: str) > str {
+fun newCleanDirectory(rel: str, site: Site) > str {
     final u = cleanURL(rel, site.blog);
     if (u == "") { return ""; }
     return u.sub(0, u.len() - 1);
@@ -785,7 +784,7 @@ fun newCleanDirectory(rel: str) > str {
 // maps to the bare site root. Aliases are deliberately absent (only canonical pages
 // belong in a sitemap). Gated on SITE_URL so the site can ship dark until the host
 // is confirmed. robots points crawlers at the sitemap.
-fun writeSEOFiles() > void {
+fun writeSEOFiles(site: Site) > void {
     if (SITE_URL == "") { return; }
     var urls: [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
@@ -807,7 +806,7 @@ fun writeSEOFiles() > void {
 // site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),
 // updated (post date), summary (description), author. Feed-level updated = newest
 // post's date. Gated on SITE_URL so it can ship dark until the host is confirmed.
-fun renderBlogAtom() > void {
+fun renderBlogAtom(site: Site) > void {
     if (SITE_URL == "") { return; }
     if (site.blogPosts.len() == 0) { return; }
     final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
@@ -842,7 +841,7 @@ fun renderBlogAtom() > void {
 // "## [<version>] - <date>" heading and its body. "[Unreleased]" is skipped: the
 // feed is for released versions only. Deterministic: reads a committed file, no
 // network. Ordering follows the file, which authors keep newest-first.
-fun parseChangelog() > void {
+fun parseChangelog(site: Site) > void {
     site.releases = mut [<Release>];
     if (os.execute(["test", "-f", site.root + "/CHANGELOG.md"]) != 0) { return; }
     final f = io.File.open(site.root + "/CHANGELOG.md", io.FileMode.read);
@@ -895,7 +894,7 @@ fun parseChangelog() > void {
 // GH/releases/tag/<ver>, id = same, updated = release date, summary = the section
 // body. Feed-level updated = newest release's date. Gated on SITE_URL and on
 // having at least one released version.
-fun renderReleasesAtom() > void {
+fun renderReleasesAtom(site: Site) > void {
     if (SITE_URL == "") { return; }
     if (site.releases.len() == 0) { return; }
     final feedUpdated = atomDate(site.releases[0].date);
@@ -930,7 +929,7 @@ fun renderReleasesAtom() > void {
 // (no bespoke color palette), so light/dark follow the site theme. rootDepth is
 // how many "../" the caller needs to reach gen/'s root, used only to preload the
 // hat asset in the shared head.
-fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str) > void {
+fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Site) > void {
     // Displayed path: /public or /public/atom, always absolute with leading + trailing slash.
     var displayPath = "/public";
     if (path != "public") { displayPath = "/" + path; }
@@ -987,7 +986,7 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str) > void {
     } else {
         site.metaCommits[site.metaPrefix + srcMarker] = site.metaFull + "|" + site.metaShort + "|" + site.metaStamp;
     }
-    final doc = renderPage("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/", "", mut []);
+    final doc = renderPage("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/", "", mut [], site);
     final of = io.File.open(site.outDir + "/" + path + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
@@ -1000,7 +999,7 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str) > void {
 // canonical spec locations (/sitemap.xml, /robots.txt); /public/atom/ lists the
 // two Atom feeds; /public/release/ is a placeholder browsing entry (populated in
 // WS U with the release-artifacts matrix). Deterministic (no network at build).
-fun renderPublic() > void {
+fun renderPublic(site: Site) > void {
     if (SITE_URL == "") { return; }
 
     // /public/atom/ - the two feeds (if they were written).
@@ -1019,7 +1018,7 @@ fun renderPublic() > void {
             "desc": "Releases (Atom 1.0)"
         });
     }
-    if (atomEntries.len() > 0) { renderAutoindex("public/atom", atomEntries, "../"); }
+    if (atomEntries.len() > 0) { renderAutoindex("public/atom", atomEntries, "../", site); }
 
     // /public/release/  - per-version tree. Each released version (parsed from
     // CHANGELOG.md by parseChangelog) gets its own subdirectory listing the 8
@@ -1043,7 +1042,7 @@ fun renderPublic() > void {
         verEntries.append(mut {"name": "SHA256SUMS",         "href": assetBase + "/SHA256SUMS",     "size": "-", "modified": date, "desc": "SHA-256 manifest"});
         verEntries.append(mut {"name": "SHA256SUMS.sig",     "href": assetBase + "/SHA256SUMS.sig", "size": "-", "modified": date, "desc": "Ed25519 signature of SHA256SUMS"});
         verEntries.append(mut {"name": "magus-release.pem",  "href": "../../../assets/magus-release.pem", "size": "-", "modified": "-", "desc": "Release signing key (SPKI PEM)"});
-        renderAutoindex("public/release/" + ver, verEntries, "../");
+        renderAutoindex("public/release/" + ver, verEntries, "../", site);
     }
 
     // /public/release/  - parent index listing every version as a subdirectory.
@@ -1053,7 +1052,7 @@ fun renderPublic() > void {
         final ver = rel["version"];
         releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel["date"], "desc": "Release " + ver});
     }
-    renderAutoindex("public/release", releaseParent, "../");
+    renderAutoindex("public/release", releaseParent, "../", site);
 
     // /public/ root.
     var rootEntries: [{str: str}] = mut [<{str: str}>];
@@ -1067,7 +1066,7 @@ fun renderPublic() > void {
     rootEntries.append(mut {"name": "release/", "href": "release/", "size": "-", "modified": "-", "desc": "Release artifacts"});
     rootEntries.append(mut {"name": "sitemap.xml", "href": "../sitemap.xml", "size": "-", "modified": "-", "desc": "XML sitemap"});
     rootEntries.append(mut {"name": "robots.txt", "href": "../robots.txt", "size": "-", "modified": "-", "desc": "Robots policy"});
-    renderAutoindex("public", rootEntries, "../");
+    renderAutoindex("public", rootEntries, "../", site);
 }
 
 // render404 writes gen/404.html - the themed "warped off the map" page GitHub
@@ -1078,7 +1077,7 @@ fun renderPublic() > void {
 // WS0b. basePath is derived from SITE_URL (e.g. https://eli.gladman.cc/magus/
 // -> "/magus/"); when SITE_URL is empty, fall back to "/" so the page still
 // renders locally with absolute paths from the server root.
-fun render404() > void {
+fun render404(site: Site) > void {
     // Extract the path component of SITE_URL: after "://<host>", everything
     // from the first "/" onwards. e.g. https://eli.gladman.cc/magus/ -> /magus/
     var basePath = "/";
@@ -1132,7 +1131,7 @@ fun render404() > void {
 `;
     final doc = template.render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "pico": PICO, "picoSri": PICO_SRI,
-        "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath),
+        "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath, site),
     });
     fs.writeFile(site.outDir + "/404.html", doc);
 }
@@ -1142,7 +1141,7 @@ fun render404() > void {
 // reuse the hat mark (WS A/V); scope/start_url match the deploy base so a
 // nested install stays inside /magus/. Gated on SITE_URL so a same-origin
 // scope is well-defined; without it we'd default to "/" and mis-scope.
-fun writeManifest() > void {
+fun writeManifest(site: Site) > void {
     if (SITE_URL == "") { return; }
     // basePath extraction mirrors render404's derivation.
     var basePath = "/";
@@ -1180,7 +1179,7 @@ fun writeManifest() > void {
 // as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
 // short commit hash so a new build purges old caches on activate) and
 // __BASE__ (SITE_URL's path prefix).
-fun writeServiceWorker() > void {
+fun writeServiceWorker(site: Site) > void {
     if (SITE_URL == "") { return; }
     var basePath = "/";
     final noScheme = SITE_URL.split("://");
@@ -1203,7 +1202,7 @@ fun writeServiceWorker() > void {
 // Footer crediting the last commit that touched a page's source (a magus/-relative
 // path), falling back to HEAD for a not-yet-committed file. Keying off the file's
 // own history means a page changes when its source does, not when any commit lands.
-fun renderCommitFooter(path: str) > str {
+fun renderCommitFooter(path: str, site: Site) > str {
     var cFull = site.metaFull;
     var cShort = site.metaShort;
     var cStamp = site.metaStamp;
@@ -1255,7 +1254,7 @@ fun renderCommitFooter(path: str) > str {
 // root ("" for spells.html, "../" for modules/fs.html, "../../" for
 // codes/sandbox/X.html), so the shared nav links and theme.js resolve at any
 // page depth and the site still works when served under a project subpath.
-fun rootPrefix(srcRel: str) > str {
+fun rootPrefix(srcRel: str, site: Site) > str {
     var rel = srcRel;
     if (rel.startsWith(site.docs + "/")) { rel = rel.sub((site.docs + "/").len()); }
     return climb(cleanDepth(rel, site.blog));
@@ -1522,7 +1521,7 @@ fun renderSiteNav(root: str, active: str) > str {
 // License link points at the pinned site.metaBranch (main) like the other GitHub links.
 // root is the relative prefix back to gen/'s root (so the site links resolve at any
 // page depth), matching renderSiteNav's root argument.
-fun renderSiteFooter(root: str) > str {
+fun renderSiteFooter(root: str, site: Site) > str {
     // Two clusters spread across the footer's width: this site's own surfaces on
     // the left, the project/external links on the right. Dots separate items within
     // a cluster; the clusters divide the row without adding a second line on desktop.
@@ -1541,7 +1540,7 @@ fun renderSiteFooter(root: str) > str {
 // version comes from parseChangelog (the committed CHANGELOG), so it is drift-stable;
 // announcement.js hides it once the reader dismisses that version and re-shows it on
 // the next release. The GitHub tag link mirrors the releases Atom feed's convention.
-fun renderAnnouncementBar() > str {
+fun renderAnnouncementBar(site: Site) > str {
     if (site.releases.len() == 0) { return ""; }
     final ver = site.releases[0].version;
     final tmpl = `  <div id="announcement-bar" data-version="{{ver}}">
@@ -1559,14 +1558,14 @@ fun renderAnnouncementBar() > str {
 // The playground is a standalone page (custom head, wasm, its own scripts) so it does
 // not go through renderPage(); templating only the chrome keeps its top bar and footer in
 // lockstep with every other page. It sits at gen/'s root, so its nav prefix is "".
-fun renderPlayground() > void {
+fun renderPlayground(site: Site) > void {
     final f = io.File.open("playground.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
     // The page ships at /playground/ (a directory index like every other page), so
     // its injected nav climbs one level to reach the site root.
     html = html.replace("<!-- site-nav -->", renderSiteNav("../", "playground"));
-    html = html.replace("<!-- site-footer -->", renderSiteFooter("../"));
+    html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
     fs.makeDirectory(site.outDir + "/playground");
     fs.writeFile(site.outDir + "/playground/index.html", html);
 }
@@ -1574,7 +1573,7 @@ fun renderPlayground() > void {
 // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
 // "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
 // renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
-fun lookupTitle(url: str) > str {
+fun lookupTitle(url: str, site: Site) > str {
     foreach (p in site.docPages) {
         if (p.url == url) { return p.title; }
     }
@@ -1604,7 +1603,7 @@ fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str
 // and underscore-prefixed fixtures excluded). Links are bare basenames, since a
 // sibling lives in the same output directory. "" when there is no sibling on
 // either side. rel is docs-relative (e.g. "modules/fs.md").
-fun renderPager(rel: str) > str {
+fun renderPager(rel: str, site: Site) > str {
     final parts = rel.split("/");
     final base = parts[parts.len() - 1];
     var srcDir = site.root + "/" + site.docs;
@@ -1649,8 +1648,8 @@ fun renderPager(rel: str) > str {
 // site default) — always non-empty, so the meta tag always fires. canonUrl is the
 // page's clean gen-root URL ("" for home) for the canonical link. pager is the
 // prev/next nav (may be ""); the home page and lone pages pass "".
-fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str]) > str {
-    final root = rootPrefix(srcRel);
+fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], site: Site) > str {
+    final root = rootPrefix(srcRel, site);
     // Which top-nav item to mark current. Every rendered docs page hangs off the
     // documentation index, except the dedicated install page; the home page (README)
     // highlights nothing (its wordmark is the home link).
@@ -1696,7 +1695,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
     // Generated pages (module/spell/man-page references) lead with a filled
     // "Generated" status chip so readers know the source of truth is code, not the
     // page - and that its "Suggest an edit" link points at generated output.
-    final gen = isGenerated(srcRel);
+    final gen = isGenerated(srcRel, site);
     var tagsHtml = "";
     if (gen or tags.len() > 0) {
         var chips = "";
@@ -1765,7 +1764,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
     // and tripping the generate drift gate. So omit the whole strip there.
     var provenance = "  <div class=\"page-provenance container\">\n"
         + tagsHtml
-        + "    " + renderCommitFooter(srcRel) + "\n"
+        + "    " + renderCommitFooter(srcRel, site) + "\n"
         + "  </div>\n";
     if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { provenance = ""; }
     // The page skeleton as one Mustache template. The head's optional blocks are
@@ -1846,7 +1845,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
         "pico": PICO,
         "picoSri": PICO_SRI,
         "gh": GH,
-        "announcement": renderAnnouncementBar(),
+        "announcement": renderAnnouncementBar(site),
         "nav": renderSiteNav(root, active),
         "breadcrumb": site.renderBreadcrumb(srcRel, title, root),
         "secondaryRow": secondaryRow,
@@ -1854,14 +1853,14 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
         "pager": pager,
         "related": site.renderRelated(srcRel, root),
         "provenance": provenance,
-        "footer": renderSiteFooter(root),
+        "footer": renderSiteFooter(root, site),
     });
 }
 
 // Render the repo's top-level README.md as the site landing page (index.html).
 // Links of the form href="docs/X" (relative from the repo root) resolve from
 // gen/index.html as href="X" — strip the docs/ prefix.
-fun renderRoot() > void {
+fun renderRoot(site: Site) > void {
     final f = io.File.open(site.root + "/README.md", io.FileMode.read);
     final md = f.readAll();
     f.close();
@@ -1886,7 +1885,7 @@ fun renderRoot() > void {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = SITE_DESC; }
 
-    final doc = renderPage(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md));
+    final doc = renderPage(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md), site);
     final of = io.File.open(site.outDir + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
@@ -1898,7 +1897,7 @@ fun renderRoot() > void {
 
 // Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
 // docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
-fun renderFile(rel: str) > void {
+fun renderFile(rel: str, site: Site) > void {
     final f = io.File.open(site.root + "/" + site.docs + "/" + rel, io.FileMode.read);
     final md = f.readAll();
     f.close();
@@ -1907,7 +1906,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = deriveTitle(md, rel); }
 
-    final html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel));
+    final html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -1916,7 +1915,7 @@ fun renderFile(rel: str) > void {
     if (desc == "") { desc = SITE_DESC; }
 
     final url = cleanURL(rel, site.blog);
-    final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel), url, readingTime(md), parseTags(md));
+    final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), site);
 
     // Directory-index output: every page is <cleanURL>index.html (extensionless,
     // with the build-artifact "gen" segment flattened out). url is gen/-root-
@@ -1947,7 +1946,7 @@ fun renderFile(rel: str) > void {
 // prefix), so permalinks sort by date and never collide across years. Post metadata
 // (title/date/description) is captured into site.blogPosts for the index page (and,
 // later, the Atom feed).
-fun renderBlogPost(base: str) > void {
+fun renderBlogPost(base: str, site: Site) > void {
     final rel = site.blog + "/" + base;
     final f = io.File.open(site.root + "/" + rel, io.FileMode.read);
     final md = f.readAll();
@@ -2011,9 +2010,9 @@ fun renderBlogPost(base: str) > void {
     }
 
     // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
-    final pager = renderBlogPager(base);
+    final pager = renderBlogPager(base, site);
 
-    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md));
+    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), site);
     fs.makeDirectory(site.outDir + "/" + site.blog + "/" + urlPath);
     final of = io.File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -2035,7 +2034,7 @@ fun renderBlogPost(base: str) > void {
 // (newest to oldest so "next" is older and "prev" is newer, matching timeline
 // intuition). Falls back to filename order when a post lacks a date. Reuses
 // renderPagerLink's climb-relative sibling link form.
-fun renderBlogPager(base: str) > str {
+fun renderBlogPager(base: str, site: Site) > str {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
     var posts: [BlogPost] = mut [<BlogPost>];
@@ -2094,7 +2093,7 @@ fun renderBlogPager(base: str) > str {
 // collected blog posts. It runs AFTER renderBlogPost has populated site.blogPosts for
 // every post in the walk. The listing is a plain <ul> under the shared renderPage()
 // template, so it inherits nav/breadcrumb/footer for free.
-fun renderBlogIndex() > void {
+fun renderBlogIndex(site: Site) > void {
     // Newest first, tiebreak by base for determinism.
     final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
         if (a.date != b.date) { return strLess(b.date, a.date); }
@@ -2141,7 +2140,7 @@ fun renderBlogIndex() > void {
         final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
-    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut []);
+    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
     fs.makeDirectory(site.outDir + "/" + site.blog);
     final of = io.File.open(site.outDir + "/" + site.blog + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -2169,8 +2168,8 @@ fun renderSyntaxRow(q: str, desc: str) > str {
 `, {"qEnc": encoding.urlEncode(q), "q": q, "desc": desc});
 }
 
-fun renderSearchPage() > void {
-    final root = rootPrefix("search/index.md");
+fun renderSearchPage(site: Site) > void {
+    final root = rootPrefix("search/index.md", site);
     // Always-open, forefront syntax reference: on the dedicated page the query
     // language is a first-class part of the surface, not a disclosure to hunt for
     // (the header dropdown carries only a compact hint). Each example is a real ?q=
@@ -2215,7 +2214,7 @@ fun renderSearchPage() > void {
 `, {"root": root, "gh": GH, "rows": rows});
     final title = "Search";
     final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
-    final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut []);
+    final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], site);
     fs.makeDirectory(site.outDir + "/search");
     final of = io.File.open(site.outDir + "/search/index.html", io.FileMode.write);
     of.write(doc);
@@ -2293,8 +2292,8 @@ object TourStep {
 // through magusfiles and Buzz. Each card carries a step number, title, one-liner, a code
 // teaser, and an Open-in-Playground deep-link. A synthesized page like the search page -
 // no .md source - so renderPage()'s srcRel guards drop its provenance/edit chrome.
-fun renderTourPage() > void {
-    final root = rootPrefix("tour/index.md");
+fun renderTourPage(site: Site) > void {
+    final root = rootPrefix("tour/index.md", site);
     final steps: [TourStep] = mut [<TourStep>];
     steps.append(TourStep{ file = "01-hello.buzz", title = "Magusfiles: write your first target",
         desc = "A magusfile is a build definition; each exported function is a runnable target.",
@@ -2356,7 +2355,7 @@ fun renderTourPage() > void {
 `, {"cards": cards});
     final title = "Tour";
     final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
-    final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut []);
+    final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], site);
     fs.makeDirectory(site.outDir + "/tour");
     final of = io.File.open(site.outDir + "/tour/index.html", io.FileMode.write);
     of.write(doc);
@@ -2372,14 +2371,14 @@ fun renderTourPage() > void {
 // walkBlog visits every blog/*.md post file (excluding index.md and _underscored
 // fixtures), in fs.list's sorted order — so the walk is deterministic. Posts are
 // flat: no nested subdirectories under blog/.
-fun walkBlog() > void {
+fun walkBlog(site: Site) > void {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
     foreach (name in fs.list(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
-            renderBlogPost(name);
+            renderBlogPost(name, site);
         }
     }
-    renderBlogIndex();
+    renderBlogIndex(site);
 }
 
 // True if path is a directory.
@@ -2388,7 +2387,7 @@ fun isDirectory(path: str) > bool {
 }
 
 // Recursively walk ../docs (the output lives outside it, under gen).
-fun walk(rel: str) > void {
+fun walk(rel: str, site: Site) > void {
     var dir = site.root + "/" + site.docs;
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
 
@@ -2397,9 +2396,9 @@ fun walk(rel: str) > void {
         if (rel != "") { childRel = rel + "/" + name; }
 
         if (isDirectory(site.root + "/" + site.docs + "/" + childRel)) {
-            walk(childRel);
+            walk(childRel, site);
         } else {
-            if (name.endsWith(".md")) { renderFile(childRel); }
+            if (name.endsWith(".md")) { renderFile(childRel, site); }
         }
     }
 }
@@ -2409,9 +2408,9 @@ fun walk(rel: str) > void {
 // renderPage() already strips for this srcRel prefix (provenance, edit link, nav
 // highlight). url ends in "/"; srcRel uses the "<dir>/_index.md" marker convention
 // so rootPrefix/renderBreadcrumb derive the right depth and trail.
-fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str) > void {
+fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void {
     final html = renderContentHTML(markdown.toHtml(md), "", "");
-    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut []);
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
     fs.makeDirectory(dir);
     fs.writeFile(dir + "/index.html", doc);
@@ -2425,8 +2424,8 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str)
 // slash off relative links - so card hrefs like "magus/" stay slash-terminated and
 // resolve without a directory redirect. searchText is the plain text indexed for
 // search (the HTML carries no useful prose otherwise).
-fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str) > void {
-    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut []);
+fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void {
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
     fs.makeDirectory(dir);
     fs.writeFile(dir + "/index.html", doc);
@@ -2443,7 +2442,7 @@ fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, 
 // for the drift gate. The MAGUS.md files stay committed (they serve the offline and
 // agent read paths); this renders the same source for the online reader, where the
 // Mermaid graphs and theming beat a raw file view.
-fun renderDevelopment() > void {
+fun renderDevelopment(site: Site) > void {
     var projects: [{str: str}] = mut [<{str: str}>];
     if (os.execute(["test", "-f", site.root + "/MAGUS.md"]) == 0) {
         projects.append(mut {"name": "magus", "path": site.root + "/MAGUS.md"});
@@ -2464,7 +2463,7 @@ fun renderDevelopment() > void {
         final name = proj["name"];
         renderDevelopmentPage(name + " targets",
             "Target catalog and run-order graph for the " + name + " project, generated from its magusfile.",
-            md, "development/" + name + "/", "development/" + name + "/_index.md");
+            md, "development/" + name + "/", "development/" + name + "/_index.md", site);
         // The old nested URL redirects to the flattened one so inbound links survive.
         site.collectAlias("development/projects/" + name, "development/" + name + "/");
     }
@@ -2491,7 +2490,7 @@ fun renderDevelopment() > void {
         cf.close();
         renderDevelopmentPage("Contributing",
             "How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.",
-            contributingMd, "development/contributing/", "development/contributing/_index.md");
+            contributingMd, "development/contributing/", "development/contributing/_index.md", site);
         haveContributing = true;
     }
 
@@ -2533,14 +2532,17 @@ magus run ci</code></pre>
 </ul>
 `, {"contributingSection": contributingSection, "projectCards": projectCards});
     renderDevelopmentPageRaw("Development", "Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.",
-        devHtml, "Development contributing getting started build test project target catalogs conventions operations configuration diagnostic codes debugging reference", "development/", "development/_index.md");
+        devHtml, "Development contributing getting started build test project target catalogs conventions operations configuration diagnostic codes debugging reference", "development/", "development/_index.md", site);
 }
 
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of
 // git history (footers) and the source tree — reproducible and gate-stable.
-export fun site_render(root: str, docs: str, blog: str, outDir: str) > void {
-    // Adopt the caller's paths as module state; every renderer below reads these.
+export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
+    // The generator state for one render pass, created here and threaded explicitly
+    // into every renderer as a `site` argument - no module-global singleton, so two
+    // renders (or parallel sessions) never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
+    var site: Site = mut Site{};
     site.root = root;
     site.docs = docs;
     site.blog = blog;
@@ -2585,41 +2587,41 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > void {
     // into the existing dir, not `playground` which would nest a subdir). The wasm is a
     // source artifact (rebuilt by build-playground), not rendered from docs, so it is
     // only copied; that keeps the drift gate stable.
-    renderPlayground();
+    renderPlayground(site);
     os.execute(["sh", "-c", "[ -d playground ] && cp -r playground/. " + site.outDir + "/playground/ || true"]);
 
     // Parse the changelog BEFORE the walk so renderPage() knows whether the releases
     // Atom feed will be written and can gate its <link rel=alternate> discovery
     // tag accordingly (advertising a missing file would trip WS L's asset check).
-    parseChangelog();
+    parseChangelog(site);
 
     // Pre-pass: gather every docs page's relatedness metadata before rendering, so
     // each page's "Related" cards can rank against the full corpus (the render walk
     // below is single-pass and can't see pages it hasn't reached yet).
     site.collectDocPages("");
 
-    renderRoot();
-    walk("");
-    walkBlog();
+    renderRoot(site);
+    walk("", site);
+    walkBlog(site);
 
     // Build the /development/ section before writeAliases so its pages are in site.pageUrls
     // for the collision guard and its collectAlias redirects (the retired
     // /development/projects/ URLs) get stubs written in the same pass.
-    renderDevelopment();
+    renderDevelopment(site);
 
     // Emit a redirect stub per declared frontmatter alias (after the walk, so every
     // real page URL is known for the collision guard). Aliases stay out of the
     // search index/sitemap/feeds — only the real page they point to appears there.
     site.writeAliases();
-    writeSEOFiles();
-    renderBlogAtom();
-    renderReleasesAtom();
-    renderPublic();
-    render404();
-    renderSearchPage();
-    renderTourPage();
-    writeManifest();
-    writeServiceWorker();
+    writeSEOFiles(site);
+    renderBlogAtom(site);
+    renderReleasesAtom(site);
+    renderPublic(site);
+    render404(site);
+    renderSearchPage(site);
+    renderTourPage(site);
+    writeManifest(site);
+    writeServiceWorker(site);
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the
@@ -2638,15 +2640,18 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > void {
     site.orphanCheck();
 
     // Parity gate: no previously-shipped URL may silently start 404-ing.
-    abandonedLinkCheck();
+    abandonedLinkCheck(site);
 
     std.print("done");
+    // Hand the populated state back to the caller, which threads it into
+    // updateUrlLock (no module-global carries it between the two calls).
+    return site;
 }
 
 // checkPathExists returns true when target (gen-root-relative, no leading slash)
 // resolves to a real file under gen/. Directory refs (URL ending in "/" or a plain
 // slugged path) resolve to their index.html; assets pass through verbatim.
-fun checkPathExists(target: str) > bool {
+fun checkPathExists(target: str, site: Site) > bool {
     // Empty target = gen/'s root, always the index.html landing. This shows up
     // when a page links to "../" (Parent Directory in an autoindex root) and the
     // resolver pops back to the root.
@@ -2720,14 +2725,14 @@ fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
 
 // walkGen recursively enumerates every written file under gen/ so the integrity
 // check reads each once. Skips buzz.wasm (binary; slow file test suffices).
-fun walkGen(rel: str, acc: [str]) > void {
+fun walkGen(rel: str, acc: [str], site: Site) > void {
     var dir = site.outDir;
     if (rel != "") { dir = site.outDir + "/" + rel; }
     foreach (name in fs.list(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
         if (os.execute(["test", "-d", site.outDir + "/" + childRel]) == 0) {
-            walkGen(childRel, acc);
+            walkGen(childRel, acc, site);
         } else {
             acc.append(childRel);
         }
@@ -2775,12 +2780,12 @@ fun readURLSet(path: str) > {str: bool} {
 // purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old
 // URL resolving) or list it in retired-urls.txt. Runs every render; the lock only
 // grows (updateUrlLock, under the rw charm).
-fun abandonedLinkCheck() > void {
+fun abandonedLinkCheck(site: Site) > void {
     final locked = readURLSet(URL_LOCK);
     final retired = readURLSet(RETIRED_URLS);
     var abandoned: [str] = mut [<str>];
     foreach (url in locked.keys()) {
-        if (retired[url] == null and checkPathExists(url) == false) {
+        if (retired[url] == null and checkPathExists(url, site) == false) {
             abandoned.append(url);
         }
     }
@@ -2794,7 +2799,7 @@ fun abandonedLinkCheck() > void {
 // only adds - a URL that drops out of the build stays in the ledger so the gate
 // keeps demanding a redirect or an explicit retirement for it. Called under the rw
 // charm so a plain (checking) render never mutates the tree.
-export fun updateUrlLock() > void {
+export fun updateUrlLock(site: Site) > void {
     var set = readURLSet(URL_LOCK);
     foreach (u in site.pageUrls.keys()) { set[u] = true; }
     var lines: [str] = mut [<str>];
