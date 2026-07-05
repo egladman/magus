@@ -1,0 +1,57 @@
+// scribe_date.buzz - date formatting for bylines, feeds, and the recent-changes
+// footer, extracted from scribe.buzz. Each function is a pure transform of its
+// argument (via the time module's fixed-layout parse/format; no site state, no IO),
+// so the module is self-contained and unit-tested. scribe.buzz flat-imports it
+// (`import "scribe_date" as _`), so its call sites are unchanged.
+import "time";
+import "assert";
+
+// formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
+// human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
+// date library. Used as the no-JS fallback; client-side JS rewrites it to the
+// viewer's local timezone via Intl.DateTimeFormat.
+export fun formatISO(iso: str) > str {
+    final ms = time.parse("2006-01-02T15:04:05Z", iso);
+    return time.format("January 2, 2006, 3:04 PM UTC", ms);
+}
+
+// formatISOShort is the compact form used by the recent-changes list; the full
+// timestamp stays in the <time datetime="..."> attribute for tooltips and readers.
+export fun formatISOShort(iso: str) > str {
+    final ms = time.parse("2006-01-02T15:04:05Z", iso);
+    return time.format("Jan 2, 2006", ms);
+}
+
+// blogDate renders a post's frontmatter date (date-only "2026-07-01" or a full
+// RFC3339 timestamp) as a plain calendar byline: "July 1, 2026" - full month, no
+// time-of-day. Blog dates are calendar days, not instants, so the paired <time>
+// carries the date-only "YYYY-MM-DD" form and theme.js formats it in UTC (a
+// midnight-UTC instant would otherwise slip to the previous day west of GMT).
+export fun blogDate(d: str) > str {
+    final dateOnly = d.split("T")[0];          // date-only or the date part of RFC3339
+    if (dateOnly.split("-").len() < 3) { return d; }
+    final ms = time.parse("2006-01-02", dateOnly);
+    return time.format("January 2, 2006", ms);
+}
+
+// blogDateAttr is the date-only "YYYY-MM-DD" that pairs with blogDate() in a
+// <time datetime> attribute (theme.js keys off its 10-char length to format in
+// UTC rather than the viewer's local zone).
+export fun blogDateAttr(d: str) > str {
+    return d.split("T")[0];
+}
+
+test "blogDateAttr keeps just the calendar day" {
+    assert.equal(blogDateAttr("2026-07-01T12:00:00Z"), "2026-07-01", "drops the time part");
+    assert.equal(blogDateAttr("2026-07-01"), "2026-07-01", "date-only unchanged");
+}
+
+test "blogDate renders a calendar byline" {
+    assert.equal(blogDate("2026-07-01"), "July 1, 2026", "date-only byline");
+    assert.equal(blogDate("2026-07-01T12:00:00Z"), "July 1, 2026", "RFC3339 byline");
+}
+
+test "formatISO renders human-readable UTC" {
+    assert.equal(formatISO("2026-06-29T01:41:51Z"), "June 29, 2026, 1:41 AM UTC", "full form");
+    assert.equal(formatISOShort("2026-06-29T01:41:51Z"), "Jun 29, 2026", "compact form");
+}

@@ -18,6 +18,25 @@ import "encoding";
 import "time";
 import "template";
 import "assert";
+// Pure text, path, and URL helpers, split into their own unit-tested module. Flat
+// import (`as _`) merges its exported functions into this scope, so callers here
+// name them directly (escapeAttr, relativePath, ...) as before the extraction.
+import "scribe_text" as _;
+// Source-path -> clean-URL mapping (the directory-index scheme and blog date
+// scoping), likewise split into its own unit-tested module and flat-imported so
+// cleanURL/cleanDepth/blogURLPath resolve here unqualified.
+import "scribe_url" as _;
+// Sitemap/Atom XML serialization and Atom date normalization, split into their own
+// unit-tested module and flat-imported so escapeXml/xmlElement/atomDate resolve here
+// unqualified at their many feed-building call sites.
+import "scribe_feed" as _;
+// Date formatting (bylines, feed dates, recent-changes stamps), split into its own
+// unit-tested module and flat-imported so formatISO/blogDate/... resolve unqualified.
+import "scribe_date" as _;
+// Directory-index link rewriting (resolve, old->new URL map, re-relativize), split
+// into its own unit-tested module and flat-imported so rewriteHref/resolvePath/
+// cleanTarget resolve unqualified at their call sites here.
+import "scribe_html" as _;
 
 // Path config, set by site_render() from the arguments the magusfile passes in - the
 // generator does not hardcode where the workspace, docs, or output live, so it stays
@@ -170,7 +189,7 @@ object Site {
                 throw "alias \"" + a + "\" collides with a real page at the same path";
             }
             fs.makeDirectory(this.outDir + "/" + a);
-            fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(relativize(a, this.aliasTarget[a])));
+            fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(relativePath(a, this.aliasTarget[a])));
         }
     }
 
@@ -184,7 +203,7 @@ object Site {
         var title = fm.q("title").stringValue();
         if (title == "") { title = deriveTitle(md, rel); }
         final desc = fm.q("description").stringValue();
-        final url = cleanURL(rel);
+        final url = cleanURL(rel, this.blog);
         // Join tags with "||" (never present in a tag) so the record stays flat;
         // sharedTagCount splits it back out.
         var joined = "";
@@ -576,10 +595,6 @@ fun deriveTitle(md: str, rel: str) > str {
     return rel;
 }
 
-// escapeAttr makes s safe to drop inside a double-quoted HTML attribute.
-fun escapeAttr(s: str) > str {
-    return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
-}
 
 // parseTags reads the frontmatter `tags:` list from raw markdown as [str], empty when
 // the field is absent. The one place tags are extracted so the rendered chips and
@@ -654,52 +669,6 @@ fun outputName(base: str) > str {
     return base.sub(0, base.len() - 3) + ".html";
 }
 
-// cleanURL maps a docs-relative source path to its clean, extensionless gen-root
-// URL: drop the .md, drop a trailing index/README landing basename, drop any
-// build-artifact "gen" segment (so docs/manpage/gen/magus-run.md surfaces at
-// manpage/magus-run/, not manpage/gen/magus-run/), and end with a trailing slash.
-// "" for the home page (README.md). Every written page becomes <cleanURL>index.html.
-//   "documentation.md"          -> "documentation/"
-//   "modules/fs.md"             -> "modules/fs/"
-//   "codes/race/README.md"      -> "codes/race/"
-//   "manpage/gen/magus-run.md"  -> "manpage/magus-run/"
-fun cleanURL(rel: str) > str {
-    // Blog posts are date-scoped: blog/2026-07-01-slug.md -> blog/2026/07/01/slug/.
-    // The blog index (blog/index.md) is not a post, so it falls through to the
-    // generic landing rule below and stays at blog/.
-    if (rel.startsWith(site.blog + "/") and rel != site.blog + "/index.md") {
-        return site.blog + "/" + blogURLPath(rel.sub((site.blog + "/").len())) + "/";
-    }
-    var base = rel;
-    if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
-    final parts = base.split("/");
-    var segs: [str] = mut [<str>];
-    var i = 0;
-    while (i < parts.len()) {
-        final p = parts[i];
-        final isLast = (i == parts.len() - 1);
-        if (p != "gen") {
-            if (isLast and (p == "index" or p == "_index" or p == "README")) {
-                // a landing basename becomes its directory's URL; drop it. "_index"
-                // is the marker convention autoindex and the /development/ pages use
-                // for a directory's own landing page, so it strips like "index".
-            } else {
-                segs.append(p);
-            }
-        }
-        i = i + 1;
-    }
-    if (segs.len() == 0) { return ""; }
-    return segs.join("/") + "/";
-}
-
-// cleanDepth is the number of path segments in a page's clean URL — its directory
-// depth below gen/'s root, i.e. how many "../" reach the root from it.
-fun cleanDepth(rel: str) > int {
-    final u = cleanURL(rel);
-    if (u == "") { return 0; }
-    return u.split("/").len() - 1;   // "modules/fs/" -> ["modules","fs",""] -> 2
-}
 
 // climb builds n repetitions of "../".
 fun climb(n: int) > str {
@@ -709,174 +678,11 @@ fun climb(n: int) > str {
     return s;
 }
 
-// rewriteHref transforms one in-content link href for the directory-index layout.
-// Every page moved into its own directory, so a relative link needs `addDepth`
-// extra "../" to climb back out, and every internal .html target became a directory
-// (drop .html, drop a trailing index/README, drop the "gen" build segment, add a
-// trailing slash). External/anchor/asset links pass through untouched; a #fragment
-// is preserved.
-// splitPath splits a gen-root-relative path into its non-empty segments, dropping
-// "." segments (a trailing slash yields no empty tail segment).
-fun splitPath(p: str) > [str] {
-    var segs: [str] = mut [<str>];
-    foreach (s in p.split("/")) {
-        if (s != "" and s != ".") { segs.append(s); }
-    }
-    return segs;
-}
-
-// resolvePath resolves a relative link against a gen-root-relative directory,
-// returning the normalized gen-root-relative target path ("" for the root). ".."
-// pops a segment; "." and empty segments are ignored.
-fun resolvePath(fromDir: str, link: str) > str {
-    var segs = splitPath(fromDir);
-    foreach (part in link.split("/")) {
-        if (part != "" and part != ".") {
-            if (part == "..") {
-                if (segs.len() > 0) {
-                    var nw: [str] = mut [<str>];
-                    var i = 0;
-                    while (i < segs.len() - 1) { nw.append(segs[i]); i = i + 1; }
-                    segs = nw;
-                }
-            } else {
-                segs.append(part);
-            }
-        }
-    }
-    return segs.join("/");
-}
-
-// cleanTarget maps an OLD flat gen-root path (e.g. "manpage/gen/magus-ls.html",
-// "codes/race/index.html", "install.html", "index.html") to its NEW clean URL
-// ("manpage/magus-ls/", "codes/race/", "install/", ""): drop .html, drop a trailing
-// index/README landing, drop the "gen" build segment, add a trailing slash.
-// playground.html directorifies like any other page (a link to it lands on
-// "playground/", matching its written gen/playground/index.html).
-fun cleanTarget(oldPath: str) > str {
-    final segs = splitPath(oldPath);
-    if (segs.len() == 0) { return ""; }
-    var keep: [str] = mut [<str>];
-    var i = 0;
-    while (i < segs.len()) {
-        var p = segs[i];
-        final isLast = (i == segs.len() - 1);
-        if (isLast and p.endsWith(".html")) { p = p.sub(0, p.len() - 5); }
-        if (p != "gen") {
-            if (isLast and (p == "index" or p == "README")) {
-                // landing basename -> its directory
-            } else {
-                keep.append(p);
-            }
-        }
-        i = i + 1;
-    }
-    if (keep.len() == 0) { return ""; }
-    return keep.join("/") + "/";
-}
-
-// relativize returns the relative link from fromDir (gen-root-relative) to toUrl
-// (gen-root-relative). A toUrl ending in "/" — or "" for the home page — is a
-// directory (its link keeps the trailing slash); anything else is a file
-// (an asset like main.js or an image). "./" when they resolve to the same place.
-fun relativize(fromDir: str, toUrl: str) > str {
-    final fromSegs = splitPath(fromDir);
-    final toSegs = splitPath(toUrl);
-    final dirLike = (toUrl == "" or toUrl.endsWith("/"));
-    var i = 0;
-    while (i < fromSegs.len() and i < toSegs.len() and fromSegs[i] == toSegs[i]) { i = i + 1; }
-    var rel = "";
-    var j = i;
-    while (j < fromSegs.len()) { rel = rel + "../"; j = j + 1; }
-    var k = i;
-    while (k < toSegs.len()) {
-        rel = rel + toSegs[k];
-        if (k < toSegs.len() - 1 or dirLike) { rel = rel + "/"; }
-        k = k + 1;
-    }
-    if (rel == "") { rel = "./"; }
-    return rel;
-}
-
-// rewriteHref transforms one in-content link for the directory-index layout by full
-// path resolution: resolve it against the page's OLD flat directory to the old
-// target, map that target to its NEW clean URL, then re-express it relative to the
-// page's NEW directory. This is correct for siblings, cross-level links, landing
-// pages, and the gen-flatten uniformly (a naive fixed "../" count is not, because
-// the flatten changes depth). External/anchor/mailto links pass through; a
-// #fragment is preserved; asset (non-.html) links are re-based but not cleaned.
-fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
-    if (h.startsWith("http://") or h.startsWith("https://") or h.startsWith("//")
-        or h.startsWith("#") or h.startsWith("mailto:")) { return h; }
-    var path = h;
-    var frag = "";
-    final hash = h.indexOf("#");
-    if (hash != null) { path = h.sub(0, hash); frag = h.sub(hash); }
-    if (path == "") { return h; }   // pure fragment already handled; be safe
-
-    final oldTarget = resolvePath(oldDir, path);
-    if (path.endsWith(".html")) {
-        return relativize(newDir, cleanTarget(oldTarget)) + frag;
-    }
-    // Non-page (asset) link: keep the file as-is, only re-base for the moved page.
-    return relativize(newDir, oldTarget) + frag;
-}
-
 // rewriteLinks applies rewriteHref to every href="..." in a rendered content
 // fragment. It runs on the markdown-rendered body only (before the page template
 // wraps it), so the nav/breadcrumb/pager hrefs — built separately with clean URLs —
 // are never double-processed. oldDir/newDir are the page's old flat directory and
 // new clean directory (both gen-root-relative, "" for the home page).
-// tagRunnable is a post-process pass over rendered markdown that finds
-// "<!-- run -->" comments the author placed above a Buzz code fence and swaps
-// the following <pre> with <pre data-runnable="true">, so the client-side Run ▶
-// mechanism (run-example.js) can find opt-in blocks without an author-visible
-// info-string extension goldmark doesn't natively surface. The comment itself
-// is dropped from the output.
-fun tagRunnable(html: str) > str {
-    // Two opt-in markers, each tagging the following <pre> with the attributes a
-    // client mode reads. "<!-- run -->" is the plain evalBuzz path (module
-    // examples: print output). "<!-- run-recorder -->" is the dry-run path
-    // (spell examples: `import "magus/spell/go"; go["go-build"]()` records a
-    // trace instead of executing), which run-example.js routes to
-    // evalBuzzWithRecorder on seeing data-recorder. run-recorder is matched first
-    // so its longer marker isn't mistaken for a bare run marker.
-    final recTagged = tagRunnableMarker(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
-    return tagRunnableMarker(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
-}
-
-// tagRunnableMarker swaps the <pre> that follows each marker comment with openTag
-// (the marker is dropped). A marker not immediately followed by a fence is simply
-// removed, so the block renders normally.
-fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
-    var buf = "";
-    var rest = html;
-    var idx = rest.indexOf(marker);
-    while (idx != null) {
-        buf = buf + rest.sub(0, idx);
-        rest = rest.sub(idx + marker.len());
-        // Skip whitespace after the comment (typically a newline). The next
-        // non-whitespace token should be "<pre>" or "<pre ..."; tag it.
-        var i = 0;
-        while (i < rest.len()) {
-            final b = rest.byte(i);
-            if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
-            i = i + 1;
-        }
-        if (rest.sub(i, 5) == "<pre>") {
-            buf = buf + rest.sub(0, i) + openTag;
-            rest = rest.sub(i + 5);
-        } else {
-            // Not immediately followed by a fence — drop the marker; the block
-            // renders normally.
-            buf = buf + rest.sub(0, i);
-            rest = rest.sub(i);
-        }
-        idx = rest.indexOf(marker);
-    }
-    return buf + rest;
-}
-
 // renderContentHTML is the ONE post-processing pipeline every page render runs: it
 // rewrites a rendered-markdown fragment's in-content links from the page's old flat
 // directory (oldDir) to its new clean directory (newDir), then applies the ordered
@@ -886,62 +692,6 @@ fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
 // buttons) from being applied on one path and silently forgotten on another.
 fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
     return tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir)))))));
-}
-
-// externalLinks adds rel="noopener noreferrer" and target="_blank" to every
-// http(s) link that doesn't already have them, and marks the anchor with a
-// data-external attribute so CSS can add a small "leaves this site" glyph via
-// ::after. Skips GitHub source links inside the article? No - they're external
-// too. Deterministic transform over rendered HTML.
-fun externalLinks(html: str) > str {
-    var buf = "";
-    var rest = html;
-    var idx = rest.indexOf("<a href=\"http");
-    while (idx != null) {
-        buf = buf + rest.sub(0, idx);
-        rest = rest.sub(idx);
-        // Locate the closing ">" of the opening tag.
-        final closeIdx = rest.indexOf(">");
-        if (closeIdx == null) { return buf + rest; }
-        var tag = rest.sub(0, closeIdx + 1);
-        var attrs = "";
-        if (tag.indexOf("rel=") == null) { attrs = attrs + " rel=\"noopener noreferrer\""; }
-        if (tag.indexOf("target=") == null) { attrs = attrs + " target=\"_blank\""; }
-        if (tag.indexOf("data-external") == null) { attrs = attrs + " data-external"; }
-        if (attrs != "") {
-            // Insert before the closing ">".
-            tag = tag.sub(0, tag.len() - 1) + attrs + ">";
-        }
-        buf = buf + tag;
-        rest = rest.sub(closeIdx + 1);
-        idx = rest.indexOf("<a href=\"http");
-    }
-    return buf + rest;
-}
-
-// lazyImages adds loading="lazy" decoding="async" to every in-content <img>
-// tag that doesn't already carry a loading attribute. The homepage hero stays
-// eager because renderRoot's markup carries loading="high"/fetchpriority (WS A)
-// which this pass leaves alone. Deterministic transform.
-fun lazyImages(html: str) > str {
-    var buf = "";
-    var rest = html;
-    var idx = rest.indexOf("<img ");
-    while (idx != null) {
-        buf = buf + rest.sub(0, idx);
-        rest = rest.sub(idx);
-        final closeIdx = rest.indexOf(">");
-        if (closeIdx == null) { return buf + rest; }
-        var tag = rest.sub(0, closeIdx + 1);
-        // Only add if not already present (author markup wins).
-        if (tag.indexOf("loading=") == null and tag.indexOf("fetchpriority=") == null) {
-            tag = "<img loading=\"lazy\" decoding=\"async\" " + tag.sub(5);
-        }
-        buf = buf + tag;
-        rest = rest.sub(closeIdx + 1);
-        idx = rest.indexOf("<img ");
-    }
-    return buf + rest;
 }
 
 // tagCodeTitle finds "<!-- code-title: FILENAME -->" comments and prepends a
@@ -1104,7 +854,7 @@ fun oldFlatDirectory(rel: str) > str {
     return parts.sub(0, parts.len() - 1).join("/");
 }
 fun newCleanDirectory(rel: str) > str {
-    final u = cleanURL(rel);
+    final u = cleanURL(rel, site.blog);
     if (u == "") { return ""; }
     return u.sub(0, u.len() - 1);
 }
@@ -1147,44 +897,6 @@ fun writeSEOFiles() > void {
     fs.writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + SITE_URL + "sitemap.xml\n");
 }
 
-// escapeXml is the XML-safe form of escapeAttr for feed content (Atom entries,
-// autoindex descriptions): the same five-entity substitution but with & handled
-// last so pre-encoded entities don't get double-encoded.
-fun escapeXml(s: str) > str {
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        .replace("\"", "&quot;").replace("'", "&apos;");
-}
-
-// Minimal XML construction for the sitemap and Atom feeds. Every text body and
-// attribute value funnels through escapeXml, so a stray "&" or "<" in a URL, title,
-// or changelog body can't produce malformed XML (the old hand-concatenation escaped
-// title/summary but left href/id/loc raw). Container tags with their own namespaces
-// (<feed>, <urlset>, <entry>, <url>) stay written inline; these cover the leaves.
-//   xmlAttribute("rel", "self")                 -> ` rel="self"`  (leading space; escaped)
-//   xmlElement("title", "magus blog")           -> `<title>magus blog</title>`
-//   xmlElementAttribute("summary", xmlAttribute("type","text"), body) -> `<summary type="text">body</summary>`
-//   xmlSelfClose("link", xmlAttribute("href", u)) -> `<link href="u"/>`
-fun xmlAttribute(name: str, value: str) > str {
-    return " " + name + "=\"" + escapeXml(value) + "\"";
-}
-fun xmlElementAttribute(tag: str, attrs: str, text: str) > str {
-    return "<" + tag + attrs + ">" + escapeXml(text) + "</" + tag + ">";
-}
-fun xmlElement(tag: str, text: str) > str {
-    return xmlElementAttribute(tag, "", text);
-}
-fun xmlSelfClose(tag: str, attrs: str) > str {
-    return "<" + tag + attrs + "/>";
-}
-
-// atomDate normalizes a frontmatter date (YYYY-MM-DD or full RFC3339) to the
-// RFC3339 UTC form Atom requires. A bare date becomes T00:00:00Z; anything
-// already containing "T" passes through (buildCommits produces full RFC3339).
-fun atomDate(d: str) > str {
-    if (d == "") { return ""; }
-    if (d.indexOf("T") == null) { return d + "T00:00:00Z"; }
-    return d;
-}
 
 // renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of
 // site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),
@@ -1583,42 +1295,6 @@ fun writeServiceWorker() > void {
     fs.writeFile(site.outDir + "/sw.js", body);
 }
 
-
-// formatISO converts an ISO 8601 UTC string ("2026-06-29T01:41:51Z") to a
-// human-readable UTC string ("June 29, 2026, 1:41 AM UTC") without any external
-// date library. Used as the no-JS fallback; client-side JS rewrites it to the
-// viewer's local timezone via Intl.DateTimeFormat.
-fun formatISO(iso: str) > str {
-    final ms = time.parse("2006-01-02T15:04:05Z", iso);
-    return time.format("January 2, 2006, 3:04 PM UTC", ms);
-}
-
-// blogDate renders a post's frontmatter date (date-only "2026-07-01" or a full
-// RFC3339 timestamp) as a plain calendar byline: "July 1, 2026" - full month, no
-// time-of-day. Blog dates are calendar days, not instants, so the paired <time>
-// carries the date-only "YYYY-MM-DD" form and theme.js formats it in UTC (a
-// midnight-UTC instant would otherwise slip to the previous day west of GMT).
-fun blogDate(d: str) > str {
-    final dateOnly = d.split("T")[0];          // date-only or the date part of RFC3339
-    if (dateOnly.split("-").len() < 3) { return d; }
-    final ms = time.parse("2006-01-02", dateOnly);
-    return time.format("January 2, 2006", ms);
-}
-
-// blogDateAttr is the date-only "YYYY-MM-DD" that pairs with blogDate() in a
-// <time datetime> attribute (theme.js keys off its 10-char length to format in
-// UTC rather than the viewer's local zone).
-fun blogDateAttr(d: str) > str {
-    return d.split("T")[0];
-}
-
-// Compact form used by the recent-changes list; the full timestamp stays in the
-// <time datetime="..."> attribute for tooltips and screen readers.
-fun formatISOShort(iso: str) > str {
-    final ms = time.parse("2006-01-02T15:04:05Z", iso);
-    return time.format("Jan 2, 2006", ms);
-}
-
 // Footer crediting the last commit that touched a page's source (a magus/-relative
 // path), falling back to HEAD for a not-yet-committed file. Keying off the file's
 // own history means a page changes when its source does, not when any commit lands.
@@ -1677,7 +1353,7 @@ fun renderCommitFooter(path: str) > str {
 fun rootPrefix(srcRel: str) > str {
     var rel = srcRel;
     if (rel.startsWith(site.docs + "/")) { rel = rel.sub((site.docs + "/").len()); }
-    return climb(cleanDepth(rel));
+    return climb(cleanDepth(rel, site.blog));
 }
 
 // stripTags removes HTML tags from a fragment, leaving its text. The text keeps
@@ -2062,47 +1738,6 @@ fun renderPager(rel: str) > str {
 {{{body}}}    </nav>
 `, {"body": body});
 }
-
-// firstPathSegment returns a clean URL's first path segment - the section a page belongs
-// to for the "same-section" relatedness signal. "spells/" and "spells/go/" both
-// return "spells"; a top-level page like "targets/" returns "targets"; "" (home)
-// returns "".
-fun firstPathSegment(url: str) > str {
-    if (url == "") { return ""; }
-    final i = url.indexOf("/");
-    if (i == null) { return url; }
-    return url.sub(0, i);
-}
-
-// sharedTagCount counts tags common to two ||-joined tag strings - the strongest
-// relatedness signal (two pages carrying the same topical tags are about the same
-// thing). O(n*m) over short lists, which is fine for a handful of tags per page.
-fun sharedTagCount(aJoined: str, bJoined: str) > int {
-    if (aJoined == "" or bJoined == "") { return 0; }
-    final aList = aJoined.split("||");
-    final bList = bJoined.split("||");
-    var n = 0;
-    foreach (t in aList) {
-        if (t != "") {
-            foreach (u in bList) {
-                if (t == u) { n = n + 1; break; }
-            }
-        }
-    }
-    return n;
-}
-
-// pad4 zero-pads a small non-negative int to four digits so scores compare
-// lexically the same way they compare numerically (renderRelated sorts by a string
-// key). Scores stay well under 1000, so four digits is ample headroom.
-fun pad4(n: int) > str {
-    var s = "{n}";
-    while (s.len() < 4) { s = "0" + s; }
-    return s;
-}
-
-
-
 // srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
 // it drives both the per-page commit footer and the "Suggest an edit" link.
 // description is the resolved page description (frontmatter, else derived, else the
@@ -2375,7 +2010,7 @@ fun renderFile(rel: str) > void {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = SITE_DESC; }
 
-    final url = cleanURL(rel);
+    final url = cleanURL(rel, site.blog);
     final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel), url, readingTime(md), parseTags(md));
 
     // Directory-index output: every page is <cleanURL>index.html (extensionless,
@@ -2400,59 +2035,6 @@ fun renderFile(rel: str) > void {
     std.print("  " + rel + " -> " + dir + "/index.html");
 }
 
-// allDigits reports whether every byte of s is an ASCII digit (and s is non-empty).
-fun allDigits(s: str) > bool {
-    if (s.len() == 0) { return false; }
-    var i = 0;
-    while (i < s.len()) {
-        final b = s.byte(i);
-        if (b < 48 or b > 57) { return false; }
-        i = i + 1;
-    }
-    return true;
-}
-
-// hasDatePrefix detects a leading YYYY-MM-DD- date prefix on a slugged filename
-// (the ".md" already stripped): 11 chars of 4-digit year, "-", 2-digit month, "-",
-// 2-digit day, "-". Buzz str.sub is (start, length), so sub(4, 1) is one char at 4.
-fun hasDatePrefix(s: str) > bool {
-    if (s.len() < 11) { return false; }
-    return allDigits(s.sub(0, 4)) and allDigits(s.sub(5, 2)) and allDigits(s.sub(8, 2))
-        and s.sub(4, 1) == "-" and s.sub(7, 1) == "-" and s.sub(10, 1) == "-";
-}
-
-// blogSlug drops the leading YYYY-MM-DD- date prefix (if present), leaving the
-// title portion of the URL. The date is not discarded - it re-enters the URL as
-// its own nested scope via blogDateDirectory/blogURLPath, so two posts that share a
-// title stay distinct by date (/blog/2026/07/01/hello/ vs /blog/2026/07/02/hello/).
-fun blogSlug(base: str) > str {
-    var s = base;
-    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
-    if (hasDatePrefix(s)) { s = s.sub(11); }
-    return s;
-}
-
-// blogDateDirectory parses a blog filename's YYYY-MM-DD- prefix into nested "YYYY/MM/DD"
-// URL segments, or null when the file carries no date prefix. The filename prefix
-// is the canonical URL date; renderBlogPost validates it against the frontmatter
-// `date` so the human-facing byline and the permalink can never drift apart.
-fun blogDateDirectory(base: str) > str? {
-    var s = base;
-    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
-    if (!hasDatePrefix(s)) { return null; }
-    return s.sub(0, 4) + "/" + s.sub(5, 2) + "/" + s.sub(8, 2);
-}
-
-// blogURLPath is a post's gen-root-relative URL path below blog/: the date scope
-// followed by the title slug ("2026/07/01/hello-blog"), or just the slug for an
-// undated file. cleanURL and renderBlogPost both route through this so the depth
-// they compute (for climb-relative links) and the directory they write agree.
-fun blogURLPath(base: str) > str {
-    final slug = blogSlug(base);
-    final dd = blogDateDirectory(base);
-    if (dd != null) { return dd + "/" + slug; }
-    return slug;
-}
 
 // renderBlogPost renders one blog/<file>.md as its own directory-index page. base
 // is the file's basename (e.g. "2026-07-01-hello-blog.md"); the written URL is date-
@@ -2580,21 +2162,21 @@ fun renderBlogPager(base: str) > str {
     if (pos < 0) { return ""; }
 
     // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link is no longer
-    // a flat "../<slug>/"; relativize walks from this post's dir to the target's URL
+    // a flat "../<slug>/"; relativePath walks from this post's dir to the target's URL
     // and writes the minimal climb, correct across any shared date prefix.
     final fromDir = site.blog + "/" + blogURLPath(base);
     var body = "";
     // Previous = newer post (earlier in ordered), Next = older post (later).
     if (pos > 0) {
         final prev = ordered[pos - 1];
-        final href = relativize(fromDir, site.blog + "/" + blogURLPath(prev.base) + "/");
+        final href = relativePath(fromDir, site.blog + "/" + blogURLPath(prev.base) + "/");
         body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Newer</span>"
             + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
     }
     if (pos < ordered.len() - 1) {
         final nxt = ordered[pos + 1];
-        final href = relativize(fromDir, site.blog + "/" + blogURLPath(nxt.base) + "/");
+        final href = relativePath(fromDir, site.blog + "/" + blogURLPath(nxt.base) + "/");
         body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Older</span>"
             + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
@@ -3321,46 +2903,6 @@ export fun updateUrlLock() > void {
 // Tests for the pure helpers. Run them with the `buzz-test` target
 // (`magus buzz -t --embedded scribe.buzz`); living in this module, they reach its
 // internal functions directly. They register but do not run during a normal render.
-test "firstPathSegment returns a clean URL's leading segment" {
-    assert.equal(firstPathSegment("spells/go/"), "spells", "spells/go/ -> spells");
-    assert.equal(firstPathSegment("targets"), "targets", "no slash -> whole string");
-    assert.equal(firstPathSegment(""), "", "empty -> empty");
-}
-
-// Guards the depth of pages built off the "_index.md" landing-marker convention
-// (the /public/ autoindex tree and the /development/ pages). A stray "_index"
-// segment left in the clean URL inflates the "../" climb by one, sending every
-// asset and nav link one directory too high (a 404, unstyled page). "_index"
-// must strip exactly like "index"/"README".
-test "cleanURL strips the _index landing marker like index" {
-    assert.equal(cleanURL("public/_index.md"), "public/", "public/_index.md -> public/");
-    assert.equal(cleanDepth("public/_index.md"), 1, "public landing is one level deep");
-    assert.equal(cleanDepth("public/atom/_index.md"), 2, "public/atom landing is two levels deep");
-    assert.equal(cleanDepth("development/_index.md"), 1, "development landing is one level deep");
-}
-
-test "pad4 left-pads to width four" {
-    assert.equal(pad4(7), "0007", "7 -> 0007");
-    assert.equal(pad4(1234), "1234", "1234 unchanged");
-    assert.equal(pad4(12345), "12345", "wider than four is kept");
-}
-
-test "escapeAttr escapes the attribute-dangerous characters" {
-    assert.equal(escapeAttr("a & b"), "a &amp; b", "ampersand");
-    assert.equal(escapeAttr("x\"y<z"), "x&quot;y&lt;z", "quote and less-than");
-}
-
-test "sharedTagCount counts common bar-joined tags" {
-    assert.equal(sharedTagCount("a||b||c", "b||c||d"), 2, "b and c shared");
-    assert.equal(sharedTagCount("a", "b"), 0, "none shared");
-    assert.equal(sharedTagCount("", "a||b"), 0, "empty side -> 0");
-}
-
-test "relativize walks from a dir to a target URL" {
-    assert.equal(relativize("a/b", "a/c/"), "../c/", "sibling directory");
-    assert.equal(relativize("development/projects", "development/"), "../", "up one level");
-}
-
 // Buzz's == is identity (not structural) for maps, so assert.equal does the
 // value comparison: the whole aliasTarget map at once, not field-by-field.
 test "Site.collectAlias trims slashes and records every alias" {

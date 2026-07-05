@@ -1,0 +1,123 @@
+// scribe_url.buzz - the source-path -> clean-URL mapping for the directory-index
+// site layout, extracted from scribe.buzz. Every function here is pure (it takes
+// what it needs as arguments - note cleanURL/cleanDepth take the blog dir rather
+// than reading a global), so the module is self-contained and unit-tested. scribe.buzz
+// flat-imports it (`import "scribe_url" as _`), so its call sites are unchanged.
+//
+// The date-prefix helpers build up to blogURLPath, which cleanURL routes blog posts
+// through; everything else is the generic .md -> clean-URL rule.
+import "assert";
+
+// allDigits reports whether every byte of s is an ASCII digit (and s is non-empty).
+export fun allDigits(s: str) > bool {
+    if (s.len() == 0) { return false; }
+    var i = 0;
+    while (i < s.len()) {
+        final b = s.byte(i);
+        if (b < 48 or b > 57) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// hasDatePrefix detects a leading YYYY-MM-DD- date prefix on a slugged filename
+// (the ".md" already stripped): 11 chars of 4-digit year, "-", 2-digit month, "-",
+// 2-digit day, "-". Buzz str.sub is (start, length), so sub(4, 1) is one char at 4.
+export fun hasDatePrefix(s: str) > bool {
+    if (s.len() < 11) { return false; }
+    return allDigits(s.sub(0, 4)) and allDigits(s.sub(5, 2)) and allDigits(s.sub(8, 2))
+        and s.sub(4, 1) == "-" and s.sub(7, 1) == "-" and s.sub(10, 1) == "-";
+}
+
+// blogSlug drops the leading YYYY-MM-DD- date prefix (if present), leaving the
+// title portion of the URL. The date is not discarded - it re-enters the URL as
+// its own nested scope via blogDateDirectory/blogURLPath, so two posts that share a
+// title stay distinct by date (/blog/2026/07/01/hello/ vs /blog/2026/07/02/hello/).
+export fun blogSlug(base: str) > str {
+    var s = base;
+    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    if (hasDatePrefix(s)) { s = s.sub(11); }
+    return s;
+}
+
+// blogDateDirectory parses a blog filename's YYYY-MM-DD- prefix into nested "YYYY/MM/DD"
+// URL segments, or null when the file carries no date prefix. The filename prefix
+// is the canonical URL date; renderBlogPost validates it against the frontmatter
+// `date` so the human-facing byline and the permalink can never drift apart.
+export fun blogDateDirectory(base: str) > str? {
+    var s = base;
+    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    if (!hasDatePrefix(s)) { return null; }
+    return s.sub(0, 4) + "/" + s.sub(5, 2) + "/" + s.sub(8, 2);
+}
+
+// blogURLPath is a post's gen-root-relative URL path below blog/: the date scope
+// followed by the title slug ("2026/07/01/hello-blog"), or just the slug for an
+// undated file. cleanURL and renderBlogPost both route through this so the depth
+// they compute (for climb-relative links) and the directory they write agree.
+export fun blogURLPath(base: str) > str {
+    final slug = blogSlug(base);
+    final dd = blogDateDirectory(base);
+    if (dd != null) { return dd + "/" + slug; }
+    return slug;
+}
+
+// cleanURL maps a docs-relative source path to its clean, extensionless gen-root
+// URL: drop the .md, drop a trailing index/README landing basename, drop any
+// build-artifact "gen" segment (so docs/manpage/gen/magus-run.md surfaces at
+// manpage/magus-run/, not manpage/gen/magus-run/), and end with a trailing slash.
+// "" for the home page (README.md). Every written page becomes <cleanURL>index.html.
+//   "documentation.md"          -> "documentation/"
+//   "modules/fs.md"             -> "modules/fs/"
+//   "codes/race/README.md"      -> "codes/race/"
+//   "manpage/gen/magus-run.md"  -> "manpage/magus-run/"
+export fun cleanURL(rel: str, blogDir: str) > str {
+    // Blog posts are date-scoped: blog/2026-07-01-slug.md -> blog/2026/07/01/slug/.
+    // The blog index (blog/index.md) is not a post, so it falls through to the
+    // generic landing rule below and stays at blog/. blogDir is passed in (not read
+    // from a global) so this stays a pure function of its arguments.
+    if (rel.startsWith(blogDir + "/") and rel != blogDir + "/index.md") {
+        return blogDir + "/" + blogURLPath(rel.sub((blogDir + "/").len())) + "/";
+    }
+    var base = rel;
+    if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
+    final parts = base.split("/");
+    var segs: [str] = mut [<str>];
+    var i = 0;
+    while (i < parts.len()) {
+        final p = parts[i];
+        final isLast = (i == parts.len() - 1);
+        if (p != "gen") {
+            if (isLast and (p == "index" or p == "_index" or p == "README")) {
+                // a landing basename becomes its directory's URL; drop it. "_index"
+                // is the marker convention autoindex and the /development/ pages use
+                // for a directory's own landing page, so it strips like "index".
+            } else {
+                segs.append(p);
+            }
+        }
+        i = i + 1;
+    }
+    if (segs.len() == 0) { return ""; }
+    return segs.join("/") + "/";
+}
+
+// cleanDepth is the number of path segments in a page's clean URL - its directory
+// depth below gen/'s root, i.e. how many "../" reach the root from it.
+export fun cleanDepth(rel: str, blogDir: str) > int {
+    final u = cleanURL(rel, blogDir);
+    if (u == "") { return 0; }
+    return u.split("/").len() - 1;   // "modules/fs/" -> ["modules","fs",""] -> 2
+}
+
+// Guards the depth of pages built off the "_index.md" landing-marker convention
+// (the /public/ autoindex tree and the /development/ pages). A stray "_index"
+// segment left in the clean URL inflates the "../" climb by one, sending every
+// asset and nav link one directory too high (a 404, unstyled page). "_index"
+// must strip exactly like "index"/"README".
+test "cleanURL strips the _index landing marker like index" {
+    assert.equal(cleanURL("public/_index.md", "blog"), "public/", "public/_index.md -> public/");
+    assert.equal(cleanDepth("public/_index.md", "blog"), 1, "public landing is one level deep");
+    assert.equal(cleanDepth("public/atom/_index.md", "blog"), 2, "public/atom landing is two levels deep");
+    assert.equal(cleanDepth("development/_index.md", "blog"), 1, "development landing is one level deep");
+}

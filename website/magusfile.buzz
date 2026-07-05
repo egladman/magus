@@ -17,7 +17,7 @@ import "scribe";
 magus.project({
     // scribe.buzz is listed explicitly: magus tracks affected/drift off this
     // sources glob, not the import graph, so it must be named to be watched.
-    "sources": ["magusfile.buzz", "scribe.buzz", "js/**/*.js", "*.css", "playground.html",
+    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html",
                 "tour/*.buzz",
                 "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
     "outputs": ["gen/**", "MAGUS.md"],

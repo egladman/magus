@@ -1,0 +1,234 @@
+// scribe_html.buzz - link rewriting for the directory-index layout, extracted from
+// scribe.buzz. These transform in-content link hrefs (resolve, map old->new URL,
+// re-relativize) and are pure string functions, so the module is self-contained and
+// unit-tested. It flat-imports scribe_text for splitPath/relativePath. scribe.buzz
+// flat-imports this module, so rewriteLinks and renderContentHTML call rewriteHref
+// unqualified as before.
+//
+// The goldmark-output taggers (externalLinks, tagAdmonition, tagMermaid, ...) stay
+// in scribe.buzz for now: they are regex passes over rendered HTML with no unit
+// coverage, so they want the full-render gate before moving.
+import "assert";
+import "scribe_text" as _;
+
+// resolvePath resolves a relative link against a gen-root-relative directory,
+// returning the normalized gen-root-relative target path ("" for the root). ".."
+// pops a segment; "." and empty segments are ignored.
+export fun resolvePath(fromDir: str, link: str) > str {
+    var segs = splitPath(fromDir);
+    foreach (part in link.split("/")) {
+        if (part != "" and part != ".") {
+            if (part == "..") {
+                if (segs.len() > 0) {
+                    var nw: [str] = mut [<str>];
+                    var i = 0;
+                    while (i < segs.len() - 1) { nw.append(segs[i]); i = i + 1; }
+                    segs = nw;
+                }
+            } else {
+                segs.append(part);
+            }
+        }
+    }
+    return segs.join("/");
+}
+
+// cleanTarget maps an OLD flat gen-root path (e.g. "manpage/gen/magus-ls.html",
+// "codes/race/index.html", "install.html", "index.html") to its NEW clean URL
+// ("manpage/magus-ls/", "codes/race/", "install/", ""): drop .html, drop a trailing
+// index/README landing, drop the "gen" build segment, add a trailing slash.
+// playground.html directorifies like any other page (a link to it lands on
+// "playground/", matching its written gen/playground/index.html).
+export fun cleanTarget(oldPath: str) > str {
+    final segs = splitPath(oldPath);
+    if (segs.len() == 0) { return ""; }
+    var keep: [str] = mut [<str>];
+    var i = 0;
+    while (i < segs.len()) {
+        var p = segs[i];
+        final isLast = (i == segs.len() - 1);
+        if (isLast and p.endsWith(".html")) { p = p.sub(0, p.len() - 5); }
+        if (p != "gen") {
+            if (isLast and (p == "index" or p == "README")) {
+                // landing basename -> its directory
+            } else {
+                keep.append(p);
+            }
+        }
+        i = i + 1;
+    }
+    if (keep.len() == 0) { return ""; }
+    return keep.join("/") + "/";
+}
+
+// rewriteHref transforms one in-content link for the directory-index layout by full
+// path resolution: resolve it against the page's OLD flat directory to the old
+// target, map that target to its NEW clean URL, then re-express it relative to the
+// page's NEW directory. This is correct for siblings, cross-level links, landing
+// pages, and the gen-flatten uniformly (a naive fixed "../" count is not, because
+// the flatten changes depth). External/anchor/mailto links pass through; a
+// #fragment is preserved; asset (non-.html) links are re-based but not cleaned.
+export fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
+    if (h.startsWith("http://") or h.startsWith("https://") or h.startsWith("//")
+        or h.startsWith("#") or h.startsWith("mailto:")) { return h; }
+    var path = h;
+    var frag = "";
+    final hash = h.indexOf("#");
+    if (hash != null) { path = h.sub(0, hash); frag = h.sub(hash); }
+    if (path == "") { return h; }   // pure fragment already handled; be safe
+
+    final oldTarget = resolvePath(oldDir, path);
+    if (path.endsWith(".html")) {
+        return relativePath(newDir, cleanTarget(oldTarget)) + frag;
+    }
+    // Non-page (asset) link: keep the file as-is, only re-base for the moved page.
+    return relativePath(newDir, oldTarget) + frag;
+}
+
+// tagRunnable is a post-process pass over rendered markdown that finds
+// "<!-- run -->" comments the author placed above a Buzz code fence and swaps
+// the following <pre> with <pre data-runnable="true">, so the client-side Run
+// mechanism (run-example.js) can find opt-in blocks without an author-visible
+// info-string extension goldmark doesn't natively surface. The comment itself
+// is dropped from the output.
+export fun tagRunnable(html: str) > str {
+    // Two opt-in markers, each tagging the following <pre> with the attributes a
+    // client mode reads. "<!-- run -->" is the plain evalBuzz path (module
+    // examples: print output). "<!-- run-recorder -->" is the dry-run path
+    // (spell examples: `import "magus/spell/go"; go["go-build"]()` records a
+    // trace instead of executing), which run-example.js routes to
+    // evalBuzzWithRecorder on seeing data-recorder. run-recorder is matched first
+    // so its longer marker isn't mistaken for a bare run marker.
+    final recTagged = tagRunnableMarker(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
+    return tagRunnableMarker(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
+}
+
+// tagRunnableMarker swaps the <pre> that follows each marker comment with openTag
+// (the marker is dropped). A marker not immediately followed by a fence is simply
+// removed, so the block renders normally.
+export fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(marker);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx + marker.len());
+        // Skip whitespace after the comment (typically a newline). The next
+        // non-whitespace token should be "<pre>" or "<pre ..."; tag it.
+        var i = 0;
+        while (i < rest.len()) {
+            final b = rest.byte(i);
+            if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
+            i = i + 1;
+        }
+        if (rest.sub(i, 5) == "<pre>") {
+            buf = buf + rest.sub(0, i) + openTag;
+            rest = rest.sub(i + 5);
+        } else {
+            // Not immediately followed by a fence — drop the marker; the block
+            // renders normally.
+            buf = buf + rest.sub(0, i);
+            rest = rest.sub(i);
+        }
+        idx = rest.indexOf(marker);
+    }
+    return buf + rest;
+}
+
+// externalLinks adds rel="noopener noreferrer" and target="_blank" to every
+// http(s) link that doesn't already have them, and marks the anchor with a
+// data-external attribute so CSS can add a small "leaves this site" glyph via
+// ::after. Deterministic transform over rendered HTML.
+export fun externalLinks(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("<a href=\"http");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx);
+        // Locate the closing ">" of the opening tag.
+        final closeIdx = rest.indexOf(">");
+        if (closeIdx == null) { return buf + rest; }
+        var tag = rest.sub(0, closeIdx + 1);
+        var attrs = "";
+        if (tag.indexOf("rel=") == null) { attrs = attrs + " rel=\"noopener noreferrer\""; }
+        if (tag.indexOf("target=") == null) { attrs = attrs + " target=\"_blank\""; }
+        if (tag.indexOf("data-external") == null) { attrs = attrs + " data-external"; }
+        if (attrs != "") {
+            // Insert before the closing ">".
+            tag = tag.sub(0, tag.len() - 1) + attrs + ">";
+        }
+        buf = buf + tag;
+        rest = rest.sub(closeIdx + 1);
+        idx = rest.indexOf("<a href=\"http");
+    }
+    return buf + rest;
+}
+
+// lazyImages adds loading="lazy" decoding="async" to every in-content <img>
+// tag that doesn't already carry a loading attribute. The homepage hero stays
+// eager because renderRoot's markup carries loading="high"/fetchpriority which
+// this pass leaves alone. Deterministic transform.
+export fun lazyImages(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf("<img ");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx);
+        final closeIdx = rest.indexOf(">");
+        if (closeIdx == null) { return buf + rest; }
+        var tag = rest.sub(0, closeIdx + 1);
+        // Only add if not already present (author markup wins).
+        if (tag.indexOf("loading=") == null and tag.indexOf("fetchpriority=") == null) {
+            tag = "<img loading=\"lazy\" decoding=\"async\" " + tag.sub(5);
+        }
+        buf = buf + tag;
+        rest = rest.sub(closeIdx + 1);
+        idx = rest.indexOf("<img ");
+    }
+    return buf + rest;
+}
+
+test "tagRunnable tags a fenced block after a run marker" {
+    assert.equal(tagRunnable("<!-- run -->\n<pre>code</pre>"),
+        "\n<pre data-runnable=\"true\">code</pre>", "marker dropped, pre tagged");
+    assert.equal(tagRunnable("<!-- run --> text"), " text", "marker not before a fence is dropped");
+    assert.equal(tagRunnable("<pre>plain</pre>"), "<pre>plain</pre>", "no marker, unchanged");
+}
+
+test "externalLinks marks http anchors" {
+    assert.equal(externalLinks("<a href=\"https://x.com\">y</a>"),
+        "<a href=\"https://x.com\" rel=\"noopener noreferrer\" target=\"_blank\" data-external>y</a>", "adds all three");
+    assert.equal(externalLinks("<a href=\"/docs/\">y</a>"), "<a href=\"/docs/\">y</a>", "internal link untouched");
+}
+
+test "lazyImages adds lazy loading to bare img tags" {
+    assert.equal(lazyImages("<img src=\"a.png\">"),
+        "<img loading=\"lazy\" decoding=\"async\" src=\"a.png\">", "adds loading + decoding");
+    assert.equal(lazyImages("<img loading=\"high\" src=\"hero.png\">"),
+        "<img loading=\"high\" src=\"hero.png\">", "author loading wins");
+}
+
+test "resolvePath normalizes .. and . against a base dir" {
+    assert.equal(resolvePath("a/b", "../c"), "a/c", "up one, then into c");
+    assert.equal(resolvePath("a/b/c", "../../x"), "a/x", "up two");
+    assert.equal(resolvePath("docs", "img.png"), "docs/img.png", "plain descent");
+}
+
+test "cleanTarget maps old flat paths to clean URLs" {
+    assert.equal(cleanTarget("manpage/gen/magus-ls.html"), "manpage/magus-ls/", "drops .html and gen");
+    assert.equal(cleanTarget("codes/race/index.html"), "codes/race/", "drops index landing");
+    assert.equal(cleanTarget("install.html"), "install/", "top-level page");
+    assert.equal(cleanTarget("index.html"), "", "home page");
+}
+
+test "rewriteHref passes through external and fragment links" {
+    assert.equal(rewriteHref("https://example.com", "docs", "docs/page"), "https://example.com", "external");
+    assert.equal(rewriteHref("#section", "docs", "docs/page"), "#section", "pure fragment");
+}
+
+test "rewriteHref re-relativizes an internal page link" {
+    assert.equal(rewriteHref("sibling.html", "docs/guide", "docs/guide/page"), "../sibling/",
+        "sibling .html resolves, cleans, and re-relativizes");
+}
