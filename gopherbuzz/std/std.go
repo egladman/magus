@@ -32,7 +32,7 @@ import (
 
 // Modules is the single source of truth for the modules gopherbuzz bundles: the
 // upstream-faithful stdlib (buzz.LabelUpstream) plus gopherbuzz's own test surface
-// (buzz.LabelExtra). Register provides every entry; a caller filters by label
+// (buzz.LabelGopherbuzz). Register provides every entry; a caller filters by label
 // for a subset. Edit this table to add a module. The registration shape is
 // buzz.Module (see gopherbuzz/module.go), shared with host embedders.
 var Modules = []buzz.Module{
@@ -53,10 +53,10 @@ var Modules = []buzz.Module{
 	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("serialize", serializeModule)},
 	{Name: "buffer", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("buffer", bufferModule)},
 	{Name: "ffi", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("ffi", ffiModule)},
-	{Name: "assertcore", Labels: []string{buzz.LabelExtra}, Bind: synthetic("assertcore", assertCoreModule)},
-	{Name: "assert", Labels: []string{buzz.LabelExtra}, Bind: source("assert", assertSource)},
-	{Name: "suite", Labels: []string{buzz.LabelExtra}, Bind: source("suite", suiteSource)},
-	{Name: "testing", Labels: []string{buzz.LabelExtra}, Bind: source("testing", testingSource)},
+	{Name: "assertcore", Labels: []string{buzz.LabelGopherbuzz}, Bind: synthetic("assertcore", assertCoreModule)},
+	{Name: "assert", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("assert", assertSource)},
+	{Name: "suite", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("suite", suiteSource)},
+	{Name: "testing", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("testing", testingSource)},
 }
 
 // synthetic returns a Bind that installs a synthetic (host-value) module built by

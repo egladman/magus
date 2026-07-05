@@ -42,14 +42,16 @@ type ModuleEnv struct {
 	Out io.Writer
 }
 
-// Well-known module labels. Labels are free-form strings; these are the vocabulary
-// gopherbuzz applies to its own stdlib. A host defines additional labels as needed.
+// Well-known module labels, classifying a module by origin. Labels are free-form
+// strings; these are the vocabulary gopherbuzz applies to its own stdlib, and a
+// host defines additional labels as needed (e.g. "host", "wasm").
 const (
-	// LabelUpstream marks a clean-room reimplementation of a module in upstream
-	// Buzz's standard library (names, signatures, and semantics track upstream).
+	// LabelUpstream marks a module that tracks upstream Buzz's standard library: a
+	// clean-room reimplementation whose names, signatures, and semantics match it.
 	LabelUpstream = "upstream"
-	// LabelExtra marks a gopherbuzz-original module with no upstream counterpart.
-	LabelExtra = "extra"
+	// LabelGopherbuzz marks a module that originates in gopherbuzz, with no
+	// counterpart in upstream Buzz.
+	LabelGopherbuzz = "gopherbuzz"
 )
 
 // HasLabel reports whether m carries label.
