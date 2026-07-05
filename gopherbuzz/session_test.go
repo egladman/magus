@@ -448,6 +448,70 @@ export fun hello(name: str) > str { return "hi " + name; }
 	assert.Equal(t, "hi b", v.String(), "qualified greet\\hello")
 }
 
+// TestImportBindsDeclaredMultiSegmentNamespace covers the upstream-conformance
+// fix: a module's exports are reachable under its full declared `namespace a\b`
+// path, not only the import-path basename. The import path (modx) deliberately
+// differs from the namespace (alpha\beta) so the declared-namespace binding is
+// what resolves the access, not the basename object.
+func TestImportBindsDeclaredMultiSegmentNamespace(t *testing.T) {
+	ctx := context.Background()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	s.SetSourceModule("modx", `
+namespace alpha\beta;
+export fun hello(name: str) > str { return "hi " + name; }
+`)
+	require.NoError(t, s.Exec(ctx, `import "modx";`), "import")
+
+	v, err := s.Eval(ctx, `return alpha\beta\hello("z")`)
+	require.NoError(t, err, "declared-namespace call alpha\\beta\\hello")
+	assert.Equal(t, "hi z", v.String(), "alpha\\beta\\hello")
+}
+
+// TestImportSiblingNamespacesSharePrefix verifies two modules whose declared
+// namespaces share a leading segment (shared\one, shared\two) both resolve —
+// the second must merge into the `shared` object the first created, not clobber
+// it. Matches upstream, where distinct full namespaces coexist under a prefix.
+func TestImportSiblingNamespacesSharePrefix(t *testing.T) {
+	ctx := context.Background()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	s.SetSourceModule("sib1", `
+namespace shared\one;
+export final a = "A";
+`)
+	s.SetSourceModule("sib2", `
+namespace shared\two;
+export final b = "B";
+`)
+	require.NoError(t, s.Exec(ctx, `import "sib1"; import "sib2";`), "import")
+
+	v, err := s.Eval(ctx, `return shared\one\a`)
+	require.NoError(t, err, "shared\\one\\a")
+	assert.Equal(t, "A", v.String(), "shared\\one\\a")
+	v, err = s.Eval(ctx, `return shared\two\b`)
+	require.NoError(t, err, "shared\\two\\b (merged into existing `shared`)")
+	assert.Equal(t, "B", v.String(), "shared\\two\\b")
+}
+
+// TestDuplicateNamespaceErrors verifies gopherbuzz now rejects two imports that
+// declare the same namespace, matching upstream's "namespace already exists"
+// (E92). Before the fix, gopherbuzz silently accepted the second and failed
+// later with a confusing "undefined".
+func TestDuplicateNamespaceErrors(t *testing.T) {
+	ctx := context.Background()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	s.SetSourceModule("d1", `
+namespace dup;
+export final x = "1";
+`)
+	s.SetSourceModule("d2", `
+namespace dup;
+export final y = "2";
+`)
+	err := s.Exec(ctx, `import "d1"; import "d2";`)
+	require.Error(t, err, "duplicate namespace must error")
+	assert.Contains(t, err.Error(), "already exists", "duplicate-namespace diagnostic")
+}
+
 // TestPrivateGlobalsDoNotCollideAcrossModules guards the per-module mangling of
 // private top-level names. Two namespaced modules each declare a private `var
 // panel` and a private `var items`; in SharedGlobals mode every module's top-level

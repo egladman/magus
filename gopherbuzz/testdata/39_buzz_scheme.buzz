@@ -1,0 +1,6 @@
+// @expect: 42
+// The `buzz:` import scheme (upstream Buzz's package manager) names a built-in
+// stdlib module: `import "buzz:std"` resolves the same module as `import "std"`
+// and binds it under the bare name, so `std\parseInt` still resolves.
+import "buzz:std";
+final __r = std\parseInt("42")!;

@@ -1652,6 +1652,24 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 			return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, yieldAnnot)
 		}
 	}
+	// Expression-body function: `fun f(x: int) > int => expr;` desugars to a
+	// block that returns expr, matching upstream Buzz's arrow-body sugar. It
+	// works with or without an explicit return type (upstream permits
+	// `fun bright(text: str) => color(...)`, no `>` clause), so this check sits
+	// after the optional return/error/yield annotations and before the block form.
+	if p.check(token.FatArrow) {
+		arrow := p.advance()
+		expr, e := p.parseExpr()
+		if e != nil {
+			return nil, nil, "", "", nil, e
+		}
+		if p.check(token.Semicolon) {
+			p.advance()
+		}
+		pos := ast.Pos{Line: arrow.Line, Col: arrow.Col}
+		body = &ast.BlockStmt{Pos: pos, Stmts: []ast.Node{&ast.ReturnStmt{Pos: pos, Value: expr}}}
+		return params, paramAnnots, retAnnot, yieldAnnot, body, nil
+	}
 	body, err = p.parseBlock()
 	if err != nil {
 		return nil, nil, "", "", nil, err

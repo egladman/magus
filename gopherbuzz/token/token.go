@@ -74,6 +74,7 @@ const (
 	DotDot     // ..
 	ErrArrow   // !>
 	YieldArrow // *>
+	FatArrow   // =>
 	Backslash  // \
 	Amp        // &
 
@@ -182,6 +183,8 @@ func (k Kind) String() string {
 		return "'.'"
 	case Assign:
 		return "'='"
+	case FatArrow:
+		return "'=>'"
 	case Eq:
 		return "'=='"
 	case Neq:
@@ -449,6 +452,9 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 	case '=':
 		if l.peekByte() == '=' {
 			return simple(Eq, 2), nil
+		}
+		if l.peekByte() == '>' {
+			return simple(FatArrow, 2), nil
 		}
 		return simple(Assign, size), nil
 	case '!':
