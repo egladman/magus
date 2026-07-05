@@ -31,9 +31,6 @@ import (
 	"github.com/egladman/gopherbuzz/vm"
 )
 
-// version is the Buzz language version gopherbuzz targets.
-const version = "0.5.0"
-
 // init pins the interpreter to the process's main OS thread. Scripts that
 // zdef() into single-thread-affine C frameworks (macOS AppKit above all)
 // must issue those calls from the main thread; without the lock the main
@@ -72,7 +69,7 @@ func run(argv []string) error {
 		return nil
 	}
 	if o.showVer {
-		fmt.Printf("buzz %s (gopherbuzz, bytecode v%d)\n", version, vm.BytecodeVersion)
+		fmt.Printf("buzz %s (gopherbuzz, upstream %s, bytecode v%d)\n", buzz.LanguageVersion, buzz.UpstreamRef, vm.BytecodeVersion)
 		return nil
 	}
 
