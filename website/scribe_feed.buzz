@@ -1,27 +1,15 @@
-// scribe_feed.buzz - XML serialization and date normalization for the sitemap and
-// Atom feeds, extracted from scribe.buzz. Every function is pure (string in, string
-// out; no site state, no IO), so the module is self-contained and unit-tested.
-// scribe.buzz flat-imports it (`import "scribe_feed" as _`), so its many call sites
-// (xmlElement alone is used ~16 times building feed entries) are unchanged.
+// scribe_feed.buzz - pure XML builders and date normalization for the sitemap and
+// Atom feeds. Flat-imported by scribe.buzz (`import "scribe_feed" as _`).
 import "assert";
 
-// escapeXml is the XML-safe form of escapeAttr for feed content (Atom entries,
-// autoindex descriptions): the same five-entity substitution but with & handled
-// last so pre-encoded entities don't get double-encoded.
+// escapeXml is escapeAttr's XML form (five entities, & last to avoid double-encoding).
 export fun escapeXml(s: str) > str {
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         .replace("\"", "&quot;").replace("'", "&apos;");
 }
 
-// Minimal XML construction for the sitemap and Atom feeds. Every text body and
-// attribute value funnels through escapeXml, so a stray "&" or "<" in a URL, title,
-// or changelog body can't produce malformed XML (the old hand-concatenation escaped
-// title/summary but left href/id/loc raw). Container tags with their own namespaces
-// (<feed>, <urlset>, <entry>, <url>) stay written inline; these cover the leaves.
-//   xmlAttribute("rel", "self")                 -> ` rel="self"`  (leading space; escaped)
-//   xmlElement("title", "magus blog")           -> `<title>magus blog</title>`
-//   xmlElementAttribute("summary", xmlAttribute("type","text"), body) -> `<summary type="text">body</summary>`
-//   xmlSelfClose("link", xmlAttribute("href", u)) -> `<link href="u"/>`
+// Minimal XML leaves; every body and value funnels through escapeXml. Container tags
+// with their own namespaces (<feed>, <urlset>, <entry>, <url>) stay written inline.
 export fun xmlAttribute(name: str, value: str) > str {
     return " " + name + "=\"" + escapeXml(value) + "\"";
 }
@@ -35,9 +23,7 @@ export fun xmlSelfClose(tag: str, attrs: str) > str {
     return "<" + tag + attrs + "/>";
 }
 
-// atomDate normalizes a frontmatter date (YYYY-MM-DD or full RFC3339) to the
-// RFC3339 UTC form Atom requires. A bare date becomes T00:00:00Z; anything
-// already containing "T" passes through (buildCommits produces full RFC3339).
+// atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -> T00:00:00Z).
 export fun atomDate(d: str) > str {
     if (d == "") { return ""; }
     if (d.indexOf("T") == null) { return d + "T00:00:00Z"; }

@@ -1,19 +1,13 @@
-// scribe_text.buzz - pure text, path, and URL helpers extracted from scribe.buzz.
-// These touch no site state (no filesystem, config, or the shared Site singleton),
-// so they live here as a self-contained, unit-tested module. scribe.buzz flat-imports
-// them (`import "scribe_text" as _`), leaving its call sites unchanged.
-//
-// This is the first slice of breaking the monolithic generator into focused modules.
-// Run the tests with the buzz-test target: `magus buzz -t --embedded scribe.buzz`.
+// scribe_text.buzz - pure text/path/URL helpers. No site state, so unit-tested here
+// and flat-imported by scribe.buzz (`import "scribe_text" as _`).
 import "assert";
 
-// escapeAttr makes s safe to drop inside a double-quoted HTML attribute.
+// escapeAttr makes s safe inside a double-quoted HTML attribute.
 export fun escapeAttr(s: str) > str {
     return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
 }
 
-// splitPath splits a gen-root-relative path into its non-empty segments, dropping
-// "." segments (a trailing slash yields no empty tail segment).
+// splitPath splits a gen-root-relative path into non-empty segments, dropping ".".
 export fun splitPath(p: str) > [str] {
     var segs: [str] = mut [<str>];
     foreach (s in p.split("/")) {
@@ -22,9 +16,8 @@ export fun splitPath(p: str) > [str] {
     return segs;
 }
 
-// relativePath returns the relative path from fromDir to toUrl for the directory-index
-// layout: a trailing slash means toUrl is a directory (its link keeps the slash),
-// anything else is a file. "./" when they resolve to the same place.
+// relativePath returns the relative path from fromDir to toUrl (directory-index layout:
+// a trailing slash means toUrl is a directory). "./" when they resolve to the same place.
 export fun relativePath(fromDir: str, toUrl: str) > str {
     final fromSegs = splitPath(fromDir);
     final toSegs = splitPath(toUrl);
@@ -44,9 +37,7 @@ export fun relativePath(fromDir: str, toUrl: str) > str {
     return rel;
 }
 
-// firstPathSegment returns the leading path segment of a clean URL: "spells/go/"
-// returns "spells", a top-level page like "targets/" returns "targets", "" (home)
-// returns "".
+// firstPathSegment returns the leading segment of a clean URL ("spells/go/" -> "spells").
 export fun firstPathSegment(url: str) > str {
     if (url == "") { return ""; }
     final i = url.indexOf("/");
@@ -54,9 +45,7 @@ export fun firstPathSegment(url: str) > str {
     return url.sub(0, i);
 }
 
-// sharedTagCount counts tags common to two ||-joined tag strings - the strongest
-// relatedness signal (two pages carrying the same topical tags are about the same
-// thing). O(n*m) over short lists, which is fine for a handful of tags per page.
+// sharedTagCount counts tags common to two ||-joined tag strings (relatedness signal).
 export fun sharedTagCount(aJoined: str, bJoined: str) > int {
     if (aJoined == "" or bJoined == "") { return 0; }
     final aList = aJoined.split("||");
@@ -72,17 +61,13 @@ export fun sharedTagCount(aJoined: str, bJoined: str) > int {
     return n;
 }
 
-// pad4 zero-pads a small non-negative int to four digits so scores compare
-// lexically the same way they compare numerically (renderRelated sorts by a string
-// key). Scores stay well under 1000, so four digits is ample headroom.
+// pad4 zero-pads a small non-negative int to four digits so scores sort lexically.
 export fun pad4(n: int) > str {
     var s = "{n}";
     while (s.len() < 4) { s = "0" + s; }
     return s;
 }
 
-// Tests for the extracted helpers. They register but do not run during a normal
-// render; the buzz-test target runs them.
 test "firstPathSegment returns a clean URL's leading segment" {
     assert.equal(firstPathSegment("spells/go/"), "spells", "spells/go/ -> spells");
     assert.equal(firstPathSegment("targets"), "targets", "no slash -> whole string");
