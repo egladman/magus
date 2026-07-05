@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
@@ -30,7 +31,7 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 		return ispell.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
 	}
 	src := string(data)
-	spec, err := extractDescriptorWithModules(ctx, src)
+	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))
 	if err != nil {
 		return ispell.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
 	}
@@ -58,15 +59,39 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 // extractDescriptorWithModules runs the spell module in a session that has the std
 // and extra host modules registered, then resolves its mgs_ functions. This is the
 // load-time twin of callBuzzSpellFunc's session setup, so a spell that imports
-// host modules at top level loads as well as it runs.
-func extractDescriptorWithModules(ctx context.Context, src string) (ispell.Descriptor, error) {
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+// host modules at top level loads as well as it runs. dir is the spell file's own
+// directory, added to the import search path so a spell that imports sibling helper
+// modules (e.g. scribe.buzz's `import "scribe_text"`) resolves during discovery.
+func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.Descriptor, error) {
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(spellSearchPaths(dir)...))
 	defer sess.Close()
 	registerMagusModules(ctx, sess)
 	if err := sess.Exec(ctx, src); err != nil {
 		return ispell.Descriptor{}, err
 	}
 	return ispell.Resolve(ctx, sess)
+}
+
+// spellSearchPaths returns the import search path templates a workspace-local spell
+// resolves against. Upstream Buzz resolves a plain (unprefixed, non-absolute) import
+// relative to the importing file's own directory (Parser.resolveImport:
+// join(dirname(script_name), path)), so these are the upstream project-relative
+// layouts rooted at the spell's own dir. No cwd or system-path fallback: upstream does
+// not consult them for a plain import, and magus resolves imports only within the
+// workspace to keep a build hermetic (matching magusSearchPaths). `buzz:` stdlib and
+// registered host modules resolve ahead of this, via the module resolver.
+func spellSearchPaths(dir string) []string {
+	templates := []string{
+		"?.buzz",
+		filepath.Join("?", "main.buzz"),
+		filepath.Join("?", "src", "main.buzz"),
+		filepath.Join("?", "src", "?.buzz"),
+	}
+	paths := make([]string, 0, len(templates))
+	for _, t := range templates {
+		paths = append(paths, filepath.Join(dir, t))
+	}
+	return paths
 }
 
 // newBuzzSpellInvoker dispatches a request against a Buzz spell. A declared command
