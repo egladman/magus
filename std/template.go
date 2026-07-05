@@ -28,6 +28,13 @@ var Template = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    TemplateRender,
 		},
+		{
+			Name:    "render_partials",
+			Doc:     "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
+			Args:    []Arg{{Name: "template", Type: TypeString}, {Name: "data", Type: TypeAny}, {Name: "partials", Type: TypeStringMap}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    TemplateRenderPartials,
+		},
 	},
 }
 
@@ -36,6 +43,17 @@ func TemplateRender(_ context.Context, tmpl string, data any) (string, error) {
 	out, err := mustache.Render(tmpl, data)
 	if err != nil {
 		return "", fmt.Errorf("template.render: %w", err)
+	}
+	return out, nil
+}
+
+// TemplateRenderPartials renders tmpl against data with Mustache semantics,
+// resolving {{>name}} includes against partials (a name->template-string map).
+// A StaticProvider drives resolution, so partials may reference one another.
+func TemplateRenderPartials(_ context.Context, tmpl string, data any, partials map[string]string) (string, error) {
+	out, err := mustache.RenderPartials(tmpl, &mustache.StaticProvider{Partials: partials}, data)
+	if err != nil {
+		return "", fmt.Errorf("template.renderPartials: %w", err)
 	}
 	return out, nil
 }
