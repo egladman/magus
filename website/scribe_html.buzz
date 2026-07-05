@@ -295,6 +295,118 @@ export fun aliasStub(rel: str) > str {
         + "</body>\n</html>\n";
 }
 
+// tagCodeTitle finds "<!-- code-title: FILENAME -->" comments and prepends a
+// <figcaption> title bar to the following <pre> block, wrapping both in a
+// <figure class="code-block-titled">. Authoring:
+//   <!-- code-title: magusfile.buzz -->
+//   ```buzz
+//   ...
+//   ```
+// Goldmark drops multi-word fence info strings, so the marker lives in HTML
+// space rather than in the fence itself. The comment is dropped from output.
+export fun tagCodeTitle(html: str) > str {
+    final open = "<!-- code-title:";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx + open.len());
+        // Read the title text up to the marker's closing "-->".
+        final closeMarker = rest.indexOf("-->");
+        if (closeMarker == null) { return buf + open + rest; }
+        final title = rest.sub(0, closeMarker).trim();
+        rest = rest.sub(closeMarker + 3);
+        // Skip whitespace, then wrap the next <pre>...</pre> in a figure.
+        var i = 0;
+        while (i < rest.len()) {
+            final b = rest.byte(i);
+            if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
+            i = i + 1;
+        }
+        // Check for <pre with any attributes.
+        if (rest.sub(i, 4) == "<pre") {
+            final endPre = rest.indexOf("</pre>");
+            if (endPre != null) {
+                final preBlock = rest.sub(i, endPre + 6 - i);
+                buf = buf + rest.sub(0, i)
+                    + "<figure class=\"code-block-titled\"><figcaption>" + title + "</figcaption>"
+                    + preBlock + "</figure>";
+                rest = rest.sub(endPre + 6);
+                idx = rest.indexOf(open);
+                continue;
+            }
+        }
+        buf = buf + rest.sub(0, i);
+        rest = rest.sub(i);
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
+// tagAdmonition converts GitHub-alert-syntax blockquotes to styled callouts:
+// each "<blockquote>\n<p>[!TYPE]\n..." becomes a <div class="admonition
+// admonition-<type>"> with a heading and the rest of the paragraph. Recognized
+// TYPES: NOTE / TIP / IMPORTANT / WARNING / CAUTION (the GitHub set). Anything
+// else passes through as a normal blockquote. Fully static, no JS.
+export fun tagAdmonition(html: str) > str {
+    var buf = "";
+    var rest = html;
+    while (true) {
+        final open = rest.indexOf("<blockquote>\n<p>[!");
+        if (open == null) { return buf + rest; }
+        buf = buf + rest.sub(0, open);
+        rest = rest.sub(open);
+        final tagEnd = rest.indexOf("]");
+        if (tagEnd == null) { return buf + rest; }
+        // rest starts at "<blockquote>\n<p>[!"; the type name runs from index 18
+        // (past "<blockquote>\n<p>[!") to tagEnd.
+        final typ = rest.sub(18, tagEnd - 18);
+        var kind = "";
+        if (typ == "NOTE") { kind = "note"; }
+        if (typ == "TIP") { kind = "tip"; }
+        if (typ == "IMPORTANT") { kind = "important"; }
+        if (typ == "WARNING") { kind = "warning"; }
+        if (typ == "CAUTION") { kind = "caution"; }
+        if (kind == "") {
+            // Unrecognized type; leave the blockquote alone and advance past it.
+            buf = buf + rest.sub(0, 12);   // len("<blockquote>")
+            rest = rest.sub(12);
+        } else {
+            final closeBq = rest.indexOf("</blockquote>");
+            if (closeBq == null) { return buf + rest; }
+            // Inner content: everything between the opening blockquote and the
+            // marker's line-ending newline, up to </blockquote>. Strip the
+            // marker paragraph's leading "[!TYPE]\n" from the first <p>.
+            var inner = rest.sub(12, closeBq - 12);        // between <blockquote> and </blockquote>
+            // Drop the leading "\n<p>[!TYPE]\n" so what's left starts with the
+            // real prose the author wrote.
+            final prefix = "\n<p>[!" + typ + "]\n";
+            if (inner.startsWith(prefix)) {
+                inner = "\n<p>" + inner.sub(prefix.len());
+            }
+            var label = typ.sub(0, 1) + typ.sub(1).lower();  // Note / Tip / ...
+            buf = buf + "<div class=\"admonition admonition-" + kind + "\">"
+                + "<p class=\"admonition-title\">" + label + "</p>"
+                + inner
+                + "</div>";
+            rest = rest.sub(closeBq + 13);   // len("</blockquote>")
+        }
+    }
+    return buf + rest;
+}
+
+// renderContentHTML is the ONE post-processing pipeline every page render runs: it
+// rewrites a rendered-markdown fragment's in-content links from the page's old flat
+// directory (oldDir) to its new clean directory (newDir), then applies the ordered
+// content transforms - runnable markers, admonitions, code titles, lazy images,
+// external-link marks, and mermaid. Routing renderRoot, renderFile, and
+// renderBlogPost through this is what keeps a transform (like the runnable Run
+// buttons) from being applied on one path and silently forgotten on another.
+export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
+    return tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir)))))));
+}
+
 test "tagMermaid wraps a mermaid fence and passes other html through" {
     assert.equal(tagMermaid("<pre><code class=\"language-mermaid\">graph</code></pre>"),
         "<div class=\"mermaid-src\"><pre><code class=\"language-mermaid\">graph</code></pre>"
