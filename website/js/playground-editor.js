@@ -13,17 +13,21 @@
 // buzz.wasm); see website/package.json `build-editor`. Only the playground page
 // loads it.
 
-import { EditorState } from "@codemirror/state";
+import { EditorState, StateField } from "@codemirror/state";
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine,
-  highlightActiveLineGutter, drawSelection, hoverTooltip,
+  highlightActiveLineGutter, drawSelection, hoverTooltip, showTooltip,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
   StreamLanguage, syntaxHighlighting, HighlightStyle, bracketMatching, indentUnit,
+  indentOnInput, foldGutter, codeFolding, foldKeymap,
 } from "@codemirror/language";
-import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {
+  autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap, snippetCompletion,
+} from "@codemirror/autocomplete";
 import { linter, lintKeymap, lintGutter, forceLinting } from "@codemirror/lint";
+import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
 
 // The reserved Buzz keywords, mirrored from gopherbuzz/token (token.Keywords).
@@ -110,6 +114,50 @@ const editorTheme = EditorView.theme({
   ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
     fontFamily: "var(--pico-font-family-monospace)",
   },
+  ".cm-buzz-sig": { padding: "0.35rem 0.55rem", maxWidth: "34rem", fontSize: "0.78rem" },
+  ".cm-buzz-sig-title": { fontFamily: "var(--pico-font-family-monospace)", fontWeight: "600" },
+  ".cm-buzz-sig-doc": { marginTop: "0.25rem", color: "var(--pico-muted-color)", whiteSpace: "normal" },
+
+  // Diagnostics, retuned to Pico's calm palette. CodeMirror's defaults are loud:
+  // a filled red-orange circle in the gutter (drawn via `content: url(<svg>)` on
+  // the marker) and a red wavy underline. Both are replaced with Pico's semantic
+  // error color (--pico-del-color) at a lower visual weight - a slim rounded bar
+  // instead of a dot, and a thin native wavy underline.
+  ".cm-gutter-lint": { width: "0.7em" },
+  ".cm-gutter-lint .cm-gutterElement": { padding: "0" },
+  ".cm-lint-marker": { width: "auto", height: "auto" },
+  ".cm-lint-marker-error": {
+    content: "normal", // drop the default circle glyph so the element renders as a bar
+    display: "block",
+    width: "3px",
+    height: "1.05em",
+    margin: "0.28em auto 0",
+    borderRadius: "2px",
+    backgroundColor: "var(--pico-del-color)",
+    opacity: "0.85",
+  },
+  ".cm-lintRange-error": {
+    backgroundImage: "none", // replace the wavy SVG with a themed native underline
+    textDecoration: "underline wavy var(--pico-del-color)",
+    textDecorationThickness: "1px",
+    textUnderlineOffset: "3px",
+  },
+  ".cm-tooltip.cm-tooltip-lint": {
+    padding: "0",
+    borderColor: "var(--pico-muted-border-color)",
+  },
+  ".cm-diagnostic": {
+    padding: "0.4rem 0.6rem",
+    marginLeft: "0",
+    fontFamily: "var(--pico-font-family-monospace)",
+    fontSize: "0.76rem",
+    lineHeight: "1.5",
+    whiteSpace: "normal",
+    maxWidth: "34rem",
+  },
+  ".cm-diagnostic-error": {
+    borderLeft: "3px solid var(--pico-del-color)",
+  },
 });
 
 // utf8Offset converts a CodeMirror position (a UTF-16 code-unit index into the
@@ -146,13 +194,60 @@ function buzzCompletionSource(ctx) {
   const from = ctx.pos - (items[0].replace || 0);
   return {
     from,
-    options: items.map((it) => ({
-      label: it.label,
-      type: cmKind(it.kind),
-      detail: it.detail || undefined,
-      info: it.doc || undefined,
-    })),
+    options: items.map((it) => {
+      const opt = {
+        label: it.label,
+        type: cmKind(it.kind),
+        detail: it.detail || undefined,
+        info: it.doc || undefined,
+      };
+      // Methods complete to a call: insert `name()` and drop the cursor between the
+      // parens (a snippet field), so the follow-on signature help has somewhere to fire.
+      if (it.kind === "method") return snippetCompletion(it.label + "(${})", opt);
+      return opt;
+    }),
     validFor: /^[A-Za-z0-9_]*$/,
+  };
+}
+
+// buzzSignatureHelp is a StateField that floats the enclosing call's signature above
+// the cursor, sourced from the wasm language service. It recomputes on every edit or
+// caret move and shows nothing when the cursor isn't inside a resolvable call.
+const buzzSignatureHelp = StateField.define({
+  create: signatureTooltip,
+  update(value, tr) {
+    if (tr.docChanged || tr.selection) return signatureTooltip(tr.state);
+    return value;
+  },
+  provide: (f) => showTooltip.from(f),
+});
+
+function signatureTooltip(state) {
+  const buzz = globalThis.buzz;
+  if (!buzz || !buzz.signature) return null;
+  const sel = state.selection.main;
+  if (!sel.empty) return null;
+  const docText = state.doc.toString();
+  const sig = buzz.signature(docText, utf8Offset(docText, sel.head));
+  if (!sig) return null;
+  return {
+    pos: sel.head,
+    above: true,
+    create() {
+      const dom = document.createElement("div");
+      dom.className = "cm-buzz-sig";
+      const title = document.createElement("div");
+      title.className = "cm-buzz-sig-title";
+      title.textContent = sig.label;
+      dom.append(title);
+      if (sig.doc) {
+        const body = document.createElement("div");
+        body.className = "cm-buzz-sig-doc";
+        body.textContent = sig.doc;
+        dom.append(body);
+      }
+      return { dom };
+    },
   };
 }
 
@@ -239,6 +334,10 @@ function mount(srcEl, area, panel) {
         bracketMatching(),
         closeBrackets(),
         indentUnit.of("    "),
+        indentOnInput(),
+        codeFolding(),
+        foldGutter(),
+        highlightSelectionMatches(),
         buzzLanguage,
         syntaxHighlighting(buzzHighlight),
         editorTheme,
@@ -246,8 +345,12 @@ function mount(srcEl, area, panel) {
         buzzLinter,
         autocompletion({ override: [buzzCompletionSource], activateOnTyping: true }),
         buzzHover,
+        buzzSignatureHelp,
+        search({ top: true }),
         keymap.of([
           ...closeBracketsKeymap,
+          ...searchKeymap,
+          ...foldKeymap,
           ...defaultKeymap,
           ...historyKeymap,
           ...completionKeymap,
@@ -302,7 +405,44 @@ function mount(srcEl, area, panel) {
   return view;
 }
 
+// populateModuleNotice fills the "some modules aren't available here" list from the
+// wasm, so the excluded set is sourced from the interpreter's own registry rather
+// than hand-kept in the page. It waits for the interpreter to boot, then renders one
+// entry per module the browser build leaves out.
+function populateModuleNotice() {
+  const list = document.getElementById("excluded-modules");
+  if (!list) return;
+  const fill = () => {
+    const buzz = globalThis.buzz;
+    if (!buzz || !buzz.excludedModules) return false;
+    const mods = buzz.excludedModules() || [];
+    // Show the count next to the summary label, like the footer's recent-changes
+    // disclosure ("Earlier changes on this page (N)").
+    const count = document.querySelector(".modules-note .excluded-count");
+    if (count) count.textContent = "(" + mods.length + ")";
+    list.replaceChildren();
+    for (const m of mods) {
+      const li = document.createElement("li");
+      // Link the module name to its reference page (../buzz/modules/<name>/,
+      // relative to the playground page) so the notice deep-links into the docs.
+      const a = document.createElement("a");
+      a.href = "../buzz/modules/" + m.name + "/";
+      const code = document.createElement("code");
+      code.textContent = m.name;
+      a.append(code);
+      li.append(a);
+      if (m.doc) li.append(" " + m.doc);
+      list.append(li);
+    }
+    return true;
+  };
+  if (fill()) return;
+  const wait = setInterval(() => { if (fill()) clearInterval(wait); }, 150);
+  setTimeout(() => clearInterval(wait), 8000); // give up quietly if the wasm never boots
+}
+
 function init() {
+  populateModuleNotice(); // independent of the editor; runs on the playground page
   const srcEl = document.getElementById("src");
   if (!srcEl) return; // not the playground page
   const area = srcEl.closest(".editor-area");
