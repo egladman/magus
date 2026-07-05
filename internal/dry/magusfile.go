@@ -1,4 +1,4 @@
-package playground
+package dry
 
 import (
 	"context"
@@ -9,13 +9,13 @@ import (
 )
 
 // Graph is the evaluated shape of a magusfile OR a spell buffer: its registered
-// projects, the targets/ops discovered, and the depends_on edges between them.
-// Output is anything the buffer printed (including magus.info logs).
+// projects, discovered targets/ops, and the depends_on edges between them. Output is
+// anything the buffer printed (including magus.info logs).
 //
-// Spell reports whether the buffer was a SPELL (its ops discovered by calling
+// Spell reports whether the buffer was a SPELL (ops discovered by calling
 // mgs_listTargets) rather than a magusfile (targets are its exported funs). When
 // true, Targets holds one entry per spell op; each op's kind and declared command
-// are surfaced via DryRun, not the graph.
+// are surfaced via Run, not the graph.
 type Graph struct {
 	OK       bool      `json:"ok"`
 	Spell    bool      `json:"spell"`
@@ -26,9 +26,9 @@ type Graph struct {
 	Diag     *Diag     `json:"diag"`
 }
 
-// DryRunResult is the ordered plan for one target: the dependency closure in run
+// Result is the ordered plan for one target: the dependency closure in run
 // order, then the host operations each target's body would perform.
-type DryRunResult struct {
+type Result struct {
 	OK     bool     `json:"ok"`
 	Order  []string `json:"order"`
 	Trace  []Op     `json:"trace"`
@@ -45,40 +45,40 @@ type targetInfo struct {
 
 // evalAndProbe runs the buffer's top level, then probes it. For a magusfile it
 // registers projects, discovers targets from exported functions, and probes each
-// target body once under the recording host to capture its depends_on edges and
-// host ops. For a SPELL buffer (one exporting mgs_listTargets) it instead resolves
-// the spell's ops — the returned []spellOp is non-nil and []targetInfo is empty.
-// Host effects are inert, so probing never cascades into running dependencies.
-func evalAndProbe(ctx context.Context, src string, charms []string, spells map[string][]string) (rec *Recorder, targets []targetInfo, ops []spellOp, isSpellBuf bool, diag *Diag) {
-	rec = newRecorder()
-	rec.charms = charms
+// target body once under the tracing host to capture depends_on edges and host ops.
+// For a SPELL buffer (one exporting mgs_listTargets) it instead resolves the spell's
+// ops - the returned []spellOp is non-nil and []targetInfo is empty. Host effects
+// are inert, so probing never cascades into running dependencies.
+func evalAndProbe(ctx context.Context, src string, charms []string, spells map[string][]string) (tr *Tracer, targets []targetInfo, ops []spellOp, isSpellBuf bool, diag *Diag) {
+	tr = newTracer()
+	tr.charms = charms
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	installHost(ctx, sess, rec, spells)
+	installHost(ctx, sess, tr, spells)
 
 	if err := sess.Exec(ctx, src); err != nil {
-		return rec, nil, nil, false, toDiag(err)
+		return tr, nil, nil, false, toDiag(err)
 	}
 
-	// A SPELL buffer's targets are its ops, discovered by calling mgs_listTargets —
+	// A SPELL buffer's targets are its ops, discovered by calling mgs_listTargets,
 	// not the exported funs. Route it to the spell probe; the ward check runs there.
 	if isSpell(sess) {
-		return rec, nil, probeSpell(ctx, sess), true, nil
+		return tr, nil, probeSpell(ctx, sess), true, nil
 	}
 
 	targets = discoverTargets(sess)
 	// Publish the full target set before probing so a magus.needs(glob/regex) in a
 	// body can expand its pattern against it.
 	for _, t := range targets {
-		rec.targetKeys = append(rec.targetKeys, t.key)
+		tr.targetKeys = append(tr.targetKeys, t.key)
 	}
 	for _, t := range targets {
-		rec.cur = t.key
-		// A failing body still yields the ops recorded up to the failure; the
+		tr.cur = t.key
+		// A failing body still yields the ops traced up to the failure; the
 		// graph stays useful, so probe errors are intentionally swallowed.
 		_, _ = sess.CallValue(ctx, t.val, nil)
 	}
-	rec.cur = ""
-	return rec, targets, nil, false, nil
+	tr.cur = ""
+	return tr, targets, nil, false, nil
 }
 
 // discoverTargets reads the session's exported functions as targets, keyed by
@@ -108,22 +108,22 @@ func discoverTargets(sess *buzz.Session) []targetInfo {
 	return out
 }
 
-// LoadMagusfile evaluates src to its project/target/edge graph. It transparently
-// handles both a magusfile and a SPELL buffer: a spell's ops become the Targets and
-// Graph.Spell is set. Charms are off (empty) for a structural load — the graph is
-// charm-independent. A ward on a spell op (e.g. MGS5002) is NOT a load diagnostic:
-// the op still lists here, and the ward surfaces via DryRun.
+// LoadMagusfile evaluates src to its project/target/edge graph, handling both a
+// magusfile and a SPELL buffer: a spell's ops become the Targets and Graph.Spell is
+// set. Charms are off (empty) for a structural load - the graph is charm-independent.
+// A ward on a spell op (e.g. MGS5002) is NOT a load diagnostic: the op still lists
+// here, and the ward surfaces via Run.
 func LoadMagusfile(ctx context.Context, src string) Graph {
-	rec, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, builtinSpellOps)
+	tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, builtinSpellOps)
 	if diag != nil {
-		return Graph{Output: rec.out.String(), Diag: diag}
+		return Graph{Output: tr.out.String(), Diag: diag}
 	}
 	if isSpellBuf {
 		ts := make([]Target, len(ops))
 		for i, o := range ops {
 			ts[i] = Target{Key: o.name, Name: o.name}
 		}
-		return Graph{OK: true, Spell: true, Targets: ts, Output: rec.out.String()}
+		return Graph{OK: true, Spell: true, Targets: ts, Output: tr.out.String()}
 	}
 	ts := make([]Target, len(targets))
 	for i, t := range targets {
@@ -131,24 +131,24 @@ func LoadMagusfile(ctx context.Context, src string) Graph {
 	}
 	return Graph{
 		OK:       true,
-		Projects: rec.projects,
+		Projects: tr.projects,
 		Targets:  ts,
-		Edges:    rec.edges,
-		Output:   rec.out.String(),
+		Edges:    tr.edges,
+		Output:   tr.out.String(),
 	}
 }
 
-// DryRun evaluates src, then returns the ordered execution plan for targetKey:
+// Run evaluates src, then returns the ordered execution plan for targetKey:
 // its dependency closure in run order, followed by the concatenated host-op
 // trace of each target in that order. charms is the active charm set (from a
 // `run t:charm` invocation), so charm-gated branches (has_charm) resolve.
-func DryRun(ctx context.Context, src, targetKey string, charms []string) DryRunResult {
-	rec, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, charms, builtinSpellOps)
+func Run(ctx context.Context, src, targetKey string, charms []string) Result {
+	tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, charms, builtinSpellOps)
 	if diag != nil {
-		return DryRunResult{Output: rec.out.String(), Diag: diag}
+		return Result{Output: tr.out.String(), Diag: diag}
 	}
 	if isSpellBuf {
-		return dryRunSpell(ops, targetKey, rec.out.String())
+		return dryRunSpell(ops, targetKey, tr.out.String(), charms)
 	}
 	// Normalize the requested name the same way registration does, so any casing or
 	// separator resolves: `run goBuild`, `run go_build`, and `run go-build` all hit
@@ -159,13 +159,13 @@ func DryRun(ctx context.Context, src, targetKey string, charms []string) DryRunR
 		known[t.key] = true
 	}
 	if !known[targetKey] {
-		return DryRunResult{Output: rec.out.String(), Diag: &Diag{Msg: "unknown target: " + targetKey}}
+		return Result{Output: tr.out.String(), Diag: &Diag{Msg: "unknown target: " + targetKey}}
 	}
 
-	order := rec.topoOrder(targetKey)
+	order := tr.topoOrder(targetKey)
 	var trace []Op
 	for _, t := range order {
-		trace = append(trace, rec.opsByTarget[t]...)
+		trace = append(trace, tr.opsByTarget[t]...)
 	}
-	return DryRunResult{OK: true, Order: order, Trace: trace, Output: rec.out.String()}
+	return Result{OK: true, Order: order, Trace: trace, Output: tr.out.String()}
 }

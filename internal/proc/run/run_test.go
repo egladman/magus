@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExecInjectsMAGUS pins that Exec exports MAGUS — the running binary's
-// resolved path — into the subprocess environment, so a spell or recipe can
-// re-invoke magus via "${MAGUS:-magus}" without relying on PATH (the GNU Make
-// $(MAKE) convention). Here the "running binary" is the test executable.
+// TestExecInjectsMAGUS pins that Exec exports MAGUS (the running binary's resolved
+// path) into the subprocess environment, so a spell or recipe can re-invoke magus
+// via "${MAGUS:-magus}" without relying on PATH (the GNU Make $(MAKE) convention).
+// Here the "running binary" is the test executable.
 func TestExecInjectsMAGUS(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("sh"); err != nil {
@@ -45,16 +45,16 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 		return res.Stdout
 	}
 
-	// Top level: MAGUS_LEVEL absent (empty ⇒ 0) ⇒ child runs at depth 1.
+	// Top level: MAGUS_LEVEL absent (empty means 0), so child runs at depth 1.
 	t.Setenv("MAGUS_LEVEL", "")
 	assert.Equal(t, "1", level(t), "MAGUS_LEVEL at top")
-	// Nested: depth 2 ⇒ child runs at depth 3.
+	// Nested: depth 2, so child runs at depth 3.
 	t.Setenv("MAGUS_LEVEL", "2")
 	assert.Equal(t, "3", level(t), "MAGUS_LEVEL when nested")
 }
 
 // TestCurrentLevel pins the contract startup relies on to decide whether to stand
-// up its own daemon: absent/invalid ⇒ 0 (top-level, starts a server), > 0 ⇒
+// up its own daemon: absent/invalid means 0 (top-level, starts a server), > 0 means
 // nested (must not, to keep one socket / one pool). Mutates env; not parallel.
 func TestCurrentLevel(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")

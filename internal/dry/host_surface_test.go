@@ -1,4 +1,4 @@
-package playground
+package dry
 
 import (
 	"context"
@@ -14,16 +14,16 @@ import (
 
 // TestMagusSurfaceMatchesBindings is the drift guard between the two host
 // implementations of the magus.* surface: the real Buzz bindings
-// (internal/interp/bindings) and this package's recording dry-run host
-// (buildMagus). A magusfile referencing a member the playground omits would fail
-// to evaluate, so the playground must implement every member the real bindings
-// register. When a binding is added or removed in the real host without mirroring
-// it here, this test fails instead of the playground silently breaking.
+// (internal/interp/bindings) and this package's tracing dry-run host (buildMagus). A
+// magusfile referencing a member the playground omits would fail to evaluate, so the
+// playground must implement every member the real bindings register. Adding or
+// removing a binding without mirroring it here fails this test instead of silently
+// breaking the playground.
 func TestMagusSurfaceMatchesBindings(t *testing.T) {
 	realTop, realTarget := bindings.MagusModuleKeys()
 	require.NotEmpty(t, realTop, "bindings.MagusModuleKeys returned no top-level members")
 
-	m := buildMagus(buzz.NewSession(context.Background(), buzz.WithEmbedded()), newRecorder())
+	m := buildMagus(buzz.NewSession(context.Background(), buzz.WithEmbedded()), newTracer())
 	have := keySet(m)
 	for _, k := range realTop {
 		assert.True(t, have[k], "playground magus.* is missing %q (registered by the real bindings); add a stub in buildMagus", k)

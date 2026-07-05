@@ -1,16 +1,29 @@
-// Package playground evaluates Buzz source and magusfiles in-process for the
-// WebAssembly playground, with every host effect (subprocess, filesystem,
-// network) replaced by an in-memory recorder. It is deliberately free of build
-// tags and of the heavyweight magus host stack (proc/cache/http), so it both
-// compiles to js/wasm and is unit-testable on the host against the real
-// interpreter.
+// Package dry is the in-process, non-executing magus evaluator: it runs Buzz
+// source and magusfiles with every host effect (subprocess, filesystem, network)
+// replaced by an in-memory tracer, then reports the project graph and the dry-run
+// op trace instead of running anything. It backs three surfaces: the WebAssembly
+// playground (internal/playground, via cmd/buzz-playground), the `magus buzz` CLI
+// subcommand (cmd/magus/buzz.go, via BrowserSafeHostModules), and the docs
+// generator (cmd/magus-docs, for runnability detection). It carries no build tags
+// and none of the heavyweight host stack (proc/cache/http), so it both compiles to
+// js/wasm and is unit-testable on the host against the real interpreter.
 //
-// A browser sandbox cannot fork processes or touch a filesystem, so a magusfile
-// is never executed for real here. Instead it is evaluated to the project graph
-// it builds (magus.project + exported target functions + depends_on
-// edges), and a target is "dry-run" to the ordered trace of host operations it
-// would invoke — mirroring `magus ls` / `magus run --dry-run`, never the tools.
-package playground
+// It is a thin adapter over the real engine, not a parallel implementation: the
+// genuinely shared, pure logic is imported, not re-derived - command decoding
+// (spell.DecodeCommandValue), charm application (spell.ApplyCharms), ward checks
+// (ward.Check), and the magus.* module surface (parity-guarded against
+// bindings.MagusModuleKeys). Only the legitimately different pieces live here: the
+// tracing host stubs (host effects cannot run in a browser), the lenient spell probe
+// (it keeps warded/undecodable ops so `ls`/`graph` still list them, where the
+// engine's strict resolve aborts), and the traced-edge topo order.
+//
+// It lives at internal/dry because it can share a package with neither counterpart:
+// the high-level runner is the host-only public API, and the subprocess primitive
+// (internal/proc) forks processes - both pull in os/exec, syscall, and platform
+// build tags. Compiling to js/wasm means it MUST NOT import internal/proc,
+// internal/cache, or the root magus engine; one such import would break that build.
+// It stays a leaf over the pure, shared logic (internal/spell, internal/ward, types).
+package dry
 
 import (
 	"bytes"
@@ -42,7 +55,7 @@ type Edge struct {
 	To   string `json:"to"`
 }
 
-// Op is one recorded host operation a target body would have performed, or (for a
+// Op is one traced host operation a target body would have performed, or (for a
 // SPELL buffer) one resolved op and its wards.
 type Op struct {
 	Target string `json:"target"` // target/op whose body emitted it
@@ -51,9 +64,9 @@ type Op struct {
 	Detail string `json:"detail"` // argv / message / diagnostic / extra context
 }
 
-// Recorder accumulates the side effects of evaluating a magusfile under the
-// stub host. It is the single sink the magus/extra/spell stubs write to.
-type Recorder struct {
+// Tracer accumulates the side effects of evaluating a magusfile under the
+// stub host. It is the single sink the magus/spell stubs write to.
+type Tracer struct {
 	out         bytes.Buffer
 	projects    []Project
 	edges       []Edge
@@ -63,9 +76,9 @@ type Recorder struct {
 	// and host ops attribute to the right node. Empty at top level.
 	cur string
 
-	// charms is the active charm set for this evaluation (from a `run t:charm`
-	// invocation), so magus.has_charm(name) reports true for a dry-run under a
-	// charm — e.g. `run release:cd` takes the cd branch. Empty for graph/ls.
+	// charms is the evaluation's active charm set (from a `run t:charm`
+	// invocation), so magus.has_charm(name) reports true under a charm - e.g.
+	// `run release:cd` takes the cd branch. Empty for graph/ls.
 	charms []string
 
 	// targetKeys is every discovered target's canonical key, set before probing so
@@ -74,11 +87,11 @@ type Recorder struct {
 	targetKeys []string
 }
 
-func newRecorder() *Recorder {
-	return &Recorder{opsByTarget: map[string][]Op{}}
+func newTracer() *Tracer {
+	return &Tracer{opsByTarget: map[string][]Op{}}
 }
 
-func (r *Recorder) addOp(kind, name, detail string) {
+func (r *Tracer) addOp(kind, name, detail string) {
 	if r.cur == "" {
 		return // an op at top level (not inside a target) has nowhere to attribute
 	}
@@ -87,7 +100,7 @@ func (r *Recorder) addOp(kind, name, detail string) {
 	})
 }
 
-func (r *Recorder) addEdge(to string) {
+func (r *Tracer) addEdge(to string) {
 	if r.cur == "" || to == "" || to == r.cur {
 		return
 	}
@@ -100,7 +113,7 @@ func (r *Recorder) addEdge(to string) {
 }
 
 // depsOf returns the direct dependencies of target (edges from target -> dep).
-func (r *Recorder) depsOf(target string) []string {
+func (r *Tracer) depsOf(target string) []string {
 	var out []string
 	for _, e := range r.edges {
 		if e.From == target {
@@ -112,14 +125,14 @@ func (r *Recorder) depsOf(target string) []string {
 
 // topoOrder returns the dependency closure of target in run order (deps before
 // dependents), de-duplicated and cycle-guarded. target itself is last.
-func (r *Recorder) topoOrder(target string) []string {
+func (r *Tracer) topoOrder(target string) []string {
 	var order []string
 	seen := map[string]bool{}
 	onStack := map[string]bool{}
 	var visit func(string)
 	visit = func(n string) {
 		if seen[n] || onStack[n] {
-			return // already placed, or a cycle — stop without re-adding
+			return // already placed, or a cycle: stop without re-adding
 		}
 		onStack[n] = true
 		deps := r.depsOf(n)

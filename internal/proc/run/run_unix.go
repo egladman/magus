@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-// SetupProcessGroup starts c in its own process group so a later signal can reach
+// SetupProcessGroup starts c in its own process group so a later signal reaches
 // the whole subtree (grandchildren included), not just the direct child. Call it
 // before c.Start.
 func SetupProcessGroup(c *exec.Cmd) {

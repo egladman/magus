@@ -1,19 +1,19 @@
-package playground_test
+package dry_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/egladman/magus/internal/playground"
+	"github.com/egladman/magus/internal/dry"
 )
 
-func TestEvalBuzz_HostModules(t *testing.T) {
+func TestEval_HostModules(t *testing.T) {
 	cases := map[string]string{
 		`import "strings"; return strings.camelCase("hello world");`: "helloWorld",
 		`import "encoding"; return encoding.base64Encode("hi");`:     "aGk=",
 	}
 	for src, want := range cases {
-		r := playground.EvalBuzz(context.Background(), src)
+		r := dry.Eval(context.Background(), src)
 		if !r.OK {
 			t.Errorf("%q: eval failed: %+v", src, r.Diag)
 			continue
