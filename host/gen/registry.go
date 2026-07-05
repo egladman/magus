@@ -2,26 +2,11 @@
 
 package gen
 
-import (
-	"context"
-
-	buzz "github.com/egladman/gopherbuzz"
-	vm "github.com/egladman/gopherbuzz/vm"
-)
-
 // This file is hand-maintained (not generated). TestModulesMatchStd guards it
-// against drift from std.All().
-
-// RegisterFunc installs a host module on a Buzz session and returns its module map.
-type RegisterFunc func(context.Context, *buzz.Session) vm.Value
-
-// ModuleReg is one host module's registration: how to install it, and whether it
-// is safe under WASM (pure compute, no filesystem, process, network, or OS
-// randomness), which the browser playground requires.
-type ModuleReg struct {
-	Register       RegisterFunc
-	WASMCompatible bool
-}
+// against drift from std.All(). The RegisterFunc / ModuleReg types live in
+// module_reg.go (no build tag) so the wasm build can use them too; the
+// WASMCompatible:true entries here are mirrored in registry_wasm.go, which the
+// wasm build sees instead of this file.
 
 // Modules is the single source of truth for magus's host modules: every bare
 // import name a Buzz session resolves beyond Buzz's own stdlib, mapped to its
@@ -32,16 +17,18 @@ type ModuleReg struct {
 // The `magus` namespace is intentionally absent. It is not a bare import; it is
 // wired onto the magus.* namespace with a magusfile's target context.
 var Modules = map[string]ModuleReg{
-	// Context-dependent (sandbox / process / network / randomness): full surface
-	// only, never the browser playground.
+	// Context-dependent (process / filesystem / network): full surface only. The
+	// browser has no way to provide these, so they are never in the playground.
 	"os":      {RegisterOs, false},
 	"fs":      {RegisterFs, false},
 	"vcs":     {RegisterVcs, false},
 	"archive": {RegisterArchive, false},
 	"http":    {RegisterHttp, false},
-	"uuid":    {RegisterUuid, false},
 
-	// Pure compute: safe everywhere, including the WASM playground.
+	// Pure compute: safe everywhere, including the WASM playground. Mirror this
+	// exact set in registry_wasm.go, which the wasm build uses in place of this file.
+	// uuid is here (its randomness uses the browser's getRandomValues) rather than
+	// treated as context-dependent - a deliberate choice to let it run in-browser.
 	"platform": {RegisterPlatform, true},
 	"crypto":   {RegisterCrypto, true},
 	"env":      {RegisterEnv, true},
@@ -57,4 +44,5 @@ var Modules = map[string]ModuleReg{
 	"yaml":     {RegisterYaml, true},
 	"template": {RegisterTemplate, true},
 	"toml":     {RegisterToml, true},
+	"uuid":     {RegisterUuid, true},
 }

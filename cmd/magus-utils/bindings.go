@@ -29,12 +29,6 @@ var wasmExcludedModules = map[string]bool{
 	"archive": true,
 	"vcs":     true,
 	"magus":   true,
-	// toml, uuid, and template are host-only for now: their libraries' TinyGo
-	// compatibility is unverified (and uuid's randomness shouldn't run in the
-	// dry-run playground). Each can graduate to the browser set later.
-	"toml":     true,
-	"uuid":     true,
-	"template": true,
 }
 
 func runBindings(args []string) error {
