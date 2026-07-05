@@ -13,10 +13,13 @@ buzzstd.Register(sess) // makes every module above importable
 ## The constraint: match upstream Buzz
 
 These modules are **the language's** standard library, not gopherbuzz's own
-invention. gopherbuzz is a pure-Go VM for [Buzz](https://buzz-lang.dev/0.5.0/)
-([reference](https://buzz-lang.dev/0.5.0/reference/)), and this package must
+invention. gopherbuzz is a pure-Go VM for [Buzz](https://buzz-lang.dev/); it
+targets 0.6.0-dev, tracking upstream `buzz-language/buzz` `main` at the commit
+pinned in [`../version.go`](../version.go) (`UpstreamRef`), and this package must
 track the upstream stdlib's **names, signatures, and observable semantics** so a
-Buzz program runs the same here as on the reference implementation.
+Buzz program runs the same here as on the reference implementation. The latest
+published [reference](https://buzz-lang.dev/0.5.0/reference/) is 0.5.0; 0.6.0 is
+unreleased.
 
 The project-wide rule (see the top-level [README](../README.md)) is **"match
 capabilities, diverge only where a concrete reason forces it."** Concretely, for

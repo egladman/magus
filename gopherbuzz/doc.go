@@ -1,7 +1,9 @@
 // Package buzz is a stack-based bytecode interpreter for the Buzz scripting
 // language embedded in magusfiles. It is a Go reimplementation of the upstream
-// Buzz language; the language reference lives at
-// https://buzz-lang.dev/0.5.0/reference/ .
+// Buzz language. gopherbuzz targets Buzz 0.6.0-dev: it tracks buzz-language/buzz
+// main (0.6.0 is unreleased), synced and validated against the exact commit
+// pinned by [UpstreamRef]; see [LanguageVersion]. The latest published language
+// reference is https://buzz-lang.dev/0.5.0/reference/ .
 //
 // Architecture: source is lexed and parsed ([Parse]), type-checked,
 // then compiled to a flat instruction stream
