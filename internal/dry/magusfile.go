@@ -138,6 +138,31 @@ func LoadMagusfile(ctx context.Context, src string) Graph {
 	}
 }
 
+// Diagnostics type-checks src as a magusfile and returns every diagnostic to
+// surface in the editor: a single parse error, or otherwise every type error the
+// checker found, sorted by position. It reuses LoadMagusfile's browser-safe host
+// setup so a magusfile's spell and module imports resolve and don't read as
+// spurious "undefined". Nothing is executed or compiled - this is the live-linting
+// counterpart to LoadMagusfile's structural load, and it is safe to call on each
+// keystroke.
+func Diagnostics(ctx context.Context, src string) []Diag {
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	installHost(ctx, sess, newTracer(), builtinSpellOps)
+
+	ds := sess.Diagnostics(src)
+	out := make([]Diag, len(ds))
+	for i, d := range ds {
+		out[i] = Diag{Msg: d.Msg, Line: d.Line, Col: d.Col}
+	}
+	slices.SortFunc(out, func(a, b Diag) int {
+		if a.Line != b.Line {
+			return a.Line - b.Line
+		}
+		return a.Col - b.Col
+	})
+	return out
+}
+
 // Run evaluates src, then returns the ordered execution plan for targetKey:
 // its dependency closure in run order, followed by the concatenated host-op
 // trace of each target in that order. charms is the active charm set (from a

@@ -1,0 +1,4 @@
+# Build-only dependencies for the playground's CodeMirror editor bundle. The
+# bundled output (playground/editor.js) is a committed artifact, like
+# playground/buzz.wasm; the node_modules that produce it are not.
+node_modules/

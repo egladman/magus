@@ -1,0 +1,19 @@
+{
+  "name": "magus-website-editor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Build-only dependencies for the playground's CodeMirror editor bundle. esbuild bundles js/playground-editor.js into playground/editor.js (a committed artifact, like playground/buzz.wasm). Not part of the site's runtime dependency graph.",
+  "type": "module",
+  "scripts": {
+    "build-editor": "esbuild js/playground-editor.js --bundle --minify --format=esm --outfile=playground/editor.js"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "6.18.6",
+    "@codemirror/commands": "6.8.1",
+    "@codemirror/language": "6.11.0",
+    "@codemirror/lint": "6.8.5",
+    "@codemirror/state": "6.5.2",
+    "@codemirror/view": "6.36.8",
+    "@lezer/highlight": "1.2.1"
+  }
+}

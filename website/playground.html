@@ -134,6 +134,21 @@
     .hl-com { color: var(--hl-com); font-style: italic; }
     .hl-punct { color: var(--pico-muted-color); }
 
+    /* CodeMirror overlay (progressive enhancement, playground/editor.js). When it
+       mounts it adds .cm-active to the panel; hide the textarea editor's own chrome
+       and let CodeMirror fill the editor area. Without the bundle (load failure or
+       an init throw), .cm-active never lands and the textarea editor stays. The
+       syntax palette reuses the same --hl-* variables the overlay used, so light/
+       dark mode carries over. */
+    .panel.cm-active .gutter-wrap,
+    .panel.cm-active #highlight,
+    .panel.cm-active #src { display: none; }
+    #cm-root { position: absolute; inset: 0; }
+    .cm-editor { height: 100%; }
+    .cm-buzz-hover { max-width: 34rem; padding: 0.5rem 0.7rem; font-size: 0.8rem; line-height: 1.5; }
+    .cm-buzz-hover-title { font-family: var(--pico-font-family-monospace); font-weight: 600; }
+    .cm-buzz-hover-doc { margin-top: 0.3rem; color: var(--pico-muted-color); white-space: normal; }
+
     /* Console: styled with Pico's own theme variables, so it follows the page's
        light/dark mode. It reads as a distinct console via its header bar and the
        border above it (like an IDE's bottom panel), not a custom color. */
@@ -401,5 +416,10 @@
   <!-- Shared feature bundle (code-copy etc.); each module guards on its own DOM
        targets, so the ones the playground lacks simply no-op. WS M reworks this. -->
   <script type="module" src="../main.js"></script>
+  <!-- CodeMirror editor bundle (esbuild output of js/playground-editor.js,
+       committed like buzz.wasm). Progressive enhancement: it upgrades the textarea
+       into a CodeMirror editor with diagnostics, autocompletion, and hover driven
+       by the wasm language service. A load failure leaves the textarea editor. -->
+  <script type="module" src="editor.js"></script>
 </body>
 </html>

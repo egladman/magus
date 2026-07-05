@@ -515,14 +515,38 @@ func (s *Session) DoString(code string) error { return s.Exec(s.ctx, code) }
 // declarations are Env bindings (SharedGlobals), not per-Run slots. Predefined
 // globals are passed to the checker so they aren't flagged as undefined.
 func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
+	prog, errs, parseErr := s.checkShared(code)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	if len(errs) != 0 {
+		return nil, errs[0]
+	}
+	// DebugLines so magus.pry() / the REPL can report a paused frame's line and
+	// drive line-level stepping; the cost is one parallel int32 slice per chunk.
+	return CompileWith(prog, CompileOptions{
+		SharedGlobals:   true,
+		DebugLines:      true,
+		PromoteTopLevel: s.promoteTopLevel,
+		ImportedTypes:   s.importedTypes,
+	})
+}
+
+// checkShared parses and type-checks code against the session's shared scope,
+// returning the parsed program and every type error found (not just the first).
+// It is the shared front half of compileShared and Diagnostics: compileShared
+// compiles on success and reports only the first error, while Diagnostics returns
+// them all for the editor. A parse error comes back separately as parseErr, since
+// type-checking has no tree to run against when parsing fails.
+func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeError, parseErr error) {
 	prog, err := parseModed(code, !s.embedded)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Resolve file-based imports before type-checking so the globals they
 	// introduce are visible to the checker.
 	if err := s.loadFileImports(prog); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	names := s.env.Names()
 	globals := make([]string, 0, len(names))
@@ -535,17 +559,68 @@ func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
 		}
 		globals = append(globals, name)
 	}
-	if errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importPrivateHint()); len(errs) != 0 {
-		return nil, errs[0]
+	return prog, checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importPrivateHint()), nil
+}
+
+// Diagnostic is a positioned diagnostic for editor tooling: a 1-based line and
+// column plus a message with the "buzz: line L:C:" prefix stripped (the position
+// travels in the fields instead). A zero Line means no position was recoverable.
+type Diagnostic struct {
+	Line, Col int
+	Msg       string
+}
+
+// Diagnostics type-checks code against the session's shared scope and returns
+// every diagnostic the editor should surface, without running or compiling
+// anything: a single parse error (checking cannot proceed past the first), or
+// otherwise every type error the checker found. Unlike Exec and Compile it does
+// not stop at the first error, so it is safe to call on each keystroke to drive
+// live squiggles. It is meant for the embedded playground path, where the host
+// and spell modules are already registered so a magusfile's imports resolve.
+func (s *Session) Diagnostics(code string) []Diagnostic {
+	_, errs, parseErr := s.checkShared(code)
+	if parseErr != nil {
+		line, col, msg := splitBuzzPos(parseErr.Error())
+		return []Diagnostic{{Line: line, Col: col, Msg: msg}}
 	}
-	// DebugLines so magus.pry() / the REPL can report a paused frame's line and
-	// drive line-level stepping; the cost is one parallel int32 slice per chunk.
-	return CompileWith(prog, CompileOptions{
-		SharedGlobals:   true,
-		DebugLines:      true,
-		PromoteTopLevel: s.promoteTopLevel,
-		ImportedTypes:   s.importedTypes,
-	})
+	out := make([]Diagnostic, len(errs))
+	for i, e := range errs {
+		out[i] = Diagnostic{Line: e.Line, Col: e.Col, Msg: e.Msg}
+	}
+	return out
+}
+
+// splitBuzzPos parses the "buzz: line L:C: message" shape the parser and checker
+// emit, returning the position and the message with that prefix removed. On no
+// match it returns a zero position and the input unchanged, so a diagnostic still
+// surfaces (just without a caret). Kept regexp-free to stay light in the wasm build.
+func splitBuzzPos(s string) (line, col int, msg string) {
+	rest := s
+	if i := strings.Index(rest, "line "); i >= 0 {
+		rest = rest[i+len("line "):]
+	} else {
+		return 0, 0, s
+	}
+	l, rest, ok := scanUint(rest)
+	if !ok || !strings.HasPrefix(rest, ":") {
+		return 0, 0, s
+	}
+	c, rest, ok := scanUint(rest[1:])
+	if !ok {
+		return 0, 0, s
+	}
+	return l, c, strings.TrimSpace(strings.TrimPrefix(rest, ":"))
+}
+
+// scanUint reads a leading run of ASCII digits, returning the value and the
+// remaining string; ok is false when s does not start with a digit.
+func scanUint(s string) (n int, rest string, ok bool) {
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		n = n*10 + int(s[i]-'0')
+		i++
+	}
+	return n, s[i:], i > 0
 }
 
 // importPrivateHint returns the names hidden by exports-only import visibility

@@ -3,6 +3,7 @@ package token
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -246,6 +247,18 @@ var keywords = map[string]Kind{
 func IsKeyword(word string) bool {
 	_, ok := keywords[word]
 	return ok
+}
+
+// Keywords returns the reserved Buzz keywords in sorted order. Editor tooling
+// (completion) uses it to offer the canonical keyword set without re-deriving it,
+// staying in sync with IsKeyword and the language.
+func Keywords() []string {
+	out := make([]string, 0, len(keywords))
+	for k := range keywords {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // StringPart is one segment of an interpolated string: either a literal run of

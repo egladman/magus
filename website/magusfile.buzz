@@ -36,6 +36,11 @@ magus.project({
         // binary; a cache hit would replay a stale one. Run by hand when the
         // interpreter or playground host changes (TinyGo is not a CI tool).
         "build-playground": {"skipCache": true},
+        // build-playground-editor bundles vendored CodeMirror into the committed
+        // playground/editor.js. Like build-playground it shells out (npm + esbuild)
+        // and is run by hand when the editor source changes; skipCache so a hit
+        // never replays a stale bundle.
+        "build-playground-editor": {"skipCache": true},
     },
 });
 
@@ -126,6 +131,21 @@ export fun build_playground(args: [str]) > void {
         ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" website/playground/wasm_exec.js"],
         "..", {});
     magus.info("rebuilt website/playground/buzz.wasm + wasm_exec.js — commit the result");
+}
+
+// build_playground_editor bundles the vendored CodeMirror editor into the committed
+// website/playground/editor.js — the editor analog of build_playground's committed
+// buzz.wasm. The playground page loads this bundle to upgrade its textarea into a
+// CodeMirror editor with diagnostics, autocompletion, and hover (driven by the wasm
+// language service, globalThis.buzz). Run by hand when js/playground-editor.js or the
+// pinned CodeMirror versions change, then commit editor.js. npm ci restores the
+// build-only deps from package-lock.json; esbuild (pinned in mise.toml) bundles them.
+export fun build_playground_editor(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    // Run from this project dir (.), where package.json / package-lock.json live.
+    os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+    os.exec("npm", ["run", "build-editor"], ".", {});
+    magus.info("rebuilt website/playground/editor.js — commit the result");
 }
 
 // serve watches ../docs and re-renders gen/ on change — handy for local docs

@@ -30,6 +30,7 @@ import (
 	"syscall/js"
 
 	"github.com/egladman/magus/internal/dry"
+	"github.com/egladman/magus/internal/langservice"
 	"github.com/egladman/magus/internal/playground"
 )
 
@@ -397,6 +398,47 @@ func exposeDataAPI() {
 		}
 		g := dry.LoadMagusfile(context.Background(), args[0].String())
 		return map[string]any{"ok": g.OK, "targets": targetKeys(g.Targets)}
+	}))
+	// The language-service trio (diagnostics / complete / hover) is the editor's
+	// IDE surface: the CodeMirror adapters call these to draw squiggles, populate
+	// the completion popup, and show hover tooltips. All three are pure functions of
+	// (source, cursor) - no session state - so the page can call them freely on each
+	// keystroke. offset is a UTF-8 byte offset into source (the adapter converts from
+	// the editor's UTF-16 position); positions in results are 1-based line/col.
+	api.Set("diagnostics", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) < 1 {
+			return nil
+		}
+		ds := dry.Diagnostics(context.Background(), args[0].String())
+		out := make([]any, len(ds))
+		for i, d := range ds {
+			out[i] = map[string]any{"line": d.Line, "col": d.Col, "msg": d.Msg}
+		}
+		return out
+	}))
+	api.Set("complete", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) < 2 {
+			return nil
+		}
+		cs := langservice.Complete(args[0].String(), args[1].Int())
+		out := make([]any, len(cs))
+		for i, c := range cs {
+			out[i] = map[string]any{
+				"label": c.Label, "kind": string(c.Kind),
+				"detail": c.Detail, "doc": c.Doc, "replace": c.Replace,
+			}
+		}
+		return out
+	}))
+	api.Set("hover", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) < 2 {
+			return nil
+		}
+		h := langservice.HoverAt(args[0].String(), args[1].Int())
+		if h == nil {
+			return nil
+		}
+		return map[string]any{"title": h.Title, "doc": h.Doc}
 	}))
 	js.Global().Set("buzz", api)
 }
