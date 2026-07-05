@@ -581,6 +581,10 @@ html {
     transition: transform 0.25s ease;
   }
   .js .toc nav { position: static; max-height: none; } /* not sticky inside the sheet */
+  /* The links carry a negative horizontal margin for a full-bleed hover in the desktop
+     sidebar; inside the narrow fixed sheet that pushes them past the panel edge and
+     triggers a horizontal scrollbar, so pin them flush here. */
+  .js .toc nav a { margin-left: 0; margin-right: 0; }
   .js .toc.toc-sheet-open { transform: translateY(0); }
 
   /* Closing hint at the foot of the sheet: quieter than the links (smaller, muted,
