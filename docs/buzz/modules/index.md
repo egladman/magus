@@ -8,7 +8,7 @@ tags: [stdlib, modules, magusfile, reference, fs, os, http, json]
 
 # Magusfile Module Reference
 
-These are the runtime utility modules. Import each under its bare name (`import "fs"`, then `fs.glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.
+These are the runtime utility modules. Import each under its bare name — `import "fs"`, then `fs.glob(...)` — with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.
 
 ## Files and paths
 
@@ -33,7 +33,6 @@ These are the runtime utility modules. Import each under its bare name (`import 
 | [`strings`](strings.md) | Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis). |
 | [`fmt`](fmt.md) | String formatting (printf-style). |
 | [`markdown`](markdown.md) | GitHub-Flavored Markdown to semantic HTML. |
-| [`template`](template.md) | Logic-less Mustache templating (Mustache spec). |
 
 ## Serialization and encoding
 

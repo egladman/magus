@@ -237,10 +237,10 @@ func renderModule(m std.Module) string {
 		"(`import \"%s\"`) and call methods in `camelCase` (`%s.someMethod`).\n\n",
 		m.Name, m.Name)
 
-	// Runnability note. Browser-safe modules (dry.BrowserSafeHostModules) get
+	// Runnability note. WASM-compatible modules (dry.WASMCompatibleMagusModules) get
 	// Run-clickable examples; the IO leaves cannot, so where such a module carries
 	// examples, explain the missing Run button rather than leaving it unexplained.
-	if _, browserSafe := dry.BrowserSafeHostModules[m.Name]; !browserSafe && moduleHasExample(m) {
+	if _, wasmCompatible := dry.WASMCompatibleMagusModules[m.Name]; !wasmCompatible && moduleHasExample(m) {
 		fmt.Fprintf(&b, "> [!NOTE]\n"+
 			"> The examples below are reference-only. `%s` performs real IO "+
 			"(filesystem, process, network, or environment access) that the in-browser "+
@@ -315,7 +315,7 @@ func renderModule(m std.Module) string {
 			}
 			// Per-method example, if one exists at
 			//   std/examples/<module>/<method>.buzz
-			// Browser-safe modules (dry.BrowserSafeHostModules) get a
+			// WASM-compatible modules (dry.WASMCompatibleMagusModules) get a
 			// "<!-- run -->" marker so the site generator makes the block
 			// Run-clickable, evaluating it in the in-page WASM playground.
 			// The IO-heavy leaves (fs, os, http, archive, env, vcs, magus) do
@@ -324,7 +324,7 @@ func renderModule(m std.Module) string {
 			if ex := readExample(m.Name, meth.Name); ex != "" {
 				fmt.Fprintln(&b, "**Example:**")
 				fmt.Fprintln(&b)
-				if _, ok := dry.BrowserSafeHostModules[m.Name]; ok {
+				if _, ok := dry.WASMCompatibleMagusModules[m.Name]; ok {
 					fmt.Fprintln(&b, "<!-- run -->")
 				}
 				fmt.Fprintln(&b, "```buzz")

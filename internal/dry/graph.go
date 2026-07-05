@@ -3,7 +3,7 @@
 // replaced by an in-memory tracer, then reports the project graph and the dry-run
 // op trace instead of running anything. It backs three surfaces: the WebAssembly
 // playground (internal/playground, via cmd/buzz-playground), the `magus buzz` CLI
-// subcommand (cmd/magus/buzz.go, via BrowserSafeHostModules), and the docs
+// subcommand (cmd/magus/buzz.go, via WASMCompatibleMagusModules), and the docs
 // generator (cmd/magus-docs, for runnability detection). It carries no build tags
 // and none of the heavyweight host stack (proc/cache/http), so it both compiles to
 // js/wasm and is unit-testable on the host against the real interpreter.

@@ -912,6 +912,9 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 }
 
 func (c *compiler) compileIf(v *ast.IfStmt) error {
+	if v.BindName != "" {
+		return c.compileIfLet(v)
+	}
 	if err := c.compileExpr(v.Cond); err != nil {
 		return err
 	}
@@ -933,6 +936,40 @@ func (c *compiler) compileIf(v *ast.IfStmt) error {
 		return err
 	}
 	c.chunk.PatchJump(jmp)
+	return nil
+}
+
+// compileIfLet lowers optional-call narrowing `if (opt -> name) { Then } else { Else }`.
+// OpJumpIfNull splits on the evaluated optional: non-null keeps the value on the
+// stack and jumps into Then (where it is bound to name in a fresh block scope);
+// null pops the value and falls through to Else. Mirrors the foreach loop-var
+// binding: the value on the stack top is stored into name's slot via OpSetLocal.
+func (c *compiler) compileIfLet(v *ast.IfStmt) error {
+	if err := c.compileExpr(v.Cond); err != nil {
+		return err
+	}
+	jThen := c.chunk.EmitJump(vmpackage.OpJumpIfNull) // non-null: jump to Then (value kept)
+	jElse := c.chunk.EmitJump(vmpackage.OpJump)       // null fell through: jump to Else
+	c.chunk.PatchJump(jThen)                          // Then starts here
+	c.enterBlock()
+	slot := c.defineLocal(v.BindName)
+	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0) // bind name = opt (pops the value)
+	for _, s := range v.Then.Stmts {
+		if err := c.compileStmt(s); err != nil {
+			return err
+		}
+	}
+	c.exitBlock()
+	if v.Else == nil {
+		c.chunk.PatchJump(jElse)
+		return nil
+	}
+	jEnd := c.chunk.EmitJump(vmpackage.OpJump)
+	c.chunk.PatchJump(jElse)
+	if err := c.compileStmt(v.Else); err != nil {
+		return err
+	}
+	c.chunk.PatchJump(jEnd)
 	return nil
 }
 
@@ -1215,7 +1252,12 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		thisFields[f.Name] = int32(i)
 	}
 	for _, m := range v.Methods {
-		idx, err := c.compileFunChunkThis(v.Name+"."+m.Name, m.Doc, m.Params, m.Body.Stmts, thisFields)
+		// A static method has no receiver, so it compiles without this-field access.
+		tf := thisFields
+		if m.IsStatic {
+			tf = nil
+		}
+		idx, err := c.compileFunChunkThis(v.Name+"."+m.Name, m.Doc, m.Params, m.Body.Stmts, tf)
 		if err != nil {
 			return err
 		}

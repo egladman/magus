@@ -93,6 +93,12 @@ type Session struct {
 	// files (executed directly, not via import) are unaffected.
 	importPrivate        map[string]bool
 	collectImportPrivate bool
+	// declaredNamespaces maps a flat-imported module's full `namespace a\b\c`
+	// path to the import path that first claimed it. Upstream Buzz exposes a
+	// no-alias import's exports under this declared path and rejects two imports
+	// sharing one namespace; gopherbuzz mirrors both (see bindNamespacePath),
+	// on top of its own basename/splat access conveniences.
+	declaredNamespaces map[string]string
 }
 
 // SetSyntheticModule registers v as the module imported by `import "<importPath>"`.
@@ -146,13 +152,14 @@ func newSession(ctx context.Context) *Session {
 	env := vmpackage.NewEnv()
 	vmpackage.RegisterStdlib(env)
 	s := &Session{
-		ctx:           ctx2,
-		cancel:        cancel,
-		env:           env,
-		embedded:      true,
-		targets:       make(map[string]vmpackage.Callable),
-		exportedNames: make(map[string]bool),
-		loadedPaths:   make(map[string]bool),
+		ctx:                ctx2,
+		cancel:             cancel,
+		env:                env,
+		embedded:           true,
+		targets:            make(map[string]vmpackage.Callable),
+		exportedNames:      make(map[string]bool),
+		loadedPaths:        make(map[string]bool),
+		declaredNamespaces: make(map[string]string),
 	}
 	// resume/resolve are session-bound so they can swap curVM to the fiber's VM
 	// for the duration of Exec(), making Frames()/CallDepth()/step hooks reflect
@@ -657,7 +664,13 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 		if !ok {
 			continue
 		}
-		parts := strings.Split(imp.Path, "/")
+		// `buzz:<name>` is upstream Buzz's package-manager scheme for a built-in
+		// stdlib module (`import "buzz:os"`), disambiguating it from a package or
+		// file import. gopherbuzz registers the stdlib under bare names, so strip
+		// the scheme and resolve/bind as if the bare name was imported; the
+		// original spelling is kept for diagnostics.
+		resolvePath := strings.TrimPrefix(imp.Path, "buzz:")
+		parts := strings.Split(resolvePath, "/")
 		basename := parts[len(parts)-1]
 
 		// Determine the bound name used to detect "already loaded":
@@ -672,7 +685,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 
 		// Host-provided synthetic modules (e.g. "magus/extra") resolve before
 		// any filesystem search and bind directly under the import's name.
-		if v, ok := s.syntheticModules[imp.Path]; ok {
+		if v, ok := s.syntheticModules[resolvePath]; ok {
 			s.env.Define(boundName, v)
 			continue
 		}
@@ -681,8 +694,8 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 		// importer can use their exported object/enum types. They flat-merge
 		// like a file import; the loadedPaths guard (keyed by import path)
 		// prevents a second exec.
-		if src, ok := s.sourceModules[imp.Path]; ok {
-			key := "source:" + imp.Path
+		if src, ok := s.sourceModules[resolvePath]; ok {
+			key := "source:" + resolvePath
 			if s.loadedPaths[key] {
 				continue
 			}
@@ -693,19 +706,24 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
 			}
 			s.bindNamespaceObject(boundName, exports)
+			if ns := s.declaredNamespace(src); ns != nil {
+				if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 
 		// A host module resolver (e.g. local magus spells: `import "spells/hello"`)
 		// gets first refusal on path-style imports, ahead of the file search.
 		if s.moduleResolver != nil {
-			if v, ok := s.moduleResolver(imp.Path); ok {
+			if v, ok := s.moduleResolver(resolvePath); ok {
 				s.env.Define(boundName, v)
 				continue
 			}
 		}
 
-		path := s.findIncludeFile(imp.Path)
+		path := s.findIncludeFile(resolvePath)
 		if path == "" {
 			// Nothing resolved this import: not an already-bound name, a synthetic
 			// or source module, the host module resolver, or a .buzz file on the
@@ -748,6 +766,14 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			// qualified access (`regex\reCompile`) resolves the same export the
 			// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
 			s.bindNamespaceObject(boundName, exports)
+			// And, when the file declares `namespace a\b\c`, bind its exports
+			// under that full path too, matching upstream Buzz exactly (and
+			// erroring on a duplicate namespace instead of failing downstream).
+			if ns := s.declaredNamespace(string(data)); ns != nil {
+				if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -803,6 +829,86 @@ func (s *Session) bindNamespaceObject(name string, exports []string) {
 		}
 	}
 	s.env.Define(name, m)
+}
+
+// declaredNamespace returns the segments of a module's leading `namespace a\b\c`
+// declaration (nil if it declares none). Upstream Buzz exposes a no-alias
+// import's exports under this full path; gopherbuzz mirrors that in
+// bindNamespacePath, in addition to its own basename/splat conveniences.
+func (s *Session) declaredNamespace(src string) []string {
+	prog, err := parseModed(src, !s.embedded)
+	if err != nil {
+		return nil
+	}
+	for _, stmt := range prog.Stmts {
+		if ns, ok := stmt.(*ast.NamespaceStmt); ok {
+			return strings.Split(ns.Name, `\`)
+		}
+		// The namespace decl, if present, leads the file (after nothing that
+		// binds a name); stop at the first non-namespace statement so we don't
+		// scan the whole body.
+		break
+	}
+	return nil
+}
+
+// bindNamespacePath makes a flat import's exports reachable under its declared
+// `namespace a\b\c` path, matching upstream Buzz (`a\b\c\export`). Segments nest
+// as maps, merging into any prefix a sibling namespace already created (so a\b
+// and a\c coexist under one `a`). importPath is used only for the duplicate
+// diagnostic. A single-segment namespace that collides with an existing binding
+// (e.g. the module's basename equals its namespace) is left as-is: the basename
+// object already resolves it. Returns an error on a duplicate namespace or a
+// segment that collides with a non-map binding.
+func (s *Session) bindNamespacePath(segments []string, exports []string, importPath string) error {
+	if len(segments) == 0 {
+		return nil
+	}
+	full := strings.Join(segments, `\`)
+	if prev, dup := s.declaredNamespaces[full]; dup {
+		return fmt.Errorf("buzz: import %q: the namespace %q already exists (also declared by import %q)", importPath, full, prev)
+	}
+
+	leaf := vmpackage.NewMap()
+	for _, n := range exports {
+		if v, ok := s.env.Get(n); ok {
+			leaf.MapSet(n, v)
+		}
+	}
+
+	if len(segments) == 1 {
+		if _, exists := s.env.Get(segments[0]); !exists {
+			s.env.Define(segments[0], leaf)
+		}
+		s.declaredNamespaces[full] = importPath
+		return nil
+	}
+
+	// Multi-segment: walk/create nested maps, merging into existing prefixes.
+	head := segments[0]
+	var cur vmpackage.Value
+	if existing, ok := s.env.Get(head); ok {
+		if !existing.IsMap() {
+			return fmt.Errorf("buzz: import %q: namespace %q conflicts with existing binding %q", importPath, full, head)
+		}
+		cur = existing
+	} else {
+		cur = vmpackage.NewMap()
+		s.env.Define(head, cur)
+	}
+	for _, seg := range segments[1 : len(segments)-1] {
+		next, ok := cur.MapGet(seg)
+		if !ok {
+			next = vmpackage.NewMap()
+			cur.MapSet(seg, next)
+		} else if !next.IsMap() {
+			return fmt.Errorf("buzz: import %q: namespace %q conflicts with existing binding %q", importPath, full, seg)
+		}
+		cur = next
+	}
+	cur.MapSet(segments[len(segments)-1], leaf)
+	s.declaredNamespaces[full] = importPath
+	return nil
 }
 
 // loadImportAsAlias executes src in a sub-session that inherits the parent's

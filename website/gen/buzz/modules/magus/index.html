@@ -101,7 +101,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="run">run</h3>
 <p>Run <code>magus run &lt;args&gt;</code> recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
-<p><strong>Signature:</strong> <code>magus.run(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L156" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>magus.run(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L155" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -129,7 +129,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="describe">describe</h3>
 <p>Run <code>magus describe &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.</p>
-<p><strong>Signature:</strong> <code>magus.describe(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L161" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>magus.describe(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L160" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -157,7 +157,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="insight">insight</h3>
 <p>Run <code>magus insight &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
-<p><strong>Signature:</strong> <code>magus.insight(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L166" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>magus.insight(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L165" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -185,7 +185,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="doctor">doctor</h3>
 <p>Run <code>magus doctor &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
-<p><strong>Signature:</strong> <code>magus.doctor(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L171" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>magus.doctor(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L170" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <table>
 <thead>
 <tr>
@@ -267,13 +267,13 @@
     <div class="related-grid">
         <a class="related-card" href="../../../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
         <a class="related-card" href="../../../buzz/modules/archive/"><span class="related-card-title">archive module</span><span class="related-card-desc">Archive creation and extraction with automatic format detection.</span></a>
-        <a class="related-card" href="../../../buzz/modules/charm/"><span class="related-card-title">charm module</span><span class="related-card-desc">Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).</span></a>
+        <a class="related-card" href="../../../buzz/modules/charm/"><span class="related-card-title">charm module</span><span class="related-card-desc">Constructors for charm values: RFC 6902 JSON Patches over a target&#39;s argv (see docs/charms.md).</span></a>
         <a class="related-card" href="../../../buzz/modules/crypto/"><span class="related-card-title">crypto module</span><span class="related-card-desc">Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-04T03:04:11Z">July 4, 2026, 3:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4992301a69f66a3041365b693ce859424522861b" data-tooltip="4992301a69f66a3041365b693ce859424522861b" title="4992301a69f66a3041365b693ce859424522861b">4992301</a>)</small>
+    <small>Last updated <time datetime="2026-07-05T02:24:18Z">July 5, 2026, 2:24 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8" data-tooltip="7bbecbc5a122147d3f1db4a29e2b3fd9734781c8" title="7bbecbc5a122147d3f1db4a29e2b3fd9734781c8">7bbecbc</a>)</small>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>

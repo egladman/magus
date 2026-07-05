@@ -15,6 +15,9 @@ import "os";
 import "std";
 import "serialize";
 import "encoding";
+import "time";
+import "template";
+import "assert";
 
 // Path config, set by site_render() from the arguments the magusfile passes in - the
 // generator does not hardcode where the workspace, docs, or output live, so it stays
@@ -35,29 +38,6 @@ final GH   = "https://github.com/egladman/magus";
 final SITE_URL  = "https://eli.gladman.cc/magus/";
 final SITE_DESC = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.";
 
-final MONTHS: {str: str} = {
-    "01": "January", "02": "February", "03": "March",    "04": "April",
-    "05": "May",     "06": "June",     "07": "July",     "08": "August",
-    "09": "September", "10": "October", "11": "November", "12": "December",
-};
-// Short month names for compact date formats (page-history list).
-final MONTHS_SHORT: {str: str} = {
-    "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
-    "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
-    "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
-};
-final HOUR12: {str: str} = {
-    "00": "12", "01": "1",  "02": "2",  "03": "3",  "04": "4",  "05": "5",
-    "06": "6",  "07": "7",  "08": "8",  "09": "9",  "10": "10", "11": "11",
-    "12": "12", "13": "1",  "14": "2",  "15": "3",  "16": "4",  "17": "5",
-    "18": "6",  "19": "7",  "20": "8",  "21": "9",  "22": "10", "23": "11",
-};
-final AMPM: {str: str} = {
-    "00": "AM", "01": "AM", "02": "AM", "03": "AM", "04": "AM", "05": "AM",
-    "06": "AM", "07": "AM", "08": "AM", "09": "AM", "10": "AM", "11": "AM",
-    "12": "PM", "13": "PM", "14": "PM", "15": "PM", "16": "PM", "17": "PM",
-    "18": "PM", "19": "PM", "20": "PM", "21": "PM", "22": "PM", "23": "PM",
-};
 
 // Value objects. They must precede Site, which holds arrays of them - Buzz has no
 // forward references to types.
@@ -204,7 +184,7 @@ object Site {
         var title = fm.q("title").stringValue();
         if (title == "") { title = deriveTitle(md, rel); }
         final desc = fm.q("description").stringValue();
-        final url = cleanUrl(rel);
+        final url = cleanURL(rel);
         // Join tags with "||" (never present in a tag) so the record stays flat;
         // sharedTagCount splits it back out.
         var joined = "";
@@ -218,7 +198,7 @@ object Site {
             title = title,
             desc = desc,
             tags = joined,
-            section = sectionFromUrl(url),
+            section = firstPathSegment(url),
             overview = pageType(md) == "overview",
             srcRel = this.docs + "/" + rel,
         });
@@ -232,7 +212,7 @@ object Site {
         foreach (name in fs.list(dir)) {
             var childRel = name;
             if (rel != "") { childRel = rel + "/" + name; }
-            if (isDir(this.root + "/" + this.docs + "/" + childRel)) {
+            if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
                 this.collectDocPages(childRel);
             } else {
                 if (name.endsWith(".md")) { this.collectDocPage(childRel); }
@@ -243,9 +223,16 @@ object Site {
     // renderBreadcrumb builds the breadcrumb <nav> for one page. Blog, search, tour,
     // /public/, and /development/ get their own flat trails; docs pages hang off the
     // documentation index, each intermediate crumb showing the linked page's real
-    // title (looked up in docPages via titleForUrl).
+    // title (looked up in docPages via lookupTitle).
     fun renderBreadcrumb(srcRel: str, title: str, root: str) > str {
         if (srcRel == "README.md") { return ""; }
+        // The crumb <li>s are computed per branch below (titles, links, current
+        // markers); this one template wraps whichever list a branch builds. li is
+        // injected raw - it is already-assembled markup, not a value to escape.
+        final bcTmpl = `    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul>{{{li}}}</ul>
+    </nav>
+`;
         var rel = srcRel;
         if (rel.startsWith(this.docs + "/")) { rel = rel.sub((this.docs + "/").len()); }
         final segsRaw = rel.split("/");
@@ -256,31 +243,28 @@ object Site {
         // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
         // the listing page.
         if (srcRel == this.blog + "/index.md") {
-            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
-                + li + "<li aria-current=\"page\">Blog</li></ul>\n    </nav>\n";
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"});
         }
         // The search page is a top-level tool surface: Home / Search (no Documentation
         // root, it does not hang off the documentation index).
         if (srcRel == "search/index.md") {
-            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
-                + li + "<li aria-current=\"page\">Search</li></ul>\n    </nav>\n";
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"});
         }
         // The tour page is a top-level onboarding surface: Home / Tour.
         if (srcRel == "tour/index.md") {
-            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
-                + li + "<li aria-current=\"page\">Tour</li></ul>\n    </nav>\n";
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"});
         }
         if (srcRel.startsWith(this.blog + "/")) {
             li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
                 + "<li aria-current=\"page\">" + title + "</li>";
-            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+            return template.render(bcTmpl, {"li": li});
         }
         // The /public/ autoindex tree also skips the Documentation root; each level
         // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
         // link in its own body, so the breadcrumb stays flat).
         if (srcRel.startsWith("public/")) {
             li = li + "<li aria-current=\"page\">" + title + "</li>";
-            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+            return template.render(bcTmpl, {"li": li});
         }
 
         // /development/ contributor surface. Home / Development for the landing; Home /
@@ -293,14 +277,13 @@ object Site {
                 li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
                     + "<li aria-current=\"page\">" + title + "</li>";
             }
-            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+            return template.render(bcTmpl, {"li": li});
         }
 
         // The documentation index roots every docs trail; on that page itself it is
         // the current leaf rather than a link back to where you already are.
         if (rel == "documentation.md") {
-            return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>"
-                + li + "<li aria-current=\"page\">Documentation</li></ul>\n    </nav>\n";
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Documentation</li>"});
         }
         li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
 
@@ -325,8 +308,8 @@ object Site {
         while (i < dirCount) {
             final seg = segs[i];
             if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
-            var label = cap(seg);
-            final t = titleForUrl(acc + "/");
+            var label = capitalizeFirst(seg);
+            final t = lookupTitle(acc + "/");
             if (t != "") {
                 li = li + "<li><a href=\"" + root + acc + "/\">" + t + "</a></li>";
             } else {
@@ -338,7 +321,7 @@ object Site {
         // The leaf is the current page's own title (faithful for both a landing and a
         // regular page), matching how the intermediate crumbs now read.
         li = li + "<li aria-current=\"page\">" + title + "</li>";
-        return "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n      <ul>" + li + "</ul>\n    </nav>\n";
+        return template.render(bcTmpl, {"li": li});
     }
 
     // renderRelated builds the "Related" card grid for the page whose source is
@@ -367,7 +350,7 @@ object Site {
 
         // picks is the final ordered card list; used dedups by URL (a page never links
         // to itself or lists the same neighbor twice).
-        var picks: [{str: str}] = mut [<{str: str}>];
+        var picks: [{str: any}] = mut [<{str: any}>];
         var used: {str: bool} = mut {};
         used[curUrl] = true;
 
@@ -386,7 +369,7 @@ object Site {
             }
         }
         if (leadUrl != "") {
-            picks.append(mut {"url": leadUrl, "title": leadTitle, "desc": leadDesc});
+            picks.append(mut {"url": leadUrl, "title": leadTitle, "desc": leadDesc, "hasDesc": leadDesc != ""});
             used[leadUrl] = true;
         }
 
@@ -413,29 +396,21 @@ object Site {
         });
         foreach (r in sorted) {
             if (picks.len() < 4) {
-                picks.append(mut {"url": r["url"], "title": r["title"], "desc": r["desc"]});
+                picks.append(mut {"url": r["url"], "title": r["title"], "desc": r["desc"], "hasDesc": r["desc"] != ""});
             }
         }
 
         if (picks.len() == 0) { return ""; }
 
-        var cards = "";
-        foreach (r in picks) {
-            var descHtml = "";
-            if (r["desc"] != "") {
-                descHtml = "<span class=\"related-card-desc\">" + escapeAttr(r["desc"]) + "</span>";
-            }
-            cards = cards
-                + "        <a class=\"related-card\" href=\"" + root + r["url"] + "\">"
-                + "<span class=\"related-card-title\">" + escapeAttr(r["title"]) + "</span>"
-                + descHtml + "</a>\n";
-        }
-        return "  <section class=\"related container\" aria-labelledby=\"related-heading\">\n"
-            + "    <h2 id=\"related-heading\" class=\"related-heading\">Related</h2>\n"
-            + "    <div class=\"related-grid\">\n"
-            + cards
-            + "    </div>\n"
-            + "  </section>\n";
+        return template.render(`  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+{{#picks}}
+        <a class="related-card" href="{{root}}{{url}}"><span class="related-card-title">{{title}}</span>{{#hasDesc}}<span class="related-card-desc">{{desc}}</span>{{/hasDesc}}</a>
+{{/picks}}
+    </div>
+  </section>
+`, {"root": root, "picks": picks});
     }
 
     // loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
@@ -466,7 +441,7 @@ object Site {
                 final parts = f.split("/");
                 var pageDir = "";
                 if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
-                foreach (target in scanRefsInHtml(html, pageDir)) {
+                foreach (target in scanReferencesInHTML(html, pageDir)) {
                     if (checkPathExists(target) == false) {
                         throw "asset integrity: " + f + " references missing " + target;
                     }
@@ -502,7 +477,7 @@ object Site {
             final fh = io.File.open(path, io.FileMode.read);
             final html = fh.readAll();
             fh.close();
-            foreach (ref in scanRefsInHtml(html, key)) {
+            foreach (ref in scanReferencesInHTML(html, key)) {
                 final k = pageKey(ref);
                 if (isPage[k] != null and visited[k] == null) {
                     visited[k] = true;
@@ -518,14 +493,14 @@ object Site {
             if (visited[dk] == null) { orphans.append(p.url); }
         }
         if (orphans.len() > 0) {
-            throw "orphaned pages: {orphans.len()} docs page(s) unreachable from site navigation (add a link from an overview page): " + orphans.join(", ");
+            throw "orphaned pages: {orphans.len()} docs renderPage(s) unreachable from site navigation (add a link from an overview page): " + orphans.join(", ");
         }
     }
 }
 var site: Site = mut Site{};
 
 // (The per-page reading-time and tags are no longer module globals: they are passed
-// straight into page() as the `reading` / `tags` arguments, so there is no
+// straight into renderPage() as the `reading` / `tags` arguments, so there is no
 // set-before-call / clear-after temporal coupling to get wrong.)
 
 fun capture(cmd: str) > str {
@@ -674,26 +649,26 @@ fun cleanBody(md: str) > str {
     return words.join(" ");
 }
 
-fun outName(base: str) > str {
+fun outputName(base: str) > str {
     if (base == "README.md") { return "index.html"; }
     return base.sub(0, base.len() - 3) + ".html";
 }
 
-// cleanUrl maps a docs-relative source path to its clean, extensionless gen-root
+// cleanURL maps a docs-relative source path to its clean, extensionless gen-root
 // URL: drop the .md, drop a trailing index/README landing basename, drop any
 // build-artifact "gen" segment (so docs/manpage/gen/magus-run.md surfaces at
 // manpage/magus-run/, not manpage/gen/magus-run/), and end with a trailing slash.
-// "" for the home page (README.md). Every written page becomes <cleanUrl>index.html.
+// "" for the home page (README.md). Every written page becomes <cleanURL>index.html.
 //   "documentation.md"          -> "documentation/"
 //   "modules/fs.md"             -> "modules/fs/"
 //   "codes/race/README.md"      -> "codes/race/"
 //   "manpage/gen/magus-run.md"  -> "manpage/magus-run/"
-fun cleanUrl(rel: str) > str {
+fun cleanURL(rel: str) > str {
     // Blog posts are date-scoped: blog/2026-07-01-slug.md -> blog/2026/07/01/slug/.
     // The blog index (blog/index.md) is not a post, so it falls through to the
     // generic landing rule below and stays at blog/.
     if (rel.startsWith(site.blog + "/") and rel != site.blog + "/index.md") {
-        return site.blog + "/" + blogUrlPath(rel.sub((site.blog + "/").len())) + "/";
+        return site.blog + "/" + blogURLPath(rel.sub((site.blog + "/").len())) + "/";
     }
     var base = rel;
     if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
@@ -704,8 +679,10 @@ fun cleanUrl(rel: str) > str {
         final p = parts[i];
         final isLast = (i == parts.len() - 1);
         if (p != "gen") {
-            if (isLast and (p == "index" or p == "README")) {
-                // a landing basename becomes its directory's URL; drop it
+            if (isLast and (p == "index" or p == "_index" or p == "README")) {
+                // a landing basename becomes its directory's URL; drop it. "_index"
+                // is the marker convention autoindex and the /development/ pages use
+                // for a directory's own landing page, so it strips like "index".
             } else {
                 segs.append(p);
             }
@@ -719,7 +696,7 @@ fun cleanUrl(rel: str) > str {
 // cleanDepth is the number of path segments in a page's clean URL — its directory
 // depth below gen/'s root, i.e. how many "../" reach the root from it.
 fun cleanDepth(rel: str) > int {
-    final u = cleanUrl(rel);
+    final u = cleanURL(rel);
     if (u == "") { return 0; }
     return u.split("/").len() - 1;   // "modules/fs/" -> ["modules","fs",""] -> 2
 }
@@ -864,14 +841,14 @@ fun tagRunnable(html: str) > str {
     // trace instead of executing), which run-example.js routes to
     // evalBuzzWithRecorder on seeing data-recorder. run-recorder is matched first
     // so its longer marker isn't mistaken for a bare run marker.
-    final recTagged = tagRunnableWith(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
-    return tagRunnableWith(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
+    final recTagged = tagRunnableMarker(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
+    return tagRunnableMarker(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
 }
 
-// tagRunnableWith swaps the <pre> that follows each marker comment with openTag
+// tagRunnableMarker swaps the <pre> that follows each marker comment with openTag
 // (the marker is dropped). A marker not immediately followed by a fence is simply
 // removed, so the block renders normally.
-fun tagRunnableWith(html: str, marker: str, openTag: str) > str {
+fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
     var buf = "";
     var rest = html;
     var idx = rest.indexOf(marker);
@@ -900,14 +877,14 @@ fun tagRunnableWith(html: str, marker: str, openTag: str) > str {
     return buf + rest;
 }
 
-// renderContentHtml is the ONE post-processing pipeline every page render runs: it
+// renderContentHTML is the ONE post-processing pipeline every page render runs: it
 // rewrites a rendered-markdown fragment's in-content links from the page's old flat
 // directory (oldDir) to its new clean directory (newDir), then applies the ordered
 // content transforms - runnable markers, admonitions, code titles, lazy images,
 // external-link marks, and mermaid. Routing renderRoot, renderFile, and
 // renderBlogPost through this is what keeps a transform (like the runnable Run
 // buttons) from being applied on one path and silently forgotten on another.
-fun renderContentHtml(rawHtml: str, oldDir: str, newDir: str) > str {
+fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
     return tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir)))))));
 }
 
@@ -1118,16 +1095,16 @@ fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
     return buf + rest;
 }
 
-// oldFlatDir / newCleanDir give a docs page's directory before and after the
+// oldFlatDirectory / newCleanDirectory give a docs page's directory before and after the
 // directory-index move, for rewriteLinks. Old: the source subdir (one .html per
 // dir). New: the clean URL without its trailing slash.
-fun oldFlatDir(rel: str) > str {
+fun oldFlatDirectory(rel: str) > str {
     final parts = rel.split("/");
     if (parts.len() <= 1) { return ""; }
     return parts.sub(0, parts.len() - 1).join("/");
 }
-fun newCleanDir(rel: str) > str {
-    final u = cleanUrl(rel);
+fun newCleanDirectory(rel: str) > str {
+    final u = cleanURL(rel);
     if (u == "") { return ""; }
     return u.sub(0, u.len() - 1);
 }
@@ -1148,12 +1125,12 @@ fun aliasStub(rel: str) > str {
         + "</body>\n</html>\n";
 }
 
-// writeSeoFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
+// writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
 // byte-stable), each as an absolute SITE_URL loc — the home page's "index.html" URL
 // maps to the bare site root. Aliases are deliberately absent (only canonical pages
 // belong in a sitemap). Gated on SITE_URL so the site can ship dark until the host
 // is confirmed. robots points crawlers at the sitemap.
-fun writeSeoFiles() > void {
+fun writeSEOFiles() > void {
     if (SITE_URL == "") { return; }
     var urls: [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
@@ -1163,7 +1140,7 @@ fun writeSeoFiles() > void {
     foreach (u in sorted) {
         var loc = u;
         if (loc == "index.html") { loc = ""; }
-        body = body + "  <url>" + xmlEl("loc", SITE_URL + loc) + "</url>\n";
+        body = body + "  <url>" + xmlElement("loc", SITE_URL + loc) + "</url>\n";
     }
     body = body + "</urlset>\n";
     fs.writeFile(site.outDir + "/sitemap.xml", body);
@@ -1183,18 +1160,18 @@ fun escapeXml(s: str) > str {
 // or changelog body can't produce malformed XML (the old hand-concatenation escaped
 // title/summary but left href/id/loc raw). Container tags with their own namespaces
 // (<feed>, <urlset>, <entry>, <url>) stay written inline; these cover the leaves.
-//   xmlAttr("rel", "self")                 -> ` rel="self"`  (leading space; escaped)
-//   xmlEl("title", "magus blog")           -> `<title>magus blog</title>`
-//   xmlElA("summary", xmlAttr("type","text"), body) -> `<summary type="text">body</summary>`
-//   xmlSelfClose("link", xmlAttr("href", u)) -> `<link href="u"/>`
-fun xmlAttr(name: str, value: str) > str {
+//   xmlAttribute("rel", "self")                 -> ` rel="self"`  (leading space; escaped)
+//   xmlElement("title", "magus blog")           -> `<title>magus blog</title>`
+//   xmlElementAttribute("summary", xmlAttribute("type","text"), body) -> `<summary type="text">body</summary>`
+//   xmlSelfClose("link", xmlAttribute("href", u)) -> `<link href="u"/>`
+fun xmlAttribute(name: str, value: str) > str {
     return " " + name + "=\"" + escapeXml(value) + "\"";
 }
-fun xmlElA(tag: str, attrs: str, text: str) > str {
+fun xmlElementAttribute(tag: str, attrs: str, text: str) > str {
     return "<" + tag + attrs + ">" + escapeXml(text) + "</" + tag + ">";
 }
-fun xmlEl(tag: str, text: str) > str {
-    return xmlElA(tag, "", text);
+fun xmlElement(tag: str, text: str) > str {
+    return xmlElementAttribute(tag, "", text);
 }
 fun xmlSelfClose(tag: str, attrs: str) > str {
     return "<" + tag + attrs + "/>";
@@ -1223,19 +1200,19 @@ fun renderBlogAtom() > void {
     final feedUpdated = atomDate(sorted[0].date);
     var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlEl("title", "magus blog") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttr("href", SITE_URL + "blog/") + xmlAttr("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttr("href", SITE_URL + "public/atom/blog.atom.xml") + xmlAttr("rel", "self")) + "\n"
-        + "  " + xmlEl("id", SITE_URL + "blog/") + "\n"
-        + "  " + xmlEl("updated", feedUpdated) + "\n";
+        + "  " + xmlElement("title", "magus blog") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "blog/") + xmlAttribute("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "public/atom/blog.atom.xml") + xmlAttribute("rel", "self")) + "\n"
+        + "  " + xmlElement("id", SITE_URL + "blog/") + "\n"
+        + "  " + xmlElement("updated", feedUpdated) + "\n";
     foreach (p in sorted) {
         final entryUrl = SITE_URL + p.url;
         body = body + "  <entry>\n"
-            + "    " + xmlEl("title", p.title) + "\n"
-            + "    " + xmlSelfClose("link", xmlAttr("href", entryUrl)) + "\n"
-            + "    " + xmlEl("id", entryUrl) + "\n"
-            + "    " + xmlEl("updated", atomDate(p.date)) + "\n"
-            + "    " + xmlEl("summary", p.description) + "\n"
+            + "    " + xmlElement("title", p.title) + "\n"
+            + "    " + xmlSelfClose("link", xmlAttribute("href", entryUrl)) + "\n"
+            + "    " + xmlElement("id", entryUrl) + "\n"
+            + "    " + xmlElement("updated", atomDate(p.date)) + "\n"
+            + "    " + xmlElement("summary", p.description) + "\n"
             + "  </entry>\n";
     }
     body = body + "</feed>\n";
@@ -1307,20 +1284,20 @@ fun renderReleasesAtom() > void {
     final feedUpdated = atomDate(site.releases[0].date);
     var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlEl("title", "magus releases") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttr("href", GH + "/releases") + xmlAttr("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttr("href", SITE_URL + "public/atom/releases.atom.xml") + xmlAttr("rel", "self")) + "\n"
-        + "  " + xmlEl("id", GH + "/releases") + "\n"
-        + "  " + xmlEl("updated", feedUpdated) + "\n";
+        + "  " + xmlElement("title", "magus releases") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", GH + "/releases") + xmlAttribute("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "public/atom/releases.atom.xml") + xmlAttribute("rel", "self")) + "\n"
+        + "  " + xmlElement("id", GH + "/releases") + "\n"
+        + "  " + xmlElement("updated", feedUpdated) + "\n";
     foreach (r in site.releases) {
         final ver = r.version;
         final link = GH + "/releases/tag/" + ver;
         body = body + "  <entry>\n"
-            + "    " + xmlEl("title", ver) + "\n"
-            + "    " + xmlSelfClose("link", xmlAttr("href", link)) + "\n"
-            + "    " + xmlEl("id", link) + "\n"
-            + "    " + xmlEl("updated", atomDate(r.date)) + "\n"
-            + "    " + xmlElA("summary", xmlAttr("type", "text"), r.body.trim()) + "\n"
+            + "    " + xmlElement("title", ver) + "\n"
+            + "    " + xmlSelfClose("link", xmlAttribute("href", link)) + "\n"
+            + "    " + xmlElement("id", link) + "\n"
+            + "    " + xmlElement("updated", atomDate(r.date)) + "\n"
+            + "    " + xmlElementAttribute("summary", xmlAttribute("type", "text"), r.body.trim()) + "\n"
             + "  </entry>\n";
     }
     body = body + "</feed>\n";
@@ -1332,25 +1309,26 @@ fun renderReleasesAtom() > void {
 // root-relative dir, without trailing slash; "" for the root of the /public/
 // tree, "atom" or "release" for a subdir). entries is a list of records with
 // {name, href, size?, modified?, desc}. Every level brackets the listing with a
-// leading and trailing rule, like a real mirror index. Themed with Pico via the shared page() template
+// leading and trailing rule, like a real mirror index. Themed with Pico via the shared renderPage() template
 // (no bespoke color palette), so light/dark follow the site theme. rootDepth is
 // how many "../" the caller needs to reach gen/'s root, used only to preload the
 // hat asset in the shared head.
-fun autoindex(path: str, entries: [{str: str}], parentHref: str) > void {
+fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str) > void {
     // Displayed path: /public or /public/atom, always absolute with leading + trailing slash.
     var displayPath = "/public";
     if (path != "public") { displayPath = "/" + path; }
     displayPath = displayPath + "/";
 
-    var body = "<h1>Index of " + displayPath + "</h1>\n"
-        + "<pre class=\"autoindex\">"
-        + "<span class=\"autoindex-head\">Name                          Last modified      Size  Description</span>\n"
-        + "<hr>\n";
+    // The parent link and the entry rows are fixed-width text (padded columns), so
+    // buzz assembles them; the template only wraps the <pre> block. The padding must
+    // stay here - Mustache can't align columns.
+    var parent = "";
     if (parentHref != "") {
-        body = body + "<a href=\"" + parentHref + "\">Parent Directory</a>                                        -   \n";
+        parent = "<a href=\"" + parentHref + "\">Parent Directory</a>                                        -   \n";
     }
     // Sort entries by name so listings are byte-stable.
     final sorted = entries.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["name"], b["name"]); });
+    var rows = "";
     foreach (e in sorted) {
         final name = e["name"];
         final href = e["href"];
@@ -1368,10 +1346,14 @@ fun autoindex(path: str, entries: [{str: str}], parentHref: str) > void {
         var padSize = size;
         var k = size.len();
         while (k < 5) { padSize = " " + padSize; k = k + 1; }
-        body = body + padName + " " + padMod + "  " + padSize + "  " + desc + "\n";
+        rows = rows + padName + " " + padMod + "  " + padSize + "  " + desc + "\n";
     }
-    body = body + "<hr>\n"
-        + "</pre>\n";
+    final body = template.render(`<h1>Index of {{displayPath}}</h1>
+<pre class="autoindex"><span class="autoindex-head">Name                          Last modified      Size  Description</span>
+<hr>
+{{{parent}}}{{{rows}}}<hr>
+</pre>
+`, {"displayPath": displayPath, "parent": parent, "rows": rows});
 
     fs.makeDirectory(site.outDir + "/" + path);
     // srcMarker matches the written directory depth so rootPrefix computes the
@@ -1388,7 +1370,7 @@ fun autoindex(path: str, entries: [{str: str}], parentHref: str) > void {
     } else {
         site.metaCommits[site.metaPrefix + srcMarker] = site.metaFull + "|" + site.metaShort + "|" + site.metaStamp;
     }
-    final doc = page("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/", "", mut []);
+    final doc = renderPage("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/", "", mut []);
     final of = io.File.open(site.outDir + "/" + path + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
@@ -1420,7 +1402,7 @@ fun renderPublic() > void {
             "desc": "Releases (Atom 1.0)"
         });
     }
-    if (atomEntries.len() > 0) { autoindex("public/atom", atomEntries, "../"); }
+    if (atomEntries.len() > 0) { renderAutoindex("public/atom", atomEntries, "../"); }
 
     // /public/release/  - per-version tree. Each released version (parsed from
     // CHANGELOG.md by parseChangelog) gets its own subdirectory listing the 8
@@ -1444,7 +1426,7 @@ fun renderPublic() > void {
         verEntries.append(mut {"name": "SHA256SUMS",         "href": assetBase + "/SHA256SUMS",     "size": "-", "modified": date, "desc": "SHA-256 manifest"});
         verEntries.append(mut {"name": "SHA256SUMS.sig",     "href": assetBase + "/SHA256SUMS.sig", "size": "-", "modified": date, "desc": "Ed25519 signature of SHA256SUMS"});
         verEntries.append(mut {"name": "magus-release.pem",  "href": "../../../assets/magus-release.pem", "size": "-", "modified": "-", "desc": "Release signing key (SPKI PEM)"});
-        autoindex("public/release/" + ver, verEntries, "../");
+        renderAutoindex("public/release/" + ver, verEntries, "../");
     }
 
     // /public/release/  - parent index listing every version as a subdirectory.
@@ -1454,7 +1436,7 @@ fun renderPublic() > void {
         final ver = rel["version"];
         releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel["date"], "desc": "Release " + ver});
     }
-    autoindex("public/release", releaseParent, "../");
+    renderAutoindex("public/release", releaseParent, "../");
 
     // /public/ root.
     var rootEntries: [{str: str}] = mut [<{str: str}>];
@@ -1468,7 +1450,7 @@ fun renderPublic() > void {
     rootEntries.append(mut {"name": "release/", "href": "release/", "size": "-", "modified": "-", "desc": "Release artifacts"});
     rootEntries.append(mut {"name": "sitemap.xml", "href": "../sitemap.xml", "size": "-", "modified": "-", "desc": "XML sitemap"});
     rootEntries.append(mut {"name": "robots.txt", "href": "../robots.txt", "size": "-", "modified": "-", "desc": "Robots policy"});
-    autoindex("public", rootEntries, "../");
+    renderAutoindex("public", rootEntries, "../");
 }
 
 // render404 writes gen/404.html - the themed "warped off the map" page GitHub
@@ -1494,44 +1476,47 @@ fun render404() > void {
     if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
     final title = "Page not found - magus";
     final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
-    // Duplicate the head + nav template (rather than call page()) because every
-    // asset/link here must be root-absolute, not relative.
-    final doc = "<!DOCTYPE html>\n"
-        + "<html lang=\"en\" class=\"no-js\">\n"
-        + "<head>\n"
-        + "  <meta charset=\"utf-8\">\n"
-        + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-        + "  <meta name=\"color-scheme\" content=\"light dark\">\n"
-        + "  <meta name=\"generator\" content=\"magus\">\n"
-        + "  <title>" + title + "</title>\n"
-        + "  <meta name=\"description\" content=\"" + escapeAttr(desc) + "\">\n"
-        + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + basePath + "assets/favicon-32.png\">\n"
-        + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + basePath + "assets/apple-touch-icon.png\">\n"
-        + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
-        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\" integrity=\"" + PICO_SRI + "\" crossorigin=\"anonymous\">\n"
-        + "  <link rel=\"stylesheet\" href=\"" + basePath + "theme.css\">\n"
-        + "  <link rel=\"stylesheet\" href=\"" + basePath + "site.css\">\n"
-        + "  <script src=\"" + basePath + "theme.js\"></script>\n"
-        + "</head>\n"
-        + "<body>\n"
-        + siteNav(basePath, "")
-        + "  <main class=\"container\">\n"
-        + "    <article>\n"
-        + "      <h1>You have warped off the map.</h1>\n"
-        + "      <p><em>No such target.</em> Let us get you back:</p>\n"
-        + "      <ul>\n"
-        + "        <li><a href=\"" + basePath + "\">Home</a></li>\n"
-        + "        <li><a href=\"" + basePath + "documentation/\">Documentation</a></li>\n"
-        + "        <li><a href=\"" + basePath + "download/\">Download</a></li>\n"
-        + "        <li><a href=\"" + basePath + "tour/\">Tour</a></li>\n"
-        + "        <li><a href=\"" + basePath + "playground/\">Playground</a></li>\n"
-        + "      </ul>\n"
-        + "    </article>\n"
-        + "  </main>\n"
-        + siteFooter(basePath)
-        + "  <script type=\"module\" src=\"" + basePath + "main.js\"></script>\n"
-        + "</body>\n"
-        + "</html>\n";
+    // Its own template (rather than renderPage()) because every asset/link here must be
+    // root-absolute, not relative - GitHub Pages keeps the deep 404 URL in the bar.
+    final tmpl = `<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>{{title}}</title>
+  <meta name="description" content="{{desc}}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{basePath}}assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="{{pico}}" integrity="{{picoSri}}" crossorigin="anonymous">
+  <link rel="stylesheet" href="{{basePath}}theme.css">
+  <link rel="stylesheet" href="{{basePath}}site.css">
+  <script src="{{basePath}}theme.js"></script>
+</head>
+<body>
+{{{nav}}}  <main class="container">
+    <article>
+      <h1>You have warped off the map.</h1>
+      <p><em>No such target.</em> Let us get you back:</p>
+      <ul>
+        <li><a href="{{basePath}}">Home</a></li>
+        <li><a href="{{basePath}}documentation/">Documentation</a></li>
+        <li><a href="{{basePath}}download/">Download</a></li>
+        <li><a href="{{basePath}}tour/">Tour</a></li>
+        <li><a href="{{basePath}}playground/">Playground</a></li>
+      </ul>
+    </article>
+  </main>
+{{{footer}}}  <script type="module" src="{{basePath}}main.js"></script>
+</body>
+</html>
+`;
+    final doc = template.render(tmpl, {
+        "title": title, "desc": desc, "basePath": basePath, "pico": PICO, "picoSri": PICO_SRI,
+        "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath),
+    });
     fs.writeFile(site.outDir + "/404.html", doc);
 }
 
@@ -1604,15 +1589,8 @@ fun writeServiceWorker() > void {
 // date library. Used as the no-JS fallback; client-side JS rewrites it to the
 // viewer's local timezone via Intl.DateTimeFormat.
 fun formatISO(iso: str) > str {
-    final dt    = iso.split("T");
-    final date  = dt[0].split("-");        // ["2026", "06", "29"]
-    final time  = dt[1].replace("Z", "").split(":"); // ["01", "41", "51"]
-    final month = date[1];
-    final hour  = time[0];
-    var   day   = date[2];
-    if (day.startsWith("0")) { day = day.sub(1); }
-    return MONTHS[month] + " " + day + ", " + date[0]
-        + ", " + HOUR12[hour] + ":" + time[1] + " " + AMPM[hour] + " UTC";
+    final ms = time.parse("2006-01-02T15:04:05Z", iso);
+    return time.format("January 2, 2006, 3:04 PM UTC", ms);
 }
 
 // blogDate renders a post's frontmatter date (date-only "2026-07-01" or a full
@@ -1621,11 +1599,10 @@ fun formatISO(iso: str) > str {
 // carries the date-only "YYYY-MM-DD" form and theme.js formats it in UTC (a
 // midnight-UTC instant would otherwise slip to the previous day west of GMT).
 fun blogDate(d: str) > str {
-    final date = d.split("T")[0].split("-");   // ["2026", "07", "01"]
-    if (date.len() < 3) { return d; }
-    var day = date[2];
-    if (day.startsWith("0")) { day = day.sub(1); }
-    return MONTHS[date[1]] + " " + day + ", " + date[0];
+    final dateOnly = d.split("T")[0];          // date-only or the date part of RFC3339
+    if (dateOnly.split("-").len() < 3) { return d; }
+    final ms = time.parse("2006-01-02", dateOnly);
+    return time.format("January 2, 2006", ms);
 }
 
 // blogDateAttr is the date-only "YYYY-MM-DD" that pairs with blogDate() in a
@@ -1638,17 +1615,14 @@ fun blogDateAttr(d: str) > str {
 // Compact form used by the recent-changes list; the full timestamp stays in the
 // <time datetime="..."> attribute for tooltips and screen readers.
 fun formatISOShort(iso: str) > str {
-    final dt   = iso.split("T");
-    final date = dt[0].split("-");
-    var   day  = date[2];
-    if (day.startsWith("0")) { day = day.sub(1); }
-    return MONTHS_SHORT[date[1]] + " " + day + ", " + date[0];
+    final ms = time.parse("2006-01-02T15:04:05Z", iso);
+    return time.format("Jan 2, 2006", ms);
 }
 
 // Footer crediting the last commit that touched a page's source (a magus/-relative
 // path), falling back to HEAD for a not-yet-committed file. Keying off the file's
 // own history means a page changes when its source does, not when any commit lands.
-fun commitFooter(path: str) > str {
+fun renderCommitFooter(path: str) > str {
     var cFull = site.metaFull;
     var cShort = site.metaShort;
     var cStamp = site.metaStamp;
@@ -1659,51 +1633,39 @@ fun commitFooter(path: str) > str {
         cShort = parts[1];
         cStamp = parts[2];
     }
-    // "Last updated" line: the always-visible provenance. Emitted as a <small>
-    // paragraph so Pico's own typography sets the muted look; no custom classes.
-    var line = "<small>Last updated <time datetime=\"" + cStamp + "\">" + formatISO(cStamp) + "</time>"
-        + " (<a href=\"" + GH + "/commit/" + cFull + "\" data-tooltip=\"" + cFull + "\" title=\"" + cFull + "\">" + cShort + "</a>)</small>";
+    // "Last updated" line: the always-visible provenance. A <small> paragraph so
+    // Pico's typography sets the muted look; no custom classes. It stays one inline
+    // line (no newlines) so the templates below carry none either.
+    var line = template.render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
+        {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": GH, "full": cFull, "short": cShort});
 
-    // <details> disclosure of the last N commits that touched this page. Semantic
-    // markup only - Pico styles <details>/<summary>/<table>/<code>/<small>/<a>
-    // natively (see MEMORY: "classless Pico, minimize custom classes"). The two
-    // deep-links live inside the panel so the closed state stays quiet. Works
-    // without JS via native <details>/<summary>. Gated on the file having a real
-    // history entry - synthesized pages (blog index) fall back to the "Last
-    // updated" line alone.
+    // <details> disclosure of the EARLIER commits that touched this page (the latest
+    // is already named above, so it is skipped to avoid a double reference). Semantic
+    // markup only - Pico styles <details>/<summary>/<ul>/<code>/<small>/<a> natively.
+    // Gated on the file having a real history entry; synthesized pages fall back to
+    // the "Last updated" line alone, and a single-commit page shows nothing extra.
     final histKey = site.metaPrefix + path;
     final hist = site.metaHistory[histKey];
     if (hist != null and hist.len() > 0) {
-        // The count is the number of recent commits listed (capped at HISTORY_MAX),
-        // so the reader knows how much the disclosure holds before opening it.
-        line = line + "<details class=\"recent-changes\"><summary>Recent changes on this page ({hist.len()})</summary>";
-        // Plain <ul> - Pico styles it natively and it reflows on any width, no
-        // wrapper or overflow rule needed. Row shape: <code>hash</code> <time>
-        // date</time> - subject. Both hash and date get Pico's monospace/muted
-        // treatment through <code>/<small>; separator (em-dash) reads as prose.
-        line = line + "<ul>";
+        var earlier: [{str: any}] = mut [<{str: any}>];
         foreach (row in hist) {
             final parts = row.split("|");
-            if (parts.len() >= 3) {
-                final rowFull = parts[0];
-                final rowShort = parts[1];
-                final rowStamp = parts[2];
+            if (parts.len() >= 3 and parts[0] != cFull) {
+                final rec = mut {<str: any>};
+                rec["full"] = parts[0];
+                rec["short"] = parts[1];
+                rec["stampAttr"] = parts[2];
+                rec["stampDisplay"] = formatISOShort(parts[2]);
                 var rowSubj = "";
                 if (parts.len() >= 4) { rowSubj = parts[3]; }
-                line = line + "<li>"
-                    + "<a href=\"" + GH + "/commit/" + rowFull + "\"><code>" + rowShort + "</code></a>"
-                    + " <small><time datetime=\"" + rowStamp + "\">" + formatISOShort(rowStamp) + "</time></small>"
-                    + " - " + escapeAttr(rowSubj)
-                    + "</li>";
+                rec["subj"] = rowSubj;
+                earlier.append(rec);
             }
         }
-        line = line + "</ul>";
-        line = line + "<p><small>"
-            + "<a href=\"" + GH + "/commits/" + site.metaBranch + "/" + histKey + "\" data-tooltip=\"All commits that touched this page\" title=\"All commits that touched this page\">Full history &#x2197;</a>"
-            + " &middot; "
-            + "<a href=\"" + GH + "/blame/" + site.metaBranch + "/" + histKey + "\" data-tooltip=\"Line-by-line commit attribution on GitHub\" title=\"Line-by-line commit attribution on GitHub\">Blame source &#x2197;</a>"
-            + "</small></p>";
-        line = line + "</details>";
+        if (earlier.len() > 0) {
+            line = line + template.render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
+                {"count": earlier.len(), "earlier": earlier, "gh": GH, "branch": site.metaBranch, "histKey": histKey});
+        }
     }
     return line;
 }
@@ -1856,7 +1818,7 @@ fun strLess(a: str, b: str) > bool {
 // (goldmark produces each on its own line with a slug id); h3s nest under their h2.
 // Returns "" with fewer than three headings — too little to warrant a sidebar (a
 // module page with one "Methods" h2 over many h3 methods still qualifies) — so
-// page() falls back to a full-width article. toc.js layers scroll-spy + the
+// renderPage() falls back to a full-width article. toc.js layers scroll-spy + the
 // collapse toggle onto this markup, so the list must already exist for it to find.
 fun renderToc(content: str) > str {
     final lines = content.split("\n");
@@ -1912,106 +1874,109 @@ fun renderToc(content: str) > str {
     // A muted closing hint at the foot of the list, mirroring the nav dropdown's
     // .nav-menu-hint: it only shows when the TOC is a mobile bottom sheet (dismissed
     // by tapping the backdrop or pressing Esc), and is hidden on the desktop sidebar.
-    return "    <aside class=\"toc\">\n      <nav>\n        <p class=\"toc-title\">On this page</p>\n        "
-        + ul + "\n        <p class=\"toc-hint\" aria-hidden=\"true\">Tap outside or press Esc to close</p>\n      </nav>\n    </aside>\n";
+    return template.render(`    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        {{{ul}}}
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+`, {"ul": ul});
 }
 
 // dirLabel maps a docs subdirectory name to its breadcrumb label.
 // cap upper-cases the first character of a slug for a breadcrumb label.
-fun cap(s: str) > str {
+fun capitalizeFirst(s: str) > str {
     if (s == "") { return s; }
     return s.sub(0, 1).upper() + s.sub(1);
 }
 
 // navLink renders one top-nav item, marking it aria-current when it is the page
 // the visitor is currently on (key == active).
-fun navLink(href: str, label: str, key: str, active: str) > str {
-    var attr = "";
-    if (key == active) { attr = " aria-current=\"page\""; }
-    return "        <li><a href=\"" + href + "\"" + attr + ">" + label + "</a></li>\n";
-}
-
-// siteNav renders the shared top bar (brand + section links + theme toggle). One
-// definition for every page - docs pages via page(), the 404, and the playground
+// renderSiteNav renders the shared top bar (brand + section links + theme toggle). One
+// definition for every page - docs pages via renderPage(), the 404, and the playground
 // (build-time injected via renderPlayground) - so adding a nav item lands everywhere
 // at once. root is the relative prefix back to gen/'s root; active is the current
 // section's key (or "" for none).
-fun siteNav(root: str, active: str) > str {
+fun renderSiteNav(root: str, active: str) > str {
     // On mobile the five section links collapse behind a menu button. That button is a
     // plain Pico .outline <button> (like the theme toggle) - NOT a <details>, whose Pico
     // accordion styling we kept having to fight - so it inherits the button look for free
     // and nav.js toggles the dropdown. Brand + theme toggle stay outside it, always shown.
-    return "  <header class=\"site-header\">\n"
-        + "    <nav class=\"container\">\n"
-        + "      <ul><li><a href=\"" + root + "index.html\" class=\"contrast\"><picture><source srcset=\"" + root + "assets/hat.webp\" type=\"image/webp\"><img class=\"brand-mark\" src=\"" + root + "assets/hat.png\" width=\"65\" height=\"48\" alt=\"\"></picture> <strong>magus</strong></a></li></ul>\n"
-        + "      <div class=\"nav-right\">\n"
-        // The icon swaps hamburger -> X when the menu is open (CSS keys off
-        // .nav-right.nav-open), giving an explicit close target at the button the
-        // user just tapped on top of the tap-outside/Esc dismissals. Both glyphs
-        // ship in the button; only one shows at a time.
-        + "        <button class=\"nav-toggle outline\" type=\"button\" aria-label=\"Open menu\" aria-expanded=\"false\" aria-controls=\"site-nav-links\"><svg class=\"icon-menu\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><line x1=\"4\" y1=\"7\" x2=\"20\" y2=\"7\"/><line x1=\"4\" y1=\"12\" x2=\"20\" y2=\"12\"/><line x1=\"4\" y1=\"17\" x2=\"20\" y2=\"17\"/></svg><svg class=\"icon-close\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><line x1=\"6\" y1=\"6\" x2=\"18\" y2=\"18\"/><line x1=\"18\" y1=\"6\" x2=\"6\" y2=\"18\"/></svg></button>\n"
-        + "        <ul class=\"nav-links\" id=\"site-nav-links\">\n"
-        // A "MENU" caption at the top of the mobile dropdown, mirroring the TOC
-        // sheet's "On this page" title (same uppercase muted style). Hidden on
-        // desktop and for no-JS visitors (it only reads as a heading inside the
-        // popup); text-transform handles the all-caps so the markup stays plain.
-        + "          <li class=\"nav-menu-label\" aria-hidden=\"true\">Menu</li>\n"
-        // Home is an explicit, redundant path to the landing page: the brand mark
-        // already links home, but its accessible name is "magus", so a plain "Home"
-        // link is clearer for screen readers and more discoverable for everyone.
-        + navLink(root + "index.html", "Home", "home", active)
-        + navLink(root + "documentation/", "Documentation", "documentation", active)
-        + navLink(root + "blog/", "Blog", "blog", active)
-        + navLink(root + "download/", "Download", "download", active)
-        + navLink(root + "tour/", "Tour", "tour", active)
-        + navLink(root + "playground/", "Playground", "playground", active)
-        + navLink(root + "development/", "Development", "development", active)
-        // A muted closing hint so the tap-outside/Esc dismissals are discoverable,
-        // not just guessable - one line, styled like the label, mobile-popup only.
-        + "          <li class=\"nav-menu-hint\" aria-hidden=\"true\">Tap outside or press Esc to close</li>\n"
-        + "        </ul>\n"
-        + "        <button id=\"theme-toggle\" class=\"outline\" aria-label=\"Cycle theme (auto / light / dark)\" title=\"Cycle theme (auto / light / dark)\">◐</button>\n"
-        + "      </div>\n"
-        + "    </nav>\n"
-        + "  </header>\n";
+    // The toggle icon swaps hamburger -> X when the menu is open (CSS keys off
+    // .nav-right.nav-open); both glyphs ship in the button, one shows at a time. The
+    // "Menu" caption and the closing hint are mobile-popup only (aria-hidden on
+    // desktop). Home is an explicit link because the brand mark's accessible name is
+    // just "magus". The {{#links}} section marks the active item with aria-current;
+    // a backtick raw string holds the Mustache verbatim.
+    final tmpl = `  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="{{root}}index.html" class="contrast"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+{{#links}}        <li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}>{{label}}</a></li>
+{{/links}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+`;
+    final links = mut [<{str: any}>];
+    links.append({"href": root + "index.html", "label": "Home", "current": active == "home"});
+    links.append({"href": root + "documentation/", "label": "Documentation", "current": active == "documentation"});
+    links.append({"href": root + "blog/", "label": "Blog", "current": active == "blog"});
+    links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
+    links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
+    links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
+    links.append({"href": root + "development/", "label": "Development", "current": active == "development"});
+    return template.render(tmpl, {"root": root, "links": links});
 }
 
-// siteFooter renders the shared one-line attribution footer. It leads with two
+// renderSiteFooter renders the shared one-line attribution footer. It leads with two
 // root-relative site links (the Search tool and the /public/ file tree) so those
 // surfaces are reachable from every page, then the absolute GitHub/Buzz links; the
 // License link points at the pinned site.metaBranch (main) like the other GitHub links.
 // root is the relative prefix back to gen/'s root (so the site links resolve at any
-// page depth), matching siteNav's root argument.
-fun siteFooter(root: str) > str {
+// page depth), matching renderSiteNav's root argument.
+fun renderSiteFooter(root: str) > str {
     // Two clusters spread across the footer's width: this site's own surfaces on
     // the left, the project/external links on the right. Dots separate items within
     // a cluster; the clusters divide the row without adding a second line on desktop.
-    return "  <footer class=\"site-footer container\">\n"
-        + "    <small class=\"footer-group\"><a href=\"" + root + "search/\">Search</a> &middot; <a href=\"" + root + "public/\">Files</a></small>\n"
-        + "    <small class=\"footer-group\"><a href=\"" + GH + "\">Source Code</a> &middot; <a href=\"" + GH + "/blob/" + site.metaBranch + "/LICENSE\">License</a> &middot; <a href=\"https://buzz-lang.dev/\">Built with Buzz</a></small>\n"
-        + "  </footer>\n";
+    // Backtick raw string holds the Mustache verbatim (a double-quoted "{{x}}" would
+    // collide with Buzz's own {expr} interpolation).
+    final tmpl = `  <footer class="site-footer container">
+    <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
+    <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+`;
+    return template.render(tmpl, {"root": root, "gh": GH, "branch": site.metaBranch});
 }
 
-// announcementBar renders a dismissible top strip announcing the newest shipped
+// renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
 // release, or "" when none has shipped yet (so it stays dormant until then). The
 // version comes from parseChangelog (the committed CHANGELOG), so it is drift-stable;
 // announcement.js hides it once the reader dismisses that version and re-shows it on
 // the next release. The GitHub tag link mirrors the releases Atom feed's convention.
-fun announcementBar() > str {
+fun renderAnnouncementBar() > str {
     if (site.releases.len() == 0) { return ""; }
     final ver = site.releases[0].version;
-    return "  <div id=\"announcement-bar\" data-version=\"" + escapeAttr(ver) + "\">\n"
-        + "    <div class=\"container\">\n"
-        + "      <span>magus <strong>" + escapeAttr(ver) + "</strong> is out. <a href=\"" + GH + "/releases/tag/" + ver + "\">See what's new</a></span>\n"
-        + "      <button class=\"announcement-close\" type=\"button\" aria-label=\"Dismiss announcement\">&times;</button>\n"
-        + "    </div>\n"
-        + "  </div>\n";
+    final tmpl = `  <div id="announcement-bar" data-version="{{ver}}">
+    <div class="container">
+      <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+`;
+    return template.render(tmpl, {"ver": ver, "gh": GH});
 }
 
 // renderPlayground writes gen/playground/index.html from the hand-authored source, injecting
 // the shared nav + footer at its <!-- site-nav --> / <!-- site-footer --> placeholders.
 // The playground is a standalone page (custom head, wasm, its own scripts) so it does
-// not go through page(); templating only the chrome keeps its top bar and footer in
+// not go through renderPage(); templating only the chrome keeps its top bar and footer in
 // lockstep with every other page. It sits at gen/'s root, so its nav prefix is "".
 fun renderPlayground() > void {
     final f = io.File.open("playground.html", io.FileMode.read);
@@ -2019,16 +1984,16 @@ fun renderPlayground() > void {
     f.close();
     // The page ships at /playground/ (a directory index like every other page), so
     // its injected nav climbs one level to reach the site root.
-    html = html.replace("<!-- site-nav -->", siteNav("../", "playground"));
-    html = html.replace("<!-- site-footer -->", siteFooter("../"));
+    html = html.replace("<!-- site-nav -->", renderSiteNav("../", "playground"));
+    html = html.replace("<!-- site-footer -->", renderSiteFooter("../"));
     fs.makeDirectory(site.outDir + "/playground");
     fs.writeFile(site.outDir + "/playground/index.html", html);
 }
 
-// titleForUrl returns the title of the docs page at a clean gen-root URL (e.g.
+// lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
 // "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
 // renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
-fun titleForUrl(url: str) > str {
+fun lookupTitle(url: str) > str {
     foreach (p in site.docPages) {
         if (p.url == url) { return p.title; }
     }
@@ -2036,9 +2001,9 @@ fun titleForUrl(url: str) > str {
 }
 
 
-// pagerLink renders one prev/next card, reading the sibling's source so it credits
+// renderPagerLink renders one prev/next card, reading the sibling's source so it credits
 // the same title (frontmatter title, else first H1) the sibling page renders with.
-fun pagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str {
+fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str {
     final f = io.File.open(srcDir + "/" + name, io.FileMode.read);
     final md = f.readAll();
     f.close();
@@ -2049,9 +2014,8 @@ fun pagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > st
     // lives in its own <slug>/ subdir, so it climbs one level to reach a sibling
     // (../<slug>/); an index.md landing sits directly in the parent, so it does not.
     final slug = name.sub(0, name.len() - 3);   // drop ".md"
-    return "      <a class=\"" + cls + "\" href=\"" + climbPrefix + slug + "/\">"
-        + "<span class=\"page-nav-dir\">" + dir + "</span>"
-        + "<span class=\"page-nav-title\">" + title + "</span></a>\n";
+    return template.render(`      <a class="{{cls}}" href="{{climbPrefix}}{{slug}}/"><span class="page-nav-dir">{{dir}}</span><span class="page-nav-title">{{title}}</span></a>
+`, {"cls": cls, "climbPrefix": climbPrefix, "slug": slug, "dir": dir, "title": title});
 }
 
 // renderPager renders the previous/next links among a page's siblings — the other
@@ -2091,17 +2055,19 @@ fun renderPager(rel: str) > str {
     final climbPrefix = "../";
 
     var body = "";
-    if (pos > 0) { body = body + pagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
-    if (pos < ordered.len() - 1) { body = body + pagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
+    if (pos > 0) { body = body + renderPagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
+    if (pos < ordered.len() - 1) { body = body + renderPagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
     if (body == "") { return ""; }
-    return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
+    return template.render(`    <nav class="page-nav" aria-label="Pagination">
+{{{body}}}    </nav>
+`, {"body": body});
 }
 
-// sectionFromUrl returns a clean URL's first path segment - the section a page belongs
+// firstPathSegment returns a clean URL's first path segment - the section a page belongs
 // to for the "same-section" relatedness signal. "spells/" and "spells/go/" both
 // return "spells"; a top-level page like "targets/" returns "targets"; "" (home)
 // returns "".
-fun sectionFromUrl(url: str) > str {
+fun firstPathSegment(url: str) > str {
     if (url == "") { return ""; }
     final i = url.indexOf("/");
     if (i == null) { return url; }
@@ -2143,7 +2109,7 @@ fun pad4(n: int) > str {
 // site default) — always non-empty, so the meta tag always fires. canonUrl is the
 // page's clean gen-root URL ("" for home) for the canonical link. pager is the
 // prev/next nav (may be ""); the home page and lone pages pass "".
-fun page(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str]) > str {
+fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str]) > str {
     final root = rootPrefix(srcRel);
     // Which top-nav item to mark current. Every rendered docs page hangs off the
     // documentation index, except the dedicated install page; the home page (README)
@@ -2161,38 +2127,21 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     if (srcRel == "tour/index.md") { active = "tour"; }
     // /development/ is a contributor surface reached from the footer, not the top nav.
     if (srcRel.startsWith("development/")) { active = "development"; }
-    var descMeta = "";
-    if (description != "") {
-        descMeta = "  <meta name=\"description\" content=\"" + escapeAttr(description) + "\">\n";
-    }
-    // Canonical URL (absolute), gated on a configured SITE_URL so the site can ship
-    // dark until the host is confirmed. SITE_URL carries the trailing slash, canonUrl
-    // is the slashed clean path ("" for home -> canonical is the site root).
-    var canon = "";
-    var feedDiscovery = "";
-    if (SITE_URL != "") {
-        canon = "  <link rel=\"canonical\" href=\"" + SITE_URL + canonUrl + "\">\n";
-        // Atom <link rel="alternate"> discovery: home + blog pages advertise both
-        // feeds so a reader auto-detects them. Gate each on the feed having been
-        // written: renderReleasesAtom only writes releases.atom.xml when at least
-        // one released version exists; renderBlogAtom only writes blog.atom.xml
-        // when at least one post exists. Advertising a missing file would trip
-        // WS L's asset-integrity check.
-        if (site.releases.len() > 0) {
-            feedDiscovery = "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus releases\" href=\"" + root + "public/atom/releases.atom.xml\">\n";
-        }
-        if (site.hasBlogPosts and (srcRel == "README.md" or srcRel.startsWith(site.blog + "/"))) {
-            feedDiscovery = feedDiscovery
-                + "  <link rel=\"alternate\" type=\"application/atom+xml\" title=\"magus blog\" href=\"" + root + "public/atom/blog.atom.xml\">\n";
-        }
-    }
+    // View-model flags for the head's optional blocks; the markup itself lives in
+    // the template's sections below. hasDescription gates the description meta and
+    // og:description. hasSiteUrl gates the canonical + og:* block (og:url/og:image
+    // must be absolute), so the site can ship dark until the host is confirmed;
+    // SITE_URL carries the trailing slash, canonUrl is the slashed clean path.
+    final hasDescription = description != "";
+    final hasSiteUrl = SITE_URL != "";
+    // Atom feed discovery advertises each feed only when it was actually written:
+    // releases once a version has shipped, blog on the home + blog pages once a post
+    // exists. Advertising a missing file would trip the asset-integrity check.
+    final hasReleasesFeed = hasSiteUrl and site.releases.len() > 0;
+    final hasBlogFeed = hasSiteUrl and site.hasBlogPosts and (srcRel == "README.md" or srcRel.startsWith(site.blog + "/"));
     // Preload the LCP hero image on the home page only (README's gopher), so the
-    // browser fetches it in parallel with the CSS instead of discovering it after
-    // layout. Modern browsers take the WebP; the <picture> PNG fallback still works.
-    var heroPreload = "";
-    if (srcRel == "README.md") {
-        heroPreload = "  <link rel=\"preload\" as=\"image\" href=\"" + root + "assets/gopher.webp\" type=\"image/webp\" fetchpriority=\"high\">\n";
-    }
+    // browser fetches it in parallel with the CSS.
+    final isHome = srcRel == "README.md";
     // Reading-time chip (module var, set by the renderX() caller). Rendered as
     // a sibling ABOVE the <article> card but INSIDE its column - a chip that
     // hovers above the card, aligned with the card's left edge, not floating
@@ -2258,107 +2207,115 @@ fun page(title: str, description: str, content: str, srcRel: str, pager: str, ca
     // "magus" (its H1-derived title is the wordmark, no need to duplicate).
     var fullTitle = title + " — magus";
     if (srcRel == "README.md") { fullTitle = "magus"; }
-    // OpenGraph + Twitter Card meta so a link shared to Slack/Discord/X/iMessage
-    // renders a title/description/image card instead of a bare URL. Gated on
-    // SITE_URL (og:url/og:image must be absolute); Twitter reads the og:* tags for
-    // everything but the card type. Default card image is the gopher mascot - no
-    // per-page image pipeline. og:type is "website" for the home page, else "article".
-    var og = "";
-    if (SITE_URL != "") {
-        var ogType = "article";
-        if (srcRel == "README.md") { ogType = "website"; }
-        var ogDesc = "";
-        if (description != "") {
-            ogDesc = "  <meta property=\"og:description\" content=\"" + escapeAttr(description) + "\">\n";
-        }
-        og = "  <meta property=\"og:type\" content=\"" + ogType + "\">\n"
-            + "  <meta property=\"og:site_name\" content=\"magus\">\n"
-            + "  <meta property=\"og:title\" content=\"" + escapeAttr(fullTitle) + "\">\n"
-            + ogDesc
-            + "  <meta property=\"og:url\" content=\"" + SITE_URL + canonUrl + "\">\n"
-            + "  <meta property=\"og:image\" content=\"" + SITE_URL + "assets/gopher.png\">\n"
-            + "  <meta name=\"twitter:card\" content=\"summary_large_image\">\n";
-    }
-    // Body class marks the /public/ file-tree pages. They keep the full page
-    // chrome (nav, breadcrumb, article card, footer) and only drop the doc-only
-    // controls with nothing to act on here - the page-tools row and the per-page
-    // provenance strip (CSS in site.css keys off .site-public).
-    var bodyTag = "<body>\n";
-    if (srcRel.startsWith("public/")) { bodyTag = "<body class=\"site-public\">\n"; }
-    // The search page keeps the full chrome but widens the container: it is a listing
-    // surface (a syntax rail beside results), not prose, so the reading-width cap wastes
-    // space. site-search only raises the container width; CSS lays out the two columns.
-    if (srcRel == "search/index.md") { bodyTag = "<body class=\"site-search\">\n"; }
+    // OpenGraph + Twitter Card meta so a shared link renders a title/description/
+    // image card instead of a bare URL. The og:* block lives in the template, gated
+    // on hasSiteUrl; here we only pick og:type ("website" for home, else "article").
+    var ogType = "article";
+    if (isHome) { ogType = "website"; }
+    // Body class marks the meta surfaces that keep the full chrome but drop or widen
+    // parts of it: /public/ file-tree pages (site.css keys .site-public to hide the
+    // doc-only controls) and the search page (site-search widens the container for
+    // the results listing). "" for an ordinary page.
+    var bodyClass = "";
+    if (srcRel.startsWith("public/")) { bodyClass = "site-public"; }
+    if (srcRel == "search/index.md") { bodyClass = "site-search"; }
     // Per-page provenance strip (footer tags + "Last updated" commit line). The
     // search page is a generated tool surface with no source commit; writing it
-    // would make commitFooter fall back to HEAD, drifting the output every commit
+    // would make renderCommitFooter fall back to HEAD, drifting the output every commit
     // and tripping the generate drift gate. So omit the whole strip there.
     var provenance = "  <div class=\"page-provenance container\">\n"
         + tagsHtml
-        + "    " + commitFooter(srcRel) + "\n"
+        + "    " + renderCommitFooter(srcRel) + "\n"
         + "  </div>\n";
     if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { provenance = ""; }
-    return "<!DOCTYPE html>\n"
-        + "<html lang=\"en\" class=\"no-js\">\n"
-        + "<head>\n"
-        + "  <meta charset=\"utf-8\">\n"
-        + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-        + "  <meta name=\"color-scheme\" content=\"light dark\">\n"
-        + "  <meta name=\"generator\" content=\"magus\">\n"
-        + "  <title>" + fullTitle + "</title>\n"
-        + descMeta
-        + canon
-        + og
-        + feedDiscovery
-        + heroPreload
-        // Favicon set - reuses the optimized hat mark (WS A). SVG isn't written
-        // yet; the PNG icons + apple-touch cover every real client.
-        + "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"" + root + "assets/favicon-32.png\">\n"
-        + "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"" + root + "assets/apple-touch-icon.png\">\n"
-        + "  <link rel=\"manifest\" href=\"" + root + "manifest.webmanifest\">\n"
-        + "  <meta name=\"theme-color\" content=\"#3178c6\">\n"
-        // Warm the CDN connection before the render-blocking Pico <link> below, so
-        // the TLS handshake overlaps HTML parsing; the same origin also serves the
-        // lazily-imported hljs/mermaid, so this preconnect covers them too.
-        + "  <link rel=\"preconnect\" href=\"https://cdn.jsdelivr.net\" crossorigin>\n"
-        + "  <link rel=\"stylesheet\" href=\"" + PICO + "\" integrity=\"" + PICO_SRI + "\" crossorigin=\"anonymous\">\n"
-        + "  <link rel=\"stylesheet\" href=\"" + root + "theme.css\">\n"
-        + "  <link rel=\"stylesheet\" href=\"" + root + "site.css\">\n"
-        + "  <script src=\"" + root + "theme.js\"></script>\n"
-        + "</head>\n"
-        + bodyTag
-        + "  <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>\n"
-        + announcementBar()
-        + siteNav(root, active)
-        + "  <main id=\"main-content\" class=\"container\" tabindex=\"-1\">\n"
-        + site.renderBreadcrumb(srcRel, title, root)
-        + "    <div class=\"page-tools\"></div>\n"
-        // With JS off, the search input, TOC toggle, code-copy, and heading
-        // anchors never get injected; explain the search absence so it reads as
-        // deliberate. The <noscript> element is stripped by the browser when JS
-        // is enabled, so JS users never see this.
-        + "    <noscript><p class=\"noscript-notice\">Search needs JavaScript. Browse the <a href=\"" + root + "documentation/\">documentation</a>, or use GitHub's code search on the <a href=\"" + GH + "\">source repo</a>.</p></noscript>\n"
-        + secondaryRow
-        + contentBlock
-        + pager
-        + "  </main>\n"
-        // "Related" card grid: the most relevant other docs pages, ranked by
-        // renderRelated(). Sits right below the article's prev/next pager and above the
-        // provenance strip (empty string, so no markup, for non-docs pages like
-        // home/blog/search/tour/public).
-        + site.renderRelated(srcRel, root)
-        + provenance
-        // Small one-line footer: attribution only. Kept intentionally sparse -
-        // the site is one project, not a portal; deeper links (blog, changelog,
-        // security.txt, feeds) are reachable from Documentation and via the
-        // <link rel="alternate"> discovery tags in <head>, not by crowding the
-        // footer with a directory.
-        + siteFooter(root)
-        // One deferred module bundle (esbuild) replaces the nine flat scripts; the
-        // head-critical theme.js stays separate above. type=module defers by spec.
-        + "  <script type=\"module\" src=\"" + root + "main.js\"></script>\n"
-        + "</body>\n"
-        + "</html>\n";
+    // The page skeleton as one Mustache template. The head's optional blocks are
+    // logic-less sections keyed off the view-model flags computed above
+    // (hasDescription/hasSiteUrl/hasReleasesFeed/hasBlogFeed/isHome); {{value}}
+    // interpolation HTML-escapes. The body's composed components (announcement, nav,
+    // breadcrumb, contentBlock, related, provenance, footer) are whole rendered
+    // fragments, injected raw via {{{...}}}. Inline notes that used to live here:
+    //   - favicon set reuses the optimized hat mark; PNG + apple-touch cover clients.
+    //   - the preconnect warms the jsdelivr TLS handshake before the Pico <link>.
+    //   - the <noscript> explains the missing search box (no JS, no injected input).
+    //   - one deferred main.js bundle; head-critical theme.js stays separate above.
+    final pageTmpl = `<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>{{fullTitle}}</title>
+{{#hasDescription}}
+  <meta name="description" content="{{description}}">
+{{/hasDescription}}
+{{#hasSiteUrl}}
+  <link rel="canonical" href="{{siteUrl}}{{canonUrl}}">
+  <meta property="og:type" content="{{ogType}}">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="{{fullTitle}}">
+{{#hasDescription}}
+  <meta property="og:description" content="{{description}}">
+{{/hasDescription}}
+  <meta property="og:url" content="{{siteUrl}}{{canonUrl}}">
+  <meta property="og:image" content="{{siteUrl}}assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+{{/hasSiteUrl}}
+{{#hasReleasesFeed}}
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="{{root}}public/atom/releases.atom.xml">
+{{/hasReleasesFeed}}
+{{#hasBlogFeed}}
+  <link rel="alternate" type="application/atom+xml" title="magus blog" href="{{root}}public/atom/blog.atom.xml">
+{{/hasBlogFeed}}
+{{#isHome}}
+  <link rel="preload" as="image" href="{{root}}assets/gopher.webp" type="image/webp" fetchpriority="high">
+{{/isHome}}
+  <link rel="icon" type="image/png" sizes="32x32" href="{{root}}assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
+  <link rel="manifest" href="{{root}}manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="{{pico}}" integrity="{{picoSri}}" crossorigin="anonymous">
+  <link rel="stylesheet" href="{{root}}theme.css">
+  <link rel="stylesheet" href="{{root}}site.css">
+  <script src="{{root}}theme.js"></script>
+</head>
+<body{{#bodyClass}} class="{{bodyClass}}"{{/bodyClass}}>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+{{{announcement}}}{{{nav}}}  <main id="main-content" class="container" tabindex="-1">
+{{{breadcrumb}}}    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
+{{{secondaryRow}}}{{{contentBlock}}}{{{pager}}}  </main>
+{{{related}}}{{{provenance}}}{{{footer}}}  <script type="module" src="{{root}}main.js"></script>
+</body>
+</html>
+`;
+    return template.render(pageTmpl, {
+        "fullTitle": fullTitle,
+        "description": description,
+        "hasDescription": hasDescription,
+        "hasSiteUrl": hasSiteUrl,
+        "siteUrl": SITE_URL,
+        "canonUrl": canonUrl,
+        "ogType": ogType,
+        "hasReleasesFeed": hasReleasesFeed,
+        "hasBlogFeed": hasBlogFeed,
+        "isHome": isHome,
+        "bodyClass": bodyClass,
+        "root": root,
+        "pico": PICO,
+        "picoSri": PICO_SRI,
+        "gh": GH,
+        "announcement": renderAnnouncementBar(),
+        "nav": renderSiteNav(root, active),
+        "breadcrumb": site.renderBreadcrumb(srcRel, title, root),
+        "secondaryRow": secondaryRow,
+        "contentBlock": contentBlock,
+        "pager": pager,
+        "related": site.renderRelated(srcRel, root),
+        "provenance": provenance,
+        "footer": renderSiteFooter(root),
+    });
 }
 
 // Render the repo's top-level README.md as the site landing page (index.html).
@@ -2378,7 +2335,7 @@ fun renderRoot() > void {
     }
     // The home page stays at gen/index.html (gen root), so its in-content links are
     // rewritten from the root directory to the root directory.
-    html = renderContentHtml(html, "", "");
+    html = renderContentHTML(html, "", "");
 
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     var title = fm.q("title").stringValue();
@@ -2389,7 +2346,7 @@ fun renderRoot() > void {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = SITE_DESC; }
 
-    final doc = page(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md));
+    final doc = renderPage(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md));
     final of = io.File.open(site.outDir + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
@@ -2410,7 +2367,7 @@ fun renderFile(rel: str) > void {
     var title = fm.q("title").stringValue();
     if (title == "") { title = deriveTitle(md, rel); }
 
-    final html = renderContentHtml(markdown.toHtml(md), oldFlatDir(rel), newCleanDir(rel));
+    final html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel));
 
     // Resolve the description: authored frontmatter, else the first real paragraph,
     // else the site default — always non-empty so the meta tag always fires.
@@ -2418,10 +2375,10 @@ fun renderFile(rel: str) > void {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = SITE_DESC; }
 
-    final url = cleanUrl(rel);
-    final doc = page(title, desc, html, site.docs + "/" + rel, renderPager(rel), url, readingTime(md), parseTags(md));
+    final url = cleanURL(rel);
+    final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel), url, readingTime(md), parseTags(md));
 
-    // Directory-index output: every page is <cleanUrl>index.html (extensionless,
+    // Directory-index output: every page is <cleanURL>index.html (extensionless,
     // with the build-artifact "gen" segment flattened out). url is gen/-root-
     // relative and ends in a slash, matching what search.js/sitemap/canonical use.
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
@@ -2466,7 +2423,7 @@ fun hasDatePrefix(s: str) > bool {
 
 // blogSlug drops the leading YYYY-MM-DD- date prefix (if present), leaving the
 // title portion of the URL. The date is not discarded - it re-enters the URL as
-// its own nested scope via blogDateDir/blogUrlPath, so two posts that share a
+// its own nested scope via blogDateDirectory/blogURLPath, so two posts that share a
 // title stay distinct by date (/blog/2026/07/01/hello/ vs /blog/2026/07/02/hello/).
 fun blogSlug(base: str) > str {
     var s = base;
@@ -2475,33 +2432,34 @@ fun blogSlug(base: str) > str {
     return s;
 }
 
-// blogDateDir parses a blog filename's YYYY-MM-DD- prefix into nested "YYYY/MM/DD"
+// blogDateDirectory parses a blog filename's YYYY-MM-DD- prefix into nested "YYYY/MM/DD"
 // URL segments, or null when the file carries no date prefix. The filename prefix
 // is the canonical URL date; renderBlogPost validates it against the frontmatter
 // `date` so the human-facing byline and the permalink can never drift apart.
-fun blogDateDir(base: str) > str? {
+fun blogDateDirectory(base: str) > str? {
     var s = base;
     if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
     if (!hasDatePrefix(s)) { return null; }
     return s.sub(0, 4) + "/" + s.sub(5, 2) + "/" + s.sub(8, 2);
 }
 
-// blogUrlPath is a post's gen-root-relative URL path below blog/: the date scope
+// blogURLPath is a post's gen-root-relative URL path below blog/: the date scope
 // followed by the title slug ("2026/07/01/hello-blog"), or just the slug for an
-// undated file. cleanUrl and renderBlogPost both route through this so the depth
+// undated file. cleanURL and renderBlogPost both route through this so the depth
 // they compute (for climb-relative links) and the directory they write agree.
-fun blogUrlPath(base: str) > str {
+fun blogURLPath(base: str) > str {
     final slug = blogSlug(base);
-    final dd = blogDateDir(base);
+    final dd = blogDateDirectory(base);
     if (dd != null) { return dd + "/" + slug; }
     return slug;
 }
 
 // renderBlogPost renders one blog/<file>.md as its own directory-index page. base
-// is the file's basename (e.g. "2026-07-01-hello-blog.md"); the written URL is
-// blog/<blogSlug(base)>/ so posts stay readable regardless of the source's date
-// prefix. Post metadata (title/date/description) is captured into site.blogPosts for
-// the index page (and, later, the Atom feed).
+// is the file's basename (e.g. "2026-07-01-hello-blog.md"); the written URL is date-
+// scoped, blog/<YYYY>/<MM>/<DD>/<slug>/ (via blogURLPath, from the filename's date
+// prefix), so permalinks sort by date and never collide across years. Post metadata
+// (title/date/description) is captured into site.blogPosts for the index page (and,
+// later, the Atom feed).
 fun renderBlogPost(base: str) > void {
     final rel = site.blog + "/" + base;
     final f = io.File.open(site.root + "/" + rel, io.FileMode.read);
@@ -2517,7 +2475,7 @@ fun renderBlogPost(base: str) > void {
     // prefix is the canonical URL scope. Require them to agree so the permalink and
     // the printed date can never drift. A post with a date but no filename prefix
     // (or a mismatched one) is a hard error, not a silent divergence.
-    final dateDir = blogDateDir(base);
+    final dateDir = blogDateDirectory(base);
     if (date != "") {
         // Frontmatter dates decode as full RFC3339 ("2026-07-01T00:00:00Z"); take
         // the calendar day and re-slash it to compare against the filename's
@@ -2536,13 +2494,13 @@ fun renderBlogPost(base: str) > void {
     }
 
     final slug = blogSlug(base);
-    final urlPath = blogUrlPath(base);        // "2026/07/01/hello-blog"
+    final urlPath = blogURLPath(base);        // "2026/07/01/hello-blog"
     final url = site.blog + "/" + urlPath + "/";
     // Blog posts sit at gen/blog/<urlPath>/index.html. Their old flat directory was
     // "blog"; their new clean directory is "blog/<urlPath>" (date-scoped). The link
     // rewriter needs both so cross-references (../../documentation/) resolve at the
     // post's real depth.
-    final html = renderContentHtml(markdown.toHtml(md), site.blog, site.blog + "/" + urlPath);
+    final html = renderContentHTML(markdown.toHtml(md), site.blog, site.blog + "/" + urlPath);
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
@@ -2568,7 +2526,7 @@ fun renderBlogPost(base: str) > void {
     // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
     final pager = renderBlogPager(base);
 
-    final doc = page(title, desc, article, rel, pager, url, readingTime(md), parseTags(md));
+    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md));
     fs.makeDirectory(site.outDir + "/" + site.blog + "/" + urlPath);
     final of = io.File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -2589,7 +2547,7 @@ fun renderBlogPost(base: str) > void {
 // renderBlogPager renders the previous/next links between posts, ordered by date
 // (newest to oldest so "next" is older and "prev" is newer, matching timeline
 // intuition). Falls back to filename order when a post lacks a date. Reuses
-// pagerLink's climb-relative sibling link form.
+// renderPagerLink's climb-relative sibling link form.
 fun renderBlogPager(base: str) > str {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
@@ -2624,19 +2582,19 @@ fun renderBlogPager(base: str) > str {
     // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link is no longer
     // a flat "../<slug>/"; relativize walks from this post's dir to the target's URL
     // and writes the minimal climb, correct across any shared date prefix.
-    final fromDir = site.blog + "/" + blogUrlPath(base);
+    final fromDir = site.blog + "/" + blogURLPath(base);
     var body = "";
     // Previous = newer post (earlier in ordered), Next = older post (later).
     if (pos > 0) {
         final prev = ordered[pos - 1];
-        final href = relativize(fromDir, site.blog + "/" + blogUrlPath(prev.base) + "/");
+        final href = relativize(fromDir, site.blog + "/" + blogURLPath(prev.base) + "/");
         body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Newer</span>"
             + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
     }
     if (pos < ordered.len() - 1) {
         final nxt = ordered[pos + 1];
-        final href = relativize(fromDir, site.blog + "/" + blogUrlPath(nxt.base) + "/");
+        final href = relativize(fromDir, site.blog + "/" + blogURLPath(nxt.base) + "/");
         body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Older</span>"
             + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
@@ -2647,7 +2605,7 @@ fun renderBlogPager(base: str) > str {
 
 // renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the
 // collected blog posts. It runs AFTER renderBlogPost has populated site.blogPosts for
-// every post in the walk. The listing is a plain <ul> under the shared page()
+// every post in the walk. The listing is a plain <ul> under the shared renderPage()
 // template, so it inherits nav/breadcrumb/footer for free.
 fun renderBlogIndex() > void {
     // Newest first, tiebreak by base for determinism.
@@ -2656,30 +2614,38 @@ fun renderBlogIndex() > void {
         return strLess(a.base, b.base);
     });
 
-    var body = "<h1>Blog</h1>\n";
-    if (sorted.len() == 0) {
-        body = body + "<p>No posts yet.</p>\n";
-    } else {
-        body = body + "<ul class=\"blog-index\">\n";
-        foreach (p in sorted) {
-            body = body + "  <li><a href=\"" + p.urlPath + "/\"><span class=\"blog-index-title\">"
-                + p.title + "</span></a>";
-            if (p.date != "") {
-                body = body + " <time class=\"blog-index-date\" datetime=\"" + blogDateAttr(p.date) + "\">"
-                    + blogDate(p.date) + "</time>";
-            }
-            if (p.description != "") {
-                body = body + "<p class=\"blog-index-desc\">" + p.description + "</p>";
-            }
-            body = body + "</li>\n";
+    // View-model per post; date/description are optional (gated by hasDate/hasDesc).
+    var posts: [{str: any}] = mut [<{str: any}>];
+    foreach (p in sorted) {
+        final rec = mut {<str: any>};
+        rec["urlPath"] = p.urlPath;
+        rec["title"] = p.title;
+        rec["hasDate"] = p.date != "";
+        if (p.date != "") {
+            rec["dateAttr"] = blogDateAttr(p.date);
+            rec["dateDisplay"] = blogDate(p.date);
         }
-        body = body + "</ul>\n";
+        rec["hasDesc"] = p.description != "";
+        rec["description"] = p.description;
+        posts.append(rec);
     }
+    final body = template.render(`<h1>Blog</h1>
+{{#hasPosts}}
+<ul class="blog-index">
+{{#posts}}
+  <li><a href="{{urlPath}}/"><span class="blog-index-title">{{title}}</span></a>{{#hasDate}} <time class="blog-index-date" datetime="{{dateAttr}}">{{dateDisplay}}</time>{{/hasDate}}{{#hasDesc}}<p class="blog-index-desc">{{description}}</p>{{/hasDesc}}</li>
+{{/posts}}
+</ul>
+{{/hasPosts}}
+{{^hasPosts}}
+<p>No posts yet.</p>
+{{/hasPosts}}
+`, {"hasPosts": sorted.len() > 0, "posts": posts});
 
     final title = "Blog";
     final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
     final url = site.blog + "/";
-    // srcRel for the index page: a blog/index.md marker so page() picks the "blog"
+    // srcRel for the index page: a blog/index.md marker so renderPage() picks the "blog"
     // active-nav key and the breadcrumb roots correctly, even though there is no
     // source file. Alias the marker's commit-footer key to the newest post's own
     // commit so the "Last updated" line is a stable snapshot instead of tracking
@@ -2688,7 +2654,7 @@ fun renderBlogIndex() > void {
         final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
-    final doc = page(title, desc, body, site.blog + "/index.md", "", url, "", mut []);
+    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut []);
     fs.makeDirectory(site.outDir + "/" + site.blog);
     final of = io.File.open(site.outDir + "/" + site.blog + "/index.html", io.FileMode.write);
     of.write(doc);
@@ -2704,16 +2670,16 @@ fun renderBlogIndex() > void {
 
 // renderSearchPage writes gen/search/index.html: the dedicated, deep-linkable search
 // surface. It is a tool page (no markdown source; kept out of the search index and
-// sitemap, and out of the provenance/edit chrome via the srcRel guards in page()).
+// sitemap, and out of the provenance/edit chrome via the srcRel guards in renderPage()).
 // The #search-page container is the signal search.js keys off to switch from the
 // header dropdown to full-page, URL-synced (?q=) results. Emitted after the walk so
 // it is a peer of renderPublic()/render404().
-// syntaxRow renders one Search Syntax entry: a clickable example that runs itself
+// renderSyntaxRow renders one Search Syntax entry: a clickable example that runs itself
 // (search.js intercepts the ?q= link) beside a plain-language description. The query
 // is url-encoded for the href and entity-escaped for its <code> display.
-fun syntaxRow(q: str, desc: str) > str {
-    return "        <dt><a class=\"syntax-example\" href=\"?q=" + encoding.urlEncode(q)
-        + "\"><code>" + escapeAttr(q) + "</code></a></dt><dd>" + desc + "</dd>\n";
+fun renderSyntaxRow(q: str, desc: str) > str {
+    return template.render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
+`, {"qEnc": encoding.urlEncode(q), "q": q, "desc": desc});
 }
 
 fun renderSearchPage() > void {
@@ -2723,47 +2689,46 @@ fun renderSearchPage() > void {
     // (the header dropdown carries only a compact hint). Each example is a real ?q=
     // link, so it works without JS and doubles as teach-by-doing once search.js runs
     // it in place.
-    final syntax = "  <section class=\"search-syntax\" aria-label=\"Search syntax\">\n"
-        + "    <p class=\"search-syntax-title\">Search Syntax</p>\n"
-        + "    <p class=\"search-syntax-lead\">Terms are combined with AND and matched case-insensitively. Click an example to run it.</p>\n"
-        + "    <dl>\n"
-        + syntaxRow("tag:build", "Pages carrying the exact tag \"build\".")
-        + syntaxRow("-tag:spell", "Exclude pages with a tag.")
-        + syntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.")
-        + syntaxRow("title:install", "Scope a term to one field: title, description, or text.")
-        + syntaxRow("\"exact phrase\"", "Match words that appear together, in order.")
-        + syntaxRow("cache -go", "Require a word; drop another with a leading minus.")
-        + syntaxRow("tag:cache OR tag:build", "OR matches either; terms are ANDed by default.")
-        + syntaxRow("tag:(cache OR build)", "Group several values for one field.")
-        + syntaxRow("title:mag*", "Wildcards: * stands for any run of characters.")
-        + syntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.")
-        + "    </dl>\n"
-        + "  </section>\n";
-    final body = "<h1>Search</h1>\n"
-        + "<div id=\"search-page\">\n"
-        + "  <div class=\"search-page-inputwrap\">\n"
-        + "    <input id=\"search-page-input\" class=\"search-input\" type=\"text\" placeholder=\"Search docs... (try tag:cache)\" autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Search the documentation\" aria-controls=\"search-page-results\">\n"
-        + "    <ul id=\"search-facets\" class=\"search-facets\" role=\"listbox\" aria-label=\"Tag suggestions\" hidden></ul>\n"
-        + "  </div>\n"
-        + "  <div id=\"search-chips\" class=\"search-chips\" aria-hidden=\"true\" hidden></div>\n"
-        // Two columns on wide screens: results in the main column, the syntax reference
-        // (and, later, facet filters) in a left rail. Results come FIRST in the DOM so
-        // that when the grid collapses on narrow screens they stack above the reference
-        // rather than being pushed down by it; the grid reorders the rail to the left.
-        + "  <div class=\"search-layout\">\n"
-        + "    <div class=\"search-main\">\n"
-        + "      <p id=\"search-page-status\" class=\"search-page-status\" role=\"status\" aria-live=\"polite\"></p>\n"
-        + "      <ul id=\"search-page-results\" class=\"search-page-results\"></ul>\n"
-        + "    </div>\n"
-        + "    <aside class=\"search-side\">\n"
-        + syntax
-        + "    </aside>\n"
-        + "  </div>\n"
-        + "  <noscript><p class=\"noscript-notice\">Search needs JavaScript. Browse the <a href=\"" + root + "documentation/\">documentation</a>, or use GitHub's code search on the <a href=\"" + GH + "\">source repo</a>.</p></noscript>\n"
-        + "</div>\n";
+    // The query examples as a view-model of pre-rendered <dt>/<dd> rows (renderSyntaxRow
+    // does the urlEncode); the template arranges the two-column layout. Results come
+    // first in the DOM so a narrow-screen collapse stacks them above the reference.
+    final rows = renderSyntaxRow("tag:build", "Pages carrying the exact tag \"build\".")
+        + renderSyntaxRow("-tag:spell", "Exclude pages with a tag.")
+        + renderSyntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.")
+        + renderSyntaxRow("title:install", "Scope a term to one field: title, description, or text.")
+        + renderSyntaxRow("\"exact phrase\"", "Match words that appear together, in order.")
+        + renderSyntaxRow("cache -go", "Require a word; drop another with a leading minus.")
+        + renderSyntaxRow("tag:cache OR tag:build", "OR matches either; terms are ANDed by default.")
+        + renderSyntaxRow("tag:(cache OR build)", "Group several values for one field.")
+        + renderSyntaxRow("title:mag*", "Wildcards: * stands for any run of characters.")
+        + renderSyntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.");
+    final body = template.render(`<h1>Search</h1>
+<div id="search-page">
+  <div class="search-page-inputwrap">
+    <input id="search-page-input" class="search-input" type="text" placeholder="Search docs... (try tag:cache)" autocomplete="off" spellcheck="false" aria-label="Search the documentation" aria-controls="search-page-results">
+    <ul id="search-facets" class="search-facets" role="listbox" aria-label="Tag suggestions" hidden></ul>
+  </div>
+  <div id="search-chips" class="search-chips" aria-hidden="true" hidden></div>
+  <div class="search-layout">
+    <div class="search-main">
+      <p id="search-page-status" class="search-page-status" role="status" aria-live="polite"></p>
+      <ul id="search-page-results" class="search-page-results"></ul>
+    </div>
+    <aside class="search-side">
+  <section class="search-syntax" aria-label="Search syntax">
+    <p class="search-syntax-title">Search Syntax</p>
+    <p class="search-syntax-lead">Terms are combined with AND and matched case-insensitively. Click an example to run it.</p>
+    <dl>
+{{{rows}}}    </dl>
+  </section>
+    </aside>
+  </div>
+  <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
+</div>
+`, {"root": root, "gh": GH, "rows": rows});
     final title = "Search";
     final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
-    final doc = page(title, desc, body, "search/index.md", "", "search/", "", mut []);
+    final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut []);
     fs.makeDirectory(site.outDir + "/search");
     final of = io.File.open(site.outDir + "/search/index.html", io.FileMode.write);
     of.write(doc);
@@ -2821,26 +2786,26 @@ object TourStep {
 
     // card renders this step's numbered <li>: the code teaser, an Open-in-Playground
     // deep link, and the concept cross-link, all resolved against root.
-    fun card(root: str, num: int) > str {
+    fun renderCard(root: str, num: int) > str {
         final src = tourSrc(this.file);
         // The concept cross-link rides at the end of the description as an inline
-        // link, not a separate "Read up:" line under the footer - that broke up the
-        // warm "Open in Playground" call to action and read as clutter.
-        return "      <li class=\"tour-card\">\n"
-            + "        <div class=\"tour-head\"><span class=\"tour-num\">{num}</span><h3>" + this.title + "</h3></div>\n"
-            + "        <p class=\"tour-desc\">" + this.desc + " <a class=\"tour-learn\" href=\"" + root + this.docSlug + "/\">" + this.docLabel + " &rarr;</a></p>\n"
-            + "        <pre class=\"tour-teaser\"><code class=\"language-buzz\">" + escapeAttr(codeTeaser(src)) + "</code></pre>\n"
-            + "        <div class=\"tour-foot\">\n"
-            + "          <a class=\"tour-open\" href=\"" + playgroundLink(root, src) + "\">Open in Playground &rarr;</a>\n"
-            + "        </div>\n"
-            + "      </li>\n";
+        // link, not a separate "Read up:" line under the footer.
+        return template.render(`      <li class="tour-card">
+        <div class="tour-head"><span class="tour-num">{{num}}</span><h3>{{title}}</h3></div>
+        <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} &rarr;</a></p>
+        <pre class="tour-teaser"><code class="language-buzz">{{teaser}}</code></pre>
+        <div class="tour-foot">
+          <a class="tour-open" href="{{playLink}}">Open in Playground &rarr;</a>
+        </div>
+      </li>
+`, {"num": num, "title": this.title, "desc": this.desc, "root": root, "docSlug": this.docSlug, "docLabel": this.docLabel, "teaser": codeTeaser(src), "playLink": playgroundLink(root, src)});
     }
 }
 
 // renderTourPage writes gen/tour/index.html: a numbered card grid that walks a newcomer
 // through magusfiles and Buzz. Each card carries a step number, title, one-liner, a code
 // teaser, and an Open-in-Playground deep-link. A synthesized page like the search page -
-// no .md source - so page()'s srcRel guards drop its provenance/edit chrome.
+// no .md source - so renderPage()'s srcRel guards drop its provenance/edit chrome.
 fun renderTourPage() > void {
     final root = rootPrefix("tour/index.md");
     final steps: [TourStep] = mut [<TourStep>];
@@ -2893,18 +2858,18 @@ fun renderTourPage() > void {
     var cards = "";
     var n = 1;
     foreach (step in steps) {
-        cards = cards + step.card(root, n);
+        cards = cards + step.renderCard(root, n);
         n = n + 1;
     }
 
-    final body = "<h1>Tour</h1>\n"
-        + "<p class=\"lede\">A guided walk through magusfiles and Buzz, step by step. Open any example in the Playground to run and edit it.</p>\n"
-        + "    <ol class=\"tour-grid\">\n"
-        + cards
-        + "    </ol>\n";
+    final body = template.render(`<h1>Tour</h1>
+<p class="lede">A guided walk through magusfiles and Buzz, step by step. Open any example in the Playground to run and edit it.</p>
+    <ol class="tour-grid">
+{{{cards}}}    </ol>
+`, {"cards": cards});
     final title = "Tour";
     final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
-    final doc = page(title, desc, body, "tour/index.md", "", "tour/", "", mut []);
+    final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut []);
     fs.makeDirectory(site.outDir + "/tour");
     final of = io.File.open(site.outDir + "/tour/index.html", io.FileMode.write);
     of.write(doc);
@@ -2921,7 +2886,7 @@ fun renderTourPage() > void {
 // fixtures), in fs.list's sorted order — so the walk is deterministic. Posts are
 // flat: no nested subdirectories under blog/.
 fun walkBlog() > void {
-    if (isDir(site.root + "/" + site.blog) == false) { return; }
+    if (isDirectory(site.root + "/" + site.blog) == false) { return; }
     foreach (name in fs.list(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             renderBlogPost(name);
@@ -2931,7 +2896,7 @@ fun walkBlog() > void {
 }
 
 // True if path is a directory.
-fun isDir(path: str) > bool {
+fun isDirectory(path: str) > bool {
     return os.execute(["test", "-d", path]) == 0;
 }
 
@@ -2944,7 +2909,7 @@ fun walk(rel: str) > void {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
 
-        if (isDir(site.root + "/" + site.docs + "/" + childRel)) {
+        if (isDirectory(site.root + "/" + site.docs + "/" + childRel)) {
             walk(childRel);
         } else {
             if (name.endsWith(".md")) { renderFile(childRel); }
@@ -2952,14 +2917,14 @@ fun walk(rel: str) > void {
     }
 }
 
-// renderDevPage renders one /development/ page from markdown through the shared
-// page() pipeline (nav, TOC, theme, search index), skipping the doc-only chrome
-// page() already strips for this srcRel prefix (provenance, edit link, nav
+// renderDevelopmentPage renders one /development/ page from markdown through the shared
+// renderPage() pipeline (nav, TOC, theme, search index), skipping the doc-only chrome
+// renderPage() already strips for this srcRel prefix (provenance, edit link, nav
 // highlight). url ends in "/"; srcRel uses the "<dir>/_index.md" marker convention
 // so rootPrefix/renderBreadcrumb derive the right depth and trail.
-fun renderDevPage(title: str, desc: str, md: str, url: str, srcRel: str) > void {
-    final html = renderContentHtml(markdown.toHtml(md), "", "");
-    final doc = page(title, desc, html, srcRel, "", url, "", mut []);
+fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str) > void {
+    final html = renderContentHTML(markdown.toHtml(md), "", "");
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut []);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
     fs.makeDirectory(dir);
     fs.writeFile(dir + "/index.html", doc);
@@ -2967,14 +2932,14 @@ fun renderDevPage(title: str, desc: str, md: str, url: str, srcRel: str) > void 
     site.pageUrls[url] = true;
 }
 
-// renderDevPageRaw is renderDevPage for pages whose body is already final HTML
+// renderDevelopmentPageRaw is renderDevelopmentPage for pages whose body is already final HTML
 // (the /development/ landing and projects index, built by hand). It skips
-// renderContentHtml - the markdown/link-rewrite pipeline that strips the trailing
+// renderContentHTML - the markdown/link-rewrite pipeline that strips the trailing
 // slash off relative links - so card hrefs like "magus/" stay slash-terminated and
 // resolve without a directory redirect. searchText is the plain text indexed for
 // search (the HTML carries no useful prose otherwise).
-fun renderDevPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str) > void {
-    final doc = page(title, desc, html, srcRel, "", url, "", mut []);
+fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str) > void {
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut []);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
     fs.makeDirectory(dir);
     fs.writeFile(dir + "/index.html", doc);
@@ -2997,7 +2962,7 @@ fun renderDevelopment() > void {
         projects.append(mut {"name": "magus", "path": site.root + "/MAGUS.md"});
     }
     foreach (name in fs.list(site.root)) {
-        if (name.startsWith(".") == false and isDir(site.root + "/" + name)) {
+        if (name.startsWith(".") == false and isDirectory(site.root + "/" + name)) {
             if (os.execute(["test", "-f", site.root + "/" + name + "/MAGUS.md"]) == 0) {
                 projects.append(mut {"name": name, "path": site.root + "/" + name + "/MAGUS.md"});
             }
@@ -3010,7 +2975,7 @@ fun renderDevelopment() > void {
         final md = f.readAll();
         f.close();
         final name = proj["name"];
-        renderDevPage(name + " targets",
+        renderDevelopmentPage(name + " targets",
             "Target catalog and run-order graph for the " + name + " project, generated from its magusfile.",
             md, "development/" + name + "/", "development/" + name + "/_index.md");
         // The old nested URL redirects to the flattened one so inbound links survive.
@@ -3037,7 +3002,7 @@ fun renderDevelopment() > void {
         final cf = io.File.open(site.root + "/CONTRIBUTING.md", io.FileMode.read);
         final contributingMd = cf.readAll();
         cf.close();
-        renderDevPage("Contributing",
+        renderDevelopmentPage("Contributing",
             "How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.",
             contributingMd, "development/contributing/", "development/contributing/_index.md");
         haveContributing = true;
@@ -3054,32 +3019,33 @@ fun renderDevelopment() > void {
     // contributor reference", so it carries the orientation a newcomer to the codebase
     // needs: the dogfooding framing, a build/test quickstart, the contributing rules, the
     // per-project graphs, and a jumping-off list to the deeper reference docs. Built as
-    // raw HTML (renderDevPageRaw skips the markdown pipeline) so the card hrefs keep their
+    // raw HTML (renderDevelopmentPageRaw skips the markdown pipeline) so the card hrefs keep their
     // trailing slash; the language-sh code block is picked up by the client highlighter.
-    final devHtml = "<h1 id=\"development\">Development</h1>\n"
-        + "<p>Reference for people working <em>on</em> magus rather than building with it. magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too.</p>\n"
-        + "<h2 id=\"getting-started\">Getting started</h2>\n"
-        + "<p>Building the <code>magus</code> binary needs only Go. The docs site and WebAssembly playground also need the Node, esbuild, and TinyGo toolchain pinned in <code>mise.toml</code>, which <a href=\"https://mise.jdx.dev/\">mise</a> installs in one step. From a fresh clone:</p>\n"
-        + "<pre><code class=\"language-sh\">git clone https://github.com/egladman/magus\n"
-        + "cd magus\n"
-        + "mise install\n"
-        + "go build -o magus ./cmd/magus\n"
-        + "magus run ci</code></pre>\n"
-        + "<p><code>magus run ci</code> builds, formats, lints, and tests every affected project - the same pipeline continuous integration runs. Only need the binary? Go alone is enough; skip <code>mise install</code> and drop the docs and playground targets.</p>\n"
-        + contributingSection
-        + "<h2 id=\"project-graphs\">Project graphs</h2>\n"
-        + "<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>\n"
-        + "    <div class=\"related-grid\">\n" + projectCards + "    </div>\n"
-        + "<h2 id=\"reference\">Reference</h2>\n"
-        + "<p>The deeper references a contributor reaches for once the build is running:</p>\n"
-        + "<ul>\n"
-        + "  <li><a href=\"../conventions/\">Conventions</a> - the naming and layout rules magus expects of a workspace, and that this repository follows.</li>\n"
-        + "  <li><a href=\"../operations/\">Operations</a> - the work hierarchy underneath a target: ops, plans, and the slots that bound concurrency.</li>\n"
-        + "  <li><a href=\"../config/\">Configuration</a> - the <code>magus.yaml</code> keys and the <code>MAGUS_*</code> environment inventory.</li>\n"
-        + "  <li><a href=\"../wards/\">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>\n"
-        + "  <li><a href=\"../debugging/\">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>\n"
-        + "</ul>\n";
-    renderDevPageRaw("Development", "Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.",
+    final devHtml = template.render(`<h1 id="development">Development</h1>
+<p>Reference for people working <em>on</em> magus rather than building with it. magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>Building the <code>magus</code> binary needs only Go. The docs site and WebAssembly playground also need the Node, esbuild, and TinyGo toolchain pinned in <code>mise.toml</code>, which <a href="https://mise.jdx.dev/">mise</a> installs in one step. From a fresh clone:</p>
+<pre><code class="language-sh">git clone https://github.com/egladman/magus
+cd magus
+mise install
+go build -o magus ./cmd/magus
+magus run ci</code></pre>
+<p><code>magus run ci</code> builds, formats, lints, and tests every affected project - the same pipeline continuous integration runs. Only need the binary? Go alone is enough; skip <code>mise install</code> and drop the docs and playground targets.</p>
+{{{contributingSection}}}<h2 id="project-graphs">Project graphs</h2>
+<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>
+    <div class="related-grid">
+{{{projectCards}}}    </div>
+<h2 id="reference">Reference</h2>
+<p>The deeper references a contributor reaches for once the build is running:</p>
+<ul>
+  <li><a href="../conventions/">Conventions</a> - the naming and layout rules magus expects of a workspace, and that this repository follows.</li>
+  <li><a href="../operations/">Operations</a> - the work hierarchy underneath a target: ops, plans, and the slots that bound concurrency.</li>
+  <li><a href="../config/">Configuration</a> - the <code>magus.yaml</code> keys and the <code>MAGUS_*</code> environment inventory.</li>
+  <li><a href="../wards/">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>
+  <li><a href="../debugging/">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>
+</ul>
+`, {"contributingSection": contributingSection, "projectCards": projectCards});
+    renderDevelopmentPageRaw("Development", "Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.",
         devHtml, "Development contributing getting started build test project target catalogs conventions operations configuration diagnostic codes debugging reference", "development/", "development/_index.md");
 }
 
@@ -3099,7 +3065,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > void {
     site.docPages = mut [<DocPage>];
     site.blogPosts = mut [<BlogPost>];
     site.hasBlogPosts = false;
-    if (isDir(site.root + "/" + site.blog)) {
+    if (isDirectory(site.root + "/" + site.blog)) {
         foreach (name in fs.list(site.root + "/" + site.blog)) {
             if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
                 site.hasBlogPosts = true;
@@ -3135,7 +3101,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > void {
     renderPlayground();
     os.execute(["sh", "-c", "[ -d playground ] && cp -r playground/. " + site.outDir + "/playground/ || true"]);
 
-    // Parse the changelog BEFORE the walk so page() knows whether the releases
+    // Parse the changelog BEFORE the walk so renderPage() knows whether the releases
     // Atom feed will be written and can gate its <link rel=alternate> discovery
     // tag accordingly (advertising a missing file would trip WS L's asset check).
     parseChangelog();
@@ -3158,7 +3124,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > void {
     // real page URL is known for the collision guard). Aliases stay out of the
     // search index/sitemap/feeds — only the real page they point to appears there.
     site.writeAliases();
-    writeSeoFiles();
+    writeSEOFiles();
     renderBlogAtom();
     renderReleasesAtom();
     renderPublic();
@@ -3208,10 +3174,10 @@ fun checkPathExists(target: str) > bool {
     return false;
 }
 
-// scanRefsInHtml pulls every href="..." and src="..." out of html, skipping
+// scanReferencesInHTML pulls every href="..." and src="..." out of html, skipping
 // external URLs, mailto:, javascript:, data:, and pure fragments. Each reference
 // is returned as a gen-root-relative path (resolved against pageDir).
-fun scanRefsInHtml(html: str, pageDir: str) > [str] {
+fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
     var refs: [str] = mut [<str>];
     var seen: {str: bool} = mut {};
     var rest = html;
@@ -3282,7 +3248,7 @@ fun walkGen(rel: str, acc: [str]) > void {
 }
 
 
-// pageKey normalizes a scanRefsInHtml result (a gen-root-relative path with no
+// pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no
 // trailing slash - "spells/go", "index.html", "assets/x.png") to a page key: "" for
 // the home page, else the directory that holds the page's index.html. Asset paths
 // pass through unchanged and simply never match a real page key.
@@ -3301,9 +3267,9 @@ fun pageKey(resolved: str) > str {
 final URL_LOCK = "urls.lock";
 final RETIRED_URLS = "retired-urls.txt";
 
-// readUrlSet reads a newline-delimited URL file into a set, skipping blanks and
+// readURLSet reads a newline-delimited URL file into a set, skipping blanks and
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
-fun readUrlSet(path: str) > {str: bool} {
+fun readURLSet(path: str) > {str: bool} {
     var set: {str: bool} = mut {};
     if (os.execute(["test", "-f", path]) != 0) { return set; }
     final f = io.File.open(path, io.FileMode.read);
@@ -3323,8 +3289,8 @@ fun readUrlSet(path: str) > {str: bool} {
 // URL resolving) or list it in retired-urls.txt. Runs every render; the lock only
 // grows (updateUrlLock, under the rw charm).
 fun abandonedLinkCheck() > void {
-    final locked = readUrlSet(URL_LOCK);
-    final retired = readUrlSet(RETIRED_URLS);
+    final locked = readURLSet(URL_LOCK);
+    final retired = readURLSet(RETIRED_URLS);
     var abandoned: [str] = mut [<str>];
     foreach (url in locked.keys()) {
         if (retired[url] == null and checkPathExists(url) == false) {
@@ -3342,7 +3308,7 @@ fun abandonedLinkCheck() > void {
 // keeps demanding a redirect or an explicit retirement for it. Called under the rw
 // charm so a plain (checking) render never mutates the tree.
 export fun updateUrlLock() > void {
-    var set = readUrlSet(URL_LOCK);
+    var set = readURLSet(URL_LOCK);
     foreach (u in site.pageUrls.keys()) { set[u] = true; }
     var lines: [str] = mut [<str>];
     foreach (u in set.keys()) { lines.append(u); }
@@ -3355,46 +3321,58 @@ export fun updateUrlLock() > void {
 // Tests for the pure helpers. Run them with the `buzz-test` target
 // (`magus buzz -t --embedded scribe.buzz`); living in this module, they reach its
 // internal functions directly. They register but do not run during a normal render.
-test "sectionFromUrl takes the first path segment" {
-    std.assert(sectionFromUrl("spells/go/") == "spells", message: "spells/go/ -> spells");
-    std.assert(sectionFromUrl("targets") == "targets", message: "no slash -> whole string");
-    std.assert(sectionFromUrl("") == "", message: "empty -> empty");
+test "firstPathSegment returns a clean URL's leading segment" {
+    assert.equal(firstPathSegment("spells/go/"), "spells", "spells/go/ -> spells");
+    assert.equal(firstPathSegment("targets"), "targets", "no slash -> whole string");
+    assert.equal(firstPathSegment(""), "", "empty -> empty");
+}
+
+// Guards the depth of pages built off the "_index.md" landing-marker convention
+// (the /public/ autoindex tree and the /development/ pages). A stray "_index"
+// segment left in the clean URL inflates the "../" climb by one, sending every
+// asset and nav link one directory too high (a 404, unstyled page). "_index"
+// must strip exactly like "index"/"README".
+test "cleanURL strips the _index landing marker like index" {
+    assert.equal(cleanURL("public/_index.md"), "public/", "public/_index.md -> public/");
+    assert.equal(cleanDepth("public/_index.md"), 1, "public landing is one level deep");
+    assert.equal(cleanDepth("public/atom/_index.md"), 2, "public/atom landing is two levels deep");
+    assert.equal(cleanDepth("development/_index.md"), 1, "development landing is one level deep");
 }
 
 test "pad4 left-pads to width four" {
-    std.assert(pad4(7) == "0007", message: "7 -> 0007");
-    std.assert(pad4(1234) == "1234", message: "1234 unchanged");
-    std.assert(pad4(12345) == "12345", message: "wider than four is kept");
+    assert.equal(pad4(7), "0007", "7 -> 0007");
+    assert.equal(pad4(1234), "1234", "1234 unchanged");
+    assert.equal(pad4(12345), "12345", "wider than four is kept");
 }
 
 test "escapeAttr escapes the attribute-dangerous characters" {
-    std.assert(escapeAttr("a & b") == "a &amp; b", message: "ampersand");
-    std.assert(escapeAttr("x\"y<z") == "x&quot;y&lt;z", message: "quote and less-than");
+    assert.equal(escapeAttr("a & b"), "a &amp; b", "ampersand");
+    assert.equal(escapeAttr("x\"y<z"), "x&quot;y&lt;z", "quote and less-than");
 }
 
 test "sharedTagCount counts common bar-joined tags" {
-    std.assert(sharedTagCount("a||b||c", "b||c||d") == 2, message: "b and c shared");
-    std.assert(sharedTagCount("a", "b") == 0, message: "none shared");
-    std.assert(sharedTagCount("", "a||b") == 0, message: "empty side -> 0");
+    assert.equal(sharedTagCount("a||b||c", "b||c||d"), 2, "b and c shared");
+    assert.equal(sharedTagCount("a", "b"), 0, "none shared");
+    assert.equal(sharedTagCount("", "a||b"), 0, "empty side -> 0");
 }
 
 test "relativize walks from a dir to a target URL" {
-    std.assert(relativize("a/b", "a/c/") == "../c/", message: "sibling directory");
-    std.assert(relativize("development/projects", "development/") == "../", message: "up one level");
+    assert.equal(relativize("a/b", "a/c/"), "../c/", "sibling directory");
+    assert.equal(relativize("development/projects", "development/"), "../", "up one level");
 }
 
-// Buzz's == is identity (not structural) for maps/lists/objects, and std.assert
-// takes a boolean, so the idiomatic form - matching upstream tests/behavior - is to
-// assert the fields that matter joined with `and`, not a serialized whole.
+// Buzz's == is identity (not structural) for maps, so assert.equal does the
+// value comparison: the whole aliasTarget map at once, not field-by-field.
 test "Site.collectAlias trims slashes and records every alias" {
     final s = mut Site{};
     s.collectAlias("/old-path/", "new-path/");
     s.collectAlias("same", "same/");
-    std.assert(s.aliasTarget["old-path"] == "new-path/" and s.aliasTarget["same"] == "same/", message: "both aliases recorded with slashes trimmed");
+    assert.equal(s.aliasTarget, {"old-path": "new-path/", "same": "same/"}, "both aliases recorded with slashes trimmed");
 }
 
 test "Site.addRecord marks the URL written and appends one search record" {
     final s = mut Site{};
     s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
-    std.assert(s.pageUrls["guide/"] == true and s.searchRecords.len() == 1, message: "url marked written and one record appended");
+    assert.equal(s.pageUrls, {"guide/": true}, "url marked written");
+    assert.len(s.searchRecords, 1, "one search record appended");
 }

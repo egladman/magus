@@ -33,7 +33,7 @@ import (
 //
 // v7 adds Instr.C (4 bytes, compile-time destination register). An older VM would
 // read C's bytes as the next instruction's Op/A fields, silently mis-executing.
-const BytecodeVersion uint16 = 8
+const BytecodeVersion uint16 = 9
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -550,6 +550,7 @@ func (e *enc) node(n ast.Node) error {
 		e.strs(v.ParamAnnots)
 		e.str(v.RetAnnot)
 		e.str(v.YieldAnnot)
+		e.boolean(v.IsStatic)
 		return e.node(v.Body)
 	case *ast.ObjectDecl:
 		e.u8(nodeObjectDecl)
@@ -1354,6 +1355,10 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		isStatic, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
 		body, err := d.node()
 		if err != nil {
 			return nil, err
@@ -1362,7 +1367,7 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("FunDecl body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.FunDecl{Pos: p, Name: name, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, Body: blockBody}, nil
+		return &ast.FunDecl{Pos: p, Name: name, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, IsStatic: isStatic, Body: blockBody}, nil
 	case nodeObjectDecl:
 		name, err := d.str()
 		if err != nil {

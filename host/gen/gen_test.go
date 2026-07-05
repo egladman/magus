@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,27 +27,31 @@ func camelCase(s string) string {
 	return out
 }
 
-// registries maps each module name to its generated Register function. It must
-// list every module that has a host/gen trampoline; magusModules in the bindings
-// package wires the same set.
-var registries = map[string]func(context.Context, *buzz.Session) vm.Value{
-	"magus":    RegisterMagus,
-	"os":       RegisterOs,
-	"platform": RegisterPlatform,
-	"fs":       RegisterFs,
-	"vcs":      RegisterVcs,
-	"archive":  RegisterArchive,
-	"crypto":   RegisterCrypto,
-	"env":      RegisterEnv,
-	"json":     RegisterJson,
-	"http":     RegisterHttp,
-	"time":     RegisterTime,
-	"fmt":      RegisterFmt,
-	"markdown": RegisterMarkdown,
-	"charm":    RegisterCharm,
-	"encoding": RegisterEncoding,
-	"path":     RegisterPath,
-	"strings":  RegisterStrings,
+// TestModulesMatchStd guards the Modules registry against drift from the canonical
+// std.Module surface: every host module std declares, except the magus namespace
+// (not a bare import), must appear in Modules, and Modules must name nothing extra.
+func TestModulesMatchStd(t *testing.T) {
+	want := map[string]bool{}
+	for _, m := range std.All() {
+		if m.Name == "magus" {
+			continue
+		}
+		want[m.Name] = true
+	}
+	for name := range Modules {
+		assert.Containsf(t, want, name, "Modules registry has %q but std.All() does not", name)
+		delete(want, name)
+	}
+	assert.Emptyf(t, want, "std.All() modules missing from the Modules registry: %v", setKeys(want))
+}
+
+// setKeys returns the keys of a set, for a readable failure message.
+func setKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // TestBuzzBindingsMatchHostModules guards against the host/gen trampolines
@@ -62,9 +65,12 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 
 	checked := 0
 	for _, m := range std.All() {
-		reg, ok := registries[m.Name]
-		if !ok {
-			// Hand-built modules (e.g. "magus") have no host/gen trampoline.
+		var reg RegisterFunc
+		if m.Name == "magus" {
+			reg = RegisterMagus // the magus.* namespace has no Modules entry
+		} else if mr, ok := Modules[m.Name]; ok {
+			reg = mr.Register
+		} else {
 			continue
 		}
 		mod := reg(ctx, sess)

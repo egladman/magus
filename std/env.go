@@ -233,7 +233,7 @@ func EnvList(ctx context.Context) (map[string]string, error) {
 }
 
 // EnvParseDotenv parses .env-format content into a name->value map. It is pure
-// (no process-environment access), so it is browser-safe.
+// (no process-environment access), so it is WASM-compatible.
 func EnvParseDotenv(_ context.Context, content string) (map[string]string, error) {
 	return parseDotenv(content), nil
 }

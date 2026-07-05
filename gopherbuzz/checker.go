@@ -377,6 +377,21 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 
 func (c *checker) checkIf(v *ast.IfStmt) {
 	cond := c.infer(v.Cond)
+	if v.BindName != "" {
+		// Optional-call narrowing: `if (opt -> name)` binds name to opt's non-null
+		// value inside Then. Optionals are erased to their base type in this
+		// checker, so the inferred cond type is name's type; no bool check applies.
+		c.pushScope()
+		c.define(v.BindName, cond, false)
+		for _, s := range v.Then.Stmts {
+			c.checkStmt(s)
+		}
+		c.popScope()
+		if v.Else != nil {
+			c.checkStmt(v.Else)
+		}
+		return
+	}
 	if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 		c.errorf(ast.NodePos(v.Cond), "if condition must be bool, got %s", cond.TypeName())
 	}

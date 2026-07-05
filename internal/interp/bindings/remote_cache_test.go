@@ -384,7 +384,7 @@ func TestCanonicalTargetModule(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerHostModules(ctx, sess)
+	registerMagusModules(ctx, sess)
 
 	src := `
 import "magus/target";

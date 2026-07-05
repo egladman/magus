@@ -20,7 +20,7 @@ import (
 // tagged //go:build !wasm: the IO leaves (process, filesystem, network, env, vcs,
 // and the magus meta-module) whose std Impls don't compile for wasm, so the
 // browser playground never registers them. Keep in sync with the //go:build !wasm
-// tags on the matching std/<name>.go files and with dry.BrowserSafeHostModules
+// tags on the matching std/<name>.go files and with dry.WASMCompatibleMagusModules
 // (whose complement this is).
 var wasmExcludedModules = map[string]bool{
 	"fs":      true,
@@ -142,7 +142,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	// The IO-heavy modules (fs/os/http/archive/env/vcs/magus) call std functions
 	// that are themselves excluded from the wasm build, so their trampolines can't
 	// compile there; tag them off wasm to match. The browser playground registers
-	// only the pure-compute modules (dry.BrowserSafeHostModules), which stay in
+	// only the pure-compute modules (dry.WASMCompatibleMagusModules), which stay in
 	// every build.
 	if wasmExcludedModules[m.Name] {
 		fmt.Fprintln(&b, "//go:build !wasm")

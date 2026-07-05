@@ -25,7 +25,7 @@ const maxChunk = 32 * 1024 * 1024
 // script. That split is what lets a remote cache backend (e.g. GitHub Actions
 // Cache) be written entirely in Buzz with no provider-specific Go code. This is
 // VM glue, hand-written against the gopherbuzz value API and merged onto the
-// generated `http` module map at bind time (see registerHostModules); it lives
+// generated `http` module map at bind time (see registerMagusModules); it lives
 // here, not on the VM-agnostic std surface.
 func registerHTTPBytes() vm.Value {
 	m := vm.NewMap()

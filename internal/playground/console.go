@@ -12,12 +12,14 @@ import (
 	"strconv"
 	"strings"
 
+	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/dry"
 )
 
-// buzzLangVersion is the Buzz language version gopherbuzz implements
-// (https://buzz-lang.dev/0.5.0).
-const buzzLangVersion = "0.5.0"
+// buzzLangVersion is the Buzz language version gopherbuzz implements. It mirrors
+// gopherbuzz's own constant so the playground banner and the CLI never drift; the
+// exact upstream commit it tracks is buzz.UpstreamRef, shown by `version`.
+const buzzLangVersion = buzz.LanguageVersion
 
 // BuildInfo describes the toolchain that produced this binary, for the status
 // line and `status` command: the in-browser analog of a REPL's build banner.
@@ -237,6 +239,7 @@ func (s *Console) version() []Line {
 	}
 	return []Line{
 		{HTML: `<b>gopherbuzz</b>: a Buzz ` + buzzLangVersion + ` interpreter, written in Go`},
+		row("upstream ", buzz.UpstreamRef+" (buzz-language/buzz)"),
 		row("compiler ", s.info.Compiler),
 		row("target   ", s.info.Target),
 		row("scheduler", s.info.Scheduler),

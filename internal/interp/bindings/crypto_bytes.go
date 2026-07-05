@@ -17,7 +17,7 @@ import (
 // an input may be a str OR a [int] byte list, and an output is a raw byte list
 // that chains as the next call's key — so they're hand-written against the
 // gopherbuzz value API and merged onto the generated `crypto` module map at bind
-// time (see registerHostModules). This is VM glue, which is why it lives here and
+// time (see registerMagusModules). This is VM glue, which is why it lives here and
 // not on the VM-agnostic std surface.
 //
 // Binary values cross the boundary as a Buzz [int] byte list — the representation

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Testing — magus</title>
+  <meta name="description" content="How to test Buzz code in magus with the test primitive and the assert and suite libraries, and why not to test magusfiles.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/testing/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Testing — magus">
+  <meta property="og:description" content="How to test Buzz code in magus with the test primitive and the assert and suite libraries, and why not to test magusfiles.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/testing/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Testing</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/testing.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#what-to-test-and-what-not-to" title="What to test, and what not to">What to test, and what not to</a></li><li><a href="#writing-a-test" title="Writing a test">Writing a test</a></li><li><a href="#the-assert-module" title="The assert module">The assert module</a></li><li><a href="#the-suite-module" title="The suite module">The suite module</a><ul><li><a href="#per-test-controls" title="Per-test controls">Per-test controls</a></li></ul></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <article>
+<h1 id="testing">Testing</h1>
+<p>Buzz builds testing into the language, as Go does: a <code>test</code> block is a first-class
+construct. magus adds two small libraries that make those blocks easier to write.
+<code>assert</code> provides value-aware matchers; <code>suite</code> groups stateful tests. magus registers
+both as extensions alongside Buzz's standard library.</p>
+<h2 id="what-to-test-and-what-not-to">What to test, and what not to</h2>
+<p>Test the code that carries logic: standalone spells, and Buzz modules imported into a
+magusfile. The website's magusfile imports <code>website/scribe.buzz</code>, a static-site
+generator, and that generator earns its tests.</p>
+<p>Do not write tests for the magusfile itself.</p>
+<p>A magusfile is declarative build configuration. Keep it thin: wire targets together
+and push logic elsewhere. When a magusfile grows complex enough to want tests, move
+that logic into a spell or a sibling module and test it there. A magusfile wires your
+build together, so testing one means testing your configuration. Keep magusfiles thin
+enough that the question never comes up.</p>
+<h2 id="writing-a-test">Writing a test</h2>
+<p>A <code>test</code> block runs when you execute the file with <code>-t</code>. Inside it, call <code>assert</code>
+matchers; a failed assertion raises and fails the test.</p>
+<pre><code class="language-buzz">import &quot;assert&quot;;
+
+test &quot;collectAlias trims slashes and records every alias&quot; {
+    final s = mut Site{};
+    s.collectAlias(&quot;/old-path/&quot;, &quot;new-path/&quot;);
+
+    // Buzz's == is reference identity for maps, so compare by value with assert.
+    assert.equal(s.aliasTarget, {&quot;old-path&quot;: &quot;new-path/&quot;}, &quot;alias recorded, slashes trimmed&quot;);
+}
+</code></pre>
+<p>Run the tests:</p>
+<pre><code class="language-bash">magus buzz -t --embedded scribe.buzz   # a single file
+magus run buzz-test                    # the project's test target
+</code></pre>
+<h2 id="the-assert-module">The <code>assert</code> module</h2>
+<p>Every matcher raises on failure, the same contract as the built-in <code>std\assert</code>, with
+value-aware checks on top. Buzz has no optional or variadic parameters, so each
+matcher takes a trailing <code>message</code> (pass <code>&quot;&quot;</code> for none; a short label makes failures
+easier to read).</p>
+<table>
+<thead>
+<tr>
+<th>Matcher</th>
+<th>Passes when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>equal(got, want, message)</code></td>
+<td><code>got</code> is structurally (deeply) equal to <code>want</code></td>
+</tr>
+<tr>
+<td><code>notEqual(got, want, message)</code></td>
+<td><code>got</code> is not deeply equal to <code>want</code></td>
+</tr>
+<tr>
+<td><code>isTrue(got, message)</code> / <code>isFalse(got, message)</code></td>
+<td><code>got</code> is <code>true</code> / <code>false</code></td>
+</tr>
+<tr>
+<td><code>isNull(got, message)</code> / <code>notNull(got, message)</code></td>
+<td><code>got</code> is / is not <code>null</code></td>
+</tr>
+<tr>
+<td><code>contains(container, item, message)</code></td>
+<td>a str holds a substring, a list holds an element (by deep equality), or a map holds a key</td>
+</tr>
+<tr>
+<td><code>len(container, want, message)</code></td>
+<td>a str, list, or map has exactly <code>want</code> elements</td>
+</tr>
+<tr>
+<td><code>isEmpty(container, message)</code></td>
+<td>a str, list, or map is empty</td>
+</tr>
+<tr>
+<td><code>greater(a, b, message)</code> / <code>less(a, b, message)</code></td>
+<td>two numbers or two strings order that way</td>
+</tr>
+<tr>
+<td><code>throws(fn, message)</code> / <code>doesNotThrow(fn, message)</code></td>
+<td>calling <code>fn</code> does / does not raise</td>
+</tr>
+<tr>
+<td><code>fail(message)</code></td>
+<td>Always fails the test</td>
+</tr>
+</tbody>
+</table>
+<p>Reach for <code>equal</code> most often. <code>==</code> compares identity for maps, lists, and objects, so
+<code>{a: 1} == {a: 1}</code> is <code>false</code>; <code>assert.equal</code> compares by value, recursing to any
+depth and ignoring map key order.</p>
+<p><code>assert.skip(message)</code> stops the current test and marks it skipped instead of failed
+(Go's <code>t.Skip</code>). Use it for a case that cannot run in the current environment. The
+runner reports skipped tests apart from failures:</p>
+<pre><code class="language-buzz">test &quot;reads the platform keychain&quot; {
+    if (os\env(&quot;CI&quot;) != null) {
+        assert.skip(&quot;no keychain in CI&quot;);
+    }
+    assert.notNull(readKey(), &quot;key present&quot;);
+}
+</code></pre>
+<h2 id="the-suite-module">The <code>suite</code> module</h2>
+<p>Reach for a suite when several tests share setup or accumulated state. A suite runs
+every case and reports all failures at the end; its matchers are soft, so a failed
+check records the failure and the test keeps going. You run a suite as a plain script
+rather than with <code>-t</code>: build the suite, run cases with <code>it</code>, then call <code>summary</code>.</p>
+<pre><code class="language-buzz">import &quot;suite&quot;;
+
+final s = suite\new(
+    setupAll: null,
+    setupEach: fun () &gt; void { /* fresh fixture per test */ },
+    teardownAll: null,
+    teardownEach: null
+);
+
+s.it(&quot;parses a release line&quot;, fun () &gt; void {
+    s.equal(parseVersion(&quot;## [1.2.0] - 2026-01-01&quot;), &quot;1.2.0&quot;, &quot;version extracted&quot;);
+    s.notNull(s, &quot;suite is live&quot;);
+});
+
+s.summary();   // prints results; exits non-zero if any test failed
+</code></pre>
+<p>The soft matchers mirror <code>assert</code>'s core (<code>equal</code>, <code>notEqual</code>, <code>isTrue</code>, <code>isFalse</code>,
+<code>isNull</code>, <code>notNull</code>, <code>fail</code>) as methods on the suite. The lifecycle hooks
+(<code>setupAll</code>, <code>setupEach</code>, <code>teardownAll</code>, <code>teardownEach</code>) run around the cases; pass
+<code>null</code> to skip one.</p>
+<h3 id="per-test-controls">Per-test controls</h3>
+<p>Go's testing package hangs its features off the <code>*testing.T</code> passed to each test. A
+<code>test</code> block has no such handle; a Suite is that handle, so it carries the same
+per-test controls, callable from inside an <code>it</code> body:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Go analog</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>s.skip(message)</code></td>
+<td><code>t.Skip</code></td>
+<td>Marks the test skipped and stops its body</td>
+</tr>
+<tr>
+<td><code>s.fatal(message)</code></td>
+<td><code>t.Fatal</code></td>
+<td>Records a failure and stops the body, for a broken precondition where the soft matchers would keep going</td>
+</tr>
+<tr>
+<td><code>s.cleanup(fn)</code></td>
+<td><code>t.Cleanup</code></td>
+<td>Registers a cleanup run after the test in reverse order, whether it passed or failed</td>
+</tr>
+<tr>
+<td><code>s.log(message)</code></td>
+<td><code>t.Log</code></td>
+<td>Buffers a line printed only if the test fails</td>
+</tr>
+<tr>
+<td><code>s.name()</code></td>
+<td><code>t.Name</code></td>
+<td>The name of the running test</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-buzz">s.it(&quot;reads the fixture&quot;, fun () &gt; void {
+    if (os\env(&quot;CI&quot;) == null) {
+        s.skip(&quot;needs the CI fixture&quot;);
+    }
+
+    final handle = openFixture();
+    s.cleanup(fun () &gt; void { handle.close(); });   // always runs
+
+    s.log(&quot;fixture at {handle.path}&quot;);              // shown only on failure
+    s.equal(handle.read(), &quot;expected&quot;, &quot;contents&quot;);
+});
+</code></pre>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../telemetry/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Telemetry</span></a>
+      <a class="page-nav-next" href="../tips/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Tips and tricks</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22testing%22">testing</a><a class="tag" href="../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../search/?q=tag%3A%22assert%22">assert</a><a class="tag" href="../search/?q=tag%3A%22suite%22">suite</a><a class="tag" href="../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../search/?q=tag%3A%22conventions%22">conventions</a></div>
+    <small>Last updated <time datetime="2026-07-05T03:04:37Z">July 5, 2026, 3:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4efcce85989585b64e0b54ea603ffc2d595545fc" data-tooltip="4efcce85989585b64e0b54ea603ffc2d595545fc" title="4efcce85989585b64e0b54ea603ffc2d595545fc">4efcce8</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

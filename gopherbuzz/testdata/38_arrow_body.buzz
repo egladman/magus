@@ -1,0 +1,8 @@
+// @expect: 21!
+// Expression-body (arrow) functions: `fun f() > T => expr` desugars to a block
+// that returns expr, matching upstream Buzz. Covers a typed arrow body
+// (triple) and one with no return-type clause (label), composed together.
+import "std";
+fun triple(x: int) > int => x * 3;
+fun label(s: str) => s + "!";
+final __r = label("{triple(7)}");

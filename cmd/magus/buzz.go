@@ -11,13 +11,14 @@ import (
 	"github.com/egladman/gopherbuzz"
 	buzzstd "github.com/egladman/gopherbuzz/std"
 	vm "github.com/egladman/gopherbuzz/vm"
-	"github.com/egladman/magus/internal/dry"
+	"github.com/egladman/magus/internal/interp/bindings"
 )
 
 // buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the
-// Buzz interpreter and its standard library. No magus host bindings (magus, fs,
-// vcs, spells) are installed; for the binding-rich experience use
-// `magus repl --engine buzz` instead.
+// Buzz interpreter with the full magus module surface (Buzz stdlib plus every
+// magus host module: fs, os, http, markdown, template, ...). The magus.* namespace
+// (targets, needs) is not installed, since it needs a magusfile; for that use
+// `magus repl --engine buzz` or run a magusfile target.
 //
 // This is the in-binary form of the former standalone magus-buzz tool, folded into
 // the main command (like `kubectl kustomize`) so a clean Buzz runner is always
@@ -52,17 +53,12 @@ func buzzCmd(ctx context.Context, args []string) error {
 	}
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }()
-	buzzstd.Register(sess)
-	// Add the magus-only pure-compute modules Buzz's own stdlib lacks (markdown,
-	// encoding), so a magus-context script or test can use them without the full
-	// host-binding engine. Deliberately additive: do NOT override modules buzzstd
-	// already provides (crypto, env, ...), so upstream-Buzz behavior for the buzz
-	// spell is preserved. Both come from the playground's browser-safe registry.
-	for _, modName := range []string{"markdown", "encoding"} {
-		if register := dry.BrowserSafeHostModules[modName]; register != nil {
-			sess.SetSyntheticModule(modName, register(ctx, sess))
-		}
-	}
+	// Install the full magus module surface (Buzz stdlib + assert/suite + every
+	// magus host module), the same one the magusfile engine uses minus the magus.*
+	// namespace, which needs a magusfile's targets. Sharing one registration keeps
+	// `magus buzz` and magusfile execution in lock-step: any module a script or test
+	// imports resolves the same way in both, with no per-surface module list.
+	bindings.RegisterModuleSurface(ctx, sess)
 
 	if err := sess.Exec(ctx, code); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
@@ -83,19 +79,34 @@ func runBuzzTests(ctx context.Context, sess *buzz.Session, name string) error {
 		return nil
 	}
 	failed := 0
+	skipped := 0
 	for _, tc := range tests {
-		if _, err := sess.CallValue(ctx, tc.Fn, []vm.Value(nil)); err != nil {
-			failed++
-			fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
-		} else {
+		_, err := sess.CallValue(ctx, tc.Fn, []vm.Value(nil))
+		if err == nil {
 			fmt.Printf("ok    test %q\n", tc.Name)
+			continue
 		}
+		if reason, ok := buzzstd.SkipMessage(err); ok {
+			skipped++
+			fmt.Printf("skip  test %q%s\n", tc.Name, skipReason(reason))
+			continue
+		}
+		failed++
+		fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
 	}
-	fmt.Printf("---\n%d passed, %d failed\n", len(tests)-failed, failed)
+	fmt.Printf("---\n%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d tests failed", failed, len(tests))
 	}
 	return nil
+}
+
+// skipReason formats a non-empty skip reason as " (reason)" for the test line.
+func skipReason(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return " (" + reason + ")"
 }
 
 // buzzSource resolves the program text (and a name for diagnostics) from the -e

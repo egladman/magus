@@ -1,0 +1,254 @@
+namespace testing;
+
+// gopherbuzz's test harness. Build a `Tester` in a script or a `test "..." {}`
+// block, register cases with `it`, and print a tally with `summary`. Assertions
+// are soft: a failure is recorded and the run continues, so one case can report
+// several problems at once.
+//
+// The public surface -- the `Tester` object, `init`/`it`/`summary`, and the
+// `assert*` matchers -- is API-compatible with upstream Buzz's `testing` module
+// so a program written against upstream runs here unchanged. The implementation
+// is gopherbuzz's own (no upstream source is reused; the rest of gopherbuzz's
+// stdlib is likewise a clean-room implementation of the language).
+//
+// Two surfaces differ from upstream, forced by gopherbuzz's current semantics:
+//   - assertOfType takes the expected type as a NAME string -- assertOfType(v,
+//     "int", ...) -- rather than upstream's generic assertOfType::<int>(v):
+//     gopherbuzz erases generics, so a type parameter is not a runtime value.
+//     assertThrows / assertDoesNotThrow, for the same reason, do not inspect the
+//     raised error's type (an erased `::<T>` argument on the call is ignored).
+//   - Terminal color is produced with std\char(27) rather than a "\027[" literal,
+//     since gopherbuzz string literals do not decode numeric escapes.
+
+import "buzz:std";
+import "buzz:os";
+import "buzz:io";
+import "assertcore";
+
+// paint wraps text in an ANSI SGR color, or returns it untouched when the output
+// is not a color terminal (NO_COLOR set, per no-color.org, or Windows console).
+fun paint(text: str, code: int) > str {
+    if (os\env("NO_COLOR") != null or os\env("OS") == "Windows_NT") {
+        return text;
+    }
+    final e = std\char(27);
+    return e + "[{code}m" + text + e + "[0m";
+}
+
+fun dim(text: str) => paint(text, 2);
+fun red(text: str) => paint(text, 31);
+fun green(text: str) => paint(text, 32);
+fun yellow(text: str) => paint(text, 33);
+
+/// A grouped assertion runner with lifecycle hooks. Construct with init(); each
+/// hook is optional (pass null). summary() reports and exits non-zero on failure.
+export object Tester {
+    /// One entry per `it`: true when that case recorded no failing assertion.
+    tests: mut [bool],
+    /// One entry per assertion: true when it held, false when it failed.
+    asserts: mut [bool],
+    /// Total wall time spent in `it` bodies, in milliseconds.
+    elapsed: double = 0.0,
+    /// Runs once when the Tester is created.
+    beforeAll: fun (t: Tester) > void?,
+    /// Runs before every `it` body.
+    beforeEach: fun (t: Tester) > void?,
+    /// Runs once, from summary(), after the last case.
+    afterAll: fun (t: Tester) > void?,
+    /// Runs after every `it` body.
+    afterEach: fun (t: Tester) > void?,
+
+    /// Builds a Tester and fires beforeAll (when set).
+    /// @param beforeAll Hook run once at construction
+    /// @param beforeEach Hook run before each case
+    /// @param afterAll Hook run once by summary()
+    /// @param afterEach Hook run after each case
+    /// @return The new Tester
+    static fun init(
+        beforeAll: fun (t: Tester) > void?,
+        beforeEach: fun (t: Tester) > void?,
+        afterAll: fun (t: Tester) > void?,
+        afterEach: fun (t: Tester) > void?
+    ) > mut Tester {
+        final t = mut Tester{
+            tests = mut [],
+            asserts = mut [],
+            beforeAll = beforeAll,
+            beforeEach = beforeEach,
+            afterAll = afterAll,
+            afterEach = afterEach,
+        };
+        if (t.beforeAll -> hook) {
+            hook(t);
+        }
+        return t;
+    }
+
+    /// Discards all recorded results and the elapsed time.
+    mut fun reset() > void {
+        this.tests = mut [];
+        this.asserts = mut [];
+        this.elapsed = 0.0;
+    }
+
+    /// Counts entries equal to `want` in a bool list (a small helper the tallies
+    /// share, standing in for a generic fold gopherbuzz cannot express).
+    fun tally(results: [bool], want: bool) > int {
+        var count = 0;
+        foreach (r in results) {
+            if (r == want) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    /// @return count of failed assertions
+    fun failedAsserts() > int {
+        return this.tally(this.asserts, false);
+    }
+
+    /// @return count of failed cases
+    fun failedTests() > int {
+        return this.tally(this.tests, false);
+    }
+
+    /// @return count of passed cases
+    fun succeededTests() > int {
+        return this.tally(this.tests, true);
+    }
+
+    /// Runs one case: beforeEach, the body, then afterEach. The case passes when
+    /// the body records no new failing assertion.
+    /// @param message The case description
+    /// @param fn The case body
+    mut fun it(message: str, fn: fun () > void) > void {
+        io\stdout.write(yellow("> {message}\n"));
+
+        final started = os\time();
+        final failuresBefore = this.failedAsserts();
+
+        if (this.beforeEach -> hook) {
+            hook(this);
+        }
+        fn();
+        if (this.afterEach -> hook) {
+            hook(this);
+        }
+
+        this.elapsed = this.elapsed + (os\time() - started);
+        this.tests.append(this.failedAsserts() == failuresBefore);
+    }
+
+    /// Prints the pass/fail tally and exits non-zero if any case failed. Fires
+    /// afterAll (when set) first.
+    fun summary() > void {
+        if (this.afterAll -> hook) {
+            hook(this);
+        }
+
+        final failed = this.failedTests();
+        final seconds = this.elapsed / 1000.0;
+
+        io\stdout.write(
+            "\n" + green("{this.succeededTests()} passed")
+                + dim(", ") + yellow("{failed} failed")
+                + dim(" in {seconds}s\n")
+        );
+
+        if (failed > 0) {
+            os\exit(1);
+        }
+    }
+
+    /// Records an assertion outcome; on failure, prints its detail to stderr.
+    /// @param ok Whether the assertion held
+    /// @param detail What was expected vs. seen
+    /// @param message The caller's label for the assertion
+    mut fun record(ok: bool, detail: str, message: str?) > void {
+        this.asserts.append(ok);
+        if (!ok) {
+            io\stderr.write(red("  FAIL: {message ?? ""}") + dim(" -- {detail}\n"));
+        }
+    }
+
+    /// Soft-asserts a boolean condition (the primitive the matchers build on).
+    /// @param condition Must be true to pass
+    /// @param detail Detail printed on failure
+    /// @param message The assertion label
+    mut fun assert(condition: bool, detail: str, message: str?) > void {
+        this.record(condition, detail, message: message);
+    }
+
+    /// Soft-asserts actual == expected.
+    mut fun assertEqual(actual: any, expected: any, message: str?) > void {
+        this.record(actual == expected, "want `{expected}`, got `{actual}`", message: message);
+    }
+
+    /// Soft-asserts actual != expected.
+    mut fun assertNotEqual(actual: any, expected: any, message: str?) > void {
+        this.record(actual != expected, "both were `{actual}`", message: message);
+    }
+
+    /// Soft-asserts every element of values is equal.
+    mut fun assertAreEqual(values: [any], message: str?) > void {
+        var allEqual = true;
+        foreach (v in values) {
+            if (v != values[0]) {
+                allEqual = false;
+                break;
+            }
+        }
+        this.record(allEqual, "elements are not all equal", message: message);
+    }
+
+    /// Soft-asserts adjacent elements of values differ.
+    mut fun assertAreNotEqual(values: [any], message: str?) > void {
+        var allDistinct = true;
+        foreach (i, v in values) {
+            if (i > 0 and v == values[i - 1]) {
+                allDistinct = false;
+                break;
+            }
+        }
+        this.record(allDistinct, "adjacent elements are equal", message: message);
+    }
+
+    /// Soft-asserts value's runtime type name equals typeName ("int", "str",
+    /// "bool", an object type name, ...). The type is passed by name rather than
+    /// as upstream's assertOfType::<T> because gopherbuzz erases generics.
+    /// @param value The value under test
+    /// @param typeName The expected type name
+    /// @param message The assertion label
+    mut fun assertOfType(value: any, typeName: str, message: str?) > void {
+        final actual = assertcore\typeName(value);
+        this.record(actual == typeName, "want type `{typeName}`, got `{actual}`", message: message);
+    }
+
+    /// Soft-asserts fn raises. The error's type is not examined (gopherbuzz erases
+    /// generics), so an erased `::<T>` argument on the call is accepted and ignored.
+    /// @param fn The function expected to raise
+    /// @param message The assertion label
+    mut fun assertThrows(fn: fun () > void, message: str?) > void {
+        var raised = false;
+        try {
+            fn();
+        } catch (err: any) {
+            raised = true;
+        }
+        this.record(raised, "function did not raise", message: message);
+    }
+
+    /// Soft-asserts fn does not raise.
+    /// @param fn The function expected to complete
+    /// @param message The assertion label
+    mut fun assertDoesNotThrow(fn: fun () > void, message: str?) > void {
+        var raised = false;
+        try {
+            fn();
+        } catch (err: any) {
+            raised = true;
+        }
+        this.record(!raised, "function raised", message: message);
+    }
+}

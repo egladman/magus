@@ -371,6 +371,12 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		}
 		return Null, nil
 	case tagObjectDef:
+		// Member access on a type value resolves a static method (Foo.make): the
+		// unbound closure, callable with no receiver. Instance methods live on
+		// instances, not the type, so they are not resolvable here.
+		if s, ok := vm.asObjectDef(obj).staticMethod(name); ok {
+			return vm.allocFun(s), nil
+		}
 		return Null, nil
 	case tagEnumDef:
 		enumDef := vm.asEnumDef(obj)

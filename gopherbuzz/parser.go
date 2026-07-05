@@ -606,15 +606,32 @@ func (p *parser) parseReturn() (*ast.ReturnStmt, error) {
 
 func (p *parser) parseIf() (*ast.IfStmt, error) {
 	t, _ := p.eat(token.If)
-	cond, err := p.parseParenCond()
+	// Parse `( cond )`, allowing the optional-call narrowing form
+	// `( opt -> name )` where name binds the non-null value inside the block.
+	if _, err := p.eat(token.LParen); err != nil {
+		return nil, err
+	}
+	cond, err := p.parseExpr()
 	if err != nil {
+		return nil, err
+	}
+	bindName := ""
+	if p.check(token.Arrow) {
+		p.advance()
+		id, err := p.eatBindingIdent()
+		if err != nil {
+			return nil, err
+		}
+		bindName = id.Val
+	}
+	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err
 	}
 	then, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
-	out := &ast.IfStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Then: then}
+	out := &ast.IfStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Then: then, BindName: bindName}
 	if p.check(token.Else) {
 		p.advance()
 		if p.check(token.If) {
@@ -923,6 +940,14 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	}
 	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		// `static fun` declares a method called on the type (Foo.make()), with no
+		// receiver. `static` is not a keyword here (it lexes as an identifier), so
+		// match it by value only in the leading `static fun` shape.
+		isStatic := false
+		if p.check(token.Ident) && p.peek().Val == "static" && p.peekAt(1).Kind == token.Fun {
+			p.advance()
+			isStatic = true
+		}
 		// `mut fun` declares a method that mutates the receiver. Mutation is enforced
 		// on the receiver value at runtime (an immutable instance rejects field
 		// writes), so the modifier is consumed here and the method parsed normally.
@@ -934,6 +959,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			if err != nil {
 				return nil, err
 			}
+			method.IsStatic = isStatic
 			decl.Methods = append(decl.Methods, method)
 			p.optSemicolon()
 			continue
@@ -1651,6 +1677,24 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 		if yieldAnnot != "void" && !strings.HasSuffix(yieldAnnot, "?") {
 			return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, yieldAnnot)
 		}
+	}
+	// Expression-body function: `fun f(x: int) > int => expr;` desugars to a
+	// block that returns expr, matching upstream Buzz's arrow-body sugar. It
+	// works with or without an explicit return type (upstream permits
+	// `fun bright(text: str) => color(...)`, no `>` clause), so this check sits
+	// after the optional return/error/yield annotations and before the block form.
+	if p.check(token.FatArrow) {
+		arrow := p.advance()
+		expr, e := p.parseExpr()
+		if e != nil {
+			return nil, nil, "", "", nil, e
+		}
+		if p.check(token.Semicolon) {
+			p.advance()
+		}
+		pos := ast.Pos{Line: arrow.Line, Col: arrow.Col}
+		body = &ast.BlockStmt{Pos: pos, Stmts: []ast.Node{&ast.ReturnStmt{Pos: pos, Value: expr}}}
+		return params, paramAnnots, retAnnot, yieldAnnot, body, nil
 	}
 	body, err = p.parseBlock()
 	if err != nil {

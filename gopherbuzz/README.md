@@ -1,9 +1,11 @@
 # gopherbuzz
 
-A pure-Go bytecode VM for the [Buzz](https://buzz-lang.dev/0.5.0/) scripting
-language with JIT support.
+A pure-Go bytecode VM for the [Buzz](https://buzz-lang.dev/) scripting
+language with JIT support. It targets Buzz 0.6.0-dev, tracking upstream
+`buzz-language/buzz` `main` at the commit pinned in [`version.go`](version.go)
+(`UpstreamRef`); the released 0.5.0 baseline stays compatible.
 
-- Reference: <https://buzz-lang.dev/0.5.0/reference/>
+- Reference: <https://buzz-lang.dev/0.5.0/reference/> (latest published; 0.6.0 is unreleased)
 - Hot-path notes: [Performance design](#performance-design) · JIT: [Baseline JIT](#baseline-jit)
 
 ## Performance

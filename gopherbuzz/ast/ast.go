@@ -73,6 +73,10 @@ type IfStmt struct {
 	Cond Node
 	Then *BlockStmt
 	Else Node
+	// BindName is set for optional-call narrowing, `if (opt -> name) { ... }`:
+	// Cond is the optional expression, and name is bound to its non-null value
+	// inside Then. Empty for an ordinary boolean if.
+	BindName string
 }
 
 // WhileStmt: while (cond) body
@@ -109,7 +113,10 @@ type ContinueStmt struct{ Pos }
 // FunDecl: fun name(params) rettype { body } — a named function statement/method.
 type FunDecl struct {
 	Pos
-	IsExported  bool
+	IsExported bool
+	// IsStatic marks an object's `static fun` method: it is called on the type
+	// itself (Foo.make(...)), takes no receiver, and cannot access this.
+	IsStatic    bool
 	Name        string
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated

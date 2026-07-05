@@ -31,9 +31,6 @@ import (
 	"github.com/egladman/gopherbuzz/vm"
 )
 
-// version is the Buzz language version gopherbuzz targets.
-const version = "0.5.0"
-
 // init pins the interpreter to the process's main OS thread. Scripts that
 // zdef() into single-thread-affine C frameworks (macOS AppKit above all)
 // must issue those calls from the main thread; without the lock the main
@@ -72,7 +69,7 @@ func run(argv []string) error {
 		return nil
 	}
 	if o.showVer {
-		fmt.Printf("buzz %s (gopherbuzz, bytecode v%d)\n", version, vm.BytecodeVersion)
+		fmt.Printf("buzz %s (gopherbuzz, upstream %s, bytecode v%d)\n", buzz.LanguageVersion, buzz.UpstreamRef, vm.BytecodeVersion)
 		return nil
 	}
 
@@ -159,19 +156,34 @@ func runTests(ctx context.Context, sess *buzz.Session, name string) error {
 		return nil
 	}
 	failed := 0
+	skipped := 0
 	for _, tc := range tests {
-		if _, err := sess.CallValue(ctx, tc.Fn, nil); err != nil {
-			failed++
-			fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
-		} else {
+		_, err := sess.CallValue(ctx, tc.Fn, nil)
+		if err == nil {
 			fmt.Printf("ok    test %q\n", tc.Name)
+			continue
 		}
+		if reason, ok := buzzstd.SkipMessage(err); ok {
+			skipped++
+			fmt.Printf("skip  test %q%s\n", tc.Name, skipReason(reason))
+			continue
+		}
+		failed++
+		fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
 	}
-	fmt.Printf("---\n%d passed, %d failed\n", len(tests)-failed, failed)
+	fmt.Printf("---\n%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d tests failed", failed, len(tests))
 	}
 	return nil
+}
+
+// skipReason formats a non-empty skip reason as " (reason)" for the test line.
+func skipReason(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return " (" + reason + ")"
 }
 
 // parseArgs parses the upstream-style flag set by hand: every option accepts

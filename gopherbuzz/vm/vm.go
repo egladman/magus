@@ -1024,6 +1024,26 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				}
 			}
 
+			// Foo.make(args): a static method is called on the type value with no
+			// receiver, so enter it with this = Null. Mirrors the object-method fast
+			// path above; the receiver slot becomes the return slot.
+			if receiver.tag() == tagObjectDef {
+				if s, ok := vm.asObjectDef(receiver).staticMethod(name); ok {
+					if err := vm.enterFun(s, recvIdx+1, recvIdx, Null); err != nil {
+						return Null, err
+					}
+					f = &vm.frames[len(vm.frames)-1]
+					code = f.chunk.Code
+					if debug {
+						vm.lastLine = 0
+						if vm.stepMask&MaskCall != 0 {
+							vm.stepHook(StepCall, frameToDebug(f))
+						}
+					}
+					continue
+				}
+			}
+
 			// Fallback: resolve the member (field value, map entry, list/str/enum
 			// member) and dispatch it like an ordinary call. getMember may bind a
 			// method here (e.g. when recv is a map whose entry is a bound method),
@@ -1984,13 +2004,19 @@ func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount int, env *Env) er
 		methods[i] = method{vm.asStr(name).V, vm.asFun(fn)}
 	}
 	def := &objectDefObj{
-		Name:    decl.Name,
-		Fields:  decl.Fields,
-		Methods: make([]methodEntry, methodCount),
-		Env:     env,
+		Name:   decl.Name,
+		Fields: decl.Fields,
+		Env:    env,
 	}
+	// Emitted closures align by index with decl.Methods (see compileObjectDecl),
+	// so route each into the instance vtable or the statics table accordingly.
 	for i, m := range methods {
-		def.Methods[i] = methodEntry{Name: m.name, Fn: m.fun}
+		entry := methodEntry{Name: m.name, Fn: m.fun}
+		if i < len(decl.Methods) && decl.Methods[i].IsStatic {
+			def.Statics = append(def.Statics, entry)
+		} else {
+			def.Methods = append(def.Methods, entry)
+		}
 	}
 	vm.push(vm.allocObjectDef(def))
 	return nil

@@ -28,5 +28,15 @@ func RegisterTemplate(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.StrVal(ret0), nil
 	}))
+	m.MapSet("renderPartials", vm.DirectValue("template.renderPartials", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		template := host.Str(bzArgs, 0)
+		data := host.Any(bzArgs, 1)
+		partials := host.StrMap(bzArgs, 2)
+		ret0, err := std.TemplateRenderPartials(ctx, template, data, partials)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.StrVal(ret0), nil
+	}))
 	return m
 }
