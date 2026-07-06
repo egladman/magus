@@ -356,25 +356,23 @@
   margin: 0;
   padding: 0.4rem;
 }
-/* Active state: when the TOC is shown (aria-expanded=true) the toggle fills with
-   its own accent (the mascot teal, distinct from the blue links and rose code), so
-   the control reads as a deliberate pop of color; hidden, it stays an outline.
-   That on/off contrast is clearer than swapping the icon. */
-/* !important is needed because Pico's .outline forces a transparent background
-   with !important; without it the filled active state can't take. */
+/* The toggle is always a solid violet control (distinct from the blue links and rose
+   code); activating it (TOC shown, aria-expanded=true) or hovering just deepens the
+   shade rather than inverting to an outline, so the on state reads as the same button
+   pressed, not a different-looking element. accent-violet-hover is the palette's
+   emphasis shade - darker in light, appropriately brighter in dark. */
+/* !important overrides Pico's .outline, which forces a transparent background with
+   !important; without it the filled state can't take. */
 .toc-toggle[aria-expanded="false"] {
-  background-color: transparent !important;
-  border-color: var(--accent-violet);
-  color: var(--accent-violet);
-}
-.toc-toggle[aria-expanded="true"] {
   background-color: var(--accent-violet) !important;
   border-color: var(--accent-violet);
   color: var(--accent-violet-inverse, #fff);
 }
-.toc-toggle[aria-expanded="true"]:hover {
+.toc-toggle[aria-expanded="true"],
+.toc-toggle[aria-expanded="false"]:hover {
   background-color: var(--accent-violet-hover, var(--accent-violet)) !important;
   border-color: var(--accent-violet-hover, var(--accent-violet));
+  color: var(--accent-violet-inverse, #fff);
 }
 
 /* Secondary tool row below the search bar: reading-time chip on the left,
