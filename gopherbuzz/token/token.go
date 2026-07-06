@@ -3,7 +3,7 @@ package token
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -263,7 +263,7 @@ func Keywords() []string {
 	for k := range keywords {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

@@ -569,21 +569,29 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 	return prog, checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importPrivateHint()), nil
 }
 
-// Diagnostic is a positioned diagnostic for editor tooling: a 1-based line and
-// column plus a message with the "buzz: line L:C:" prefix stripped (the position
-// travels in the fields instead). A zero Line means no position was recoverable.
+// Diagnostic is a positioned diagnostic for editor tooling. Line and Col are
+// 1-based; a zero Line means no position was recoverable (Col is only meaningful
+// beside a nonzero Line). Msg has the "buzz: line L:C:" prefix stripped - the
+// position travels in the fields instead. Msg/Line/Col mirror the unexported checker
+// typeError; keep the two shapes in sync if either gains a field.
 type Diagnostic struct {
 	Line, Col int
 	Msg       string
 }
 
-// Diagnostics type-checks code against the session's shared scope and returns
-// every diagnostic the editor should surface, without running or compiling
-// anything: a single parse error (checking cannot proceed past the first), or
-// otherwise every type error the checker found. Unlike Exec and Compile it does
-// not stop at the first error, so it is safe to call on each keystroke to drive
-// live squiggles. It is meant for the embedded playground path, where the host
-// and spell modules are already registered so a magusfile's imports resolve.
+// Diagnostics parses and type-checks code against the session's shared scope and
+// returns every diagnostic the editor should surface: a single parse error (checking
+// cannot proceed past it), or otherwise every type error the checker found. Unlike
+// Exec and Compile it does not stop at the first error, so it can drive live
+// squiggles per keystroke.
+//
+// It is NOT side-effect-free. Resolving the program's imports executes each imported
+// module's top-level code and reads its file from disk, so the checker can see the
+// globals and types they define (there is no check-only import pass). It also mutates
+// session state (loadedPaths, env, importedTypes). Call it on a fresh or throwaway
+// session - the embedded playground path (dry.Diagnostics) makes a new one per call -
+// never on a live session you still intend to Exec, or a later real import will be
+// skipped as already-loaded.
 func (s *Session) Diagnostics(code string) []Diagnostic {
 	_, errs, parseErr := s.checkShared(code)
 	if parseErr != nil {
