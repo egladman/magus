@@ -57,7 +57,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
+        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-playground-editor" title="build-playground-editor">build-playground-editor</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -115,6 +115,7 @@ graph LR
   subgraph entry_cluster[&quot; &quot;]
     ci(&quot;ci&quot;)
     build_playground(&quot;build-playground&quot;)
+    build_playground_editor(&quot;build-playground-editor&quot;)
     serve(&quot;serve&quot;)
   end
   preflight(&quot;preflight&quot;)
@@ -136,9 +137,10 @@ graph LR
   build --&gt; ci
   test --&gt; ci
   preflight --&gt; build_playground
+  preflight --&gt; build_playground_editor
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_playground,ci,serve anchor
+  class build_playground,build_playground_editor,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 </code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
@@ -211,6 +213,17 @@ magus run ci .  # from the workspace root
 <p><strong>Defaults</strong></p>
 <pre><code class="language-sh">magus run build-playground    # from the project directory
 magus run build-playground .  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#preflight"><code>preflight</code></a></li>
+</ul>
+<p><strong>Details:</strong> uncached (always runs)</p>
+<h3 id="build-playground-editor"><code>build-playground-editor</code></h3>
+<p>build_playground_editor bundles the vendored CodeMirror editor into the committed website/playground/editor.js — the editor analog of build_playground's committed buzz.wasm.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run build-playground-editor    # from the project directory
+magus run build-playground-editor .  # from the workspace root
 </code></pre>
 <p><strong>Depends on:</strong></p>
 <ul>

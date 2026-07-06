@@ -138,7 +138,7 @@ export fun build_playground(args: [str]) > void {
 // website/playground/editor.js — the editor analog of build_playground's committed
 // buzz.wasm. The playground page loads this bundle to upgrade its textarea into a
 // CodeMirror editor with diagnostics, autocompletion, and hover (driven by the wasm
-// language service, globalThis.buzz). Run by hand when js/playground-editor.js or the
+// language service, globalThis.buzz). Run by hand when js/editor.js or the
 // pinned CodeMirror versions change, then commit editor.js. npm ci restores the
 // build-only deps from package-lock.json; esbuild (pinned in mise.toml) bundles them.
 export fun build_playground_editor(args: [str]) > void {

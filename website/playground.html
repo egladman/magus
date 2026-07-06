@@ -299,7 +299,7 @@
 
     <!-- Collapsed by default: the host modules the browser build leaves out. The
          list is filled from the interpreter itself (globalThis.buzz.excludedModules
-         via playground-editor.js), so it can't drift from what actually compiled in. -->
+         via editor.js), so it can't drift from what actually compiled in. -->
     <details class="modules-note">
       <summary>Not everything runs here <span class="excluded-count"></span></summary>
       <p>Anything that just crunches data works in your browser. A handful of modules need a process, a real filesystem, or the network, so they only come alive with <a href="../download/">magus installed</a>:</p>
@@ -425,7 +425,7 @@
   <!-- Shared feature bundle (code-copy etc.); each module guards on its own DOM
        targets, so the ones the playground lacks simply no-op. WS M reworks this. -->
   <script type="module" src="../main.js"></script>
-  <!-- CodeMirror editor bundle (esbuild output of js/playground-editor.js,
+  <!-- CodeMirror editor bundle (esbuild output of js/editor.js,
        committed like buzz.wasm). Progressive enhancement: it upgrades the textarea
        into a CodeMirror editor with diagnostics, autocompletion, and hover driven
        by the wasm language service. A load failure leaves the textarea editor. -->

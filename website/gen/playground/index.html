@@ -134,6 +134,21 @@
     .hl-com { color: var(--hl-com); font-style: italic; }
     .hl-punct { color: var(--pico-muted-color); }
 
+    /* CodeMirror overlay (progressive enhancement, playground/editor.js). When it
+       mounts it adds .cm-active to the panel; hide the textarea editor's own chrome
+       and let CodeMirror fill the editor area. Without the bundle (load failure or
+       an init throw), .cm-active never lands and the textarea editor stays. The
+       syntax palette reuses the same --hl-* variables the overlay used, so light/
+       dark mode carries over. */
+    .panel.cm-active .gutter-wrap,
+    .panel.cm-active #highlight,
+    .panel.cm-active #src { display: none; }
+    #cm-root { position: absolute; inset: 0; }
+    .cm-editor { height: 100%; }
+    .cm-buzz-hover { max-width: 34rem; padding: 0.5rem 0.7rem; font-size: 0.8rem; line-height: 1.5; }
+    .cm-buzz-hover-title { font-family: var(--pico-font-family-monospace); font-weight: 600; }
+    .cm-buzz-hover-doc { margin-top: 0.3rem; color: var(--pico-muted-color); white-space: normal; }
+
     /* Console: styled with Pico's own theme variables, so it follows the page's
        light/dark mode. It reads as a distinct console via its header bar and the
        border above it (like an IDE's bottom panel), not a custom color. */
@@ -147,14 +162,6 @@
     }
     .term-bar .term-title { color: var(--pico-color); font-weight: 600; letter-spacing: 0.03em; }
     .term-bar .term-hint { margin-left: auto; }
-    .term-bar .local-tag {
-      font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.32rem;
-      padding: 0.02rem 0.5rem; border-radius: 1rem; cursor: help;
-      border: 1px solid var(--pico-muted-border-color);
-    }
-    .term-bar .local-tag::before {
-      content: ""; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--pico-ins-color);
-    }
 
     .term { flex: 0 0 auto; display: flex; flex-direction: column; cursor: text; }
     .term-out {
@@ -175,21 +182,6 @@
     }
     .term-prompt .ps1 { color: var(--pico-muted-color); font-weight: 500; white-space: nowrap; }
     .term-prompt .ps1 .chevron { color: var(--pico-primary); }
-    /* Circled "?" hint glyph before the placeholder text, telling the reader the
-       next word is a command they can type. Hides once the input has focus or a
-       value so it does not compete with real input. */
-    .term-prompt .help-glyph {
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      color: var(--pico-muted-color);
-      transition: opacity 0.15s ease;
-    }
-    .term-prompt:focus-within .help-glyph,
-    .term-prompt:has(input:not(:placeholder-shown)) .help-glyph {
-      opacity: 0;
-      pointer-events: none;
-    }
     .term-prompt input {
       flex: 1; border: 0; margin: 0; padding: 0; background: transparent;
       font-family: inherit; font-size: inherit; color: var(--pico-color);
@@ -215,6 +207,40 @@
       color: var(--pico-muted-color);
     }
     .pg-note code { font-size: 0.85em; }
+
+    /* Collapsible "modules not available here" notice below the panel. It mirrors
+       the site footer's recent-changes disclosure: an uppercase, tracked, muted
+       label that stays a plain heading in both states, over a bordered panel (the
+       shared --syntax-panel-bg) whose rows are separated by rules. */
+    .modules-note { margin-top: var(--pad); font-size: 0.85rem; border-bottom: none; }
+    .modules-note > summary:not([role]) {
+      width: fit-content; cursor: pointer;
+      color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    /* Keep the label muted in every state (outrank Pico's accordion summary rules). */
+    main .modules-note > summary:not([role]),
+    main .modules-note > summary:not([role]):hover,
+    main .modules-note > summary:not([role]):focus,
+    main .modules-note > summary:not([role]):focus-visible,
+    main .modules-note[open] > summary:not([role]) { color: var(--pico-muted-color); }
+    .modules-note[open] > summary { margin-bottom: 0.5rem; }
+    .modules-note p { color: var(--pico-muted-color); margin: 0 0 0.5rem; }
+    .modules-note[open] > ul {
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--pico-muted-border-color);
+      border-radius: var(--pico-border-radius);
+      background: var(--syntax-panel-bg);
+    }
+    .modules-note ul { list-style: none; margin: 0; padding: 0; }
+    .modules-note li { padding: 0.3rem 0; list-style: none; color: var(--pico-muted-color); }
+    .modules-note li + li { border-top: 1px solid var(--pico-muted-border-color); }
+    .modules-note code { font-size: 0.85em; }
+
+    /* The provenance block that used to carry the divider between the content and
+       the footer is gone (its text was redundant), so give the injected site footer
+       its own top rule - scoped to this page - so the footer doesn't read as barren. */
+    .site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
   </style>
 </head>
 <body>
@@ -243,7 +269,7 @@
   <main class="container-fluid">
     <h1 class="pg-title">Playground</h1>
     <p class="lede">A scratchpad for magusfiles. New to magus? <a href="../tour/">Take the tour</a> for guided, runnable examples.</p>
-    <p class="pg-note">Runs <a href="https://github.com/egladman/magus/tree/main/gopherbuzz">gopherbuzz</a>, the <a href="https://buzz-lang.dev/">Buzz</a> interpreter magus reads magusfiles with, compiled to WebAssembly entirely in your browser - nothing leaves this tab. Build tools don't run here, so <code>run</code> shows a target's plan (like <code>--dry-run</code>) instead of invoking them; <a href="../download/">install magus</a> to run these targets for real.</p>
+    <p class="pg-note">The <a href="https://buzz-lang.dev/">Buzz</a> interpreter runs as WebAssembly in your browser; nothing leaves this tab. Build tools don't run here, so <code>run</code> shows a target's plan, not the real build. <a href="../download/">Install magus</a> to run for real.</p>
 
     <section class="panel">
       <header class="file-bar">
@@ -264,46 +290,44 @@
 
       <div class="term-bar">
         <span class="term-title">console</span>
-        <span class="local-tag" title="Runs entirely in your browser. No server, no network, no shell - build tools are not executed here.">in-browser</span>
         <span class="term-hint">tab to complete · ↑↓ history</span>
       </div>
       <div class="term" id="term">
         <div class="term-out" id="term-out"></div>
         <div class="term-prompt">
           <span class="ps1">magus <span class="chevron">❯</span></span>
-          <span class="help-glyph" aria-hidden="true" title="Type 'help' to see available commands">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-          </span>
           <input id="term-in" type="text" aria-label="Console input" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
-                 placeholder="type help to get started (sandbox: nothing runs for real)" disabled>
+                 placeholder="help" disabled>
         </div>
       </div>
 
       <div class="loading-overlay" id="loading" role="status">loading WebAssembly…</div>
-      <!-- No-JS fallback: the loading overlay stays visible forever without JS,
-           so replace the panel content with a clear explanation. -->
+      <!-- No-JS fallback: every part of the panel needs JavaScript (the editor,
+           the console, and the WebAssembly boot), so hide all of it and collapse
+           the panel down to a single explanatory note. -->
       <noscript>
         <style>
-          #loading, .panel .editor, .panel .term { display: none !important; }
+          .panel .file-bar, .panel .editor, .panel .term-bar, .panel .term, #loading { display: none !important; }
+          .panel { height: auto !important; min-height: 0 !important; }
         </style>
-        <div class="loading-overlay" style="position:static;padding:1.5rem;">
+        <div style="padding:1.5rem;color:var(--pico-muted-color);">
           <p><strong>The playground needs JavaScript.</strong></p>
-          <p>It runs a WebAssembly Buzz interpreter in your browser to evaluate
-             magusfiles locally. Enable JavaScript to try magus live, or
-             <a href="../download/">download magus</a> to run it for real.</p>
+          <p>It runs the Buzz interpreter as WebAssembly in your browser. Enable JavaScript to try it, or <a href="../download/">install magus</a> to run magusfiles locally.</p>
         </div>
       </noscript>
     </section>
 
+    <!-- Collapsed by default: the host modules the browser build leaves out. The
+         list is filled from the interpreter itself (globalThis.buzz.excludedModules
+         via playground-editor.js), so it can't drift from what actually compiled in. -->
+    <details class="modules-note">
+      <summary>Not everything runs here <span class="excluded-count"></span></summary>
+      <p>Anything that just crunches data works in your browser. A handful of modules need a process, a real filesystem, or the network, so they only come alive with <a href="../download/">magus installed</a>:</p>
+      <ul id="excluded-modules"></ul>
+    </details>
+
   </main>
 
-  <div class="page-provenance container">
-    <small>Compiled with TinyGo to WebAssembly; the interpreter and your magusfile run entirely client-side.</small>
-  </div>
     <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
@@ -425,5 +449,10 @@
   <!-- Shared feature bundle (code-copy etc.); each module guards on its own DOM
        targets, so the ones the playground lacks simply no-op. WS M reworks this. -->
   <script type="module" src="../main.js"></script>
+  <!-- CodeMirror editor bundle (esbuild output of js/playground-editor.js,
+       committed like buzz.wasm). Progressive enhancement: it upgrades the textarea
+       into a CodeMirror editor with diagnostics, autocompletion, and hover driven
+       by the wasm language service. A load failure leaves the textarea editor. -->
+  <script type="module" src="editor.js"></script>
 </body>
 </html>

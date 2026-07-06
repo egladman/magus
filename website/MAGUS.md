@@ -66,6 +66,7 @@ graph LR
   subgraph entry_cluster[" "]
     ci("ci")
     build_playground("build-playground")
+    build_playground_editor("build-playground-editor")
     serve("serve")
   end
   preflight("preflight")
@@ -87,9 +88,10 @@ graph LR
   build --> ci
   test --> ci
   preflight --> build_playground
+  preflight --> build_playground_editor
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_playground,ci,serve anchor
+  class build_playground,build_playground_editor,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 ```
@@ -197,6 +199,23 @@ build-playground rebuilds the WebAssembly interpreter the playground page loads:
 ```sh
 magus run build-playground    # from the project directory
 magus run build-playground .  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+**Details:** uncached (always runs)
+
+### `build-playground-editor`
+
+build_playground_editor bundles the vendored CodeMirror editor into the committed website/playground/editor.js — the editor analog of build_playground's committed buzz.wasm.
+
+**Defaults**
+
+```sh
+magus run build-playground-editor    # from the project directory
+magus run build-playground-editor .  # from the workspace root
 ```
 
 **Depends on:**
