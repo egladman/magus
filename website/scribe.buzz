@@ -918,8 +918,8 @@ fun renderPublic(site: Site) > void {
     // which would break the drift gate); modified is the release date from
     // the CHANGELOG entry.
     foreach (rel in site.releases) {
-        final ver = rel["version"];
-        final date = rel["date"];
+        final ver = rel.version;
+        final date = rel.date;
         final assetBase = GH + "/releases/download/" + ver;
         var verEntries: [{str: str}] = mut [<{str: str}>];
         verEntries.append(mut {"name": "magus_" + ver + "_linux_amd64.tar.gz",   "href": assetBase + "/magus_" + ver + "_linux_amd64.tar.gz",   "size": "-", "modified": date, "desc": "Linux amd64 binary"});
@@ -937,8 +937,8 @@ fun renderPublic(site: Site) > void {
     // Empty when no releases have shipped yet; just the bracketing rules remain.
     var releaseParent: [{str: str}] = mut [<{str: str}>];
     foreach (rel in site.releases) {
-        final ver = rel["version"];
-        releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel["date"], "desc": "Release " + ver});
+        final ver = rel.version;
+        releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel.date, "desc": "Release " + ver});
     }
     renderAutoindex("public/release", releaseParent, "../", site);
 

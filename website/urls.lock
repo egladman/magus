@@ -112,6 +112,7 @@ operations/
 public/
 public/atom/
 public/release/
+public/release/0.1.0/
 remote-cache/
 services/
 spells/
