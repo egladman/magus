@@ -405,7 +405,7 @@ func exposeDataAPI() {
 	// (source, cursor) - no session state - so the page can call them freely on each
 	// keystroke. offset is a UTF-8 byte offset into source (the adapter converts from
 	// the editor's UTF-16 position); positions in results are 1-based line/col.
-	api.Set("diagnostics", js.FuncOf(func(_ js.Value, args []js.Value) any {
+	api.Set("diagnostics", dataHandler(func(args []js.Value) any {
 		if len(args) < 1 {
 			return nil
 		}
@@ -416,11 +416,12 @@ func exposeDataAPI() {
 		}
 		return out
 	}))
-	api.Set("complete", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) < 2 {
+	api.Set("complete", dataHandler(func(args []js.Value) any {
+		off, ok := numberArg(args, 1)
+		if !ok {
 			return nil
 		}
-		cs := langservice.Complete(args[0].String(), args[1].Int())
+		cs := langservice.CompleteAt(args[0].String(), off)
 		out := make([]any, len(cs))
 		for i, c := range cs {
 			out[i] = map[string]any{
@@ -430,11 +431,12 @@ func exposeDataAPI() {
 		}
 		return out
 	}))
-	api.Set("hover", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) < 2 {
+	api.Set("hover", dataHandler(func(args []js.Value) any {
+		off, ok := numberArg(args, 1)
+		if !ok {
 			return nil
 		}
-		h := langservice.HoverAt(args[0].String(), args[1].Int())
+		h := langservice.HoverAt(args[0].String(), off)
 		if h == nil {
 			return nil
 		}
@@ -442,11 +444,12 @@ func exposeDataAPI() {
 	}))
 	// signature is call-signature help: given the cursor inside a call's arg list, it
 	// returns the callee's signature and doc for the editor to float above the line.
-	api.Set("signature", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) < 2 {
+	api.Set("signature", dataHandler(func(args []js.Value) any {
+		off, ok := numberArg(args, 1)
+		if !ok {
 			return nil
 		}
-		s := langservice.SignatureAt(args[0].String(), args[1].Int())
+		s := langservice.SignatureAt(args[0].String(), off)
 		if s == nil {
 			return nil
 		}
@@ -464,6 +467,27 @@ func exposeDataAPI() {
 		return out
 	}))
 	js.Global().Set("buzz", api)
+}
+
+// dataHandler wraps a language-service callback so a panic on adversarial or
+// half-typed source surfaces to JS as null instead of aborting the whole wasm
+// instance. The unnamed `any` return is nil after a recovered panic.
+func dataHandler(fn func(args []js.Value) any) js.Func {
+	return js.FuncOf(func(_ js.Value, args []js.Value) any {
+		defer func() { _ = recover() }()
+		return fn(args)
+	})
+}
+
+// numberArg reads args[i] as an int, but only when it is actually a JS number.
+// js.Value.Int() panics on a non-number, and these entry points are reachable via
+// globalThis.buzz for console scripting (not just the UI, which always passes a
+// number), so a bad offset must return not-ok rather than crash the module.
+func numberArg(args []js.Value, i int) (int, bool) {
+	if i >= len(args) || args[i].Type() != js.TypeNumber {
+		return 0, false
+	}
+	return args[i].Int(), true
 }
 
 func targetKeys(ts []dry.Target) []any {
