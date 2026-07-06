@@ -47,6 +47,8 @@ func buzzCmd(ctx context.Context, args []string) error {
 
 	// No code, no file/stdin argument, and an interactive terminal: open a REPL.
 	// A non-terminal stdin (pipe, redirect, heredoc) falls through to script mode.
+	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
+	// so buzzRepl is always embedded regardless of the flag.
 	if eval == "" && !test && len(rest) == 0 && stdinIsTerminal() {
 		return buzzRepl(ctx)
 	}

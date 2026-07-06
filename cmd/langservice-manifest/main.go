@@ -48,9 +48,11 @@ func run() error {
 	b.WriteString("// and hover. See cmd/langservice-manifest.\n")
 	b.WriteString("var modules = []Module{\n")
 
+	emitted := 0
 	for _, summary := range list.Modules {
 		m := host.ModulesOutput(summary.Name)
 		if len(m.Modules) == 0 {
+			fmt.Fprintf(os.Stderr, "warning: module %q returned no detail; omitted from manifest\n", summary.Name)
 			continue
 		}
 		mod := m.Modules[0]
@@ -71,6 +73,7 @@ func run() error {
 			b.WriteString("\t\t},\n")
 		}
 		b.WriteString("\t},\n")
+		emitted++
 	}
 	b.WriteString("}\n")
 
@@ -81,6 +84,6 @@ func run() error {
 	if err := os.WriteFile(filepath.FromSlash(outFile), src, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outFile, err)
 	}
-	fmt.Printf("wrote %s (%d modules)\n", outFile, len(list.Modules))
+	fmt.Printf("wrote %s (%d modules)\n", outFile, emitted)
 	return nil
 }
