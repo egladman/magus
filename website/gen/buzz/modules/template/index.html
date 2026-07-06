@@ -81,7 +81,7 @@
 <h3 id="render">render</h3>
 <p>Render a Mustache template against a context value (usually a name-&gt;value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.</p>
 <p><strong>Signature:</strong> <code>template.render(template, data) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/template.go#L40" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -104,7 +104,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 
@@ -119,7 +119,7 @@ std.print(template.render(`Hello {{name}}`, {&quot;name&quot;: &quot;world&quot;
 <h3 id="render-partials">render_partials</h3>
 <p>Render a Mustache template that includes partials via {{&gt;name}}, resolving each name against the partials map (name-&gt;template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.</p>
 <p><strong>Signature:</strong> <code>template.renderPartials(template, data, partials) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/template.go#L51" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -148,7 +148,7 @@ std.print(template.render(`Hello {{name}}`, {&quot;name&quot;: &quot;world&quot;
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 

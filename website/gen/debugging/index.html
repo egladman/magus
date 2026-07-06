@@ -113,7 +113,7 @@ go
 <p>The prompt is <code>pry&gt;</code> at the innermost frame; <code>pry[N]&gt;</code> after <code>.up</code>/<code>.down</code> to frame N.</p>
 <p><code>magus.pry()</code> is a no-op during <code>magus ls</code> and <code>magus describe</code> so it is safe to leave in place during development. Remove it before committing.</p>
 <h2 id="meta-commands">Meta-commands</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Command</th>
@@ -214,7 +214,7 @@ go
 <td>Run until the current frame returns</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p>Pry history is persisted at <code>$XDG_STATE_HOME/magus/pry_history</code> (or <code>~/.local/state/magus/pry_history</code>) and is shared across pry sessions. The standalone <code>magus repl</code> does not record to or read from this file.</p>
 <p>Color output is enabled when stdout is a TTY; set <code>NO_COLOR=1</code> to disable. The continuation prompt (<code>&gt;&gt;</code> / <code>pry&gt;&gt;</code>) is green-tinted on color terminals.</p>
 <h2 id="multiline-input">Multiline input</h2>
@@ -228,7 +228,7 @@ magus affected build --step
 <pre><code class="language-text">→ go build ./...  (cwd: /workspace/api)
   [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort:
 </code></pre>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -257,7 +257,7 @@ magus affected build --step
 <td>Abort the run</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
     </article>
     </div>
     </div>

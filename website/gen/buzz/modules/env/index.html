@@ -81,7 +81,7 @@
 <h3 id="get">get</h3>
 <p>Return the value of name, or &quot;&quot; if unset. Use lookup to tell unset from set-but-empty.</p>
 <p><strong>Signature:</strong> <code>env.get(name) → string</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -98,12 +98,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <h3 id="lookup">lookup</h3>
 <p>Return (value, found); found is false when name is unset or stripped by the sandbox.</p>
 <p><strong>Signature:</strong> <code>env.lookup(name) → string, bool</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L126" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -120,12 +120,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string, bool</p>
 <h3 id="set">set</h3>
 <p>Set name to value in the current process environment.</p>
 <p><strong>Signature:</strong> <code>env.set(name, value)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L135" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -148,7 +148,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h3 id="list">list</h3>
 <p>Return all environment variables as a name→value map.</p>
 <p><strong>Signature:</strong> <code>env.list() → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L216" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
@@ -156,7 +156,7 @@
 <h3 id="unset">unset</h3>
 <p>Remove name from the current process environment.</p>
 <p><strong>Signature:</strong> <code>env.unset(name)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L152" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -173,11 +173,11 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h3 id="expand">expand</h3>
 <p>Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to &quot;&quot;).</p>
 <p><strong>Signature:</strong> <code>env.expand(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L167" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -194,7 +194,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <h3 id="home">home</h3>
 <p>Return the current user's home directory.</p>
@@ -203,7 +203,7 @@
 <h3 id="get-or">get_or</h3>
 <p>Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.</p>
 <p><strong>Signature:</strong> <code>env.getOr(name, def) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L189" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -226,12 +226,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <h3 id="require">require</h3>
 <p>Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).</p>
 <p><strong>Signature:</strong> <code>env.require(name) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L204" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -248,12 +248,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <h3 id="parse-dotenv">parse_dotenv</h3>
 <p>Parse .env-format content into a name-&gt;value map. Supports KEY=VALUE, blank lines, # comments, a leading <code>export </code>, single/double quotes (double-quoted values honor \n \t &quot; \ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.</p>
 <p><strong>Signature:</strong> <code>env.parseDotenv(content) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L237" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -270,12 +270,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> map[string]string</p>
 <h3 id="read-dotenv">read_dotenv</h3>
 <p>Read a .env file and return its name-&gt;value map (parse_dotenv over the file contents). Errors if the file cannot be read.</p>
 <p><strong>Signature:</strong> <code>env.readDotenv(path) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L242" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -292,12 +292,12 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> map[string]string</p>
 <h3 id="load-dotenv">load_dotenv</h3>
 <p>Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.</p>
 <p><strong>Signature:</strong> <code>env.loadDotenv(path)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L253" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -314,7 +314,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <div class="footnotes" role="doc-endnotes">
 <hr>
 <ol>

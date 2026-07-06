@@ -75,7 +75,7 @@
 <h1 id="magusfile-module-reference">Magusfile Module Reference</h1>
 <p>These are the runtime utility modules. Import each under its bare name — <code>import &quot;fs&quot;</code>, then <code>fs.glob(...)</code> — with <code>camelCase</code> methods. magus layers these host methods onto Buzz's own stdlib, so a single <code>import &quot;fs&quot;</code> (or <code>os</code>, <code>crypto</code>) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (<code>*</code>) and a footnote on their page; either form works.</p>
 <h2 id="files-and-paths">Files and paths</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -96,9 +96,9 @@
 <td>Archive creation and extraction with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst. Symlinks and non-regular entries are skipped.</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="process-and-environment">Process and environment</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -119,9 +119,9 @@
 <td>Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin).</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="text-and-formatting">Text and formatting</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -142,9 +142,9 @@
 <td>GitHub-Flavored Markdown to semantic HTML.</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="serialization-and-encoding">Serialization and encoding</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -165,9 +165,9 @@
 <td>Base64/hex/URL text codecs.</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="cryptography">Cryptography</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -180,9 +180,9 @@
 <td>Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="networking">Networking</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -195,9 +195,9 @@
 <td>HTTP client with automatic retry on transient errors.</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="time">Time</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -210,9 +210,9 @@
 <td>Timestamp formatting/parsing and duration parsing (Go time, UTC).</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="versioning-and-version-control">Versioning and version control</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -229,9 +229,9 @@
 <td>Version-control queries for the current working tree.</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="magus-internals">Magus internals</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -248,9 +248,9 @@
 <td>Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="other">Other</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Module</th>
@@ -271,7 +271,7 @@
 <td>Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens).</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../../targets/">Targets</a>: the runnable units whose magusfiles call these modules.</li>

@@ -93,7 +93,7 @@ config in <a href="../internal/config/config.go"><code>internal/config/config.go
     x-api-key: &quot;…&quot;
 </code></pre>
 <p>Or via the environment:</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Env var</th>
@@ -140,13 +140,13 @@ config in <a href="../internal/config/config.go"><code>internal/config/config.go
 <td>Head-based trace sampling ratio in <code>[0,1]</code></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Export details.</strong> magus pushes metrics over OTLP on a periodic reader every
 <strong>30s</strong>. It batches traces and samples them head-based by <code>sample_ratio</code>
 (<code>1.0</code> = every trace). Metrics are unsampled: every recorded point is exported.</p>
 <h2 id="resource-attributes">Resource attributes</h2>
 <p>Every metric and span carries these resource attributes:</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Attribute</th>
@@ -175,12 +175,12 @@ config in <a href="../internal/config/config.go"><code>internal/config/config.go
 <td>detected host metadata</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="metrics">Metrics</h2>
 <h3 id="cache-local">Cache (local)</h3>
 <p>Low-cardinality aggregate view of the on-disk content-addressed cache; no
 per-project attribute.</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -220,7 +220,7 @@ per-project attribute.</p>
 <td>Wall-clock of a single <code>Cache.Run</code></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h3 id="remote-cache">Remote cache</h3>
 <p>The <a href="../remote-cache/">shared backend</a> (S3, GitHub Actions, ...), exported only
 when one is wired via <code>magus.cache.remote(...)</code>. These mirror the local-cache
@@ -229,7 +229,7 @@ local counters: a remote hit is still a <em>local</em> miss, because the remote 
 only runs after the local store misses. Instrumentation wraps the backend
 interface, so it applies to every backend (including ones you write) with no
 backend changes.</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -276,13 +276,13 @@ backend changes.</p>
 <td>Bytes transferred, recorded on hits and puts only (egress/ingress cost)</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><code>outcome ∈ {hit, miss, stored, error}</code>; <code>stored</code> is a successful <code>put</code>.
 <strong>Remote hit-rate</strong> is <code>hits / (hits + misses)</code>. <strong>Put success</strong> is the
 <code>magus.cache.remote.duration</code> count for <code>op=put</code> minus
 <code>magus.cache.remote.errors</code> for <code>op=put</code>.</p>
 <h3 id="graph">Graph</h3>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -308,13 +308,13 @@ backend changes.</p>
 <td>Wall-clock of a single graph query</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><code>strategy</code> is present only when the query reports one. <code>op=build</code> is the full
 graph build.</p>
 <h3 id="target-runs">Target runs</h3>
 <p>Per-project, per-spell. <code>magus.project</code> has unbounded cardinality; see
 <a href="#cardinality">Cardinality</a>.</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -340,11 +340,11 @@ graph build.</p>
 <td>Wall-clock of a single target execution</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><code>outcome ∈ {success, error}</code> · <code>cache.hit ∈ {true, false}</code> · one row is emitted
 per resolved spell per project.</p>
 <h3 id="concurrency-pool">Concurrency pool</h3>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Metric</th>
@@ -370,12 +370,12 @@ per resolved spell per project.</p>
 <td>Concurrency slots currently in use (gauge-like)</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><code>magus.pool.slots.inflight</code> is an up-down counter: it rises as targets acquire
 slots and falls as they release, so its value reads as the live in-use depth.</p>
 <h2 id="traces-spans">Traces (spans)</h2>
 <p>Spans are sampled head-based by <code>telemetry.sample_ratio</code>.</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Span</th>
@@ -420,7 +420,7 @@ slots and falls as they release, so its value reads as the live in-use depth.</p
 <td>A retention sweep (<code>magus config cache prune --remote</code>)</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p>The <code>magus.cache.hash</code> / <code>replay</code> / <code>snapshot</code> spans break a target's latency
 down by phase: hashing vs. building vs. I/O. The remote <code>get</code>/<code>put</code> spans put a
 network fetch or upload inline in the build trace with its own latency, so a slow

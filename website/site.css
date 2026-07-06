@@ -1929,6 +1929,19 @@ a code {
   border-radius: 0;
 }
 
+/* Wide data tables (e.g. the config reference) get wrapped by wrapTables() in a
+   <figure class="table-scroll">. goldmark emits a bare <table> that Pico renders at
+   full width with no overflow of its own, so on a narrow viewport a four-column table
+   pushes past the column. The figure scrolls horizontally instead; the table keeps its
+   natural width so nothing wraps or clips. */
+.table-scroll {
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+.table-scroll table {
+  margin: 0;
+}
+
 /* Keyboard-shortcut help overlay - a native <dialog> so the browser handles
    focus trap + backdrop + Esc-to-close. Pico gives <dialog> a card look; we
    just scope the inner width. */

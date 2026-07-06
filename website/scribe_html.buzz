@@ -168,6 +168,29 @@ export fun tagMermaid(html: str) > str {
     return buf + rest;
 }
 
+// wrapTables wraps each rendered <table> in a <figure class="table-scroll"> so a wide
+// table scrolls horizontally within its column instead of overflowing the viewport on
+// narrow screens. goldmark emits a bare <table> that Pico renders full-bleed with no
+// overflow handling of its own.
+export fun wrapTables(html: str) > str {
+    final open = "<table>";
+    final close = "</table>";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx);
+        final end = rest.indexOf(close);
+        if (end == null) { return buf + rest; }
+        final block = rest.sub(0, end + close.len());
+        buf = buf + el("figure", attr("class", "table-scroll"), block);
+        rest = rest.sub(end + close.len());
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
 // rewriteLinks applies rewriteHref to every href="..." in a rendered fragment.
 export fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
     var buf = "";
@@ -312,7 +335,7 @@ export fun tagAdmonition(html: str) > str {
 // links, then the ordered content transforms. Routing every render through it keeps
 // a transform from being applied on one path and forgotten on another.
 export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
-    return tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir)))))));
+    return wrapTables(tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir))))))));
 }
 
 test "tagMermaid wraps a mermaid fence and passes other html through" {
@@ -321,6 +344,15 @@ test "tagMermaid wraps a mermaid fence and passes other html through" {
         + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span></div>",
         "wraps the fence");
     assert.equal(tagMermaid("<p>hi</p>"), "<p>hi</p>", "non-mermaid unchanged");
+}
+
+test "wrapTables wraps each table in a scroll figure" {
+    assert.equal(wrapTables("<table><tr><td>a</td></tr></table>"),
+        "<figure class=\"table-scroll\"><table><tr><td>a</td></tr></table></figure>", "single table wrapped");
+    assert.equal(wrapTables("<table>1</table><p>x</p><table>2</table>"),
+        "<figure class=\"table-scroll\"><table>1</table></figure><p>x</p><figure class=\"table-scroll\"><table>2</table></figure>",
+        "each table wrapped, prose between untouched");
+    assert.equal(wrapTables("<p>no table</p>"), "<p>no table</p>", "no table, unchanged");
 }
 
 test "rewriteLinks rewrites in-content hrefs" {

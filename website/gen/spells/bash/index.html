@@ -78,7 +78,7 @@
 <p><strong>Version probe:</strong> none</p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
 <p>Every op is invoked as <code>bash[&quot;&lt;op&gt;&quot;](opts?)</code>, where the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Key</th>
@@ -113,7 +113,7 @@
 <td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L119" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="shellcheck">shellcheck</h2>
 <p>One shellcheck invocation over every shell source: find feeds xargs with NUL separators, and -r skips running shellcheck on an empty set.</p>

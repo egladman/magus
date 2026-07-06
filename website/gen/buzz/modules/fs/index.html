@@ -84,7 +84,7 @@
 <h3 id="glob">glob</h3>
 <p>Return paths matching pattern (doublestar-style).</p>
 <p><strong>Signature:</strong> <code>fs.glob(pattern) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L221" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -101,7 +101,7 @@
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> []string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -112,7 +112,7 @@ foreach (path in fs.glob(&quot;cmd/**/*.go&quot;)) { std.print(path); }
 <h3 id="dirname">dirname</h3>
 <p>Directory portion of path.</p>
 <p><strong>Signature:</strong> <code>fs.dirname(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L248" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -129,7 +129,7 @@ foreach (path in fs.glob(&quot;cmd/**/*.go&quot;)) { std.print(path); }
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -141,7 +141,7 @@ std.print(fs.dirname(&quot;cmd/magus/main.go&quot;));
 <h3 id="basename">basename</h3>
 <p>Final element of path.</p>
 <p><strong>Signature:</strong> <code>fs.basename(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L253" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -158,7 +158,7 @@ std.print(fs.dirname(&quot;cmd/magus/main.go&quot;));
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -170,7 +170,7 @@ std.print(fs.basename(&quot;cmd/magus/main.go&quot;));
 <h3 id="exists">exists</h3>
 <p>True iff path exists.</p>
 <p><strong>Signature:</strong> <code>fs.exists(path) → bool</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L258" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -187,7 +187,7 @@ std.print(fs.basename(&quot;cmd/magus/main.go&quot;));
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> bool</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -198,7 +198,7 @@ if (fs.exists(&quot;go.mod&quot;)) { std.print(&quot;Go module&quot;); }
 <h3 id="read-file">read_file</h3>
 <p>Return the contents of path as a string.</p>
 <p><strong>Signature:</strong> <code>fs.readFile(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L271" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -215,7 +215,7 @@ if (fs.exists(&quot;go.mod&quot;)) { std.print(&quot;Go module&quot;); }
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -227,7 +227,7 @@ std.print(version);
 <h3 id="write-file">write_file</h3>
 <p>Write content to path (mode 0644).</p>
 <p><strong>Signature:</strong> <code>fs.writeFile(path, content)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L284" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -250,7 +250,7 @@ std.print(version);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -259,7 +259,7 @@ fs.writeFile(&quot;dist/manifest.txt&quot;, &quot;artifact list here\n&quot;);
 <h3 id="mkdirall">mkdirall</h3>
 <p>Create path and parents (default mode 0755).</p>
 <p><strong>Signature:</strong> <code>fs.mkdirall(path, [perm])</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L299" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -282,7 +282,7 @@ fs.writeFile(&quot;dist/manifest.txt&quot;, &quot;artifact list here\n&quot;);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -292,7 +292,7 @@ fs.mkdirall(&quot;dist/reports&quot;, 493);
 <h3 id="join">join</h3>
 <p>Join path elements with the OS separator.</p>
 <p><strong>Signature:</strong> <code>fs.join(parts...) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L314" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -309,7 +309,7 @@ fs.mkdirall(&quot;dist/reports&quot;, 493);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -321,7 +321,7 @@ std.print(fs.join([&quot;cmd&quot;, &quot;magus&quot;, &quot;main.go&quot;]));
 <h3 id="remove-all">remove_all</h3>
 <p>Recursively remove path (no error if missing).</p>
 <p><strong>Signature:</strong> <code>fs.removeAll(path)</code><sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L319" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -338,7 +338,7 @@ std.print(fs.join([&quot;cmd&quot;, &quot;magus&quot;, &quot;main.go&quot;]));
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -347,7 +347,7 @@ fs.removeAll(&quot;dist/&quot;);
 <h3 id="list-dir">list_dir</h3>
 <p>Return directory entries; empty if path does not exist.</p>
 <p><strong>Signature:</strong> <code>fs.listDir(path) → []string</code><sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L334" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -364,7 +364,7 @@ fs.removeAll(&quot;dist/&quot;);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> []string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -375,7 +375,7 @@ foreach (name in fs.listDir(&quot;cmd&quot;)) { std.print(name); }
 <h3 id="ext">ext</h3>
 <p>File-name extension of path, including the leading dot (&quot;&quot; if none).</p>
 <p><strong>Signature:</strong> <code>fs.ext(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L354" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -392,7 +392,7 @@ foreach (name in fs.listDir(&quot;cmd&quot;)) { std.print(name); }
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -404,7 +404,7 @@ std.print(fs.ext(&quot;archive.tar.gz&quot;));
 <h3 id="is-dir">is_dir</h3>
 <p>True iff path exists and is a directory (a sandbox-denied path reads as false).</p>
 <p><strong>Signature:</strong> <code>fs.isDir(path) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L361" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -421,7 +421,7 @@ std.print(fs.ext(&quot;archive.tar.gz&quot;));
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> bool</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -432,7 +432,7 @@ if (fs.isDir(&quot;internal&quot;)) { std.print(&quot;internal is a directory&qu
 <h3 id="is-file">is_file</h3>
 <p>True iff path exists and is a regular file (a sandbox-denied path reads as false).</p>
 <p><strong>Signature:</strong> <code>fs.isFile(path) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L372" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -449,7 +449,7 @@ if (fs.isDir(&quot;internal&quot;)) { std.print(&quot;internal is a directory&qu
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> bool</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -460,7 +460,7 @@ if (fs.isFile(&quot;go.mod&quot;)) { std.print(&quot;go.mod is a file&quot;); }
 <h3 id="stat">stat</h3>
 <p>Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.</p>
 <p><strong>Signature:</strong> <code>fs.stat(path) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L384" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -477,7 +477,7 @@ if (fs.isFile(&quot;go.mod&quot;)) { std.print(&quot;go.mod is a file&quot;); }
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -490,7 +490,7 @@ std.print(info.modTime);
 <h3 id="copy-file">copy_file</h3>
 <p>Copy the file at src to dst (overwriting), preserving its permission bits.</p>
 <p><strong>Signature:</strong> <code>fs.copyFile(src, dst)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L403" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -513,7 +513,7 @@ std.print(info.modTime);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -522,7 +522,7 @@ fs.copyFile(&quot;dist/magus&quot;, &quot;/usr/local/bin/magus&quot;);
 <h3 id="copy-dir">copy_dir</h3>
 <p>Recursively copy the directory tree at src to dst, preserving permission bits.</p>
 <p><strong>Signature:</strong> <code>fs.copyDir(src, dst)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L423" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -545,7 +545,7 @@ fs.copyFile(&quot;dist/magus&quot;, &quot;/usr/local/bin/magus&quot;);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -555,7 +555,7 @@ fs.copyDir(&quot;assets/&quot;, &quot;dist/assets/&quot;);
 <h3 id="watch">watch</h3>
 <p>Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.</p>
 <p><strong>Signature:</strong> <code>fs.watch(paths, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L521" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -578,7 +578,7 @@ fs.copyDir(&quot;assets/&quot;, &quot;dist/assets/&quot;);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
 import &quot;fs&quot;;
@@ -592,7 +592,7 @@ fs.watch([&quot;cmd/**/*.go&quot;, &quot;internal/**/*.go&quot;], fun (paths: [s
 <h3 id="walk">walk</h3>
 <p>Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.</p>
 <p><strong>Signature:</strong> <code>fs.walk(root, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L571" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -615,7 +615,7 @@ fs.watch([&quot;cmd/**/*.go&quot;, &quot;internal/**/*.go&quot;], fun (paths: [s
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
 import &quot;fs&quot;;
@@ -631,7 +631,7 @@ fs.walk(&quot;.&quot;, fun (path: str, isDir: bool) &gt; bool {
 <h3 id="append-file">append_file</h3>
 <p>Append content to path (creating if absent, mode 0644).</p>
 <p><strong>Signature:</strong> <code>fs.appendFile(path, content)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L608" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -654,7 +654,7 @@ fs.walk(&quot;.&quot;, fun (path: str, isDir: bool) &gt; bool {
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -663,7 +663,7 @@ fs.appendFile(&quot;dist/build.log&quot;, &quot;compile done\n&quot;);
 <h3 id="chmod">chmod</h3>
 <p>Change the permission bits of path to mode (octal integer, e.g. 0755).</p>
 <p><strong>Signature:</strong> <code>fs.chmod(path, mode)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L631" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -686,7 +686,7 @@ fs.appendFile(&quot;dist/build.log&quot;, &quot;compile done\n&quot;);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -697,7 +697,7 @@ fs.chmod(&quot;dist/magus&quot;, 493);
 <h3 id="symlink">symlink</h3>
 <p>Create a symbolic link at link pointing to target.</p>
 <p><strong>Signature:</strong> <code>fs.symlink(target, link)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L647" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -720,7 +720,7 @@ fs.chmod(&quot;dist/magus&quot;, 493);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 
@@ -729,7 +729,7 @@ fs.symlink(&quot;dist/magus&quot;, &quot;/usr/local/bin/magus&quot;);
 <h3 id="readlink">readlink</h3>
 <p>Return the target of the symbolic link at path.</p>
 <p><strong>Signature:</strong> <code>fs.readlink(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L665" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -746,7 +746,7 @@ fs.symlink(&quot;dist/magus&quot;, &quot;/usr/local/bin/magus&quot;);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -757,7 +757,7 @@ std.print(fs.readlink(&quot;/usr/local/bin/magus&quot;));
 <h3 id="temp-dir">temp_dir</h3>
 <p>Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.</p>
 <p><strong>Signature:</strong> <code>fs.tempDir([prefix]) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L708" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -774,7 +774,7 @@ std.print(fs.readlink(&quot;/usr/local/bin/magus&quot;));
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -787,7 +787,7 @@ std.print(tmp);
 <h3 id="read-lines">read_lines</h3>
 <p>Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.</p>
 <p><strong>Signature:</strong> <code>fs.readLines(path) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L681" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -804,7 +804,7 @@ std.print(tmp);
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Returns:</strong> []string</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;std&quot;;
@@ -815,7 +815,7 @@ foreach (line in fs.readLines(&quot;targets.txt&quot;)) { std.print(line); }
 <h3 id="write-lines">write_lines</h3>
 <p>Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.</p>
 <p><strong>Signature:</strong> <code>fs.writeLines(path, lines)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L695" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Parameter</th>
@@ -838,7 +838,7 @@ foreach (line in fs.readLines(&quot;targets.txt&quot;)) { std.print(line); }
 <td></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><strong>Example:</strong></p>
 <pre><code class="language-buzz">import &quot;fs&quot;;
 

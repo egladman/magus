@@ -109,7 +109,7 @@ magus run buzz-test                    # the project's test target
 value-aware checks on top. Buzz has no optional or variadic parameters, so each
 matcher takes a trailing <code>message</code> (pass <code>&quot;&quot;</code> for none; a short label makes failures
 easier to read).</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Matcher</th>
@@ -158,7 +158,7 @@ easier to read).</p>
 <td>Always fails the test</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p>Reach for <code>equal</code> most often. <code>==</code> compares identity for maps, lists, and objects, so
 <code>{a: 1} == {a: 1}</code> is <code>false</code>; <code>assert.equal</code> compares by value, recursing to any
 depth and ignoring map key order.</p>
@@ -201,7 +201,7 @@ s.summary();   // prints results; exits non-zero if any test failed
 <p>Go's testing package hangs its features off the <code>*testing.T</code> passed to each test. A
 <code>test</code> block has no such handle; a Suite is that handle, so it carries the same
 per-test controls, callable from inside an <code>it</code> body:</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Method</th>
@@ -236,7 +236,7 @@ per-test controls, callable from inside an <code>it</code> body:</p>
 <td>The name of the running test</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <pre><code class="language-buzz">s.it(&quot;reads the fixture&quot;, fun () &gt; void {
     if (os\env(&quot;CI&quot;) == null) {
         s.skip(&quot;needs the CI fixture&quot;);

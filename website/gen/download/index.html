@@ -84,7 +84,7 @@
 <p>Every build is published at <a href="../public/release">/public/release/</a> alongside its <code>SHA256SUMS</code> manifest and signature. However you install, <a href="#verify-a-release">verify the release</a> first.</p>
 <h2 id="update">Update</h2>
 <p><code>magus self update</code> fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: <a href="../manpage/magus-self"><code>magus self</code></a>.</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Flag</th>
@@ -117,7 +117,7 @@
 <td>Skip the confirmation prompt</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p>Package-maintainer builds compiled with <code>-tags noselfupdate</code> disable this subcommand; fall back to a manual <a href="#install">install</a>.</p>
 <h2 id="verify-a-release">Verify a release</h2>
 <p>Alongside the binary tarballs, each release ships <code>SHA256SUMS</code> (the manifest) and <code>SHA256SUMS.sig</code> (its Ed25519 signature). All artifacts, plus the signing key, are listed at <a href="../public/release">/public/release/</a>.</p>

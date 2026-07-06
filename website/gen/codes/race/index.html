@@ -73,7 +73,7 @@ magus run build --race=watch             # cheap: fsnotify + static checks
 magus run build --race=replay            # determinism only
 magus run build --race=watch,replay      # everything
 </code></pre>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Mode</th>
@@ -103,7 +103,7 @@ magus run build --race=watch,replay      # everything
 <td>watch overhead + 2× wall-clock</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><code>MGS4002</code> (declared-output overlap) is always emitted: a static check
 at graph construction time, with zero runtime cost, no flag required.</p>
 <p><code>watch</code> is safe to leave on for every CI run. <code>replay</code> re-executes the

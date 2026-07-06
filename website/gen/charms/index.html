@@ -85,7 +85,7 @@
 <h2 id="the-mechanism-a-json-patch-over-the-argv">The mechanism: a JSON Patch over the argv</h2>
 <p>A target runs a command: a <code>cmd</code> (e.g. <code>go</code>) and a base argv (e.g. <code>[&quot;tool&quot;, &quot;golangci-lint&quot;, &quot;run&quot;, &quot;./...&quot;]</code>). magus treats the argv as a JSON array and a charm as an <strong>RFC 6902 JSON Patch</strong> applied over it.</p>
 <p>Each operation is <code>{ op, path, value?, from? }</code>:</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th><code>op</code></th>
@@ -125,7 +125,7 @@
 <td><code>value</code></td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><code>path</code> and <code>from</code> are <strong>JSON Pointers</strong> (RFC 6901): <code>&quot;/0&quot;</code>, <code>&quot;/1&quot;</code>, ... for a specific index; <code>&quot;/-&quot;</code> for append (valid only as target of <code>add</code>/<code>move</code>/<code>copy</code>).</p>
 <p>Most authors use the <a href="#the-charm-constructor-reference"><code>charm</code> constructors</a> instead of writing raw patches: they resolve a <em>value anchor</em> to an index at author time so you never count indices.</p>
 <h2 id="applying-charms-on-the-cli">Applying charms on the CLI</h2>
@@ -137,7 +137,7 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 <p>The project is a <strong>positional</strong> argument, not part of the token. See the full grammar in <a href="../targets/#cli-grammar">targets.md#cli-grammar</a>.</p>
 <h2 id="the-rw-charm">The <code>rw</code> charm</h2>
 <p><code>rw</code> (read→write) is a <strong>built-in</strong> charm. It flips a target from check-only (read) to mutate-in-place:</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Target</th>
@@ -162,7 +162,7 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 <td>apply autofixes where supported (e.g. <code>golangci-lint --fix</code>)</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p><code>rw</code> carries no special flag. Like every other charm, you activate it with a <code>:rw</code> suffix (<code>magus run format:rw</code>). There is no <code>-w</code>/<code>--write</code> shortcut and no <code>--write</code> flag: the suffix is the one way to ask for it.</p>
 <p><strong>CI is always read-only.</strong> <code>Magus.RunCI</code> strips the <code>rw</code> charm before dispatch, so the composite <code>ci</code> pipeline can never mutate the tree even if a caller requests it (e.g. <code>ci:rw</code>). <code>rw</code> is the only charm with this strip status; the other built-in (<code>cd</code>) and every workspace charm you define are ordinary vocabulary that survive into <code>ci</code>.</p>
 <h2 id="defaulting-charms-per-workspace-default-charms">Defaulting charms per workspace (<code>default_charms</code>)</h2>
@@ -260,7 +260,7 @@ charms = {
 <h2 id="the-charm-constructor-reference">The <code>charm</code> constructor reference</h2>
 <p>Both charm modules build a charm's patch; every constructor returns <code>{ ops = [...] }</code>. The <code>argv</code>-taking constructors resolve a <em>value anchor</em> (or predicate for the <code>*Func</code> variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.</p>
 <p>The table is the <strong>full</strong> set, available on the host <code>charm</code> module (<code>import &quot;charm&quot;</code>, called <code>charm.after(...)</code>). The pure-Buzz <code>magus/charm</code> module (<code>import &quot;magus/charm&quot;</code>, called bare as <code>after(...)</code>) exports the <strong>core</strong> rows (append, prepend, after, before, set, drop) for self-contained built-in spells.</p>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Constructor</th>
@@ -333,7 +333,7 @@ charms = {
 <td><code>path</code>, by predicate</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <p>Method names are camelCase (<code>charm.afterFunc</code>, <code>charm.pathFunc</code>), following Buzz's convention.</p>
 <p>A missing anchor is a <strong>load-time error</strong>, not a silently wrong index.</p>
 <h2 id="use-case-cookbook">Use-case cookbook</h2>
@@ -376,7 +376,7 @@ guard   = charm.test(base, &quot;run&quot;);
 <p><strong>A charm rewrites a target's arguments. It can never change the base command (<code>cmd</code>) or replace the whole argv.</strong> <code>ValidatePatch</code> rejects the root pointer (<code>&quot;&quot;</code>), so every charm op edits an <em>element</em> of the argv, never the array as a whole.</p>
 <p><code>ValidatePatch</code> enforces this boundary deliberately.</p>
 <h3 id="decision-guide">Decision guide</h3>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>You want to...</th>
@@ -406,7 +406,7 @@ guard   = charm.test(base, &quot;run&quot;);
 <td>identity, not a modifier</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h3 id="why-the-boundary-exists">Why the boundary exists</h3>
 <ul>
 <li><strong>Composability.</strong> Argument edits layer cleanly across charms. Two charms each replacing the whole command is an unresolvable conflict; element-level edits have a well-defined merge.</li>
@@ -491,7 +491,7 @@ type Charm struct {
 </code></pre>
 <p><code>ValidatePatch</code> enforces: the <code>op</code> is one of six; <code>path</code> is non-empty and rooted at <code>/</code> (root path rejected, forbidding whole-argv replacement); <code>move</code>/<code>copy</code> carry a <code>/</code>-rooted <code>from</code>. <code>ApplyPatch</code> runs ops in order over a copy of the argv (the base is never mutated), with bounds-checked indices. The implementation is verified differentially against the reference RFC 6902 library (<code>evanphx/json-patch</code>).</p>
 <h2 id="glossary">Glossary</h2>
-<table>
+<figure class="table-scroll"><table>
 <thead>
 <tr>
 <th>Term</th>
@@ -536,7 +536,7 @@ type Charm struct {
 <td>The set-membership query a spell uses to react to a charm; unknown charms are ignored.</td>
 </tr>
 </tbody>
-</table>
+</table></figure>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../operations/">operations.md</a>: the Operation whose argv a charm patches, and where charms sit in the hierarchy.</li>
