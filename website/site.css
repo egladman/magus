@@ -1560,6 +1560,10 @@ a code {
   margin-left: auto;
   flex: none;
   width: auto;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: 0;
   padding: 0 0.3rem;
