@@ -17,6 +17,7 @@ import "serialize";
 import "encoding";
 import "time";
 import "template";
+import "crypto";
 import "assert";
 // Pure text, path, and URL helpers, split into their own unit-tested module. Flat
 // import (`as _`) merges its exported functions into this scope, so callers here
@@ -1080,9 +1081,24 @@ fun writeServiceWorker(site: Site) > void {
     final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
     var body = tmplFile.readAll();
     tmplFile.close();
+    // The cache version is a digest of the precached assets' own digests (same list
+    // as PRECACHE in the template), so it changes exactly when a cached asset changes
+    // and is otherwise byte-identical across re-renders. This deliberately replaces
+    // the old "magus-<HEAD short hash>" form, which changed on every commit, could
+    // never contain its own commit's hash, and so perpetually drifted the gen gate.
+    final precached = ["search-index.json", "playground/wasm_exec.js",
+        "playground/buzz.wasm", "main.js", "theme.js", "site.css", "theme.css"];
+    var manifest = "";
+    foreach (rel in precached) {
+        final p = site.outDir + "/" + rel;
+        if (os.execute(["test", "-f", p]) == 0) {
+            manifest = manifest + rel + ":" + crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(p)) + "\n";
+        }
+    }
+    final version = "magus-" + crypto.hash(crypto.HashAlgorithm.Sha256, manifest).sub(0, 12);
     // .replace only touches the first match; the markers appear both in the file
     // header comment and in the code, so replaceAll it is.
-    body = $"__VERSION__".replaceAll(body, "magus-" + site.metaShort);
+    body = $"__VERSION__".replaceAll(body, version);
     body = $"__BASE__".replaceAll(body, basePath);
     fs.writeFile(site.outDir + "/sw.js", body);
 }
@@ -2509,12 +2525,15 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     renderSearchPage(site);
     renderTourPage(site);
     writeManifest(site);
-    writeServiceWorker(site);
 
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the
     // walk order is fs.list's (sorted), so the file is byte-stable across runs.
     fs.writeFile(site.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
+
+    // Written last: its cache version is a digest of the precached assets (incl.
+    // search-index.json just above), so every one of them must already exist.
+    writeServiceWorker(site);
 
     // Reproducibility guard: throw on any dangling href/src reference. Runs after
     // every asset + page has been written, so a missing file (renamed bundle,
