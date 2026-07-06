@@ -17,7 +17,7 @@ Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache)
 
 Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.
 
-**Signature:** `template.render(template, data) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L42)
+**Signature:** `template.render(template, data) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L40)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -43,7 +43,7 @@ std.print(template.render(`Hello {{name}}`, {"name": "world"}));
 
 Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.
 
-**Signature:** `template.renderPartials(template, data, partials) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L53)
+**Signature:** `template.renderPartials(template, data, partials) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L51)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
