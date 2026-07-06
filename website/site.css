@@ -1085,17 +1085,8 @@ article li {
   flex-direction: column;
   gap: 0.3rem;
 }
-.tour-open {
-  align-self: flex-start;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-decoration: none;
-  color: var(--accent-warm); /* the card's call to action - warm, not another blue link */
-}
-.tour-open:hover,
-.tour-open:focus-visible {
-  color: var(--accent-warm-hover);
-  text-decoration: underline;
+.tour-foot .open-in-playground {
+  align-self: flex-start; /* shrink to its content in the flex-column footer */
 }
 /* Inline concept cross-link tucked at the end of the description, so the warm
    "Open in Playground" call to action below stands on its own. Quiet by default
@@ -1713,13 +1704,34 @@ a code {
   border-color: var(--accent-warm-hover);
 }
 .run-example[disabled] { opacity: 0.6; }
+/* Open in Playground - the shared orange call to action, used both on the tour
+   cards (standalone) and beside the Run button on runnable code blocks. Outline
+   orange by default so where it sits next to the filled Run button it reads as the
+   secondary action; it fills in on hover/focus. One component, one look, either place. */
 .open-in-playground {
-  margin-left: auto; /* push to the right edge of the bar */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.65rem;
   font-size: 0.85rem;
-  color: var(--pico-muted-color);
+  font-weight: 600;
+  line-height: 1.5;
+  border: 1px solid var(--accent-warm);
+  border-radius: var(--pico-border-radius);
+  background-color: transparent;
+  color: var(--accent-warm);
   text-decoration: none;
 }
-.open-in-playground:hover { color: var(--accent-warm); text-decoration: underline; }
+.open-in-playground:hover,
+.open-in-playground:focus-visible {
+  background-color: var(--accent-warm);
+  border-color: var(--accent-warm);
+  color: var(--accent-warm-inverse);
+  text-decoration: none;
+}
+.runnable-bar .open-in-playground {
+  margin-left: auto; /* push to the right edge of the bar, opposite Run */
+}
 .runnable-output {
   margin: 0.4rem 0 1rem;
   padding: 0.6rem 0.75rem;

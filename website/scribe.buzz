@@ -2207,7 +2207,7 @@ object TourStep {
         <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} &rarr;</a></p>
         <pre class="tour-teaser"><code class="language-buzz">{{teaser}}</code></pre>
         <div class="tour-foot">
-          <a class="tour-open" href="{{playLink}}">Open in Playground &rarr;</a>
+          <a class="open-in-playground" href="{{playLink}}" title="Open this snippet in the playground" data-tooltip="Open in playground">Open in Playground &rarr;</a>
         </div>
       </li>
 `, {"num": num, "title": this.title, "desc": this.desc, "root": root, "docSlug": this.docSlug, "docLabel": this.docLabel, "teaser": codeTeaser(src), "playLink": playgroundLink(root, src)});
