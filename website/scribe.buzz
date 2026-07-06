@@ -827,38 +827,60 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Sit
     // The parent link and the entry rows are fixed-width text (padded columns), so
     // buzz assembles them; the template only wraps the <pre> block. The padding must
     // stay here - Mustache can't align columns.
-    var parent = "";
-    if (parentHref != "") {
-        parent = "<a href=\"" + parentHref + "\">Parent Directory</a>                                        -   \n";
-    }
     // Sort entries by name so listings are byte-stable.
     final sorted = entries.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["name"], b["name"]); });
+
+    // Column widths grow to the widest cell (floors: the header labels, and 30 for
+    // names to keep the classic look), so cells of any length stay aligned - a
+    // release artifact name runs past 30 chars and a full RFC3339 stamp past a bare
+    // date, either of which a fixed width would shove out of column. Two spaces
+    // separate every column; Name/Last modified are left-aligned, Size right-aligned.
+    var nameW = 30;
+    if (parentHref != "") { if (16 > nameW) { nameW = 16; } }   // len("Parent Directory")
+    var modW = 13;                                               // len("Last modified")
+    var sizeW = 4;                                               // len("Size")
+    foreach (e in sorted) {
+        if (e["name"].len() > nameW) { nameW = e["name"].len(); }
+        if (e["modified"].len() > modW) { modW = e["modified"].len(); }
+        if (e["size"].len() > sizeW) { sizeW = e["size"].len(); }
+    }
+
+    // Header, padded to the same widths as the rows below.
+    var head = "Name";
+    var hi = 4; while (hi < nameW) { head = head + " "; hi = hi + 1; }
+    head = head + "  Last modified";
+    var hj = 13; while (hj < modW) { head = head + " "; hj = hj + 1; }
+    var sizeHead = "Size";
+    var hk = 4; while (hk < sizeW) { sizeHead = " " + sizeHead; hk = hk + 1; }
+    head = head + "  " + sizeHead + "  Description";
+
+    var parent = "";
+    if (parentHref != "") {
+        var pName = "<a href=\"" + parentHref + "\">Parent Directory</a>";
+        var pi = 16; while (pi < nameW) { pName = pName + " "; pi = pi + 1; }
+        var pMod = "-"; var pj = 1; while (pj < modW) { pMod = pMod + " "; pj = pj + 1; }
+        var pSize = "-"; var pk = 1; while (pk < sizeW) { pSize = " " + pSize; pk = pk + 1; }
+        parent = pName + "  " + pMod + "  " + pSize + "  \n";
+    }
+
     var rows = "";
     foreach (e in sorted) {
         final name = e["name"];
-        final href = e["href"];
-        final size = e["size"];
-        final modified = e["modified"];
-        final desc = e["desc"];
-        var nameCell = "<a href=\"" + href + "\">" + name + "</a>";
-        // Pad to a 30-char column so alignment stays stable across variable-length names.
-        var padName = nameCell;
-        var i = name.len();
-        while (i < 30) { padName = padName + " "; i = i + 1; }
-        var padMod = modified;
-        var j = modified.len();
-        while (j < 19) { padMod = padMod + " "; j = j + 1; }
-        var padSize = size;
-        var k = size.len();
-        while (k < 5) { padSize = " " + padSize; k = k + 1; }
-        rows = rows + padName + " " + padMod + "  " + padSize + "  " + desc + "\n";
+        // The name cell pads by its visible length; the <a> tags occupy no columns.
+        var nameCell = "<a href=\"" + e["href"] + "\">" + name + "</a>";
+        var ni = name.len(); while (ni < nameW) { nameCell = nameCell + " "; ni = ni + 1; }
+        var padMod = e["modified"];
+        var mj = e["modified"].len(); while (mj < modW) { padMod = padMod + " "; mj = mj + 1; }
+        var padSize = e["size"];
+        var sk = e["size"].len(); while (sk < sizeW) { padSize = " " + padSize; sk = sk + 1; }
+        rows = rows + nameCell + "  " + padMod + "  " + padSize + "  " + e["desc"] + "\n";
     }
     final body = template.render(`<h1>Index of {{displayPath}}</h1>
-<pre class="autoindex"><span class="autoindex-head">Name                          Last modified      Size  Description</span>
+<pre class="autoindex"><span class="autoindex-head">{{{head}}}</span>
 <hr>
 {{{parent}}}{{{rows}}}<hr>
 </pre>
-`, {"displayPath": displayPath, "parent": parent, "rows": rows});
+`, {"displayPath": displayPath, "head": head, "parent": parent, "rows": rows});
 
     fs.makeDirectory(site.outDir + "/" + path);
     // srcMarker matches the written directory depth so rootPrefix computes the

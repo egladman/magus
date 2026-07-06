@@ -1545,8 +1545,12 @@ a code {
 /* Release-announcement strip (announcementBar() in the magusfile; dismissed per
    version by announcement.js). A slim primary-tinted bar above the header. */
 #announcement-bar {
-  background: var(--pico-primary-focus);
-  border-bottom: 1px solid var(--pico-muted-border-color);
+  /* Muted warm tint: the site's established warm accent (reserved for CTAs) mixed
+     down into the page background, so the strip reads as a gentle notice and adds
+     warmth against the otherwise blue/violet palette. color-mix keeps it low-chroma
+     and theme-adaptive (both inputs are theme vars), in light and dark alike. */
+  background: color-mix(in srgb, var(--accent-warm) 15%, var(--pico-background-color));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-warm) 35%, var(--pico-muted-border-color));
   font-size: 0.9rem;
 }
 #announcement-bar .container {
@@ -1557,10 +1561,12 @@ a code {
 }
 #announcement-bar a { font-weight: 600; }
 .announcement-close {
-  margin-left: auto;
+  /* margin:0 with left:auto pushes the button right AND zeroes Pico's default button
+     margin-bottom - as a flex item that bottom margin inflates the button's margin box
+     and shoves the glyph to the top of the bar. inline-flex then centers the x in it. */
+  margin: 0 0 0 auto;
   flex: none;
   width: auto;
-  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
