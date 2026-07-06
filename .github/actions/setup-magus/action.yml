@@ -73,7 +73,10 @@ runs:
       shell: bash
       run: |
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
-        go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
+        # CGO_ENABLED=0 matches the shipped release build (static, pure-Go) and uses
+        # internal/codec's pure-Go xz/zstd fallbacks, so the runner needs no liblzma/
+        # libzstd system libs. Without it the default cgo build fails pkg-config.
+        CGO_ENABLED=0 go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
         echo "magus: built from source" >&2
 
     - name: Add magus to PATH
