@@ -1,9 +1,3 @@
----
-title: magus
-description: A fast cross-platform task orchestrator for polyglot monorepos. Single binary, code as configuration, statically typed, no second toolchain.
-tags: [magus, readme, task orchestrator, build system, monorepo, polyglot, buzz, affected, cache]
----
-
 # magus
 
 <p align="center">

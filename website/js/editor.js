@@ -9,9 +9,9 @@
 // (parse badge, `run`/`eval` console) stays live and untouched. If this module
 // throws or the bundle fails to load, the page falls back to the textarea editor.
 //
-// esbuild bundles this file into playground/editor.js (a committed artifact, like
-// buzz.wasm); see website/package.json `build-editor`. Only the playground page
-// loads it.
+// esbuild bundles this file into gen/playground/editor.js (a committed artifact,
+// like gen/playground/buzz.wasm); see website/package.json `build-editor`. Only
+// the playground page loads it.
 
 import { EditorState, StateField } from "@codemirror/state";
 import {

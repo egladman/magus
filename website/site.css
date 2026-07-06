@@ -16,6 +16,28 @@
      occupy the same screen real estate instead of one being 78rem and the other
      full-bleed. Wider than the prose container, but still capped. */
   --content-wide: 78rem;
+  /* On a non-overlay-scrollbar system, a page tall enough to scroll reserves a
+     vertical scrollbar gutter that document.documentElement.clientWidth (normal
+     in-flow sizing) accounts for, but the viewport used to size a
+     position:fixed full-bleed element (.toc's mobile sheet, .toc-backdrop) does
+     not - the classic "100vw/fixed overlay is wider than the visible page"
+     mismatch. Reserving the gutter unconditionally keeps both measurements
+     consistent, so those overlays stop overshooting into horizontal scroll. */
+  scrollbar-gutter: stable;
+}
+
+/* Second, independent layer against the same class of bug: the mobile TOC
+   sheet (.toc, below) sits off-screen via transform when closed, but a
+   transform doesn't remove an element from layout - its box still
+   participates in scrollWidth even while invisible, which can nudge the page
+   into a phantom few pixels of horizontal scroll no vertical-scrollbar gutter
+   fix touches. overflow-x: clip (not hidden/auto/scroll) forbids all
+   horizontal scroll - including programmatic - without establishing a new
+   scroll container, so position: sticky (the header, the desktop TOC sidebar)
+   keeps working unaffected; verified against both before shipping this. CSS
+   only, no JS. */
+html {
+  overflow-x: clip;
 }
 
 /* Skip-to-content link: the first focusable element on the page, hidden off the
@@ -1102,6 +1124,14 @@ article li {
 .tour-learn:focus-visible {
   color: var(--pico-color);
 }
+/* Same-site "go to this concept" arrow (rarr), shared by .tour-learn and the
+   search "see all results" link. Inline text, not flex, so the glyph's own
+   metrics sit a hair below the surrounding baseline; nudge it back up. */
+.xref-arrow {
+  display: inline-block;
+  font-size: 0.95em;
+  vertical-align: -0.02em;
+}
 
 /* Persistent header-dropdown footer: a compact syntax hint plus the explicit door to
    the full /search/ page for the current query. This is what makes "dropdown = quick
@@ -1707,8 +1737,11 @@ a code {
 /* Open in Playground - the shared orange call to action, used both on the tour
    cards (standalone) and beside the Run button on runnable code blocks. Outline
    orange by default so where it sits next to the filled Run button it reads as the
-   secondary action; it fills in on hover/focus. One component, one look, either place. */
-.open-in-playground {
+   secondary action; it fills in on hover/focus. One component, one look, either place.
+   Pins :visited to the same warm color: it's a styled control, not prose, so it must
+   not pick up the article's blue/purple visited-link convention (theme.css) once clicked. */
+.open-in-playground,
+.open-in-playground:visited {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -1723,11 +1756,21 @@ a code {
   text-decoration: none;
 }
 .open-in-playground:hover,
-.open-in-playground:focus-visible {
+.open-in-playground:focus-visible,
+.open-in-playground:visited:hover,
+.open-in-playground:visited:focus-visible {
   background-color: var(--accent-warm);
   border-color: var(--accent-warm);
   color: var(--accent-warm-inverse);
   text-decoration: none;
+}
+/* The label arrow is a separate glyph (rarr for same-site concept links, the
+   north-east arrow for this opens-elsewhere control - see .xref-arrow below);
+   sized down a touch and pinned to a 1 line-height so its glyph metrics don't
+   sit low against the label baseline inside the flex row. */
+.open-in-playground .oip-arrow {
+  font-size: 0.95em;
+  line-height: 1;
 }
 .runnable-bar .open-in-playground {
   margin-left: auto; /* push to the right edge of the bar, opposite Run */

@@ -37,7 +37,7 @@ magus.project({
         // interpreter or playground host changes (TinyGo is not a CI tool).
         "build-playground": {"skipCache": true},
         // build-playground-editor bundles vendored CodeMirror into the committed
-        // playground/editor.js. Like build-playground it shells out (npm + esbuild)
+        // gen/playground/editor.js. Like build-playground it shells out (npm + esbuild)
         // and is run by hand when the editor source changes; skipCache so a hit
         // never replays a stale bundle.
         "build-playground-editor": {"skipCache": true},
@@ -107,13 +107,16 @@ export fun ci(args: [str]) > void {
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground page
-// loads: TinyGo compiles ../cmd/buzz-playground to website/playground/buzz.wasm and
-// the matching wasm_exec.js glue is copied beside it. Both are committed (like
-// default.pgo), so CI — which has no TinyGo — never rebuilds them; the render
-// just copies the checked-in result into gen/. Run this after changing the
-// interpreter (../gopherbuzz) or the playground host (../internal/playground),
-// then commit the refreshed artifacts. TinyGo ≥ 0.40 is required; the glue must
-// come from the same TinyGo that built the wasm.
+// loads: TinyGo compiles ../cmd/buzz-playground straight to website/gen/playground/buzz.wasm
+// and the matching wasm_exec.js glue is copied beside it. Both are committed (like
+// default.pgo), so CI — which has no TinyGo — never rebuilds them. Building directly
+// into gen/ (rather than a separate website/playground/ source dir the render would
+// then copy) avoids keeping two committed copies of the same artifact in sync; gen/
+// is itself committed and drift-gated, and nothing else in the render pipeline
+// touches these three files, so they simply survive regeneration untouched. Run this
+// after changing the interpreter (../gopherbuzz) or the playground host
+// (../internal/playground), then commit the refreshed artifacts. TinyGo >= 0.40 is
+// required; the glue must come from the same TinyGo that built the wasm.
 export fun build_playground(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
     // The playground embeds the gopherbuzz Buzz VM, so this target depends on
@@ -126,16 +129,16 @@ export fun build_playground(args: [str]) > void {
     // reported scheduler is guaranteed to match the build.
     os.exec("tinygo",
         ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
-         "-o", "website/playground/buzz.wasm", "./cmd/buzz-playground"],
+         "-o", "website/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
         "..", {});
     os.exec("sh",
-        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" website/playground/wasm_exec.js"],
+        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" website/gen/playground/wasm_exec.js"],
         "..", {});
-    magus.info("rebuilt website/playground/buzz.wasm + wasm_exec.js — commit the result");
+    magus.info("rebuilt website/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
 }
 
 // build_playground_editor bundles the vendored CodeMirror editor into the committed
-// website/playground/editor.js — the editor analog of build_playground's committed
+// website/gen/playground/editor.js — the editor analog of build_playground's committed
 // buzz.wasm. The playground page loads this bundle to upgrade its textarea into a
 // CodeMirror editor with diagnostics, autocompletion, and hover (driven by the wasm
 // language service, globalThis.buzz). Run by hand when js/editor.js or the
@@ -146,7 +149,7 @@ export fun build_playground_editor(args: [str]) > void {
     // Run from this project dir (.), where package.json / package-lock.json live.
     os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
     os.exec("npm", ["run", "build-editor"], ".", {});
-    magus.info("rebuilt website/playground/editor.js — commit the result");
+    magus.info("rebuilt website/gen/playground/editor.js - commit the result");
 }
 
 // serve watches ../docs and re-renders gen/ on change — handy for local docs

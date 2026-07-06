@@ -4,8 +4,8 @@
 // author marker); this module finds those blocks, adds a Run button + an output
 // panel, and on click LAZY-LOADS the playground WASM (never on page load - the
 // ~1.9 MB artifact would regress the perf work). Subsequent runs on the page
-// reuse the cached module. Also adds an "Open in Playground →" link that deep-
-// links the snippet into /playground/#source=<base64url>.
+// reuse the cached module. Also adds an "Open in Playground ↗" link (opens in a
+// new tab) that deep-links the snippet into /playground/#source=<base64url>.
 
 (function () {
   var blocks = document.querySelectorAll("pre[data-runnable]");
@@ -122,10 +122,17 @@
 
     var openLink = document.createElement("a");
     openLink.className = "open-in-playground";
-    openLink.textContent = "Open in Playground →";
     openLink.href = ROOT + "playground/#source=" + base64url(code.textContent);
-    openLink.setAttribute("title", "Open this snippet in the playground");
+    openLink.target = "_blank";
+    openLink.rel = "noopener";
+    openLink.setAttribute("title", "Open this snippet in the playground (new tab)");
     openLink.setAttribute("data-tooltip", "Open in playground");
+    openLink.append("Open in Playground ");
+    var openArrow = document.createElement("span");
+    openArrow.className = "oip-arrow";
+    openArrow.setAttribute("aria-hidden", "true");
+    openArrow.textContent = "↗";
+    openLink.append(openArrow);
     bar.appendChild(openLink);
 
     block.appendChild(bar);

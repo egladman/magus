@@ -137,6 +137,16 @@ object Site {
     aliasTarget: {str: str} = mut {},
     pageUrls: {str: bool} = mut {},
 
+    // Every gen-root-relative file this render pass actually wrote, populated at the
+    // handful of choke points that own an output write (addRecord, writeAliases,
+    // renderAutoindex; a couple of one-off index.md siblings track themselves
+    // directly). pruneStaleOutputs() diffs this against what's really on disk after
+    // the render completes and deletes anything left over from a previous run whose
+    // source (a docs page, a blog post, an alias, a release) is gone - so a rename or
+    // deletion cleans up its old gen/ output without needing to nuke and rebuild the
+    // entire tree on every run.
+    writtenPaths: {str: bool} = mut {},
+
     // Blog posts (consumed by the blog index, Atom feed, and pager). hasBlogPosts is
     // precomputed before the walk so an early page (README) can decide whether to
     // advertise the blog Atom feed in <head>.
@@ -154,9 +164,14 @@ object Site {
 
     // addRecord appends one page's search-index record and marks its URL as written
     // (so the alias pass can catch a redirect that shadows a real page). Called once
-    // per rendered page.
+    // per rendered page. Also records the page's index.html in writtenPaths (root's
+    // url is the bare "index.html" filename, every other url ends in "/") so
+    // pruneStaleOutputs knows this page is current.
     fun addRecord(url: str, title: str, desc: str, md: str) > void {
         this.pageUrls[url] = true;
+        var filePath = url;
+        if (filePath.endsWith("/")) { filePath = filePath + "index.html"; }
+        this.writtenPaths[filePath] = true;
         final rec = mut {<str: any>};
         rec["url"] = url;
         rec["title"] = title;
@@ -191,6 +206,7 @@ object Site {
             }
             fs.makeDirectory(this.outDir + "/" + a);
             fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(relativePath(a, this.aliasTarget[a])));
+            this.writtenPaths[a + "/index.html"] = true;
         }
     }
 
@@ -901,8 +917,11 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Sit
     final of = io.File.open(site.outDir + "/" + path + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
-    // Register the URL for sitemap purposes.
+    // Register the URL for sitemap purposes, and mark it written so
+    // pruneStaleOutputs knows a since-removed release/feed's old autoindex page
+    // should be cleaned up rather than left behind.
     site.pageUrls[path + "/"] = true;
+    site.writtenPaths[path + "/index.html"] = true;
 }
 
 // renderPublic writes the nested /public/ autoindex tree: the root at /public/
@@ -1788,8 +1807,17 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
 // gen/index.html as href="X" — strip the docs/ prefix.
 fun renderRoot(site: Site) > void {
     final f = io.File.open(site.root + "/README.md", io.FileMode.read);
-    final md = f.readAll();
+    final rawMd = f.readAll();
     f.close();
+
+    // The committed README carries no frontmatter (GitHub renders a leading YAML
+    // block as an ugly metadata table on the repo landing page), so a minimal
+    // frontmatter is synthesized here, in memory, before the README is used for
+    // anything else. Title and description are deliberately left out: they
+    // already derive correctly from the content below (the H1, then the first
+    // real paragraph), so only the search/tag classification - which has no
+    // content to derive from - needs a value. Kept to one basic tag by design.
+    final md = "---\ntags: [readme]\n---\n\n" + rawMd;
 
     var html = markdown.toHtml(md);
     while (html.indexOf("href=\"./docs/") != null) {
@@ -1815,7 +1843,10 @@ fun renderRoot(site: Site) > void {
     final of = io.File.open(site.outDir + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
-    fs.writeFile(site.outDir + "/index.md", md);
+    // The "View source" link targets this file directly - write the original,
+    // unamended README so it matches the committed source byte for byte (the
+    // synthesized tags frontmatter above is a build-time-only detail).
+    fs.writeFile(site.outDir + "/index.md", rawMd);
     site.addRecord("index.html", title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), "index.html"); }
     std.print("  README.md -> " + site.outDir + "/index.html");
@@ -2204,10 +2235,10 @@ object TourStep {
         // link, not a separate "Read up:" line under the footer.
         return template.render(`      <li class="tour-card">
         <div class="tour-head"><span class="tour-num">{{num}}</span><h3>{{title}}</h3></div>
-        <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} &rarr;</a></p>
+        <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} <span class="xref-arrow" aria-hidden="true">&rarr;</span></a></p>
         <pre class="tour-teaser"><code class="language-buzz">{{teaser}}</code></pre>
         <div class="tour-foot">
-          <a class="open-in-playground" href="{{playLink}}" title="Open this snippet in the playground" data-tooltip="Open in playground">Open in Playground &rarr;</a>
+          <a class="open-in-playground" href="{{playLink}}" target="_blank" rel="noopener" title="Open this snippet in the playground (new tab)" data-tooltip="Open in playground">Open in Playground <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a>
         </div>
       </li>
 `, {"num": num, "title": this.title, "desc": this.desc, "root": root, "docSlug": this.docSlug, "docLabel": this.docLabel, "teaser": codeTeaser(src), "playLink": playgroundLink(root, src)});
@@ -2477,6 +2508,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     site.searchRecords = mut [];
     site.aliasTarget = mut {};
     site.pageUrls = mut {};
+    site.writtenPaths = mut {};
     site.docPages = mut [<DocPage>];
     site.blogPosts = mut [<BlogPost>];
     site.hasBlogPosts = false;
@@ -2487,11 +2519,23 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
             }
         }
     }
-    fs.delete(site.outDir);
+    // gen/ is NOT wiped and rebuilt from scratch: outDir is created if missing, then
+    // every render below writes/overwrites its current output in place, and
+    // pruneStaleOutputs() (called near the end of this function, once every write is
+    // known) deletes exactly the leftovers whose source has since been renamed or
+    // removed - a renamed docs page, a deleted blog post, a dropped alias, a release
+    // that fell out of CHANGELOG.md. Committed-but-not-rendered artifacts (the
+    // playground's WASM/editor bundle, rebuilt out of band by build-playground /
+    // build-playground-editor) simply persist untouched, since nothing here writes
+    // or deletes them.
     fs.makeDirectory(site.outDir);
     std.print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
 
-    // Copy static assets referenced by the root README (images, badges).
+    // Copy static assets referenced by the root README (images, badges). Scoped
+    // delete-then-recopy (not a tracked/pruned path like everything else): cp -r
+    // alone wouldn't remove a since-deleted source image, so the destination is
+    // cleared first to keep this one directory-copy free of leftovers too.
+    fs.delete(site.outDir + "/assets");
     os.execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets " + site.outDir + "/ || true"]);
 
     // Bundle + minify the client-side assets with esbuild (pinned in mise.toml).
@@ -2507,14 +2551,14 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
     // Emit the WebAssembly playground page at gen/playground/index.html (injecting the
-    // shared nav/footer into the hand-authored playground.html), then copy the committed
-    // buzz.wasm + TinyGo glue into that same directory. renderPlayground creates the dir
-    // and writes index.html first, so the copy merges the assets in (cp of `playground/.`
-    // into the existing dir, not `playground` which would nest a subdir). The wasm is a
-    // source artifact (rebuilt by build-playground), not rendered from docs, so it is
-    // only copied; that keeps the drift gate stable.
+    // shared nav/footer into the hand-authored playground.html). buzz.wasm,
+    // wasm_exec.js, and editor.js are committed directly in gen/playground/ - rebuilt
+    // in place by build-playground / build-playground-editor, never by this render -
+    // so renderPlayground only needs to add index.html alongside them. gen/ no longer
+    // gets wiped on every generate (see the comment above fs.makeDirectory(site.outDir)),
+    // so there is no external source copy to merge in; pruneStaleOutputs() also knows
+    // to leave these three paths alone (see its alwaysKeep set).
     renderPlayground(site);
-    os.execute(["sh", "-c", "[ -d playground ] && cp -r playground/. " + site.outDir + "/playground/ || true"]);
 
     // Parse the changelog BEFORE the walk so renderPage() knows whether the releases
     // Atom feed will be written and can gate its <link rel=alternate> discovery
@@ -2556,6 +2600,12 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // Written last: its cache version is a digest of the precached assets (incl.
     // search-index.json just above), so every one of them must already exist.
     writeServiceWorker(site);
+
+    // Clean up anything left on disk from a previous render whose source is gone
+    // (see pruneStaleOutputs' doc comment). Runs before the two gates below so
+    // neither can trip on a stale page's dangling reference to content removed
+    // along with it.
+    pruneStaleOutputs(site);
 
     // Reproducibility guard: throw on any dangling href/src reference. Runs after
     // every asset + page has been written, so a missing file (renamed bundle,
@@ -2665,6 +2715,47 @@ fun walkGen(rel: str, acc: [str], site: Site) > void {
         } else {
             acc.append(childRel);
         }
+    }
+}
+
+// pruneStaleOutputs deletes gen/ output left behind by a source that no longer
+// produces it - a renamed/removed docs page, a deleted blog post, a dropped
+// frontmatter alias, a release that fell out of CHANGELOG.md. gen/ is no longer
+// wiped before each render (see the comment in site_render), so this is what keeps
+// it from silently accumulating orphans instead: walk what is really on disk,
+// and for every "<dir>/index.html" NOT in writtenPaths (this render's actual
+// output) and not in alwaysKeep, delete the whole directory - taking any sibling
+// file (an index.md, say) with it. Run before assetIntegrityCheck/orphanCheck so
+// neither gate can trip on a stale page's dangling reference to content that was
+// removed along with it.
+fun pruneStaleOutputs(site: Site) > void {
+    // Fixed, unconditional-or-deliberately-persistent outputs that are never
+    // candidates for pruning: paths a normal render always (re)writes regardless of
+    // docs/blog content (so they're never actually stale), plus the playground's
+    // committed WASM/editor bundle, which this render never writes or deletes at all
+    // (it is refreshed out of band by build-playground / build-playground-editor).
+    final alwaysKeep: {str: bool} = mut {
+        "index.html": true, "index.md": true, "404.html": true,
+        "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
+        "sw.js": true, "search-index.json": true,
+        "site.css": true, "theme.css": true, "theme.js": true, "main.js": true,
+        "search/index.html": true,
+        "playground/index.html": true, "playground/buzz.wasm": true,
+        "playground/wasm_exec.js": true, "playground/editor.js": true,
+    };
+    final acc: [str] = mut [<str>];
+    walkGen("", acc, site);
+    final staleDirs: {str: bool} = mut {};
+    foreach (path in acc) {
+        if (alwaysKeep[path] != null) { continue; }
+        if (path.startsWith("assets/")) { continue; }   // scoped delete+recopy above already keeps this clean
+        if (path.endsWith("/index.html") == false) { continue; }   // only page-shaped files drive pruning
+        if (site.writtenPaths[path] != null) { continue; }
+        staleDirs[path.sub(0, path.len() - 11)] = true;   // len("/index.html") == 11
+    }
+    foreach (dir in staleDirs.keys()) {
+        std.print("  pruning stale " + dir + "/ (no longer produced)");
+        fs.delete(site.outDir + "/" + dir);
     }
 }
 

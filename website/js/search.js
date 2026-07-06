@@ -383,7 +383,7 @@
     li.setAttribute("role", "presentation");
     var label = count > 0 ? "See all " + count + " result" + (count === 1 ? "" : "s") : "Open full search";
     li.innerHTML =
-      '<a class="search-seeall" href="' + ROOT + "search/?q=" + encodeURIComponent(query) + '">' + label + " &rarr;</a>" +
+      '<a class="search-seeall" href="' + ROOT + "search/?q=" + encodeURIComponent(query) + '">' + label + ' <span class="xref-arrow" aria-hidden="true">&rarr;</span></a>' +
       '<span class="search-synhint">Syntax: <code>tag:name</code> <code>-term</code> <code>&quot;phrase&quot;</code></span>';
     return li;
   }

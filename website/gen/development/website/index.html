@@ -216,7 +216,7 @@ magus run ci .  # from the workspace root
 <li><a href="#test"><code>test</code></a></li>
 </ul>
 <h3 id="build-playground"><code>build-playground</code></h3>
-<p>build-playground rebuilds the WebAssembly interpreter the playground page loads: TinyGo compiles ../cmd/buzz-playground to website/playground/buzz.wasm and the matching wasm_exec.js glue is copied beside it.</p>
+<p>build-playground rebuilds the WebAssembly interpreter the playground page loads: TinyGo compiles ../cmd/buzz-playground straight to website/gen/playground/buzz.wasm and the matching wasm_exec.js glue is copied beside it.</p>
 <p><strong>Defaults</strong></p>
 <pre><code class="language-sh">magus run build-playground    # from the project directory
 magus run build-playground .  # from the workspace root
@@ -227,7 +227,7 @@ magus run build-playground .  # from the workspace root
 </ul>
 <p><strong>Details:</strong> uncached (always runs)</p>
 <h3 id="build-playground-editor"><code>build-playground-editor</code></h3>
-<p>build_playground_editor bundles the vendored CodeMirror editor into the committed website/playground/editor.js — the editor analog of build_playground's committed buzz.wasm.</p>
+<p>build_playground_editor bundles the vendored CodeMirror editor into the committed website/gen/playground/editor.js — the editor analog of build_playground's committed buzz.wasm.</p>
 <p><strong>Defaults</strong></p>
 <pre><code class="language-sh">magus run build-playground-editor    # from the project directory
 magus run build-playground-editor .  # from the workspace root
