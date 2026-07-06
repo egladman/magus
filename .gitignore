@@ -7,6 +7,13 @@ coverage.out
 /magus-utils
 /magus-scribe
 
+# release output from `magus run release` — cross-compiled tarballs + SHA256SUMS,
+# published to the GitHub release, never committed
+/dist/
+
+# macOS directory metadata
+.DS_Store
+
 # magus runtime cache
 .magus/
 
