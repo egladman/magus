@@ -1,7 +1,7 @@
 package langservice
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/egladman/gopherbuzz/token"
@@ -20,11 +20,11 @@ const (
 	KindKeyword  CompletionKind = "keyword"
 )
 
-// Completion is one suggestion. Label is what the user sees and, unless Insert is
-// set, what is inserted; Detail is a short right-aligned hint (a signature or type);
-// Doc is the longer description shown in the item's info panel. Replace is the
-// number of characters immediately before the cursor the item replaces (the length
-// of the partial word being completed), so the editor can compute the edit range.
+// Completion is one suggestion. Label is both what the user sees and what is
+// inserted; Detail is a short right-aligned hint (a signature or type); Doc is the
+// longer description shown in the item's info panel. Replace is the number of
+// characters immediately before the cursor the item replaces (the length of the
+// partial word being completed), so the editor can compute the edit range.
 type Completion struct {
 	Label   string         `json:"label"`
 	Kind    CompletionKind `json:"kind"`
@@ -40,13 +40,17 @@ var builtins = []string{
 	"values", "append", "range", "error", "assert", "type",
 }
 
-// Complete returns the completions for the cursor at offset in src. It classifies
+// CompleteAt returns the completions for the cursor at offset in src. It classifies
 // the cursor context from the raw text - inside an import path, after a `module.`
 // member access, or on a bare word - so it stays useful on the half-typed source a
 // live editor calls it with. offset is a byte offset; out-of-range offsets are
 // clamped. Results are sorted and each carries Replace, the length of the partial
 // token it completes.
-func Complete(src string, offset int) []Completion {
+//
+// It returns a slice (nil when there is nothing to offer) rather than the *T that
+// its sibling cursor queries HoverAt and SignatureAt return: completion is inherently
+// a list, hover and signature name a single thing.
+func CompleteAt(src string, offset int) []Completion {
 	if offset < 0 {
 		offset = 0
 	}
@@ -191,7 +195,7 @@ func wordCompletions(src, before string) []Completion {
 		add(s.Name, completionKindFor(s.Kind), s.Sig, "")
 	}
 	for _, imp := range scanImports(src) {
-		if m, ok := LookupModule(moduleBase(imp.Path)); ok {
+		if m, ok := lookupModule(moduleBase(imp.Path)); ok {
 			add(imp.Name, KindModule, "", m.Doc)
 		} else {
 			add(imp.Name, KindModule, "", "")
@@ -213,7 +217,11 @@ func completionKindFor(k symbolKind) CompletionKind {
 		return KindFunction
 	case symType:
 		return KindType
+	case symConstant:
+		return KindConstant
 	default:
+		// Unreachable: scanSymbols only produces the three kinds above. A new
+		// symbolKind should be classified explicitly, not silently labeled here.
 		return KindConstant
 	}
 }
@@ -228,5 +236,5 @@ func lineStart(s string) int {
 }
 
 func sortByLabel(c []Completion) {
-	sort.Slice(c, func(i, j int) bool { return c[i].Label < c[j].Label })
+	slices.SortFunc(c, func(a, b Completion) int { return strings.Compare(a.Label, b.Label) })
 }

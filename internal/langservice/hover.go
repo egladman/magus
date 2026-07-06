@@ -43,7 +43,7 @@ func HoverAt(src string, offset int) *Hover {
 	}
 
 	// A bare module name.
-	if mod, ok := LookupModule(word); ok {
+	if mod, ok := lookupModule(word); ok {
 		return &Hover{Title: "module " + mod.Name, Doc: mod.Doc}
 	}
 

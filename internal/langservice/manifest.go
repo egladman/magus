@@ -47,11 +47,8 @@ var moduleIndex = func() map[string]Module {
 	return m
 }()
 
-// Modules returns the manifest module set (sorted by name by the generator).
-func Modules() []Module { return modules }
-
-// LookupModule returns the module registered under its bare import name.
-func LookupModule(name string) (Module, bool) {
+// lookupModule returns the module registered under its bare import name.
+func lookupModule(name string) (Module, bool) {
 	m, ok := moduleIndex[name]
 	return m, ok
 }

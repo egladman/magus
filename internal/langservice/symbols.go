@@ -57,7 +57,7 @@ func scanSymbols(src string) []symbol {
 				out = append(out, symbol{Name: name, Kind: symConstant})
 			}
 		case strings.HasPrefix(line, "var "), strings.HasPrefix(line, "mut "):
-			if name := leadingIdent(line[len("var "):]); name != "" {
+			if name := leadingIdent(line[4:]); name != "" { // past the matched "var "/"mut " keyword (both 4 bytes)
 				out = append(out, symbol{Name: name, Kind: symConstant})
 			}
 		case strings.HasPrefix(line, "object "):
@@ -151,12 +151,12 @@ func scanImports(src string) []importBinding {
 func resolveModule(base, src string) (Module, bool) {
 	for _, imp := range scanImports(src) {
 		if imp.Name == base {
-			if m, ok := LookupModule(moduleBase(imp.Path)); ok {
+			if m, ok := lookupModule(moduleBase(imp.Path)); ok {
 				return m, true
 			}
 		}
 	}
-	return LookupModule(base)
+	return lookupModule(base)
 }
 
 // moduleBase returns the bare import name a module path binds under: its last path

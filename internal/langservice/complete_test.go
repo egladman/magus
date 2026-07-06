@@ -30,7 +30,7 @@ func findLabel(cs []Completion, label string) (Completion, bool) {
 func TestComplete_ImportPath(t *testing.T) {
 	// `import "f` -> module paths starting with f (fs, fmt, ...).
 	src := `import "f`
-	got := Complete(src, len(src))
+	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got, "expected import-path completions")
 	for _, c := range got {
 		assert.Equal(t, KindModule, c.Kind)
@@ -43,7 +43,7 @@ func TestComplete_ImportPath(t *testing.T) {
 
 func TestComplete_ModuleMembers(t *testing.T) {
 	src := "import \"fs\";\nfs."
-	got := Complete(src, len(src))
+	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got, "expected fs members")
 	for _, c := range got {
 		assert.Contains(t, []CompletionKind{KindMethod, KindField}, c.Kind)
@@ -54,7 +54,7 @@ func TestComplete_ModuleMembers(t *testing.T) {
 func TestComplete_ModuleMembers_Partial(t *testing.T) {
 	// Direct module name (no import yet) still offers members, filtered by partial.
 	src := "fs.gl"
-	got := Complete(src, len(src))
+	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got)
 	for _, c := range got {
 		assert.True(t, strings.HasPrefix(c.Label, "gl"), "label %q not prefixed by partial", c.Label)
@@ -67,7 +67,7 @@ func TestComplete_ModuleMembers_Partial(t *testing.T) {
 
 func TestComplete_AliasedImport(t *testing.T) {
 	src := "import \"fs\" as f;\nf."
-	got := Complete(src, len(src))
+	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got, "aliased module members should resolve")
 	_, ok := findLabel(got, "glob")
 	assert.True(t, ok, "fs.glob should be offered under alias f")
@@ -77,7 +77,7 @@ func TestComplete_BuzzSchemeImport(t *testing.T) {
 	// Upstream's `buzz:` package scheme binds the bare module name, so member
 	// completion must resolve past the scheme.
 	src := "import \"buzz:fs\";\nfs."
-	got := Complete(src, len(src))
+	got := CompleteAt(src, len(src))
 	require.NotEmpty(t, got, "buzz: scheme import should resolve fs members")
 	_, ok := findLabel(got, "glob")
 	assert.True(t, ok, "fs.glob should be offered when imported via buzz:fs")
@@ -85,7 +85,7 @@ func TestComplete_BuzzSchemeImport(t *testing.T) {
 
 func TestComplete_Word_KeywordsModulesSymbols(t *testing.T) {
 	src := "import \"fs\";\nexport fun build(args: [str]) > void {}\nbu"
-	got := Complete(src, len(src))
+	got := CompleteAt(src, len(src))
 	names := labels(got)
 	// Its own top-level function is offered.
 	assert.Contains(t, names, "build")
@@ -96,12 +96,12 @@ func TestComplete_Word_KeywordsModulesSymbols(t *testing.T) {
 }
 
 func TestComplete_Word_EmptyPrefixIsQuiet(t *testing.T) {
-	assert.Empty(t, Complete("   ", 3), "no prefix should yield no word dump")
+	assert.Empty(t, CompleteAt("   ", 3), "no prefix should yield no word dump")
 }
 
 func TestComplete_OffsetClamped(t *testing.T) {
 	assert.NotPanics(t, func() {
-		Complete("fs.", 999)
-		Complete("fs.", -5)
+		CompleteAt("fs.", 999)
+		CompleteAt("fs.", -5)
 	})
 }
