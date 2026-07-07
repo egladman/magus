@@ -96,25 +96,15 @@ func ExplainCharms(argv []string, charms map[string]types.Charm, activeNames []s
 	return steps, nil
 }
 
-// CharmConflict reports an active charm whose edit is overwritten by another active
-// charm on the same command. Name changes the command on its own, yet the fully
-// charm-applied command is identical whether or not Name is active, because
-// OverriddenBy edits the same position and, applied later in sorted-name order, wins.
-// The surviving value is decided by alphabetical charm name rather than any declared
-// precedence, so a conflict is almost always an authoring mistake, not intent.
-type CharmConflict struct {
-	Name         string // the charm whose edit is lost
-	OverriddenBy string // the active charm that overwrites it, or "" if none is singly responsible
-}
-
 // Conflicts returns the active charms whose effect is clobbered by another active
-// charm on argv. A charm conflicts when it changes the command on its own but the
-// command with the full active set equals the command with that charm removed -
-// proof its edit left no trace. Disjoint edits (two appended flags both survive)
-// never conflict; only a destructive overlap on the same position does. A charm that
-// is a no-op on its own is not a conflict (that is the Before==After case describe
-// surfaces separately). activeNames need not be sorted or deduped.
-func Conflicts(argv []string, charms map[string]types.Charm, activeNames []string) ([]CharmConflict, error) {
+// charm on argv (as types.CharmConflict: the lost charm and the one that overwrites
+// it). A charm conflicts when it changes the command on its own but the command with
+// the full active set equals the command with that charm removed - proof its edit
+// left no trace. Disjoint edits (two appended flags both survive) never conflict;
+// only a destructive overlap on the same position does. A charm that is a no-op on
+// its own is not a conflict (that is the Before==After case describe surfaces
+// separately). activeNames need not be sorted or deduped.
+func Conflicts(argv []string, charms map[string]types.Charm, activeNames []string) ([]types.CharmConflict, error) {
 	seen := map[string]bool{}
 	var active []string
 	for _, name := range activeNames {
@@ -132,7 +122,7 @@ func Conflicts(argv []string, charms map[string]types.Charm, activeNames []strin
 		return nil, err
 	}
 
-	var out []CharmConflict
+	var out []types.CharmConflict
 	for _, name := range active {
 		alone, err := ApplyCharms(argv, charms, []string{name})
 		if err != nil {
@@ -152,7 +142,7 @@ func Conflicts(argv []string, charms map[string]types.Charm, activeNames []strin
 			return nil, err
 		}
 		if slices.Equal(without, canonical) {
-			out = append(out, CharmConflict{Name: name, OverriddenBy: overrider(argv, charms, name, active)})
+			out = append(out, types.CharmConflict{Name: name, OverriddenBy: overrider(argv, charms, name, active)})
 		}
 	}
 	return out, nil

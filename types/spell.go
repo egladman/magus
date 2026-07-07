@@ -49,6 +49,7 @@ type Spell struct {
 	invoke       func(ctx context.Context, req InvokeRequest) (any, error)
 	renderCmd    func(target string, charms []string) (cmd string, args []string, ok bool, err error)
 	explainCmd   func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)
+	conflictCmd  func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)
 	dependsOn    func(dir string) []string
 	versionProbe func(ctx context.Context, dir string) (string, error)
 }
@@ -109,6 +110,17 @@ func (s *Spell) ExplainCommand(target string, charms []string) (steps []CharmTra
 		return nil, false, nil
 	}
 	return s.explainCmd(target, charms)
+}
+
+// ConflictingCharms returns the active charms whose edit is overridden by another
+// active charm on the target's command (both edit the same argument; the loser has
+// no effect). ok is false on the same conditions as RenderCommand. It executes
+// nothing; `magus describe target ...:a,b` surfaces the result before a run.
+func (s *Spell) ConflictingCharms(target string, charms []string) (conflicts []CharmConflict, ok bool, err error) {
+	if s.conflictCmd == nil {
+		return nil, false, nil
+	}
+	return s.conflictCmd(target, charms)
 }
 
 func (s *Spell) DeclarationFiles() []string    { return s.declarationFiles }
@@ -203,6 +215,12 @@ func WithCommandRenderer(fn func(target string, charms []string) (cmd string, ar
 // target --explain`. See Spell.ExplainCommand.
 func WithCommandExplainer(fn func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)) SpellOption {
 	return func(s *Spell) { s.explainCmd = fn }
+}
+
+// WithCommandConflicts sets the charm-conflict detector used by `magus describe` to
+// report active charms whose edit another active charm overrides.
+func WithCommandConflicts(fn func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)) SpellOption {
+	return func(s *Spell) { s.conflictCmd = fn }
 }
 
 func WithSpellDependsOn(fn func(dir string) []string) SpellOption {

@@ -416,6 +416,12 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 				if steps, sok, serr := s.ExplainCommand(et.Name, t.Charms); serr == nil && sok && len(steps) > 1 {
 					se.CharmTrace = steps
 				}
+				// Two active charms that edit the same argument silently override one
+				// another; surface the loser here so a preview catches the mistake
+				// before a run does.
+				if conflicts, cok, cerr := s.ConflictingCharms(et.Name, t.Charms); cerr == nil && cok && len(conflicts) > 0 {
+					se.Conflicts = conflicts
+				}
 			}
 			spellEntries = append(spellEntries, se)
 		}

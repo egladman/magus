@@ -706,6 +706,17 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 					fmt.Printf("      %-10s %s\n", label, strings.Join(step.Command, " "))
 				}
 			}
+			// Shown without --explain: an overridden charm is a mistake, not a detail.
+			if len(s.Conflicts) > 0 {
+				fmt.Printf("    charm conflicts:\n")
+				for _, c := range s.Conflicts {
+					by := c.OverriddenBy
+					if by == "" {
+						by = "another active charm"
+					}
+					fmt.Printf("      %s overridden by %s (no effect here)\n", c.Name, by)
+				}
+			}
 		}
 		if e.Policy != nil {
 			fmt.Printf("  policy:")

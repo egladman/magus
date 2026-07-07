@@ -36,6 +36,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			types.WithInvoker(newSpellInvoker(spec.Ops)),
 			types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			types.WithCommandExplainer(newCommandExplainer(spec.Ops)),
+			types.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
 			types.WithTargetSources(spec.TargetNeeds),
 			types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
 			types.WithTargetDocs(docsByTarget(spec.Ops)),
@@ -143,6 +144,31 @@ func newCommandExplainer(targets map[string]types.SpellOp) func(string, []string
 			steps = append(steps, types.CharmTraceStep{Charm: s.Charm, Command: append([]string{op.Bin}, s.Command...)})
 		}
 		return steps, true, nil
+	}
+}
+
+// newCommandConflictChecker returns the charm-conflict detector used by `magus
+// describe target`: it reports the active charms whose edit is overridden by another
+// active charm on this op's argv (see ispell.Conflicts). It mirrors the renderer's
+// ok/err contract and executes nothing.
+func newCommandConflictChecker(targets map[string]types.SpellOp) func(string, []string) ([]types.CharmConflict, bool, error) {
+	return func(target string, charms []string) ([]types.CharmConflict, bool, error) {
+		op, ok := targets[target]
+		if !ok || op.Bin == "" {
+			return nil, false, nil
+		}
+		var active []string
+		ctx := types.WithCharms(context.Background(), charms)
+		for name := range op.Charms {
+			if types.HasCharm(ctx, name) {
+				active = append(active, name)
+			}
+		}
+		conflicts, err := ispell.Conflicts(op.Args, op.Charms, active)
+		if err != nil {
+			return nil, false, err
+		}
+		return conflicts, true, nil
 	}
 }
 
@@ -258,6 +284,7 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 		types.WithServiceTargets(m.ServiceOpNames()...),
 		types.WithCommandRenderer(newCommandRenderer(m.Ops)),
 		types.WithCommandExplainer(newCommandExplainer(m.Ops)),
+		types.WithCommandConflicts(newCommandConflictChecker(m.Ops)),
 		types.WithTargetCharms(charmNamesByTarget(m.Ops)),
 		types.WithTargetDocs(docsByTarget(m.Ops)),
 		types.WithDocRequiredTargets(m.DocOps...),

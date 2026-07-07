@@ -269,6 +269,19 @@ type EvaluatedSpellEntry struct {
 	// charms are active and change the command; the RFC 6902 patch made legible by
 	// `magus describe target ...:charm --explain`.
 	CharmTrace []CharmTraceStep `json:"charm_trace,omitempty"       yaml:"charm_trace,omitempty"`
+	// Conflicts lists the active charms whose edit is overridden by another active
+	// charm on this command (both edit the same argument; the winner is decided by
+	// sorted charm name, so the loser has no effect). Empty when the active charms
+	// have disjoint edits. `magus describe target ...:a,b` surfaces it before a run.
+	Conflicts []CharmConflict `json:"conflicts,omitempty"         yaml:"conflicts,omitempty"`
+}
+
+// CharmConflict reports an active charm (Name) whose edit is overwritten by another
+// active charm (OverriddenBy) on the same command, so Name has no effect there. The
+// winner is decided by sorted charm name, not declared precedence.
+type CharmConflict struct {
+	Name         string `json:"name"                    yaml:"name"`
+	OverriddenBy string `json:"overridden_by,omitempty" yaml:"overridden_by,omitempty"`
 }
 
 // CharmTraceStep is one line of a charm-application trace: the command (cmd as

@@ -49,6 +49,9 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 	if err != nil {
 		return run.ExecResult{}, err
 	}
+	// Warn on the real execution path only (not the describe/render path, which
+	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
+	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
 	args = append(args, opts.args...)
 	// A service op reached as a dependency is supervised in the background (started,
 	// readiness-gated, deduped by fingerprint) instead of forked to completion, which
@@ -83,7 +86,6 @@ func resolveCharmArgs(ctx context.Context, base []string, charms map[string]type
 			activeNames = append(activeNames, name)
 		}
 	}
-	warnCharmConflicts(base, charms, activeNames)
 	return ispell.ApplyCharms(base, charms, activeNames)
 }
 
@@ -97,7 +99,13 @@ var charmConflictWarned sync.Map // signature string -> struct{}
 // alphabetical name, so the loser has no effect). It never blocks the run - the
 // command still resolves deterministically - but an author almost never means to
 // declare a charm whose edit is thrown away, so magus says so.
-func warnCharmConflicts(base []string, charms map[string]types.Charm, activeNames []string) {
+func warnCharmConflicts(ctx context.Context, base []string, charms map[string]types.Charm) {
+	var activeNames []string
+	for name := range charms {
+		if types.HasCharm(ctx, name) {
+			activeNames = append(activeNames, name)
+		}
+	}
 	conflicts, err := ispell.Conflicts(base, charms, activeNames)
 	if err != nil {
 		return

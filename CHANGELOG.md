@@ -23,9 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `magus describe charm[s]` inverts the charm index: it lists every target that
   declares a charm and the argv edit it makes, marking the reserved built-ins and
   workspace defaults.
-- Charm conflict warning: when two active charms edit the same argument, one
-  silently overrides the other (the winner decided by name order), so magus now
-  warns that the losing charm has no effect. Disjoint edits never trip it.
+- Charm conflict detection: when two active charms edit the same argument, one
+  silently overrides the other (the winner decided by name order), so magus warns
+  that the losing charm has no effect at run time and flags it in `magus describe
+  target ...:a,b` before a run. Disjoint edits never trip it.
 
 ### Changed
 

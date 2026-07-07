@@ -1,0 +1,29 @@
+# two active charms editing the same argument conflict: one silently overrides the
+# other (winner by sorted name), so describe flags the loser before a run happens.
+exec magus describe target lint:rw,fmt
+stdout 'charm conflicts'
+stdout 'fmt overridden by rw \(no effect here\)'
+
+# one charm alone never conflicts
+exec magus describe target lint:rw
+! stdout 'charm conflicts'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+import "magus/charm";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    final args = ["lint", "."];
+    return Command{bin = "acme", args = args, charms = {
+        "rw": set(args, "lint", "fix"),
+        "fmt": set(args, "lint", "format"),
+    }};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
