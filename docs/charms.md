@@ -17,6 +17,28 @@ Charms replace the one-off boolean flags (`--write`, `--fix`, `--verbose`) that 
 - **Composable.** Charms stack: orthogonal intents like `rw` and `debug` combine without special-casing.
 - **Bounded.** A charm edits arguments only; it cannot swap the command or replace the whole argv. See [Charm vs Target](#charm-vs-target-the-command-boundary).
 
+## Additive by design
+
+Charms only ever *add* intent. You turn one on by naming it (`:rw`); the active set
+is the union of what you named and the workspace `default_charms`, and nothing else.
+There is no per-charm "off" switch, and that absence is deliberate.
+
+The one subtraction magus offers is coarse: `--no-default-charms` drops the whole
+default baseline at once, after which you re-add exactly what you want. There is no
+`--without-charm=rw` to peel a single charm off the set.
+
+Some task runners take the other path, with named configuration profiles you toggle
+on and off per invocation. That turns the active configuration into a set you are
+always managing: enable a default, then remember to disable it here and re-enable it
+there. magus keeps the active set an explicit, additive union instead - what you see
+named is what is on. If you do not want a charm's effect, do not add it.
+
+This is a design decision, not a shortcoming. An additive-only model keeps a charm's
+meaning stable and the active set legible at a glance; a subtractive one trades both
+away for a convenience that usually just papers over an over-broad default. When the
+defaults feel like something you fight, the fix is a smaller default set, not a
+subtraction operator.
+
 ## The mechanism: a JSON Patch over the argv
 
 A target runs a command: a `cmd` (e.g. `go`) and a base argv (e.g. `["tool", "golangci-lint", "run", "./..."]`). magus treats the argv as a JSON array and a charm as an **RFC 6902 JSON Patch** applied over it.
