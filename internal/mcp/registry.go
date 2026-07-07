@@ -95,4 +95,27 @@ var Registry = []ToolDescriptor{
 			{Name: "project", Type: "string", Required: true, Description: "Project path."},
 		},
 	},
+	{
+		Name:        "magus_query",
+		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics.",
+		Params: []ParamDescriptor{
+			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field filters (kind:spell, project:pkg/foo, relation:uses, id:build) and negation (-kind:op)."},
+			{Name: "budget", Type: "number", Description: "Max nodes in the returned neighborhood (default 50)."},
+		},
+	},
+	{
+		Name:        "magus_explain",
+		Description: "Show one knowledge-graph node's context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it. The argument is a node ID (target:pkg/foo:build) or a name that resolves to one.",
+		Params: []ParamDescriptor{
+			{Name: "node", Type: "string", Required: true, Description: "A node ID or a name that resolves to one."},
+		},
+	},
+	{
+		Name:        "magus_path",
+		Description: "Show the shortest path between two knowledge-graph nodes: the chain of edges connecting them, with each hop's relation. Answers how two entities relate.",
+		Params: []ParamDescriptor{
+			{Name: "from", Type: "string", Required: true, Description: "Start node ID or a name that resolves to one."},
+			{Name: "to", Type: "string", Required: true, Description: "End node ID or a name that resolves to one."},
+		},
+	},
 }
