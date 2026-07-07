@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   silently overrides the other (the winner decided by name order), so magus warns
   that the losing charm has no effect at run time and flags it in `magus describe
   target ...:a,b` before a run. Disjoint edits never trip it.
+- `magus describe target` describes a service op before it runs: its readiness
+  probe, stop command, idle window, whether it is shared, and its dedup fingerprint.
+
+### Fixed
+
+- A workspace-local Buzz spell could not declare a service op: the host-registered
+  `magus/target` module omitted the `Service` type (present only on the dry-run
+  host), so `Service{...}` failed to compile. Both hosts now register it.
 
 ### Changed
 

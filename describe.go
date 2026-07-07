@@ -408,6 +408,12 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 			if ok {
 				se.Command = append([]string{cmd}, args...)
 			}
+			// A service target is described, not just rendered: surface its readiness
+			// probe, stop command, idle window, and fingerprint so the supervision plan
+			// is visible before the service ever starts.
+			if view, sok := s.ServiceView(et.Name); sok {
+				se.Service = view
+			}
 			// Attach the per-charm application trace (base -> +charm -> +charm) when
 			// charms are active and actually reshape the command, so `--explain` can
 			// render the RFC 6902 patch as a legible before/after. A trace with only

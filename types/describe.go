@@ -274,6 +274,22 @@ type EvaluatedSpellEntry struct {
 	// sorted charm name, so the loser has no effect). Empty when the active charms
 	// have disjoint edits. `magus describe target ...:a,b` surfaces it before a run.
 	Conflicts []CharmConflict `json:"conflicts,omitempty"         yaml:"conflicts,omitempty"`
+	// Service is set only when this spell's op is a service (a long-running process
+	// magus supervises rather than runs to completion). It carries the static, pre-run
+	// facts; Command above is the process itself. Nil for an ordinary command op.
+	Service *ServiceView `json:"service,omitempty" yaml:"service,omitempty"`
+}
+
+// ServiceView is the static, pre-run description of a service op, shown by `magus
+// describe target` when the target is a service. Every field is known without
+// starting the service; live registry state (ref-count, probe status) needs the
+// daemon and is not part of this static view.
+type ServiceView struct {
+	Readiness   []string `json:"readiness,omitempty"   yaml:"readiness,omitempty"`   // probe command polled until it exits 0, if any
+	Stop        []string `json:"stop,omitempty"        yaml:"stop,omitempty"`        // graceful-shutdown command, if any
+	Idle        string   `json:"idle,omitempty"        yaml:"idle,omitempty"`        // idle-timeout override (a duration), else the daemon default
+	Distinct    string   `json:"distinct,omitempty"    yaml:"distinct,omitempty"`    // dedup opt-out reason; empty means the instance is shared
+	Fingerprint string   `json:"fingerprint,omitempty" yaml:"fingerprint,omitempty"` // content hash that keys shared-instance dedup
 }
 
 // CharmConflict reports an active charm (Name) whose edit is overwritten by another

@@ -50,6 +50,7 @@ type Spell struct {
 	renderCmd    func(target string, charms []string) (cmd string, args []string, ok bool, err error)
 	explainCmd   func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)
 	conflictCmd  func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)
+	serviceView  func(target string) (view *ServiceView, ok bool)
 	dependsOn    func(dir string) []string
 	versionProbe func(ctx context.Context, dir string) (string, error)
 }
@@ -121,6 +122,17 @@ func (s *Spell) ConflictingCharms(target string, charms []string) (conflicts []C
 		return nil, false, nil
 	}
 	return s.conflictCmd(target, charms)
+}
+
+// ServiceView returns the static, pre-run description of a service target (its
+// readiness probe, stop command, idle override, distinct reason, and fingerprint).
+// ok is false when the target is not a service or the spell carries no service data.
+// It executes nothing.
+func (s *Spell) ServiceView(target string) (view *ServiceView, ok bool) {
+	if s.serviceView == nil {
+		return nil, false
+	}
+	return s.serviceView(target)
 }
 
 func (s *Spell) DeclarationFiles() []string    { return s.declarationFiles }
@@ -221,6 +233,12 @@ func WithCommandExplainer(fn func(target string, charms []string) (steps []Charm
 // report active charms whose edit another active charm overrides.
 func WithCommandConflicts(fn func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)) SpellOption {
 	return func(s *Spell) { s.conflictCmd = fn }
+}
+
+// WithServiceView sets the static service-facts accessor used by `magus describe
+// target` to describe a service op before it runs.
+func WithServiceView(fn func(target string) (view *ServiceView, ok bool)) SpellOption {
+	return func(s *Spell) { s.serviceView = fn }
 }
 
 func WithSpellDependsOn(fn func(dir string) []string) SpellOption {

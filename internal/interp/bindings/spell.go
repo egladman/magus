@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/serviceident"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/std"
@@ -37,6 +38,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			types.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 			types.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
+			types.WithServiceView(newServiceViewer(spec.Ops)),
 			types.WithTargetSources(spec.TargetNeeds),
 			types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
 			types.WithTargetDocs(docsByTarget(spec.Ops)),
@@ -172,6 +174,38 @@ func newCommandConflictChecker(targets map[string]types.SpellOp) func(string, []
 	}
 }
 
+// newServiceViewer returns the static service-facts accessor used by `magus describe
+// target`: for a service op it reports the readiness probe, stop command, idle
+// override, distinct reason, and fingerprint - all known without starting the
+// service. ok is false for a non-service op. It executes nothing.
+func newServiceViewer(targets map[string]types.SpellOp) func(string) (*types.ServiceView, bool) {
+	return func(target string) (*types.ServiceView, bool) {
+		op, ok := targets[target]
+		if !ok || !op.IsService() || op.Service == nil {
+			return nil, false
+		}
+		svc := types.Service{
+			Command:   types.Command{Bin: op.Bin, Args: op.Args},
+			Readiness: op.Service.Readiness,
+			Stop:      op.Service.Stop,
+			Idle:      op.Service.Idle,
+			Distinct:  op.Service.Distinct,
+		}
+		view := &types.ServiceView{
+			Idle:        op.Service.Idle,
+			Distinct:    op.Service.Distinct,
+			Fingerprint: serviceident.Fingerprint(svc),
+		}
+		if op.Service.Readiness.Bin != "" {
+			view.Readiness = append([]string{op.Service.Readiness.Bin}, op.Service.Readiness.Args...)
+		}
+		if op.Service.Stop.Bin != "" {
+			view.Stop = append([]string{op.Service.Stop.Bin}, op.Service.Stop.Args...)
+		}
+		return view, true
+	}
+}
+
 // noResult is the invoker's no-op outcome (no Data, no error) for a request that
 // fans out to a spell with nothing to contribute: an unknown target, or a handler
 // op on a built-in spell (no script body to run). nil Data is an ordinary invoker
@@ -285,6 +319,7 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 		types.WithCommandRenderer(newCommandRenderer(m.Ops)),
 		types.WithCommandExplainer(newCommandExplainer(m.Ops)),
 		types.WithCommandConflicts(newCommandConflictChecker(m.Ops)),
+		types.WithServiceView(newServiceViewer(m.Ops)),
 		types.WithTargetCharms(charmNamesByTarget(m.Ops)),
 		types.WithTargetDocs(docsByTarget(m.Ops)),
 		types.WithDocRequiredTargets(m.DocOps...),

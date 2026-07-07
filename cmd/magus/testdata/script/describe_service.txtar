@@ -1,0 +1,38 @@
+# a service target is described, not just rendered: describe target surfaces the
+# readiness probe, stop command, and dedup fingerprint before the service starts.
+exec magus describe target serve
+stdout 'service:'
+stdout 'readiness: pg_isready -h localhost'
+stdout 'stop:      docker stop magus-pg'
+stdout 'shared:    yes'
+stdout 'fingerprint:'
+
+# an ordinary command target has no service section
+exec magus describe target lint
+! stdout 'service:'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/pg" as pg;
+import "spells/acme" as acme;
+magus.project({ "spells": [pg, acme] });
+export fun serve(args: [str]) > void { pg.serve(); }
+export fun lint(args: [str]) > void { acme.lint(); }
+-- spells/pg/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "pg"; }
+fun serve(t: Target) > Service {
+    return Service{
+        command = Command{bin = "docker", args = ["run", "-p", "5432:5432", "postgres:16"]},
+        readiness = Command{bin = "pg_isready", args = ["-h", "localhost"]},
+        stop = Command{bin = "docker", args = ["stop", "magus-pg"]},
+    };
+}
+export fun mgs_listTargets() > {str: fun(Target) Service} { return {"serve": serve}; }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(t: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

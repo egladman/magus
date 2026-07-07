@@ -132,6 +132,10 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 		ispell.PatchOpSource,
 		ispell.CharmTypeSource,
 		ispell.CommandSource,
+		// Service must follow Command (its command/readiness/stop fields are typed
+		// Command), so a workspace-local spell can author a service op. The dry host
+		// registers the same bundle; keep the two in step.
+		ispell.ServiceSource,
 		ispell.TargetQuerySource,
 		ispell.ExecResultSource,
 		// Boundary mirrors of the host-method record shapes, so a magusfile can

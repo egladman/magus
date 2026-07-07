@@ -696,6 +696,26 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			if len(s.Command) > 0 {
 				fmt.Printf("    command: %s\n", strings.Join(s.Command, " "))
 			}
+			if s.Service != nil {
+				fmt.Printf("    service:\n")
+				if len(s.Service.Readiness) > 0 {
+					fmt.Printf("      readiness: %s\n", strings.Join(s.Service.Readiness, " "))
+				}
+				if len(s.Service.Stop) > 0 {
+					fmt.Printf("      stop:      %s\n", strings.Join(s.Service.Stop, " "))
+				}
+				if s.Service.Idle != "" {
+					fmt.Printf("      idle:      %s\n", s.Service.Idle)
+				}
+				if s.Service.Distinct != "" {
+					fmt.Printf("      distinct:  %s\n", s.Service.Distinct)
+				} else {
+					fmt.Printf("      shared:    yes (dedups by fingerprint)\n")
+				}
+				if s.Service.Fingerprint != "" {
+					fmt.Printf("      fingerprint: %s\n", s.Service.Fingerprint)
+				}
+			}
 			if explain && len(s.CharmTrace) > 0 {
 				fmt.Printf("    charm trace:\n")
 				for _, step := range s.CharmTrace {
