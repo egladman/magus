@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,18 +18,6 @@ import (
 	"golang.org/x/term"
 )
 
-//go:embed embed/magus-release.pub
-var embeddedPubKey []byte
-
-func init() {
-	if len(embeddedPubKey) != ed25519.PublicKeySize {
-		panic(fmt.Sprintf(
-			"magus: embedded release public key is %d bytes, want %d; rebuild from a valid release",
-			len(embeddedPubKey), ed25519.PublicKeySize,
-		))
-	}
-}
-
 // Overridable for tests (unexported; test files set them directly).
 var (
 	overridePubKey  []byte
@@ -43,7 +30,7 @@ func activeOpts() selfupdate.Options {
 	if overridePubKey != nil {
 		opts.PubKey = ed25519.PublicKey(overridePubKey)
 	} else {
-		opts.PubKey = ed25519.PublicKey(embeddedPubKey)
+		opts.PubKey = selfupdate.PubKey
 	}
 	return opts
 }
