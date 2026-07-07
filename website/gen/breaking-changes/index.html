@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Breaking changes — magus</title>
+  <meta name="description" content="How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI&#39;s public surface.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/breaking-changes/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Breaking changes — magus">
+  <meta property="og:description" content="How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI&#39;s public surface.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/breaking-changes/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Breaking changes</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/breaking-changes.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#proto-schemas-buf-breaking" title="Proto schemas: buf-breaking">Proto schemas: buf-breaking</a></li><li><a href="#cli-surfaces-a-drift-gated-apilock" title="CLI surfaces: a drift-gated api.lock">CLI surfaces: a drift-gated api.lock</a></li><li><a href="#acceptance-model" title="Acceptance model">Acceptance model</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="breaking-changes">Breaking changes</h1>
+<p>A backward-incompatible change should show up in a pull request diff, not in a bug
+report after release. magus gives you two mechanisms for this, one per artifact you
+publish: <code>buf-breaking</code> for a protobuf schema, and a drift-gated <code>.lock</code> snapshot
+for a command-line surface. Both turn &quot;did this change break a consumer?&quot; into a
+diff a reviewer reads, so nobody has to remember to check.</p>
+<h2 id="proto-schemas-buf-breaking">Proto schemas: buf-breaking</h2>
+<p>The <code>buf</code> spell ships a <code>buf-breaking</code> op that compares your current <code>.proto</code>
+schema against a baseline and fails on a wire- or JSON-incompatible edit (a renamed
+field, a changed type, a deleted message). It defaults to the <code>main</code> branch, buf's
+standard CI baseline:</p>
+<pre><code class="language-buzz">import &quot;magus&quot;;
+import &quot;magus/spell/buf&quot;;
+
+magus.project({ &quot;spells&quot;: [buf] });
+
+export fun lint(args: [str]) &gt; void {
+    buf[&quot;buf-lint&quot;]();
+    buf[&quot;buf-breaking&quot;]();
+}
+</code></pre>
+<p>Compose it into the read-only <code>lint</code> target alongside <code>buf-lint</code>, <code>go-vet</code>, and the
+rest. <code>magus run lint</code> then forks <code>buf breaking --against .git#branch=main</code>, and a
+breaking <code>.proto</code> edit fails the same stage that catches a style violation. Point
+the baseline elsewhere with a function target when a repo uses a different default
+branch or an image baseline.</p>
+<h2 id="cli-surfaces-a-drift-gated-apilock">CLI surfaces: a drift-gated api.lock</h2>
+<p>A proto schema has buf to describe its compatibility. A command-line surface has
+nothing equivalent, so magus tracks its own with a pattern you can copy for any CLI
+you ship.</p>
+<p><code>magus-utils api</code> writes the public surface (every subcommand, flag, project
+target, and config key) as a sorted, newline-delimited <code>.lock</code> file, the same flat
+format as <code>urls.lock</code>. The snapshot lives at
+<code>internal/manpage/testdata/api.lock</code>, and <code>TestAPIUpToDate</code> regenerates it in
+memory and compares. Change the CLI and the test fails until you regenerate:</p>
+<pre><code class="language-console">$ go generate ./internal/manpage/...
+</code></pre>
+<p>The regenerated diff is the review artifact. A new line is a new flag or command;
+a removed line is a removed one. A reviewer reads the removed lines and decides
+whether the change is acceptable, the same judgment <code>buf-breaking</code> automates for
+protos.</p>
+<p>To adopt this for your own tool: emit its public surface as a sorted list, commit
+the list, and add a test that regenerates and compares. The list is derived from
+one source of truth (magus builds it from the man page registry plus the config
+keys), so it never drifts from the real CLI.</p>
+<h2 id="acceptance-model">Acceptance model</h2>
+<p>magus deliberately keeps this lightweight. There is no allowlist file to maintain
+and no <code>doctor</code> check that a machine has to interpret. Acceptance is a human reading
+a diff:</p>
+<ol>
+<li>The drift gate fails on any surface change, breaking or not.</li>
+<li>You regenerate, and the <code>.lock</code> diff joins the pull request.</li>
+<li>A reviewer reads it. An added line needs no ceremony. A removed line is a
+backward-incompatible change, so you record it as a <code>### Breaking</code> note under
+<code>## [Unreleased]</code> in <a href="https://keepachangelog.com/en/1.1.0/" rel="noopener noreferrer" target="_blank" data-external>CHANGELOG.md</a>.</li>
+</ol>
+<p>The <code>CHANGELOG</code> note is the release story; the <code>.lock</code> diff is the proof. Neither
+requires a new subcommand or a config flag, because the compatibility record is the
+same review every other change already goes through.</p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../affected/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Affected</span></a>
+      <a class="page-nav-next" href="../cache/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Cache model</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
+        <a class="related-card" href="../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22breaking-changes%22">breaking-changes</a><a class="tag" href="../search/?q=tag%3A%22compatibility%22">compatibility</a><a class="tag" href="../search/?q=tag%3A%22buf-breaking%22">buf-breaking</a><a class="tag" href="../search/?q=tag%3A%22api-lock%22">api-lock</a><a class="tag" href="../search/?q=tag%3A%22drift-gate%22">drift-gate</a><a class="tag" href="../search/?q=tag%3A%22changelog%22">changelog</a><a class="tag" href="../search/?q=tag%3A%22proto%22">proto</a></div>
+    <small>Last updated <time datetime="2026-07-07T18:12:24Z">July 7, 2026, 6:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/4917cbc8d4448942c00b377e17e6535d86c16ac0" data-tooltip="4917cbc8d4448942c00b377e17e6535d86c16ac0" title="4917cbc8d4448942c00b377e17e6535d86c16ac0">4917cbc</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

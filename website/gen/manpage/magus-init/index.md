@@ -6,7 +6,7 @@ tags: [cli, magus init, bootstrap, setup, magus.yaml, magusfile, workspace]
 
 # magus-init
 
-Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)
+Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
 
 ## Synopsis
 
@@ -25,6 +25,10 @@ With --global only the global config is written; the per-clone workspace
 bootstrap (magusfile stub + merge driver) is skipped.
 
 The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
+
+The "spell" subcommand scaffolds a new spell instead of bootstrapping a
+workspace: "magus init spell \<name\>" writes spells/\<name\>/spell.buzz with the
+mgs_ contract stubbed, each function documented, and a runnable test block.
 
 ## Options
 
@@ -60,13 +64,13 @@ magus init --vcs git
 magus init --global
 ```
 
-*Write config into the repo instead of XDG*
+*Scaffold a new spell*
 
 ```sh
-magus init --local
+magus init spell mytool
 ```
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

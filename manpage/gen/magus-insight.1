@@ -24,18 +24,16 @@ hotspots   Edit frequency × complexity — the prime refactoring targets. The
              author count (bus factor), and abandonment (projects gone quiet).
   trend      The recent half of the window versus the earlier half: a positive
              delta is a rising hotspot, a negative one is cooling.
-  structure  The knowledge\-graph lens (no VCS): god nodes (the most connected
-             spells, modules, targets \- where structural risk concentrates),
-             orphans (docs that document nothing, spells no target uses), and doc
-             coverage (the share of diagnostics, spells, and modules with a doc).
-             \-\-kind scopes every section to one node kind.
-  report     Every lens as one whole\-workspace Markdown document (the magusfile's
-             postflight target writes this to the GitHub Actions step summary).
+  report     Every lens plus graph stats as one whole\-workspace Markdown document
+             (the magusfile's postflight target writes this to the GitHub Actions
+             step summary).
 .PP
-The history lenses read VCS: \-\-commits caps the scan; \-\-since bounds it by date
-(90d, 12w, 6mo, 1y). The structure lens reads the knowledge graph cache\-first
-instead. Each lens accepts \-o text|json|yaml|name; hotspots and affinity also
-render \-o mermaid (the hotspots file view renders a churn\-vs\-complexity quadrant).
+The lenses read VCS: \-\-commits caps the scan; \-\-since bounds it by date
+(90d, 12w, 6mo, 1y). Each lens accepts \-o text|json|yaml|name; hotspots and
+affinity also render \-o mermaid (the hotspots file view renders a
+churn\-vs\-complexity quadrant). The structural companion — god nodes, orphans,
+and doc coverage from the knowledge graph — is magus graph stats; the report
+embeds it.
 .SH OPTIONS
 .RS
 .TP
@@ -44,9 +42,6 @@ Cap on how many recent commits to scan
 .TP
 \fB\-\-files\fR
 hotspots: rank individual files instead of projects
-.TP
-\fB\-\-kind\fR \fIstring\fR
-structure: scope every section to one node kind (spell, target, doc, ...)
 .TP
 \fB\-\-since\fR \fIstring\fR
 Only commits within this window (e.g. 90d, 12w, 6mo, 1y)
@@ -100,6 +95,7 @@ magus insight report --workspace
 \fBmagus\-where\fR(1),
 \fBmagus\-tail\fR(1),
 \fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-status\fR(1),
 \fBmagus\-doctor\fR(1),

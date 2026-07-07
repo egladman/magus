@@ -17,6 +17,7 @@
 //	magus tail [-f] [-n N] [target]     stream the most recent cached log (interactive only)
 //	magus affected <target>             run a target for VCS-diff affected projects
 //	magus affected --plan               emit shard plan JSON for CI fan-out
+//	magus graph <deps|export|stats>     the graphs as objects: project DAG, knowledge-graph export, shape stats
 //	magus watch [flags]                 emit changed paths (pipe into affected --stdin)
 //	magus status [flags]                inspect the concurrency pool of a running parent magus
 //	magus doctor                        validate the workspace
@@ -427,6 +428,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return explainCmd(ctx, root, subArgs)
 	case "path":
 		return pathCmd(ctx, root, subArgs)
+	case "graph":
+		return graphCmd(ctx, root, subArgs)
 	case "watch":
 		return watchCmd(ctx, root, rc, subArgs)
 	case "status":
@@ -466,7 +469,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 
 var knownSubcommands = []string{
 	"ls", "describe", "run", "x", "where", "tail",
-	"affected", "insight", "query", "explain", "path", "watch", "status", "doctor",
+	"affected", "insight", "query", "explain", "path", "graph", "watch", "status", "doctor",
 	"config", "server", "repl", "completion", "init", "self", "version",
 	"clean", "merge-driver", "buzz",
 	"help",
@@ -486,6 +489,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  query          search the knowledge graph and show a node's neighborhood")
 	fmt.Fprintln(os.Stderr, "  explain        show one knowledge-graph node: its edges, provenance, blast radius")
 	fmt.Fprintln(os.Stderr, "  path           show the shortest path between two knowledge-graph nodes")
+	fmt.Fprintln(os.Stderr, "  graph          the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)")
 	fmt.Fprintln(os.Stderr, "  watch          emit changed file paths (pipe into affected --stdin)")
 	fmt.Fprintln(os.Stderr, "  status         inspect the concurrency pool of a running parent magus")
 	fmt.Fprintln(os.Stderr, "  clean          remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]")

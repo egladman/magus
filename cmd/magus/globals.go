@@ -22,6 +22,7 @@ const (
 	outputMermaid  = FormatMermaid
 	outputTree     = FormatTree
 	outputMarkdown = FormatMarkdown
+	outputGraphML  = FormatGraphML
 )
 
 // globalFlags carries display/verbosity flags shared across the top-level and every subcommand FlagSet

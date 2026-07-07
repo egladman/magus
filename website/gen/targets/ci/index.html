@@ -95,7 +95,7 @@
 cache:
   remote:
     trusted_keys:
-      - &quot;&lt;base64 Ed25519 public key&gt;&quot;   # magus config cache key generate
+      - &quot;&lt;base64 Ed25519 public key&gt;&quot; # magus config cache key generate
 </code></pre>
 <p>A complementary defense is to open the cache <strong>read-only on untrusted refs</strong>: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and flake detector read it): restore always, save only from trusted pushes.</p>
 <pre><code class="language-yaml"># PRs replay the cache and see main's history, but write neither
@@ -107,10 +107,10 @@ MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../affected/"><span class="related-card-title">Affected</span><span class="related-card-desc">How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.</span></a>
         <a class="related-card" href="../../codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
+        <a class="related-card" href="../../faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
         <a class="related-card" href="../../manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
-        <a class="related-card" href="../../remote-cache/"><span class="related-card-title">Remote caching</span><span class="related-card-desc">Wire an S3 or GitHub Actions remote cache backend as a spell so CI runners replay signed build artifacts across machines with a strict trust model.</span></a>
-        <a class="related-card" href="../../spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">

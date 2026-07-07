@@ -27,6 +27,50 @@ Every op is invoked as `buf["<op>"](opts?)`, where the optional options map acce
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## buf-breaking
+
+breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). It defaults to comparing against the main branch, buf's standard CI pattern; point it elsewhere with a function target when a repo uses a different default branch or an image baseline. This is the protobuf analogue of an API-contract gate: compose it into `lint` so a breaking .proto change fails the same read-only stage as go-vet and golangci-lint. The gha charm swaps buf's reporter to GitHub Actions annotations.
+
+**Command:** `buf breaking --against .git#branch=main`
+
+### gha
+
+Appends `--error-format=github-actions`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/-",
+    "value": "--error-format=github-actions"
+  }
+]
+```
+
+</details>
+
+### Example
+
+<!-- run-recorder -->
+```buzz
+// buf-breaking gates backward-incompatible schema changes, so it composes into the
+// read-only `lint` target alongside buf-lint. `magus run lint` forks `buf lint` then
+// `buf breaking --against .git#branch=main`, failing on a wire- or JSON-incompatible
+// .proto edit the same way go-vet fails a static-analysis violation.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun lint(args: [str]) > void {
+    buf["buf-lint"]();
+    buf["buf-breaking"]();
+}
+```
+
 ## buf-build
 
 **Command:** `buf build`

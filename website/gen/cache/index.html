@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Cache model — magus</title>
+  <meta name="description" content="How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/cache/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Cache model — magus">
+  <meta property="og:description" content="How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/cache/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Cache model</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/cache.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#design-intent" title="Design intent">Design intent</a></li><li><a href="#needs-provides-claims-a-targets-cache-footprint" title="needs, provides, claims: a target's cache footprint">needs, provides, claims: a target's cache footprint</a></li><li><a href="#the-cache-key" title="The cache key">The cache key</a></li><li><a href="#invalidation-what-busts-a-key" title="Invalidation: what busts a key">Invalidation: what busts a key</a></li><li><a href="#replay-a-hit-restores-outputs-not-execution" title="Replay: a hit restores outputs, not execution">Replay: a hit restores outputs, not execution</a></li><li><a href="#on-disk-just-files" title="On disk: just files">On disk: just files</a></li><li><a href="#connecting-to-the-remote-cache" title="Connecting to the remote cache">Connecting to the remote cache</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">10 min read</small>
+    <article>
+<h1 id="the-magus-cache-model">The magus cache model</h1>
+<p>magus's build cache is <strong>content-addressed</strong>: a target's outputs are keyed by the
+SHA-256 of its inputs, so an unchanged target replays its previous outputs instead
+of rerunning. This page is the <strong>local</strong> model: what magus hashes, what invalidates
+a key, what &quot;replay&quot; restores, and where it all lives on disk. The <a href="../remote-cache/">remote
+cache</a> shares these same artifacts across machines and layers a
+signed trust model on top; this page is the substrate it references, so we describe
+it once here and link there for the distributed story.</p>
+<h2 id="design-intent">Design intent</h2>
+<ul>
+<li><strong>Correctness is a declaration contract.</strong> magus caches what a target <em>declares</em>,
+not what it <em>touches</em>. A target's <code>needs</code>, <code>provides</code>, and <code>claims</code> (see below)
+define its whole cache footprint. Under-declare an input and a stale hit slips
+through; over-declare an output and every replay snapshots more than necessary.
+The cache is only as correct as those declarations, which is why the vocabulary
+is explicit rather than inferred from a traced filesystem.</li>
+<li><strong>Identical inputs replay.</strong> The key is a pure function of the inputs. Two runs
+with byte-identical sources, tool versions, charms, and dependency keys produce
+the same key and so the same hit. Nothing about wall-clock time, machine, or run
+order enters the key.</li>
+<li><strong>A hit never runs the body.</strong> On a hit magus restores the recorded outputs and
+emits the result event; the target's <code>export fun</code> never executes. The saved work
+<em>is</em> the point.</li>
+<li><strong>It is just files.</strong> The store is a directory of blobs, JSON manifests, and
+captured logs under <code>.magus/</code>. There is no database and no daemon in the read
+path. You can <code>ls</code> it, <code>cat</code> a manifest, and reason about a hit or miss with
+ordinary tools.</li>
+</ul>
+<h2 id="needs-provides-claims-a-targets-cache-footprint">needs, provides, claims: a target's cache footprint</h2>
+<p>A bound <a href="../spells/">spell</a> contributes three glob sets to its project. Only
+operations are runnable; these three are metadata that make caching and the
+affected set correct (see <a href="../spells/#what-a-spell-provides">What a spell provides</a>).
+Binding a spell contributes its <code>needs</code>/<code>provides</code>/<code>claims</code> to a project's cache
+key and affected set even before you wire a target.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Declaration</th>
+<th>What it is</th>
+<th>Role in the cache</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>needs</code></strong></td>
+<td>input globs (the sources)</td>
+<td>hashed into the cache key; also seed the affected set</td>
+</tr>
+<tr>
+<td><strong><code>provides</code></strong></td>
+<td>output globs</td>
+<td>snapshotted into the cache on a miss and replayed on a hit</td>
+</tr>
+<tr>
+<td><strong><code>claims</code></strong></td>
+<td>files the spell owns</td>
+<td>affected-set attribution only; <strong>not</strong> hashed, <strong>not</strong> snapshotted</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Internally these map to a <code>Step</code> the cache hashes and replays: <code>needs</code> become
+<code>Step.Sources</code>, <code>provides</code> become <code>Step.Outputs</code>. <code>claims</code> do not appear in the
+<code>Step</code> at all: they attribute changed files to a project for affected-set
+computation and never touch the cache key or the snapshot. Two rules follow
+directly:</p>
+<ul>
+<li><strong>Declare every input in <code>needs</code>.</strong> A source file that isn't matched by a <code>needs</code>
+glob doesn't enter the key, so editing it produces no miss and you replay a stale
+build.</li>
+<li><strong>Keep <code>provides</code> tight and complete.</strong> Under-declare and the cache can't replay
+an output it never recorded; over-declare and every hit restores files that
+were never outputs.</li>
+</ul>
+<p>The output tree is never treated as an input: source expansion excludes the
+<code>provides</code> globs and prunes their static directory prefixes, so a generated file
+can't feed back into its own key.</p>
+<h2 id="the-cache-key">The cache key</h2>
+<p>The key is the hex SHA-256 of a deterministic, newline-delimited serialization of
+the <code>Step</code>. magus writes these lines, in this order, into one hash:</p>
+<ul>
+<li><strong><code>keyVersion</code></strong> - an internal schema version. Bumping it (when the set of hashed
+fields changes) forces a global rebuild.</li>
+<li><strong><code>projectPath</code></strong> and <strong><code>target</code></strong> - so the same sources under different targets
+key separately.</li>
+<li><strong><code>charm:</code> lines</strong> - the active <a href="../charms/">charms</a>, sorted by name. A
+charm-variant run (<code>lint:rw</code>) hashes differently from the bare run, because the
+charm changes behavior. Empty charms add nothing, so charm-less runs are
+unaffected.</li>
+<li><strong><code>src:</code> lines</strong> - for every file matched by <code>needs</code>, its workspace-relative path,
+its content SHA-256, and its executable bit. Files are discovered by a single
+walk, sorted by path, and hashed in parallel. Only the executable bit of the mode
+is folded in (not the full permissions, which would differ across machines with
+different umasks), so <code>chmod +x</code> on a script - which changes no content -
+still invalidates the key.</li>
+<li><strong><code>env:</code> lines</strong> - each allow-listed environment variable name and its value,
+sorted, distinguishing unset from set-to-empty. A variable's value contributes to
+the key only if the spell opted it in.</li>
+<li><strong><code>dep:</code> lines</strong> - the resolved cache keys of upstream dependencies, sorted. This
+is how a change ripples: a dependency's new key becomes an input line here, so a
+dependent misses transitively.</li>
+<li><strong><code>spellDefVersion</code></strong> - a binary fingerprint of the spell definition, so a magus
+upgrade that changes a spell forces a miss.</li>
+<li><strong><code>tool:</code> lines</strong> - <code>spell:version</code> strings, sorted, so a toolchain upgrade
+(a new <code>go</code> or <code>prettier</code>) invalidates the key even when no source changed.</li>
+</ul>
+<p>Because the serialization is stable and sorted, the key is reproducible: identical
+inputs anywhere yield the identical key. A <code>src</code> file's content hash uses an
+mtime + size fast path (a per-file memo persisted under the cache dir), so an
+unchanged tree re-keys without re-reading every byte; the memo is a performance
+cache for the hash, never a substitute for it.</p>
+<h2 id="invalidation-what-busts-a-key">Invalidation: what busts a key</h2>
+<p>A miss is &quot;no manifest stored under this key.&quot; Anything that changes a
+hashed line above yields a new key, and thus a new (empty) slot:</p>
+<ul>
+<li>editing, adding, or removing a file matched by <code>needs</code>;</li>
+<li>toggling the executable bit on a needed file;</li>
+<li>changing the value of an allow-listed env var (or setting/unsetting it);</li>
+<li>an upstream dependency's key changing (transitive invalidation);</li>
+<li>a spell definition change (<code>spellDefVersion</code>) or a tool-version bump;</li>
+<li>applying or dropping a charm;</li>
+<li>renaming the project or target.</li>
+</ul>
+<p>What does <strong>not</strong> invalidate: a file's mtime alone (content is what's hashed), a
+<code>claims</code>-only file, an <code>After</code> ordering edge (ordering is not hashed), or anything
+outside the declared <code>needs</code>.</p>
+<p>Old keys are never mutated - a miss writes a <em>new</em> entry beside the old one - so
+invalidation is additive. Reverting a change restores the earlier key and replays
+its still-present entry. Disk is reclaimed separately by eviction and pruning (see
+<a href="#on-disk-just-files">On disk</a>).</p>
+<p>For targets that must never cache - a long-running <code>fs.watch</code> loop, a service op -
+the step is marked no-cache: magus skips the replay path so they always run, and
+skips the snapshot so a re-run re-executes instead of replaying a stale success.</p>
+<h2 id="replay-a-hit-restores-outputs-not-execution">Replay: a hit restores outputs, not execution</h2>
+<p>On a run, magus computes the key, then looks for a manifest stored under it:</p>
+<ol>
+<li><strong>Hit.</strong> The manifest is read and its outputs are restored into the workspace.
+The target's body <strong>does not run</strong> - the <code>export fun</code> never executes on a hit.
+Each output is materialized from the content-addressed store by reflink (a
+copy-on-write clone) where the filesystem supports it, falling back to a byte
+copy. (Hard-linking is deliberately avoided: it would alias the shared blob and
+a later in-place rewrite would silently poison the cache.) Symlink outputs are
+restored as symlinks. Any captured build log recorded on the original run is
+replayed to stdout, so a cached pass looks like the real one.</li>
+<li><strong>Miss.</strong> The body runs. On success, magus <strong>snapshots</strong> the <code>provides</code> outputs:
+each file's content is hashed, its bytes are stored once in the content-addressed
+store (deduplicated by hash), and a manifest is written atomically recording
+every output's path, content hash, mode, and size. A subsequent identical run
+hits.</li>
+</ol>
+<p>This is why the target result is <em>emitted, not returned</em>. A return value can't
+exist on a hit, since the body never ran - but a hit is exactly what you most want
+to report. So the dispatcher emits a <strong><code>target.result</code></strong> event
+(<code>{project, target, status, cache_hit, duration_ms}</code>) for <strong>both</strong> the ran and the
+cached case, sourced from the cache's per-run callback. See
+<a href="../operations/#results-what-each-layer-produces">Results</a> for how the event fits
+the run hierarchy.</p>
+<p>A run that &quot;wins the race&quot; against a cancellation is neither snapshotted nor
+published: its outputs may be incomplete, so magus surfaces the cancellation
+instead of recording a poisoned entry.</p>
+<h2 id="on-disk-just-files">On disk: just files</h2>
+<p>The cache lives at <strong><code>.magus/</code></strong> in the workspace root (override with
+<code>MAGUS_CACHE_DIR</code>, or <code>cache.dir</code> in <code>magus.yaml</code>). Its layout is three
+directories plus a hash memo:</p>
+<pre><code class="language-text">.magus/
+├── cas/         content-addressed blobs, sharded by the first two hex chars
+│   └── ab/ab34...f0      one file per unique output content (deduplicated)
+├── manifests/   one JSON manifest per cache entry
+│   └── api/&lt;key&gt;.json     project path flattened; file named by cache key
+├── logs/        captured build output, replayed on a hit
+│   └── api/&lt;key&gt;.log
+└── mtimes/      the per-file hash fast-path memo
+</code></pre>
+<p>A <strong>manifest</strong> is plain JSON you can read directly. It records the project path, the
+cache key, the target, and one record per output - path, content-address (<code>blob</code>),
+mode, size, and (for symlinks) the link target:</p>
+<pre><code class="language-json">{
+  &quot;projectPath&quot;: &quot;api&quot;,
+  &quot;hash&quot;: &quot;ab34...f0&quot;,
+  &quot;target&quot;: &quot;build&quot;,
+  &quot;outputs&quot;: [
+    {
+      &quot;path&quot;: &quot;api/dist/server.js&quot;,
+      &quot;blob&quot;: &quot;9c1f...&quot;,
+      &quot;mode&quot;: 420,
+      &quot;size&quot;: 20481
+    }
+  ],
+  &quot;createdAt&quot;: &quot;2026-07-07T12:00:00Z&quot;
+}
+</code></pre>
+<p>That transparency is deliberate: a hit or miss is answerable with <code>ls</code> and <code>cat</code>,
+and a build log for any entry is a file you can open. magus never mutates an
+existing manifest, and a manifest read back under the wrong key or project (copied
+or renamed onto the wrong slot) is treated as a miss rather than trusted.</p>
+<p>Space is bounded two ways. An optional size cap (<code>cache.size_mb</code> /
+<code>MAGUS_CACHE_SIZE_MB</code>) drives <strong>LRU eviction</strong> of the oldest manifests after a
+build, and orphaned blobs are garbage-collected once no surviving manifest
+references them (blobs are shared, so a blob's bytes are only reclaimed when its
+last referencing manifest is evicted). Out of band, <code>magus config cache prune</code>
+evicts entries older than a cutoff. To force a clean rebuild of specific projects,
+<code>magus clean --cache &lt;project&gt;</code> drops their entries. The whole store is portable:
+<code>magus config cache export</code> / <code>import</code> move it as a gzip-tar.</p>
+<h2 id="connecting-to-the-remote-cache">Connecting to the remote cache</h2>
+<p>Everything above is local to one machine. A <a href="../remote-cache/">remote cache</a> shares
+these exact artifacts across CI runners: on a <strong>local</strong> miss magus asks the remote
+backend for the artifact keyed by the same <code>(projectPath, hash)</code>, and if found
+imports it into the local store so the ordinary hit path replays it - no rebuild.
+After a genuine build, magus uploads the artifact so the next machine hits.</p>
+<p>The artifact is the same content: the manifest, its blobs, and the build log,
+packed as a gzip-tar. The key computation, the replay path, and the manifest format
+are identical - the remote layer only moves those bytes between machines. On top of
+that it adds a <strong>signed trust model</strong>: because a replayed artifact injects files
+into a consumer's build, every remote artifact is verified against an Ed25519 trust
+set before it is allowed to replay, and an unsigned or untrusted one falls back to a
+local build. That trust boundary, the backend contract, and CI wiring are covered
+in full in <a href="../remote-cache/">remote-cache.md</a>; this page's model is what it builds
+on.</p>
+<h2 id="glossary">Glossary</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>needs</strong></td>
+<td>A spell's declared input globs. Hashed into the cache key (<code>Step.Sources</code>); also seed the affected set.</td>
+</tr>
+<tr>
+<td><strong>provides</strong></td>
+<td>A spell's declared output globs. Snapshotted on a miss and replayed on a hit (<code>Step.Outputs</code>).</td>
+</tr>
+<tr>
+<td><strong>claims</strong></td>
+<td>Files a spell owns, for affected-set attribution only. Never hashed and never snapshotted.</td>
+</tr>
+<tr>
+<td><strong>Cache key</strong></td>
+<td>The hex SHA-256 of the serialized <code>Step</code>: sources, env, deps, tool versions, spell version, charms, project, and target.</td>
+</tr>
+<tr>
+<td><strong>Content-addressed</strong></td>
+<td>Stored by content hash: identical output bytes are stored once, and a blob's name is its own SHA-256.</td>
+</tr>
+<tr>
+<td><strong>Manifest</strong></td>
+<td>The JSON record of one cache entry: project, key, target, and one record (path, blob, mode, size, symlink) per output.</td>
+</tr>
+<tr>
+<td><strong>Blob</strong></td>
+<td>One unique output content, stored once under <code>cas/</code>, sharded by the first two hex chars of its hash.</td>
+</tr>
+<tr>
+<td><strong>Replay</strong></td>
+<td>Restoring a manifest's outputs on a hit (reflink then copy) without running the target body.</td>
+</tr>
+<tr>
+<td><strong>Snapshot</strong></td>
+<td>Recording a miss's outputs into the store and writing its manifest.</td>
+</tr>
+<tr>
+<td><strong>target.result</strong></td>
+<td>The emitted report event for one target run (<code>{project, target, status, cache_hit, duration_ms}</code>); fires on both hits and misses.</td>
+</tr>
+<tr>
+<td><strong><code>.magus/</code></strong></td>
+<td>The on-disk cache in the workspace root: <code>cas/</code> + <code>manifests/</code> + <code>logs/</code> + the mtime memo.</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../spells/">spells.md</a>: where <code>needs</code>/<code>provides</code>/<code>claims</code> are declared, and what a bound spell contributes.</li>
+<li><a href="../operations/">operations.md</a>: the run hierarchy and the <code>target.result</code> event that fires on a hit.</li>
+<li><a href="../targets/">targets.md</a>: what a Target is - the unit a cache key is computed and replayed for.</li>
+<li><a href="../charms/">charms.md</a>: the execution modifiers that key into the cache as <code>charm:</code> lines.</li>
+<li><a href="../remote-cache/">remote-cache.md</a>: sharing these artifacts across machines under a signed trust model.</li>
+</ul>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../breaking-changes/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Breaking changes</span></a>
+      <a class="page-nav-next" href="../charms/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Charms</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
+        <a class="related-card" href="../spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../search/?q=tag%3A%22provides%22">provides</a><a class="tag" href="../search/?q=tag%3A%22claims%22">claims</a><a class="tag" href="../search/?q=tag%3A%22cache-key%22">cache-key</a><a class="tag" href="../search/?q=tag%3A%22invalidation%22">invalidation</a><a class="tag" href="../search/?q=tag%3A%22replay%22">replay</a><a class="tag" href="../search/?q=tag%3A%22content-addressed%22">content-addressed</a></div>
+    <small>Last updated <time datetime="2026-07-07T15:40:59Z">July 7, 2026, 3:40 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a5c858b3c9c1fcc6dd38eabe930a792a3efbd845" data-tooltip="a5c858b3c9c1fcc6dd38eabe930a792a3efbd845" title="a5c858b3c9c1fcc6dd38eabe930a792a3efbd845">a5c858b</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

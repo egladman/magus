@@ -1,7 +1,17 @@
 ---
 title: Telemetry
 description: Export magus metrics and traces to any OTLP collector you run, with head-based sampling, resource attributes, and full instrument reference.
-tags: [telemetry, opentelemetry, otlp, observability, metrics, traces, logs, monitoring]
+tags:
+  [
+    telemetry,
+    opentelemetry,
+    otlp,
+    observability,
+    metrics,
+    traces,
+    logs,
+    monitoring,
+  ]
 ---
 
 # Telemetry (OpenTelemetry)

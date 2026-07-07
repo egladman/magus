@@ -54,8 +54,8 @@ func allModuleEntries() []types.ModuleEntry {
 }
 
 // BuildKnowledgeGraph assembles, persists, and returns the workspace knowledge
-// graph. It is the single graph-loading path shared by `magus describe knowledge`,
-// the query/explain/path verbs, and the MCP tools: it gathers the describe
+// graph. It is the single graph-loading path shared by the `magus graph`
+// subcommands, the query/explain/path verbs, and the MCP tools: it gathers the describe
 // outputs the graph is composed from, resolves the cache dir, and runs the
 // cache-first build. ws is any workspace view that can describe itself (the
 // read-only Inspect result or a full *Magus).

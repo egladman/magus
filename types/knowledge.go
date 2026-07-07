@@ -14,7 +14,7 @@ package types
 const KnowledgeSchemaVersion = 1
 
 // KnowledgeGraphDefinition is the human-readable description printed by
-// "magus describe knowledge".
+// "magus graph export".
 const KnowledgeGraphDefinition = "The knowledge graph is a deterministic, " +
 	"cache-backed graph of the magus domain: projects, targets, spells, ops, charms, " +
 	"modules, methods, and diagnostics, connected by verified relations (depends_on, " +
@@ -164,12 +164,12 @@ type KnowledgePathOutput struct {
 	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
 }
 
-// KnowledgeStructure is the knowledge-graph structural analytics behind
-// `magus insight structure`: where the workspace concentrates (god nodes), where
-// it neglects (orphans), and where docs are missing (coverage). It is the
-// structural analogue of insight's git-history lenses, derived purely from the
-// graph (degree and reachability), so it is deterministic and LLM-free.
-type KnowledgeStructure struct {
+// KnowledgeStats is the knowledge-graph analytics behind `magus graph stats`:
+// where the workspace concentrates (god nodes), where it neglects (orphans),
+// and where docs are missing (coverage). It is the structural analogue of
+// insight's git-history lenses (insight report embeds it), derived purely from
+// the graph (degree and reachability), so it is deterministic and LLM-free.
+type KnowledgeStats struct {
 	Definition string                 `json:"definition"          yaml:"definition"`
 	NodeCount  int                    `json:"node_count"          yaml:"node_count"`
 	EdgeCount  int                    `json:"edge_count"          yaml:"edge_count"`
@@ -207,12 +207,12 @@ type KnowledgeDocCoverage struct {
 	Undocumented []string `json:"undocumented,omitempty" yaml:"undocumented,omitempty"`
 }
 
-// KnowledgeStructureDefinition is the human-readable description of the lens.
-const KnowledgeStructureDefinition = "Structure reads the knowledge graph to show " +
+// KnowledgeStatsDefinition is the human-readable description of `magus graph stats`.
+const KnowledgeStatsDefinition = "Graph stats reads the knowledge graph to show " +
 	"where the workspace concentrates and where it is neglected: god nodes (the most " +
 	"connected spells, modules, and targets - the structural risk), orphans (docs that " +
 	"document nothing, spells nothing uses), and doc coverage (the share of diagnostics, " +
-	"spells, and modules that have a doc). It is the structural companion to the " +
+	"spells, and modules that have a doc). It is the structural companion to insight's " +
 	"git-history lenses."
 
 // KnowledgeRouting is the compact "query first" summary rendered into MAGUS.md's
@@ -245,7 +245,7 @@ type KnowledgeRoutingProject struct {
 }
 
 // KnowledgeGraphOutput is the merged node-link export produced by
-// "magus describe knowledge -o json". It is node-link compatible (nodes have an
+// "magus graph export -o json". It is node-link compatible (nodes have an
 // "id"; links have "source"/"target"), so external graph UIs read it directly;
 // the extra magus fields (definition, schema_version, counts) are additive and
 // ignored by strict node-link readers. Directed and non-multigraph by construction.

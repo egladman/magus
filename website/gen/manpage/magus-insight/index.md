@@ -1,6 +1,6 @@
 ---
 title: magus insight
-description: "Read VCS history to surface hotspots, temporal coupling, ownership, and trends, showing where a codebase's attention and risk concentrate."
+description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend, read from VCS history."
 tags: [cli, magus insight, analysis, hotspots, ownership, coupling, vcs]
 ---
 
@@ -33,12 +33,16 @@ hotspots   Edit frequency × complexity — the prime refactoring targets. The
              author count (bus factor), and abandonment (projects gone quiet).
   trend      The recent half of the window versus the earlier half: a positive
              delta is a rising hotspot, a negative one is cooling.
-  report     Every lens as one whole-workspace Markdown document (the magusfile's
-             postflight target writes this to the GitHub Actions step summary).
+  report     Every lens plus graph stats as one whole-workspace Markdown document
+             (the magusfile's postflight target writes this to the GitHub Actions
+             step summary).
 
---commits caps the scan; --since bounds it by date (90d, 12w, 6mo, 1y). Each lens
-accepts -o text|json|yaml|name; hotspots and affinity also render -o mermaid (the
-hotspots file view renders a churn-vs-complexity quadrant chart).
+The lenses read VCS: --commits caps the scan; --since bounds it by date
+(90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
+affinity also render -o mermaid (the hotspots file view renders a
+churn-vs-complexity quadrant). The structural companion — god nodes, orphans,
+and doc coverage from the knowledge graph — is magus graph stats; the report
+embeds it.
 
 ## Options
 
@@ -94,5 +98,5 @@ magus insight report --workspace
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

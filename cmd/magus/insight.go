@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/interactive"
@@ -26,7 +25,7 @@ type insightAnalyzer interface {
 	Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error)
 }
 
-var insightLenses = []string{"hotspots", "affinity", "ownership", "trend", "structure", "report"}
+var insightLenses = []string{"hotspots", "affinity", "ownership", "trend", "report"}
 
 func insightCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -43,10 +42,12 @@ func insightCmd(ctx context.Context, root string, args []string) error {
 		return insightOwnership(ctx, root, rest)
 	case "trend":
 		return insightTrend(ctx, root, rest)
-	case "structure":
-		return insightStructure(ctx, root, rest)
 	case "report":
 		return insightReport(ctx, root, rest)
+	case "structure":
+		// Removed lens: the knowledge-graph analytics moved to the graph home.
+		fmt.Fprintln(os.Stderr, "magus insight: the structure lens moved to `magus graph stats`")
+		return errSilent{exitCode: 2}
 	default:
 		fmt.Fprintf(os.Stderr, "magus insight: unknown lens %q\n", lens)
 		if sug := interactive.SuggestNearest(lens, insightLenses); sug != "" {
@@ -69,12 +70,10 @@ func insightUsage() {
 	fmt.Fprintln(os.Stderr, "  ownership  author concentration, bus factor, and abandonment risk")
 	fmt.Fprintln(os.Stderr, "  trend      rising vs cooling activity across the window")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Structure lens (knowledge graph):")
-	fmt.Fprintln(os.Stderr, "  structure  god nodes, orphans, and doc coverage (--kind to scope)")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  report     every lens as one Markdown doc (commit it as INSIGHT.md)")
+	fmt.Fprintln(os.Stderr, "  report     every lens plus graph stats as one Markdown doc (commit it as INSIGHT.md)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "History flags: --commits N, --since 90d|12w|6mo|1y. Each lens accepts -o text|json|yaml|name.")
+	fmt.Fprintln(os.Stderr, "See also: `magus graph stats` for the knowledge-graph shape (god nodes, orphans, doc coverage).")
 }
 
 // insightSetup parses the common flags, resolves the working-directory scope (like
@@ -270,10 +269,10 @@ func insightReport(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	report := types.InsightReport{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}
-	// The report spans both axes: add the structural lens (best-effort - a graph
-	// build failure just omits the section rather than failing the whole report).
+	// The report spans both axes: add graph stats (best-effort - a graph build
+	// failure just omits the section rather than failing the whole report).
 	if g, gerr := loadKnowledgeGraph(ctx, root, false); gerr == nil {
-		report.Structure = g.Structure("")
+		report.GraphStats = g.Stats("")
 	}
 
 	switch outOpts.Format {
@@ -281,69 +280,6 @@ func insightReport(ctx context.Context, root string, args []string) error {
 		return emitFormatted(outOpts, report)
 	}
 	return render.WriteInsightMarkdown(os.Stdout, report)
-}
-
-// insightStructure is the structural lens: it reads the knowledge graph (cache-
-// first) rather than git history, reporting god nodes, orphans, and doc coverage.
-func insightStructure(ctx context.Context, root string, args []string) error {
-	var kind string
-	_, err := cmdParse("insight structure", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&kind, "kind", "", "scope every section to one node kind (e.g. spell, target, doc, diagnostic)")
-		fs.Usage = func() {
-			fmt.Fprintf(os.Stderr, "Usage: magus insight structure [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStructureDefinition)
-			fs.PrintDefaults()
-		}
-	})
-	if err != nil {
-		return err
-	}
-	outOpts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
-	g, err := loadKnowledgeGraph(ctx, root, false)
-	if err != nil {
-		return err
-	}
-	out := g.Structure(kind)
-
-	switch outOpts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(outOpts, out)
-	case outputName:
-		for _, god := range out.Gods {
-			fmt.Println(god.ID)
-		}
-		return nil
-	}
-	return structureText(out)
-}
-
-func structureText(out types.KnowledgeStructure) error {
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("graph: %d nodes, %d edges\n\n", out.NodeCount, out.EdgeCount)
-	fmt.Println("god nodes (most connected):")
-	fmt.Printf("  %6s  %4s  %4s  %-11s  %s\n", "DEGREE", "IN", "OUT", "KIND", "LABEL")
-	for _, g := range out.Gods {
-		fmt.Printf("  %6d  %4d  %4d  %-11s  %s\n", g.Degree, g.In, g.Out, g.Kind, g.Label)
-	}
-	if len(out.Orphans) > 0 {
-		fmt.Printf("\norphans (%d):\n", len(out.Orphans))
-		for _, o := range out.Orphans {
-			fmt.Printf("  %-11s  %-26s  %s\n", o.Kind, truncate(o.Label, 26), o.Reason)
-		}
-	}
-	if len(out.Coverage) > 0 {
-		fmt.Println("\ndoc coverage:")
-		for _, c := range out.Coverage {
-			fmt.Printf("  %-11s  %d/%d (%d%%)", c.Kind, c.Documented, c.Total, c.Percent)
-			if len(c.Undocumented) > 0 {
-				fmt.Printf("  missing: %s", strings.Join(c.Undocumented, ", "))
-			}
-			fmt.Println()
-		}
-	}
-	return nil
 }
 
 func hotspotText(out types.HotspotOutput) error {

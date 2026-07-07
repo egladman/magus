@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   target ...:a,b` before a run. Disjoint edits never trip it.
 - `magus describe target` describes a service op before it runs: its readiness
   probe, stop command, idle window, whether it is shared, and its dedup fingerprint.
+- `magus graph` is the home of the workspace's graphs as objects: `graph deps`
+  emits the project dependency DAG (the standalone form of `run --graph` /
+  `affected --graph`, which remain), `graph export` emits the merged knowledge
+  graph (`-o json` node-link, or the new `-o graphml` for external graph
+  viewers), and `graph stats` reports its shape (god nodes, orphans, doc
+  coverage; `--kind` to scope). The `query`/`explain`/`path` retrieval verbs
+  are unchanged.
 
 ### Fixed
 
@@ -38,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Breaking: `magus describe knowledge` is now `magus graph export`, and
+  `magus insight structure` is now `magus graph stats`; the old spellings error
+  with a pointer to the new home. `insight report` still embeds the graph-stats
+  section, renamed from `structure` to `graph_stats` in its `-o json`/`yaml`
+  output (the `KnowledgeStats` schema itself is unchanged).
 - `magus buzz lsp` replaces the top-level `magus lsp`.
 - Local spell imports resolve workspace-root-first with walk-up accrual; a name
   collision between an ancestor and a descendant spell is flagged (MGS1002) and

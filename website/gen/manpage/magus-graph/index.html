@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>magus graph — magus</title>
+  <meta name="description" content="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/manpage/magus-graph/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="magus graph — magus">
+  <meta property="og:description" content="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/manpage/magus-graph/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../index.html">Home</a></li>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../blog/">Blog</a></li>
+        <li><a href="../../download/">Download</a></li>
+        <li><a href="../../tour/">Tour</a></li>
+        <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Manpage</li><li aria-current="page">magus graph</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/manpage/gen/magus-graph.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a><ul><li><a href="#graph-deps-options" title="graph deps options">graph deps options</a></li><li><a href="#graph-export-options" title="graph export options">graph export options</a></li><li><a href="#graph-stats-options" title="graph stats options">graph stats options</a></li></ul></li><li><a href="#subcommands" title="Subcommands">Subcommands</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="magus-graph">magus-graph</h1>
+<p>The workspace's graphs as objects: deps, export, stats</p>
+<h2 id="synopsis">Synopsis</h2>
+<p><strong>magus</strong> graph &lt;deps|export|stats&gt; [flags]</p>
+<h2 id="description">Description</h2>
+<p>The workspace's graphs as objects: emit, export, and measure them. The
+query, explain, and path verbs read the knowledge graph; magus graph is the
+home of the graph itself.</p>
+<p>Subcommands (the first argument):</p>
+<p>deps     The project dependency DAG. A trailing list of project paths roots
+the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
+same view scoped to a run is available as magus run &lt;target&gt; --graph
+and magus affected &lt;target&gt; --graph.
+export   The merged knowledge graph: the deterministic, cache-backed graph of
+the magus domain (projects, targets, spells, ops, charms, modules,
+methods, diagnostics, docs, buzz sources). -o json emits the
+node-link form; -o graphml emits GraphML. External graph viewers
+(Gephi, yEd) read both directly. The graph is cache-backed under
+&lt;cache&gt;/knowledge; only shards whose sources changed are rebuilt.
+stats    The graph's shape: god nodes (the most connected spells, modules,
+targets - where structural risk concentrates), orphans (docs that
+document nothing, spells no target uses), and doc coverage (the
+share of diagnostics, spells, and modules with a doc). --kind scopes
+every section to one node kind. insight report embeds this section.</p>
+<h3 id="graph-deps-options">graph deps options</h3>
+<dl>
+<dt><strong>--depth</strong> <em>int</em></dt>
+<dd>Cap displayed depth (0 = unlimited)</dd>
+<dt><strong>--spell</strong> <em>string</em></dt>
+<dd>Only projects driven by this spell</dd>
+<dt><strong>--target</strong> <em>string</em></dt>
+<dd>Target whose duration history annotates nodes (default: build)</dd>
+<dt><strong>--upstream</strong></dt>
+<dd>Show dependents instead of dependencies</dd>
+</dl>
+<h3 id="graph-export-options">graph export options</h3>
+<dl>
+<dt><strong>--refresh</strong></dt>
+<dd>Force a full graph rebuild before exporting</dd>
+</dl>
+<h3 id="graph-stats-options">graph stats options</h3>
+<dl>
+<dt><strong>--kind</strong> <em>string</em></dt>
+<dd>Scope every section to one node kind (spell, target, doc, ...)</dd>
+<dt><strong>--refresh</strong></dt>
+<dd>Force a full graph rebuild first</dd>
+</dl>
+<h2 id="subcommands">Subcommands</h2>
+<dl>
+<dt><strong>deps</strong></dt>
+<dd>Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)</dd>
+<dt><strong>export</strong></dt>
+<dd>Export the merged knowledge graph (json node-link or graphml)</dd>
+<dt><strong>stats</strong></dt>
+<dd>Report the knowledge graph's shape: god nodes, orphans, doc coverage</dd>
+</dl>
+<h2 id="examples">Examples</h2>
+<p><em>Project DAG as Mermaid</em></p>
+<pre><code class="language-sh">magus graph deps -o mermaid
+</code></pre>
+<p><em>DAG rooted at one project, dependents up</em></p>
+<pre><code class="language-sh">magus graph deps pkg/api --upstream
+</code></pre>
+<p><em>Knowledge graph for an external viewer</em></p>
+<pre><code class="language-sh">magus graph export -o json &gt; graph.json
+</code></pre>
+<p><em>GraphML for Gephi or yEd</em></p>
+<pre><code class="language-sh">magus graph export -o graphml &gt; graph.graphml
+</code></pre>
+<p><em>Where structural risk concentrates</em></p>
+<pre><code class="language-sh">magus graph stats
+</code></pre>
+<p><em>Doc coverage for spells only</em></p>
+<pre><code class="language-sh">magus graph stats --kind spell
+</code></pre>
+<h2 id="see-also">See Also</h2>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../magus-doctor/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus doctor</span></a>
+      <a class="page-nav-next" href="../magus-init/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus init</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
+        <a class="related-card" href="../../manpage/magus-completion/"><span class="related-card-title">magus completion</span><span class="related-card-desc">Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.</span></a>
+        <a class="related-card" href="../../manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
+        <a class="related-card" href="../../manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+graph%22">magus graph</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22dependency+graph%22">dependency graph</a><a class="tag" href="../../search/?q=tag%3A%22export%22">export</a><a class="tag" href="../../search/?q=tag%3A%22graphml%22">graphml</a></div>
+    <small>Last updated <time datetime="2026-07-07T23:05:33Z">July 7, 2026, 11:05 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/437f556f649941a5da2ebc3b68601554dd3b0c59" data-tooltip="437f556f649941a5da2ebc3b68601554dd3b0c59" title="437f556f649941a5da2ebc3b68601554dd3b0c59">437f556</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../main.js"></script>
+</body>
+</html>

@@ -60,23 +60,23 @@ Target (export fun) ──composes──▶ Operations  +  ──needs──▶ 
 target.result event   (per target; no per-op breakdown)
 ```
 
-| Layer         | Entity                  | Cardinality                   | Identity                             |
-| ------------- | ----------------------- | ----------------------------- | ------------------------------------ |
-| **Spell**     | a library of operations | many spells per project       | `name` + its ops                     |
-| **Operation** | one tool-native action  | many ops per spell            | `spell` + op name                    |
-| **Process**   | one forked command      | 1 per op (0 for a no-op marker)   | argv                                 |
-| **Target**    | a runnable `export fun` | one per name per project      | `Path + Name` ([Target](targets.md)) |
+| Layer         | Entity                  | Cardinality                     | Identity                             |
+| ------------- | ----------------------- | ------------------------------- | ------------------------------------ |
+| **Spell**     | a library of operations | many spells per project         | `name` + its ops                     |
+| **Operation** | one tool-native action  | many ops per spell              | `spell` + op name                    |
+| **Process**   | one forked command      | 1 per op (0 for a no-op marker) | argv                                 |
+| **Target**    | a runnable `export fun` | one per name per project        | `Path + Name` ([Target](targets.md)) |
 
 Charms ([charms.md](charms.md)) sit orthogonal to this stack: a charm rewrites an
 Operation's argv (_in what manner_ it runs), it is not a layer of its own.
 
 ## Results: what each layer produces
 
-| Result              | Layer     | Shape                                               | Returned or emitted                                                                   | Status          |
-| ------------------- | --------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------- |
+| Result              | Layer     | Shape                                               | Returned or emitted                                                                      | Status          |
+| ------------------- | --------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------- |
 | **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `os.exec`, `magus.cmd`/`run`/`describe`/`insight`/`doctor`, a Capture op | exists          |
-| `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                   | **(not built)** |
-| **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                     | exists          |
+| `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                      | **(not built)** |
+| **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                        | exists          |
 
 - **`ExecResult` exists in both worlds.** It is the Go `run.ExecResult` and the
   spell-op **capture record** a `Capture: true` op returns "instead of void": the
@@ -127,11 +127,11 @@ protected `ispell.Target`, which was the actual offender.
 
 The serializable Buzz value types model the _nouns_ around this hierarchy:
 
-| Value type        | Models                                                                                                           | Layer it touches            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Value type        | Models                                                                                                                    | Layer it touches            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skipCache`, `exclusive`, `slots`, ...) | Target                      |
-| **`TargetQuery`** | an unresolved dependency edge (a query → 0..N Targets)                                                           | Target (`magus.needs` edge) |
-| **`ExecResult`**  | the `{stdout, stderr, code, ok}` outcome of one process                                                          | Process                     |
+| **`TargetQuery`** | an unresolved dependency edge (a query → 0..N Targets)                                                                    | Target (`magus.needs` edge) |
+| **`ExecResult`**  | the `{stdout, stderr, code, ok}` outcome of one process                                                                   | Process                     |
 
 `TargetQuery` _produces_ `Target`s; a `Target` is run as a set of `Operation`s;
 each `Operation` yields an `ExecResult`.

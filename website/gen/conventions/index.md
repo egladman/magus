@@ -58,8 +58,9 @@ superscript like this[^example] links to a short note at the foot of the page, w
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.
 
-[^example]: Authored as `text[^label]` in the prose, with a matching `[^label]: note`
-line anywhere in the file.
+[^example]:
+    Authored as `text[^label]` in the prose, with a matching `[^label]: note`
+    line anywhere in the file.
 
 ## Code-block titles
 

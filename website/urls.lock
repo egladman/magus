@@ -1,5 +1,7 @@
+affected/
 blog/
 blog/2026/07/01/hello-blog/
+breaking-changes/
 buzz/modules/
 buzz/modules/archive/
 buzz/modules/charm/
@@ -23,10 +25,14 @@ buzz/modules/toml/
 buzz/modules/uuid/
 buzz/modules/vcs/
 buzz/modules/yaml/
+cache/
 charms/
 ci/
+codes/charms/
+codes/charms/MGS6001/
 codes/magusfile/
 codes/magusfile/MGS1001/
+codes/magusfile/MGS1002/
 codes/race/
 codes/race/MGS4001/
 codes/race/MGS4002/
@@ -67,13 +73,19 @@ download/docker/
 download/linux/
 download/macos/
 download/windows/
+editor/
 engines/
+faq/
+flaky-builds/
+getting-started/
 index.html
+insight/
 manpage/magus-affected/
 manpage/magus-completion/
 manpage/magus-config/
 manpage/magus-describe/
 manpage/magus-doctor/
+manpage/magus-graph/
 manpage/magus-init/
 manpage/magus-insight/
 manpage/magus-ls/
@@ -114,6 +126,7 @@ public/atom/
 public/release/
 public/release/v0.1.0/
 remote-cache/
+sandbox/
 services/
 spells/
 spells/bash/
@@ -133,3 +146,4 @@ testing/
 tips/
 tour/
 wards/
+workspace/

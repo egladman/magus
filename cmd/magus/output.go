@@ -181,6 +181,7 @@ const (
 	FormatMermaid  Format = "mermaid"
 	FormatTree     Format = "tree"
 	FormatMarkdown Format = "markdown" // describe graph: target catalog + dependency graph as a Markdown doc
+	FormatGraphML  Format = "graphml"  // graph export: GraphML XML for external graph viewers
 )
 
 // CommonFormats are the formats every structured command accepts. The

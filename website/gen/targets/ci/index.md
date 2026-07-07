@@ -1,7 +1,17 @@
 ---
 title: CI
 description: Compose a ci target from your magusfile, wire the flow with magus.needs, and lock down shared-cache writes with Ed25519 trusted keys.
-tags: [ci, ci target, affected, cache, remote cache, trusted keys, magus.needs, github actions]
+tags:
+  [
+    ci,
+    ci target,
+    affected,
+    cache,
+    remote cache,
+    trusted keys,
+    magus.needs,
+    github actions,
+  ]
 aliases: [ci]
 ---
 
@@ -48,7 +58,7 @@ flowchart TD
 cache:
   remote:
     trusted_keys:
-      - "<base64 Ed25519 public key>"   # magus config cache key generate
+      - "<base64 Ed25519 public key>" # magus config cache key generate
 ```
 
 A complementary defense is to open the cache **read-only on untrusted refs**: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and flake detector read it): restore always, save only from trusted pushes.

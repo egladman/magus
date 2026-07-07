@@ -111,11 +111,12 @@ type Trend struct {
 }
 
 // InsightReport bundles every lens for the combined `magus insight report` (the
-// committable Markdown doc and its -o json form).
+// committable Markdown doc and its -o json form). GraphStats is the knowledge-
+// graph axis (`magus graph stats`), embedded so the report spans both axes.
 type InsightReport struct {
-	Hotspots  HotspotOutput      `json:"hotspots"  yaml:"hotspots"`
-	Affinity  AffinityOutput     `json:"affinity"  yaml:"affinity"`
-	Ownership OwnershipOutput    `json:"ownership" yaml:"ownership"`
-	Trend     TrendOutput        `json:"trend"     yaml:"trend"`
-	Structure KnowledgeStructure `json:"structure" yaml:"structure"`
+	Hotspots   HotspotOutput   `json:"hotspots"    yaml:"hotspots"`
+	Affinity   AffinityOutput  `json:"affinity"    yaml:"affinity"`
+	Ownership  OwnershipOutput `json:"ownership"   yaml:"ownership"`
+	Trend      TrendOutput     `json:"trend"       yaml:"trend"`
+	GraphStats KnowledgeStats  `json:"graph_stats" yaml:"graph_stats"`
 }

@@ -6,13 +6,10 @@ magus\-describe \- Define a magus concept and list its entities
 .RI "describe <noun> [<name>] [flags]"
 .SH DESCRIPTION
 Define a magus concept and list every entity of that kind. The noun is
-one of spell, charm, target, project, workspace, module, mcp\-tool, or knowledge;
-singular and plural are interchangeable. Pass a name after the noun to detail a
-single entity instead of listing them all.
-.PP
-The knowledge noun emits the deterministic knowledge graph of the workspace
-domain (projects, targets, spells, ops, charms, modules, methods, diagnostics)
-as a merged node\-link graph; use \-o json to feed it to an external graph tool.
+one of spell, charm, target, project, workspace, module, or mcp\-tool; singular
+and plural are interchangeable. Pass a name after the noun to detail a single
+entity instead of listing them all. (The knowledge graph lives under magus
+graph: export for the merged graph, stats for its shape.)
 .PP
 The charm noun is the inverse of a target ref: "describe charm rw" lists every
 target that declares the rw charm and the argv edit each one makes, the transpose
@@ -72,6 +69,7 @@ magus describe target --explain lint:rw,debug
 \fBmagus\-tail\fR(1),
 \fBmagus\-affected\fR(1),
 \fBmagus\-insight\fR(1),
+\fBmagus\-graph\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-status\fR(1),
 \fBmagus\-doctor\fR(1),

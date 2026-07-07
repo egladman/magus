@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// structureFixture: spell go is used (a target uses its op), spell cosign is not;
+// statsFixture: spell go is used (a target uses its op), spell cosign is not;
 // one diagnostic is documented, one is not; one doc is isolated (orphan).
-func structureFixture() *Graph {
+func statsFixture() *Graph {
 	g := NewGraph()
 	node := func(id, kind, label string) {
 		g.AddNode(types.KnowledgeNode{ID: id, Kind: kind, Label: label})
@@ -36,8 +36,8 @@ func structureFixture() *Graph {
 	return g
 }
 
-func TestStructureOrphans(t *testing.T) {
-	s := structureFixture().Structure("")
+func TestStatsOrphans(t *testing.T) {
+	s := statsFixture().Stats("")
 	ids := map[string]string{}
 	for _, o := range s.Orphans {
 		ids[o.ID] = o.Reason
@@ -48,8 +48,8 @@ func TestStructureOrphans(t *testing.T) {
 	assert.NotContains(t, ids, "spell:go", "a used spell is not an orphan")
 }
 
-func TestStructureCoverage(t *testing.T) {
-	s := structureFixture().Structure("")
+func TestStatsCoverage(t *testing.T) {
+	s := statsFixture().Stats("")
 	var diag types.KnowledgeDocCoverage
 	for _, c := range s.Coverage {
 		if c.Kind == types.KindDiagnostic {
@@ -63,16 +63,16 @@ func TestStructureCoverage(t *testing.T) {
 	assert.Equal(t, []string{"MGS2001"}, diag.Undocumented)
 }
 
-func TestStructureGodsSortedByDegree(t *testing.T) {
-	s := structureFixture().Structure("")
+func TestStatsGodsSortedByDegree(t *testing.T) {
+	s := statsFixture().Stats("")
 	require.NotEmpty(t, s.Gods)
 	for i := 1; i < len(s.Gods); i++ {
 		assert.GreaterOrEqual(t, s.Gods[i-1].Degree, s.Gods[i].Degree, "gods sorted by degree desc")
 	}
 }
 
-func TestStructureKindScope(t *testing.T) {
-	s := structureFixture().Structure(types.KindSpell)
+func TestStatsKindScope(t *testing.T) {
+	s := statsFixture().Stats(types.KindSpell)
 	for _, g := range s.Gods {
 		assert.Equal(t, types.KindSpell, g.Kind, "kind-scoped gods are all spells")
 	}

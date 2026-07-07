@@ -65,12 +65,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#buf-build" title="buf-build">buf-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#buf-format" title="buf-format">buf-format</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#buf-generate" title="buf-generate">buf-generate</a><ul><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#buf-lint" title="buf-lint">buf-lint</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#example-3" title="Example">Example</a></li></ul></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#buf-breaking" title="buf-breaking">buf-breaking</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#buf-build" title="buf-build">buf-build</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#buf-format" title="buf-format">buf-format</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#buf-generate" title="buf-generate">buf-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#buf-lint" title="buf-lint">buf-lint</a><ul><li><a href="#gha-1" title="gha">gha</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="buf">buf</h1>
 <p>The <code>buf</code> spell forks the <code>buf</code> CLI to build, lint, format, and generate from Protobuf sources. It declares <code>gen/**</code> as its outputs so magus caches generated code correctly.</p>
@@ -116,9 +116,41 @@
 </tbody>
 </table></figure>
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
+<h2 id="buf-breaking">buf-breaking</h2>
+<p>breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). It defaults to comparing against the main branch, buf's standard CI pattern; point it elsewhere with a function target when a repo uses a different default branch or an image baseline. This is the protobuf analogue of an API-contract gate: compose it into <code>lint</code> so a breaking .proto change fails the same read-only stage as go-vet and golangci-lint. The gha charm swaps buf's reporter to GitHub Actions annotations.</p>
+<p><strong>Command:</strong> <code>buf breaking --against .git#branch=main</code></p>
+<h3 id="gha">gha</h3>
+<p>Appends <code>--error-format=github-actions</code>.</p>
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+<pre><code class="language-json">[
+  {
+    &quot;op&quot;: &quot;add&quot;,
+    &quot;path&quot;: &quot;/-&quot;,
+    &quot;value&quot;: &quot;--error-format=github-actions&quot;
+  }
+]
+</code></pre>
+</details>
+<h3 id="example">Example</h3>
+
+<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// buf-breaking gates backward-incompatible schema changes, so it composes into the
+// read-only `lint` target alongside buf-lint. `magus run lint` forks `buf lint` then
+// `buf breaking --against .git#branch=main`, failing on a wire- or JSON-incompatible
+// .proto edit the same way go-vet fails a static-analysis violation.
+import &quot;magus&quot;;
+import &quot;magus/spell/buf&quot;;
+
+magus.project({ &quot;spells&quot;: [buf] });
+
+export fun lint(args: [str]) &gt; void {
+    buf[&quot;buf-lint&quot;]();
+    buf[&quot;buf-breaking&quot;]();
+}
+</code></pre>
 <h2 id="buf-build">buf-build</h2>
 <p><strong>Command:</strong> <code>buf build</code></p>
-<h3 id="example">Example</h3>
+<h3 id="example-1">Example</h3>
 
 <pre data-runnable="true" data-recorder="true"><code class="language-buzz">// Wire buf-build into a build target: magus run build forks buf build.
 import &quot;magus&quot;;
@@ -146,7 +178,7 @@ export fun build(args: [str]) &gt; void {
 ]
 </code></pre>
 </details>
-<h3 id="example-1">Example</h3>
+<h3 id="example-2">Example</h3>
 
 <pre data-runnable="true" data-recorder="true"><code class="language-buzz">// buf-format checks formatting; the rw charm (magus run format:rw) rewrites in place.
 import &quot;magus&quot;;
@@ -160,7 +192,7 @@ export fun format(args: [str]) &gt; void {
 </code></pre>
 <h2 id="buf-generate">buf-generate</h2>
 <p><strong>Command:</strong> <code>buf generate</code></p>
-<h3 id="example-2">Example</h3>
+<h3 id="example-3">Example</h3>
 
 <pre data-runnable="true" data-recorder="true"><code class="language-buzz">// Wire buf-generate into a generate target: magus run generate forks buf generate.
 import &quot;magus&quot;;
@@ -174,7 +206,7 @@ export fun generate(args: [str]) &gt; void {
 </code></pre>
 <h2 id="buf-lint">buf-lint</h2>
 <p><strong>Command:</strong> <code>buf lint</code></p>
-<h3 id="gha">gha</h3>
+<h3 id="gha-1">gha</h3>
 <p>Appends <code>--error-format=github-actions</code>.</p>
 <details class="charm-patch">
 <summary>JSON Patch</summary>
@@ -187,7 +219,7 @@ export fun generate(args: [str]) &gt; void {
 ]
 </code></pre>
 </details>
-<h3 id="example-3">Example</h3>
+<h3 id="example-4">Example</h3>
 
 <pre data-runnable="true" data-recorder="true"><code class="language-buzz">// buf-lint checks Protobuf style. The gha charm annotates findings in GitHub Actions.
 import &quot;magus&quot;;

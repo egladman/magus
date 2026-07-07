@@ -25,7 +25,7 @@ import (
 // There is no continuously maintained merged graph.json: at scale, rewriting a
 // merged file on every shard change is an O(graph) write per edit. Merging
 // happens in memory at load time; the merged node-link export is produced on
-// demand by `magus describe knowledge`.
+// demand by `magus graph export`.
 
 // ErrNoStore reports that the knowledge store has never been written (no manifest).
 var ErrNoStore = errors.New("knowledge: no persisted graph")

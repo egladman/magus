@@ -1,0 +1,127 @@
+.TH MAGUS-GRAPH 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-graph \- The workspace's graphs as objects: deps, export, stats
+.SH SYNOPSIS
+.B magus
+.RI "graph <deps|export|stats> [flags]"
+.SH DESCRIPTION
+The workspace's graphs as objects: emit, export, and measure them. The
+query, explain, and path verbs read the knowledge graph; magus graph is the
+home of the graph itself.
+.PP
+Subcommands (the first argument):
+.PP
+deps     The project dependency DAG. A trailing list of project paths roots
+           the graph; \-o selects text, json, yaml, dot, mermaid, or tree. The
+           same view scoped to a run is available as magus run <target> \-\-graph
+           and magus affected <target> \-\-graph.
+  export   The merged knowledge graph: the deterministic, cache\-backed graph of
+           the magus domain (projects, targets, spells, ops, charms, modules,
+           methods, diagnostics, docs, buzz sources). \-o json emits the
+           node\-link form; \-o graphml emits GraphML. External graph viewers
+           (Gephi, yEd) read both directly. The graph is cache\-backed under
+           <cache>/knowledge; only shards whose sources changed are rebuilt.
+  stats    The graph's shape: god nodes (the most connected spells, modules,
+           targets \- where structural risk concentrates), orphans (docs that
+           document nothing, spells no target uses), and doc coverage (the
+           share of diagnostics, spells, and modules with a doc). \-\-kind scopes
+           every section to one node kind. insight report embeds this section.
+.SS graph deps options
+.RS
+.TP
+\fB\-\-depth\fR \fIint\fR
+Cap displayed depth (0 = unlimited)
+.TP
+\fB\-\-spell\fR \fIstring\fR
+Only projects driven by this spell
+.TP
+\fB\-\-target\fR \fIstring\fR
+Target whose duration history annotates nodes (default: build)
+.TP
+\fB\-\-upstream\fR
+Show dependents instead of dependencies
+.RE
+.SS graph export options
+.RS
+.TP
+\fB\-\-refresh\fR
+Force a full graph rebuild before exporting
+.RE
+.SS graph stats options
+.RS
+.TP
+\fB\-\-kind\fR \fIstring\fR
+Scope every section to one node kind (spell, target, doc, ...)
+.TP
+\fB\-\-refresh\fR
+Force a full graph rebuild first
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBdeps\fR
+Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)
+.TP
+\fBexport\fR
+Export the merged knowledge graph (json node\-link or graphml)
+.TP
+\fBstats\fR
+Report the knowledge graph's shape: god nodes, orphans, doc coverage
+.RE
+.SH EXAMPLES
+\fIProject DAG as Mermaid\fR
+.PP
+.EX
+magus graph deps -o mermaid
+.EE
+.PP
+\fIDAG rooted at one project, dependents up\fR
+.PP
+.EX
+magus graph deps pkg/api --upstream
+.EE
+.PP
+\fIKnowledge graph for an external viewer\fR
+.PP
+.EX
+magus graph export -o json > graph.json
+.EE
+.PP
+\fIGraphML for Gephi or yEd\fR
+.PP
+.EX
+magus graph export -o graphml > graph.graphml
+.EE
+.PP
+\fIWhere structural risk concentrates\fR
+.PP
+.EX
+magus graph stats
+.EE
+.PP
+\fIDoc coverage for spells only\fR
+.PP
+.EX
+magus graph stats --kind spell
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-tail\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-insight\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

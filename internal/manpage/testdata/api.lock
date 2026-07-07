@@ -89,6 +89,7 @@ subcommand completion
 subcommand config
 subcommand describe
 subcommand doctor
+subcommand graph
 subcommand init
 subcommand insight
 subcommand ls

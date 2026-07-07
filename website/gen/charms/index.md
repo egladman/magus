@@ -17,6 +17,28 @@ Charms replace the one-off boolean flags (`--write`, `--fix`, `--verbose`) that 
 - **Composable.** Charms stack: orthogonal intents like `rw` and `debug` combine without special-casing.
 - **Bounded.** A charm edits arguments only; it cannot swap the command or replace the whole argv. See [Charm vs Target](#charm-vs-target-the-command-boundary).
 
+## Additive by design
+
+Charms only ever _add_ intent. You turn one on by naming it (`:rw`); the active set
+is the union of what you named and the workspace `default_charms`, and nothing else.
+There is no per-charm "off" switch, and that absence is deliberate.
+
+The one subtraction magus offers is coarse: `--no-default-charms` drops the whole
+default baseline at once, after which you re-add exactly what you want. There is no
+`--without-charm=rw` to peel a single charm off the set.
+
+Some task runners take the other path, with named configuration profiles you toggle
+on and off per invocation. That turns the active configuration into a set you are
+always managing: enable a default, then remember to disable it here and re-enable it
+there. magus keeps the active set an explicit, additive union instead - what you see
+named is what is on. If you do not want a charm's effect, do not add it.
+
+This is a design decision, not a shortcoming. An additive-only model keeps a charm's
+meaning stable and the active set legible at a glance; a subtractive one trades both
+away for a convenience that usually just papers over an over-broad default. When the
+defaults feel like something you fight, the fix is a smaller default set, not a
+subtraction operator.
+
 ## The mechanism: a JSON Patch over the argv
 
 A target runs a command: a `cmd` (e.g. `go`) and a base argv (e.g. `["tool", "golangci-lint", "run", "./..."]`). magus treats the argv as a JSON array and a charm as an **RFC 6902 JSON Patch** applied over it.
@@ -92,7 +114,7 @@ magus run lint:rw,debug
 The patches of all active charms are **concatenated in sorted charm-name order and applied as one sequential patch** over the base argv:
 
 - **Deterministic.** `lint:rw,debug` and `lint:debug,rw` produce the same result; duplicates are insignificant.
-- **Composable.** Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the _same_ position resolve by sorted charm-name order.
+- **Composable.** Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the _same_ position resolve by sorted charm-name order, so one charm silently wins and the other has no effect. Because that winner is an alphabetical accident rather than a declared precedence, magus treats it as a mistake: it warns at run time and flags the overridden charm in `magus describe target ...:a,b`. Two charms that must both apply should edit different arguments, or one should own the position.
 
 Example with base `go tool golangci-lint run ./...`:
 
@@ -118,6 +140,30 @@ project: .  target: lint
 ```
 
 Add charms to the target ref and the `command:` line updates. Two caveats: a magusfile-function target computes its argv at runtime, so no static command is shown; and `describe` never executes or writes files even for `:rw`. (`--dry-run` reports at the target level; use `describe` to see the command itself.)
+
+### Seeing each charm's edit: `--explain`
+
+`--explain` turns the single `command:` line into a step-by-step trace: the base
+command, then the command after each active charm's patch, in the deterministic
+sorted-name order magus applies them. It is the RFC 6902 patch made legible, so
+you can see exactly which charm made which edit without reading the patch data.
+
+```sh
+$ magus describe target --explain lint:rw,debug
+project: .  target: lint
+  charms:  [debug rw]
+  spell: go
+    command: go tool golangci-lint run --fix ./... -v
+    charm trace:
+      base       go tool golangci-lint run ./...
+      + debug    go tool golangci-lint run ./... -v
+      + rw       go tool golangci-lint run --fix ./... -v
+```
+
+The flag comes before the target ref (`--explain lint:rw`), like every other magus
+subcommand flag. A charm that is active but changes nothing for this target adds no
+line, and a charm whose patch does not apply to the command is reported as
+[MGS6001](codes/charms/MGS6001.md) rather than dropped silently.
 
 ## Declaring what a charm does
 

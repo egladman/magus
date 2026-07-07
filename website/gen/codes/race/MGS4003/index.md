@@ -1,7 +1,8 @@
 ---
 title: "MGS4003: non-deterministic output"
 description: Fires under race replay when a project's declared outputs differ across two consecutive runs, indicating a reproducibility violation.
-tags: [MGS4003, race, determinism, replay, reproducible builds, outputs, hashing]
+tags:
+  [MGS4003, race, determinism, replay, reproducible builds, outputs, hashing]
 ---
 
 # MGS4003: non-deterministic output

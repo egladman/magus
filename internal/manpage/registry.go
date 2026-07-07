@@ -16,6 +16,7 @@ var All = []Command{
 	tailCommand,
 	affectedCommand,
 	insightCommand,
+	graphCommand,
 	watchCommand,
 	statusCommand,
 	doctorCommand,
@@ -64,16 +65,13 @@ against the same struct that -o json emits.`,
 var describeCommand = Command{
 	Name:        "describe",
 	Short:       "Define a magus concept and list its entities",
-	Description: "Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, knowledge) and list every entity of that kind, or detail one when a name is given.",
+	Description: "Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.",
 	Tags:        []string{"cli", "magus describe", "spell", "charm", "target", "project", "workspace", "introspection"},
 	Long: `Define a magus concept and list every entity of that kind. The noun is
-one of spell, charm, target, project, workspace, module, mcp-tool, or knowledge;
-singular and plural are interchangeable. Pass a name after the noun to detail a
-single entity instead of listing them all.
-
-The knowledge noun emits the deterministic knowledge graph of the workspace
-domain (projects, targets, spells, ops, charms, modules, methods, diagnostics)
-as a merged node-link graph; use -o json to feed it to an external graph tool.
+one of spell, charm, target, project, workspace, module, or mcp-tool; singular
+and plural are interchangeable. Pass a name after the noun to detail a single
+entity instead of listing them all. (The knowledge graph lives under magus
+graph: export for the merged graph, stats for its shape.)
 
 The charm noun is the inverse of a target ref: "describe charm rw" lists every
 target that declares the rw charm and the argv edit each one makes, the transpose
@@ -275,8 +273,8 @@ introduced a regression.`,
 var insightCommand = Command{
 	Name:        "insight",
 	Short:       "Behavioral code analysis from VCS history",
-	Description: "Show where a codebase's attention and risk concentrate: history lenses (hotspots, coupling, ownership, trend) from VCS, and a structure lens (god nodes, orphans, doc coverage) from the knowledge graph.",
-	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs", "structure"},
+	Description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend, read from VCS history.",
+	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs"},
 	Long: `Read version-control history to show where a codebase's attention and
 risk concentrate. By default every lens is contextual to the working directory — run
 from inside a subtree and it reflects only that subtree's history; pass --workspace to
@@ -296,25 +294,22 @@ Lenses (the first argument):
              author count (bus factor), and abandonment (projects gone quiet).
   trend      The recent half of the window versus the earlier half: a positive
              delta is a rising hotspot, a negative one is cooling.
-  structure  The knowledge-graph lens (no VCS): god nodes (the most connected
-             spells, modules, targets - where structural risk concentrates),
-             orphans (docs that document nothing, spells no target uses), and doc
-             coverage (the share of diagnostics, spells, and modules with a doc).
-             --kind scopes every section to one node kind.
-  report     Every lens as one whole-workspace Markdown document (the magusfile's
-             postflight target writes this to the GitHub Actions step summary).
+  report     Every lens plus graph stats as one whole-workspace Markdown document
+             (the magusfile's postflight target writes this to the GitHub Actions
+             step summary).
 
-The history lenses read VCS: --commits caps the scan; --since bounds it by date
-(90d, 12w, 6mo, 1y). The structure lens reads the knowledge graph cache-first
-instead. Each lens accepts -o text|json|yaml|name; hotspots and affinity also
-render -o mermaid (the hotspots file view renders a churn-vs-complexity quadrant).`,
+The lenses read VCS: --commits caps the scan; --since bounds it by date
+(90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
+affinity also render -o mermaid (the hotspots file view renders a
+churn-vs-complexity quadrant). The structural companion — god nodes, orphans,
+and doc coverage from the knowledge graph — is magus graph stats; the report
+embeds it.`,
 	Usage: "magus insight <lens> [flags]",
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Int("commits", 500, "Cap on how many recent commits to scan")
 		fs.String("since", "", "Only commits within this window (e.g. 90d, 12w, 6mo, 1y)")
 		fs.Bool("workspace", false, "Analyze the whole workspace instead of the current project/subtree")
 		fs.Bool("files", false, "hotspots: rank individual files instead of projects")
-		fs.String("kind", "", "structure: scope every section to one node kind (spell, target, doc, ...)")
 	},
 	Examples: []Example{
 		{"Prime refactoring targets (files)", "magus insight hotspots --files"},
@@ -323,6 +318,58 @@ render -o mermaid (the hotspots file view renders a churn-vs-complexity quadrant
 		{"Bus factor and abandonment", "magus insight ownership"},
 		{"Rising vs cooling activity", "magus insight trend --since 90d"},
 		{"Whole-workspace report (all lenses)", "magus insight report --workspace"},
+	},
+}
+
+var graphCommand = Command{
+	Name:        "graph",
+	Short:       "The workspace's graphs as objects: deps, export, stats",
+	Description: "Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).",
+	Tags:        []string{"cli", "magus graph", "graph", "knowledge graph", "dependency graph", "export", "graphml"},
+	Long: `The workspace's graphs as objects: emit, export, and measure them. The
+query, explain, and path verbs read the knowledge graph; magus graph is the
+home of the graph itself.
+
+Subcommands (the first argument):
+
+  deps     The project dependency DAG. A trailing list of project paths roots
+           the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
+           same view scoped to a run is available as magus run <target> --graph
+           and magus affected <target> --graph.
+  export   The merged knowledge graph: the deterministic, cache-backed graph of
+           the magus domain (projects, targets, spells, ops, charms, modules,
+           methods, diagnostics, docs, buzz sources). -o json emits the
+           node-link form; -o graphml emits GraphML. External graph viewers
+           (Gephi, yEd) read both directly. The graph is cache-backed under
+           <cache>/knowledge; only shards whose sources changed are rebuilt.
+  stats    The graph's shape: god nodes (the most connected spells, modules,
+           targets - where structural risk concentrates), orphans (docs that
+           document nothing, spells no target uses), and doc coverage (the
+           share of diagnostics, spells, and modules with a doc). --kind scopes
+           every section to one node kind. insight report embeds this section.`,
+	Usage: "magus graph <deps|export|stats> [flags]",
+	Children: []Command{
+		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)", BuildFlags: func(fs *flag.FlagSet) {
+			fs.Bool("upstream", false, "Show dependents instead of dependencies")
+			fs.Int("depth", 0, "Cap displayed depth (0 = unlimited)")
+			fs.String("spell", "", "Only projects driven by this spell")
+			fs.String("target", "", "Target whose duration history annotates nodes (default: build)")
+		}},
+		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml)", BuildFlags: func(fs *flag.FlagSet) {
+			fs.Bool("refresh", false, "Force a full graph rebuild before exporting")
+		}},
+		{Name: "stats", Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", BuildFlags: func(fs *flag.FlagSet) {
+			fs.String("kind", "", "Scope every section to one node kind (spell, target, doc, ...)")
+			fs.Bool("refresh", false, "Force a full graph rebuild first")
+		}},
+	},
+	Examples: []Example{
+		{"Project DAG as Mermaid", "magus graph deps -o mermaid"},
+		{"DAG rooted at one project, dependents up", "magus graph deps pkg/api --upstream"},
+		{"Knowledge graph for an external viewer", "magus graph export -o json > graph.json"},
+		{"GraphML for Gephi or yEd", "magus graph export -o graphml > graph.graphml"},
+		{"Where structural risk concentrates", "magus graph stats"},
+		{"Doc coverage for spells only", "magus graph stats --kind spell"},
 	},
 }
 

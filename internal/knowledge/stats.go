@@ -12,18 +12,18 @@ const (
 	maxUndocumented = 25
 )
 
-// documentableKinds are the kinds whose doc coverage the structure lens reports:
+// documentableKinds are the kinds whose doc coverage graph stats reports:
 // entities magus generates docs for (diagnostic pages, spell pages, module pages).
 var documentableKinds = []string{types.KindDiagnostic, types.KindSpell, types.KindModule}
 
-// Structure computes the knowledge-graph structural analytics: god nodes (highest
-// degree - where risk concentrates), orphans (isolated docs, unused spells), and
-// doc coverage per documentable kind. kind, when non-empty, scopes every section
-// to that node kind. Deterministic and LLM-free.
-func (g *Graph) Structure(kind string) types.KnowledgeStructure {
+// Stats computes the knowledge-graph analytics behind `magus graph stats`: god
+// nodes (highest degree - where risk concentrates), orphans (isolated docs,
+// unused spells), and doc coverage per documentable kind. kind, when non-empty,
+// scopes every section to that node kind. Deterministic and LLM-free.
+func (g *Graph) Stats(kind string) types.KnowledgeStats {
 	g.ensureAdj()
-	return types.KnowledgeStructure{
-		Definition: types.KnowledgeStructureDefinition,
+	return types.KnowledgeStats{
+		Definition: types.KnowledgeStatsDefinition,
 		NodeCount:  len(g.nodes),
 		EdgeCount:  len(g.edges),
 		Gods:       g.godNodes(kind),

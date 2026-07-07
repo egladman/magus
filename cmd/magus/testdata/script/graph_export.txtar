@@ -1,6 +1,6 @@
-# describe knowledge assembles the deterministic domain graph and emits a routing
+# graph export assembles the deterministic domain graph and emits a routing
 # summary by default. It must build implicitly (cache-first) with no build verb.
-exec magus describe knowledge
+exec magus graph export
 stdout 'knowledge graph'
 stdout 'nodes by kind'
 stdout 'edges by relation'
@@ -14,7 +14,7 @@ exists .magus/knowledge/manifest.json
 
 # -o json emits the merged node-link graph external graph tools read directly:
 # nodes carry id/kind, links carry source/target/relation, plus the schema version.
-exec magus describe knowledge -o json
+exec magus graph export -o json
 stdout '"schema_version"'
 stdout '"directed": true'
 stdout '"kind": "project"'
@@ -27,6 +27,18 @@ stdout '"relation": "depends_on"'
 stdout '"relation": "uses"'
 stdout '"relation": "references"'
 stdout '"confidence": "extracted"'
+
+# -o graphml emits GraphML for external graph viewers: declared keys, directed
+# graph, node/edge data elements.
+exec magus graph export -o graphml
+stdout '<graphml xmlns='
+stdout 'edgedefault="directed"'
+stdout '<node id="spell:acme">'
+stdout '<data key="relation">uses</data>'
+
+# the removed spelling points at the new home
+! exec magus describe knowledge
+stderr 'moved to `magus graph export`'
 
 -- magus.yaml --
 concurrency: 4

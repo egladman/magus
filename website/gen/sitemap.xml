@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://eli.gladman.cc/magus/affected/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/blog/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/blog/2026/07/01/hello-blog/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/breaking-changes/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/archive/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/charm/</loc></url>
@@ -25,9 +27,13 @@
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/uuid/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/vcs/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/yaml/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/cache/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/charms/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/charms/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/charms/MGS6001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1001/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1002/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/race/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/race/MGS4001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/race/MGS4002/</loc></url>
@@ -64,13 +70,19 @@
   <url><loc>https://eli.gladman.cc/magus/download/linux/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/download/macos/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/download/windows/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/editor/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/engines/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/faq/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/flaky-builds/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/getting-started/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/insight/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-affected/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-completion/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-config/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-describe/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-doctor/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/manpage/magus-graph/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-init/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-insight/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-ls/</loc></url>
@@ -87,6 +99,7 @@
   <url><loc>https://eli.gladman.cc/magus/mcp/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/operations/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/remote-cache/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/sandbox/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/services/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/spells/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/spells/bash/</loc></url>
@@ -105,4 +118,5 @@
   <url><loc>https://eli.gladman.cc/magus/testing/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/tips/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/wards/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/workspace/</loc></url>
 </urlset>

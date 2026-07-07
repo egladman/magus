@@ -14,7 +14,7 @@ import (
 
 // query/explain/path are the knowledge-graph retrieval verbs. They reuse
 // prior-art vocabulary (graph tooling generally) and sit on the same cache-first
-// substrate as `describe knowledge`. query resolves terms to nodes and returns
+// substrate as `magus graph export`. query resolves terms to nodes and returns
 // the neighborhood; explain shows one node's context; path connects two nodes.
 
 func queryCmd(ctx context.Context, root string, args []string) error {

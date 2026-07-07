@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Sandbox model — magus</title>
+  <meta name="description" content="The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/sandbox/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Sandbox model — magus">
+  <meta property="og:description" content="The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/sandbox/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Sandbox model</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/sandbox.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#threat-model" title="Threat model">Threat model</a></li><li><a href="#the-allowlist-is-the-policy" title="The allowlist is the policy">The allowlist is the policy</a><ul><li><a href="#the-default-filesystem-footprint" title="The default filesystem footprint">The default filesystem footprint</a></li><li><a href="#how-paths-are-resolved-and-matched" title="How paths are resolved and matched">How paths are resolved and matched</a></li><li><a href="#extending-the-allowlist" title="Extending the allowlist">Extending the allowlist</a></li><li><a href="#environment-scrubbing" title="Environment scrubbing">Environment scrubbing</a></li><li><a href="#the-daemon-socket-is-withheld-not-allowlisted" title="The daemon socket is withheld, not allowlisted">The daemon socket is withheld, not allowlisted</a></li></ul></li><li><a href="#how-a-targets-declared-footprint-becomes-the-allowlist" title="How a target's declared footprint becomes the allowlist">How a target's declared footprint becomes the allowlist</a></li><li><a href="#platform-reality-two-enforcement-layers" title="Platform reality: two enforcement layers">Platform reality: two enforcement layers</a><ul><li><a href="#the-daemon-and-policy-immutability" title="The daemon and policy immutability">The daemon and policy immutability</a></li></ul></li><li><a href="#what-the-sandbox-does-not-confine" title="What the sandbox does not confine">What the sandbox does not confine</a></li><li><a href="#diagnostic-map" title="Diagnostic map">Diagnostic map</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">13 min read</small>
+    <article>
+<h1 id="the-magus-sandbox-model">The magus sandbox model</h1>
+<p>The <strong>sandbox</strong> confines every magus subprocess and every in-process spell to a bounded filesystem and a bounded environment. Where a Target answers &quot;what operation, on what project&quot; (see <a href="../targets/">targets.md</a>) and a Spell answers &quot;how a tool performs an operation&quot; (see <a href="../spells/">spells.md</a>), the sandbox answers a different question entirely: <strong>&quot;what may that tool touch while it runs.&quot;</strong></p>
+<p>This page is the model. The <a href="../codes/sandbox/">MGS2xxx codes</a> are the individual violations that model produces at run time; each one is a boundary this page describes being hit. Read this to understand the system; read a code page to resolve a specific denial.</p>
+<h2 id="threat-model">Threat model</h2>
+<p>A build tool runs other people's code. A spell dispatches <code>gofmt</code>, <code>prettier</code>, <code>golangci-lint</code>, <code>cargo</code>, and whatever else a workspace declares, and a magusfile is arbitrary Buzz. Some of that is first-party and trusted; much of it is transitively pulled from package registries and extension marketplaces. The sandbox treats <strong>tool invocations as untrusted-ish</strong>: not assumed malicious, but not granted the ambient authority of the invoking user either.</p>
+<p>The concrete class it defends against is the <strong>supply-chain credential attack</strong> that has repeatedly appeared on npm and the VS Code marketplace: a compromised package or extension reads a credential from disk (<code>~/.aws/credentials</code>, <code>~/.ssh/id_rsa</code>, <code>~/.npmrc</code>) and exfiltrates it, or writes a persistence hook into a shell startup file. The sandbox is built to make that attack fail by default, without the operator having to notice the package was compromised.</p>
+<p>Four design intents follow from that:</p>
+<ul>
+<li><strong>Least authority.</strong> A tool gets the workspace and a curated set of caches and system libraries, nothing more. Credential stores in <code>$HOME</code>, other users' files, and arbitrary write targets are outside the grant.</li>
+<li><strong>Secrets stay out of subprocesses.</strong> The child-process environment is rebuilt from a small allowlist, so a compromised tool cannot read <code>GITHUB_TOKEN</code> or <code>AWS_ACCESS_KEY_ID</code> out of its own environment and phone home.</li>
+<li><strong>Reproducibility.</strong> A run that can only see its declared inputs cannot silently depend on a file or variable that happens to exist on one developer's machine. The confinement doubles as a hermeticity check.</li>
+<li><strong>Fail closed.</strong> When the kernel layer is asked to enforce a policy and cannot, magus does not silently run unconfined; it either falls back to the in-process layer with a loud notice (<a href="../codes/sandbox/MGS2005/">MGS2005</a>) or refuses the run (<a href="../codes/sandbox/MGS2010/">MGS2010</a>).</li>
+</ul>
+<p>What the sandbox does <strong>not</strong> claim to stop in its current form is spelled out under <a href="#what-the-sandbox-does-not-confine">What the sandbox does not confine</a>. Being precise about the gaps is part of the model.</p>
+<h2 id="the-allowlist-is-the-policy">The allowlist is the policy</h2>
+<p>A <a href="#glossary"><code>Policy</code></a> is an immutable record built once per workspace from the workspace root plus the workspace's <code>magus.yaml</code> sandbox config. It has two halves:</p>
+<ul>
+<li>a <strong>filesystem allowlist</strong> (<code>filesystem.Ruleset</code>): a list of rules, each a path with <code>read</code> / <code>write</code> / <code>exec</code> bits.</li>
+<li>an <strong>environment allowlist</strong> (<code>env.Allowlist</code>): the exact variable names and suffix-glob patterns a child may inherit.</li>
+</ul>
+<p>A <strong>nil policy means the sandbox is off</strong>: every check passes through. Enabling it (<code>sandbox.enabled: true</code>, or <code>MAGUS_SANDBOX_ENABLED=1</code>) is what attaches a non-nil policy to the run.</p>
+<h3 id="the-default-filesystem-footprint">The default filesystem footprint</h3>
+<p><code>BuildPolicy</code> assembles the baseline every enabled run starts from:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>read</th>
+<th>write</th>
+<th>exec</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the <strong>workspace root</strong></td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>Spells build binaries in-tree and run them; the workspace is the one fully-writable region.</td>
+</tr>
+<tr>
+<td><code>$TMPDIR</code> / <code>/tmp</code></td>
+<td>yes</td>
+<td>yes</td>
+<td><strong>no</strong></td>
+<td>Scratch space. Exec is withheld: <code>/tmp</code> is world-shared on multiuser hosts, so exec there would let one user run a payload another planted.</td>
+</tr>
+<tr>
+<td>system libs and certs (<code>/usr/lib</code>, <code>/lib</code>, <code>/etc/ssl</code>, <code>/etc/resolv.conf</code>, <code>/etc/hosts</code>, <code>/nix/store</code> when present, ...)</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>Dynamic linking and TLS need to read these; nothing needs to write or execve them.</td>
+</tr>
+<tr>
+<td>the <strong>magus binary itself</strong> (resolved)</td>
+<td>yes</td>
+<td>no</td>
+<td>yes</td>
+<td>Recursive <code>magus</code> invocations must be able to re-exec the same binary.</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Read access alone lets the dynamic linker <code>mmap</code> a shared library <code>PROT_EXEC</code>; it does <strong>not</strong> grant <code>execve</code>. Exec is a separate, narrower bit, which is why a spell can load <code>/usr/lib</code> but cannot run an arbitrary binary it finds there.</p>
+<h3 id="how-paths-are-resolved-and-matched">How paths are resolved and matched</h3>
+<p>Path matching is <strong>prefix containment over real, resolved paths</strong>, and the resolution is the security-critical part:</p>
+<ul>
+<li>Both the requested path and every rule path are made <strong>absolute, symlink-resolved (<code>EvalSymlinks</code>), and lexically cleaned</strong> before comparison. Rule paths are normalized at policy-build time so the containment test is symmetric with the kernel layer.</li>
+<li>A request is permitted if it is <strong>at or beneath</strong> an allowed rule path with the right bit set. There is no glob or wildcard on the filesystem side; containment is by directory subtree.</li>
+<li>Because matching is on resolved paths, <strong>a symlink inside the workspace pointing at <code>/etc</code> grants no access to <code>/etc</code></strong>. The link resolves to <code>/etc</code>, which is not under any writable rule, and the write is denied.</li>
+<li>A write target that does not exist yet is handled by resolving its <strong>parent</strong> and re-attaching the base name, so a create is checked against where the file will actually land.</li>
+</ul>
+<p>A read outside every read rule raises <a href="../codes/sandbox/MGS2001/">MGS2001</a>; a write outside every write rule raises <a href="../codes/sandbox/MGS2002/">MGS2002</a>; an exec whose resolved binary path is outside every exec rule raises <a href="../codes/sandbox/MGS2007/">MGS2007</a>. The exec check runs against the path <code>exec.LookPath</code> returns, so an unqualified <code>curl</code> is checked at <code>/usr/bin/curl</code> (allowed), while a binary dropped in <code>~/.local/bin</code> is not.</p>
+<h3 id="extending-the-allowlist">Extending the allowlist</h3>
+<p>A workspace widens its footprint declaratively in <code>magus.yaml</code>:</p>
+<pre><code class="language-yaml">sandbox:
+  enabled: true
+  allow:
+    - path: ~/.cargo
+      mode: rw
+    - path: ~/.terraform.d/plugins
+      mode: ro
+</code></pre>
+<p>Each entry is expanded (<code>~</code> for home, <code>$VAR</code> against the current environment), symlink-resolved, and turned into a rule. <code>mode: ro</code> grants read; <code>mode: rw</code> grants read and write. User-allowlisted paths are additionally granted <strong>exec</strong>, so toolchain directories like <code>$CARGO_HOME/bin</code> stay runnable. When an entry cannot be resolved (an unset <code>$VAR</code>, an invalid path) it is <strong>skipped, not fatal</strong> - a missing optional cache should not block a build - and <a href="../codes/sandbox/MGS2004/">MGS2004</a> records that the rule did not take effect.</p>
+<h3 id="environment-scrubbing">Environment scrubbing</h3>
+<p>The child environment is not inherited; it is <strong>rebuilt from an allowlist</strong>. The default keeps only a small, non-secret baseline: <code>HOME</code>, <code>USER</code>, <code>PATH</code>, locale and terminal vars (<code>LANG</code>, <code>LC_*</code>, <code>TZ</code>, <code>TERM</code>, and per-platform additions like <code>SHELL</code>, <code>PWD</code>, <code>XDG_*</code>), plus the one runtime coordination var <code>MAGUS_RUN_ID</code>. Every other variable is dropped, which is what keeps <code>AWS_*</code>, <code>GITHUB_TOKEN</code>, <code>VAULT_*</code>, <code>NPM_TOKEN</code>, <code>ANTHROPIC_API_KEY</code>, and their kind out of subprocesses. When variables are dropped, <a href="../codes/sandbox/MGS2003/">MGS2003</a> records the count as an informational notice - the build may well have succeeded; the message exists so a behavior change from a missing variable is traceable.</p>
+<p>A workspace opts specific variables back in through <code>sandbox.env.passthrough</code>:</p>
+<pre><code class="language-yaml">sandbox:
+  env:
+    passthrough:
+      - GOPATH
+      - GOCACHE
+      - &quot;MISE_*&quot;
+</code></pre>
+<p>Passthrough matching is <strong>exact name or suffix glob</strong>: a pattern must end in a single <code>*</code> with a non-empty prefix, so <code>MISE_*</code> matches every name starting with <code>MISE_</code>. A bare <code>*</code> is never honored - it would leak the whole environment, defeating the point. A malformed pattern is skipped with <a href="../codes/sandbox/MGS2004/">MGS2004</a>. PATH-shim runtime managers (mise, asdf, direnv) are the common legitimate reason a build needs passthrough; when a subprocess looks like it failed because those vars were stripped, <a href="../codes/sandbox/MGS2006/">MGS2006</a> fires as a targeted hint.</p>
+<p>Env scrubbing runs in <strong>pure Go</strong>, independent of any kernel support, so it is enforced on every platform.</p>
+<h3 id="the-daemon-socket-is-withheld-not-allowlisted">The daemon socket is withheld, not allowlisted</h3>
+<p><code>MAGUS_DAEMON_SOCKET</code> and <code>MAGUS_DAEMON_ADDRESS</code> are deliberately <strong>absent</strong> from the environment allowlist. The daemon socket is unauthenticated: anything that can reach it can drive the daemon, so a compromised spell that inherited it could issue daemon commands and escape confinement. Withholding it is the default and needs no code path.</p>
+<p>The one exception is a <strong>recursive <code>magus</code> invocation</strong>, which is the same trusted binary re-executing itself and genuinely needs daemon coordination. For that case magus re-injects the two vars as explicit overrides on the child and logs <a href="../codes/sandbox/MGS2008/">MGS2008</a> at debug level. The socket stays hidden from ordinary spell subprocesses; it is handed only to nested magus processes.</p>
+<h2 id="how-a-targets-declared-footprint-becomes-the-allowlist">How a target's declared footprint becomes the allowlist</h2>
+<p>The sandbox and the operation model meet here: <strong>a target's declared needs are its footprint, and the footprint is the allowlist.</strong></p>
+<p>A target runs a spell with <code>cwd = project.Dir</code> and may only walk <strong>down</strong> from there (see <a href="../operations/">operations.md</a> and the workspace-scope rule). Its legitimate reach is: the project subtree it owns, the caches and system paths in the default footprint, and whatever the workspace has explicitly widened via <code>sandbox.allow</code> / <code>sandbox.env.passthrough</code>. Anything a target reaches for beyond that set is, by construction, something it did not declare - which is exactly the signal a denial carries. A denied read is not just &quot;access failed&quot;; it is &quot;this tool tried to touch something outside its declared footprint,&quot; and that is the supply-chain tell the model is designed to surface.</p>
+<p>One boundary sits adjacent to but outside the sandbox policy: <strong>descendant project scope.</strong> A spell dispatched on a parent project must stop at the boundary of any registered descendant project nested inside it. When a write-mode dispatch's downward walk crosses into a descendant's tree (typically a recursive glob like <code>prettier --write '**/*.md'</code> reaching into <code>api/docs/</code>), the auditor raises <a href="../codes/sandbox/MGS3001/">MGS3001</a>. This is <strong>observational</strong>, not enforced: magus does not roll the writes back. It is enforced by convention and audit rather than by landlock, because both trees are inside the workspace and therefore both inside the filesystem allowlist - the kernel cannot tell a parent's writes from a descendant's. That is why MGS3001 lives on the MGS3xxx (audit) rail rather than the MGS2xxx (sandbox) rail.</p>
+<h2 id="platform-reality-two-enforcement-layers">Platform reality: two enforcement layers</h2>
+<p>The sandbox is enforced by <strong>two layers that run together</strong>, and exactly one of them is platform-dependent.</p>
+<ul>
+<li><strong>Kernel layer (Linux 5.13+ only).</strong> On a host with landlock, magus calls <code>landlock_restrict_self</code> on itself <strong>once, before any spell code runs</strong>. The restriction is permanent, cannot be loosened, and is <strong>inherited across <code>fork+exec</code></strong>, so every child process gets the same filesystem confinement automatically with no root required. magus probes the running kernel's landlock ABI (v1 = 5.13, v2 = 5.19 adds REFER, v3 = 6.2 adds TRUNCATE) and masks the requested access bits to what the kernel understands, so it does not fail on older kernels. Paths in the allowlist that do not exist on the host are silently skipped - the kernel denies unlisted paths anyway.</li>
+<li><strong>Interpreter layer (every platform, pure Go).</strong> The Buzz <code>fs.*</code>, <code>sh.*</code>, and <code>env.*</code> bindings consult the policy in user space before performing any path or process operation. This is what produces the friendly <code>MGS2001</code> / <code>MGS2002</code> / <code>MGS2007</code> messages, and it runs regardless of kernel support.</li>
+</ul>
+<p>On Linux both layers run, and the kernel layer is the backstop that also closes the residual TOCTOU window the user-space path check leaves open.</p>
+<p>On <strong>macOS, Windows, or Linux older than 5.13</strong> (or with the LSM disabled), <code>Apply</code> returns <code>ErrUnsupported</code>, and the run degrades to the <strong>interpreter layer only</strong>. This is a deliberate, non-fatal fallback: magus emits <a href="../codes/sandbox/MGS2005/">MGS2005</a> once so the operator knows kernel enforcement is absent, then continues. <code>Supported()</code> reports <code>false</code> on non-Linux and checks <code>/sys/kernel/security/landlock</code> on Linux.</p>
+<p>What that degradation means precisely:</p>
+<ul>
+<li><strong>Filesystem and env confinement through the documented bindings still hold.</strong> Every spell magus ships and every magusfile written against the <code>fs.*</code> / <code>sh.*</code> / <code>env.*</code> API is still blocked from out-of-workspace paths and secret env vars. Env scrubbing in particular is pure Go and always applies.</li>
+<li><strong>What is lost is the kernel backstop.</strong> A spell that bypassed the binding layer - native code, a Go plugin, embedded cgo - could not be confined by user-space checks alone. No such spell type exists today; the spell API routes everything through the bindings. If one is ever added it must require landlock or be rejected up front.</li>
+</ul>
+<h3 id="the-daemon-and-policy-immutability">The daemon and policy immutability</h3>
+<p>Because <code>landlock_restrict_self</code> is process-global and irreversible, a long-running daemon serving many workspaces cannot re-apply a different policy per request. It instead computes the <strong>set-union</strong> of every declared workspace's policy at startup and applies landlock exactly once; per-workspace binding-layer checks stay strict, and only the kernel layer sees the union. Each policy carries a stable <strong>fingerprint</strong> (a hash of its FS rules and env config). If a workspace's config later resolves to a fingerprint that differs from the applied union, the kernel and binding layers would disagree, so magus <strong>fails closed</strong> with <a href="../codes/sandbox/MGS2010/">MGS2010</a> rather than run under a mismatched policy - the fix is to restart the daemon so it rebuilds the union.</p>
+<h2 id="what-the-sandbox-does-not-confine">What the sandbox does not confine</h2>
+<p>Being explicit about the boundary is part of the threat model:</p>
+<ul>
+<li><strong>Network egress is audited, not blocked.</strong> A compromised spell with no token in its environment can still reach an arbitrary host. Every request through the built-in <code>http.*</code> bindings is recorded at info level with method and URL before it is sent (<a href="../codes/sandbox/MGS2009/">MGS2009</a>), including localhost, RFC1918 ranges, and the cloud metadata endpoint (<code>169.254.169.254</code>). There is no SSRF allow/deny yet; treat any URL reachable from a magusfile as trusted. A future opt-in network policy is the intended fix.</li>
+<li><strong>In-memory secret theft from magus itself.</strong> If magus holds a secret in memory when a spell runs, landlock cannot help; the sandbox confines the tool's filesystem and environment, not magus's own address space.</li>
+<li><strong>Descendant-boundary writes</strong> are audited (<a href="../codes/sandbox/MGS3001/">MGS3001</a>), not prevented, because they occur inside the workspace where the allowlist already permits writes.</li>
+</ul>
+<h2 id="diagnostic-map">Diagnostic map</h2>
+<p>Every sandbox violation maps to a boundary described above.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Fires when</th>
+<th>Layer / disposition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../codes/sandbox/MGS2001/">MGS2001</a> PathReadDenied</td>
+<td>read of a path outside the read allowlist</td>
+<td>binding + kernel; denied</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2002/">MGS2002</a> PathWriteDenied</td>
+<td>write to a path outside the write allowlist</td>
+<td>binding + kernel; denied</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2003/">MGS2003</a> EnvStripped</td>
+<td>child env rebuilt; secret-bearing / unlisted vars dropped</td>
+<td>pure Go; informational</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2004/">MGS2004</a> AllowlistUnresolved</td>
+<td>a <code>sandbox.allow</code> / passthrough entry could not resolve</td>
+<td>policy build; entry skipped, non-fatal</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2005/">MGS2005</a> SandboxUnsupported</td>
+<td>kernel landlock unavailable; interpreter layer only</td>
+<td>once per process; non-fatal fallback</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2006/">MGS2006</a> PathShimSuspected</td>
+<td>a subprocess likely failed because mise/asdf/direnv vars were stripped</td>
+<td>heuristic hint</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2007/">MGS2007</a> ExecDenied</td>
+<td>execve of a binary whose resolved path is outside the exec allowlist</td>
+<td>binding + kernel; denied</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2008/">MGS2008</a> DaemonSocketWithheld</td>
+<td>daemon socket re-injected into a recursive <code>magus</code> invocation</td>
+<td>debug-level note</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2009/">MGS2009</a> NetEgress</td>
+<td>outbound request through <code>http.*</code> while sandboxed</td>
+<td>audited, <strong>not</strong> blocked</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS2010/">MGS2010</a> SandboxPolicyMismatch</td>
+<td>a daemon is asked to serve a workspace outside its applied union</td>
+<td>fail closed</td>
+</tr>
+<tr>
+<td><a href="../codes/sandbox/MGS3001/">MGS3001</a> DescendantBoundaryCrossed</td>
+<td>a write-mode walk crossed into a registered descendant project</td>
+<td>audit rail; observational, not rolled back</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="glossary">Glossary</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Policy</strong></td>
+<td>The immutable per-workspace sandbox record: a filesystem <code>Ruleset</code>, an env <code>Allowlist</code>, and a frozen base-env snapshot. A nil policy means the sandbox is off.</td>
+</tr>
+<tr>
+<td><strong>Rule</strong></td>
+<td>One filesystem allowlist entry: a resolved path plus <code>read</code> / <code>write</code> / <code>exec</code> bits. Access is granted to a path at or beneath a rule with the matching bit.</td>
+</tr>
+<tr>
+<td><strong>Footprint</strong></td>
+<td>The set of paths and env vars a target legitimately touches: its project subtree, the default caches/system paths, and any workspace-declared extras. It is the allowlist.</td>
+</tr>
+<tr>
+<td><strong>Kernel layer</strong></td>
+<td>Linux landlock (<code>landlock_restrict_self</code>), applied once per process, inherited across <code>fork+exec</code>, permanent. Absent on non-Linux and pre-5.13 kernels.</td>
+</tr>
+<tr>
+<td><strong>Interpreter layer</strong></td>
+<td>The pure-Go checks the Buzz <code>fs.*</code> / <code>sh.*</code> / <code>env.*</code> bindings run before any operation. Enforced on every platform; the only layer where the kernel one is absent.</td>
+</tr>
+<tr>
+<td><strong>Env scrubbing</strong></td>
+<td>Rebuilding the child environment from the allowlist, dropping every unlisted (including secret-bearing) variable. Pure Go; always enforced.</td>
+</tr>
+<tr>
+<td><strong>Passthrough</strong></td>
+<td>The <code>sandbox.env.passthrough</code> opt-in that adds exact names or suffix-glob patterns (<code>NAME_*</code>) back into the child environment.</td>
+</tr>
+<tr>
+<td><strong>Fingerprint</strong></td>
+<td>A stable hash of a policy's FS rules and env config; equal fingerprints can share one landlock ruleset. A mismatch against a daemon's applied union raises MGS2010.</td>
+</tr>
+<tr>
+<td><strong>Union policy</strong></td>
+<td>The set-union of every declared workspace's policy, applied once by a multi-workspace daemon because landlock is irreversible.</td>
+</tr>
+<tr>
+<td><strong>SandboxUnsupported</strong></td>
+<td>The <code>ErrUnsupported</code> fallback: kernel landlock is unavailable, so only the interpreter layer runs (MGS2005). Non-fatal by design.</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../codes/sandbox/">codes/sandbox/README.md</a>: the sandbox diagnostics landing page and the full MGS2xxx index.</li>
+<li><a href="../operations/">operations.md</a>: the Operation and Target model whose declared footprint the sandbox confines.</li>
+<li><a href="../targets/">targets.md</a>: the workspace-scope &quot;descend only, never ascend&quot; rule and the resolved-path guarantee.</li>
+<li><a href="../config/">config.md</a>: the <code>sandbox.*</code> configuration keys (<code>enabled</code>, <code>allow</code>, <code>env.passthrough</code>).</li>
+<li><a href="../daemon/">daemon.md</a>: the long-running daemon, its declared workspaces, and the union-policy application MGS2010 guards.</li>
+</ul>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../remote-cache/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Remote caching</span></a>
+      <a class="page-nav-next" href="../services/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Services</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
+        <a class="related-card" href="../codes/sandbox/MGS2007/"><span class="related-card-title">MGS2007: exec denied</span><span class="related-card-desc">Fires when a spell tries to execute a binary whose resolved path is outside the workspace, tmp, and the system executable allowlist.</span></a>
+        <a class="related-card" href="../codes/sandbox/MGS2001/"><span class="related-card-title">MGS2001: path read denied</span><span class="related-card-desc">Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.</span></a>
+        <a class="related-card" href="../codes/sandbox/MGS2002/"><span class="related-card-title">MGS2002: path write denied</span><span class="related-card-desc">Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../search/?q=tag%3A%22security%22">security</a><a class="tag" href="../search/?q=tag%3A%22threat-model%22">threat-model</a><a class="tag" href="../search/?q=tag%3A%22allowlist%22">allowlist</a><a class="tag" href="../search/?q=tag%3A%22landlock%22">landlock</a><a class="tag" href="../search/?q=tag%3A%22filesystem%22">filesystem</a><a class="tag" href="../search/?q=tag%3A%22network%22">network</a><a class="tag" href="../search/?q=tag%3A%22exec%22">exec</a></div>
+    <small>Last updated <time datetime="2026-07-07T15:40:59Z">July 7, 2026, 3:40 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a5c858b3c9c1fcc6dd38eabe930a792a3efbd845" data-tooltip="a5c858b3c9c1fcc6dd38eabe930a792a3efbd845" title="a5c858b3c9c1fcc6dd38eabe930a792a3efbd845">a5c858b</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

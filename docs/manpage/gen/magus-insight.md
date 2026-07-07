@@ -1,7 +1,7 @@
 ---
 title: magus insight
-description: "Show where a codebase's attention and risk concentrate: history lenses (hotspots, coupling, ownership, trend) from VCS, and a structure lens (god nodes, orphans, doc coverage) from the knowledge graph."
-tags: [cli, magus insight, analysis, hotspots, ownership, coupling, vcs, structure]
+description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend, read from VCS history."
+tags: [cli, magus insight, analysis, hotspots, ownership, coupling, vcs]
 ---
 
 # magus-insight
@@ -33,18 +33,16 @@ hotspots   Edit frequency × complexity — the prime refactoring targets. The
              author count (bus factor), and abandonment (projects gone quiet).
   trend      The recent half of the window versus the earlier half: a positive
              delta is a rising hotspot, a negative one is cooling.
-  structure  The knowledge-graph lens (no VCS): god nodes (the most connected
-             spells, modules, targets - where structural risk concentrates),
-             orphans (docs that document nothing, spells no target uses), and doc
-             coverage (the share of diagnostics, spells, and modules with a doc).
-             --kind scopes every section to one node kind.
-  report     Every lens as one whole-workspace Markdown document (the magusfile's
-             postflight target writes this to the GitHub Actions step summary).
+  report     Every lens plus graph stats as one whole-workspace Markdown document
+             (the magusfile's postflight target writes this to the GitHub Actions
+             step summary).
 
-The history lenses read VCS: --commits caps the scan; --since bounds it by date
-(90d, 12w, 6mo, 1y). The structure lens reads the knowledge graph cache-first
-instead. Each lens accepts -o text|json|yaml|name; hotspots and affinity also
-render -o mermaid (the hotspots file view renders a churn-vs-complexity quadrant).
+The lenses read VCS: --commits caps the scan; --since bounds it by date
+(90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
+affinity also render -o mermaid (the hotspots file view renders a
+churn-vs-complexity quadrant). The structural companion — god nodes, orphans,
+and doc coverage from the knowledge graph — is magus graph stats; the report
+embeds it.
 
 ## Options
 
@@ -53,9 +51,6 @@ render -o mermaid (the hotspots file view renders a churn-vs-complexity quadrant
 
 **--files**
 : hotspots: rank individual files instead of projects
-
-**--kind** *string*
-: structure: scope every section to one node kind (spell, target, doc, ...)
 
 **--since** *string*
 : Only commits within this window (e.g. 90d, 12w, 6mo, 1y)
@@ -103,5 +98,5 @@ magus insight report --workspace
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

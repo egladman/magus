@@ -1,24 +1,28 @@
-# insight structure is the knowledge-graph lens: god nodes, orphans, doc coverage.
+# graph stats is the knowledge-graph shape lens: god nodes, orphans, doc coverage.
 # It reads the graph (cache-first), not git history, so it needs no commits window.
-exec magus insight structure
+exec magus graph stats
 stdout 'god nodes'
 stdout 'doc coverage'
 stdout 'DEGREE'
 
 # -o json exposes the three sections.
-exec magus insight structure -o json
+exec magus graph stats -o json
 stdout '"gods"'
 stdout '"coverage"'
 stdout '"node_count"'
 
 # --kind scopes every section to one node kind.
-exec magus insight structure --kind spell -o json
+exec magus graph stats --kind spell -o json
 stdout '"kind": "spell"'
 
 # acme's lint target uses acme, so the acme spell is NOT an orphan; but built-in
 # spells this workspace never uses are (a real "registered but unused" signal).
-exec magus insight structure -o json
+exec magus graph stats -o json
 stdout '"reason": "no target uses it"'
+
+# the removed lens points at the new home
+! exec magus insight structure
+stderr 'moved to `magus graph stats`'
 
 -- magus.yaml --
 concurrency: 4

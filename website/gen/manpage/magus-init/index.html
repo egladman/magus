@@ -73,7 +73,7 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="magus-init">magus-init</h1>
-<p>Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)</p>
+<p>Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)</p>
 <h2 id="synopsis">Synopsis</h2>
 <hr>
 <h2 id="description">Description</h2>
@@ -85,6 +85,9 @@ always wired in the repo.</p>
 <p>With --global only the global config is written; the per-clone workspace
 bootstrap (magusfile stub + merge driver) is skipped.</p>
 <p>The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.</p>
+<p>The &quot;spell&quot; subcommand scaffolds a new spell instead of bootstrapping a
+workspace: &quot;magus init spell &lt;name&gt;&quot; writes spells/&lt;name&gt;/spell.buzz with the
+mgs_ contract stubbed, each function documented, and a runnable test block.</p>
 <h2 id="options">Options</h2>
 <dl>
 <dt><strong>--force</strong></dt>
@@ -106,16 +109,16 @@ bootstrap (magusfile stub + merge driver) is skipped.</p>
 <p><em>Write only the global config</em></p>
 <pre><code class="language-sh">magus init --global
 </code></pre>
-<p><em>Write config into the repo instead of XDG</em></p>
-<pre><code class="language-sh">magus init --local
+<p><em>Scaffold a new spell</em></p>
+<pre><code class="language-sh">magus init spell mytool
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../magus-doctor/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus doctor</span></a>
+      <a class="page-nav-prev" href="../magus-graph/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus graph</span></a>
       <a class="page-nav-next" href="../magus-insight/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus insight</span></a>
     </nav>
   </main>
@@ -123,14 +126,14 @@ bootstrap (magusfile stub + merge driver) is skipped.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
+        <a class="related-card" href="../../manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
         <a class="related-card" href="../../manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
         <a class="related-card" href="../../manpage/magus-ls/"><span class="related-card-title">magus ls</span><span class="related-card-desc">List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.</span></a>
-        <a class="related-card" href="../../manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+init%22">magus init</a><a class="tag" href="../../search/?q=tag%3A%22bootstrap%22">bootstrap</a><a class="tag" href="../../search/?q=tag%3A%22setup%22">setup</a><a class="tag" href="../../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22workspace%22">workspace</a></div>
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de" data-tooltip="5d9e514ddc79f4e388d41f11d6894bd4afba27de" title="5d9e514ddc79f4e388d41f11d6894bd4afba27de">5d9e514</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/5cf487cd315c639cda74697a0766e1311f21fd51"><code>5cf487c</code></a> <small><time datetime="2026-06-20T03:59:44Z">Jun 20, 2026</time></small> - add magus insight; behavioral code analysis from vcs history</li><li><a href="https://github.com/egladman/magus/commit/5a8088a9f69aebadc047592add6abeeb4b95904d"><code>5a8088a</code></a> <small><time datetime="2026-06-19T21:15:40Z">Jun 19, 2026</time></small> - api legibility: command/handler op dispatch; exhaustive switches; drop dead code; rename misleading symbols; bridge -&gt; host</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-init.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-init.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-07T16:42:15Z">July 7, 2026, 4:42 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/54d007c2a4cb829d155fdd92e20aafbabd7df71a" data-tooltip="54d007c2a4cb829d155fdd92e20aafbabd7df71a" title="54d007c2a4cb829d155fdd92e20aafbabd7df71a">54d007c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/5cf487cd315c639cda74697a0766e1311f21fd51"><code>5cf487c</code></a> <small><time datetime="2026-06-20T03:59:44Z">Jun 20, 2026</time></small> - add magus insight; behavioral code analysis from vcs history</li><li><a href="https://github.com/egladman/magus/commit/5a8088a9f69aebadc047592add6abeeb4b95904d"><code>5a8088a</code></a> <small><time datetime="2026-06-19T21:15:40Z">Jun 19, 2026</time></small> - api legibility: command/handler op dispatch; exhaustive switches; drop dead code; rename misleading symbols; bridge -&gt; host</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-init.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-init.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>

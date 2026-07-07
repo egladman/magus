@@ -19,6 +19,9 @@ That machinery stays transparent. The cache, the daemon socket, and the run log 
 
 ## Getting started
 
+Prefer a linear, written walkthrough? The [Getting started guide](getting-started.md)
+runs install to first `ci` pipeline as prose. The quick version:
+
 **1. [Install magus](download.md).** A single self-contained binary. The [Download guide](download.md) covers install, verification, and updating.
 
 **2. Initialize your workspace.** From the root of your repo:
@@ -57,10 +60,13 @@ magus affected ci   # run ci only for the projects your changes touched
 
 Start here to understand the model magus is built on.
 
+- [Workspace and projects](workspace.md) - how magus discovers projects, the magusfile layout, `depends_on`, and monorepo patterns.
 - [Targets](targets.md) - the named operations you run (`build`, `test`, `lint`), declared as exported functions in a magusfile.
 - [Spells](spells.md) - language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](spells.md#spells-vs-targets) for where the line falls.
 - [Charms](charms.md) - execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
 - [Operations and the work hierarchy](operations.md) - how a run is scheduled and parallelized across projects.
+- [Cache model](cache.md) - needs/provides/claims, the content-addressed cache key, invalidation, and replay.
+- [Sandbox model](sandbox.md) - the threat model and allowlist semantics that confine spell execution.
 - [Services](services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
 - [Wards](wards.md) - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).
 - [Engines](engines.md) - how magus loads and evaluates a magusfile.
@@ -72,6 +78,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [CI](targets/ci.md) - compose a `ci` target with `magus.needs`, and the shared-cache trust model.
 - [Daemon and concurrency](daemon.md) - one persistent process, one shared pool across every client.
 - [Remote caching](remote-cache.md) - share the build cache across machines and CI, with a signing-based trust model.
+- [Editor setup](editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
 - [Debugging](debugging.md) - the interactive REPL, `magus.pry()` breakpoints, and stepping through a target.
 - [Tips and tricks](tips.md) - non-obvious ways to combine subcommands.
 - [MCP](mcp.md) - drive magus from agents over the Model Context Protocol.
@@ -92,5 +99,5 @@ The magusfile API and diagnostics:
 - [Configuration](config.md) - every `magus.yaml` key with its `MAGUS_*` environment variable, CLI flag, and type.
 - [Standard library modules](buzz/modules/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
 - [Spells reference](spells.md#built-in-spells) - the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
-- Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [*wards*](wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](codes/services/MGS5002.md)). Browse by family: [magusfile](codes/magusfile/README.md), [race](codes/race/README.md), [sandbox](codes/sandbox/README.md), and [services](codes/services/README.md).
+- Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](codes/services/MGS5002.md)). Browse by family: [magusfile](codes/magusfile/README.md), [race](codes/race/README.md), [sandbox](codes/sandbox/README.md), and [services](codes/services/README.md).
 - [Documentation conventions](conventions.md) - how placeholders, shell commands, runnable examples, and admonitions are written across these docs.

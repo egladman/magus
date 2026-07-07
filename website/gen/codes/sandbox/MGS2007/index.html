@@ -110,7 +110,7 @@ allowlist. This is sandbox working as designed.</p>
         <a class="related-card" href="../../../codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
         <a class="related-card" href="../../../codes/sandbox/MGS2001/"><span class="related-card-title">MGS2001: path read denied</span><span class="related-card-desc">Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.</span></a>
         <a class="related-card" href="../../../codes/sandbox/MGS2002/"><span class="related-card-title">MGS2002: path write denied</span><span class="related-card-desc">Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.</span></a>
-        <a class="related-card" href="../../../codes/sandbox/MGS2003/"><span class="related-card-title">MGS2003: env vars stripped</span><span class="related-card-desc">Informational notice that the sandbox replaced a child process environment with a curated allowlist, dropping variables like tokens or credentials.</span></a>
+        <a class="related-card" href="../../../sandbox/"><span class="related-card-title">Sandbox model</span><span class="related-card-desc">The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.</span></a>
     </div>
   </section>
   <div class="page-provenance container">

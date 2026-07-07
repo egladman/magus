@@ -2,3 +2,7 @@
 # prettier rewriting them) would drift against `magus run generate`.
 docs/modules/
 docs/manpage/gen/
+
+# Claude Code session worktrees: full repo checkouts owned by other sessions.
+# A root-scoped prettier walk must never rewrite (or even check) them.
+.claude/

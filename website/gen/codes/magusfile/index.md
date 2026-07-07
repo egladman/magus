@@ -16,3 +16,4 @@ gap is visible before CI runs.
 ## Codes
 
 - [MGS1001](MGS1001.md): no `ci` target defined in the selected project(s).
+- [MGS1002](MGS1002.md): a spell import is shadowed by a same-named spell higher in the tree.

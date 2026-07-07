@@ -7,9 +7,9 @@ A **target** is a named operation (build, test, lint, …) declared as an `expor
 ## Quick start
 
 ```sh
-magus run <target>            # from inside the project directory
-magus run <target> <path>     # from anywhere in the workspace
-magus run <target>:<charm>    # change HOW it runs (e.g. lint:rw)
+magus run <target>          # from inside the project directory
+magus run <target> <path>   # from anywhere in the workspace
+magus run <target>:<charm>  # change HOW it runs (e.g. lint:rw)
 ```
 
 Unfamiliar with a term? See the [Glossary](#glossary).
@@ -19,10 +19,10 @@ Unfamiliar with a term? See the [Glossary](#glossary).
 This workspace has a knowledge graph of **934 nodes** and **1499 edges** (schema v1). Query it instead of grepping:
 
 ```sh
-magus query "<terms>"             # kind:spell, project:pkg/foo, relation:uses, free text, -negation
-magus explain <node>              # one node: its edges, provenance, blast radius
-magus path <a> <b>                # how two nodes connect
-magus describe knowledge -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
+magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
+magus explain <node>        # one node: its edges, provenance, blast radius
+magus path <a> <b>          # how two nodes connect
+magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 ```
 
 | Kind | Count | List them | Anchors (most connected) |

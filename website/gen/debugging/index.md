@@ -1,7 +1,17 @@
 ---
 title: Debugging magusfiles
 description: Drop into an interactive Buzz REPL with magusfile bindings preloaded, or set magus.pry() breakpoints mid-target to inspect frames, locals, and state.
-tags: [debugging, repl, pry, breakpoint, buzz, troubleshooting, diagnostics, magusfile]
+tags:
+  [
+    debugging,
+    repl,
+    pry,
+    breakpoint,
+    buzz,
+    troubleshooting,
+    diagnostics,
+    magusfile,
+  ]
 ---
 
 # Debugging

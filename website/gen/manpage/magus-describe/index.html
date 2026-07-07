@@ -6,12 +6,12 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <title>magus describe — magus</title>
-  <meta name="description" content="Show the changed files and dependency chains that cause a given project to appear in the affected set computed by magus affected.">
+  <meta name="description" content="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/manpage/magus-describe/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="magus describe — magus">
-  <meta property="og:description" content="Show the changed files and dependency chains that cause a given project to appear in the affected set computed by magus affected.">
+  <meta property="og:description" content="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/manpage/magus-describe/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -65,31 +65,56 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
+        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a></li><li><a href="#options" title="Options">Options</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="magus-describe">magus-describe</h1>
-<p>Explain why a project is in the affected set</p>
+<p>Define a magus concept and list its entities</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> describe &lt;project&gt; [flags]</p>
+<p><strong>magus</strong> describe &lt;noun&gt; [&lt;name&gt;] [flags]</p>
 <h2 id="description">Description</h2>
-<p>Show the changed files and dependency chains that cause a given project
-to appear in the affected set computed by magus affected.</p>
-<p>Each path section shows the seed project whose files changed, the chain of
-dependency edges leading from that seed to the target, and the list of changed
-files under the seed.</p>
+<p>Define a magus concept and list every entity of that kind. The noun is
+one of spell, charm, target, project, workspace, module, or mcp-tool; singular
+and plural are interchangeable. Pass a name after the noun to detail a single
+entity instead of listing them all. (The knowledge graph lives under magus
+graph: export for the merged graph, stats for its shape.)</p>
+<p>The charm noun is the inverse of a target ref: &quot;describe charm rw&quot; lists every
+target that declares the rw charm and the argv edit each one makes, the transpose
+of the charms a single &quot;describe target&quot; lists.</p>
+<p>For a target ref (e.g. &quot;api:build&quot;, or &quot;:test&quot; for all projects) magus prints the
+fully-evaluated dispatch plan: the workspace-rooted source and output globs, the
+spells that fire, the charm-applied command, and any per-target policy. Add a charm
+and --explain (e.g. &quot;lint:rw --explain&quot;) to see each charm reshape the command one
+step at a time.</p>
+<h2 id="options">Options</h2>
+<dl>
+<dt><strong>--evaluated</strong></dt>
+<dd>For projects: print workspace-rooted globs, effective claims, and per-target policies</dd>
+<dt><strong>--explain</strong></dt>
+<dd>For a target ref with charms: show the per-charm argv trace (base then each charm)</dd>
+</dl>
 <h2 id="examples">Examples</h2>
-<p><em>Describe why api/gateway is affected</em></p>
-<pre><code class="language-sh">magus describe api/gateway
+<p><em>List every target</em></p>
+<pre><code class="language-sh">magus describe targets
 </code></pre>
-<p><em>JSON output</em></p>
-<pre><code class="language-sh">magus describe api/gateway -o json
+<p><em>List a charm's declaring targets</em></p>
+<pre><code class="language-sh">magus describe charm rw
+</code></pre>
+<p><em>Detail one project</em></p>
+<pre><code class="language-sh">magus describe project api
+</code></pre>
+<p><em>Preview a charm-applied command</em></p>
+<pre><code class="language-sh">magus describe target lint:rw
+</code></pre>
+<p><em>Trace how each charm reshapes the command</em></p>
+<pre><code class="language-sh">magus describe target --explain lint:rw,debug
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>
@@ -101,15 +126,15 @@ files under the seed.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
-        <a class="related-card" href="../../manpage/magus-completion/"><span class="related-card-title">magus completion</span><span class="related-card-desc">Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.</span></a>
-        <a class="related-card" href="../../manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
         <a class="related-card" href="../../manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
+        <a class="related-card" href="../../manpage/magus-init/"><span class="related-card-title">magus init</span><span class="related-card-desc">Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.</span></a>
+        <a class="related-card" href="../../manpage/magus-ls/"><span class="related-card-title">magus ls</span><span class="related-card-desc">List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.</span></a>
+        <a class="related-card" href="../../manpage/magus-run/"><span class="related-card-title">magus run</span><span class="related-card-desc">Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+describe%22">magus describe</a><a class="tag" href="../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../search/?q=tag%3A%22dependency+graph%22">dependency graph</a><a class="tag" href="../../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../../search/?q=tag%3A%22debugging%22">debugging</a></div>
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de" data-tooltip="5d9e514ddc79f4e388d41f11d6894bd4afba27de" title="5d9e514ddc79f4e388d41f11d6894bd4afba27de">5d9e514</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/5cf487cd315c639cda74697a0766e1311f21fd51"><code>5cf487c</code></a> <small><time datetime="2026-06-20T03:59:44Z">Jun 20, 2026</time></small> - add magus insight; behavioral code analysis from vcs history</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-describe.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-describe.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+describe%22">magus describe</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22charm%22">charm</a><a class="tag" href="../../search/?q=tag%3A%22target%22">target</a><a class="tag" href="../../search/?q=tag%3A%22project%22">project</a><a class="tag" href="../../search/?q=tag%3A%22workspace%22">workspace</a><a class="tag" href="../../search/?q=tag%3A%22introspection%22">introspection</a></div>
+    <small>Last updated <time datetime="2026-07-07T21:05:50Z">July 7, 2026, 9:05 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d243f737843b8305cf45da1ce08da026527183fa" data-tooltip="d243f737843b8305cf45da1ce08da026527183fa" title="d243f737843b8305cf45da1ce08da026527183fa">d243f73</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (6)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b06a9adfad8b2e637ecd98ab2cbfb3a7572f48e1"><code>b06a9ad</code></a> <small><time datetime="2026-07-07T18:24:15Z">Jul 7, 2026</time></small> - add a describe charm noun that inverts the charm index; it lists every target that declares a charm and the argv edit it makes, marking reserved built-ins and workspace defaults</li><li><a href="https://github.com/egladman/magus/commit/54d007c2a4cb829d155fdd92e20aafbabd7df71a"><code>54d007c</code></a> <small><time datetime="2026-07-07T16:42:15Z">Jul 7, 2026</time></small> - parse interspersed CLI flags; derive the global flag pre-scan from the real bindings; refresh stale/incomplete man pages; rename manpage Segment/Subcommand to Command/Target</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/5cf487cd315c639cda74697a0766e1311f21fd51"><code>5cf487c</code></a> <small><time datetime="2026-06-20T03:59:44Z">Jun 20, 2026</time></small> - add magus insight; behavioral code analysis from vcs history</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b783</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-describe.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-describe.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>

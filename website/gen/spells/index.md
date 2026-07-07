@@ -19,7 +19,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | Spell | Language | Ops | Purpose |
 |-------|----------|-----|---------|
 | [`bash`](spells/bash.md) | Shell | 1 | Bash spell: shellcheck linting for shell scripts. |
-| [`buf`](spells/buf.md) | Protobuf | 4 | Buf spell: protobuf build, lint, format, and code generation. |
+| [`buf`](spells/buf.md) | Protobuf | 5 | Buf spell: protobuf build, lint, format, and code generation. |
 | [`buzz`](spells/buzz.md) | Buzz | 3 | Buzz spell: check and test .buzz sources, plus run them through the magus interpreter. |
 | [`cosign`](spells/cosign.md) | - | 3 | Cosign spell: keyless sign, attest, and verify for container artifacts. |
 | [`docker`](spells/docker.md) | Docker | 4 | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting. |
@@ -246,17 +246,17 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 
 ## Glossary
 
-| Term               | Definition                                                                                                                                                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Spell**          | A library of tool-native operations for one toolchain, plus its cache/affected metadata. Bound to a project; runs nothing on its own.                                                                                              |
-| **Op (operation)** | One tool-native action a spell exposes, named after its CLI command (`go-vet`, `golangci-lint`). Reached by subscript on the handle (`go["go-vet"]()`) or via `spell::op` on the CLI. See [Naming operations](#naming-operations). |
-| **Handle**         | The value bound by importing a spell (`import "magus/spell/<name>"` for a built-in, `import "spells/<name>"` for a workspace-local one). Inert until passed to `magus.project.register`.                                           |
-| **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                      |
-| **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                             |
-| **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`), for affected-set attribution.                                                                                                                                                         |
-| **Op**             | A command op forks a `Command` (`{bin, args, charms}`) to completion; a service op is a long-running `Service` (`{command, readiness?, stop?, distinct?, idle?}`): foregrounded when run directly, supervised in the background when reached as a dependency.                                                   |
-| **Op kind**        | Whether an op is a `command` (returns a `Command`, run to completion, the default) or a `service` (returns a `Service`, a long-running process). Inferred from the return type; lives on the op, so one spell mixes both. |
-| **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                   |
+| Term               | Definition                                                                                                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Spell**          | A library of tool-native operations for one toolchain, plus its cache/affected metadata. Bound to a project; runs nothing on its own.                                                                                                                         |
+| **Op (operation)** | One tool-native action a spell exposes, named after its CLI command (`go-vet`, `golangci-lint`). Reached by subscript on the handle (`go["go-vet"]()`) or via `spell::op` on the CLI. See [Naming operations](#naming-operations).                            |
+| **Handle**         | The value bound by importing a spell (`import "magus/spell/<name>"` for a built-in, `import "spells/<name>"` for a workspace-local one). Inert until passed to `magus.project.register`.                                                                      |
+| **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                                                 |
+| **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                                                        |
+| **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`), for affected-set attribution.                                                                                                                                                                                    |
+| **Op**             | A command op forks a `Command` (`{bin, args, charms}`) to completion; a service op is a long-running `Service` (`{command, readiness?, stop?, distinct?, idle?}`): foregrounded when run directly, supervised in the background when reached as a dependency. |
+| **Op kind**        | Whether an op is a `command` (returns a `Command`, run to completion, the default) or a `service` (returns a `Service`, a long-running process). Inferred from the return type; lives on the op, so one spell mixes both.                                     |
+| **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                                              |
 
 ## Worked examples in this repo
 
