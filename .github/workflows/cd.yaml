@@ -6,34 +6,190 @@ on:
       - 'v*'
 
 permissions:
-  contents: read  # default; the release job overrides to write
+  contents: read  # default; publish overrides to write
 
 jobs:
-  release:
-    name: Build and publish release
+  # One job per native runner: each builds BOTH its own platform's static and
+  # dynamically-linked (cgo) binary, back to back on the same runner. Static
+  # cross-compiles trivially (no C toolchain needed) so there's no reason to farm it
+  # out to a separate job — that would just be fanning out for no benefit. cgo needs a
+  # real C toolchain + libzstd/liblzma for that exact platform, which is exactly what
+  # each of these runners already has set up for its own native arch/OS.
+  # contents: read only; none of these see MAGUS_SIGNING_KEY.
+  release-linux-amd64:
+    name: Build release artifacts (linux/amd64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # publish is the only job that creates the Release/uploads assets
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history + tags so the release-build target's version() (git describe
+          # --tags) resolves the tag and build_date() reads the commit date.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-magus  # apt-installs liblzma-dev/libzstd-dev on Linux
+      # No remote-cache env is set in CD on purpose: a release builds clean off the
+      # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
+      # chance of replaying a cached (unsigned) artifact into a release.
+      - name: Build release artifacts (static + dynamic)
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-linux-amd64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release-linux-arm64:
+    name: Build release artifacts (linux/arm64)
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-magus
+      - name: Build release artifacts (static + dynamic)
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-linux-arm64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release-darwin-amd64:
+    name: Build release artifacts (darwin/amd64)
+    runs-on: macos-13
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-magus  # brew-installs zstd/xz on macOS
+      - name: Build release artifacts (static + dynamic)
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-darwin-amd64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release-darwin-arm64:
+    name: Build release artifacts (darwin/arm64)
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-magus
+      - name: Build release artifacts (static + dynamic)
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-darwin-arm64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release-windows-amd64:
+    name: Build release artifacts (windows/amd64)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      # MSYS2 ships prebuilt mingw-w64 zstd/xz packages, so internal/codec's cgo path
+      # can link without building those C libs from source. UNVERIFIED: whether `go
+      # build`'s cgo pkg-config lookup resolves correctly outside an MSYS2 shell
+      # context — spike this before trusting the release job on it.
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-zstd mingw-w64-x86_64-xz
+          path-type: inherit
+
+      - name: Point go build at the MSYS2 mingw toolchain
+        shell: msys2 {0}
+        run: |
+          echo "MAGUS_CGO_CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
+          echo "MAGUS_CGO_PKG_CONFIG_PATH=$(cygpath -m /mingw64/lib/pkgconfig)" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup-magus
+
+      # release-build:static doesn't need MAGUS_CGO_CC/PKG_CONFIG_PATH (CGO_ENABLED=0
+      # ignores them), so running it here too is harmless — same runner, same shell.
+      - name: Build release artifacts (static + dynamic)
+        shell: msys2 {0}
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-windows-amd64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs:
+      - release-linux-amd64
+      - release-linux-arm64
+      - release-darwin-amd64
+      - release-darwin-arm64
+      - release-windows-amd64
     runs-on: ubuntu-latest
     permissions:
       contents: write  # create the GitHub Release and upload assets
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # Full history + tags so the release target's version() (git describe
-          # --tags) resolves the tag and build_date() reads the commit date.
+          # Full history + tags so generate_release_notes below has commit history.
           fetch-depth: 0
 
-      - uses: ./.github/actions/setup-magus
+      - uses: ./.github/actions/setup-magus  # provides the Go toolchain for the magus-utils calls below
 
-      # No remote-cache env is set in CD on purpose: a release builds clean off the
-      # cache. magusfile.buzz leaves the backend unbound without it, so there
-      # is zero chance of replaying a cached (unsigned) artifact into a release.
-      # Cross-compiles all 5 targets into dist/ and writes SHA256SUMS.
-      - name: Build release artifacts
-        run: magus run release --no-default-charms
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
 
-      - name: Sign SHA256SUMS
+      # Every release-<platform> job wrote its own <asset>.sha256 sidecar
+      # (sha256sum-compatible, one line) alongside each tarball — no cross-job
+      # aggregation needed, just concatenate what's on disk.
+      - name: Build combined manifest
+        run: cat dist/*.sha256 > dist/SHA256SUMS
+
+      # Signs dist/SHA256SUMS, then self-verifies against the embedded release pubkey
+      # before the release goes out (safe here, unlike setup-magus, since this job has
+      # the magus source checked out). See release_sign() in magusfile.buzz.
+      - name: Sign and verify SHA256SUMS
         env:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
-        run: go run ./cmd/magus-utils sign dist/SHA256SUMS
+        run: magus run release-sign --no-default-charms
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
@@ -46,7 +202,7 @@ jobs:
 
   image:
     name: Publish container images
-    needs: release
+    needs: publish
     runs-on: ubuntu-latest
     permissions:
       contents: read

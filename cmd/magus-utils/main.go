@@ -25,6 +25,7 @@ var scribes = map[string]func(args []string) error{
 	"spells":   runSpells,
 	"sign":     runSign,
 	"api":      runAPI,
+	"verify":   runVerify,
 }
 
 func main() {
@@ -46,5 +47,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|bindings|config|spells|sign|api> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|bindings|config|spells|sign|api|verify> [flags]")
 }

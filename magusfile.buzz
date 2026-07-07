@@ -48,6 +48,11 @@ magus.project({
         "ci-shard": {"skipCache": true},
         "postflight": {"skipCache": true},
         "image-build": {"skipCache": true},
+        // A release must never replay a cached artifact (see cd.yaml's remote-cache
+        // comment); each has a real side effect (dist/ output, or a signature over it)
+        // per invocation.
+        "release-build": {"skipCache": true},
+        "release-sign": {"skipCache": true},
         // coverage rewrites assets/coverage.svg; a cache hit would skip the write.
         "coverage": {"skipCache": true},
     },
@@ -119,15 +124,20 @@ fun build_variant(dockerfile: str, platforms: str, tags: [str], meta: str, publi
     }
 }
 
-// Under the cd charm, build+push+sign static and CGO images; else load a single-arch static image.
+// Under the cd charm, build+push+sign both static and CGO images unconditionally.
+// Otherwise loads one single-arch image locally: CGO/glibc (Dockerfile) by default, or
+// the static/no-libc variant (Dockerfile.static) under the `static` charm — the same
+// default-cgo/opt-in-static convention as release_build() in this file.
 export fun image_build(args: [str]) > void {
     if (magus.has_charm("cd")) {
         build_variant("Dockerfile.static", "linux/amd64,linux/arm64",
             [IMAGE + ":" + version(), IMAGE + ":latest"], "static-meta.json", true);
         build_variant("Dockerfile", "linux/amd64",
             [IMAGE + ":" + version() + "-cgo", IMAGE + ":latest-cgo"], "cgo-meta.json", true);
-    } else {
+    } else if (magus.has_charm("static")) {
         build_variant("Dockerfile.static", "linux/amd64", [image_tag()], "", false);
+    } else {
+        build_variant("Dockerfile", "linux/amd64", [image_tag()], "", false);
     }
 }
 
@@ -212,43 +222,89 @@ export fun generate(args: [str]) > void {
     }
 }
 
-// Cross-compiles a static binary per platform into dist/ and archives each.
-export fun release(args: [str]) > void {
-    final release_platforms = [
-        ["linux",   "amd64"],
-        ["linux",   "arm64"],
-        ["darwin",  "amd64"],
-        ["darwin",  "arm64"],
-        ["windows", "amd64"],
-    ];
-
+// Builds one (goos, goarch) release binary and archives it into dist/, writing a
+// standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format).
+// No cross-job aggregation needed: CD's publish job later does
+// `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target.
+// release-build's cgo and static (charm) modes both call this, differing only in
+// CGO_ENABLED and the asset suffix.
+fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void {
     fs.makeDirectory("dist");
     final v = version();
-    final flags = ld_flags();
-    foreach (p in release_platforms) {
-        final goos = p[0];
-        final goarch = p[1];
-        var binary = "magus";
-        if (goos == "windows") { binary = "magus.exe"; }
+    var binary = "magus";
+    if (goos == "windows") { binary = "magus.exe"; }
 
-        // Stage each binary alone so the archive holds just the binary at its root.
-        final stage = fs.join("dist", goos + "-" + goarch);
-        fs.makeDirectory(stage);
-        go["go-build"]({
-            "env": {"GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "0", "GOEXPERIMENT": "jsonv2"},
-            "args": ["-trimpath", "-ldflags", flags, "-o", fs.join(stage, binary), "./cmd/magus"],
-        });
+    final stage = fs.join("dist", goos + "-" + goarch + suffix);
+    fs.makeDirectory(stage);
 
-        final asset = fs.join("dist", "magus_" + v + "_" + goos + "_" + goarch + ".tar.gz");
-        archive.compress(stage, asset, {});
-        fs.delete(stage);
+    var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
+    if (cgo) {
+        env["CGO_ENABLED"] = "1";
+        // CC/PKG_CONFIG_PATH are set by the CD workflow only where the native toolchain
+        // isn't already on the default search path (currently just windows/MSYS2);
+        // empty on Linux/macOS, where apt/brew already put libzstd.pc/liblzma.pc where
+        // pkg-config looks by default.
+        final cc = os.env("MAGUS_CGO_CC");
+        if (cc != null and cc != "") { env["CC"] = cc; }
+        final pkgcfg = os.env("MAGUS_CGO_PKG_CONFIG_PATH");
+        if (pkgcfg != null and pkgcfg != "") { env["PKG_CONFIG_PATH"] = pkgcfg; }
+    } else {
+        env["CGO_ENABLED"] = "0";
     }
-    var sums = "";
-    foreach (asset in fs.glob(fs.join("dist", "magus_*.tar.gz"))) {
-        final digest = crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(asset));
-        sums = sums + digest + "  " + fs.basename(asset) + "\n";
+
+    go["go-build"]({
+        "env": env,
+        "args": ["-trimpath", "-ldflags", ld_flags(), "-o", fs.join(stage, binary), "./cmd/magus"],
+    });
+
+    final asset = fs.join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
+    archive.compress(stage, asset, {});
+    fs.delete(stage);
+
+    final digest = crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(asset));
+    fs.writeFile(asset + ".sha256", digest + "  " + fs.basename(asset) + "\n");
+}
+
+// Resolves which platform to build: the explicit (goos, goarch) args when given, else
+// the current runner's own native platform. So a bare `magus run release-build` (with
+// or without the static charm) builds exactly one binary — the one you're standing
+// on — never a silent "all 5" surprise.
+fun release_target_platform(goos: str, goarch: str) > [str] {
+    if (goos != null and goos != "") { return [goos, goarch]; }
+    final p = os.platform();
+    return [p[0], p[1]];
+}
+
+// Builds one release binary for one platform. Default is dynamically-linked (cgo):
+// internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for
+// whatever (goos, goarch) you ask for, so cross-compiling this variant only works if
+// you already have that toolchain around — CD never does, sticking to each native
+// job's own platform. The `static` charm (`magus run release-build:static`) switches
+// to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the
+// cgo default it's cheap to run for every platform from one machine — CD's
+// release-static job loops `release-build:static` once per platform with explicit
+// args. Reads has_charm directly (see docs/charms.md's function-target pattern, e.g.
+// build:container): this is a magusfile function target with no spell, so :static
+// trips the soft undeclared-charm typo-guard warning — expected here, same as that
+// example.
+export fun release_build(goos: str, goarch: str) > void {
+    final p = release_target_platform(goos, goarch);
+    if (magus.has_charm("static")) {
+        build_release_variant(p[0], p[1], false, "-static");
+    } else {
+        build_release_variant(p[0], p[1], true, "");
     }
-    fs.writeFile(fs.join("dist", "SHA256SUMS"), sums);
+}
+
+// Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see
+// cmd/magus-utils/sign.go), then self-verifies the signature against the embedded
+// release pubkey (internal/releasekey) before the release goes out — a cheap
+// regression guard, safe to run here (unlike setup-magus, which can't depend on the
+// magus source tree since it's reused by arbitrary external repos).
+export fun release_sign(args: [str]) > void {
+    os.exec("go", ["run", "./cmd/magus-utils", "sign", fs.join("dist", "SHA256SUMS")]);
+    os.exec("go", ["run", "./cmd/magus-utils", "verify",
+        fs.join("dist", "SHA256SUMS"), fs.join("dist", "SHA256SUMS.sig")]);
 }
 
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.

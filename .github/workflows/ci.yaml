@@ -15,7 +15,7 @@ permissions:
 
 env:
   # Release tag to install; empty builds from source.
-  MAGUS_VERSION: ''
+  MAGUS_VERSION: 'v0.1.0'
   # Exercise the encoding/json/v2 codec across all jobs (shim falls back to v1).
   GOEXPERIMENT: jsonv2
   # PRs open the cache read-only (no local writes, no remote push) so a PR can't
@@ -176,6 +176,31 @@ jobs:
       - uses: ./.github/actions/magus
         with:
           merge-history: 'true'
+
+  # setup-magus ships as a reusable action other repos can point at on either
+  # amd64 or arm64 GitHub-hosted runners. The main matrix only ever runs on
+  # ubuntu-latest (amd64), so this job is the only thing that actually exercises
+  # the arm64 download/verify/extract path against a real release.
+  setup-magus-arm-smoke:
+    name: setup-magus (arm64 smoke test)
+    needs: preflight
+    if: needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/setup-magus
+        with:
+          version: ${{ env.MAGUS_VERSION }}
+      - name: Confirm the arm64 binary actually installed and runs
+        run: |
+          set -euo pipefail
+          magus version
+          file "$(command -v magus)" | grep -q "ARM aarch64" || {
+            echo "expected an ARM aarch64 binary on PATH" >&2
+            exit 1
+          }
 
   # postflight is the fan-in: once the matrix joins, summarize the whole run's
   # behavioral code analysis (hotspots, affinity, ownership, trend) into the job
