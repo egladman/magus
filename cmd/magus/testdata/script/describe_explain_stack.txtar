@@ -1,0 +1,32 @@
+# two stacked charms apply in sorted charm-name order (debug before rw), and
+# --explain shows one trace step per charm on top of the base command.
+exec magus describe target lint:rw,debug --explain
+stdout 'charm trace'
+stdout 'base       acme lint \.'
+stdout '\+ debug    acme lint \. -v'
+stdout '\+ rw       acme lint --fix \. -v'
+
+# order of the charms in the ref does not matter: the trace is identical
+exec magus describe target lint:debug,rw --explain
+stdout '\+ debug    acme lint \. -v'
+stdout '\+ rw       acme lint --fix \. -v'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+import "magus/charm";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    final args = ["lint", "."];
+    return Command{bin = "acme", args = args, charms = {
+        "rw": after(args, "lint", ["--fix"]),
+        "debug": append(["-v"]),
+    }};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
