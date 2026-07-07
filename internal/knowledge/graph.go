@@ -1,0 +1,168 @@
+package knowledge
+
+import (
+	"cmp"
+	"slices"
+
+	"github.com/egladman/magus/types"
+)
+
+// Graph is the in-memory knowledge graph: the union of every shard's nodes and
+// edges, keyed for dedup and emitted in deterministic order. It is assembled at
+// load time (shards are authoritative on disk; there is no continuously merged
+// file). Not safe for concurrent mutation - build it on one goroutine, then read.
+type Graph struct {
+	nodes map[string]types.KnowledgeNode // by node ID
+	edges map[edgeKey]types.KnowledgeEdge
+
+	// Adjacency indices for traversal, built lazily on first query and assumed
+	// stable thereafter (queries run after load/merge completes).
+	out map[string][]types.KnowledgeEdge // by source ID
+	in  map[string][]types.KnowledgeEdge // by target ID
+}
+
+// edgeKey collapses parallel edges: at most one edge per (source, target,
+// relation). A second edge with the same key upgrades score/provenance if the
+// newcomer is stronger, so extraction order never changes the result.
+type edgeKey struct {
+	source, target, relation string
+}
+
+// NewGraph returns an empty graph ready for AddNode/AddEdge/Merge.
+func NewGraph() *Graph {
+	return &Graph{
+		nodes: map[string]types.KnowledgeNode{},
+		edges: map[edgeKey]types.KnowledgeEdge{},
+	}
+}
+
+// AddNode inserts a node, or upgrades an existing one with the same ID by filling
+// empty fields from the newcomer. Idempotent: the same node from two shards (e.g.
+// an op node the registry declares and a project references) merges cleanly, and
+// the richer description wins regardless of insertion order.
+func (g *Graph) AddNode(n types.KnowledgeNode) {
+	n.Label = sanitize(n.Label, maxLabelLen)
+	n.Doc = sanitize(n.Doc, maxDocLen)
+	n.Source = sanitize(n.Source, maxSrcLen)
+	existing, ok := g.nodes[n.ID]
+	if !ok {
+		g.nodes[n.ID] = n
+		return
+	}
+	if existing.Doc == "" {
+		existing.Doc = n.Doc
+	}
+	if existing.Source == "" {
+		existing.Source = n.Source
+	}
+	if existing.Label == "" {
+		existing.Label = n.Label
+	}
+	if len(n.Attrs) > 0 {
+		if existing.Attrs == nil {
+			existing.Attrs = map[string]string{}
+		}
+		for k, v := range n.Attrs {
+			if _, has := existing.Attrs[k]; !has {
+				existing.Attrs[k] = v
+			}
+		}
+	}
+	g.nodes[n.ID] = existing
+}
+
+// AddEdge inserts a directed edge, deduplicating by (source, target, relation).
+// On collision the higher-confidence edge (extracted over inferred, then higher
+// score) is kept, so the merged graph is independent of shard load order.
+func (g *Graph) AddEdge(e types.KnowledgeEdge) {
+	e.Provenance = sanitize(e.Provenance, maxSrcLen)
+	k := edgeKey{e.Source, e.Target, e.Relation}
+	if prev, ok := g.edges[k]; ok && edgeStronger(prev, e) {
+		return
+	}
+	g.edges[k] = e
+	g.out, g.in = nil, nil // invalidate adjacency; rebuilt on next query
+}
+
+func (g *Graph) node(id string) (types.KnowledgeNode, bool) {
+	n, ok := g.nodes[id]
+	return n, ok
+}
+
+// ensureAdj builds the out/in adjacency indices from the (sorted) edge set on
+// first use. Iterating Edges() keeps each adjacency list in deterministic order.
+func (g *Graph) ensureAdj() {
+	if g.out != nil {
+		return
+	}
+	g.out = map[string][]types.KnowledgeEdge{}
+	g.in = map[string][]types.KnowledgeEdge{}
+	for _, e := range g.Edges() {
+		g.out[e.Source] = append(g.out[e.Source], e)
+		g.in[e.Target] = append(g.in[e.Target], e)
+	}
+}
+
+// edgeStronger reports whether a should be kept over b (a is at least as strong).
+func edgeStronger(a, b types.KnowledgeEdge) bool {
+	if a.Confidence != b.Confidence {
+		return a.Confidence == types.ConfidenceExtracted
+	}
+	return a.Score >= b.Score
+}
+
+// Merge folds a shard's nodes and edges into the graph.
+func (g *Graph) Merge(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge) {
+	for _, n := range nodes {
+		g.AddNode(n)
+	}
+	for _, e := range edges {
+		g.AddEdge(e)
+	}
+}
+
+// Nodes returns every node sorted by ID (stable, deterministic).
+func (g *Graph) Nodes() []types.KnowledgeNode {
+	out := make([]types.KnowledgeNode, 0, len(g.nodes))
+	for _, n := range g.nodes {
+		out = append(out, n)
+	}
+	slices.SortFunc(out, func(a, b types.KnowledgeNode) int { return cmp.Compare(a.ID, b.ID) })
+	return out
+}
+
+// Edges returns every edge sorted by (source, target, relation).
+func (g *Graph) Edges() []types.KnowledgeEdge {
+	out := make([]types.KnowledgeEdge, 0, len(g.edges))
+	for _, e := range g.edges {
+		out = append(out, e)
+	}
+	slices.SortFunc(out, func(a, b types.KnowledgeEdge) int {
+		if c := cmp.Compare(a.Source, b.Source); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.Target, b.Target); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Relation, b.Relation)
+	})
+	return out
+}
+
+// Output renders the merged graph as the node-link export. Nodes and edges are
+// sorted so identical inputs produce byte-identical JSON (required for cache
+// fingerprinting, golden tests, and meaningful diffs).
+func (g *Graph) Output() types.KnowledgeGraphOutput {
+	nodes := g.Nodes()
+	edges := g.Edges()
+	return types.KnowledgeGraphOutput{
+		Definition:    types.KnowledgeGraphDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Directed:      true,
+		Multigraph:    false,
+		NodeCount:     len(nodes),
+		EdgeCount:     len(edges),
+		Nodes:         nodes,
+		Links:         edges,
+	}
+}
