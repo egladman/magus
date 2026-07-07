@@ -1,6 +1,6 @@
 ---
 title: magus describe
-description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.
+description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, knowledge) and list every entity of that kind, or detail one when a name is given.
 tags: [cli, magus describe, spell, charm, target, project, workspace, introspection]
 ---
 
@@ -15,9 +15,13 @@ Define a magus concept and list its entities
 ## Description
 
 Define a magus concept and list every entity of that kind. The noun is
-one of spell, charm, target, project, workspace, module, or mcp-tool; singular
-and plural are interchangeable. Pass a name after the noun to detail a single
-entity instead of listing them all.
+one of spell, charm, target, project, workspace, module, mcp-tool, or knowledge;
+singular and plural are interchangeable. Pass a name after the noun to detail a
+single entity instead of listing them all.
+
+The knowledge noun emits the deterministic knowledge graph of the workspace
+domain (projects, targets, spells, ops, charms, modules, methods, diagnostics)
+as a merged node-link graph; use -o json to feed it to an external graph tool.
 
 The charm noun is the inverse of a target ref: "describe charm rw" lists every
 target that declares the rw charm and the argv edit each one makes, the transpose
