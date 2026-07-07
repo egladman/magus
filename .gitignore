@@ -19,3 +19,6 @@ coverage.out
 
 /magus-docs
 /buzz-playground
+
+# compiled Go test binaries (go test -c / bench runs)
+*.test
