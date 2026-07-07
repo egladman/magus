@@ -21,6 +21,10 @@ type Inputs struct {
 	Spells      types.SpellsOutput      // DescribeSpells(): spell + op nodes
 	Modules     []types.ModuleEntry     // host modules, each with Methods populated
 	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes()
+	// Root is the absolute workspace root, used by the docs and buzz-source
+	// extractors to scan the filesystem. Empty disables those extractors (the
+	// store tests build from synthetic Inputs with no tree to scan).
+	Root string
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -36,10 +40,21 @@ type Shard struct {
 // plus one per project in the graph. Order is registry first, then projects in
 // their DescribeGraph order.
 func AssembleShards(in Inputs) []Shard {
-	shards := make([]Shard, 0, len(in.Graph.Projects)+1)
+	shards := make([]Shard, 0, len(in.Graph.Projects)+3)
 	shards = append(shards, assembleRegistry(in))
 	for _, p := range in.Graph.Projects {
 		shards = append(shards, assembleProject(p))
+	}
+	// Docs and buzz-source extraction scan the filesystem, so they run only when a
+	// workspace root is set (synthetic-Inputs tests leave it empty). Empty shards
+	// are dropped so no empty files are persisted.
+	if in.Root != "" {
+		if d := assembleDocs(in.Root, in.Spells); len(d.Nodes) > 0 {
+			shards = append(shards, d)
+		}
+		if b := assembleBuzz(in.Root); len(b.Nodes) > 0 {
+			shards = append(shards, b)
+		}
 	}
 	return shards
 }
@@ -169,6 +184,19 @@ func extractedEdge(source, target, relation, provenance string) types.KnowledgeE
 		Relation:   relation,
 		Confidence: types.ConfidenceExtracted,
 		Score:      1.0,
+		Provenance: provenance,
+	}
+}
+
+// inferredEdge builds a rubric-inferred edge (confidence inferred, sub-1.0 score)
+// for fuzzy evidence such as an in-body doc mention or an unresolved buzz import.
+func inferredEdge(source, target, relation, provenance string, score float64) types.KnowledgeEdge {
+	return types.KnowledgeEdge{
+		Source:     source,
+		Target:     target,
+		Relation:   relation,
+		Confidence: types.ConfidenceInferred,
+		Score:      score,
 		Provenance: provenance,
 	}
 }

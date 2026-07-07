@@ -158,7 +158,7 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		if _, relOnly := q.fields["relation"]; relOnly && !g.touchesRelation(id, q.fields["relation"]) {
 			return 0, false
 		}
-		return 1, true // field-only match; flat score
+		return 1 + kindRank(n.Kind), true // field-only match; flat score plus kind bias
 	}
 
 	// Every positive term must match (AND); score is the sum of best per-term
@@ -175,7 +175,22 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		}
 		total += best
 	}
-	return total, true
+	return total + kindRank(n.Kind), true
+}
+
+// kindRank biases resolution toward primary domain entities (target, spell, ...)
+// over source-level nodes (function, file, import, rationale, doc) when text
+// relevance ties, so a bare `explain build` resolves the target, not its source
+// function. The bonus is small relative to a real leaf match, so it only breaks
+// ties; it never lets a weaker text match outrank a stronger one.
+func kindRank(kind string) int {
+	switch kind {
+	case types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
+		types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic:
+		return 100
+	default:
+		return 0
+	}
 }
 
 // Neighborhood collects the induced subgraph reachable from seeds within a node

@@ -284,6 +284,13 @@ func groupSpellOps(hits []spellHit) []types.TargetSpellUse {
 	return uses
 }
 
+// Inspect walks the AST rooted at n depth-first, calling fn for each node (fn
+// returns false to skip that node's children). Exported so other extractors - the
+// knowledge-graph buzz walker - reuse this switch's full node coverage instead of
+// re-implementing it and risking a missed nesting (a call inside an if-condition,
+// say). It is the go/ast.Inspect analogue for the Buzz AST.
+func Inspect(n ast.Node, fn func(ast.Node) bool) { inspect(n, fn) }
+
 // inspect walks the AST rooted at n in depth-first order, calling fn for every node.
 // fn returns false to stop descending into that node's children (go/ast.Inspect
 // style). Concrete-pointer children are nil-checked before recursion so a nil

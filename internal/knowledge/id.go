@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -31,6 +32,20 @@ func methodID(module, method string) string {
 func diagnosticID(code string) string { return types.KindDiagnostic + ":" + code }
 
 func charmID(name string) string { return types.KindCharm + ":" + name }
+
+func docID(relPath string) string { return types.KindDoc + ":" + relPath }
+
+func fileID(relPath string) string { return types.KindFile + ":" + relPath }
+
+func functionID(relPath, name string) string {
+	return types.KindFunction + ":" + relPath + ":" + name
+}
+
+func importID(literal string) string { return types.KindImport + ":" + literal }
+
+func rationaleID(relPath string, line int) string {
+	return types.KindRationale + ":" + relPath + ":" + strconv.Itoa(line)
+}
 
 // sanitize normalizes free-form repo text (labels, docs, provenance) before it
 // enters the graph, per the plan's ingest-sanitization requirement: strip

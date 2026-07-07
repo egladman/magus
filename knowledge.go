@@ -65,6 +65,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		Spells:      ws.DescribeSpells(),
 		Modules:     allModuleEntries(),
 		Diagnostics: types.AllDiagnosticCodes(),
+		Root:        root,
 	}
 	return knowledge.Build(ctx, resolveCacheDir(root, cfg), knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),

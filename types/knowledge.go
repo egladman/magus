@@ -33,22 +33,24 @@ const (
 	KindModule     = "module"
 	KindMethod     = "method"
 	KindDiagnostic = "diagnostic"
-	KindDoc        = "doc"      // phase 4
-	KindFile       = "file"     // phase 4
-	KindFunction   = "function" // phase 4
-	KindImport     = "import"   // phase 4
+	KindDoc        = "doc"       // markdown doc page (phase 4)
+	KindFile       = "file"      // a .buzz source file (phase 4)
+	KindFunction   = "function"  // a function in a .buzz file (phase 4)
+	KindImport     = "import"    // an unresolvable buzz import literal (phase 4)
+	KindRationale  = "rationale" // a NOTE/WHY/HACK/TODO comment (phase 4)
 )
 
 // Knowledge edge relations. Values are stable wire strings.
 const (
-	RelationDependsOn  = "depends_on" // project->project, target->target
-	RelationContains   = "contains"   // project->target, spell->op
-	RelationUses       = "uses"       // target->op
-	RelationReferences = "references" // charm->target/project
-	RelationDocuments  = "documents"  // doc->spell/diagnostic/module (phase 4)
-	RelationCalls      = "calls"      // function->function (phase 4)
-	RelationImports    = "imports"    // file->file (phase 4)
-	RelationEmits      = "emits"      // target->diagnostic, runtime (phase 8)
+	RelationDependsOn    = "depends_on"    // project->project, target->target
+	RelationContains     = "contains"      // project->target, spell->op
+	RelationUses         = "uses"          // target->op
+	RelationReferences   = "references"    // charm->target/project
+	RelationDocuments    = "documents"     // doc->spell/diagnostic/module (phase 4)
+	RelationCalls        = "calls"         // function->function (phase 4)
+	RelationImports      = "imports"       // file->file / file->import (phase 4)
+	RelationRationaleFor = "rationale_for" // rationale->function (phase 4)
+	RelationEmits        = "emits"         // target->diagnostic, runtime (phase 8)
 )
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
