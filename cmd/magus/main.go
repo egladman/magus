@@ -62,6 +62,13 @@ import (
 )
 
 func main() {
+	os.Exit(runCLI())
+}
+
+// runCLI is the CLI entry point as a function returning an exit code, so both main
+// (os.Exit(runCLI())) and the testscript harness (testscript.RunMain) can drive the
+// real command in process. It must never call os.Exit itself.
+func runCLI() int {
 	log.SetFlags(0)
 	log.SetPrefix("magus: ")
 
@@ -80,7 +87,7 @@ func main() {
 
 	if exitCode >= 0 {
 		cleanup()
-		os.Exit(exitCode)
+		return exitCode
 	}
 
 	code := 0
@@ -93,7 +100,7 @@ func main() {
 		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
 	}
 	cleanup()
-	os.Exit(code)
+	return code
 }
 
 // startupResult carries everything main needs to dispatch a subcommand.

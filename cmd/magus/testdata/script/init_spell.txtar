@@ -1,0 +1,10 @@
+# magus init spell scaffolds a contract-complete, parseable spell
+exec magus init spell acme
+exists spells/acme/spell.buzz
+grep 'export fun mgs_getName\(\) > str \{ return "acme"; \}' spells/acme/spell.buzz
+grep 'mgs_listTargets' spells/acme/spell.buzz
+grep 'import "magus/target"' spells/acme/spell.buzz
+
+# a second scaffold refuses to overwrite without --force
+! exec magus init spell acme
+stderr 'already exists'

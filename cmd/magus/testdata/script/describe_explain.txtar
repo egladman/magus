@@ -1,0 +1,25 @@
+# interspersed flags: --explain AFTER the positional ref is still parsed,
+# and it renders the per-charm argv trace (base then each charm)
+exec magus describe target lint:rw --explain
+stdout 'charm trace'
+stdout 'acme lint \.'
+stdout 'acme lint --fix \.'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+import "magus/charm";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    final args = ["lint", "."];
+    return Command{bin = "acme", args = args, charms = {
+        "rw": after(args, "lint", ["--fix"]),
+    }};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

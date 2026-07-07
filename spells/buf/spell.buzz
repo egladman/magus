@@ -43,11 +43,26 @@ fun bufFormat(target: Target) > Command {
     }};
 }
 
+// breaking checks the current schema against a baseline for backward-incompatible
+// changes (wire and JSON compatibility). It defaults to comparing against the main
+// branch, buf's standard CI pattern; point it elsewhere with a function target when
+// a repo uses a different default branch or an image baseline. This is the protobuf
+// analogue of an API-contract gate: compose it into `lint` so a breaking .proto
+// change fails the same read-only stage as go-vet and golangci-lint. The gha charm
+// swaps buf's reporter to GitHub Actions annotations.
+fun bufBreaking(target: Target) > Command {
+    final args = ["breaking", "--against", ".git#branch=main"];
+    return Command{bin = "buf", args = args, charms = {
+        "gha": append(["--error-format=github-actions"]),
+    }};
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "buf-build": bufBuild,
         "buf-generate": bufGenerate,
         "buf-lint": bufLint,
         "buf-format": bufFormat,
+        "buf-breaking": bufBreaking,
     };
 }

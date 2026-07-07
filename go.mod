@@ -20,6 +20,7 @@ require (
 	github.com/minio/selfupdate v0.6.0
 	github.com/narqo/go-badge v0.0.0-20230821190521-c9a75c019a59
 	github.com/pelletier/go-toml/v2 v2.3.0
+	github.com/rogpeppe/go-internal v1.14.1
 	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.11.1
 	github.com/ulikunitz/xz v0.5.15
@@ -77,6 +78,7 @@ require (
 	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/tools v0.45.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529 // indirect
 	google.golang.org/grpc v1.80.0 // indirect

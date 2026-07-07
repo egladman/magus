@@ -1,0 +1,3 @@
+# magus version prints the binary name
+exec magus version
+stdout 'magus'

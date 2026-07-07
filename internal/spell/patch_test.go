@@ -201,6 +201,9 @@ var goldenBuiltins = map[string]Descriptor{
 			"buf-format": {Command: types.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
+			"buf-breaking": {Command: types.Command{Bin: "buf", Args: []string{"breaking", "--against", ".git#branch=main"}, Charms: map[string]types.Charm{
+				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
+			}}},
 		},
 	},
 	"buzz": {
