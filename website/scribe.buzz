@@ -1078,10 +1078,13 @@ fun llmsIndexBody(pages: [DocPage], base: str) > str {
     });
     var body = "# magus\n\n"
         + "> Workspace-aware build orchestrator and content-addressed cache. "
-        + "Each page has a Markdown source at its URL plus index.md.\n\n"
+        + "Every link below is the page's raw Markdown (its index.md sibling), "
+        + "so an agent fetches clean content directly.\n\n"
         + "## Documentation\n\n";
     foreach (p in sorted) {
-        var line = "- [" + p.title + "](" + base + p.url + ")";
+        // Link straight to the page's Markdown (directory-style url + index.md, the
+        // sibling of index.html), not the HTML page, so no URL guessing is needed.
+        var line = "- [" + p.title + "](" + base + p.url + "index.md)";
         if (p.desc != "") { line = line + ": " + p.desc; }
         body = body + line + "\n";
     }
@@ -2895,10 +2898,11 @@ test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descript
     pages.append(DocPage{url = "faq/", title = "FAQ", desc = ""});
     final want = "# magus\n\n"
         + "> Workspace-aware build orchestrator and content-addressed cache. "
-        + "Each page has a Markdown source at its URL plus index.md.\n\n"
+        + "Every link below is the page's raw Markdown (its index.md sibling), "
+        + "so an agent fetches clean content directly.\n\n"
         + "## Documentation\n\n"
-        + "- [Cache](/cache/): The cache model\n"
-        + "- [FAQ](/faq/)\n"
-        + "- [Targets](/targets/): What a target is\n";
-    assert.equal(llmsIndexBody(pages, "/"), want, "llms.txt body sorted, base-prefixed, description only when present");
+        + "- [Cache](/cache/index.md): The cache model\n"
+        + "- [FAQ](/faq/index.md)\n"
+        + "- [Targets](/targets/index.md): What a target is\n";
+    assert.equal(llmsIndexBody(pages, "/"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
 }
