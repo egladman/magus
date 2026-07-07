@@ -61,7 +61,7 @@ func genRoff(outDir, date, ver string) {
 	}
 	for _, seg := range imanpage.All {
 		name := "magus-" + seg.Name + ".1"
-		if err := writeFile(outDir, name, renderSegment(seg, date, ver)); err != nil {
+		if err := writeFile(outDir, name, renderCommand(seg, date, ver)); err != nil {
 			fatalf("%s: %v", name, err)
 		}
 	}
@@ -109,7 +109,7 @@ func renderMain(date, ver string) []byte {
 	return buf.Bytes()
 }
 
-func renderSegment(seg imanpage.Segment, date, ver string) []byte {
+func renderCommand(seg imanpage.Command, date, ver string) []byte {
 	var buf bytes.Buffer
 	w := imanpage.NewWriter(&buf)
 
@@ -267,7 +267,7 @@ func genMD(outDir string) {
 	}
 	for _, seg := range imanpage.All {
 		name := "magus-" + seg.Name + ".md"
-		if err := writeFile(outDir, name, renderSegmentMD(seg)); err != nil {
+		if err := writeFile(outDir, name, renderCommandMD(seg)); err != nil {
 			fatalf("%s: %v", name, err)
 		}
 	}
@@ -314,7 +314,7 @@ func renderMainMD() []byte {
 	return m.bytes()
 }
 
-func renderSegmentMD(seg imanpage.Segment) []byte {
+func renderCommandMD(seg imanpage.Command) []byte {
 	var m mdBuf
 	desc := seg.Description
 	if desc == "" {

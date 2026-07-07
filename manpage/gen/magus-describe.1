@@ -1,27 +1,52 @@
 .TH MAGUS-DESCRIBE 1 "" "magus dev" "magus Manual"
 .SH NAME
-magus\-describe \- Explain why a project is in the affected set
+magus\-describe \- Define a magus concept and list its entities
 .SH SYNOPSIS
 .B magus
-.RI "describe <project> [flags]"
+.RI "describe <noun> [<name>] [flags]"
 .SH DESCRIPTION
-Show the changed files and dependency chains that cause a given project
-to appear in the affected set computed by magus affected.
+Define a magus concept and list every entity of that kind. The noun is
+one of spell, target, project, workspace, module, or mcp\-tool; singular and
+plural are interchangeable. Pass a name after the noun to detail a single entity
+instead of listing them all.
 .PP
-Each path section shows the seed project whose files changed, the chain of
-dependency edges leading from that seed to the target, and the list of changed
-files under the seed.
+For a target ref (e.g. "api:build", or ":test" for all projects) magus prints the
+fully\-evaluated dispatch plan: the workspace\-rooted source and output globs, the
+spells that fire, the charm\-applied command, and any per\-target policy. Add a charm
+and \-\-explain (e.g. "lint:rw \-\-explain") to see each charm reshape the command one
+step at a time.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-evaluated\fR
+For projects: print workspace\-rooted globs, effective claims, and per\-target policies
+.TP
+\fB\-\-explain\fR
+For a target ref with charms: show the per\-charm argv trace (base then each charm)
+.RE
 .SH EXAMPLES
-\fIDescribe why api/gateway is affected\fR
+\fIList every target\fR
 .PP
 .EX
-magus describe api/gateway
+magus describe targets
 .EE
 .PP
-\fIJSON output\fR
+\fIDetail one project\fR
 .PP
 .EX
-magus describe api/gateway -o json
+magus describe project api
+.EE
+.PP
+\fIPreview a charm\-applied command\fR
+.PP
+.EX
+magus describe target lint:rw
+.EE
+.PP
+\fITrace how each charm reshapes the command\fR
+.PP
+.EX
+magus describe target --explain lint:rw,debug
 .EE
 .PP
 .SH SEE ALSO

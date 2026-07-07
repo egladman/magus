@@ -173,9 +173,11 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			flagName = ""
 		}
 		envVar := config.EnvName("MAGUS", thisYAML...)
-		usage := sanitizeUsage(firstDocLine(field.Doc))
-		if usage == "" {
-			usage = envVar
+		// The flag help leads with the env var, then the field's doc comment when
+		// it has one. A field with no doc shows just the env var, not "ENV: ENV".
+		help := envVar
+		if usage := sanitizeUsage(firstDocLine(field.Doc)); usage != "" {
+			help = envVar + ": " + usage
 		}
 
 		*out = append(*out, FlagDef{
@@ -185,7 +187,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			Kind:      kind,
 			GoPath:    goSel,
 			YamlPath:  strings.Join(thisYAML, "."),
-			Usage:     envVar + ": " + usage,
+			Usage:     help,
 		})
 	}
 }

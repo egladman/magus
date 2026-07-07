@@ -5,11 +5,11 @@ import (
 	"fmt"
 )
 
-// ExampleSegment shows how to build a Segment descriptor for a CLI subcommand.
-// Segments are consumed by the man-page generator and the registry builder to
+// ExampleCommand shows how to build a Command descriptor for a CLI subcommand.
+// Commands are consumed by the man-page generator and the registry builder to
 // produce magus(1) and its per-subcommand man pages.
-func ExampleSegment() {
-	seg := Segment{
+func ExampleCommand() {
+	seg := Command{
 		Name:  "run",
 		Short: "run a target for selected projects",
 		Usage: "magus run <target> [flags] [project...]",

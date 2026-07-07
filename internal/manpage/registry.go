@@ -5,31 +5,31 @@ import (
 	"time"
 )
 
-// All is the ordered list of magus top-level segments consumed by the
+// All is the ordered list of magus top-level commands consumed by the
 // man-page generator (internal/manpage).
-var All = []Segment{
-	listSegment,
-	describeSegment,
-	runSegment,
-	xSegment,
-	whereSegment,
-	tailSegment,
-	affectedSegment,
-	insightSegment,
-	watchSegment,
-	statusSegment,
-	doctorSegment,
-	configSegment,
-	serverSegment,
-	completionSegment,
-	initSegment,
-	selfSegment,
-	versionSegment,
+var All = []Command{
+	listCommand,
+	describeCommand,
+	runCommand,
+	xCommand,
+	whereCommand,
+	tailCommand,
+	affectedCommand,
+	insightCommand,
+	watchCommand,
+	statusCommand,
+	doctorCommand,
+	configCommand,
+	serverCommand,
+	completionCommand,
+	initCommand,
+	selfCommand,
+	versionCommand,
 }
 
-// CommonSubcommands is the canonical set of project-scoped targets shared by
-// the "run" and "affected" segments.
-var CommonSubcommands = []Subcommand{
+// CommonTargets is the canonical set of project-scoped targets shared by
+// the "run" and "affected" commands.
+var CommonTargets = []Target{
 	{Name: "ls", Short: "Print selected projects without executing anything"},
 	{Name: "build", Short: "Build selected projects"},
 	{Name: "test", Short: "Test selected projects"},
@@ -40,7 +40,7 @@ var CommonSubcommands = []Subcommand{
 	{Name: "ci", Short: "Run the magusfile's ci target read-only (affected-set anchor)"},
 }
 
-var listSegment = Segment{
+var listCommand = Command{
 	Name:        "ls",
 	Short:       "List all discovered projects",
 	Description: "List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.",
@@ -61,25 +61,35 @@ against the same struct that -o json emits.`,
 	},
 }
 
-var describeSegment = Segment{
+var describeCommand = Command{
 	Name:        "describe",
-	Short:       "Explain why a project is in the affected set",
-	Description: "Show the changed files and dependency chains that cause a given project to appear in the affected set computed by magus affected.",
-	Tags:        []string{"cli", "magus describe", "affected", "dependency graph", "explain", "debugging"},
-	Long: `Show the changed files and dependency chains that cause a given project
-to appear in the affected set computed by magus affected.
+	Short:       "Define a magus concept and list its entities",
+	Description: "Define a magus concept (spell, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.",
+	Tags:        []string{"cli", "magus describe", "spell", "target", "project", "workspace", "introspection"},
+	Long: `Define a magus concept and list every entity of that kind. The noun is
+one of spell, target, project, workspace, module, or mcp-tool; singular and
+plural are interchangeable. Pass a name after the noun to detail a single entity
+instead of listing them all.
 
-Each path section shows the seed project whose files changed, the chain of
-dependency edges leading from that seed to the target, and the list of changed
-files under the seed.`,
-	Usage: "magus describe <project> [flags]",
+For a target ref (e.g. "api:build", or ":test" for all projects) magus prints the
+fully-evaluated dispatch plan: the workspace-rooted source and output globs, the
+spells that fire, the charm-applied command, and any per-target policy. Add a charm
+and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
+step at a time.`,
+	Usage: "magus describe <noun> [<name>] [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("explain", false, "For a target ref with charms: show the per-charm argv trace (base then each charm)")
+		fs.Bool("evaluated", false, "For projects: print workspace-rooted globs, effective claims, and per-target policies")
+	},
 	Examples: []Example{
-		{"Describe why api/gateway is affected", "magus describe api/gateway"},
-		{"JSON output", "magus describe api/gateway -o json"},
+		{"List every target", "magus describe targets"},
+		{"Detail one project", "magus describe project api"},
+		{"Preview a charm-applied command", "magus describe target lint:rw"},
+		{"Trace how each charm reshapes the command", "magus describe target --explain lint:rw,debug"},
 	},
 }
 
-var runSegment = Segment{
+var runCommand = Command{
 	Name:        "run",
 	Short:       "Run a target for selected projects",
 	Description: "Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.",
@@ -100,7 +110,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
 		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
 	},
-	Targets: CommonSubcommands,
+	Targets: CommonTargets,
 	Examples: []Example{
 		{"Build everything", "magus run build"},
 		{"Test one project", "magus run test api/gateway"},
@@ -114,7 +124,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 	},
 }
 
-var whereSegment = Segment{
+var whereCommand = Command{
 	Name:        "where",
 	Short:       "Print the absolute path of a project",
 	Description: `Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd "$(magus where api)".`,
@@ -137,7 +147,7 @@ that.`,
 	},
 }
 
-var tailSegment = Segment{
+var tailCommand = Command{
 	Name:        "tail",
 	Short:       "Stream the most recent cached log (interactive only)",
 	Description: "Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.",
@@ -168,7 +178,7 @@ exist yet (run a build first).`,
 	},
 }
 
-var xSegment = Segment{
+var xCommand = Command{
 	Name:        "x",
 	Short:       "Interactive shorthand: pick project + target",
 	Description: "Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.",
@@ -196,7 +206,7 @@ humans. Scripts should call magus run directly.`,
 	},
 }
 
-var affectedSegment = Segment{
+var affectedCommand = Command{
 	Name:        "affected",
 	Short:       "Run a target for VCS-diff affected projects",
 	Description: "Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.",
@@ -239,7 +249,7 @@ introduced a regression.`,
 		fs.String("good", "", "With --bisect: known-good commit SHA (auto-detected from history when empty)")
 		fs.String("target", "test", "With --bisect: magus target to bisect")
 	},
-	Targets: CommonSubcommands,
+	Targets: CommonTargets,
 	Examples: []Example{
 		{"Build projects changed since the default base ref", "magus affected build"},
 		{"Use a different base ref", "magus affected build --base main"},
@@ -253,7 +263,7 @@ introduced a regression.`,
 	},
 }
 
-var insightSegment = Segment{
+var insightCommand = Command{
 	Name:        "insight",
 	Short:       "Behavioral code analysis from VCS history",
 	Description: "Read VCS history to surface hotspots, temporal coupling, ownership, and trends, showing where a codebase's attention and risk concentrate.",
@@ -300,7 +310,7 @@ hotspots file view renders a churn-vs-complexity quadrant chart).`,
 	},
 }
 
-var watchSegment = Segment{
+var watchCommand = Command{
 	Name:        "watch",
 	Short:       "Emit changed file paths to stdout",
 	Description: "Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.",
@@ -329,7 +339,7 @@ trigger a full initial build in the downstream magus affected --stdin.`,
 	},
 }
 
-var statusSegment = Segment{
+var statusCommand = Command{
 	Name:        "status",
 	Short:       "Inspect concurrency pool and configuration",
 	Description: "Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.",
@@ -346,6 +356,8 @@ snapshot on its own line for log capture.`,
 		fs.Duration("watch", 0, "Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot")
 		fs.Bool("compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 		fs.String("socket", "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
+		fs.String("probe", "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
+		fs.String("workspace", "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
 	},
 	Examples: []Example{
 		{"One-shot status snapshot", "magus status"},
@@ -355,7 +367,7 @@ snapshot on its own line for log capture.`,
 	},
 }
 
-var doctorSegment = Segment{
+var doctorCommand = Command{
 	Name:        "doctor",
 	Short:       "Validate the workspace",
 	Description: "Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.",
@@ -381,7 +393,7 @@ check fails.`,
 	},
 }
 
-var configSegment = Segment{
+var configCommand = Command{
 	Name:        "config",
 	Short:       "View or update magus configuration",
 	Description: "Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.",
@@ -398,7 +410,7 @@ they can be edited by hand.
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
 locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 	Usage: "magus config <view|set|init> [flags]",
-	Children: []Segment{
+	Children: []Command{
 		{Name: "view", Short: "Print the effective configuration (defaults + file + env)"},
 		{Name: "set", Short: "Write a key to the local (or global) config file"},
 		{Name: "init", Short: "Materialise built-in defaults to magus.yaml"},
@@ -412,7 +424,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 	},
 }
 
-var serverSegment = Segment{
+var serverCommand = Command{
 	Name:        "server",
 	Short:       "Manage the persistent magus daemon",
 	Description: "Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.",
@@ -433,7 +445,7 @@ The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
 check for the file with [ -S "$socket" ] before starting one.`,
 	Usage: "magus server <start|stop> [flags]",
-	Children: []Segment{
+	Children: []Command{
 		{Name: "start", Short: "Start a persistent daemon (foreground; use & or a supervisor to background)"},
 		{Name: "stop", Short: "Send a graceful shutdown request to a running daemon"},
 	},
@@ -445,7 +457,7 @@ check for the file with [ -S "$socket" ] before starting one.`,
 	},
 }
 
-var completionSegment = Segment{
+var completionCommand = Command{
 	Name:        "completion",
 	Short:       "Print a shell completion script",
 	Description: "Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.",
@@ -460,11 +472,11 @@ var completionSegment = Segment{
 	},
 }
 
-// initSegment documents `magus init`. Defined here (untagged) so it can be
+// initCommand documents `magus init`. Defined here (untagged) so it can be
 // embedded in the registry's All list regardless of build tags.
-var initSegment = Segment{
+var initCommand = Command{
 	Name:        "init",
-	Short:       "Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver)",
+	Short:       "Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)",
 	Description: "Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.",
 	Tags:        []string{"cli", "magus init", "bootstrap", "setup", "magus.yaml", "magusfile", "workspace"},
 	Long: `Bootstrap a magus workspace in the current directory.
@@ -477,7 +489,11 @@ always wired in the repo.
 With --global only the global config is written; the per-clone workspace
 bootstrap (magusfile stub + merge driver) is skipped.
 
-The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.`,
+The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
+
+The "spell" subcommand scaffolds a new spell instead of bootstrapping a
+workspace: "magus init spell <name>" writes spells/<name>/spell.buzz with the
+mgs_ contract stubbed, each function documented, and a runnable test block.`,
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Bool("global", false, "Write only the global config; skip the workspace bootstrap")
 		fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
@@ -488,11 +504,11 @@ The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.`,
 		{"Bootstrap the current repo", "magus init"},
 		{"Non-interactive (CI): pick the VCS explicitly", "magus init --vcs git"},
 		{"Write only the global config", "magus init --global"},
-		{"Write config into the repo instead of XDG", "magus init --local"},
+		{"Scaffold a new spell", "magus init spell mytool"},
 	},
 }
 
-var versionSegment = Segment{
+var versionCommand = Command{
 	Name:        "version",
 	Short:       "Print version, commit, and build date",
 	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary.",

@@ -4,22 +4,22 @@ package manpage
 
 import "flag"
 
-// selfSegment (default build) documents the `magus self` surface: update.
+// selfCommand (default build) documents the `magus self` surface: update.
 // It is omitted from binaries built with -tags noselfupdate, so it is part of
 // the man pages only for the default build.
-var selfSegment = Segment{
+var selfCommand = Command{
 	Name:        "self",
 	Short:       "Manage the magus binary (update)",
 	Description: "Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.",
 	Tags:        []string{"cli", "magus self", "self update", "updates", "versioning", "install"},
-	Long: `Subcommands for managing the magus binary.
+	Long: `Targets for managing the magus binary.
 
 update is compiled in by default. Package maintainers who own the system
 binary can build with -tags noselfupdate to disable the self-update mechanism.
 
 To bootstrap a workspace, use: magus init`,
 	Usage: "magus self update [flags]",
-	Children: []Segment{
+	Children: []Command{
 		{
 			Name:  "update",
 			Short: "Update magus to the latest release",

@@ -49,7 +49,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : List all discovered projects. See [**magus-ls**(1)](magus-ls.md).
 
 **describe**
-: Explain why a project is in the affected set. See [**magus-describe**(1)](magus-describe.md).
+: Define a magus concept and list its entities. See [**magus-describe**(1)](magus-describe.md).
 
 **run**
 : Run a target for selected projects. See [**magus-run**(1)](magus-run.md).
@@ -88,7 +88,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Print a shell completion script. See [**magus-completion**(1)](magus-completion.md).
 
 **init**
-: Bootstrap a workspace (magus.yaml + magusfile.tl + merge driver). See [**magus-init**(1)](magus-init.md).
+: Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See [**magus-init**(1)](magus-init.md).
 
 **self**
 : Manage the magus binary (update). See [**magus-self**(1)](magus-self.md).

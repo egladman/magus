@@ -1,38 +1,62 @@
 ---
 title: magus describe
-description: Show the changed files and dependency chains that cause a given project to appear in the affected set computed by magus affected.
-tags: [cli, magus describe, affected, dependency graph, explain, debugging]
+description: Define a magus concept (spell, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.
+tags: [cli, magus describe, spell, target, project, workspace, introspection]
 ---
 
 # magus-describe
 
-Explain why a project is in the affected set
+Define a magus concept and list its entities
 
 ## Synopsis
 
-**magus** describe \<project\> [flags]
+**magus** describe \<noun\> [\<name\>] [flags]
 
 ## Description
 
-Show the changed files and dependency chains that cause a given project
-to appear in the affected set computed by magus affected.
+Define a magus concept and list every entity of that kind. The noun is
+one of spell, target, project, workspace, module, or mcp-tool; singular and
+plural are interchangeable. Pass a name after the noun to detail a single entity
+instead of listing them all.
 
-Each path section shows the seed project whose files changed, the chain of
-dependency edges leading from that seed to the target, and the list of changed
-files under the seed.
+For a target ref (e.g. "api:build", or ":test" for all projects) magus prints the
+fully-evaluated dispatch plan: the workspace-rooted source and output globs, the
+spells that fire, the charm-applied command, and any per-target policy. Add a charm
+and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
+step at a time.
+
+## Options
+
+**--evaluated**
+: For projects: print workspace-rooted globs, effective claims, and per-target policies
+
+**--explain**
+: For a target ref with charms: show the per-charm argv trace (base then each charm)
 
 ## Examples
 
-*Describe why api/gateway is affected*
+*List every target*
 
 ```sh
-magus describe api/gateway
+magus describe targets
 ```
 
-*JSON output*
+*Detail one project*
 
 ```sh
-magus describe api/gateway -o json
+magus describe project api
+```
+
+*Preview a charm-applied command*
+
+```sh
+magus describe target lint:rw
+```
+
+*Trace how each charm reshapes the command*
+
+```sh
+magus describe target --explain lint:rw,debug
 ```
 
 ## See Also

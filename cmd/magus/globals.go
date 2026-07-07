@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 )
@@ -56,11 +57,56 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 	if local != nil {
 		local(fs)
 	}
-	if err := fs.Parse(expandVerbosityArgs(args)); err != nil {
+	// Reorder so a flag may follow a positional (`magus run build --explain`);
+	// stdlib flag otherwise stops at the first positional. Done after binding so the
+	// full flag set (config + display + local) is known for value detection.
+	if err := fs.Parse(reorderFlagsFirst(fs, expandVerbosityArgs(args))); err != nil {
 		return nil, err
 	}
 	applyDisplay()
 	return fs.Args(), nil
+}
+
+// reorderFlagsFirst moves recognized flags (and their values) ahead of positional
+// arguments, so a flag may appear after a positional and stdlib flag still sees it.
+// It restores the GNU-style interspersed-flag behavior users expect, without a
+// dependency. It stops at "--": everything after is left in place (the passthrough
+// marker and its tail survive for the caller or flag.Parse to handle). A value-taking
+// flag is detected from fs (a flag whose Value is not a bool flag consumes the next
+// token); an unknown or "=" flag is passed through untouched for flag.Parse to report.
+func reorderFlagsFirst(fs *flag.FlagSet, args []string) []string {
+	flags := make([]string, 0, len(args))
+	positionals := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positionals = append(positionals, args[i:]...)
+			break
+		}
+		if len(a) < 2 || a[0] != '-' {
+			positionals = append(positionals, a)
+			continue
+		}
+		name := strings.TrimLeft(a, "-")
+		if strings.IndexByte(name, '=') >= 0 {
+			flags = append(flags, a) // -flag=value: self-contained
+			continue
+		}
+		if f := fs.Lookup(name); f != nil && !flagIsBool(f) && i+1 < len(args) {
+			flags = append(flags, a, args[i+1]) // value flag consumes the next token
+			i++
+			continue
+		}
+		flags = append(flags, a) // bool flag, or unknown (flag.Parse reports it)
+	}
+	return append(flags, positionals...)
+}
+
+// flagIsBool reports whether f is a boolean flag (usable without a value), which
+// includes counted flags like -v (verbosity implements IsBoolFlag).
+func flagIsBool(f *flag.Flag) bool {
+	b, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && b.IsBoolFlag()
 }
 
 func outputOptionsOrDefault() (OutputOptions, error) {

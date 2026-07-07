@@ -18,42 +18,50 @@ import (
 	"golang.org/x/term"
 )
 
+// statusFlags groups the local flags for `magus status` into one value: an
+// idiomatic options struct with a bind method (plain stdlib flag, no reflection,
+// no runtime cost), so the command's whole flag surface lives in one place and is
+// testable. The middle ground between loose per-flag vars and a declarative
+// registry; reach for it when a command carries several flags.
+type statusFlags struct {
+	watchInterval time.Duration
+	socket        string
+	compact       bool
+	probe         string
+	workspace     string
+}
+
+func (f *statusFlags) bind(fs *flag.FlagSet) {
+	fs.DurationVar(&f.watchInterval, "watch", 0, "poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot")
+	fs.DurationVar(&f.watchInterval, "W", 0, "Short for --watch")
+	fs.StringVar(&f.socket, "socket", "", "proc server address as unix:// URL or bare path (default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir)")
+	fs.BoolVar(&f.compact, "compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
+	fs.BoolVar(&f.compact, "c", false, "Short for --compact")
+	fs.StringVar(&f.probe, "probe", "", "exec-probe mode: liveness or readiness (exits 0=healthy, 1=unhealthy; ignores --watch/--compact)")
+	fs.StringVar(&f.workspace, "workspace", "", "workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
+		fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
+		fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
+		fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
+		fs.PrintDefaults()
+	}
+}
+
 func status(ctx context.Context, args []string) error {
-	var (
-		watchInterval time.Duration
-		socket        string
-		compact       bool
-		probe         string
-		workspace     string
-	)
-	_, err := cmdParse("status", args, func(fs *flag.FlagSet) {
-		fs.DurationVar(&watchInterval, "watch", 0, "poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot")
-		fs.DurationVar(&watchInterval, "W", 0, "Short for --watch")
-		fs.StringVar(&socket, "socket", "", "proc server address as unix:// URL or bare path (default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir)")
-		fs.BoolVar(&compact, "compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
-		fs.BoolVar(&compact, "c", false, "Short for --compact")
-		fs.StringVar(&probe, "probe", "", "exec-probe mode: liveness or readiness (exits 0=healthy, 1=unhealthy; ignores --watch/--compact)")
-		fs.StringVar(&workspace, "workspace", "", "workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
-			fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
-			fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
-			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
-		}
-	})
-	if err != nil {
+	var f statusFlags
+	if _, err := cmdParse("status", args, f.bind); err != nil {
 		return err
 	}
 
 	// Probe mode: exec-probe semantics — exit 0 healthy, exit 1 unhealthy.
 	// Ignores --watch, --compact, and -o formatting flags.
-	if probe != "" {
-		kind, err := parseProbeKind(probe)
+	if f.probe != "" {
+		kind, err := parseProbeKind(f.probe)
 		if err != nil {
 			return err
 		}
-		return runProbe(ctx, socket, kind, workspace)
+		return runProbe(ctx, f.socket, kind, f.workspace)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -61,19 +69,19 @@ func status(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if watchInterval == 0 {
-		return printStatus(ctx, socket, opts, 0, compact)
+	if f.watchInterval == 0 {
+		return printStatus(ctx, f.socket, opts, 0, f.compact)
 	}
 
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	useGrid := gridEnabled(opts, isTTY) && !compact
+	useGrid := gridEnabled(opts, isTTY) && !f.compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
 	// but re-query the daemon only at the user-specified watchInterval.
 	// Compact mode has no animation: only the queryTick drives reprints.
 	animTick := time.NewTicker(150 * time.Millisecond)
 	defer animTick.Stop()
-	queryTick := time.NewTicker(watchInterval)
+	queryTick := time.NewTicker(f.watchInterval)
 	defer queryTick.Stop()
 
 	animFrame := 0
@@ -81,7 +89,7 @@ func status(ctx context.Context, args []string) error {
 		if opts.Format == outputText && isTTY {
 			fmt.Print("\033[H\033[2J")
 		}
-		if err := printStatus(ctx, socket, opts, animFrame, compact); err != nil {
+		if err := printStatus(ctx, f.socket, opts, animFrame, f.compact); err != nil {
 			return err
 		}
 		if !useGrid {

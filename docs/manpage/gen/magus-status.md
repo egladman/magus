@@ -27,11 +27,17 @@ snapshot on its own line for log capture.
 **--compact**
 : Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)
 
+**--probe** *string*
+: Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)
+
 **--socket** *string*
 : Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir
 
 **--watch** *duration*
 : Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot
+
+**--workspace** *string*
+: Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)
 
 ## Examples
 

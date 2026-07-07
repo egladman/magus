@@ -9,7 +9,7 @@ func init() {
 			EnvVar:   "MAGUS_CACHE_DIR",
 			Flag:     FlagNames{Long: "cache-dir"},
 			Kind:     KindString,
-			Usage:    "MAGUS_CACHE_DIR: MAGUS_CACHE_DIR",
+			Usage:    "MAGUS_CACHE_DIR",
 		},
 		{
 			GoPath:   "Cache.Immutable",
@@ -17,7 +17,7 @@ func init() {
 			EnvVar:   "MAGUS_CACHE_IMMUTABLE",
 			Flag:     FlagNames{Long: "cache-immutable"},
 			Kind:     KindBool,
-			Usage:    "MAGUS_CACHE_IMMUTABLE: MAGUS_CACHE_IMMUTABLE",
+			Usage:    "MAGUS_CACHE_IMMUTABLE",
 		},
 		{
 			GoPath:   "Cache.SizeMB",
@@ -25,7 +25,7 @@ func init() {
 			EnvVar:   "MAGUS_CACHE_SIZE_MB",
 			Flag:     FlagNames{Long: "cache-size-mb"},
 			Kind:     KindInt,
-			Usage:    "MAGUS_CACHE_SIZE_MB: MAGUS_CACHE_SIZE_MB",
+			Usage:    "MAGUS_CACHE_SIZE_MB",
 		},
 		{
 			GoPath:   "Cache.Remote.TrustedKeys",
@@ -33,7 +33,7 @@ func init() {
 			EnvVar:   "MAGUS_CACHE_REMOTE_TRUSTED_KEYS",
 			Flag:     FlagNames{Long: ""},
 			Kind:     KindStringSlice,
-			Usage:    "MAGUS_CACHE_REMOTE_TRUSTED_KEYS: MAGUS_CACHE_REMOTE_TRUSTED_KEYS",
+			Usage:    "MAGUS_CACHE_REMOTE_TRUSTED_KEYS",
 		},
 		{
 			GoPath:   "Cache.Remote.Insecure",
@@ -49,7 +49,7 @@ func init() {
 			EnvVar:   "MAGUS_CI_MAX_SHARDS",
 			Flag:     FlagNames{Long: "ci-max-shards"},
 			Kind:     KindInt,
-			Usage:    "MAGUS_CI_MAX_SHARDS: MAGUS_CI_MAX_SHARDS",
+			Usage:    "MAGUS_CI_MAX_SHARDS",
 		},
 		{
 			GoPath:   "CI.RunnerPoolBudget",
@@ -57,7 +57,7 @@ func init() {
 			EnvVar:   "MAGUS_CI_RUNNER_POOL_BUDGET",
 			Flag:     FlagNames{Long: "ci-runner-pool-budget"},
 			Kind:     KindInt,
-			Usage:    "MAGUS_CI_RUNNER_POOL_BUDGET: MAGUS_CI_RUNNER_POOL_BUDGET",
+			Usage:    "MAGUS_CI_RUNNER_POOL_BUDGET",
 		},
 		{
 			GoPath:   "Flake.Enabled",
@@ -65,7 +65,7 @@ func init() {
 			EnvVar:   "MAGUS_FLAKE_ENABLED",
 			Flag:     FlagNames{Long: "flake-enabled"},
 			Kind:     KindBool,
-			Usage:    "MAGUS_FLAKE_ENABLED: MAGUS_FLAKE_ENABLED",
+			Usage:    "MAGUS_FLAKE_ENABLED",
 		},
 		{
 			GoPath:   "Flake.BootstrapSamples",
@@ -73,7 +73,7 @@ func init() {
 			EnvVar:   "MAGUS_FLAKE_BOOTSTRAP_SAMPLES",
 			Flag:     FlagNames{Long: "flake-bootstrap-samples"},
 			Kind:     KindInt,
-			Usage:    "MAGUS_FLAKE_BOOTSTRAP_SAMPLES: MAGUS_FLAKE_BOOTSTRAP_SAMPLES",
+			Usage:    "MAGUS_FLAKE_BOOTSTRAP_SAMPLES",
 		},
 		{
 			GoPath:   "Flake.MinSamples",
@@ -81,7 +81,7 @@ func init() {
 			EnvVar:   "MAGUS_FLAKE_MIN_SAMPLES",
 			Flag:     FlagNames{Long: "flake-min-samples"},
 			Kind:     KindInt,
-			Usage:    "MAGUS_FLAKE_MIN_SAMPLES: MAGUS_FLAKE_MIN_SAMPLES",
+			Usage:    "MAGUS_FLAKE_MIN_SAMPLES",
 		},
 		{
 			GoPath:   "Flake.Threshold",
@@ -89,7 +89,7 @@ func init() {
 			EnvVar:   "MAGUS_FLAKE_THRESHOLD",
 			Flag:     FlagNames{Long: "flake-threshold"},
 			Kind:     KindFloat64,
-			Usage:    "MAGUS_FLAKE_THRESHOLD: MAGUS_FLAKE_THRESHOLD",
+			Usage:    "MAGUS_FLAKE_THRESHOLD",
 		},
 		{
 			GoPath:   "Flake.AnnotateGHA",
@@ -97,7 +97,7 @@ func init() {
 			EnvVar:   "MAGUS_FLAKE_ANNOTATE_GHA",
 			Flag:     FlagNames{Long: "flake-annotate-gha"},
 			Kind:     KindBool,
-			Usage:    "MAGUS_FLAKE_ANNOTATE_GHA: MAGUS_FLAKE_ANNOTATE_GHA",
+			Usage:    "MAGUS_FLAKE_ANNOTATE_GHA",
 		},
 		{
 			GoPath:   "Graph.Direction",
@@ -105,7 +105,7 @@ func init() {
 			EnvVar:   "MAGUS_GRAPH_DIRECTION",
 			Flag:     FlagNames{Long: "graph-direction"},
 			Kind:     KindString,
-			Usage:    "MAGUS_GRAPH_DIRECTION: MAGUS_GRAPH_DIRECTION",
+			Usage:    "MAGUS_GRAPH_DIRECTION",
 		},
 		{
 			GoPath:   "Graph.Spell",
@@ -113,7 +113,7 @@ func init() {
 			EnvVar:   "MAGUS_GRAPH_SPELL",
 			Flag:     FlagNames{Long: "graph-spell"},
 			Kind:     KindString,
-			Usage:    "MAGUS_GRAPH_SPELL: MAGUS_GRAPH_SPELL",
+			Usage:    "MAGUS_GRAPH_SPELL",
 		},
 		{
 			GoPath:   "Graph.Depth",
@@ -121,7 +121,7 @@ func init() {
 			EnvVar:   "MAGUS_GRAPH_DEPTH",
 			Flag:     FlagNames{Long: "graph-depth"},
 			Kind:     KindInt,
-			Usage:    "MAGUS_GRAPH_DEPTH: MAGUS_GRAPH_DEPTH",
+			Usage:    "MAGUS_GRAPH_DEPTH",
 		},
 		{
 			GoPath:   "Graph.Roots",
@@ -129,7 +129,7 @@ func init() {
 			EnvVar:   "MAGUS_GRAPH_ROOTS",
 			Flag:     FlagNames{Long: "graph-roots"},
 			Kind:     KindString,
-			Usage:    "MAGUS_GRAPH_ROOTS: MAGUS_GRAPH_ROOTS",
+			Usage:    "MAGUS_GRAPH_ROOTS",
 		},
 		{
 			GoPath:   "Telemetry.Enabled",
@@ -137,7 +137,7 @@ func init() {
 			EnvVar:   "MAGUS_TELEMETRY_ENABLED",
 			Flag:     FlagNames{Long: "telemetry-enabled"},
 			Kind:     KindBool,
-			Usage:    "MAGUS_TELEMETRY_ENABLED: MAGUS_TELEMETRY_ENABLED",
+			Usage:    "MAGUS_TELEMETRY_ENABLED",
 		},
 		{
 			GoPath:   "Telemetry.Endpoint",
@@ -145,7 +145,7 @@ func init() {
 			EnvVar:   "MAGUS_TELEMETRY_ENDPOINT",
 			Flag:     FlagNames{Long: "telemetry-endpoint"},
 			Kind:     KindString,
-			Usage:    "MAGUS_TELEMETRY_ENDPOINT: MAGUS_TELEMETRY_ENDPOINT",
+			Usage:    "MAGUS_TELEMETRY_ENDPOINT",
 		},
 		{
 			GoPath:   "Telemetry.Protocol",
@@ -153,7 +153,7 @@ func init() {
 			EnvVar:   "MAGUS_TELEMETRY_PROTOCOL",
 			Flag:     FlagNames{Long: "telemetry-protocol"},
 			Kind:     KindString,
-			Usage:    "MAGUS_TELEMETRY_PROTOCOL: MAGUS_TELEMETRY_PROTOCOL",
+			Usage:    "MAGUS_TELEMETRY_PROTOCOL",
 		},
 		{
 			GoPath:   "Telemetry.Insecure",
@@ -161,7 +161,7 @@ func init() {
 			EnvVar:   "MAGUS_TELEMETRY_INSECURE",
 			Flag:     FlagNames{Long: "telemetry-insecure"},
 			Kind:     KindBool,
-			Usage:    "MAGUS_TELEMETRY_INSECURE: MAGUS_TELEMETRY_INSECURE",
+			Usage:    "MAGUS_TELEMETRY_INSECURE",
 		},
 		{
 			GoPath:   "Telemetry.ServiceName",
@@ -169,7 +169,7 @@ func init() {
 			EnvVar:   "MAGUS_TELEMETRY_SERVICE_NAME",
 			Flag:     FlagNames{Long: "telemetry-service-name"},
 			Kind:     KindString,
-			Usage:    "MAGUS_TELEMETRY_SERVICE_NAME: MAGUS_TELEMETRY_SERVICE_NAME",
+			Usage:    "MAGUS_TELEMETRY_SERVICE_NAME",
 		},
 		{
 			GoPath:   "Telemetry.SampleRatio",
@@ -177,7 +177,7 @@ func init() {
 			EnvVar:   "MAGUS_TELEMETRY_SAMPLE_RATIO",
 			Flag:     FlagNames{Long: "telemetry-sample-ratio"},
 			Kind:     KindFloat64,
-			Usage:    "MAGUS_TELEMETRY_SAMPLE_RATIO: MAGUS_TELEMETRY_SAMPLE_RATIO",
+			Usage:    "MAGUS_TELEMETRY_SAMPLE_RATIO",
 		},
 		{
 			GoPath:   "Daemon.Address",
@@ -217,7 +217,7 @@ func init() {
 			EnvVar:   "MAGUS_VCS_ENABLED",
 			Flag:     FlagNames{Long: ""},
 			Kind:     KindBoolPtr,
-			Usage:    "MAGUS_VCS_ENABLED: MAGUS_VCS_ENABLED",
+			Usage:    "MAGUS_VCS_ENABLED",
 		},
 		{
 			GoPath:   "VCS.Name",
@@ -225,7 +225,7 @@ func init() {
 			EnvVar:   "MAGUS_VCS_NAME",
 			Flag:     FlagNames{Long: "vcs-name"},
 			Kind:     KindString,
-			Usage:    "MAGUS_VCS_NAME: MAGUS_VCS_NAME",
+			Usage:    "MAGUS_VCS_NAME",
 		},
 		{
 			GoPath:   "VCS.BaseRef",
@@ -241,7 +241,7 @@ func init() {
 			EnvVar:   "MAGUS_MCP_ENABLED",
 			Flag:     FlagNames{Long: ""},
 			Kind:     KindBoolPtr,
-			Usage:    "MAGUS_MCP_ENABLED: MAGUS_MCP_ENABLED",
+			Usage:    "MAGUS_MCP_ENABLED",
 		},
 		{
 			GoPath:   "MCP.Address",
@@ -249,7 +249,7 @@ func init() {
 			EnvVar:   "MAGUS_MCP_ADDRESS",
 			Flag:     FlagNames{Long: "mcp-address"},
 			Kind:     KindString,
-			Usage:    "MAGUS_MCP_ADDRESS: MAGUS_MCP_ADDRESS",
+			Usage:    "MAGUS_MCP_ADDRESS",
 		},
 		{
 			GoPath:   "Report.Filter",
@@ -265,7 +265,7 @@ func init() {
 			EnvVar:   "MAGUS_LOG_FORMAT",
 			Flag:     FlagNames{Long: "log-format"},
 			Kind:     KindString,
-			Usage:    "MAGUS_LOG_FORMAT: MAGUS_LOG_FORMAT",
+			Usage:    "MAGUS_LOG_FORMAT",
 		},
 		{
 			GoPath:   "Log.Level",
@@ -337,7 +337,7 @@ func init() {
 			EnvVar:   "MAGUS_SANDBOX_ENABLED",
 			Flag:     FlagNames{Long: "sandbox-enabled"},
 			Kind:     KindBool,
-			Usage:    "MAGUS_SANDBOX_ENABLED: MAGUS_SANDBOX_ENABLED",
+			Usage:    "MAGUS_SANDBOX_ENABLED",
 		},
 		{
 			GoPath:   "Sandbox.Env.Passthrough",

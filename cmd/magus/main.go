@@ -46,6 +46,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -139,13 +140,29 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	}
 }
 
-var globalValueFlags = map[string]bool{
-	"-root": true, "--root": true,
-	"-config": true, "--config": true,
-	"-output": true, "--output": true, "-o": true,
-	"-tee": true, "--tee": true,
-	"-concurrency": true, "--concurrency": true,
-}
+// globalValueFlags is the set of "-name"/"--name" tokens for every value-taking
+// global flag, derived once from the real bindings (the config-generated
+// gen.BindFlags plus the display flags) rather than hand-listed, so peekSub can
+// never drift from them. Two bootstrap flags are added explicitly: root and config
+// precede config loading, so they are not part of the generated set. Deriving it
+// closes the latent gap where a value global flag missing from the old hand-kept
+// list made `magus --cache-dir x run` misread x as the subcommand.
+var globalValueFlags = sync.OnceValue(func() map[string]bool {
+	fs := flag.NewFlagSet("global", flag.ContinueOnError)
+	gen.BindFlags(fs, &globalCfg)
+	bindDisplayFlags(fs)
+	out := map[string]bool{
+		"-root": true, "--root": true,
+		"-config": true, "--config": true,
+	}
+	fs.VisitAll(func(f *flag.Flag) {
+		if !flagIsBool(f) {
+			out["-"+f.Name] = true
+			out["--"+f.Name] = true
+		}
+	})
+	return out
+})
 
 // peekSub returns the subcommand and trailing args, scanning past global flags.
 // Intentionally approximate: disagreement with fs.Parse costs extra work, not correctness.
@@ -163,7 +180,7 @@ func peekSub(args []string) (sub string, subArgs []string) {
 			continue
 		}
 		// --flag value form: consume both tokens.
-		if globalValueFlags[a] && i+1 < len(args) {
+		if globalValueFlags()[a] && i+1 < len(args) {
 			i += 2
 			continue
 		}

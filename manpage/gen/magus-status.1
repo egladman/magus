@@ -18,11 +18,17 @@ snapshot on its own line for log capture.
 \fB\-\-compact\fR
 Single\-line, densely\-packed snapshot for sidebar/multiplexer use (text output only)
 .TP
+\fB\-\-probe\fR \fIstring\fR
+Exec\-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores \-\-watch/\-\-compact)
+.TP
 \fB\-\-socket\fR \fIstring\fR
 Adopt server address as unix:// URL or bare path; default: auto\-detect from MAGUS_DAEMON_SOCKET or scan sock dir
 .TP
 \fB\-\-watch\fR \fIduration\fR
 Poll and reprint at this interval (e.g. \-\-watch=1s); 0 means one\-shot
+.TP
+\fB\-\-workspace\fR \fIstring\fR
+Workspace root to check for readiness with \-\-probe=readiness (default: any loaded workspace)
 .RE
 .SH EXAMPLES
 \fIOne\-shot status snapshot\fR

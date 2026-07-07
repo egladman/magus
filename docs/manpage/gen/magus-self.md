@@ -14,7 +14,7 @@ Manage the magus binary (update)
 
 ## Description
 
-Subcommands for managing the magus binary.
+Targets for managing the magus binary.
 
 update is compiled in by default. Package maintainers who own the system
 binary can build with -tags noselfupdate to disable the self-update mechanism.
