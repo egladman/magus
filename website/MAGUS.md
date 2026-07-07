@@ -103,8 +103,7 @@ generate renders the site and refreshes MAGUS.md, then gates on drift: a clean c
 **Defaults**
 
 ```sh
-magus run generate    # from the project directory
-magus run generate .  # from the workspace root
+magus run generate  # from the workspace root
 ```
 
 **Charms**
@@ -125,8 +124,7 @@ magus run generate:rw  # mutate in place instead of checking
 **Defaults**
 
 ```sh
-magus run format    # from the project directory
-magus run format .  # from the workspace root
+magus run format  # from the workspace root
 ```
 
 **Depends on:**
@@ -138,8 +136,7 @@ magus run format .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run lint    # from the project directory
-magus run lint .  # from the workspace root
+magus run lint  # from the workspace root
 ```
 
 **Depends on:**
@@ -151,8 +148,7 @@ magus run lint .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run build    # from the project directory
-magus run build .  # from the workspace root
+magus run build  # from the workspace root
 ```
 
 **Depends on:**
@@ -164,8 +160,7 @@ magus run build .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run test    # from the project directory
-magus run test .  # from the workspace root
+magus run test  # from the workspace root
 ```
 
 **Depends on:**
@@ -180,8 +175,7 @@ magus run test .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run ci    # from the project directory
-magus run ci .  # from the workspace root
+magus run ci  # from the workspace root
 ```
 
 **Depends on:**
@@ -197,8 +191,7 @@ build-playground rebuilds the WebAssembly interpreter the playground page loads:
 **Defaults**
 
 ```sh
-magus run build-playground    # from the project directory
-magus run build-playground .  # from the workspace root
+magus run build-playground  # from the workspace root
 ```
 
 **Depends on:**
@@ -214,8 +207,7 @@ build_playground_editor bundles the vendored CodeMirror editor into the committe
 **Defaults**
 
 ```sh
-magus run build-playground-editor    # from the project directory
-magus run build-playground-editor .  # from the workspace root
+magus run build-playground-editor  # from the workspace root
 ```
 
 **Depends on:**
@@ -231,8 +223,7 @@ serve watches ../docs and re-renders gen/ on change — handy for local docs wor
 **Defaults**
 
 ```sh
-magus run serve    # from the project directory
-magus run serve .  # from the workspace root
+magus run serve  # from the workspace root
 ```
 
 **Details:** uncached (always runs)
@@ -242,8 +233,7 @@ magus run serve .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run preflight    # from the project directory
-magus run preflight .  # from the workspace root
+magus run preflight  # from the workspace root
 ```
 
 ### `md-generate`
@@ -253,8 +243,7 @@ md-generate renders MAGUS.md (the target catalog + dependency graph) via `magus 
 **Defaults**
 
 ```sh
-magus run md-generate    # from the project directory
-magus run md-generate .  # from the workspace root
+magus run md-generate  # from the workspace root
 ```
 
 ### `buzz-test`
@@ -264,8 +253,7 @@ buzz-test runs scribe's unit tests (the `test "..." {}` blocks in scribe.buzz) t
 **Defaults**
 
 ```sh
-magus run buzz-test    # from the project directory
-magus run buzz-test .  # from the workspace root
+magus run buzz-test  # from the workspace root
 ```
 
 ## Glossary

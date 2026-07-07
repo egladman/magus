@@ -352,12 +352,18 @@ func writeTargetSection(b *bytes.Buffer, path string, n types.TargetGraphNode, e
 		fmt.Fprintf(b, "%s\n\n", n.Doc)
 	}
 
-	// The two canonical forms. Charm variants get their own block below so this
-	// one (and the Executes command) stay about the plain invocation; "Defaults"
-	// pairs with the "Charms" label.
+	// One canonical invocation, runnable from the workspace root and unambiguous:
+	// the root project needs no path (it *is* the workspace root); a nested project
+	// names its path so a copy-paste from the repo root hits the right project, not
+	// the cwd one. The shorter in-the-project-directory form (and this path form)
+	// are documented once in Quick start, so per-target blocks don't repeat both.
+	// Charm variants get their own block below.
+	run := fmt.Sprintf("magus run %s", n.Name)
+	if path != "." && path != "" {
+		run = fmt.Sprintf("magus run %s %s", n.Name, path)
+	}
 	writeCommandBlock(b, "Defaults", []cmdLine{
-		{fmt.Sprintf("magus run %s", n.Name), "from the project directory"},
-		{fmt.Sprintf("magus run %s %s", n.Name, path), "from the workspace root"},
+		{run, "from the workspace root"},
 	})
 
 	if len(n.Charms) > 0 {

@@ -116,8 +116,7 @@ Regenerates MAGUS.md and fails on drift.
 **Defaults**
 
 ```sh
-magus run generate    # from the project directory
-magus run generate .  # from the workspace root
+magus run generate  # from the workspace root
 ```
 
 **Charms**
@@ -138,8 +137,7 @@ magus run generate:rw  # mutate in place instead of checking
 **Defaults**
 
 ```sh
-magus run format    # from the project directory
-magus run format .  # from the workspace root
+magus run format  # from the workspace root
 ```
 
 **Depends on:**
@@ -151,8 +149,7 @@ magus run format .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run lint    # from the project directory
-magus run lint .  # from the workspace root
+magus run lint  # from the workspace root
 ```
 
 **Depends on:**
@@ -164,8 +161,7 @@ magus run lint .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run build    # from the project directory
-magus run build .  # from the workspace root
+magus run build  # from the workspace root
 ```
 
 **Depends on:**
@@ -177,8 +173,7 @@ magus run build .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run test    # from the project directory
-magus run test .  # from the workspace root
+magus run test  # from the workspace root
 ```
 
 **Depends on:**
@@ -192,8 +187,7 @@ The anchor `magus affected ci` keys off; fans out lint/build/test after format.
 **Defaults**
 
 ```sh
-magus run ci    # from the project directory
-magus run ci .  # from the workspace root
+magus run ci  # from the workspace root
 ```
 
 **Depends on:**
@@ -209,8 +203,7 @@ Regenerates default.pgo, the Buzz VM's PGO profile.
 **Defaults**
 
 ```sh
-magus run pgo-generate    # from the project directory
-magus run pgo-generate .  # from the workspace root
+magus run pgo-generate  # from the workspace root
 ```
 
 **Details:** uncached (always runs)
@@ -220,8 +213,7 @@ magus run pgo-generate .  # from the workspace root
 **Defaults**
 
 ```sh
-magus run preflight    # from the project directory
-magus run preflight .  # from the workspace root
+magus run preflight  # from the workspace root
 ```
 
 ### `md-generate`
@@ -231,8 +223,7 @@ Renders MAGUS.md (target catalog plus graph) from this magusfile.
 **Defaults**
 
 ```sh
-magus run md-generate    # from the project directory
-magus run md-generate .  # from the workspace root
+magus run md-generate  # from the workspace root
 ```
 
 ## Glossary

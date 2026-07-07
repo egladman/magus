@@ -29,8 +29,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		"### `build`",                         // per-target heading
 		"Build the binary.",                   // doc line
 		"**Defaults**",                        // base invocation block label
-		"magus run build",                     // project-dir form
-		"magus run build .",                   // workspace form
+		"magus run build",                     // one canonical form; the root project needs no path
 		"**Charms**",                          // charm variants live in their own block
 		"magus run build:rw",                  // charm example command
 		"mutate in place instead of checking", // the rw charm's gloss
@@ -64,12 +63,29 @@ func TestWriteTargetGraphMarkdownHeadingAndOrder(t *testing.T) {
 	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
 	got := b.String()
 	assert.Contains(t, got, "## Project: magus", "heading should use the repo-relative path")
-	// The invocation example still addresses the project by its workspace path.
-	assert.Contains(t, got, "magus run build .", "invocation example should keep the workspace-relative path")
+	// The root project's invocation needs no path (it is the workspace root), so it
+	// renders as the bare command rather than a noisy trailing-dot form.
+	assert.Contains(t, got, "magus run build", "root invocation is the bare command")
+	assert.NotContains(t, got, "magus run build .", "root project must not render a trailing-dot path")
 	i, j := strings.Index(got, "### `build`"), strings.Index(got, "### `worker`")
 	require.GreaterOrEqual(t, i, 0, "primary target should precede the worker:\n%s", got)
 	require.GreaterOrEqual(t, j, 0, "primary target should precede the worker:\n%s", got)
 	assert.Less(t, i, j, "primary target should precede the worker")
+}
+
+// TestWriteTargetGraphMarkdownNestedInvocation pins the invocation form for a
+// nested project: one canonical command that names the project path, so it is
+// unambiguous when copy-pasted from the repo root (not the cwd-sensitive bare form).
+func TestWriteTargetGraphMarkdownNestedInvocation(t *testing.T) {
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+		Path:   "pkg/foo",
+		Engine: "buzz",
+		Nodes:  []types.TargetGraphNode{{Name: "build"}},
+	}}}
+	var b bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil))
+	got := b.String()
+	assert.Contains(t, got, "magus run build pkg/foo", "nested invocation names its project path")
 }
 
 // TestWriteTargetGraphMarkdownInlineGraphs pins the graph layout: there is no
