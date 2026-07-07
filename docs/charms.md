@@ -92,7 +92,7 @@ magus run lint:rw,debug
 The patches of all active charms are **concatenated in sorted charm-name order and applied as one sequential patch** over the base argv:
 
 - **Deterministic.** `lint:rw,debug` and `lint:debug,rw` produce the same result; duplicates are insignificant.
-- **Composable.** Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the _same_ position resolve by sorted charm-name order.
+- **Composable.** Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the _same_ position resolve by sorted charm-name order, so one charm silently wins and the other has no effect. Because that winner is an alphabetical accident rather than a declared precedence, magus treats it as a mistake: it warns at run time and flags the overridden charm in `magus describe target ...:a,b`. Two charms that must both apply should edit different arguments, or one should own the position.
 
 Example with base `go tool golangci-lint run ./...`:
 
