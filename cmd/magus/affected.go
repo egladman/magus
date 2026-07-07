@@ -62,8 +62,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		graphView  *bool
 		upstream   *bool
 		graphDepth *int
-		step       *bool
-		raceFlag   *string
+		step         *bool
+		raceFlag     *string
+		withoutCharm *string
 	)
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		// affected-only: VCS diff base ref; `magus run` has no diff. See run_affected_parity_test.go.
@@ -80,6 +81,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1; not compatible with --stdin)")
 		raceFlag = fs.String("race", "", raceFormatHelp)
+		withoutCharm = fs.String("without-charm", "", "Suppress a named charm for this run even if the target ref adds it (comma-separated, e.g. --without-charm=rw)")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -240,8 +242,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}
-	if len(parsed.Charms) > 0 {
-		runOpts = append(runOpts, magus.WithCharms(parsed.Charms...))
+	if charms := dropCharms(parsed.Charms, splitCharmList(*withoutCharm)); len(charms) > 0 {
+		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
 	if spellFilter != "" {
 		if target == "ci" {
