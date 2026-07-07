@@ -1,0 +1,13 @@
+// buf-breaking gates backward-incompatible schema changes, so it composes into the
+// read-only `lint` target alongside buf-lint. `magus run lint` forks `buf lint` then
+// `buf breaking --against .git#branch=main`, failing on a wire- or JSON-incompatible
+// .proto edit the same way go-vet fails a static-analysis violation.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun lint(args: [str]) > void {
+    buf["buf-lint"]();
+    buf["buf-breaking"]();
+}

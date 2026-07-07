@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Spell authoring kit: `magus init spell` scaffolds a spell, `magus buzz -t` runs a
+  spell's in-file test blocks, and `magus buzz lsp` serves diagnostics and
+  completion to an editor over stdio.
+- `buf-breaking` op in the buf spell: gates a proto schema against a baseline
+  branch, composable into a `lint` target. See [Breaking changes](docs/breaking-changes.md).
+- `describe target --explain` prints the charm trace behind a target's resolved
+  command, so a stacked argv patch is inspectable before a run.
+- Silent-failure diagnostics: an invalid charm patch (MGS6001), a `has_charm` typo,
+  a spell that binds zero ops, and an unknown project name now report a coded,
+  actionable error instead of failing quietly.
+- Interspersed global flags: `magus <command> --verbose` and `magus --verbose
+  <command>` now parse the same way.
+
+### Changed
+
+- `magus buzz lsp` replaces the top-level `magus lsp`.
+- Local spell imports resolve workspace-root-first with walk-up accrual; a name
+  collision between an ancestor and a descendant spell is flagged (MGS1002) and
+  suppressed only with an acknowledged `spells.allow_shadow` reason.
+
 ## [v0.1.0] - 2026-07-05
 
 ### Added
