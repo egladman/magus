@@ -275,8 +275,8 @@ introduced a regression.`,
 var insightCommand = Command{
 	Name:        "insight",
 	Short:       "Behavioral code analysis from VCS history",
-	Description: "Read VCS history to surface hotspots, temporal coupling, ownership, and trends, showing where a codebase's attention and risk concentrate.",
-	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs"},
+	Description: "Show where a codebase's attention and risk concentrate: history lenses (hotspots, coupling, ownership, trend) from VCS, and a structure lens (god nodes, orphans, doc coverage) from the knowledge graph.",
+	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs", "structure"},
 	Long: `Read version-control history to show where a codebase's attention and
 risk concentrate. By default every lens is contextual to the working directory — run
 from inside a subtree and it reflects only that subtree's history; pass --workspace to
@@ -296,18 +296,25 @@ Lenses (the first argument):
              author count (bus factor), and abandonment (projects gone quiet).
   trend      The recent half of the window versus the earlier half: a positive
              delta is a rising hotspot, a negative one is cooling.
+  structure  The knowledge-graph lens (no VCS): god nodes (the most connected
+             spells, modules, targets - where structural risk concentrates),
+             orphans (docs that document nothing, spells no target uses), and doc
+             coverage (the share of diagnostics, spells, and modules with a doc).
+             --kind scopes every section to one node kind.
   report     Every lens as one whole-workspace Markdown document (the magusfile's
              postflight target writes this to the GitHub Actions step summary).
 
---commits caps the scan; --since bounds it by date (90d, 12w, 6mo, 1y). Each lens
-accepts -o text|json|yaml|name; hotspots and affinity also render -o mermaid (the
-hotspots file view renders a churn-vs-complexity quadrant chart).`,
+The history lenses read VCS: --commits caps the scan; --since bounds it by date
+(90d, 12w, 6mo, 1y). The structure lens reads the knowledge graph cache-first
+instead. Each lens accepts -o text|json|yaml|name; hotspots and affinity also
+render -o mermaid (the hotspots file view renders a churn-vs-complexity quadrant).`,
 	Usage: "magus insight <lens> [flags]",
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Int("commits", 500, "Cap on how many recent commits to scan")
 		fs.String("since", "", "Only commits within this window (e.g. 90d, 12w, 6mo, 1y)")
 		fs.Bool("workspace", false, "Analyze the whole workspace instead of the current project/subtree")
 		fs.Bool("files", false, "hotspots: rank individual files instead of projects")
+		fs.String("kind", "", "structure: scope every section to one node kind (spell, target, doc, ...)")
 	},
 	Examples: []Example{
 		{"Prime refactoring targets (files)", "magus insight hotspots --files"},

@@ -1,0 +1,36 @@
+# insight structure is the knowledge-graph lens: god nodes, orphans, doc coverage.
+# It reads the graph (cache-first), not git history, so it needs no commits window.
+exec magus insight structure
+stdout 'god nodes'
+stdout 'doc coverage'
+stdout 'DEGREE'
+
+# -o json exposes the three sections.
+exec magus insight structure -o json
+stdout '"gods"'
+stdout '"coverage"'
+stdout '"node_count"'
+
+# --kind scopes every section to one node kind.
+exec magus insight structure --kind spell -o json
+stdout '"kind": "spell"'
+
+# acme's lint target uses acme, so the acme spell is NOT an orphan; but built-in
+# spells this workspace never uses are (a real "registered but unused" signal).
+exec magus insight structure -o json
+stdout '"reason": "no target uses it"'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

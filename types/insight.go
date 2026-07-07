@@ -113,8 +113,9 @@ type Trend struct {
 // InsightReport bundles every lens for the combined `magus insight report` (the
 // committable Markdown doc and its -o json form).
 type InsightReport struct {
-	Hotspots  HotspotOutput   `json:"hotspots"  yaml:"hotspots"`
-	Affinity  AffinityOutput  `json:"affinity"  yaml:"affinity"`
-	Ownership OwnershipOutput `json:"ownership" yaml:"ownership"`
-	Trend     TrendOutput     `json:"trend"     yaml:"trend"`
+	Hotspots  HotspotOutput      `json:"hotspots"  yaml:"hotspots"`
+	Affinity  AffinityOutput     `json:"affinity"  yaml:"affinity"`
+	Ownership OwnershipOutput    `json:"ownership" yaml:"ownership"`
+	Trend     TrendOutput        `json:"trend"     yaml:"trend"`
+	Structure KnowledgeStructure `json:"structure" yaml:"structure"`
 }

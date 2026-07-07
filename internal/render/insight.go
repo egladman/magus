@@ -238,8 +238,47 @@ func WriteInsightMarkdown(w io.Writer, r types.InsightReport) error {
 		b.WriteString("\n")
 	}
 
+	writeStructureSection(&b, r.Structure)
+
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// writeStructureSection renders the knowledge-graph structural lens into the
+// combined report: god nodes, orphans, and doc coverage. Empty when no graph was
+// built (the report is best-effort about the structural section).
+func writeStructureSection(b *strings.Builder, s types.KnowledgeStructure) {
+	if s.NodeCount == 0 {
+		return
+	}
+	b.WriteString("## Structure\n\n")
+	fmt.Fprintf(b, "%s\n\n", types.KnowledgeStructureDefinition)
+
+	if len(s.Gods) > 0 {
+		b.WriteString("**God nodes** (most connected):\n\n")
+		b.WriteString("| Degree | In | Out | Kind | Label |\n|--:|--:|--:|---|---|\n")
+		for _, g := range s.Gods {
+			fmt.Fprintf(b, "| %d | %d | %d | %s | `%s` |\n", g.Degree, g.In, g.Out, g.Kind, g.Label)
+		}
+		b.WriteString("\n")
+	}
+	if len(s.Orphans) > 0 {
+		b.WriteString("**Orphans** (neglected):\n\n")
+		b.WriteString("| Kind | Label | Why |\n|---|---|---|\n")
+		for _, o := range s.Orphans {
+			fmt.Fprintf(b, "| %s | `%s` | %s |\n", o.Kind, o.Label, o.Reason)
+		}
+		b.WriteString("\n")
+	}
+	if len(s.Coverage) > 0 {
+		b.WriteString("**Doc coverage:**\n\n")
+		b.WriteString("| Kind | Documented | Coverage | Missing |\n|---|--:|--:|---|\n")
+		for _, c := range s.Coverage {
+			missing := strings.Join(c.Undocumented, ", ")
+			fmt.Fprintf(b, "| %s | %d/%d | %d%% | %s |\n", c.Kind, c.Documented, c.Total, c.Percent, missing)
+		}
+		b.WriteString("\n")
+	}
 }
 
 func windowText(commits int, since string) string {

@@ -164,6 +164,57 @@ type KnowledgePathOutput struct {
 	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
 }
 
+// KnowledgeStructure is the knowledge-graph structural analytics behind
+// `magus insight structure`: where the workspace concentrates (god nodes), where
+// it neglects (orphans), and where docs are missing (coverage). It is the
+// structural analogue of insight's git-history lenses, derived purely from the
+// graph (degree and reachability), so it is deterministic and LLM-free.
+type KnowledgeStructure struct {
+	Definition string                 `json:"definition"          yaml:"definition"`
+	NodeCount  int                    `json:"node_count"          yaml:"node_count"`
+	EdgeCount  int                    `json:"edge_count"          yaml:"edge_count"`
+	Gods       []KnowledgeGodNode     `json:"gods"                yaml:"gods"`
+	Orphans    []KnowledgeOrphan      `json:"orphans,omitempty"   yaml:"orphans,omitempty"`
+	Coverage   []KnowledgeDocCoverage `json:"coverage,omitempty"  yaml:"coverage,omitempty"`
+}
+
+// KnowledgeGodNode is a highly-connected node - where structural risk concentrates.
+type KnowledgeGodNode struct {
+	ID     string `json:"id"     yaml:"id"`
+	Kind   string `json:"kind"   yaml:"kind"`
+	Label  string `json:"label"  yaml:"label"`
+	Degree int    `json:"degree" yaml:"degree"` // in + out
+	In     int    `json:"in"     yaml:"in"`
+	Out    int    `json:"out"    yaml:"out"`
+}
+
+// KnowledgeOrphan is a node missing the connection its kind implies (a doc that
+// documents nothing, a spell no target uses), with a plain-English reason.
+type KnowledgeOrphan struct {
+	ID     string `json:"id"     yaml:"id"`
+	Kind   string `json:"kind"   yaml:"kind"`
+	Label  string `json:"label"  yaml:"label"`
+	Reason string `json:"reason" yaml:"reason"`
+}
+
+// KnowledgeDocCoverage is doc coverage for one documentable kind: how many of its
+// nodes have a doc pointing at them.
+type KnowledgeDocCoverage struct {
+	Kind         string   `json:"kind"                   yaml:"kind"`
+	Total        int      `json:"total"                  yaml:"total"`
+	Documented   int      `json:"documented"             yaml:"documented"`
+	Percent      int      `json:"percent"                yaml:"percent"`
+	Undocumented []string `json:"undocumented,omitempty" yaml:"undocumented,omitempty"`
+}
+
+// KnowledgeStructureDefinition is the human-readable description of the lens.
+const KnowledgeStructureDefinition = "Structure reads the knowledge graph to show " +
+	"where the workspace concentrates and where it is neglected: god nodes (the most " +
+	"connected spells, modules, and targets - the structural risk), orphans (docs that " +
+	"document nothing, spells nothing uses), and doc coverage (the share of diagnostics, " +
+	"spells, and modules that have a doc). It is the structural companion to the " +
+	"git-history lenses."
+
 // KnowledgeRouting is the compact "query first" summary rendered into MAGUS.md's
 // header: per-kind and per-project entry points so a reader's (human or agent)
 // next action is a magus query, not a grep. It routes - counts, the field to
