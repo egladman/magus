@@ -23,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `magus describe charm[s]` inverts the charm index: it lists every target that
   declares a charm and the argv edit it makes, marking the reserved built-ins and
   workspace defaults.
-- `magus run --without-charm=<name>` suppresses one named charm for a run, the
-  granular counterpart to `--no-default-charms`.
 
 ### Changed
 

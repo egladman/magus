@@ -76,7 +76,6 @@ Per-run charms stack on top, exactly as if you had typed the whole set. Three th
 - **`magus affected` does not apply them**, so CI (which runs `magus affected ci`) stays read-only regardless of the workspace default.
 - **`RunCI` still strips `rw`**, so even a local `magus run ci` verifies without writing.
 - **`--no-default-charms`** ignores the defaults for one run (`magus run format --no-default-charms` to check without rewriting).
-- **`--without-charm=<name>`** suppresses one named charm for a run, whether it came from the `:suffix` or from `default_charms` (`magus run lint:rw,debug --without-charm=debug`). It is the granular counterpart to `--no-default-charms`, which drops every default at once; the value is comma-separated to suppress several.
 
 `MAGUS_DEFAULT_CHARMS` (comma-separated) is the environment equivalent. It only sets the default baseline; it never changes what a charm means, so `has_charm("rw")` in spells and targets is unaffected.
 
