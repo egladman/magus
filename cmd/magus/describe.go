@@ -20,6 +20,7 @@ import (
 // projects`); a trailing name then switches a list into a one-entity detail.
 var describeAlias = map[string]string{
 	"spell": "spell", "spells": "spell",
+	"charm": "charm", "charms": "charm",
 	"target": "target", "targets": "target",
 	"graph": "graph", "graphs": "graph",
 	"project": "project", "projects": "project",
@@ -38,6 +39,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 	switch describeAlias[noun] {
 	case "spell":
 		return describeSpells(ctx, root, rest)
+	case "charm":
+		return describeCharms(ctx, root, rest)
 	case "target":
 		return describeTargetNoun(ctx, root, rest)
 	case "graph":
@@ -74,6 +77,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Nouns (each accepts singular or plural):")
 	fmt.Fprintln(os.Stderr, "  spell        language/runtime adapters")
+	fmt.Fprintln(os.Stderr, "  charm        execution modifiers (rw, gha) and the targets that declare them")
 	fmt.Fprintln(os.Stderr, "  target       targets dispatched to projects; `target <path:target>` evaluates one")
 	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (magus.needs DAG) per project")
 	fmt.Fprintln(os.Stderr, "  project      directories recognized as units of work; `project <path>` details one")
@@ -281,6 +285,103 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		}
 		if t.Opaque {
 			fmt.Printf("    opaque: true\n")
+		}
+	}
+	return nil
+}
+
+// describeCharms routes `describe charm[s]`: no name lists every charm known in the
+// workspace; a name details it (built-in meaning, workspace-default status, and the
+// targets that declare it with the argv edit each makes).
+func describeCharms(ctx context.Context, root string, args []string) error {
+	pos, err := cmdParse("describe charms", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus describe charm[s] [<name>] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, types.CharmDefinition)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "With no argument, lists every charm known in the workspace. With a name")
+			fmt.Fprintln(os.Stderr, "(e.g. \"rw\") details it: the built-in meaning, whether it is a workspace")
+			fmt.Fprintln(os.Stderr, "default, and every target that declares it with the argv edit it makes.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+
+	out := ws.DescribeCharms(globalCfg.DefaultCharms)
+	detail := len(pos) > 0
+	if detail {
+		name := types.NormalizeCharmName(pos[0])
+		names := namesOf(out.Charms, func(c types.CharmEntry) string { return c.Name })
+		out.Charms = filterByName(out.Charms, name, func(c types.CharmEntry) string { return c.Name })
+		out.Count = len(out.Charms)
+		if out.Count == 0 {
+			return unknownEntity("charm", pos[0], names)
+		}
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, out)
+	case outputName:
+		for _, c := range out.Charms {
+			fmt.Println(c.Name)
+		}
+		return nil
+	}
+
+	// text / wide
+	fmt.Printf("definition: %s\n\n", out.Definition)
+	fmt.Printf("charms (%d):\n", out.Count)
+	for _, c := range out.Charms {
+		tags := make([]string, 0, 2)
+		if c.Builtin {
+			tags = append(tags, "built-in")
+		}
+		if c.Default {
+			tags = append(tags, "workspace default")
+		}
+		line := "  " + c.Name
+		if len(tags) > 0 {
+			line += "  [" + strings.Join(tags, ", ") + "]"
+		}
+		fmt.Println(line)
+		if c.Doc != "" {
+			fmt.Printf("    %s\n", c.Doc)
+		}
+		// List view stays a summary; the per-target argv edits print only in the
+		// single-charm detail view, where the extra lines are the point.
+		if !detail {
+			if n := len(c.Declarations); n > 0 {
+				fmt.Printf("    declared by %d target(s)\n", n)
+			}
+			continue
+		}
+		if len(c.Declarations) == 0 {
+			fmt.Printf("    no target in this workspace declares it\n")
+			continue
+		}
+		fmt.Printf("    declared by:\n")
+		for _, d := range c.Declarations {
+			fmt.Printf("      %s:%s  (spell %s)\n", d.Project, d.Target, d.Spell)
+			if len(d.After) > 0 && !slices.Equal(d.Before, d.After) {
+				fmt.Printf("        base     %s\n", strings.Join(d.Before, " "))
+				fmt.Printf("        + %-6s %s\n", c.Name, strings.Join(d.After, " "))
+			}
 		}
 	}
 	return nil

@@ -55,6 +55,22 @@ func IsReservedCharm(name string) bool {
 	return slices.Contains(reservedCharms, NormalizeCharmName(name))
 }
 
+// ReservedCharmDoc returns a one-line description of a reserved built-in charm, or
+// "" for a name that is not reserved. It is the single source `magus describe charm`
+// reads, so the built-in summaries cannot drift from the reserved set.
+func ReservedCharmDoc(name string) string {
+	switch NormalizeCharmName(name) {
+	case CharmReadWrite:
+		return "mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci"
+	case CharmCD:
+		return "continuous-delivery: a target reads it to publish its artifact; survives into ci"
+	case CharmGHA:
+		return "GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci"
+	default:
+		return ""
+	}
+}
+
 // WithCharms returns a context carrying the active execution charms, normalized
 // (see NormalizeCharmName) so the stored set is canonical and HasCharm only has
 // to normalize the query. An empty set leaves the context unchanged, so it never

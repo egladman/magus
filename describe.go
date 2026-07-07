@@ -49,6 +49,86 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 	}
 }
 
+// DescribeCharms builds the inverse charm index: every charm name a target in the
+// workspace declares, plus the reserved built-ins and any workspace default, and for
+// each the project/target/spell declarations that give it a patch. defaults is the
+// workspace default_charms set, so the report can mark which charms apply to every
+// run without a :suffix. It is the transpose of DescribeTarget: one charm, every
+// target that declares it, rather than one target and the charms it declares.
+func (m *Magus) DescribeCharms(defaults []string) types.CharmsOutput {
+	defaultSet := map[string]struct{}{}
+	for _, c := range defaults {
+		defaultSet[types.NormalizeCharmName(c)] = struct{}{}
+	}
+
+	byName := map[string]*types.CharmEntry{}
+	ensure := func(name string) *types.CharmEntry {
+		e, ok := byName[name]
+		if !ok {
+			_, isDefault := defaultSet[name]
+			e = &types.CharmEntry{
+				Name:    name,
+				Builtin: types.IsReservedCharm(name),
+				Default: isDefault,
+				Doc:     types.ReservedCharmDoc(name),
+			}
+			byName[name] = e
+		}
+		return e
+	}
+
+	// The reserved built-ins are vocabulary even where no target declares a patch for
+	// them; a workspace default that isn't reserved is real vocabulary too.
+	for _, name := range types.ReservedCharms() {
+		ensure(name)
+	}
+	for name := range defaultSet {
+		ensure(name)
+	}
+
+	for _, p := range m.ws.All() {
+		for _, s := range p.ResolvedSpells {
+			for _, target := range s.Targets() {
+				for _, c := range s.Charms(target) {
+					name := types.NormalizeCharmName(c)
+					decl := types.CharmDeclaration{Project: p.Path, Target: target, Spell: s.Name()}
+					// Render base -> +charm so the report shows the patch's effect on this
+					// target legibly rather than raw RFC 6902 ops. A charm that changes
+					// nothing leaves Before == After (a no-op declaration).
+					if steps, ok, err := s.ExplainCommand(target, []string{name}); err == nil && ok && len(steps) > 0 {
+						decl.Before = steps[0].Command
+						decl.After = steps[len(steps)-1].Command
+					}
+					e := ensure(name)
+					e.Declarations = append(e.Declarations, decl)
+				}
+			}
+		}
+	}
+
+	entries := make([]types.CharmEntry, 0, len(byName))
+	for _, e := range byName {
+		slices.SortFunc(e.Declarations, func(a, b types.CharmDeclaration) int {
+			if c := cmp.Compare(a.Project, b.Project); c != 0 {
+				return c
+			}
+			if c := cmp.Compare(a.Target, b.Target); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.Spell, b.Spell)
+		})
+		entries = append(entries, *e)
+	}
+	slices.SortFunc(entries, func(a, b types.CharmEntry) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return types.CharmsOutput{
+		Definition: types.CharmDefinition,
+		Count:      len(entries),
+		Charms:     entries,
+	}
+}
+
 // DescribeTargets enumerates targets known in the workspace.
 func (m *Magus) DescribeTargets() types.TargetsOutput {
 	type targetInfo struct {

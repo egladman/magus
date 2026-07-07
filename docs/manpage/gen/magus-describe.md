@@ -1,7 +1,7 @@
 ---
 title: magus describe
-description: Define a magus concept (spell, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.
-tags: [cli, magus describe, spell, target, project, workspace, introspection]
+description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.
+tags: [cli, magus describe, spell, charm, target, project, workspace, introspection]
 ---
 
 # magus-describe
@@ -15,9 +15,13 @@ Define a magus concept and list its entities
 ## Description
 
 Define a magus concept and list every entity of that kind. The noun is
-one of spell, target, project, workspace, module, or mcp-tool; singular and
-plural are interchangeable. Pass a name after the noun to detail a single entity
-instead of listing them all.
+one of spell, charm, target, project, workspace, module, or mcp-tool; singular
+and plural are interchangeable. Pass a name after the noun to detail a single
+entity instead of listing them all.
+
+The charm noun is the inverse of a target ref: "describe charm rw" lists every
+target that declares the rw charm and the argv edit each one makes, the transpose
+of the charms a single "describe target" lists.
 
 For a target ref (e.g. "api:build", or ":test" for all projects) magus prints the
 fully-evaluated dispatch plan: the workspace-rooted source and output globs, the
@@ -39,6 +43,12 @@ step at a time.
 
 ```sh
 magus describe targets
+```
+
+*List a charm's declaring targets*
+
+```sh
+magus describe charm rw
 ```
 
 *Detail one project*

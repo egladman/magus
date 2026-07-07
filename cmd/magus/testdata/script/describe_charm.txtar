@@ -1,0 +1,39 @@
+# describe charm is the inverse index of describe target: one charm, every target
+# that declares it. The list form always includes the reserved built-ins.
+exec magus describe charms
+stdout 'rw'
+stdout 'gha'
+stdout 'built-in'
+stdout 'declared by 1 target'
+
+# the detail form documents the built-in and shows the argv edit the charm makes,
+# rendered base -> +charm from the declaring target (acme lint . -> acme lint --fix .)
+exec magus describe charm rw
+stdout 'rw  \[built-in\]'
+stdout 'mutate in place'
+stdout '\.:lint  \(spell acme\)'
+stdout 'base     acme lint \.'
+stdout '\+ rw     acme lint --fix \.'
+
+# an unknown charm errors with a nonzero status and a nearest-match hint
+! exec magus describe charm rww
+stderr 'unknown charm'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+import "magus/charm";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    final args = ["lint", "."];
+    return Command{bin = "acme", args = args, charms = {
+        "rw": after(args, "lint", ["--fix"]),
+    }};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

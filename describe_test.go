@@ -169,6 +169,59 @@ func TestDescribeTarget_Charms(t *testing.T) {
 	assert.Equal(t, []string{"debug", "write"}, got, "DescribeTarget(lint).Charms (sorted union across spells)")
 }
 
+func TestDescribeCharms_InverseIndex(t *testing.T) {
+	// Not parallel: mutates global spell registry.
+	const spellName = "zzz-describe-charms-spell"
+	s := types.NewSpell(spellName,
+		types.WithTargets("lint"),
+		types.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(s)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
+
+	out := ws.DescribeCharms([]string{"write"})
+	assert.NotEmpty(t, out.Definition, "DescribeCharms: Definition is empty")
+
+	byName := make(map[string]types.CharmEntry, len(out.Charms))
+	for _, c := range out.Charms {
+		byName[c.Name] = c
+	}
+
+	// Reserved built-ins always appear, documented, even where nothing declares them.
+	for _, name := range types.ReservedCharms() {
+		e, ok := byName[name]
+		require.Truef(t, ok, "DescribeCharms: reserved charm %q missing", name)
+		assert.Truef(t, e.Builtin, "DescribeCharms: %q.Builtin", name)
+		assert.NotEmptyf(t, e.Doc, "DescribeCharms: %q.Doc", name)
+	}
+
+	// A spell-declared charm is indexed back to the target that declares it.
+	for _, name := range []string{"write", "debug"} {
+		e, ok := byName[name]
+		require.Truef(t, ok, "DescribeCharms: declared charm %q missing", name)
+		assert.Falsef(t, e.Builtin, "DescribeCharms: %q.Builtin should be false", name)
+		require.Lenf(t, e.Declarations, 1, "DescribeCharms: %q declarations", name)
+		d := e.Declarations[0]
+		assert.Equal(t, ".", d.Project, "declaration project")
+		assert.Equal(t, "lint", d.Target, "declaration target")
+		assert.Equal(t, spellName, d.Spell, "declaration spell")
+	}
+
+	// The workspace default is flagged; a non-default charm is not.
+	assert.True(t, byName["write"].Default, "DescribeCharms: write should be marked default")
+	assert.False(t, byName["debug"].Default, "DescribeCharms: debug should not be default")
+
+	// Entries are sorted by name.
+	for i := 1; i < len(out.Charms); i++ {
+		assert.LessOrEqualf(t, out.Charms[i-1].Name, out.Charms[i].Name,
+			"DescribeCharms: not sorted at [%d]=%q,[%d]=%q", i-1, out.Charms[i-1].Name, i, out.Charms[i].Name)
+	}
+}
+
 func TestDescribeTargets_CustomTargets(t *testing.T) {
 	t.Parallel()
 	const customTarget = "zzz-custom-target"

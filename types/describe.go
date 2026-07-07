@@ -29,6 +29,43 @@ type SpellsOutput struct {
 	Spells     []SpellEntry `json:"spells"     yaml:"spells"`
 }
 
+// CharmDefinition is the human-readable description of a charm shown by "magus describe charms".
+const CharmDefinition = "A charm is a named, shared execution modifier applied as an " +
+	"RFC 6902 JSON Patch over a target's argv: it changes how a target runs (rw, gha), " +
+	"never which target or project runs. See docs/charms.md."
+
+// CharmsOutput is the payload of "magus describe charm[s]": the inverse charm
+// index, every charm name known in the workspace paired with the declarations that
+// give it meaning. It is the transpose of EvaluatedTargetsOutput's per-target charm
+// list (one charm, every target that declares it).
+type CharmsOutput struct {
+	Definition string       `json:"definition" yaml:"definition"`
+	Count      int          `json:"count"      yaml:"count"`
+	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
+}
+
+// CharmEntry is one charm in the inverse index: its name, whether it is a reserved
+// built-in or a workspace default, its built-in doc (empty for a spell-defined
+// charm), and every target that declares a patch for it.
+type CharmEntry struct {
+	Name         string             `json:"name"                   yaml:"name"`
+	Builtin      bool               `json:"builtin,omitempty"      yaml:"builtin,omitempty"`
+	Default      bool               `json:"default,omitempty"      yaml:"default,omitempty"`
+	Doc          string             `json:"doc,omitempty"          yaml:"doc,omitempty"`
+	Declarations []CharmDeclaration `json:"declarations,omitempty" yaml:"declarations,omitempty"`
+}
+
+// CharmDeclaration is one target's declaration of a charm: the spell that owns the
+// command and the before/after argv the charm's patch produces for that target.
+// Before == After marks a declaration whose patch changes nothing for this target.
+type CharmDeclaration struct {
+	Project string   `json:"project"          yaml:"project"`
+	Target  string   `json:"target"           yaml:"target"`
+	Spell   string   `json:"spell"            yaml:"spell"`
+	Before  []string `json:"before,omitempty" yaml:"before,omitempty"`
+	After   []string `json:"after,omitempty"  yaml:"after,omitempty"`
+}
+
 // TargetDefinition is the human-readable description of a target shown by "magus describe targets".
 const TargetDefinition = "A target is a named operation (e.g. build, test, lint) declared as an " +
 	"exported function in a project's magusfile, which may compose a spell's " +

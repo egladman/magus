@@ -6,9 +6,13 @@ magus\-describe \- Define a magus concept and list its entities
 .RI "describe <noun> [<name>] [flags]"
 .SH DESCRIPTION
 Define a magus concept and list every entity of that kind. The noun is
-one of spell, target, project, workspace, module, or mcp\-tool; singular and
-plural are interchangeable. Pass a name after the noun to detail a single entity
-instead of listing them all.
+one of spell, charm, target, project, workspace, module, or mcp\-tool; singular
+and plural are interchangeable. Pass a name after the noun to detail a single
+entity instead of listing them all.
+.PP
+The charm noun is the inverse of a target ref: "describe charm rw" lists every
+target that declares the rw charm and the argv edit each one makes, the transpose
+of the charms a single "describe target" lists.
 .PP
 For a target ref (e.g. "api:build", or ":test" for all projects) magus prints the
 fully\-evaluated dispatch plan: the workspace\-rooted source and output globs, the
@@ -29,6 +33,12 @@ For a target ref with charms: show the per\-charm argv trace (base then each cha
 .PP
 .EX
 magus describe targets
+.EE
+.PP
+\fIList a charm's declaring targets\fR
+.PP
+.EX
+magus describe charm rw
 .EE
 .PP
 \fIDetail one project\fR
