@@ -1,0 +1,54 @@
+# The knowledge retrieval verbs (query/explain/path) sit on the same cache-first
+# graph as `describe knowledge`. query resolves terms to nodes + a neighborhood.
+exec magus query kind:spell
+stdout 'spell:acme'
+stdout 'matches:'
+
+exec magus query build
+stdout 'target:\.:build'
+stdout 'neighborhood:'
+
+# explain shows one node's edges, provenance, and blast radius. "build" resolves
+# by name; build needs lint (depends_on) and the charm rw references it.
+exec magus explain build
+stdout 'node: target:\.:build'
+stdout 'kind:  target'
+stdout 'out edges'
+stdout 'depends_on'
+
+exec magus explain build -o json
+stdout '"blast_radius"'
+stdout '"relation": "depends_on"'
+stdout '"relation": "references"'
+
+# an unresolvable name errors with a nonzero status
+! exec magus explain zzz-nonesuch
+stderr 'no node matches'
+
+# path connects two resolved nodes
+exec magus path lint build
+stdout 'from:'
+stdout 'to:'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+export fun build(args: [str]) > void {
+    magus.needs(magus.target.literal("lint"));
+    if (magus.has_charm("rw")) { acme.lint(); }
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+import "magus/charm";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    final args = ["lint", "."];
+    return Command{bin = "acme", args = args, charms = {
+        "rw": after(args, "lint", ["--fix"]),
+    }};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

@@ -1,0 +1,52 @@
+# describe knowledge assembles the deterministic domain graph and emits a routing
+# summary by default. It must build implicitly (cache-first) with no build verb.
+exec magus describe knowledge
+stdout 'knowledge graph'
+stdout 'nodes by kind'
+stdout 'edges by relation'
+stdout 'project'
+stdout 'target'
+stdout 'spell'
+stdout 'diagnostic'
+
+# the store is persisted under the cache dir (shards authoritative + a manifest)
+exists .magus/knowledge/manifest.json
+
+# -o json emits the merged node-link graph external graph tools read directly:
+# nodes carry id/kind, links carry source/target/relation, plus the schema version.
+exec magus describe knowledge -o json
+stdout '"schema_version"'
+stdout '"directed": true'
+stdout '"kind": "project"'
+stdout '"kind": "target"'
+stdout '"kind": "spell"'
+stdout '"kind": "charm"'
+stdout '"kind": "diagnostic"'
+stdout 'spell:acme'
+stdout '"relation": "depends_on"'
+stdout '"relation": "uses"'
+stdout '"relation": "references"'
+stdout '"confidence": "extracted"'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+export fun build(args: [str]) > void {
+    magus.needs(magus.target.literal("lint"));
+    if (magus.has_charm("rw")) { acme.lint(); }
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+import "magus/charm";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    final args = ["lint", "."];
+    return Command{bin = "acme", args = args, charms = {
+        "rw": after(args, "lint", ["--fix"]),
+    }};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

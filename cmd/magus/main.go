@@ -421,6 +421,12 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return affected(ctx, root, rc, subArgs)
 	case "insight":
 		return insightCmd(ctx, root, subArgs)
+	case "query":
+		return queryCmd(ctx, root, subArgs)
+	case "explain":
+		return explainCmd(ctx, root, subArgs)
+	case "path":
+		return pathCmd(ctx, root, subArgs)
 	case "watch":
 		return watchCmd(ctx, root, rc, subArgs)
 	case "status":
@@ -460,7 +466,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 
 var knownSubcommands = []string{
 	"ls", "describe", "run", "x", "where", "tail",
-	"affected", "insight", "watch", "status", "doctor",
+	"affected", "insight", "query", "explain", "path", "watch", "status", "doctor",
 	"config", "server", "repl", "completion", "init", "self", "version",
 	"clean", "merge-driver", "buzz",
 	"help",
@@ -477,6 +483,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  where          print the absolute path of a project (fuzzy match)")
 	fmt.Fprintln(os.Stderr, "  tail           stream the most recent cached log for cwd project")
 	fmt.Fprintln(os.Stderr, "  affected       run a target for VCS-diff affected projects")
+	fmt.Fprintln(os.Stderr, "  query          search the knowledge graph and show a node's neighborhood")
+	fmt.Fprintln(os.Stderr, "  explain        show one knowledge-graph node: its edges, provenance, blast radius")
+	fmt.Fprintln(os.Stderr, "  path           show the shortest path between two knowledge-graph nodes")
 	fmt.Fprintln(os.Stderr, "  watch          emit changed file paths (pipe into affected --stdin)")
 	fmt.Fprintln(os.Stderr, "  status         inspect the concurrency pool of a running parent magus")
 	fmt.Fprintln(os.Stderr, "  clean          remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]")

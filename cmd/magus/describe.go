@@ -27,6 +27,7 @@ var describeAlias = map[string]string{
 	"workspace": "workspace", "workspaces": "workspace",
 	"module": "module", "modules": "module",
 	"mcp-tool": "mcp-tool", "mcp-tools": "mcp-tool",
+	"knowledge": "knowledge",
 }
 
 func describeCmd(ctx context.Context, root string, args []string) error {
@@ -53,6 +54,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 		return describeModules(rest)
 	case "mcp-tool":
 		return describeMCPTools(rest)
+	case "knowledge":
+		return describeKnowledge(ctx, root, rest)
 	default:
 		fmt.Fprintf(os.Stderr, "magus describe: unknown noun %q\n", noun)
 		spellings := make([]string, 0, len(describeAlias)) // every accepted spelling, sorted for a stable suggestion
@@ -84,6 +87,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
 	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")
 	fmt.Fprintln(os.Stderr, "  mcp-tool     tools exposed to AI agents via the MCP daemon")
+	fmt.Fprintln(os.Stderr, "  knowledge    the deterministic knowledge graph of the workspace domain")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
 	fmt.Fprintln(os.Stderr, "See also: `magus config view` to inspect the resolved runtime configuration.")
