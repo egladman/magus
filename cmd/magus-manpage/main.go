@@ -33,7 +33,11 @@ func main() {
 	format := flag.String("format", "roff", "output format: roff or md")
 	out := flag.String("out", "", "output directory (default: manpage/gen for roff, docs/manpage/gen for md)")
 	date := flag.String("date", "", "date for .TH header; empty omits it (roff mode)")
-	ver := flag.String("version", "dev", "version string for .TH source field (roff mode)")
+	// The committed man pages carry no version: baking one turns every release bump
+	// into spurious churn across all pages. The .TH source field stays a neutral
+	// "magus" by default; a release build passes -version vX.Y.Z to stamp the copies
+	// it ships, which are never committed.
+	ver := flag.String("version", "", "version for the .TH source field, e.g. v0.2.0; empty (the default) stays version-neutral for committed pages (roff mode)")
 	flag.Parse()
 
 	switch *format {
@@ -50,6 +54,16 @@ func main() {
 	default:
 		fatalf("unknown -format %q; want roff or md", *format)
 	}
+}
+
+// thSource builds the .TH source field. Empty ver (the committed-page default)
+// yields a bare "magus" so a version bump never rewrites the pages; a release build
+// passes the real version and it reads "magus vX.Y.Z".
+func thSource(ver string) string {
+	if ver == "" {
+		return "magus"
+	}
+	return "magus " + ver
 }
 
 func genRoff(outDir, date, ver string) {
@@ -73,7 +87,7 @@ func renderMain(date, ver string) []byte {
 	var buf bytes.Buffer
 	w := imanpage.NewWriter(&buf)
 
-	w.TH("magus", "1", date, "magus "+ver, "magus Manual")
+	w.TH("magus", "1", date, thSource(ver), "magus Manual")
 
 	w.SH("Name")
 	fmt.Fprintln(&buf, `magus \- workspace-aware build orchestrator and content-addressed cache`)
@@ -114,7 +128,7 @@ func renderCommand(seg imanpage.Command, date, ver string) []byte {
 	w := imanpage.NewWriter(&buf)
 
 	pageName := "magus-" + seg.Name
-	w.TH(pageName, "1", date, "magus "+ver, "magus Manual")
+	w.TH(pageName, "1", date, thSource(ver), "magus Manual")
 
 	w.SH("Name")
 	fmt.Fprintf(&buf, "%s \\- %s\n", imanpage.EscapeHyphen(pageName), imanpage.Escape(seg.Short))
