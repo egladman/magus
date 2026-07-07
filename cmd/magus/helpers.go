@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus"
@@ -29,6 +30,42 @@ func withDefaultCharms(perRun, defaults []string, noDefault bool) []string {
 	for _, c := range perRun {
 		if !slices.Contains(out, c) {
 			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// dropCharms removes each name in drop (matched by normalized charm name, so
+// --without-charm=RW drops "rw") from charms, whichever way the charm entered the
+// set - a target :suffix or default_charms. It is the granular counterpart to
+// --no-default-charms: suppress one named charm for a run rather than all defaults.
+func dropCharms(charms, drop []string) []string {
+	if len(drop) == 0 || len(charms) == 0 {
+		return charms
+	}
+	remove := make(map[string]struct{}, len(drop))
+	for _, d := range drop {
+		remove[types.NormalizeCharmName(d)] = struct{}{}
+	}
+	out := make([]string, 0, len(charms))
+	for _, c := range charms {
+		if _, skip := remove[types.NormalizeCharmName(c)]; !skip {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// splitCharmList parses a comma-separated charm-flag value (e.g. "rw,debug") into
+// its non-empty, trimmed names. Mirrors the "target:a,b" suffix grammar.
+func splitCharmList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
 		}
 	}
 	return out

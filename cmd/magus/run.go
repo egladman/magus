@@ -48,6 +48,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		step         *bool
 
 		noDefaultCharms *bool
+		withoutCharm    *string
 	)
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
 		timeout = fs.Duration("timeout", 0, "Abort if not finished within this duration (e.g. 5m, 1h30m); 0 = no limit")
@@ -64,6 +65,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1)")
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
+		withoutCharm = fs.String("without-charm", "", "Suppress a named charm for this run even if the target ref or default_charms adds it (comma-separated, e.g. --without-charm=rw)")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -174,7 +176,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if globalCfg.DryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}
-	if charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms); len(charms) > 0 {
+	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
+	if charms = dropCharms(charms, splitCharmList(*withoutCharm)); len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
 	if *noFlakeRetry {

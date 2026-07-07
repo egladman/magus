@@ -52,3 +52,34 @@ func TestWithDefaultCharms(t *testing.T) {
 		})
 	}
 }
+
+// TestDropCharms covers the --without-charm subtraction: it removes a named charm
+// however it entered the set, matches by normalized name, and is an identity when
+// nothing is dropped.
+func TestDropCharms(t *testing.T) {
+	cases := []struct {
+		name   string
+		charms []string
+		drop   []string
+		want   []string
+	}{
+		{"drop nothing is identity", []string{"rw", "debug"}, nil, []string{"rw", "debug"}},
+		{"drop one from the set", []string{"rw", "debug"}, []string{"debug"}, []string{"rw"}},
+		{"drop by normalized name", []string{"rw"}, []string{"RW"}, []string{}},
+		{"drop a name not present", []string{"rw"}, []string{"gha"}, []string{"rw"}},
+		{"empty charms stays empty", nil, []string{"rw"}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, dropCharms(c.charms, c.drop))
+		})
+	}
+}
+
+// TestSplitCharmList covers the comma-separated --without-charm value parse.
+func TestSplitCharmList(t *testing.T) {
+	assert.Nil(t, splitCharmList(""))
+	assert.Equal(t, []string{"rw"}, splitCharmList("rw"))
+	assert.Equal(t, []string{"rw", "debug"}, splitCharmList("rw, debug"))
+	assert.Equal(t, []string{"rw", "debug"}, splitCharmList(" rw ,, debug,"))
+}
