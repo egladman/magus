@@ -22,7 +22,7 @@ import (
 // it for any magus workspace, which is how a project's MAGUS.md is generated and
 // drift-checked. Markdown is target-graph-only (it backs MAGUS.md); the project
 // dependency graph offers only Mermaid/DOT (WriteGraphMermaid / WriteGraphDOT).
-func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map[string]types.EvaluatedTargetEntry) error {
+func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map[string]types.EvaluatedTargetEntry, routing *types.KnowledgeRouting) error {
 	var b bytes.Buffer // accumulate, then one write — keeps the body free of per-line error checks
 
 	b.WriteString("# Targets\n\n")
@@ -39,6 +39,10 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 	b.WriteString("magus run <target>:<charm>    # change HOW it runs (e.g. lint:rw)\n")
 	b.WriteString("```\n\n")
 	b.WriteString("Unfamiliar with a term? See the [Glossary](#glossary).\n\n")
+
+	if routing != nil {
+		writeRouting(&b, *routing)
+	}
 
 	projects := nonEmptyProjects(out)
 	if len(projects) > 0 {
@@ -67,6 +71,49 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 
 	_, err := w.Write(b.Bytes())
 	return err
+}
+
+// writeRouting emits the "query first" section from the knowledge graph: the
+// retrieval verbs, a per-kind entry table, and per-project rows. It routes the
+// reader's next action to a magus query (counts + the query to run + a few
+// high-degree anchor nodes); it never dumps graph data, so it stays diff-stable
+// across routine edits. Generated per-repo and drift-gated like the rest of MAGUS.md.
+func writeRouting(b *bytes.Buffer, r types.KnowledgeRouting) {
+	b.WriteString("## Query first\n\n")
+	fmt.Fprintf(b, "This workspace has a knowledge graph of **%d nodes** and **%d edges** "+
+		"(schema v%d). Query it instead of grepping:\n\n", r.NodeCount, r.EdgeCount, r.SchemaVersion)
+	b.WriteString("```sh\n")
+	b.WriteString("magus query \"<terms>\"             # kind:spell, project:pkg/foo, relation:uses, free text, -negation\n")
+	b.WriteString("magus explain <node>              # one node: its edges, provenance, blast radius\n")
+	b.WriteString("magus path <a> <b>                # how two nodes connect\n")
+	b.WriteString("magus describe knowledge -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)\n")
+	b.WriteString("```\n\n")
+
+	b.WriteString("| Kind | Count | List them | Anchors (most connected) |\n")
+	b.WriteString("|---|--:|---|---|\n")
+	for _, k := range r.Kinds {
+		fmt.Fprintf(b, "| %s | %d | `magus query kind:%s` | %s |\n", k.Kind, k.Count, k.Kind, mdInlineCode(k.Anchors))
+	}
+	b.WriteString("\n")
+
+	if len(r.Projects) > 0 {
+		b.WriteString("| Project | Targets | Scope a query | Key targets |\n")
+		b.WriteString("|---|--:|---|---|\n")
+		for _, p := range r.Projects {
+			fmt.Fprintf(b, "| %s | %d | `magus query project:%s` | %s |\n", p.Path, p.TargetCount, p.Path, mdInlineCode(p.KeyTargets))
+		}
+		b.WriteString("\n")
+	}
+}
+
+// mdInlineCode renders labels as comma-separated inline code for a table cell,
+// or an empty cell when there are none.
+func mdInlineCode(labels []string) string {
+	parts := make([]string, len(labels))
+	for i, l := range labels {
+		parts[i] = "`" + l + "`"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // EvalKey is the lookup key for an evaluated target, joining project path and

@@ -170,7 +170,14 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 				}
 			}
 		}
-		return render.WriteTargetGraphMarkdown(os.Stdout, out, eval)
+		// Build the knowledge graph to drive MAGUS.md's "query first" routing
+		// section; best-effort, so a graph build failure just omits the section.
+		var routing *types.KnowledgeRouting
+		if g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, false, nil); err == nil {
+			r := g.Routing()
+			routing = &r
+		}
+		return render.WriteTargetGraphMarkdown(os.Stdout, out, eval, routing)
 	}
 
 	// text / wide

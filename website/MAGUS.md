@@ -14,6 +14,32 @@ magus run <target>:<charm>    # change HOW it runs (e.g. lint:rw)
 
 Unfamiliar with a term? See the [Glossary](#glossary).
 
+## Query first
+
+This workspace has a knowledge graph of **259 nodes** and **216 edges** (schema v1). Query it instead of grepping:
+
+```sh
+magus query "<terms>"             # kind:spell, project:pkg/foo, relation:uses, free text, -negation
+magus explain <node>              # one node: its edges, provenance, blast radius
+magus path <a> <b>                # how two nodes connect
+magus describe knowledge -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
+```
+
+| Kind | Count | List them | Anchors (most connected) |
+|---|--:|---|---|
+| project | 1 | `magus query kind:project` | `.` |
+| target | 12 | `magus query kind:target` | `generate`, `ci`, `format` |
+| spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
+| op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
+| charm | 1 | `magus query kind:charm` | `rw` |
+| module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
+| method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 21 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
+
+| Project | Targets | Scope a query | Key targets |
+|---|--:|---|---|
+| . | 12 | `magus query project:.` | `generate`, `ci`, `format` |
+
 ## Reading the graphs
 
 ```mermaid

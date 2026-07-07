@@ -162,6 +162,35 @@ type KnowledgePathOutput struct {
 	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
 }
 
+// KnowledgeRouting is the compact "query first" summary rendered into MAGUS.md's
+// header: per-kind and per-project entry points so a reader's (human or agent)
+// next action is a magus query, not a grep. It routes - counts, the field to
+// query, and a few high-degree anchor nodes - and never dumps graph data, so it
+// stays diff-stable across routine edits.
+type KnowledgeRouting struct {
+	SchemaVersion int                       `json:"schema_version" yaml:"schema_version"`
+	NodeCount     int                       `json:"node_count"     yaml:"node_count"`
+	EdgeCount     int                       `json:"edge_count"     yaml:"edge_count"`
+	Kinds         []KnowledgeRoutingKind    `json:"kinds"          yaml:"kinds"`
+	Projects      []KnowledgeRoutingProject `json:"projects"       yaml:"projects"`
+}
+
+// KnowledgeRoutingKind is one row of the domain routing table: a node kind, how
+// many exist, and up to a few highest-degree "anchor" nodes to start from.
+type KnowledgeRoutingKind struct {
+	Kind    string   `json:"kind"              yaml:"kind"`
+	Count   int      `json:"count"             yaml:"count"`
+	Anchors []string `json:"anchors,omitempty" yaml:"anchors,omitempty"`
+}
+
+// KnowledgeRoutingProject is one per-project routing row: its path, target count,
+// and a few key (highest-degree) targets.
+type KnowledgeRoutingProject struct {
+	Path        string   `json:"path"                  yaml:"path"`
+	TargetCount int      `json:"target_count"          yaml:"target_count"`
+	KeyTargets  []string `json:"key_targets,omitempty" yaml:"key_targets,omitempty"`
+}
+
 // KnowledgeGraphOutput is the merged node-link export produced by
 // "magus describe knowledge -o json". It is node-link compatible (nodes have an
 // "id"; links have "source"/"target"), so external graph UIs read it directly;
