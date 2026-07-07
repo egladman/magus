@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus/internal/proc/run"
@@ -82,7 +83,39 @@ func resolveCharmArgs(ctx context.Context, base []string, charms map[string]type
 			activeNames = append(activeNames, name)
 		}
 	}
+	warnCharmConflicts(base, charms, activeNames)
 	return ispell.ApplyCharms(base, charms, activeNames)
+}
+
+// charmConflictWarned dedups the run-time conflict warning: the same overridden
+// charm on the same command recurs across every project a target fans out to, so one
+// warning per unique conflict per process is enough.
+var charmConflictWarned sync.Map // signature string -> struct{}
+
+// warnCharmConflicts emits a one-time soft warning when two active charms edit the
+// same argv position and one silently overrides the other (the winner decided by
+// alphabetical name, so the loser has no effect). It never blocks the run - the
+// command still resolves deterministically - but an author almost never means to
+// declare a charm whose edit is thrown away, so magus says so.
+func warnCharmConflicts(base []string, charms map[string]types.Charm, activeNames []string) {
+	conflicts, err := ispell.Conflicts(base, charms, activeNames)
+	if err != nil {
+		return
+	}
+	for _, c := range conflicts {
+		winner := c.OverriddenBy
+		if winner == "" {
+			winner = "another active charm"
+		}
+		sig := strings.Join(base, "\x00") + "|" + c.Name + ">" + winner
+		if _, seen := charmConflictWarned.LoadOrStore(sig, struct{}{}); seen {
+			continue
+		}
+		slog.Warn("magus: an active charm is overridden by another and has no effect",
+			"charm", c.Name,
+			"overridden_by", winner,
+			"hint", fmt.Sprintf("charms %q and %q both edit the same argument; %q wins by name order, so %q does nothing here. Drop one, or make their edits disjoint.", c.Name, winner, winner, c.Name))
+	}
 }
 
 // directMagusBinaryWarnOnce is process-global so the "use magus.cmd/..." hint fires

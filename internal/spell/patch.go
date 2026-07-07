@@ -96,6 +96,96 @@ func ExplainCharms(argv []string, charms map[string]types.Charm, activeNames []s
 	return steps, nil
 }
 
+// CharmConflict reports an active charm whose edit is overwritten by another active
+// charm on the same command. Name changes the command on its own, yet the fully
+// charm-applied command is identical whether or not Name is active, because
+// OverriddenBy edits the same position and, applied later in sorted-name order, wins.
+// The surviving value is decided by alphabetical charm name rather than any declared
+// precedence, so a conflict is almost always an authoring mistake, not intent.
+type CharmConflict struct {
+	Name         string // the charm whose edit is lost
+	OverriddenBy string // the active charm that overwrites it, or "" if none is singly responsible
+}
+
+// Conflicts returns the active charms whose effect is clobbered by another active
+// charm on argv. A charm conflicts when it changes the command on its own but the
+// command with the full active set equals the command with that charm removed -
+// proof its edit left no trace. Disjoint edits (two appended flags both survive)
+// never conflict; only a destructive overlap on the same position does. A charm that
+// is a no-op on its own is not a conflict (that is the Before==After case describe
+// surfaces separately). activeNames need not be sorted or deduped.
+func Conflicts(argv []string, charms map[string]types.Charm, activeNames []string) ([]CharmConflict, error) {
+	seen := map[string]bool{}
+	var active []string
+	for _, name := range activeNames {
+		if _, ok := charms[name]; ok && !seen[name] {
+			seen[name] = true
+			active = append(active, name)
+		}
+	}
+	if len(active) < 2 {
+		return nil, nil // one charm cannot be overridden by another
+	}
+
+	canonical, err := ApplyCharms(argv, charms, active)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []CharmConflict
+	for _, name := range active {
+		alone, err := ApplyCharms(argv, charms, []string{name})
+		if err != nil {
+			return nil, err
+		}
+		if slices.Equal(alone, argv) {
+			continue // no-op in isolation; not a conflict
+		}
+		rest := make([]string, 0, len(active)-1)
+		for _, n := range active {
+			if n != name {
+				rest = append(rest, n)
+			}
+		}
+		without, err := ApplyCharms(argv, charms, rest)
+		if err != nil {
+			return nil, err
+		}
+		if slices.Equal(without, canonical) {
+			out = append(out, CharmConflict{Name: name, OverriddenBy: overrider(argv, charms, name, active)})
+		}
+	}
+	return out, nil
+}
+
+// overrider returns the active charm that overwrites name's edit: the pair {name,
+// other} applied together yields the same command as other alone (name is lost),
+// which name alone would have changed. Returns "" when no single charm accounts for
+// the override. Scanned in sorted-name order for a stable answer.
+func overrider(argv []string, charms map[string]types.Charm, name string, active []string) string {
+	others := make([]string, 0, len(active)-1)
+	for _, n := range active {
+		if n != name {
+			others = append(others, n)
+		}
+	}
+	slices.Sort(others)
+	for _, other := range others {
+		pair, err := ApplyCharms(argv, charms, []string{name, other})
+		if err != nil {
+			continue
+		}
+		solo, err := ApplyCharms(argv, charms, []string{other})
+		if err != nil {
+			continue
+		}
+		if slices.Equal(pair, solo) {
+			return other
+		}
+	}
+	return ""
+}
+
 // applyOp applies a single op to argv (already a private copy ApplyPatch owns).
 func applyOp(argv []string, op types.PatchOp) ([]string, error) {
 	switch op.Op {
