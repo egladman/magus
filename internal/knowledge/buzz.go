@@ -12,7 +12,6 @@ import (
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/ast"
 	"github.com/egladman/gopherbuzz/token"
-	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -142,13 +141,13 @@ func appendRationale(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge, r
 
 // callEdges returns the intra-file function->function call edges for one function:
 // bare calls (IdentExpr callee) to another function defined in the same file,
-// deduped, excluding self-recursion. Reuses describe.Inspect for full AST coverage
+// deduped, excluding self-recursion. Uses ast.Inspect for full AST coverage
 // so a call nested in an if-condition or loop body is not missed.
 func callEdges(rel string, d *ast.FunDecl, sameFile map[string]bool) []types.KnowledgeEdge {
 	fnID := functionID(rel, d.Name)
 	seen := map[string]bool{}
 	var out []types.KnowledgeEdge
-	describe.Inspect(d.Body, func(n ast.Node) bool {
+	ast.Inspect(d.Body, func(n ast.Node) bool {
 		ce, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
