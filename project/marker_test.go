@@ -7,7 +7,11 @@ import (
 )
 
 func TestIsIgnoreDir(t *testing.T) {
-	for _, name := range []string{".git", ".hg", ".jj", ".magus", ".build", "vendor", "node_modules", "target", "gen"} {
+	// Any dot-directory is skipped, plus the well-known non-dot build/dep dirs.
+	for _, name := range []string{
+		".git", ".hg", ".jj", ".magus", ".build", ".claude", ".idea", ".vscode",
+		"vendor", "node_modules", "target", "gen",
+	} {
 		assert.True(t, IsIgnoreDir(name), "IsIgnoreDir(%q) should be true", name)
 	}
 	for _, name := range []string{"src", "cmd", "pkg", "internal", "starter"} {
@@ -16,7 +20,11 @@ func TestIsIgnoreDir(t *testing.T) {
 }
 
 func TestIgnoreDirs_ContainsExpected(t *testing.T) {
-	for _, d := range []string{".git", "vendor", "node_modules"} {
+	// The list holds only non-dot names; dot-dirs are covered by the prefix rule.
+	for _, d := range []string{"vendor", "node_modules", "target", "gen"} {
 		assert.Contains(t, IgnoreDirs, d, "IgnoreDirs missing %q", d)
+	}
+	for _, d := range IgnoreDirs {
+		assert.False(t, d[0] == '.', "IgnoreDirs should not list dot-dirs (%q); the prefix rule covers them", d)
 	}
 }
