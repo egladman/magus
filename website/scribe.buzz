@@ -1066,6 +1066,40 @@ fun render404(site: Site) > void {
     fs.writeFile(site.outDir + "/404.html", doc);
 }
 
+// llmsIndexBody builds the gen/llms.txt document (the llms.txt convention): an H1,
+// a one-line summary, then every docs page as "- [title](base+url): description",
+// sorted by URL for a byte-stable artifact like search-index.json. base is the link
+// prefix (SITE_URL for absolute links, else "/"). Each linked page has its Markdown
+// source at <url>index.md (emitted next to the HTML by renderFile), so an agent can
+// fetch clean Markdown per page. Kept pure so a unit test can pin the exact output.
+fun llmsIndexBody(pages: [DocPage], base: str) > str {
+    final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
+        return strLess(a.url, b.url);
+    });
+    var body = "# magus\n\n"
+        + "> Workspace-aware build orchestrator and content-addressed cache. "
+        + "Each page has a Markdown source at its URL plus index.md.\n\n"
+        + "## Documentation\n\n";
+    foreach (p in sorted) {
+        var line = "- [" + p.title + "](" + base + p.url + ")";
+        if (p.desc != "") { line = line + ": " + p.desc; }
+        body = body + line + "\n";
+    }
+    return body;
+}
+
+// writeLLMsIndex writes gen/llms.txt from the collected docs corpus, mirroring the
+// post-walk search-index.json write. Links are absolute under SITE_URL when set so
+// an external agent can follow them; otherwise root-relative.
+fun writeLLMsIndex(site: Site) > void {
+    var base = "/";
+    if (SITE_URL != "") {
+        base = SITE_URL;
+        if (base.endsWith("/") == false) { base = base + "/"; }
+    }
+    fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base));
+}
+
 // writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
 // (mostly on Android and Windows) read to allow "install this site". Icons
 // reuse the hat mark (WS A/V); scope/start_url match the deploy base so a
@@ -2592,6 +2626,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     renderTourPage(site);
     writeManifest(site);
 
+    // llms.txt: the docs index an AI agent reads to discover pages and fetch each
+    // one's Markdown at <url>index.md. A post-walk aggregate over the docs corpus,
+    // like search-index.json below.
+    writeLLMsIndex(site);
+
     // Flat {url, title, text, tags, description?} record per page; search.js
     // fetches this lazily on first focus. Keys are sorted by serialize, and the
     // walk order is fs.list's (sorted), so the file is byte-stable across runs.
@@ -2847,4 +2886,19 @@ test "Site.addRecord marks the URL written and appends one search record" {
     s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
     assert.equal(s.pageUrls, {"guide/": true}, "url marked written");
     assert.len(s.searchRecords, 1, "one search record appended");
+}
+
+test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descriptions" {
+    final pages = mut [<DocPage>];
+    pages.append(DocPage{url = "targets/", title = "Targets", desc = "What a target is"});
+    pages.append(DocPage{url = "cache/", title = "Cache", desc = "The cache model"});
+    pages.append(DocPage{url = "faq/", title = "FAQ", desc = ""});
+    final want = "# magus\n\n"
+        + "> Workspace-aware build orchestrator and content-addressed cache. "
+        + "Each page has a Markdown source at its URL plus index.md.\n\n"
+        + "## Documentation\n\n"
+        + "- [Cache](/cache/): The cache model\n"
+        + "- [FAQ](/faq/)\n"
+        + "- [Targets](/targets/): What a target is\n";
+    assert.equal(llmsIndexBody(pages, "/"), want, "llms.txt body sorted, base-prefixed, description only when present");
 }
