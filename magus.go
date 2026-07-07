@@ -319,20 +319,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, err
 	}
 
-	cacheDir := filepath.Join(m.ws.Root, ".magus")
-	if m.cfg.Cache.Dir != "" {
-		if filepath.IsAbs(m.cfg.Cache.Dir) {
-			cacheDir = filepath.Clean(m.cfg.Cache.Dir)
-		} else {
-			cacheDir = filepath.Join(m.ws.Root, m.cfg.Cache.Dir)
-		}
-	} else if override := os.Getenv("MAGUS_CACHE_DIR"); override != "" {
-		if filepath.IsAbs(override) {
-			cacheDir = filepath.Clean(override)
-		} else {
-			cacheDir = filepath.Join(m.ws.Root, override)
-		}
-	}
+	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
 	cfgOpts := []cache.Option{cache.WithMutable(!m.cfg.Cache.Immutable)}
 	if m.cfg.Cache.SizeMB != 0 {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))

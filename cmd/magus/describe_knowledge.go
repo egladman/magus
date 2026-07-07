@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 
-	"github.com/egladman/magus/host"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
 )
@@ -84,55 +82,7 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh bool) (*knowle
 	if err != nil {
 		return nil, err
 	}
-	wsRoot := ws.Root()
-	in := knowledge.Inputs{
-		Graph:       ws.DescribeGraph(),
-		Spells:      ws.DescribeSpells(),
-		Modules:     allModuleEntries(),
-		Diagnostics: types.AllDiagnosticCodes(),
-	}
-	return knowledge.Build(ctx, resolveCacheDir(wsRoot), knowledge.BuildOptions{
-		Immutable: cacheImmutable(),
-		Refresh:   refresh,
-	}, in, slog.Default())
-}
-
-// allModuleEntries returns every stdlib module with its methods populated. The
-// summary view (empty name) carries only names, so each is re-queried for detail.
-func allModuleEntries() []types.ModuleEntry {
-	summary := host.ModulesOutput("")
-	out := make([]types.ModuleEntry, 0, len(summary.Modules))
-	for _, m := range summary.Modules {
-		out = append(out, host.ModulesOutput(m.Name).Modules...)
-	}
-	return out
-}
-
-// resolveCacheDir mirrors magus.go's cache-dir resolution (config Cache.Dir, then
-// MAGUS_CACHE_DIR, then <root>/.magus) so the knowledge store sits beside the
-// build cache. There is no exported getter for the resolved dir.
-func resolveCacheDir(root string) string {
-	dir := filepath.Join(root, ".magus")
-	if globalCfg.Cache.Dir != "" {
-		if filepath.IsAbs(globalCfg.Cache.Dir) {
-			return filepath.Clean(globalCfg.Cache.Dir)
-		}
-		return filepath.Join(root, globalCfg.Cache.Dir)
-	}
-	if ov := os.Getenv("MAGUS_CACHE_DIR"); ov != "" {
-		if filepath.IsAbs(ov) {
-			return filepath.Clean(ov)
-		}
-		return filepath.Join(root, ov)
-	}
-	return dir
-}
-
-// cacheImmutable reports whether MAGUS_CACHE_IMMUTABLE is set, matching the cache
-// package's convention (load-only, no writes).
-func cacheImmutable() bool {
-	v := strings.ToLower(os.Getenv("MAGUS_CACHE_IMMUTABLE"))
-	return v == "true" || v == "1"
+	return magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
 }
 
 type keyCount struct {
