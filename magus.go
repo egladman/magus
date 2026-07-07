@@ -18,9 +18,11 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/depgraph"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -117,15 +119,20 @@ func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceR
 	if err != nil {
 		return nil, err
 	}
-	if err := m.finishConstruction(ctx); err != nil {
+	if err := m.load(ctx); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-// finishConstruction completes workspace setup shared by Inspect and Open:
-// magusfile preloading, workspace-registry application, and magusfile spell autobind.
-func (m *Magus) finishConstruction(ctx context.Context) error {
+// load completes workspace setup shared by Inspect and Open: magusfile preloading,
+// workspace-registry application, and magusfile spell autobind.
+func (m *Magus) load(ctx context.Context) error {
+	// Thread the workspace into ctx for the whole preload, so a magusfile's import
+	// resolver (and magusSearchPaths) can read the workspace root. Without this the
+	// root is only present on the run path (Magus.Run), so preload-time resolution
+	// (describe, affected, ls) could not walk spell imports up to the root.
+	ctx = types.WithWorkspace(ctx, m)
 	if err := preloadMagusfiles(ctx, m); err != nil {
 		return err
 	}
@@ -138,7 +145,30 @@ func (m *Magus) finishConstruction(ctx context.Context) error {
 		return err
 	}
 	m.autobindMagusfileSpell()
+	// Shadow ward: a nested spells/<name> that a root-wins ancestor already defines
+	// is dead code (its import always resolves to the ancestor). Block it unless the
+	// author acknowledged the shadow in magus.yaml, so the footgun is visible without
+	// removing the escape hatch for a deliberate override.
+	if diags, err := ward.SpellShadows(m.ws.Root, m.shadowAcknowledged); err != nil {
+		return err
+	} else if len(diags) > 0 {
+		return diags[0]
+	}
 	return nil
+}
+
+// shadowAcknowledged reports whether a spell-import shadow is deliberately allowed
+// by a spells.allow_shadow entry in this workspace's config. A reason is required,
+// so an entry without one does not acknowledge: the shadow keeps blocking (MGS1002)
+// until the author records why, keeping the escape hatch auditable at load time
+// even though config schema validation runs only on save.
+func (m *Magus) shadowAcknowledged(importPath string) bool {
+	for _, a := range m.cfg.Spells.AllowShadow {
+		if a.Name == importPath && a.Reason != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
@@ -285,7 +315,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// Evaluate magusfiles before building the cache: project registration, spell
 	// autobind, and any magus.cache.remote() backend wiring all happen here, so a
 	// magusfile-chosen remote backend can be attached at cache construction.
-	if err := m.finishConstruction(ctx); err != nil {
+	if err := m.load(ctx); err != nil {
 		return nil, err
 	}
 
@@ -486,9 +516,25 @@ func (m *Magus) ExpandPath(t types.Target) ([]types.Target, error) {
 		return nil, fmt.Errorf("magus: expand: unknown project %q: use \":\" for all projects", path)
 	}
 	if m.Get(path) == nil {
+		if hint := m.suggestProjectPath(path); hint != "" {
+			return nil, fmt.Errorf("magus: expand: %w: %q; did you mean %q?", types.ErrUnknownProject, path, hint)
+		}
 		return nil, fmt.Errorf("magus: expand: %w: %q", types.ErrUnknownProject, path)
 	}
 	return []types.Target{{Path: path, Name: t.Name}}, nil
+}
+
+// suggestProjectPath returns the workspace project path closest to a typo'd path,
+// or "" when nothing is near. It mirrors the did-you-mean the CLI gives for
+// unknown subcommands and describe nouns, so a fat-fingered `magus run test aip`
+// points at "api" instead of a bare "unknown project".
+func (m *Magus) suggestProjectPath(path string) string {
+	all := m.All()
+	candidates := make([]string, 0, len(all))
+	for _, p := range all {
+		candidates = append(candidates, p.Path)
+	}
+	return interactive.SuggestNearest(path, candidates)
 }
 
 // ExpandCwd resolves t for the project containing cwd; found=false when cwd is not inside any project.

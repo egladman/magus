@@ -31,6 +31,15 @@ import (
 // `buzz`. A piped or redirected stdin still runs as a script (so `cat x | magus
 // buzz` and heredocs keep working), and `magus buzz -` forces stdin.
 func buzzCmd(ctx context.Context, args []string) error {
+	// `magus buzz lsp` is the Buzz language server (stdio LSP). It is a noun
+	// subcommand of buzz, grouped with the rest of the Buzz-language tooling, rather
+	// than a top-level `magus lsp`, so serving other languages later needs no new
+	// top-level subcommand contract. Intercept it before flag parsing, which would
+	// otherwise read "lsp" as a script filename.
+	if len(args) > 0 && args[0] == "lsp" {
+		return lspCmd(ctx, args[1:])
+	}
+
 	var eval string
 	var test bool
 	var embedded bool
@@ -73,6 +82,10 @@ func buzzCmd(ctx context.Context, args []string) error {
 	// `magus buzz` and magusfile execution in lock-step: any module a script or test
 	// imports resolves the same way in both, with no per-surface module list.
 	bindings.RegisterModuleSurface(ctx, sess)
+	// Install the magus/target and magus/charm source modules too, so a spell file
+	// (which imports them) and its `test "..." {}` blocks run here: `magus buzz -t`
+	// is the spell test harness.
+	bindings.RegisterSpellSourceModules(sess)
 
 	if err := sess.Exec(ctx, code); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
@@ -212,6 +225,7 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "       magus buzz -            # run a script from stdin")
 	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>    # run an inline snippet")
 	fmt.Fprintln(os.Stderr, "       magus buzz -t <file>    # run its test \"...\" {} blocks")
+	fmt.Fprintln(os.Stderr, "       magus buzz lsp          # language server over stdio (LSP)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run Buzz source from a REPL, file, stdin, or an inline snippet. With no")
 	fmt.Fprintln(os.Stderr, "argument on a terminal it opens a REPL; a piped or redirected stdin runs")

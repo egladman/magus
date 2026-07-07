@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	buzz "github.com/egladman/gopherbuzz"
@@ -69,20 +70,22 @@ func resolveProjectImport(ctx context.Context, importPath string) (vm.Value, boo
 }
 
 // resolveLocalSpellImport resolves a path-style import (e.g. "spells/hello") to a
-// workspace-local spell at <importPath>.buzz, relative to the process cwd (the
-// magusfile's directory at run time). It returns the
-// spell handle and ok=true when a file exists and parses as a spell; otherwise
-// ok=false, leaving the import to the normal file search.
+// workspace-local spell, returning the spell handle and ok=true when a file exists
+// and parses as a spell; otherwise ok=false, leaving the import to the normal file
+// search. It never takes a "./"-relative path: a bare `import "spells/hello"` stays
+// faithful to upstream Buzz's plain-import form.
+//
+// Resolution walks a spells dir at every level from the workspace root down to the
+// importing file's directory, root-first (see spellSearchLevels). This accrues
+// spells along a nested project's path: a spell at the workspace root is shared by
+// every project, one at an intermediate dir is shared by that subtree, and one next
+// to a project's magusfile is private to it. Precedence is ROOT-WINS: the first
+// (root-most) match is canonical, so a shared name means one spell workspace-wide.
+// A deeper level defining a name an ancestor already owns is a shadow footgun,
+// guarded separately by the shadow ward at preload; this resolver just picks the
+// canonical one deterministically and never errors.
 func resolveLocalSpellImport(ctx context.Context, importPath string) (vm.Value, bool) {
-	// Resolve relative to the magusfile's own directory first, so a magusfile
-	// imported from outside its dir (e.g. workspace preload visiting a sub-project)
-	// still finds its ./spells; fall back to cwd for the run-from-here case.
-	dirs := []string{}
-	if src := interp.SourceFromContext(ctx); src != nil && src.Dir != "" {
-		dirs = append(dirs, src.Dir)
-	}
-	dirs = append(dirs, "")
-	for _, dir := range dirs {
+	for _, dir := range spellSearchLevels(ctx) {
 		// Two layouts are accepted: a flat spells/<name>.buzz, and the directory
 		// convention spells/<name>/spell.buzz (preferred — keeps a spell's source
 		// and any future companion files together, easy to discover).
@@ -104,4 +107,62 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (vm.Value, 
 		}
 	}
 	return vm.Null, false
+}
+
+// spellSearchLevels returns the directories a path-style spell import is searched
+// against, in resolution order: the workspace root first, then each nested level
+// down to the importing file's own directory (root-wins), then "" (the process
+// cwd) as an out-of-workspace fallback for a `magus buzz` script with no workspace.
+// The walk is bounded at the workspace root so resolution stays hermetic and never
+// reaches for spells outside the workspace.
+func spellSearchLevels(ctx context.Context) []string {
+	var start, root string
+	if src := interp.SourceFromContext(ctx); src != nil {
+		start = src.Dir
+	}
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		root = ws.Root()
+	}
+	return append(rootFirstLevels(root, start), "")
+}
+
+// rootFirstLevels returns the directory chain from root down to start inclusive,
+// root-most first, so a root-wins search visits the shared level before nested
+// ones. It is bounded to root and its descendants: an empty root yields just start
+// (or nothing), and a start outside root yields only start, so the walk never
+// escapes the workspace.
+func rootFirstLevels(root, start string) []string {
+	absStart := absOrEmpty(start)
+	absRoot := absOrEmpty(root)
+	if absStart == "" {
+		if absRoot != "" {
+			return []string{absRoot}
+		}
+		return nil
+	}
+	within := absRoot != "" && (absStart == absRoot || strings.HasPrefix(absStart, absRoot+string(filepath.Separator)))
+	if !within {
+		return []string{absStart} // importing file is outside the workspace root
+	}
+	var up []string
+	for cur := absStart; ; cur = filepath.Dir(cur) {
+		up = append(up, cur)
+		if cur == absRoot {
+			break
+		}
+	}
+	slices.Reverse(up)
+	return up
+}
+
+// absOrEmpty returns filepath.Abs(p), or p unchanged when it cannot be resolved,
+// or "" for an empty input.
+func absOrEmpty(p string) string {
+	if p == "" {
+		return ""
+	}
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return p
 }

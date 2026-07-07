@@ -561,6 +561,16 @@ func TestExpand_UnknownPath(t *testing.T) {
 	assert.ErrorIs(t, err, types.ErrUnknownProject, "expected ErrUnknownProject for unknown project path")
 }
 
+// TestExpand_UnknownPath_Suggestion appends a did-you-mean when a typo'd path is
+// close to a real project, matching the CLI's other nearest-match hints.
+func TestExpand_UnknownPath_Suggestion(t *testing.T) {
+	t.Parallel()
+	ws := newWorkspace(t)
+	_, err := ws.ExpandPath(types.Target{Path: "aip", Name: "build"})
+	require.ErrorIs(t, err, types.ErrUnknownProject)
+	assert.Contains(t, err.Error(), `did you mean "api"`)
+}
+
 // TestParseTarget covers the canonical "target[:charm,...]" parsing cases.
 func TestParseTarget(t *testing.T) {
 	t.Parallel()

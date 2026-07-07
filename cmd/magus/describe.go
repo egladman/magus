@@ -300,7 +300,10 @@ func firstLine(s string) string {
 func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
+	var explain bool
 	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&explain, "explain", false, "show the per-charm argv trace (base -> +charm -> +charm) for the rendered command")
+		fs.BoolVar(&explain, "e", false, "shorthand for --explain")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -308,7 +311,8 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no argument, lists every target. With a path:target ref (e.g.")
 			fmt.Fprintln(os.Stderr, "\"api:build\", \":test\" for all projects) prints its fully-evaluated")
-			fmt.Fprintln(os.Stderr, "dispatch plan:")
+			fmt.Fprintln(os.Stderr, "dispatch plan. Add a charm and --explain (e.g. \"lint:rw --explain\")")
+			fmt.Fprintln(os.Stderr, "to see each charm reshape the command, one step at a time:")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.EvaluatedTargetDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -322,7 +326,7 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	if len(pos) == 0 {
 		return describeTargets(ctx, root)
 	}
-	return describeTarget(ctx, root, pos)
+	return describeTarget(ctx, root, pos, explain)
 }
 
 func describeTargets(ctx context.Context, root string) error {
@@ -516,7 +520,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 // describeTarget renders one evaluated target. pos is describeTargetNoun's parsed
 // positionals (pos[0] = path:target ref, optional pos[1] = project path); flags
 // are already parsed and applied by the caller.
-func describeTarget(ctx context.Context, root string, pos []string) error {
+func describeTarget(ctx context.Context, root string, pos []string, explain bool) error {
 	if len(pos) == 0 {
 		fmt.Fprintln(os.Stderr, "magus describe target: requires a <target> [project] argument")
 		return errSilent{exitCode: 2}
@@ -590,6 +594,16 @@ func describeTarget(ctx context.Context, root string, pos []string) error {
 			fmt.Println()
 			if len(s.Command) > 0 {
 				fmt.Printf("    command: %s\n", strings.Join(s.Command, " "))
+			}
+			if explain && len(s.CharmTrace) > 0 {
+				fmt.Printf("    charm trace:\n")
+				for _, step := range s.CharmTrace {
+					label := "base"
+					if step.Charm != "" {
+						label = "+ " + step.Charm
+					}
+					fmt.Printf("      %-10s %s\n", label, strings.Join(step.Command, " "))
+				}
 			}
 		}
 		if e.Policy != nil {

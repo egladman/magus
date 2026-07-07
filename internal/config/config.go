@@ -49,6 +49,27 @@ type Config struct {
 	// Sandbox confines subprocesses and spells to the workspace + allowlist using Linux landlock (≥5.13)
 	// when available, with binding-level fallback. See SandboxConfig for allowlist and env knobs.
 	Sandbox SandboxConfig `yaml:"sandbox"`
+
+	// Spells configures workspace spell resolution (the import walk and its wards).
+	Spells SpellsConfig `yaml:"spells"`
+}
+
+// SpellsConfig holds workspace-level spell settings.
+type SpellsConfig struct {
+	// AllowShadow acknowledges intentional spell shadows. Spell imports resolve
+	// root-wins (a spells/<name> higher in the tree is canonical), so a same-named
+	// spell in a nested project is normally a dead footgun and blocks the run. Listing
+	// its import path here with a reason permits the shadow deliberately. `magus
+	// doctor` flags an entry whose shadow no longer exists, so stale reasons are pruned.
+	AllowShadow []ShadowAck `yaml:"allow_shadow"`
+}
+
+// ShadowAck acknowledges one intentional spell shadow. Name is the import path the
+// shadow is keyed by (e.g. "spells/hello"); Reason is required so the intent is
+// auditable, matching the acknowledged-suppression pattern used elsewhere.
+type ShadowAck struct {
+	Name   string `yaml:"name"`
+	Reason string `yaml:"reason" validate:"required"`
 }
 
 // SandboxConfig is the per-workspace sandbox policy.

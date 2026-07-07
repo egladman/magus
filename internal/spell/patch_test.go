@@ -10,6 +10,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExplainCharms(t *testing.T) {
+	base := []string{"tool", "golangci-lint", "run", "./..."}
+	charms := map[string]types.Charm{
+		"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+		"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+	}
+
+	t.Run("one step per active charm, cumulative, sorted", func(t *testing.T) {
+		steps, err := ExplainCharms(base, charms, []string{"debug", "rw"})
+		require.NoError(t, err)
+		require.Len(t, steps, 2)
+		// Sorted name order: debug before rw.
+		assert.Equal(t, "debug", steps[0].Charm)
+		assert.Equal(t, []string{"tool", "golangci-lint", "run", "./...", "-v"}, steps[0].Command)
+		assert.Equal(t, "rw", steps[1].Charm)
+		assert.Equal(t, []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}, steps[1].Command)
+	})
+
+	t.Run("undeclared or inactive charm contributes no step", func(t *testing.T) {
+		steps, err := ExplainCharms(base, charms, []string{"rw", "nope"})
+		require.NoError(t, err)
+		require.Len(t, steps, 1)
+		assert.Equal(t, "rw", steps[0].Charm)
+	})
+
+	t.Run("no active charms yields no steps", func(t *testing.T) {
+		steps, err := ExplainCharms(base, charms, nil)
+		require.NoError(t, err)
+		assert.Empty(t, steps)
+	})
+
+	t.Run("a charm that does not apply is an error naming it", func(t *testing.T) {
+		bad := map[string]types.Charm{"oob": {Ops: []types.PatchOp{{Op: "add", Path: "/99", Value: "x"}}}}
+		_, err := ExplainCharms(base, bad, []string{"oob"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "oob")
+	})
+}
+
 func TestApplyPatch(t *testing.T) {
 	// applies asserts a patch produces the expected argv.
 	applies := func(t *testing.T, argv []string, ops []types.PatchOp, want []string) {

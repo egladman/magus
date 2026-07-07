@@ -267,6 +267,36 @@ func TestCheckCharmTargetCollision(t *testing.T) {
 	})
 }
 
+func TestCheckHasCharmTypos(t *testing.T) {
+	run := func(body string) Check {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(body), 0o644))
+		r := &runner{root: root}
+		return r.checkHasCharmTypos([]*types.Project{{Path: ".", Dir: root}})
+	}
+
+	t.Run("no has_charm reads", func(t *testing.T) {
+		assert.Equal(t, StatusOK, run("export fun build(_a: [str]) > void {}\n").Status)
+	})
+	t.Run("live read of a reserved charm", func(t *testing.T) {
+		assert.Equal(t, StatusOK, run("export fun b(_a: [str]) > void { magus.has_charm(\"rw\"); }\n").Status)
+	})
+	t.Run("separator variant of a real charm is live, not a typo", func(t *testing.T) {
+		// has_charm("rw_") normalizes to "rw", so the branch is live and must not flag.
+		assert.Equal(t, StatusOK, run("export fun b(_a: [str]) > void { magus.has_charm(\"rw_\"); }\n").Status)
+	})
+	t.Run("novel undeclared charm has no near match, so no flag", func(t *testing.T) {
+		assert.Equal(t, StatusOK, run("export fun b(_a: [str]) > void { magus.has_charm(\"container\"); }\n").Status)
+	})
+	t.Run("misspelling of a real charm is flagged", func(t *testing.T) {
+		got := run("export fun b(_a: [str]) > void { magus.has_charm(\"rww\"); }\n")
+		assert.Equal(t, StatusFail, got.Status, got.Message)
+		require.Len(t, got.Details, 1)
+		assert.Contains(t, got.Details[0], "rww")
+		assert.Contains(t, got.Details[0], "rw")
+	})
+}
+
 func TestCheckEnvVars(t *testing.T) {
 	t.Run("no unknown vars", func(t *testing.T) {
 		for _, kv := range os.Environ() {
@@ -495,8 +525,8 @@ func TestCheckNearDuplicateServices(t *testing.T) {
 		spell := types.NewSpell("docker",
 			types.WithTargets("db"),
 			types.WithServiceTargets("db"),
-			types.WithCommandRenderer(func(target string, _ []string) (string, []string, bool) {
-				return "docker", append([]string{"run"}, args...), true
+			types.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+				return "docker", append([]string{"run"}, args...), true, nil
 			}),
 		)
 		return &types.Project{Path: path, ResolvedSpells: []*types.Spell{spell}}

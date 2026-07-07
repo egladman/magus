@@ -108,6 +108,17 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
 
 func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 	RegisterModuleSurface(ctx, sess)
+	RegisterSpellSourceModules(sess)
+}
+
+// RegisterSpellSourceModules installs the `magus/target` and `magus/charm` source
+// modules a spell (or magusfile) imports: the canonical Target/Charm/Command value
+// types plus the pure-Buzz charm constructors. It is layered on top of
+// RegisterModuleSurface by the magusfile runtime and, deliberately, by `magus buzz`
+// so a spell file and its `test "..." {}` blocks run under `magus buzz -t` with the
+// same modules the engine loads them with. Kept separate from the base surface
+// because a plain script needs neither type until it imports a spell module.
+func RegisterSpellSourceModules(sess *buzz.Session) {
 	// Canonical value types (Target/Charm) plus the generated TargetQuery as a
 	// flat-importable source module, so a spell's mgs_listTargets can be typed
 	// {str: fun(Target, fun(any)) void/bool} instead of `any`, and a magusfile can name or

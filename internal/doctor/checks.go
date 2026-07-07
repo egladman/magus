@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/serviceident"
 	"github.com/egladman/magus/project"
@@ -654,6 +655,119 @@ func declaredCharmNames(path string) []string {
 		names = append(names, n.Charms...)
 	}
 	return names
+}
+
+// checkHasCharmTypos flags a has_charm("NAME") read whose NAME matches no charm
+// but is a near-miss of a real one: almost always a typo that silently becomes
+// dead code, since the branch it guards can never be taken. It deliberately does
+// NOT flag a novel undeclared name with no close match: a function target may
+// legitimately read a charm no spell declares (a runtime-only toggle a user opts
+// into with a suffix), so only a near-collision with a known charm is reported.
+//
+// Names are compared on their canonical (kebab) form, so separator- and
+// case-variants that collapse onto a real charm (has_charm("no_cache") for
+// "no-cache", has_charm("rw_") for "rw") are correctly treated as live reads, not
+// typos. What remains are genuine misspellings (has_charm("rww") for "rw").
+func (r *runner) checkHasCharmTypos(projects []*types.Project) Check {
+	const name = "has_charm typos"
+
+	// The known-charm vocabulary: magus's reserved built-ins plus every charm any
+	// bound spell declares, canonicalized. A read matching one of these is live; a
+	// near-miss of one is the typo we flag.
+	known := map[string]struct{}{}
+	var knownNames []string
+	add := func(c string) {
+		n := types.NormalizeCharmName(c)
+		if _, ok := known[n]; ok {
+			return
+		}
+		known[n] = struct{}{}
+		knownNames = append(knownNames, n)
+	}
+	for _, c := range types.ReservedCharms() {
+		add(c)
+	}
+	for _, p := range projects {
+		for _, s := range p.ResolvedSpells {
+			for _, t := range s.Targets() {
+				for _, c := range s.Charms(t) {
+					add(c)
+				}
+			}
+		}
+	}
+
+	seen := map[string]struct{}{}
+	var details []string
+	for _, p := range projects {
+		for _, f := range magusfileSourcesInDir(p.Dir) {
+			for _, raw := range declaredCharmNames(f) {
+				n := types.NormalizeCharmName(raw)
+				if _, ok := known[n]; ok {
+					continue // a live read of a real charm
+				}
+				hint := interactive.SuggestNearest(n, knownNames)
+				if hint == "" {
+					continue // a novel undeclared name: a legitimate runtime toggle
+				}
+				if _, dup := seen[raw]; dup {
+					continue
+				}
+				seen[raw] = struct{}{}
+				details = append(details, fmt.Sprintf("has_charm(%q) matches no charm; did you mean %q?", raw, hint))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no has_charm reads look like typos"}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:    name,
+		Status:  StatusFail,
+		Message: fmt.Sprintf("%d has_charm read(s) look like a misspelled charm; the guarded branch is dead as written", len(details)),
+		Details: details,
+	}
+}
+
+// checkStaleShadowAcks flags a spells.allow_shadow entry whose shadow no longer
+// exists: the deeper spell was moved or renamed, so the acknowledgment and its
+// reason are dead config. Mirrors the unused-distinct check for services, keeping
+// the acknowledged-suppression list honest.
+func (r *runner) checkStaleShadowAcks() Check {
+	const name = "stale spell-shadow acknowledgments"
+	acks := r.opts.cfg.Spells.AllowShadow
+	if len(acks) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no allow_shadow entries"}
+	}
+	if r.ws == nil {
+		return Check{Name: name, Status: StatusOK, Message: "workspace not loaded"}
+	}
+	// r.ws.Root() is the resolved workspace root; r.root can be empty on this path.
+	conflicts, err := project.SpellShadows(r.ws.Root())
+	if err != nil {
+		return Check{Name: name, Status: StatusOK, Message: "spell layout not scanned: " + err.Error()}
+	}
+	shadowed := make(map[string]struct{}, len(conflicts))
+	for _, c := range conflicts {
+		shadowed[c.Import] = struct{}{}
+	}
+	var details []string
+	for _, a := range acks {
+		if _, ok := shadowed[a.Name]; !ok {
+			details = append(details, fmt.Sprintf("%q no longer shadows anything (reason: %q)", a.Name, a.Reason))
+		}
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%d allow_shadow entr(ies), all live", len(acks))}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:    name,
+		Status:  StatusFail,
+		Message: fmt.Sprintf("%d allow_shadow entr(ies) no longer match a real shadow; remove them", len(details)),
+		Details: details,
+	}
 }
 
 // checkWorkspaceRegistration reports whether this workspace is currently

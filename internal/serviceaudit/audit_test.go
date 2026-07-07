@@ -14,11 +14,11 @@ func dbProject(path string, args ...string) *types.Project {
 	spell := types.NewSpell("docker",
 		types.WithTargets("db"),
 		types.WithServiceTargets("db"),
-		types.WithCommandRenderer(func(target string, _ []string) (string, []string, bool) {
+		types.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 			if target != "db" {
-				return "", nil, false
+				return "", nil, false, nil
 			}
-			return "docker", append([]string{"run"}, args...), true
+			return "docker", append([]string{"run"}, args...), true, nil
 		}),
 	)
 	return &types.Project{Path: path, ResolvedSpells: []*types.Spell{spell}}
@@ -37,8 +37,8 @@ func TestCollectMembersSkipsCommandTargets(t *testing.T) {
 	// A non-service target must not be collected even if it renders a command.
 	spell := types.NewSpell("go",
 		types.WithTargets("build"),
-		types.WithCommandRenderer(func(string, []string) (string, []string, bool) {
-			return "go", []string{"build"}, true
+		types.WithCommandRenderer(func(string, []string) (string, []string, bool, error) {
+			return "go", []string{"build"}, true, nil
 		}),
 	)
 	p := &types.Project{Path: "svc", ResolvedSpells: []*types.Spell{spell}}

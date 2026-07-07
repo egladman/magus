@@ -157,6 +157,8 @@ func (r *runner) run(wsErr error) Report {
 		r.checkEnvVars(),
 		r.checkTargetNameConventions(projects),
 		r.checkCharmTargetCollision(projects),
+		r.checkHasCharmTypos(projects),
+		r.checkStaleShadowAcks(),
 		r.checkVCSBaseRef(),
 		r.checkWorkspaceRegistration(),
 	)

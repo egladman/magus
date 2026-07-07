@@ -119,6 +119,30 @@ project: .  target: lint
 
 Add charms to the target ref and the `command:` line updates. Two caveats: a magusfile-function target computes its argv at runtime, so no static command is shown; and `describe` never executes or writes files even for `:rw`. (`--dry-run` reports at the target level; use `describe` to see the command itself.)
 
+### Seeing each charm's edit: `--explain`
+
+`--explain` turns the single `command:` line into a step-by-step trace: the base
+command, then the command after each active charm's patch, in the deterministic
+sorted-name order magus applies them. It is the RFC 6902 patch made legible, so
+you can see exactly which charm made which edit without reading the patch data.
+
+```sh
+$ magus describe target --explain lint:rw,debug
+project: .  target: lint
+  charms:  [debug rw]
+  spell: go
+    command: go tool golangci-lint run --fix ./... -v
+    charm trace:
+      base       go tool golangci-lint run ./...
+      + debug    go tool golangci-lint run ./... -v
+      + rw       go tool golangci-lint run --fix ./... -v
+```
+
+The flag comes before the target ref (`--explain lint:rw`), like every other magus
+subcommand flag. A charm that is active but changes nothing for this target adds no
+line, and a charm whose patch does not apply to the command is reported as
+[MGS6001](codes/charms/MGS6001.md) rather than dropped silently.
+
 ## Declaring what a charm does
 
 A charm only does something for a target that declares it. Declarations live in a spell's `charms` table, keyed by charm name. Two charm-construction modules exist (pick by where the spell runs), plus the raw-data escape hatch.

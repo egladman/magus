@@ -43,6 +43,7 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 		types.WithServiceTargets(spec.ServiceOpNames()...),
 		types.WithInvoker(newBuzzSpellInvoker(spec, src)),
 		types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
+		types.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 		types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
 		types.WithTargetDocs(docsByTarget(spec.Ops)),
 		// A workspace-local Buzz spell: doctor enforces a doc comment on each

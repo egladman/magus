@@ -422,34 +422,71 @@ func TestNewCommandRenderer(t *testing.T) {
 	render := newCommandRenderer(targets)
 
 	t.Run("base, no charms", func(t *testing.T) {
-		cmd, args, ok := render("lint", nil)
+		cmd, args, ok, err := render("lint", nil)
+		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)
 		assert.Equal(t, []string{"tool", "golangci-lint", "run", "./..."}, args)
 	})
 	t.Run("charms applied", func(t *testing.T) {
-		cmd, args, ok := render("lint", []string{"write", "debug"})
+		cmd, args, ok, err := render("lint", []string{"write", "debug"})
+		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)
 		assert.Equal(t, []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}, args)
 	})
 	t.Run("charmless target", func(t *testing.T) {
-		cmd, args, ok := render("build", []string{"write"})
+		cmd, args, ok, err := render("build", []string{"write"})
+		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)
 		assert.Equal(t, []string{"build"}, args)
 	})
 	t.Run("no-op (empty cmd) → none", func(t *testing.T) {
-		cmd, args, ok := render("noop", nil)
+		cmd, args, ok, err := render("noop", nil)
+		assert.NoError(t, err)
 		assert.False(t, ok)
 		assert.Empty(t, cmd)
 		assert.Nil(t, args)
 	})
 	t.Run("unknown target → none", func(t *testing.T) {
-		cmd, args, ok := render("missing", nil)
+		cmd, args, ok, err := render("missing", nil)
+		assert.NoError(t, err)
 		assert.False(t, ok)
 		assert.Empty(t, cmd)
 		assert.Nil(t, args)
+	})
+	t.Run("explainer traces base then each charm with the bin prefixed", func(t *testing.T) {
+		steps, ok, err := newCommandExplainer(targets)("lint", []string{"write", "debug"})
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		require.Len(t, steps, 3) // base + write + debug
+		assert.Empty(t, steps[0].Charm)
+		assert.Equal(t, []string{"go", "tool", "golangci-lint", "run", "./..."}, steps[0].Command)
+		assert.Equal(t, "debug", steps[1].Charm) // sorted: debug before write
+		assert.Equal(t, "write", steps[2].Charm)
+		assert.Equal(t, []string{"go", "tool", "golangci-lint", "run", "--fix", "./...", "-v"}, steps[2].Command)
+	})
+	t.Run("explainer: no active charms → base-only, still ok", func(t *testing.T) {
+		steps, ok, err := newCommandExplainer(targets)("lint", nil)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		require.Len(t, steps, 1)
+		assert.Empty(t, steps[0].Charm)
+	})
+
+	t.Run("well-formed patch that does not apply → error, not silent drop", func(t *testing.T) {
+		// An out-of-range index is valid in shape (passes ValidatePatch at load) but
+		// cannot apply to a 2-element argv; the renderer surfaces it (MGS6001 upstream)
+		// rather than dropping the command line.
+		oob := map[string]types.SpellOp{
+			"lint": {Command: types.Command{Bin: "go", Args: []string{"run", "./..."}, Charms: map[string]types.Charm{
+				"write": {Ops: []types.PatchOp{{Op: "add", Path: "/9", Value: "--fix"}}},
+			}}},
+		}
+		_, _, ok, err := newCommandRenderer(oob)("lint", []string{"write"})
+		assert.Error(t, err)
+		assert.False(t, ok)
 	})
 }
 

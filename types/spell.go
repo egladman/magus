@@ -47,7 +47,8 @@ type Spell struct {
 	declarationDirGlobs []string
 
 	invoke       func(ctx context.Context, req InvokeRequest) (any, error)
-	renderCmd    func(target string, charms []string) (cmd string, args []string, ok bool)
+	renderCmd    func(target string, charms []string) (cmd string, args []string, ok bool, err error)
+	explainCmd   func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)
 	dependsOn    func(dir string) []string
 	versionProbe func(ctx context.Context, dir string) (string, error)
 }
@@ -70,14 +71,14 @@ func (s *Spell) Invoke(ctx context.Context, req InvokeRequest) (InvokeResponse, 
 
 var _ SpellDriver = (*Spell)(nil)
 
-func (s *Spell) Sources() []string                  { return s.sources }
-func (s *Spell) Claims() []string                   { return s.claims }
-func (s *Spell) Outputs() []string                  { return s.outputs }
-func (s *Spell) Targets() []string                  { return s.targets }
+func (s *Spell) Sources() []string { return s.sources }
+func (s *Spell) Claims() []string  { return s.claims }
+func (s *Spell) Outputs() []string { return s.outputs }
+func (s *Spell) Targets() []string { return s.targets }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
-func (s *Spell) IsServiceTarget(name string) bool { return s.serviceTargets[name] }
+func (s *Spell) IsServiceTarget(name string) bool   { return s.serviceTargets[name] }
 func (s *Spell) Opaque() bool                       { return s.opaque }
 func (s *Spell) TargetSources() map[string][]string { return s.targetSources }
 func (s *Spell) Charms(target string) []string      { return s.targetCharms[target] }
@@ -86,13 +87,30 @@ func (s *Spell) Charms(target string) []string      { return s.targetCharms[targ
 // charms applied — cmd plus the charm-patched argv — for static preview
 // (`magus describe`). ok is false when the spell has no renderer, the target is
 // a function-op (its argv is computed in-VM, not statically knowable), or it is a
-// no-op marker. It executes nothing.
-func (s *Spell) RenderCommand(target string, charms []string) (cmd string, args []string, ok bool) {
+// no-op marker. A non-nil err means an active charm's patch is valid in shape but
+// does not apply to this target's argv (an out-of-range index, a failing `test`
+// op): the charm is dead on this target and the caller surfaces it instead of
+// dropping the command line silently. It executes nothing.
+func (s *Spell) RenderCommand(target string, charms []string) (cmd string, args []string, ok bool, err error) {
 	if s.renderCmd == nil {
-		return "", nil, false
+		return "", nil, false, nil
 	}
 	return s.renderCmd(target, charms)
 }
+
+// ExplainCommand returns the charm-application trace for a static preview: step 0
+// is the base command (no charms), and each later step is the command after one
+// more active charm's patch, in the deterministic order magus applies them. ok is
+// false on the same conditions as RenderCommand (no renderer, function-op, no-op
+// marker). A non-nil err means an active charm's patch does not apply to this
+// op's argv (see RenderCommand). It executes nothing.
+func (s *Spell) ExplainCommand(target string, charms []string) (steps []CharmTraceStep, ok bool, err error) {
+	if s.explainCmd == nil {
+		return nil, false, nil
+	}
+	return s.explainCmd(target, charms)
+}
+
 func (s *Spell) DeclarationFiles() []string    { return s.declarationFiles }
 func (s *Spell) DeclarationDirGlobs() []string { return s.declarationDirGlobs }
 
@@ -177,8 +195,14 @@ func WithInvoker(fn func(ctx context.Context, req InvokeRequest) (any, error)) S
 
 // WithCommandRenderer sets the fork-command renderer used by `magus describe` to
 // preview the charm-applied argv without executing. See Spell.RenderCommand.
-func WithCommandRenderer(fn func(target string, charms []string) (cmd string, args []string, ok bool)) SpellOption {
+func WithCommandRenderer(fn func(target string, charms []string) (cmd string, args []string, ok bool, err error)) SpellOption {
 	return func(s *Spell) { s.renderCmd = fn }
+}
+
+// WithCommandExplainer sets the charm-trace renderer used by `magus describe
+// target --explain`. See Spell.ExplainCommand.
+func WithCommandExplainer(fn func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)) SpellOption {
+	return func(s *Spell) { s.explainCmd = fn }
 }
 
 func WithSpellDependsOn(fn func(dir string) []string) SpellOption {

@@ -31,6 +31,12 @@ var starterMagusfileBuzz string
 // bootstrap (magusfile stub + merge driver) is per-clone and skipped.
 // With --local the config is written into the repo (CWD) instead of XDG.
 func initCmd(ctx context.Context, root string, args []string) error {
+	// `magus init spell <name>` is a noun subcommand: scaffold a spell rather than
+	// bootstrap the workspace. Consistent with the describe/config noun grammar.
+	if len(args) > 0 && args[0] == "spell" {
+		return initSpellCmd(ctx, args[1:])
+	}
+
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	useGlobal := fs.Bool("global", false, "Write only the global config ($XDG_CONFIG_HOME/magus/magus.yaml); skips workspace bootstrap")
 	useLocal := fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
@@ -46,6 +52,9 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "The VCS is taken from --vcs, or picked interactively when stdin is a")
 		fmt.Fprintln(os.Stderr, "terminal. With --global only the global config is written.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Subcommands:")
+		fmt.Fprintln(os.Stderr, "  magus init spell <name>   scaffold a new spell at spells/<name>/spell.buzz")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()

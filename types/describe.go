@@ -225,6 +225,21 @@ type EvaluatedSpellEntry struct {
 	// no-op targets, whose argv isn't statically knowable. Preview only: `magus
 	// describe` renders it; nothing is executed.
 	Command []string `json:"command,omitempty"           yaml:"command,omitempty"`
+	// CharmTrace is the step-by-step application of the active charms over this
+	// spell's base argv: element 0 is the base command (no charms), and each
+	// subsequent step is the command after one more charm's patch, in the
+	// deterministic sorted-name order magus applies them. Populated only when
+	// charms are active and change the command; the RFC 6902 patch made legible by
+	// `magus describe target ...:charm --explain`.
+	CharmTrace []CharmTraceStep `json:"charm_trace,omitempty"       yaml:"charm_trace,omitempty"`
+}
+
+// CharmTraceStep is one line of a charm-application trace: the command (cmd as
+// element 0) after the named charm's patch applies on top of the prior step. The
+// base step (before any charm) has an empty Charm.
+type CharmTraceStep struct {
+	Charm   string   `json:"charm,omitempty"   yaml:"charm,omitempty"`
+	Command []string `json:"command"           yaml:"command"`
 }
 
 // EvaluatedTargetEntry is the fully-resolved view of a single path:target pair.

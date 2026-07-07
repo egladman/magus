@@ -315,9 +315,27 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 				charmSet[c] = struct{}{}
 			}
 			// Render the fork command with the requested charms applied, so
-			// `magus describe target lint:rw` previews exactly what would run.
-			if cmd, args, ok := s.RenderCommand(et.Name, t.Charms); ok {
+			// `magus describe target lint:rw` previews exactly what would run. A
+			// well-formed charm patch that does not apply to this op's argv is a
+			// silent no-op at render time, so surface it (MGS6001) rather than
+			// omitting the command line without explanation.
+			cmd, args, ok, rerr := s.RenderCommand(et.Name, t.Charms)
+			if rerr != nil {
+				return types.EvaluatedTargetsOutput{}, types.DiagnosticErrorf(types.CharmPatchInvalid,
+					"target %q in project %q: charm(s) %v do not apply to spell %q's command (%v)",
+					et.Name, et.Path, t.Charms, s.Name(), rerr)
+			}
+			if ok {
 				se.Command = append([]string{cmd}, args...)
+			}
+			// Attach the per-charm application trace (base -> +charm -> +charm) when
+			// charms are active and actually reshape the command, so `--explain` can
+			// render the RFC 6902 patch as a legible before/after. A trace with only
+			// the base step (no active charm touched this spell) is left off.
+			if len(t.Charms) > 0 {
+				if steps, sok, serr := s.ExplainCommand(et.Name, t.Charms); serr == nil && sok && len(steps) > 1 {
+					se.CharmTrace = steps
+				}
 			}
 			spellEntries = append(spellEntries, se)
 		}

@@ -118,7 +118,8 @@ type dispatchProfile struct {
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
 	case "help", "version", "buzz":
-		// buzz is a standalone Buzz runner; no workspace, config, or daemon.
+		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server);
+		// both analyze source text directly, needing no workspace, config, or daemon.
 		return dispatchProfile{}
 	case "completion", "self":
 		return dispatchProfile{needsConfig: true}

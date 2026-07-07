@@ -35,6 +35,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			types.WithServiceTargets(spec.ServiceOpNames()...),
 			types.WithInvoker(newSpellInvoker(spec.Ops)),
 			types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
+			types.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 			types.WithTargetSources(spec.TargetNeeds),
 			types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
 			types.WithTargetDocs(docsByTarget(spec.Ops)),
@@ -95,17 +96,53 @@ func newVersionProbe(argv []string) func(context.Context, string) (string, error
 // newCommandRenderer returns the command preview used by `magus describe`: it
 // reports cmd plus the argv as reshaped by the active charms, executing nothing. A
 // no-op marker op (empty Cmd) returns ok=false, since there is no command to show.
-func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string) (string, []string, bool) {
-	return func(target string, charms []string) (string, []string, bool) {
+// A charm whose patch is well-formed but does not apply to this op's argv (an
+// out-of-range index, a failing `test` op) returns the apply error, so `describe`
+// reports it as MGS6001 instead of dropping the command line without a word.
+func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string) (string, []string, bool, error) {
+	return func(target string, charms []string) (string, []string, bool, error) {
 		op, ok := targets[target]
 		if !ok || op.Bin == "" {
-			return "", nil, false
+			return "", nil, false, nil
 		}
 		args, err := resolveCharmArgs(types.WithCharms(context.Background(), charms), op.Args, op.Charms)
 		if err != nil {
-			return "", nil, false
+			return "", nil, false, err
 		}
-		return op.Bin, args, true
+		return op.Bin, args, true, nil
+	}
+}
+
+// newCommandExplainer returns the charm-trace renderer used by `magus describe
+// target --explain`: step 0 is the base command (no charms) and each later step
+// is the command after one more active charm's patch, in magus's sorted-name
+// application order. It mirrors newCommandRenderer's ok/err contract and executes
+// nothing.
+func newCommandExplainer(targets map[string]types.SpellOp) func(string, []string) ([]types.CharmTraceStep, bool, error) {
+	return func(target string, charms []string) ([]types.CharmTraceStep, bool, error) {
+		op, ok := targets[target]
+		if !ok || op.Bin == "" {
+			return nil, false, nil
+		}
+		var active []string
+		ctx := types.WithCharms(context.Background(), charms)
+		for name := range op.Charms {
+			if types.HasCharm(ctx, name) {
+				active = append(active, name)
+			}
+		}
+		charmSteps, err := ispell.ExplainCharms(op.Args, op.Charms, active)
+		if err != nil {
+			return nil, false, err
+		}
+		// Prepend the base step, then prefix every step's argv with the bin so each
+		// line is the full command a reader can compare top to bottom.
+		steps := make([]types.CharmTraceStep, 0, len(charmSteps)+1)
+		steps = append(steps, types.CharmTraceStep{Command: append([]string{op.Bin}, op.Args...)})
+		for _, s := range charmSteps {
+			steps = append(steps, types.CharmTraceStep{Charm: s.Charm, Command: append([]string{op.Bin}, s.Command...)})
+		}
+		return steps, true, nil
 	}
 }
 
@@ -220,6 +257,7 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 		types.WithTargets(m.OpNames()...),
 		types.WithServiceTargets(m.ServiceOpNames()...),
 		types.WithCommandRenderer(newCommandRenderer(m.Ops)),
+		types.WithCommandExplainer(newCommandExplainer(m.Ops)),
 		types.WithTargetCharms(charmNamesByTarget(m.Ops)),
 		types.WithTargetDocs(docsByTarget(m.Ops)),
 		types.WithDocRequiredTargets(m.DocOps...),

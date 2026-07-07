@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp"
@@ -64,7 +65,7 @@ func configureFnHint(arg vm.Value) string {
 	return ""
 }
 
-func parseBuzzProjectOpts(_ context.Context, v vm.Value) ([]workspace.ProjectOption, error) {
+func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectOption, error) {
 	if !v.IsMap() {
 		return nil, nil
 	}
@@ -104,6 +105,19 @@ func parseBuzzProjectOpts(_ context.Context, v vm.Value) ([]workspace.ProjectOpt
 					return nil, fmt.Errorf("magus.project: spell %q: %w", name, err)
 				}
 				registerLocalSpell(m)
+			}
+			// A tool spell bound to contribute targets that exposes none almost always
+			// means its mgs_listTargets was omitted or misnamed: the spell loads and
+			// binds cleanly, then silently adds nothing to run. Warn (not error). A
+			// declaration spell (the built-in magusfile spell, which registers
+			// magusfile.buzz) legitimately has no ops, so a non-empty declaration set
+			// is the signal to stay quiet; a pure in-VM cache backend is bound through
+			// magus.cache.remote, not here.
+			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok &&
+				len(sp.Targets()) == 0 &&
+				len(sp.DeclarationFiles()) == 0 &&
+				len(sp.DeclarationDirGlobs()) == 0 {
+				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", "spell", name)
 			}
 			opts = append(opts, workspace.WithRegisteredSpell(name))
 		}

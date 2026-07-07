@@ -63,6 +63,39 @@ func ApplyCharms(argv []string, charms map[string]types.Charm, activeNames []str
 	return ApplyPatch(argv, ops)
 }
 
+// ExplainCharms is ApplyCharms with its work shown: it returns one step per
+// active declared charm, in the same sorted-name order ApplyCharms uses, each
+// carrying the argv after that charm's patch applies on top of the prior step.
+// The returned steps do NOT include the base; the caller pairs them with the
+// unmodified argv. A charm named in activeNames but not declared in charms (or
+// declaring no ops) contributes nothing and no step. An op that does not apply is
+// an error, exactly as in ApplyCharms, naming the charm that failed.
+func ExplainCharms(argv []string, charms map[string]types.Charm, activeNames []string) ([]types.CharmTraceStep, error) {
+	on := make(map[string]bool, len(activeNames))
+	for _, name := range activeNames {
+		on[name] = true
+	}
+	names := make([]string, 0, len(charms))
+	for name := range charms {
+		if on[name] && len(charms[name].Ops) > 0 {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+
+	var steps []types.CharmTraceStep
+	cur := slices.Clone(argv)
+	for _, name := range names {
+		next, err := ApplyPatch(cur, charms[name].Ops)
+		if err != nil {
+			return nil, fmt.Errorf("charm %q: %w", name, err)
+		}
+		cur = next
+		steps = append(steps, types.CharmTraceStep{Charm: name, Command: slices.Clone(cur)})
+	}
+	return steps, nil
+}
+
 // applyOp applies a single op to argv (already a private copy ApplyPatch owns).
 func applyOp(argv []string, op types.PatchOp) ([]string, error) {
 	switch op.Op {

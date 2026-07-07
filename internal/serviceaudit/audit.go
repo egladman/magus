@@ -22,8 +22,8 @@ func collectMembers(projects []*types.Project, charms []string) []serviceident.M
 				if !s.IsServiceTarget(target) {
 					continue
 				}
-				bin, args, ok := s.RenderCommand(target, charms)
-				if !ok {
+				bin, args, ok, err := s.RenderCommand(target, charms)
+				if err != nil || !ok {
 					continue
 				}
 				members = append(members, serviceident.Member{

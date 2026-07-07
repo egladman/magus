@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services.
+// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms.
 
 // Base URLs for diagnostic documentation, keyed by code-prefix subdir.
 const (
@@ -14,6 +14,7 @@ const (
 	diagnosticRaceBase      = "https://github.com/egladman/magus/blob/main/docs/codes/race/"
 	diagnosticMagusfileBase = "https://github.com/egladman/magus/blob/main/docs/codes/magusfile/"
 	diagnosticServicesBase  = "https://github.com/egladman/magus/blob/main/docs/codes/services/"
+	diagnosticCharmsBase    = "https://github.com/egladman/magus/blob/main/docs/codes/charms/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code).
@@ -22,6 +23,8 @@ type DiagnosticCode string
 // URL returns the documentation URL for this code.
 func (c DiagnosticCode) URL() string {
 	switch {
+	case strings.HasPrefix(string(c), "MGS6"):
+		return diagnosticCharmsBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS5"):
 		return diagnosticServicesBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS4"):
@@ -35,6 +38,7 @@ func (c DiagnosticCode) URL() string {
 
 const (
 	NoCITarget                DiagnosticCode = "MGS1001"
+	SpellShadowed             DiagnosticCode = "MGS1002"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -53,6 +57,7 @@ const (
 	NearDuplicateServices     DiagnosticCode = "MGS5001"
 	ServiceOpDetached         DiagnosticCode = "MGS5002"
 	CommandOpNeverExits       DiagnosticCode = "MGS5003"
+	CharmPatchInvalid         DiagnosticCode = "MGS6001"
 )
 
 // DiagnosticError is a typed error carrying an MGS code and message.
