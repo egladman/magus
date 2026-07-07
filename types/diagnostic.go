@@ -60,6 +60,29 @@ const (
 	CharmPatchInvalid         DiagnosticCode = "MGS6001"
 )
 
+// allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
+// in sync with the const block above; it is the enumeration source for tooling
+// (the knowledge graph turns each into a diagnostic node) since Go const blocks
+// are not reflectable.
+var allDiagnosticCodes = []DiagnosticCode{
+	NoCITarget, SpellShadowed,
+	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
+	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
+	NetEgress, SandboxPolicyMismatch,
+	DescendantBoundaryCrossed,
+	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
+	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
+	CharmPatchInvalid,
+}
+
+// AllDiagnosticCodes returns every registered diagnostic code in ascending MGS
+// order. The returned slice is a copy; callers may mutate it freely.
+func AllDiagnosticCodes() []DiagnosticCode {
+	out := make([]DiagnosticCode, len(allDiagnosticCodes))
+	copy(out, allDiagnosticCodes)
+	return out
+}
+
 // DiagnosticError is a typed error carrying an MGS code and message.
 type DiagnosticError struct {
 	Code DiagnosticCode
