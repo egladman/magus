@@ -22,6 +22,11 @@ type fakeWS struct {
 	projects []*types.Project
 }
 
+// Compile-time proof the mock implements the full interface, so widening
+// WorkspaceRepository (as DescribeCharms did) fails to build here immediately
+// rather than in a downstream test's argument position.
+var _ types.WorkspaceRepository = (*fakeWS)(nil)
+
 func (f *fakeWS) All() []*types.Project        { return f.projects }
 func (f *fakeWS) Root() string                 { panic("not used") }
 func (f *fakeWS) Get(string) *types.Project    { panic("not used") }
@@ -50,10 +55,11 @@ func (f *fakeWS) Affected(context.Context, string) (*types.AffectedResult, error
 func (f *fakeWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	panic("not used")
 }
-func (f *fakeWS) DescribeSpells() types.SpellsOutput     { panic("not used") }
-func (f *fakeWS) DescribeTargets() types.TargetsOutput   { panic("not used") }
-func (f *fakeWS) DescribeGraph() types.TargetGraphOutput { panic("not used") }
-func (f *fakeWS) DescribeProjects() types.ProjectsOutput { panic("not used") }
+func (f *fakeWS) DescribeSpells() types.SpellsOutput         { panic("not used") }
+func (f *fakeWS) DescribeCharms([]string) types.CharmsOutput { panic("not used") }
+func (f *fakeWS) DescribeTargets() types.TargetsOutput       { panic("not used") }
+func (f *fakeWS) DescribeGraph() types.TargetGraphOutput     { panic("not used") }
+func (f *fakeWS) DescribeProjects() types.ProjectsOutput     { panic("not used") }
 func (f *fakeWS) DescribeWorkspaces(types.WorkspaceConfig) types.WorkspacesOutput {
 	panic("not used")
 }
