@@ -107,6 +107,10 @@ func TestGraphRefsPrefersSymbol(t *testing.T) {
 	out, ok := g.Refs("Bar")
 	require.True(t, ok)
 	assert.Equal(t, "symbol:example.com/foo Bar#", out.Symbol, "resolves to the symbol, not the function")
+
+	// A ref carrying grammar tokens must not widen resolution to a non-symbol.
+	_, ok = g.Refs("kind:function Bar")
+	assert.False(t, ok, "grammar tokens in the ref cannot resolve a non-symbol node")
 }
 
 func TestSymbolsShardNaming(t *testing.T) {

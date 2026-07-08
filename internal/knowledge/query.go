@@ -423,7 +423,13 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 		case types.RelationDefines:
 			out.Defs = append(out.Defs, types.KnowledgeRefSite{File: file})
 		case types.RelationReferences:
-			count, lines, _ := parseRefProvenance(e.Provenance)
+			// Only a SCIP-ingested reference edge carries the count/lines provenance;
+			// skip any other references edge into this node rather than emit a phantom
+			// count-0 site that would inflate FileCount.
+			count, lines, ok := parseRefProvenance(e.Provenance)
+			if !ok {
+				continue
+			}
 			out.Refs = append(out.Refs, types.KnowledgeRefSite{File: file, Count: count, Lines: lines})
 			out.RefCount += count
 		}
@@ -451,17 +457,20 @@ func (g *Graph) resolveOne(ref string) (string, bool) {
 
 // resolveSymbol maps a ref to a SYMBOL node specifically, so `magus refs Foo` resolves
 // to the ingested symbol rather than a same-named buzz function or target. An exact
-// symbol-ID hit wins; otherwise the ref is resolved with a kind:symbol filter. A ref
-// that matches no symbol yields ok=false (refs is symbol-only).
+// symbol-ID hit wins; otherwise ref is resolved as-is and the highest-ranked SYMBOL
+// match is taken. The ref is NOT concatenated into the query grammar (that would let
+// a ref like "kind:file x" widen the kind filter and resolve a non-symbol); it is
+// resolved plainly and filtered by kind here. No symbol match yields ok=false.
 func (g *Graph) resolveSymbol(ref string) (string, bool) {
 	if n, ok := g.node(ref); ok && n.Kind == types.KindSymbol {
 		return ref, true
 	}
-	matches := g.Resolve("kind:"+types.KindSymbol+" "+ref, 1)
-	if len(matches) == 0 {
-		return "", false
+	for _, m := range g.Resolve(ref, 0) {
+		if m.Kind == types.KindSymbol {
+			return m.ID, true
+		}
 	}
-	return matches[0].ID, true
+	return "", false
 }
 
 // blastRadius returns how many other nodes can reach id by walking edges in their
