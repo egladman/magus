@@ -75,7 +75,8 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
+	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, false)
 	if err != nil {
 		return err
 	}
