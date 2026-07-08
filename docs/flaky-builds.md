@@ -21,7 +21,7 @@ history:
   there is not enough history to judge, so magus retries every failure once.
 - **Scored phase.** With enough history (`flake.min_samples`), magus computes a
   Wilson-score flake rate and retries when it exceeds `flake.threshold`. A stable
-  target that suddenly fails is *not* retried - that looks like a regression.
+  target that suddenly fails is _not_ retried - that looks like a regression.
 - **Unaffected prior.** A failure in a project the diff did not touch carries a
   strong prior on flakiness (its code did not change), so magus leans toward retry.
 

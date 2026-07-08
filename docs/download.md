@@ -22,14 +22,14 @@ Every build is published at [/public/release/](../public/release/) alongside its
 
 `magus self update` fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: [`magus self`](manpage/magus-self/).
 
-| Flag | Effect |
-|---|---|
-| `--check` | Report availability without installing |
-| `--dry-run` | Fetch and verify but do not swap |
-| `--version v0.4.2` | Pin to a specific tag |
-| `--force` | Allow downgrade or reinstall |
-| `--bin-dir <path>` | Install elsewhere instead of in place |
-| `-y` / `--yes` | Skip the confirmation prompt |
+| Flag               | Effect                                 |
+| ------------------ | -------------------------------------- |
+| `--check`          | Report availability without installing |
+| `--dry-run`        | Fetch and verify but do not swap       |
+| `--version v0.4.2` | Pin to a specific tag                  |
+| `--force`          | Allow downgrade or reinstall           |
+| `--bin-dir <path>` | Install elsewhere instead of in place  |
+| `-y` / `--yes`     | Skip the confirmation prompt           |
 
 Package-maintainer builds compiled with `-tags noselfupdate` disable this subcommand; fall back to a manual [install](#install).
 
@@ -45,7 +45,7 @@ magus self update --dry-run
 
 The trust chain runs through your already-trusted binary. Nothing else to do.
 
-**First install - verify by hand.** Do *not* verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.
+**First install - verify by hand.** Do _not_ verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.
 
 1. Save the key. Either [download magus-release.pem](assets/magus-release.pem), or copy the PEM block below into `magus-release.pem`.
 

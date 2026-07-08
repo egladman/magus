@@ -1,7 +1,18 @@
 ---
 title: Daemon and concurrency
 description: The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.
-tags: [daemon, concurrency, magus server, magus status, socket, pool, magus.yaml, shared services, keep-warm]
+tags:
+  [
+    daemon,
+    concurrency,
+    magus server,
+    magus status,
+    socket,
+    pool,
+    magus.yaml,
+    shared services,
+    keep-warm,
+  ]
 ---
 
 # Daemon and concurrency

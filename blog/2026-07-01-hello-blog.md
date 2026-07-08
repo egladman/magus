@@ -20,6 +20,7 @@ Click **Run** to execute this Buzz snippet in your browser. The WebAssembly
 interpreter is fetched lazily on the first click, so unopened pages stay light:
 
 <!-- run -->
+
 ```buzz
 import "std";
 final greeting = "hello from a runnable snippet";

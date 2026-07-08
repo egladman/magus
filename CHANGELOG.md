@@ -19,14 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   a spell that binds zero ops, and an unknown project name now report a coded,
   actionable error instead of failing quietly.
 - Interspersed global flags: `magus <command> --verbose` and `magus --verbose
-  <command>` now parse the same way.
+<command>` now parse the same way.
 - `magus describe charm[s]` inverts the charm index: it lists every target that
   declares a charm and the argv edit it makes, marking the reserved built-ins and
   workspace defaults.
 - Charm conflict detection: when two active charms edit the same argument, one
   silently overrides the other (the winner decided by name order), so magus warns
   that the losing charm has no effect at run time and flags it in `magus describe
-  target ...:a,b` before a run. Disjoint edits never trip it.
+target ...:a,b` before a run. Disjoint edits never trip it.
 - `magus describe target` describes a service op before it runs: its readiness
   probe, stop command, idle window, whether it is shared, and its dedup fingerprint.
 - `magus graph` is the home of the workspace's graphs as objects: `graph deps`

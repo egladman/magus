@@ -1,7 +1,17 @@
 ---
 title: Services
 description: How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.
-tags: [services, service op, shared services, readiness, daemon, keep-warm, MGS5001, MGS5002]
+tags:
+  [
+    services,
+    service op,
+    shared services,
+    readiness,
+    daemon,
+    keep-warm,
+    MGS5001,
+    MGS5002,
+  ]
 ---
 
 # Services

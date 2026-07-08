@@ -2,7 +2,17 @@
 title: race diagnostics
 page_type: overview
 description: Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.
-tags: [race, diagnostics, error codes, MGS4xxx, concurrency, determinism, watch, replay]
+tags:
+  [
+    race,
+    diagnostics,
+    error codes,
+    MGS4xxx,
+    concurrency,
+    determinism,
+    watch,
+    replay,
+  ]
 ---
 
 # Race condition diagnostics

@@ -1,7 +1,17 @@
 ---
 title: Cache model
 description: How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.
-tags: [cache, needs, provides, claims, cache-key, invalidation, replay, content-addressed]
+tags:
+  [
+    cache,
+    needs,
+    provides,
+    claims,
+    cache-key,
+    invalidation,
+    replay,
+    content-addressed,
+  ]
 ---
 
 # The magus cache model
@@ -16,8 +26,8 @@ it once here and link there for the distributed story.
 
 ## Design intent
 
-- **Correctness is a declaration contract.** magus caches what a target *declares*,
-  not what it *touches*. A target's `needs`, `provides`, and `claims` (see below)
+- **Correctness is a declaration contract.** magus caches what a target _declares_,
+  not what it _touches_. A target's `needs`, `provides`, and `claims` (see below)
   define its whole cache footprint. Under-declare an input and a stale hit slips
   through; over-declare an output and every replay snapshots more than necessary.
   The cache is only as correct as those declarations, which is why the vocabulary
@@ -28,7 +38,7 @@ it once here and link there for the distributed story.
   order enters the key.
 - **A hit never runs the body.** On a hit magus restores the recorded outputs and
   emits the result event; the target's `export fun` never executes. The saved work
-  *is* the point.
+  _is_ the point.
 - **It is just files.** The store is a directory of blobs, JSON manifests, and
   captured logs under `.magus/`. There is no database and no daemon in the read
   path. You can `ls` it, `cat` a manifest, and reason about a hit or miss with
@@ -42,11 +52,11 @@ affected set correct (see [What a spell provides](spells.md#what-a-spell-provide
 Binding a spell contributes its `needs`/`provides`/`claims` to a project's cache
 key and affected set even before you wire a target.
 
-| Declaration   | What it is                         | Role in the cache                                                                 |
-| ------------- | ---------------------------------- | --------------------------------------------------------------------------------- |
-| **`needs`**   | input globs (the sources)          | hashed into the cache key; also seed the affected set                             |
-| **`provides`**| output globs                       | snapshotted into the cache on a miss and replayed on a hit                        |
-| **`claims`**  | files the spell owns               | affected-set attribution only; **not** hashed, **not** snapshotted               |
+| Declaration    | What it is                | Role in the cache                                                  |
+| -------------- | ------------------------- | ------------------------------------------------------------------ |
+| **`needs`**    | input globs (the sources) | hashed into the cache key; also seed the affected set              |
+| **`provides`** | output globs              | snapshotted into the cache on a miss and replayed on a hit         |
+| **`claims`**   | files the spell owns      | affected-set attribution only; **not** hashed, **not** snapshotted |
 
 Internally these map to a `Step` the cache hashes and replays: `needs` become
 `Step.Sources`, `provides` become `Step.Outputs`. `claims` do not appear in the
@@ -118,7 +128,7 @@ What does **not** invalidate: a file's mtime alone (content is what's hashed), a
 `claims`-only file, an `After` ordering edge (ordering is not hashed), or anything
 outside the declared `needs`.
 
-Old keys are never mutated - a miss writes a *new* entry beside the old one - so
+Old keys are never mutated - a miss writes a _new_ entry beside the old one - so
 invalidation is additive. Reverting a change restores the earlier key and replays
 its still-present entry. Disk is reclaimed separately by eviction and pruning (see
 [On disk](#on-disk-just-files)).
@@ -145,7 +155,7 @@ On a run, magus computes the key, then looks for a manifest stored under it:
    every output's path, content hash, mode, and size. A subsequent identical run
    hits.
 
-This is why the target result is *emitted, not returned*. A return value can't
+This is why the target result is _emitted, not returned_. A return value can't
 exist on a hit, since the body never ran - but a hit is exactly what you most want
 to report. So the dispatcher emits a **`target.result`** event
 (`{project, target, status, cache_hit, duration_ms}`) for **both** the ran and the
@@ -184,7 +194,12 @@ mode, size, and (for symlinks) the link target:
   "hash": "ab34...f0",
   "target": "build",
   "outputs": [
-    { "path": "api/dist/server.js", "blob": "9c1f...", "mode": 420, "size": 20481 }
+    {
+      "path": "api/dist/server.js",
+      "blob": "9c1f...",
+      "mode": 420,
+      "size": 20481
+    }
   ],
   "createdAt": "2026-07-07T12:00:00Z"
 }
@@ -224,19 +239,19 @@ on.
 
 ## Glossary
 
-| Term                | Definition                                                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **needs**           | A spell's declared input globs. Hashed into the cache key (`Step.Sources`); also seed the affected set.                               |
-| **provides**        | A spell's declared output globs. Snapshotted on a miss and replayed on a hit (`Step.Outputs`).                                        |
-| **claims**          | Files a spell owns, for affected-set attribution only. Never hashed and never snapshotted.                                            |
-| **Cache key**       | The hex SHA-256 of the serialized `Step`: sources, env, deps, tool versions, spell version, charms, project, and target.             |
-| **Content-addressed** | Stored by content hash: identical output bytes are stored once, and a blob's name is its own SHA-256.                               |
-| **Manifest**        | The JSON record of one cache entry: project, key, target, and one record (path, blob, mode, size, symlink) per output.               |
-| **Blob**            | One unique output content, stored once under `cas/`, sharded by the first two hex chars of its hash.                                 |
-| **Replay**          | Restoring a manifest's outputs on a hit (reflink then copy) without running the target body.                                          |
-| **Snapshot**        | Recording a miss's outputs into the store and writing its manifest.                                                                   |
-| **target.result**   | The emitted report event for one target run (`{project, target, status, cache_hit, duration_ms}`); fires on both hits and misses.    |
-| **`.magus/`**       | The on-disk cache in the workspace root: `cas/` + `manifests/` + `logs/` + the mtime memo.                                            |
+| Term                  | Definition                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **needs**             | A spell's declared input globs. Hashed into the cache key (`Step.Sources`); also seed the affected set.                           |
+| **provides**          | A spell's declared output globs. Snapshotted on a miss and replayed on a hit (`Step.Outputs`).                                    |
+| **claims**            | Files a spell owns, for affected-set attribution only. Never hashed and never snapshotted.                                        |
+| **Cache key**         | The hex SHA-256 of the serialized `Step`: sources, env, deps, tool versions, spell version, charms, project, and target.          |
+| **Content-addressed** | Stored by content hash: identical output bytes are stored once, and a blob's name is its own SHA-256.                             |
+| **Manifest**          | The JSON record of one cache entry: project, key, target, and one record (path, blob, mode, size, symlink) per output.            |
+| **Blob**              | One unique output content, stored once under `cas/`, sharded by the first two hex chars of its hash.                              |
+| **Replay**            | Restoring a manifest's outputs on a hit (reflink then copy) without running the target body.                                      |
+| **Snapshot**          | Recording a miss's outputs into the store and writing its manifest.                                                               |
+| **target.result**     | The emitted report event for one target run (`{project, target, status, cache_hit, duration_ms}`); fires on both hits and misses. |
+| **`.magus/`**         | The on-disk cache in the workspace root: `cas/` + `manifests/` + `logs/` + the mtime memo.                                        |
 
 ## See also
 

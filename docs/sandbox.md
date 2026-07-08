@@ -1,7 +1,17 @@
 ---
 title: Sandbox model
 description: The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.
-tags: [sandbox, security, threat-model, allowlist, landlock, filesystem, network, exec]
+tags:
+  [
+    sandbox,
+    security,
+    threat-model,
+    allowlist,
+    landlock,
+    filesystem,
+    network,
+    exec,
+  ]
 ---
 
 # The magus sandbox model
@@ -38,12 +48,12 @@ A **nil policy means the sandbox is off**: every check passes through. Enabling 
 
 `BuildPolicy` assembles the baseline every enabled run starts from:
 
-| Path                                                             | read | write | exec  | Why                                                                                             |
-| --------------------------------------------------------------- | ---- | ----- | ----- | ----------------------------------------------------------------------------------------------- |
-| the **workspace root**                                          | yes  | yes   | yes   | Spells build binaries in-tree and run them; the workspace is the one fully-writable region.     |
-| `$TMPDIR` / `/tmp`                                              | yes  | yes   | **no** | Scratch space. Exec is withheld: `/tmp` is world-shared on multiuser hosts, so exec there would let one user run a payload another planted. |
-| system libs and certs (`/usr/lib`, `/lib`, `/etc/ssl`, `/etc/resolv.conf`, `/etc/hosts`, `/nix/store` when present, ...) | yes  | no    | no    | Dynamic linking and TLS need to read these; nothing needs to write or execve them.              |
-| the **magus binary itself** (resolved)                          | yes  | no    | yes   | Recursive `magus` invocations must be able to re-exec the same binary.                          |
+| Path                                                                                                                     | read | write | exec   | Why                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------ | ---- | ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| the **workspace root**                                                                                                   | yes  | yes   | yes    | Spells build binaries in-tree and run them; the workspace is the one fully-writable region.                                                 |
+| `$TMPDIR` / `/tmp`                                                                                                       | yes  | yes   | **no** | Scratch space. Exec is withheld: `/tmp` is world-shared on multiuser hosts, so exec there would let one user run a payload another planted. |
+| system libs and certs (`/usr/lib`, `/lib`, `/etc/ssl`, `/etc/resolv.conf`, `/etc/hosts`, `/nix/store` when present, ...) | yes  | no    | no     | Dynamic linking and TLS need to read these; nothing needs to write or execve them.                                                          |
+| the **magus binary itself** (resolved)                                                                                   | yes  | no    | yes    | Recursive `magus` invocations must be able to re-exec the same binary.                                                                      |
 
 Read access alone lets the dynamic linker `mmap` a shared library `PROT_EXEC`; it does **not** grant `execve`. Exec is a separate, narrower bit, which is why a spell can load `/usr/lib` but cannot run an arbitrary binary it finds there.
 
@@ -139,34 +149,34 @@ Being explicit about the boundary is part of the threat model:
 
 Every sandbox violation maps to a boundary described above.
 
-| Code                                            | Fires when                                                              | Layer / disposition                     |
-| ----------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------- |
-| [MGS2001](codes/sandbox/MGS2001.md) PathReadDenied      | read of a path outside the read allowlist                              | binding + kernel; denied                |
-| [MGS2002](codes/sandbox/MGS2002.md) PathWriteDenied     | write to a path outside the write allowlist                            | binding + kernel; denied                |
-| [MGS2003](codes/sandbox/MGS2003.md) EnvStripped         | child env rebuilt; secret-bearing / unlisted vars dropped              | pure Go; informational                  |
-| [MGS2004](codes/sandbox/MGS2004.md) AllowlistUnresolved | a `sandbox.allow` / passthrough entry could not resolve                | policy build; entry skipped, non-fatal  |
-| [MGS2005](codes/sandbox/MGS2005.md) SandboxUnsupported  | kernel landlock unavailable; interpreter layer only                    | once per process; non-fatal fallback    |
-| [MGS2006](codes/sandbox/MGS2006.md) PathShimSuspected   | a subprocess likely failed because mise/asdf/direnv vars were stripped | heuristic hint                          |
-| [MGS2007](codes/sandbox/MGS2007.md) ExecDenied          | execve of a binary whose resolved path is outside the exec allowlist   | binding + kernel; denied                |
-| [MGS2008](codes/sandbox/MGS2008.md) DaemonSocketWithheld | daemon socket re-injected into a recursive `magus` invocation          | debug-level note                        |
-| [MGS2009](codes/sandbox/MGS2009.md) NetEgress           | outbound request through `http.*` while sandboxed                      | audited, **not** blocked                |
-| [MGS2010](codes/sandbox/MGS2010.md) SandboxPolicyMismatch | a daemon is asked to serve a workspace outside its applied union       | fail closed                             |
-| [MGS3001](codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project    | audit rail; observational, not rolled back |
+| Code                                                          | Fires when                                                             | Layer / disposition                        |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------ |
+| [MGS2001](codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                              | binding + kernel; denied                   |
+| [MGS2002](codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist                            | binding + kernel; denied                   |
+| [MGS2003](codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped              | pure Go; informational                     |
+| [MGS2004](codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                | policy build; entry skipped, non-fatal     |
+| [MGS2005](codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                    | once per process; non-fatal fallback       |
+| [MGS2006](codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped | heuristic hint                             |
+| [MGS2007](codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist   | binding + kernel; denied                   |
+| [MGS2008](codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket re-injected into a recursive `magus` invocation          | debug-level note                           |
+| [MGS2009](codes/sandbox/MGS2009.md) NetEgress                 | outbound request through `http.*` while sandboxed                      | audited, **not** blocked                   |
+| [MGS2010](codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union       | fail closed                                |
+| [MGS3001](codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project         | audit rail; observational, not rolled back |
 
 ## Glossary
 
-| Term                       | Definition                                                                                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Policy**                 | The immutable per-workspace sandbox record: a filesystem `Ruleset`, an env `Allowlist`, and a frozen base-env snapshot. A nil policy means the sandbox is off.       |
-| **Rule**                   | One filesystem allowlist entry: a resolved path plus `read` / `write` / `exec` bits. Access is granted to a path at or beneath a rule with the matching bit.         |
-| **Footprint**              | The set of paths and env vars a target legitimately touches: its project subtree, the default caches/system paths, and any workspace-declared extras. It is the allowlist. |
-| **Kernel layer**           | Linux landlock (`landlock_restrict_self`), applied once per process, inherited across `fork+exec`, permanent. Absent on non-Linux and pre-5.13 kernels.             |
-| **Interpreter layer**      | The pure-Go checks the Buzz `fs.*` / `sh.*` / `env.*` bindings run before any operation. Enforced on every platform; the only layer where the kernel one is absent.  |
-| **Env scrubbing**          | Rebuilding the child environment from the allowlist, dropping every unlisted (including secret-bearing) variable. Pure Go; always enforced.                          |
-| **Passthrough**            | The `sandbox.env.passthrough` opt-in that adds exact names or suffix-glob patterns (`NAME_*`) back into the child environment.                                       |
-| **Fingerprint**            | A stable hash of a policy's FS rules and env config; equal fingerprints can share one landlock ruleset. A mismatch against a daemon's applied union raises MGS2010.  |
-| **Union policy**           | The set-union of every declared workspace's policy, applied once by a multi-workspace daemon because landlock is irreversible.                                       |
-| **SandboxUnsupported**     | The `ErrUnsupported` fallback: kernel landlock is unavailable, so only the interpreter layer runs (MGS2005). Non-fatal by design.                                    |
+| Term                   | Definition                                                                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Policy**             | The immutable per-workspace sandbox record: a filesystem `Ruleset`, an env `Allowlist`, and a frozen base-env snapshot. A nil policy means the sandbox is off.             |
+| **Rule**               | One filesystem allowlist entry: a resolved path plus `read` / `write` / `exec` bits. Access is granted to a path at or beneath a rule with the matching bit.               |
+| **Footprint**          | The set of paths and env vars a target legitimately touches: its project subtree, the default caches/system paths, and any workspace-declared extras. It is the allowlist. |
+| **Kernel layer**       | Linux landlock (`landlock_restrict_self`), applied once per process, inherited across `fork+exec`, permanent. Absent on non-Linux and pre-5.13 kernels.                    |
+| **Interpreter layer**  | The pure-Go checks the Buzz `fs.*` / `sh.*` / `env.*` bindings run before any operation. Enforced on every platform; the only layer where the kernel one is absent.        |
+| **Env scrubbing**      | Rebuilding the child environment from the allowlist, dropping every unlisted (including secret-bearing) variable. Pure Go; always enforced.                                |
+| **Passthrough**        | The `sandbox.env.passthrough` opt-in that adds exact names or suffix-glob patterns (`NAME_*`) back into the child environment.                                             |
+| **Fingerprint**        | A stable hash of a policy's FS rules and env config; equal fingerprints can share one landlock ruleset. A mismatch against a daemon's applied union raises MGS2010.        |
+| **Union policy**       | The set-union of every declared workspace's policy, applied once by a multi-workspace daemon because landlock is irreversible.                                             |
+| **SandboxUnsupported** | The `ErrUnsupported` fallback: kernel landlock is unavailable, so only the interpreter layer runs (MGS2005). Non-fatal by design.                                          |
 
 ## See also
 

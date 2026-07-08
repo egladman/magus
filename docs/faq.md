@@ -12,7 +12,7 @@ Short answers with a link to the full story.
 
 A **target** is a named operation on a project (`build`, `test`, `lint`). A
 **spell** teaches magus how a tool performs that operation (the `go` spell knows
-`go build`, `go test`). A **charm** modifies *how* a target runs without changing
+`go build`, `go test`). A **charm** modifies _how_ a target runs without changing
 which target (`rw` to write in place, `gha` for GitHub Actions output). Target =
 what, spell = how, charm = in what manner. See [targets.md](targets.md),
 [spells.md](spells.md), [charms.md](charms.md).
@@ -28,7 +28,7 @@ by default with `default_charms: [rw]`. See [charms.md](charms.md#the-rw-charm).
 
 The cache is content-addressed: a target's outputs are keyed by the SHA-256 of its
 declared inputs (`needs`, `provides`, `claims`). Unchanged inputs replay the
-previous outputs instead of rerunning. magus caches what a target *declares*, not
+previous outputs instead of rerunning. magus caches what a target _declares_, not
 what it touches, so correctness is a declaration contract. See [cache.md](cache.md).
 
 ## How do I build only what changed?
@@ -66,7 +66,7 @@ surface; a target is the normal way in. See [operations.md](operations.md).
 ## Is my telemetry or cache sent anywhere?
 
 No. magus operates on your files and your infrastructure. Telemetry is off by
-default and, when enabled, ships to *your* OTLP collector, not a magus-operated
+default and, when enabled, ships to _your_ OTLP collector, not a magus-operated
 backend. The [remote cache](remote-cache.md) is your storage. See
 [telemetry.md](telemetry.md).
 

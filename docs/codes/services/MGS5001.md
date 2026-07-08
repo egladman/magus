@@ -30,7 +30,7 @@ near-identical, resource-hungry containers nobody meant to run separately.
 
 Magus deduplicates services by a **fingerprint** of their configuration. Two
 services with an identical fingerprint are auto-shared silently. But these
-services are only *nearly* identical, and the difference may be load-bearing (a
+services are only _nearly_ identical, and the difference may be load-bearing (a
 different `POSTGRES_DB` means a different database), so magus refuses to merge
 them on its own and surfaces them to you instead.
 

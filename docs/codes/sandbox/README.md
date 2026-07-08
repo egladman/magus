@@ -2,7 +2,17 @@
 title: sandbox diagnostics
 page_type: overview
 description: Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.
-tags: [sandbox, diagnostics, error codes, MGS2xxx, security, permissions, landlock, supply chain]
+tags:
+  [
+    sandbox,
+    diagnostics,
+    error codes,
+    MGS2xxx,
+    security,
+    permissions,
+    landlock,
+    supply chain,
+  ]
 ---
 
 # The sandbox

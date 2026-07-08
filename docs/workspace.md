@@ -21,12 +21,12 @@ The split is deliberate. The workspace is the unit of _discovery, caching, and a
 
 The workspace root is the nearest ancestor directory carrying a root marker. `FindRoot` walks up from the current directory and stops at the first directory that contains any of these, in priority order:
 
-| Marker           | Why it roots a workspace                                  |
-| ---------------- | -------------------------------------------------------- |
-| `magusfiles/`    | a split-magusfile directory                              |
-| `magusfile.buzz` | a magusfile at the root                                  |
-| `magus.yaml`     | the workspace config file                                |
-| `go.mod`         | the Go-module root, as a last-resort fallback            |
+| Marker           | Why it roots a workspace                      |
+| ---------------- | --------------------------------------------- |
+| `magusfiles/`    | a split-magusfile directory                   |
+| `magusfile.buzz` | a magusfile at the root                       |
+| `magus.yaml`     | the workspace config file                     |
+| `go.mod`         | the Go-module root, as a last-resort fallback |
 
 magus markers precede `go.mod`, so an explicit `magus.yaml` or `magusfile.buzz` always wins over a stray module boundary. `magus.yaml` (workspace configuration - see [config.md](config.md)) lives at the root; it is optional, and its absence does not stop discovery once a root is found by another marker.
 
@@ -77,22 +77,22 @@ export fun ci(args: [str]) > void {
 
 `magus.project({...})` is **optional**. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:
 
-| Key            | Effect                                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| `spells`       | binds spell handles to the project, contributing their ops, sources, and outputs                          |
-| `depends_on`   | declares upstream project paths this project depends on (repo-relative or project-relative)               |
-| `outputs`      | declares the project-relative file globs this project produces                                            |
-| `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                              |
-| `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                          |
-| `targets`      | a per-target policy table (see below)                                                                     |
+| Key            | Effect                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| `spells`       | binds spell handles to the project, contributing their ops, sources, and outputs            |
+| `depends_on`   | declares upstream project paths this project depends on (repo-relative or project-relative) |
+| `outputs`      | declares the project-relative file globs this project produces                              |
+| `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                |
+| `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list            |
+| `targets`      | a per-target policy table (see below)                                                       |
 
 The `targets` sub-map keys a target name to a policy table:
 
-| Policy       | Effect                                                                          |
-| ------------ | ------------------------------------------------------------------------------- |
-| `skipCache`  | opts the target out of the cache; magus always runs it and never replays it     |
-| `exclusive`  | runs the target alone - no peer target runs concurrently while it does          |
-| `slots`      | the target holds N concurrency slots while it runs, throttling parallel work    |
+| Policy      | Effect                                                                       |
+| ----------- | ---------------------------------------------------------------------------- |
+| `skipCache` | opts the target out of the cache; magus always runs it and never replays it  |
+| `exclusive` | runs the target alone - no peer target runs concurrently while it does       |
+| `slots`     | the target holds N concurrency slots while it runs, throttling parallel work |
 
 ```buzz
 magus.project({
@@ -148,12 +148,12 @@ The explicit-path form configures a project that **discovery already found** - i
 
 Project selection is a **positional** argument to `magus run`, `magus list`, and `magus clean`, never embedded in the target token (see [targets.md#cli-grammar](targets.md#cli-grammar)):
 
-| Input                        | Selects                                       |
-| ---------------------------- | --------------------------------------------- |
-| bare (`api`, `web/studio`)   | the project at that workspace-relative path   |
+| Input                        | Selects                                        |
+| ---------------------------- | ---------------------------------------------- |
+| bare (`api`, `web/studio`)   | the project at that workspace-relative path    |
 | dot-relative (`./x`, `../x`) | resolved against the current working directory |
-| `.`                          | the project containing the current directory  |
-| empty (omitted) or `/`       | all projects (fan-out)                        |
+| `.`                          | the project containing the current directory   |
+| empty (omitted) or `/`       | all projects (fan-out)                         |
 
 Empty and `/` both fan out to every discovered project. A `ws:` prefix is **rejected**: magus tells you to use `/` for all projects instead. An unknown bare path is an error with a did-you-mean suggestion. Because paths are repo-relative, a bare `api` means the same project regardless of your current directory, while `../foo` behaves as a shell user expects.
 
@@ -168,16 +168,16 @@ Together, discovery gives magus the set of projects, `depends_on` gives it the e
 
 ## Glossary
 
-| Term             | Definition                                                                                                                    |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Workspace**    | The discovered root, its `magus.yaml`, and the set of projects beneath it. The `types.Workspace` value, keyed by root path.  |
-| **Project**      | A directory registered by a magusfile; owns its targets, bound spells, and policy. The `types.Project` struct.               |
-| **Root**         | The workspace root directory, found by `FindRoot` and canonicalised at discovery. Every project `Path` is relative to it.    |
-| **Discovery**    | The single `WalkDir` pass (`project.Discover`) that registers a project per directory carrying a magusfile.                  |
-| **magusfile**    | `magusfile.buzz` (or `magusfiles/*.buzz`); its presence registers a project. Exported functions become targets.             |
-| **`magus.project`** | The optional call that layers policy (spells, `depends_on`, outputs, watch-ignore, per-target flags) onto a project.      |
-| **depends_on**   | Declared upstream project paths. Drive ordering, the reverse-closure affected set, and `dep:` cache-key propagation.         |
-| **Ignore dirs**  | The fixed directory names discovery prunes at any depth (`.git`, `vendor`, `node_modules`, `target`, `gen`, ...).            |
+| Term                | Definition                                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Workspace**       | The discovered root, its `magus.yaml`, and the set of projects beneath it. The `types.Workspace` value, keyed by root path. |
+| **Project**         | A directory registered by a magusfile; owns its targets, bound spells, and policy. The `types.Project` struct.              |
+| **Root**            | The workspace root directory, found by `FindRoot` and canonicalised at discovery. Every project `Path` is relative to it.   |
+| **Discovery**       | The single `WalkDir` pass (`project.Discover`) that registers a project per directory carrying a magusfile.                 |
+| **magusfile**       | `magusfile.buzz` (or `magusfiles/*.buzz`); its presence registers a project. Exported functions become targets.             |
+| **`magus.project`** | The optional call that layers policy (spells, `depends_on`, outputs, watch-ignore, per-target flags) onto a project.        |
+| **depends_on**      | Declared upstream project paths. Drive ordering, the reverse-closure affected set, and `dep:` cache-key propagation.        |
+| **Ignore dirs**     | The fixed directory names discovery prunes at any depth (`.git`, `vendor`, `node_modules`, `target`, `gen`, ...).           |
 
 ## See also
 

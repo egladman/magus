@@ -74,7 +74,7 @@ not die:
 ```yaml
 ---
 title: Download
-aliases: [install]      # clean, gen-root-relative old paths
+aliases: [install] # clean, gen-root-relative old paths
 ---
 ```
 

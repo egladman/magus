@@ -8,14 +8,14 @@ tags: [insight, vcs, history, hotspots, coupling, ownership, churn, analysis]
 
 `magus insight <lens>` reads version-control history to show where a codebase's
 attention and risk actually concentrate. Static structure tells you how the code is
-organized; history tells you how it is *used* - which files churn, which projects
+organized; history tells you how it is _used_ - which files churn, which projects
 change together, who owns what. The [man page](manpage/gen/magus-insight.md) lists
 the flags; this page is the intent.
 
 ## Design intent
 
-- **Behavior over structure.** A dependency graph shows what *could* affect what.
-  History shows what *does*. A file edited every week is a different risk than one
+- **Behavior over structure.** A dependency graph shows what _could_ affect what.
+  History shows what _does_. A file edited every week is a different risk than one
   untouched for a year, even at the same complexity.
 - **Contextual by default.** Every lens reflects the working directory's subtree;
   `--workspace` widens it to the whole workspace. Run it where you are asking the
@@ -56,7 +56,7 @@ Each lens accepts `-o text|json|yaml|name`; `hotspots` and `affinity` also rende
 ## Where it fits
 
 Insight is a read-only lens, never part of a build. Reach for it when you are
-deciding *what to work on* rather than running work: picking a refactor target
+deciding _what to work on_ rather than running work: picking a refactor target
 (hotspots), questioning an architecture (affinity), or planning ownership
 (ownership). The `report` lens in CI turns that into a recurring signal on every
 run.

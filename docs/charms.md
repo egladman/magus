@@ -19,7 +19,7 @@ Charms replace the one-off boolean flags (`--write`, `--fix`, `--verbose`) that 
 
 ## Additive by design
 
-Charms only ever *add* intent. You turn one on by naming it (`:rw`); the active set
+Charms only ever _add_ intent. You turn one on by naming it (`:rw`); the active set
 is the union of what you named and the workspace `default_charms`, and nothing else.
 There is no per-charm "off" switch, and that absence is deliberate.
 

@@ -1,7 +1,16 @@
 ---
 title: "MGS3001: descendant project boundary crossed"
 description: Fires when a spell's downward walk crosses into a registered descendant project's directory and modifies files there during a write-mode dispatch.
-tags: [MGS3001, audit, project boundary, descendants, workspace scope, formatter, globs]
+tags:
+  [
+    MGS3001,
+    audit,
+    project boundary,
+    descendants,
+    workspace scope,
+    formatter,
+    globs,
+  ]
 ---
 
 # MGS3001: descendant project boundary crossed

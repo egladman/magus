@@ -56,18 +56,18 @@ value-aware checks on top. Buzz has no optional or variadic parameters, so each
 matcher takes a trailing `message` (pass `""` for none; a short label makes failures
 easier to read).
 
-| Matcher | Passes when |
-|---------|-------------|
-| `equal(got, want, message)` | `got` is structurally (deeply) equal to `want` |
-| `notEqual(got, want, message)` | `got` is not deeply equal to `want` |
-| `isTrue(got, message)` / `isFalse(got, message)` | `got` is `true` / `false` |
-| `isNull(got, message)` / `notNull(got, message)` | `got` is / is not `null` |
-| `contains(container, item, message)` | a str holds a substring, a list holds an element (by deep equality), or a map holds a key |
-| `len(container, want, message)` | a str, list, or map has exactly `want` elements |
-| `isEmpty(container, message)` | a str, list, or map is empty |
-| `greater(a, b, message)` / `less(a, b, message)` | two numbers or two strings order that way |
-| `throws(fn, message)` / `doesNotThrow(fn, message)` | calling `fn` does / does not raise |
-| `fail(message)` | Always fails the test |
+| Matcher                                             | Passes when                                                                               |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `equal(got, want, message)`                         | `got` is structurally (deeply) equal to `want`                                            |
+| `notEqual(got, want, message)`                      | `got` is not deeply equal to `want`                                                       |
+| `isTrue(got, message)` / `isFalse(got, message)`    | `got` is `true` / `false`                                                                 |
+| `isNull(got, message)` / `notNull(got, message)`    | `got` is / is not `null`                                                                  |
+| `contains(container, item, message)`                | a str holds a substring, a list holds an element (by deep equality), or a map holds a key |
+| `len(container, want, message)`                     | a str, list, or map has exactly `want` elements                                           |
+| `isEmpty(container, message)`                       | a str, list, or map is empty                                                              |
+| `greater(a, b, message)` / `less(a, b, message)`    | two numbers or two strings order that way                                                 |
+| `throws(fn, message)` / `doesNotThrow(fn, message)` | calling `fn` does / does not raise                                                        |
+| `fail(message)`                                     | Always fails the test                                                                     |
 
 Reach for `equal` most often. `==` compares identity for maps, lists, and objects, so
 `{a: 1} == {a: 1}` is `false`; `assert.equal` compares by value, recursing to any
@@ -122,13 +122,13 @@ Go's testing package hangs its features off the `*testing.T` passed to each test
 `test` block has no such handle; a Suite is that handle, so it carries the same
 per-test controls, callable from inside an `it` body:
 
-| Method | Go analog | Effect |
-|--------|-----------|--------|
-| `s.skip(message)` | `t.Skip` | Marks the test skipped and stops its body |
-| `s.fatal(message)` | `t.Fatal` | Records a failure and stops the body, for a broken precondition where the soft matchers would keep going |
-| `s.cleanup(fn)` | `t.Cleanup` | Registers a cleanup run after the test in reverse order, whether it passed or failed |
-| `s.log(message)` | `t.Log` | Buffers a line printed only if the test fails |
-| `s.name()` | `t.Name` | The name of the running test |
+| Method             | Go analog   | Effect                                                                                                   |
+| ------------------ | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `s.skip(message)`  | `t.Skip`    | Marks the test skipped and stops its body                                                                |
+| `s.fatal(message)` | `t.Fatal`   | Records a failure and stops the body, for a broken precondition where the soft matchers would keep going |
+| `s.cleanup(fn)`    | `t.Cleanup` | Registers a cleanup run after the test in reverse order, whether it passed or failed                     |
+| `s.log(message)`   | `t.Log`     | Buffers a line printed only if the test fails                                                            |
+| `s.name()`         | `t.Name`    | The name of the running test                                                                             |
 
 ```buzz
 s.it("reads the fixture", fun () > void {

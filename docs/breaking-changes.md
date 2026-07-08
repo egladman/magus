@@ -1,7 +1,16 @@
 ---
 title: Breaking changes
 description: How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's public surface.
-tags: [breaking-changes, compatibility, buf-breaking, api-lock, drift-gate, changelog, proto]
+tags:
+  [
+    breaking-changes,
+    compatibility,
+    buf-breaking,
+    api-lock,
+    drift-gate,
+    changelog,
+    proto,
+  ]
 ---
 
 # Breaking changes

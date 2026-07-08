@@ -6,9 +6,9 @@ tags: [wards, diagnostics, operations, services, kind, MGSxxxx, guardrails]
 
 # Wards
 
-A **ward** is a guardrail magus runs against a *resolved op* - after a target's
+A **ward** is a guardrail magus runs against a _resolved op_ - after a target's
 operation is fully assembled but before it executes. The ward inspects the op's
-argv and rejects it when the command contradicts the op's declared *kind*, so a
+argv and rejects it when the command contradicts the op's declared _kind_, so a
 misconfigured op fails immediately with a coded, actionable diagnostic instead of
 misbehaving at run time.
 
@@ -18,7 +18,7 @@ code, a plain-language explanation, and a suggested fix.
 
 ## Kind coherence
 
-magus ops carry a *kind* - a **service** op is a long-running process magus
+magus ops carry a _kind_ - a **service** op is a long-running process magus
 supervises in the foreground; a **command** op runs to completion. A ward fires when
 the argv lies about that kind:
 
