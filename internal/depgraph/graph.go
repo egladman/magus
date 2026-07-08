@@ -281,6 +281,10 @@ func (g *Graph) Predecessors(id ID) iter.Seq[ID] {
 }
 
 // TopoOrder returns a copy of the Kahn order (deps before dependents).
+// FIXME: the comment says "deps before dependents" but the observed order is the
+// reverse — Kahn starts from the in-degree-zero root, so a dependent sorts ahead
+// of the dependencies it points at (see TestBuild_TopoSortDepsBeforeDependents).
+// Reconcile the comment with the behavior, or the behavior with the comment.
 func (g *Graph) TopoOrder() []ID {
 	return slices.Clone(g.topo)
 }
