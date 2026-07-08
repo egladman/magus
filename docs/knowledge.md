@@ -40,7 +40,14 @@ magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # the shortest chain of edges between two nodes
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
+magus graph open            # explore it visually in your browser (data stays local)
 ```
+
+Prefer a picture? `magus graph open` launches the interactive [Graph
+Explorer](graph.html) seeded with your own workspace - a force-directed, searchable
+view of the same graph. Your data never leaves your machine: it rides in the URL
+fragment (or a local loopback server with `--serve`), never reaching the site. This
+site's own graph is the [live demo](graph.html).
 
 The committed `MAGUS.md` routing table is the entry point: it lists every node
 kind with its count, the query that lists it, and the highest-degree anchor
@@ -100,6 +107,13 @@ delete-plus-add.
 
 Node kinds: `project`, `target`, `spell`, `op`, `charm`, `module`, `method`,
 `diagnostic`, `doc`, `file`, `function`, `import`, `rationale`.
+
+Nodes also carry static metadata the extractors already parse, surfaced as
+attributes so `magus explain` answers a question without a second describe: a
+project reports its `engine` and `target_count`, each target inherits its
+project's `engine`, and a doc page carries its frontmatter `title` and `tags`.
+Attributes are additive and absent when unknown, so they never bump the schema
+version.
 
 Edges are directed and carry provenance and a confidence tag - `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
