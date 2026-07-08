@@ -184,16 +184,32 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 	return out
 }
 
-// MergeWorkspaceSymbols pulls the persisted per-project @symbols shards into g, for
-// a symbol-seeded query (the default graph excludes them for scale). It opens the
-// same store BuildKnowledgeGraph writes, so the shards a build just persisted are
-// available. Best-effort: no store or no symbol shards is a no-op.
-func MergeWorkspaceSymbols(ctx context.Context, ws types.Describer, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
+// symbolStore opens the same store BuildKnowledgeGraph writes, so the symbol shards a
+// build just persisted (and the derived xref routing index) are available for a
+// lazy merge.
+func symbolStore(ws types.Describer, root string, cfg config.Config, log *slog.Logger) *knowledge.Store {
 	if log == nil {
 		log = slog.Default()
 	}
-	cacheDir := resolveCacheDir(root, cfg)
-	store := knowledge.NewStore(cacheDir, cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShardsFor(ws), log)
+	return knowledge.NewStore(resolveCacheDir(root, cfg), cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShardsFor(ws), log)
+}
+
+// MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
+// a symbol-seeded query (the default graph excludes them for scale). Best-effort: no
+// store or no symbol shards is a no-op.
+func MergeWorkspaceSymbols(ctx context.Context, ws types.Describer, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
+	return symbolStore(ws, root, cfg, log).MergeSymbolShards(ctx, g)
+}
+
+// MergeWorkspaceSymbolsForRef merges symbols into g for `magus refs`, targeting only
+// the shards that mention ref (via the xref routing index) when ref is an exact symbol
+// ID - the scale-safe reverse lookup - or all symbol shards when ref is a fuzzy name
+// whose exact ID is not yet known.
+func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Describer, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
+	store := symbolStore(ws, root, cfg, log)
+	if strings.HasPrefix(ref, types.KindSymbol+":") {
+		return store.MergeSymbolShardsFor(ctx, g, []string{ref})
+	}
 	return store.MergeSymbolShards(ctx, g)
 }
 
@@ -314,6 +330,22 @@ func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph
 		return nil, err
 	}
 	if err := MergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default()); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+// KnowledgeGraphWithSymbolsForRef is KnowledgeGraphWithSymbols for magus_refs: it
+// merges only the symbol shards that mention ref (targeted reverse lookup) when ref
+// is an exact symbol ID, or all of them for a fuzzy name. Also fresh-not-warm, so the
+// shared warm graph stays symbol-free.
+func (m *Magus) KnowledgeGraphWithSymbolsForRef(ctx context.Context, ref string) (*knowledge.Graph, error) {
+	root := m.Root()
+	g, err := BuildKnowledgeGraph(ctx, m, root, m.cfg, false, slog.Default())
+	if err != nil {
+		return nil, err
+	}
+	if err := MergeWorkspaceSymbolsForRef(ctx, m, root, m.cfg, g, ref, slog.Default()); err != nil {
 		return nil, err
 	}
 	return g, nil

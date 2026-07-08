@@ -81,7 +81,7 @@ func (t *refsTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.I
 	if symbol == "" {
 		return types.InvokeResponse{}, errors.New("mcp: symbol is required")
 	}
-	g, err := t.opts.Magus.KnowledgeGraphWithSymbols(ctx)
+	g, err := t.opts.Magus.KnowledgeGraphWithSymbolsForRef(ctx, symbol)
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}

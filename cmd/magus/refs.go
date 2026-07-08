@@ -16,13 +16,9 @@ import (
 // loads the lazily-loaded @symbols shards. Its output is occurrence-shaped (file:line
 // rows), which is why it is a distinct verb rather than a `magus query` neighborhood.
 func refsCmd(ctx context.Context, root string, args []string) error {
-	var (
-		refresh     bool
-		globalScope bool
-	)
+	var refresh bool
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before resolving")
-		fs.BoolVar(&globalScope, "global", false, "resolve across the workspaces registered in config (knowledge.workspaces)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -47,7 +43,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, true) // refs always needs symbols
+	g, err := loadKnowledgeGraphForRefs(ctx, root, refresh, pos[0])
 	if err != nil {
 		return err
 	}

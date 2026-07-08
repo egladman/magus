@@ -318,6 +318,25 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 	return g, nil
 }
 
+// loadKnowledgeGraphForRefs builds the domain graph and merges the symbol shards a
+// `magus refs` lookup needs - targeted to ref's shards via the xref routing index when
+// ref is an exact symbol ID, else all symbol shards. Symbols are per-workspace, so
+// refs does not take --global.
+func loadKnowledgeGraphForRefs(ctx context.Context, root string, refresh bool, ref string) (*knowledge.Graph, error) {
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
+	if err != nil {
+		return nil, err
+	}
+	if err := magus.MergeWorkspaceSymbolsForRef(ctx, ws, ws.Root(), globalCfg, g, ref, slog.Default()); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
 type keyCount struct {
 	key string
 	n   int
