@@ -1,7 +1,12 @@
 # Generated docs; the generator owns their formatting. Hand-formatting (or
 # prettier rewriting them) would drift against `magus run generate`.
-docs/modules/
+docs/buzz/modules/
+docs/spells/
+docs/spells.md
 docs/manpage/gen/
+docs/config.md
+MAGUS.md
+website/gen/
 
 # Claude Code session worktrees: full repo checkouts owned by other sessions.
 # A root-scoped prettier walk must never rewrite (or even check) them.
