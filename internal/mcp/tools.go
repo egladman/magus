@@ -38,6 +38,7 @@ func allMCPTools(opts ServerOptions) []types.SpellDriver {
 		&explainTool{opts: opts},
 		&pathTool{opts: opts},
 		&statsTool{opts: opts},
+		&refsTool{opts: opts},
 	}
 }
 

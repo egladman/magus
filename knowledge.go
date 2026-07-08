@@ -302,6 +302,23 @@ func (m *Magus) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Gr
 	return m.warmKnowledgeGraph().Get(ctx, refresh)
 }
 
+// KnowledgeGraphWithSymbols returns a graph that INCLUDES the lazily-loaded @symbols
+// shards, for a symbol-seeded MCP query (magus_query on symbols, magus_refs). It
+// builds cache-first into a FRESH graph - not the shared warm graph - and merges
+// symbols into it, so the warm graph the other MCP tools answer from is never
+// polluted with a workspace's (potentially huge) symbol set.
+func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
+	root := m.Root()
+	g, err := BuildKnowledgeGraph(ctx, m, root, m.cfg, false, slog.Default())
+	if err != nil {
+		return nil, err
+	}
+	if err := MergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default()); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
 // WatchKnowledgeGraph starts a file watcher that keeps the warm knowledge graph
 // fresh, so daemon MCP calls answer from memory. It returns a stop function; the
 // long-lived daemon calls it once at startup. A one-shot CLI never calls it and

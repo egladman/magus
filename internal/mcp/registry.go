@@ -113,6 +113,15 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
+		Name:        "magus_refs",
+		Description: "List where an ingested code symbol is defined and every file that references it, as file:line rows drawn from a SCIP index. The occurrence-shaped answer for a symbol's fan-in (magus_query renders that poorly). Symbols come from a declared knowledge.symbols index. For a large fan-in, pass limit and echo the returned next_cursor.",
+		Params: []ParamDescriptor{
+			{Name: "symbol", Type: "string", Required: true, Description: "A symbol node ID (symbol:...) or a name that resolves to one."},
+			{Name: "limit", Type: "number", Description: "Page size: max referencing files to return. Omit or 0 for all."},
+			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor. Only valid for the same symbol and an unchanged graph."},
+		},
+	},
+	{
 		Name:        "magus_path",
 		Description: "Show the shortest path between two knowledge-graph nodes: the chain of edges connecting them, with each hop's relation. Answers how two entities relate.",
 		Params: []ParamDescriptor{

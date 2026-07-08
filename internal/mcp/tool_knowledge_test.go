@@ -4,6 +4,7 @@ package mcp
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/egladman/magus/internal/knowledge"
@@ -11,6 +12,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// refsGraph builds a graph with one symbol referenced from n files, enough to page
+// a magus_refs response.
+func refsGraph(n int) *knowledge.Graph {
+	g := knowledge.NewGraph()
+	const sym = "symbol:example.com/x Foo#"
+	g.AddNode(types.KnowledgeNode{ID: sym, Kind: types.KindSymbol, Label: "Foo"})
+	for i := 0; i < n; i++ {
+		g.AddEdge(types.KnowledgeEdge{
+			Source: "file:pkg/f" + strconv.Itoa(i) + ".go", Target: sym,
+			Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1,
+			Provenance: "scip count=1 lines=3",
+		})
+	}
+	return g
+}
 
 // pagedGraph builds a small graph with n target nodes under one project, enough to
 // page a "kind:target" query.
@@ -33,6 +50,7 @@ func TestKnowledgeToolNames(t *testing.T) {
 	assert.Equal(t, "magus_explain", (&explainTool{}).Name())
 	assert.Equal(t, "magus_path", (&pathTool{}).Name())
 	assert.Equal(t, "magus_stats", (&statsTool{}).Name())
+	assert.Equal(t, "magus_refs", (&refsTool{}).Name())
 }
 
 // TestRegistryHasStatsDriver pins that magus_stats is both described and wired:
@@ -124,4 +142,53 @@ func TestPagedQueryRejectsStaleCursor(t *testing.T) {
 	g.AddNode(types.KnowledgeNode{ID: "target:pkg/a:zzz", Kind: types.KindTarget, Label: "zzz"})
 	_, err = pagedQuery(g, "kind:target", 50, 2, first.NextCursor)
 	assert.ErrorContains(t, err, "graph changed")
+}
+
+func TestRefsToolRequiredParam(t *testing.T) {
+	_, err := (&refsTool{}).Invoke(context.Background(), types.InvokeRequest{})
+	assert.ErrorContains(t, err, "symbol is required")
+}
+
+func TestPagedRefsUnpaged(t *testing.T) {
+	resp, err := pagedRefs(refsGraph(5), "symbol:example.com/x Foo#", 0, "")
+	require.NoError(t, err)
+	assert.Equal(t, 5, resp.FileCount)
+	assert.Len(t, resp.Refs, 5)
+	assert.Empty(t, resp.NextCursor)
+}
+
+func TestPagedRefsWalksAllPages(t *testing.T) {
+	g := refsGraph(5)
+	seen, pages, cursor := 0, 0, ""
+	for {
+		resp, err := pagedRefs(g, "symbol:example.com/x Foo#", 2, cursor)
+		require.NoError(t, err)
+		assert.Equal(t, 5, resp.FileCount, "the total is stable across pages")
+		seen += len(resp.Refs)
+		pages++
+		if resp.NextCursor == "" {
+			break
+		}
+		cursor = resp.NextCursor
+		require.LessOrEqual(t, pages, 5, "must terminate")
+	}
+	assert.Equal(t, 5, seen, "every referencing file returned once")
+	assert.Equal(t, 3, pages, "5 files at limit 2 is three pages")
+}
+
+func TestPagedRefsRejectsStaleCursor(t *testing.T) {
+	g := refsGraph(5)
+	first, err := pagedRefs(g, "symbol:example.com/x Foo#", 2, "")
+	require.NoError(t, err)
+	require.NotEmpty(t, first.NextCursor)
+
+	// A cursor issued for a since-changed graph is rejected.
+	g.AddNode(types.KnowledgeNode{ID: "symbol:example.com/x Other#", Kind: types.KindSymbol, Label: "Other"})
+	_, err = pagedRefs(g, "symbol:example.com/x Foo#", 2, first.NextCursor)
+	assert.ErrorContains(t, err, "graph changed")
+}
+
+func TestPagedRefsNoSuchSymbol(t *testing.T) {
+	_, err := pagedRefs(refsGraph(1), "symbol:nope Missing#", 0, "")
+	assert.ErrorContains(t, err, "no symbol matches")
 }
