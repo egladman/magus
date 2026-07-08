@@ -97,10 +97,12 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        "magus_query",
-		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics.",
+		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page.",
 		Params: []ParamDescriptor{
 			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field filters (kind:spell, project:pkg/foo, relation:uses, id:build) and negation (-kind:op)."},
 			{Name: "budget", Type: "number", Description: "Max nodes in the returned neighborhood (default 50)."},
+			{Name: "limit", Type: "number", Description: "Page size: max matches to return. Omit or 0 for all matches (no paging)."},
+			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor, to fetch the next page. Only valid for the same query and an unchanged graph."},
 		},
 	},
 	{
