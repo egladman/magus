@@ -1,15 +1,18 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
@@ -133,6 +136,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		Diagnostics: types.AllDiagnosticCodes(),
 		Root:        root,
 		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
+		Timings:     loadKnowledgeTimings(ctx, cfg),
 	}
 	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
@@ -140,6 +144,40 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
 		Remote:    remoteShardsFor(ws),
 	}, in, log)
+}
+
+// loadKnowledgeTimings reads the local timing history (best-effort) into per-target
+// timing inputs for the @runtime shard. A disabled or unreadable history yields no
+// timings, so the performance attrs are simply absent, never an error. The result
+// is sorted so assembly stays deterministic regardless of history map order.
+func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.KnowledgeTiming {
+	if cfg.HistoryPath == "" {
+		return nil
+	}
+	var h forecast.History
+	if err := h.Load(ctx, cfg.HistoryPath); err != nil {
+		return nil
+	}
+	var out []types.KnowledgeTiming
+	for project, targets := range h.Projects {
+		for target, st := range targets {
+			out = append(out, types.KnowledgeTiming{
+				Project:    project,
+				Target:     target,
+				P75Ms:      st.P75Ms,
+				Samples:    st.Samples,
+				HitRate:    st.HitRate,
+				HitSamples: st.HitCount + st.MissCount,
+			})
+		}
+	}
+	slices.SortFunc(out, func(a, b types.KnowledgeTiming) int {
+		if c := cmp.Compare(a.Project, b.Project); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Target, b.Target)
+	})
+	return out
 }
 
 // knowledgeRemoteNamespace is the fixed "project path" the knowledge shard store

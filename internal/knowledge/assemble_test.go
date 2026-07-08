@@ -222,7 +222,7 @@ func TestAssembleRuntimeEmitsEdges(t *testing.T) {
 		{Unit: "pkg/bar", Code: types.SandboxPolicyMismatch},
 		{Unit: "", Code: types.ExecDenied}, // no unit -> skipped
 	}
-	s := assembleRuntime(events)
+	s := assembleRuntime(events, nil, nil)
 	require.Equal(t, RuntimeShardName, s.Name)
 	require.Len(t, s.Edges, 2)
 
@@ -245,6 +245,39 @@ func TestRuntimeShardBuildsIntoGraph(t *testing.T) {
 	// The emits edge connects the existing target node to the existing diagnostic node.
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "diagnostic:MGS2007", types.RelationEmits),
 		"runtime emits edge present in the merged graph")
+}
+
+func TestAssembleRuntimeTimingAttrs(t *testing.T) {
+	known := map[string]bool{"target:pkg/a:build": true}
+	timings := []types.KnowledgeTiming{
+		{Project: "pkg/a", Target: "build", P75Ms: 4200, Samples: 9, HitRate: 0.75, HitSamples: 12},
+		{Project: "pkg/a", Target: "ghost", P75Ms: 100, Samples: 3, HitSamples: 3}, // unknown target -> dropped
+		{Project: "pkg/a", Target: "cold", HitSamples: 0},                          // no signal at all -> no node
+	}
+	s := assembleRuntime(nil, timings, known)
+
+	require.Len(t, s.Nodes, 1, "only the known, signal-bearing target yields a node")
+	n := s.Nodes[0]
+	assert.Equal(t, "target:pkg/a:build", n.ID)
+	assert.Equal(t, types.KindTarget, n.Kind, "typed so the merge is order-independent")
+	assert.Equal(t, "4200", n.Attrs[AttrDurationP75Ms])
+	assert.Equal(t, "9", n.Attrs[AttrRunSamples])
+	assert.Equal(t, "0.75", n.Attrs[AttrCacheHitRate])
+}
+
+// TestRuntimeTimingMergesOntoTarget: a timing node merges its attrs onto the
+// project shard's target node regardless of shard load order, without clobbering
+// the static engine attr.
+func TestRuntimeTimingMergesOntoTarget(t *testing.T) {
+	in := sampleInputs()
+	in.Timings = []types.KnowledgeTiming{{Project: "pkg/a", Target: "build", P75Ms: 500, Samples: 5, HitRate: 0.5, HitSamples: 8}}
+	out := mergeAll(AssembleShards(in)).Output()
+
+	build, ok := nodeByID(out, "target:pkg/a:build")
+	require.True(t, ok)
+	assert.Equal(t, "500", build.Attrs[AttrDurationP75Ms])
+	assert.Equal(t, "0.50", build.Attrs[AttrCacheHitRate])
+	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "static engine attr survives the timing merge")
 }
 
 func TestIsRuntimeShard(t *testing.T) {

@@ -35,6 +35,11 @@ type Inputs struct {
 	// history, not workspace sources, so it lands in an isolated @runtime shard
 	// that is excluded from remote export and skippable at load.
 	Runtime []types.DiagnosticEvent
+	// Timings carries observed per-target run cost (p75 duration, cache hit rate)
+	// from the local timing history. Like Runtime it is non-deterministic and lands
+	// in the @runtime shard; it annotates existing target nodes rather than adding
+	// edges.
+	Timings []types.KnowledgeTiming
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -66,10 +71,25 @@ func AssembleShards(in Inputs) []Shard {
 			shards = append(shards, b)
 		}
 	}
-	if r := assembleRuntime(in.Runtime); len(r.Edges) > 0 {
+	// The runtime shard carries both non-deterministic inputs: emits edges from
+	// prior diagnostics and timing attrs on existing targets. Timings are filtered
+	// to targets that actually exist so stale history never conjures a phantom node.
+	if r := assembleRuntime(in.Runtime, in.Timings, knownTargetIDs(in.Graph)); len(r.Edges) > 0 || len(r.Nodes) > 0 {
 		shards = append(shards, r)
 	}
 	return shards
+}
+
+// knownTargetIDs collects every target node ID the project shards will define, so
+// the runtime shard can drop timings for targets no longer in any magusfile.
+func knownTargetIDs(g types.TargetGraphOutput) map[string]bool {
+	ids := map[string]bool{}
+	for _, p := range g.Projects {
+		for _, n := range p.Nodes {
+			ids[targetID(p.Path, n.Name)] = true
+		}
+	}
+	return ids
 }
 
 // assembleRegistry builds the workspace-independent shard: spell/op nodes with
@@ -233,21 +253,23 @@ func nilIfEmpty(m map[string]string) map[string]string {
 	return m
 }
 
-// The runtime shard is the graph's one non-deterministic input: "emits" edges from
-// a unit to each MGS code it tripped in actual runs, answering "what has this
-// target tripped" - history the static "documents" edge cannot. Derived from local
-// run records (see the persistence half in store.go), not workspace sources, so it
-// is isolated in a dedicated @runtime shard and excluded from remote export.
+// The runtime shard carries the graph's non-deterministic inputs, both derived from
+// local run records (see the persistence half in store.go), not workspace sources,
+// so they are isolated in a dedicated @runtime shard and excluded from remote
+// export: "emits" edges from a unit to each MGS code it tripped in actual runs
+// ("what has this target tripped" - history the static "documents" edge cannot),
+// and observed performance attrs (p75 duration, cache hit rate) on target nodes.
 
 // RuntimeShardName is the isolated shard holding runtime "emits" edges; the leading
 // "@" keeps it clear of any project path and is the remote-export exclusion key.
 const RuntimeShardName = "@runtime"
 
-// assembleRuntime turns runtime diagnostic records into the isolated shard: one
-// "emits" edge per (unit, code) from the target/project node to the diagnostic
-// node. The endpoints come from the registry and project shards, so these edges
-// connect existing nodes.
-func assembleRuntime(events []types.DiagnosticEvent) Shard {
+// assembleRuntime builds the isolated shard from the two non-deterministic inputs:
+// one "emits" edge per (unit, code) from the target/project node to the diagnostic
+// node, plus a partial target node per timing carrying observed performance attrs.
+// Both connect to nodes the registry and project shards define; timings for a
+// target no longer in known are dropped so stale history never adds a phantom node.
+func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTiming, known map[string]bool) Shard {
 	s := Shard{Name: RuntimeShardName}
 	seen := map[string]bool{}
 	for _, ev := range events {
@@ -263,7 +285,40 @@ func assembleRuntime(events []types.DiagnosticEvent) Shard {
 		seen[key] = true
 		s.Edges = append(s.Edges, extractedEdge(unit, diag, types.RelationEmits, "runtime"))
 	}
+	for _, t := range timings {
+		tID := targetID(t.Project, t.Target)
+		if !known[tID] {
+			continue
+		}
+		attrs := timingAttrs(t)
+		if len(attrs) == 0 {
+			continue
+		}
+		// A typed partial node so the merge is order-independent: whichever shard
+		// loads first, the project shard fills Doc/Source and these attrs merge in.
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{
+			ID:    tID,
+			Kind:  types.KindTarget,
+			Label: t.Target,
+			Attrs: attrs,
+		})
+	}
 	return s
+}
+
+// timingAttrs renders the observed attrs that a timing actually backs: the p75
+// duration only when a settled sample count supports it, the hit rate only when
+// any hit/miss was observed. An empty map means "no signal", so no node is emitted.
+func timingAttrs(t types.KnowledgeTiming) map[string]string {
+	attrs := map[string]string{}
+	if t.P75Ms > 0 && t.Samples > 0 {
+		attrs[AttrDurationP75Ms] = strconv.FormatInt(t.P75Ms, 10)
+		attrs[AttrRunSamples] = strconv.Itoa(t.Samples)
+	}
+	if t.HitSamples > 0 {
+		attrs[AttrCacheHitRate] = strconv.FormatFloat(t.HitRate, 'f', 2, 64)
+	}
+	return attrs
 }
 
 // runtimeUnitID maps a DiagnosticEvent.Unit to a node ID: "<project>:<target>" for

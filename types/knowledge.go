@@ -61,6 +61,21 @@ const (
 	ConfidenceInferred  = "inferred"
 )
 
+// KnowledgeTiming is one target's observed run cost, gathered from the local
+// timing history and folded onto the target node in the isolated @runtime shard
+// (observed, non-deterministic, never remote-shared). It is an assembly input, not
+// a wire type: Project and Target name the node, the rest annotate it. Samples is
+// the duration-percentile sample count; HitSamples is the hit-rate denominator
+// (hits + misses), so a consumer can tell a cold rate from a settled one.
+type KnowledgeTiming struct {
+	Project    string
+	Target     string
+	P75Ms      int64
+	Samples    int
+	HitRate    float64
+	HitSamples int
+}
+
 // KnowledgeNode is one vertex: a magus-domain entity with stable identity and
 // provenance. ID is "<kind>:<qualified-name>" (e.g. "target:pkg/foo:build"),
 // stable across builds so external consumers and agent memory can key on it.

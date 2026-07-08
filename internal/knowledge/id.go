@@ -102,3 +102,18 @@ const (
 	// AttrTags is a doc page's frontmatter tags, comma-joined.
 	AttrTags = "tags"
 )
+
+// Runtime-performance attribute keys. Unlike the static keys above these are
+// OBSERVED (from local run history, not workspace sources), so they ride the
+// isolated @runtime shard: an agent planning work sees a target's cost without a
+// separate history query, and the observed/derived split stays clean. Absent when
+// no history backs the target.
+const (
+	// AttrDurationP75Ms is a target's p75 run duration in milliseconds.
+	AttrDurationP75Ms = "duration_p75_ms"
+	// AttrCacheHitRate is a target's rolling cache hit rate, formatted "0.NN".
+	AttrCacheHitRate = "cache_hit_rate"
+	// AttrRunSamples is how many timed runs back the duration percentile - the
+	// confidence behind duration_p75_ms.
+	AttrRunSamples = "run_samples"
+)
