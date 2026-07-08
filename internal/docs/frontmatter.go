@@ -8,17 +8,63 @@ package docs
 import (
 	"fmt"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Frontmatter is the frontmatter a generated docs page carries. Title and Tags are
 // always emitted; PageType and Aliases only when set. Key order is fixed (title,
 // page_type, aliases, description, tags) so regenerated output stays byte-stable.
+// The yaml tags let ParseFrontmatter read back a block WriteFrontmatter emitted.
 type Frontmatter struct {
-	Title       string
-	PageType    string   // "overview" for hub/index pages; "" otherwise
-	Aliases     []string // old clean URLs that should redirect here (parity on a move)
-	Description string
-	Tags        []string
+	Title       string   `yaml:"title"`
+	PageType    string   `yaml:"page_type"` // "overview" for hub/index pages; "" otherwise
+	Aliases     []string `yaml:"aliases"`   // old clean URLs that should redirect here (parity on a move)
+	Description string   `yaml:"description"`
+	Tags        []string `yaml:"tags"`
+}
+
+// ParseFrontmatter reads a leading YAML frontmatter block (a "---" line, the YAML
+// body, then a closing "---" line) off a markdown document, returning the parsed
+// fields and ok=true. A document with no leading block, or one whose YAML does not
+// parse, yields a zero Frontmatter and ok=false - callers treat frontmatter as
+// best-effort metadata, never a hard error. It is the read counterpart to
+// WriteFrontmatter, kept here so both halves of the format live together.
+func ParseFrontmatter(content string) (Frontmatter, bool) {
+	// A frontmatter block must open on the very first line. Tolerate a UTF-8 BOM
+	// and either newline style, but nothing else before the fence.
+	rest := strings.TrimPrefix(content, "\ufeff")
+	if !strings.HasPrefix(rest, "---\n") && !strings.HasPrefix(rest, "---\r\n") {
+		return Frontmatter{}, false
+	}
+	nl := strings.IndexByte(rest, '\n')
+	body := rest[nl+1:]
+	// The closing fence is a line that is exactly "---" (its own YAML would read a
+	// bare "---" as a document separator, so scan lines rather than yaml-parse).
+	end := -1
+	for off := 0; off < len(body); {
+		line := body[off:]
+		if i := strings.IndexByte(line, '\n'); i >= 0 {
+			line = line[:i]
+		}
+		if strings.TrimRight(line, "\r") == "---" {
+			end = off
+			break
+		}
+		nlAt := strings.IndexByte(body[off:], '\n')
+		if nlAt < 0 {
+			break
+		}
+		off += nlAt + 1
+	}
+	if end < 0 {
+		return Frontmatter{}, false
+	}
+	var f Frontmatter
+	if err := yaml.Unmarshal([]byte(body[:end]), &f); err != nil {
+		return Frontmatter{}, false
+	}
+	return f, true
 }
 
 // WriteFrontmatter emits the site's YAML frontmatter block. Values containing a
