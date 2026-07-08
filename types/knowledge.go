@@ -80,6 +80,20 @@ type KnowledgeTiming struct {
 	HitRateSamples int
 }
 
+// KnowledgeVCS is one file's git history metadata (an assembly input, not a wire type),
+// folded onto the file node as attrs in the @vcs shard. It is EXTRACTED from git, not
+// inferred, and deterministic per commit: the same HEAD yields the same values, so the
+// shard is remote-shareable (unlike @runtime). Path is workspace-relative and matches a
+// file node's Source. Commits is the number of commits touching the file within the
+// scanned window; LastCommit/LastUnix are the most recent such commit's short SHA and
+// author time.
+type KnowledgeVCS struct {
+	Path       string
+	LastCommit string
+	LastUnix   int64
+	Commits    int
+}
+
 // KnowledgeSymbol is one code symbol ingested from a SCIP index (an assembly input,
 // not a wire type). magus never parses source; a per-language indexer emits the
 // index file and this is the language-agnostic shape the reader distills it to. Key

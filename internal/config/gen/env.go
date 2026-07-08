@@ -181,6 +181,14 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Knowledge.MaxSizeMB = n
 		}
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_VCS_ENABLED"); v != "" {
+		cfg.Knowledge.VCS.Enabled = parseBoolEnv(v, cfg.Knowledge.VCS.Enabled)
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_VCS_MAX_COMMITS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Knowledge.VCS.MaxCommits = n
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Concurrency = n

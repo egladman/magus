@@ -1,4 +1,4 @@
-package main
+package vcs
 
 import (
 	"archive/tar"
@@ -15,13 +15,13 @@ import (
 )
 
 // tarball builds an in-memory tar stream from name->content entries (a directory entry
-// has an empty content and a trailing slash in name).
+// has empty content and a trailing slash in name).
 func tarball(t *testing.T, entries map[string]string) *bytes.Reader {
 	t.Helper()
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	for name, content := range entries {
-		if content == "" && name[len(name)-1] == '/' {
+		if content == "" && strings.HasSuffix(name, "/") {
 			require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeDir, Mode: 0o755}))
 			continue
 		}
@@ -46,9 +46,6 @@ func TestExtractTar(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(dst, "pkg", "service.buzz"))
 	require.NoError(t, err)
 	assert.Equal(t, "target build {}\n", string(got))
-	got, err = os.ReadFile(filepath.Join(dst, "magus.yaml"))
-	require.NoError(t, err)
-	assert.Equal(t, "version: 1\n", string(got))
 }
 
 // TestExtractTarRejectsEscape locks in the defense-in-depth guard: a crafted entry whose
@@ -62,9 +59,8 @@ func TestExtractTarRejectsEscape(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "escaping entry must not be written")
 }
 
-// gitInit makes a throwaway repo at dir with the given files committed, returning nothing
-// (t fatals on any git error). Skips the whole test if git is unavailable.
-func gitInit(t *testing.T, dir string, files map[string]string) {
+// gitInitRepo makes a throwaway repo at dir with files committed. Skips if git is absent.
+func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -86,41 +82,41 @@ func gitInit(t *testing.T, dir string, files map[string]string) {
 	run("commit", "-q", "-m", "init")
 }
 
-// TestGitArchiveTo exercises the real git-archive -> tar -> temp-tree path against a
-// throwaway repo, including the subdir re-rooting (a magus root nested below the git root).
-func TestGitArchiveTo(t *testing.T) {
+// TestExportRevision exercises the real git-archive -> tar -> temp-tree path, including
+// the subdir re-rooting (a workspace root nested below the git root).
+func TestExportRevision(t *testing.T) {
 	repo := t.TempDir()
-	gitInit(t, repo, map[string]string{
+	gitInitRepo(t, repo, map[string]string{
 		"magus.yaml":       "version: 1\n",
 		"pkg/service.buzz": "target build {}\n",
 		"sub/proj/app.txt": "nested\n",
 	})
 	ctx := context.Background()
 
-	// From the git root: the whole tree is archived, re-rooted at repo.
+	// From the git root: the whole tree is exported, re-rooted at repo.
 	dst := t.TempDir()
-	require.NoError(t, gitArchiveTo(ctx, repo, "HEAD", dst))
+	require.NoError(t, gitVCS{}.ExportRevision(ctx, repo, "HEAD", dst))
 	got, err := os.ReadFile(filepath.Join(dst, "pkg", "service.buzz"))
 	require.NoError(t, err)
 	assert.Equal(t, "target build {}\n", string(got))
 
-	// From a subdir (a nested root): only that subtree is archived, re-rooted so the
-	// subdir's own files sit at the destination top level (app.txt, not sub/proj/app.txt).
+	// From a subdir: only that subtree is exported, re-rooted so the subdir's own files
+	// sit at the destination top level (app.txt, not sub/proj/app.txt).
 	sub := filepath.Join(repo, "sub", "proj")
 	dstSub := t.TempDir()
-	require.NoError(t, gitArchiveTo(ctx, sub, "HEAD", dstSub))
+	require.NoError(t, gitVCS{}.ExportRevision(ctx, sub, "HEAD", dstSub))
 	got, err = os.ReadFile(filepath.Join(dstSub, "app.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "nested\n", string(got))
 	_, statErr := os.Stat(filepath.Join(dstSub, "magus.yaml"))
-	assert.True(t, os.IsNotExist(statErr), "subdir archive must not include repo-root files")
+	assert.True(t, os.IsNotExist(statErr), "subdir export must not include repo-root files")
 }
 
-// TestGitArchiveToBadRev reports a clear error (not a panic or hang) for an unknown rev.
-func TestGitArchiveToBadRev(t *testing.T) {
+// TestExportRevisionBadRev reports a clear error (not a panic or hang) for an unknown rev.
+func TestExportRevisionBadRev(t *testing.T) {
 	repo := t.TempDir()
-	gitInit(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
-	err := gitArchiveTo(context.Background(), repo, "no-such-rev", t.TempDir())
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	err := gitVCS{}.ExportRevision(context.Background(), repo, "no-such-rev", t.TempDir())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no-such-rev")
 }

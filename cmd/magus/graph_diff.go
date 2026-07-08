@@ -1,15 +1,11 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -18,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // graphDiff reports how the knowledge graph changed relative to a baseline: the nodes
@@ -85,7 +82,14 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	diff := knowledge.DiffGraphs(baseLabel, baseline, g.Output())
+	current := g.Output()
+	// @vcs enrichment (opt-in) stamps commit-varying attrs on file nodes. They are not
+	// domain shape, and the base side never has them (a --rev export tree has no history,
+	// and an exported baseline predates the current commit), so keeping them would report
+	// nearly every file node as changed. Strip them from both sides for a structural diff.
+	stripVCSAttrs(&baseline)
+	stripVCSAttrs(&current)
+	diff := knowledge.DiffGraphs(baseLabel, baseline, current)
 
 	switch outOpts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -120,6 +124,37 @@ func diffBaseline(ctx context.Context, root, rev string, pos []string) (types.Kn
 		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: decode baseline %q (expected `magus graph export -o json` output): %w", baselinePath, err)
 	}
 	return baseline, baselinePath, nil
+}
+
+// stripVCSAttrs removes the @vcs enrichment attrs (the "vcs_" namespace: last commit,
+// date, count) from every node, so a graph diff reflects domain shape rather than which
+// files got new commits since the base. See graphDiff for why both sides are stripped.
+// It replaces (never mutates) a node's Attrs map: Graph.Output() shares the live graph's
+// maps by reference, so deleting in place would corrupt the source graph.
+func stripVCSAttrs(g *types.KnowledgeGraphOutput) {
+	for i := range g.Nodes {
+		src := g.Nodes[i].Attrs
+		hasVCS := false
+		for k := range src {
+			if strings.HasPrefix(k, "vcs_") {
+				hasVCS = true
+				break
+			}
+		}
+		if !hasVCS {
+			continue // nothing to strip; leave the shared map untouched
+		}
+		kept := make(map[string]string, len(src))
+		for k, v := range src {
+			if !strings.HasPrefix(k, "vcs_") {
+				kept[k] = v
+			}
+		}
+		if len(kept) == 0 {
+			kept = nil
+		}
+		g.Nodes[i].Attrs = kept
+	}
 }
 
 // baselineHasSymbols reports whether an exported graph contains any symbol nodes, so the
@@ -256,12 +291,13 @@ func clip(s string) string {
 	return s
 }
 
-// baseGraphFromRev builds a base knowledge graph from a git revision's tracked files.
-// It streams `git archive <rev>` into a throwaway temp tree, then runs the ordinary
-// extraction pipeline there via a direct Inspect (NOT the memoized inspectWorkspace,
-// which panics on a second root). The result is domain-only and reflects the CURRENT
-// config applied to the revision's files - a historical-config diff would need the rev's
-// own config threaded through, which is deliberately out of scope here.
+// baseGraphFromRev builds a base knowledge graph from a revision's tracked files. It
+// materializes the revision into a throwaway temp tree via the VCS abstraction (any
+// backend implementing RevisionExporter; git does, and one that does not gives a clear
+// error), then runs the ordinary extraction pipeline there via a direct Inspect (NOT the
+// memoized inspectWorkspace, which panics on a second root). The result is domain-only
+// and reflects the CURRENT config applied to the revision's files - a historical-config
+// diff would need the rev's own config threaded through, deliberately out of scope here.
 //
 // The base build is pinned to an isolated, immutable cache under the temp tree: without
 // this, an absolute cache.dir / MAGUS_CACHE_DIR would make resolveCacheDir ignore the
@@ -269,19 +305,31 @@ func clip(s string) string {
 // point (corrupting the base) and prune live shards on write. Isolated + immutable means
 // it assembles in memory and touches nothing outside the temp tree.
 func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGraphOutput, error) {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: --rev needs version control, but none resolved for this workspace")
+	}
+	exporter, ok := res.VCS.(types.RevisionExporter)
+	if !ok {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: --rev is not supported by %s; export a baseline with `graph export -o json` instead", res.Name)
+	}
+
 	tmp, err := os.MkdirTemp("", "magus-graph-diff-")
 	if err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: create temp tree: %w", err)
 	}
 	defer os.RemoveAll(tmp)
 
-	if err := gitArchiveTo(ctx, root, rev, tmp); err != nil {
-		return types.KnowledgeGraphOutput{}, err
+	if err := exporter.ExportRevision(ctx, root, rev, tmp); err != nil {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: export revision %q: %w", rev, err)
 	}
 
 	cfg := globalCfg
 	cfg.Cache.Dir = filepath.Join(tmp, ".magus-base-cache") // absolute -> wins over any env cache dir
 	cfg.Cache.Immutable = true
+	// The exported tree has no VCS metadata, so history enrichment can't run against it;
+	// disable it so the base is not asymmetrically missing @vcs attrs the current side has.
+	cfg.Knowledge.VCS.Enabled = false
 
 	ws, err := magus.Inspect(ctx, tmp, magus.WithLoadedConfig(cfg))
 	if err != nil {
@@ -292,92 +340,4 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: build graph for revision %q: %w", rev, err)
 	}
 	return g.Output(), nil
-}
-
-// gitArchiveTo extracts the tracked files at rev into dstDir, re-rooted at the magus
-// root. `git -C root archive <rev> -- .` limits the archive to root's own subtree and
-// emits paths relative to it, so the temp tree lines up with a plain Inspect(dstDir)
-// whether root is the git top-level or a nested subdir. It pipes through the stdlib tar
-// reader so no `tar` binary is required, and rejects any entry whose path escapes dstDir.
-func gitArchiveTo(ctx context.Context, root, rev, dstDir string) error {
-	cmd := exec.CommandContext(ctx, "git", "-C", root, "archive", "--format=tar", rev, "--", ".")
-	var errBuf bytes.Buffer
-	cmd.Stderr = &errBuf
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("graph diff: git archive pipe: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("graph diff: start git archive: %w", err)
-	}
-
-	extractErr := extractTar(stdout, dstDir)
-	// Drain any unread archive bytes unconditionally (even after an extract error) so git
-	// never blocks writing to a full pipe; only then is it safe to Wait (Wait closes the
-	// pipe). This ordering is load-bearing.
-	_, _ = io.Copy(io.Discard, stdout)
-	if waitErr := cmd.Wait(); waitErr != nil {
-		msg := strings.TrimSpace(errBuf.String())
-		if msg == "" {
-			msg = waitErr.Error()
-		}
-		return fmt.Errorf("graph diff: git archive %q failed: %s (check the revision exists and has tracked files here)", rev, msg)
-	}
-	if extractErr != nil {
-		return fmt.Errorf("graph diff: extract revision %q archive: %w", rev, extractErr)
-	}
-	return nil
-}
-
-// extractTar writes a tar stream into dstDir, creating parent directories as needed and
-// refusing any entry whose path would escape dstDir (git archive never emits such an
-// entry; the guard is defense in depth against a crafted path). Symlinks, hardlinks, and
-// other special entries are skipped with a debug log: the extraction feeds a read-only
-// graph build, so an escaping or dangling link has no value there.
-func extractTar(r io.Reader, dstDir string) error {
-	tr := tar.NewReader(r)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !filepath.IsLocal(hdr.Name) {
-			return fmt.Errorf("archive entry %q escapes the destination", hdr.Name)
-		}
-		target := filepath.Join(dstDir, filepath.FromSlash(hdr.Name))
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := writeTarEntry(tr, target, hdr); err != nil {
-				return err
-			}
-		default:
-			slog.Default().Debug("graph diff: skipping non-regular archive entry", "name", hdr.Name, "typeflag", hdr.Typeflag)
-		}
-	}
-}
-
-// writeTarEntry writes one regular-file entry to target.
-func writeTarEntry(tr *tar.Reader, target string, hdr *tar.Header) error {
-	f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode)&0o777)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(f, tr); err != nil {
-		f.Close()
-		return fmt.Errorf("write %q: %w", hdr.Name, err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("write %q: %w", hdr.Name, err)
-	}
-	return nil
 }
