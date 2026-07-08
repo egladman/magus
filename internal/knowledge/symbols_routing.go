@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,19 +16,58 @@ import (
 // The symbol xref routing file is a DERIVED index for scale-safe reverse lookup:
 // which @symbols shards must be loaded to see a given symbol's definition and every
 // reference to it. Without it, `magus refs S` loads every symbol shard; with it, an
-// exact-ID lookup loads only the shards that mention S. It is deterministic (a pure
-// function of the symbol shards), rebuilt whenever they change, and never the source
-// of truth - a missing or stale file just falls back to loading all symbol shards.
+// exact-ID lookup loads only the shards that mention S. It is a pure function of the
+// symbol shards, and it is NEVER the source of truth: a missing, corrupt, STALE, or
+// unhelpful routing file just falls back to loading all symbol shards, so it can only
+// ever make a lookup faster, never wrong.
 
-// symbolsRoutingFile is the derived xref index, written beside the shards. Keyed by a
-// hash of the symbol node ID (compact at millions of symbols) to the sorted names of
-// the shards whose index mentions that symbol.
+// symbolsRoutingFile is the derived xref index, written beside the shards.
 const symbolsRoutingFile = "@symbols.routing.json"
 
-// symbolRefKey hashes a symbol node ID to the routing file's compact key.
+// symbolRouting is the persisted index plus the key that binds it to the exact symbol
+// shards it was built from. On read, a ShardsKey that does not match the current
+// manifest means the shards moved since the file was written (a swallowed write, an
+// immutable run, or a crash between the manifest and this file) - it is stale and
+// ignored, so a stale file degrades to load-all rather than an under-load.
+type symbolRouting struct {
+	// ShardsKey hashes the current symbol shards' (name, fingerprint); the Index is
+	// valid exactly while it is unchanged.
+	ShardsKey string `json:"shards_key"`
+	// Index maps a symbol-id hash (compact at millions of symbols) to the sorted names
+	// of the shards whose index mentions that symbol.
+	Index map[string][]string `json:"index"`
+}
+
+// symbolRefKey hashes a symbol node ID to the routing index's compact key.
 func symbolRefKey(symbolID string) string {
 	sum := sha256.Sum256([]byte(symbolID))
 	return hex.EncodeToString(sum[:8])
+}
+
+// symbolShardsKey hashes the sorted (name, fingerprint) of every symbol shard in the
+// manifest - the identity the routing index is bound to. Empty when there are none.
+func symbolShardsKey(man *manifest) string {
+	if man == nil {
+		return ""
+	}
+	var names []string
+	for name := range man.Shards {
+		if IsSymbolsShard(name) {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	slices.Sort(names)
+	h := sha256.New()
+	for _, name := range names {
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		h.Write([]byte(man.Shards[name].Fingerprint))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)[:8])
 }
 
 // buildXref indexes every symbol node in the given shards to the shard names it
@@ -67,19 +105,19 @@ func buildXref(shards []Shard) map[string][]string {
 
 func (s *Store) routingPath() string { return filepath.Join(s.dir, "shards", symbolsRoutingFile) }
 
-// writeXref persists the routing index (or removes a stale one when no symbols exist),
-// so the file is present exactly when it is useful. Best-effort at the write layer:
-// callers treat a routing failure as non-fatal (the graph still works, just without
-// the reverse-lookup shortcut).
-func (s *Store) writeXref(shards []Shard) error {
-	xref := buildXref(shards)
-	if len(xref) == 0 {
+// writeXref persists the routing index bound to man's symbol shards (or removes a
+// stale file when no symbols exist, so it is present exactly when useful). Best-effort
+// at the write layer: callers treat a failure as non-fatal (the graph still works,
+// lookups just fall back to loading all symbol shards).
+func (s *Store) writeXref(shards []Shard, man manifest) error {
+	index := buildXref(shards)
+	if len(index) == 0 {
 		if err := os.Remove(s.routingPath()); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	}
-	b, err := codec.MarshalIndent(xref, "", "  ")
+	b, err := codec.MarshalIndent(symbolRouting{ShardsKey: symbolShardsKey(&man), Index: index}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -89,47 +127,48 @@ func (s *Store) writeXref(shards []Shard) error {
 	return file.WriteFileAtomic(s.routingPath(), b, 0o644)
 }
 
-// readXref loads the routing index, or nil when it is absent/unreadable (the caller
-// then falls back to loading all symbol shards).
-func (s *Store) readXref() map[string][]string {
+// readXref loads the routing index, or nil when it is absent or unreadable.
+func (s *Store) readXref() *symbolRouting {
 	b, err := os.ReadFile(s.routingPath())
 	if err != nil {
 		return nil
 	}
-	var xref map[string][]string
-	if err := codec.Unmarshal(b, &xref); err != nil {
+	var r symbolRouting
+	if err := codec.Unmarshal(b, &r); err != nil {
 		return nil
 	}
-	return xref
+	return &r
 }
 
-// MergeSymbolShardsFor merges only the @symbols shards that mention the given symbol
-// IDs (per the routing index) into g, restoring an evicted shard from the remote as
-// needed. It is the targeted counterpart to MergeSymbolShards: a `magus refs S` on an
-// exact symbol ID loads a handful of shards instead of all of them. Falls back to a
-// full symbol load when the routing file is missing (never built, or a fuzzy ref
-// whose exact ID is not yet known).
-func (s *Store) MergeSymbolShardsFor(ctx context.Context, g *Graph, symbolIDs []string) error {
-	xref := s.readXref()
-	if xref == nil {
+// MergeSymbolShardsByID merges only the @symbols shards that mention the given symbol
+// IDs into g, for a scale-safe reverse lookup (`magus refs S` on an exact ID loads a
+// handful of shards, not all). It falls back to a FULL symbol load - never an
+// under-load - whenever the routing index cannot be trusted to be both fresh and
+// helpful: absent, corrupt, stale (its ShardsKey no longer matches the manifest), or
+// yielding no shards for these ids (a fuzzy symbol:-prefixed ref, or an unknown id).
+func (s *Store) MergeSymbolShardsByID(ctx context.Context, g *Graph, symbolIDs []string) error {
+	man := s.readManifestOrNil()
+	if man == nil {
+		return nil
+	}
+	routing := s.readXref()
+	if routing == nil || routing.ShardsKey != symbolShardsKey(man) {
 		return s.MergeSymbolShards(ctx, g)
 	}
 	want := map[string]bool{}
 	for _, id := range symbolIDs {
-		for _, name := range xref[symbolRefKey(id)] {
+		for _, name := range routing.Index[symbolRefKey(id)] {
 			want[name] = true
 		}
+	}
+	if len(want) == 0 {
+		return s.MergeSymbolShards(ctx, g)
 	}
 	names := make([]string, 0, len(want))
 	for name := range want {
 		names = append(names, name)
 	}
 	slices.Sort(names)
-
-	man := s.readManifestOrNil()
-	if man == nil {
-		return nil
-	}
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -137,16 +176,9 @@ func (s *Store) MergeSymbolShardsFor(ctx context.Context, g *Graph, symbolIDs []
 		if _, ok := man.Shards[name]; !ok {
 			continue // routing named a shard the manifest no longer has; skip
 		}
-		sf, err := s.readShard(name)
-		if err != nil {
-			if s.restoreShard(ctx, name, man.Shards[name].Fingerprint) == nil {
-				sf, err = s.readShard(name)
-			}
-			if err != nil {
-				return fmt.Errorf("knowledge: load symbol shard %q: %w", name, err)
-			}
+		if err := s.readMergeShard(ctx, g, man, name); err != nil {
+			return err
 		}
-		g.Merge(sf.Nodes, sf.Edges)
 	}
 	return nil
 }

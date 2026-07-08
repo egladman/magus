@@ -207,8 +207,11 @@ func MergeWorkspaceSymbols(ctx context.Context, ws types.Describer, root string,
 // whose exact ID is not yet known.
 func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Describer, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
 	store := symbolStore(ws, root, cfg, log)
+	// An exact symbol ID can route to just its shards; a fuzzy name (or any non-exact
+	// symbol: ref) yields no routing hit and MergeSymbolShardsByID falls back to loading
+	// all, so the fuzzy resolve still has every symbol to match against.
 	if strings.HasPrefix(ref, types.KindSymbol+":") {
-		return store.MergeSymbolShardsFor(ctx, g, []string{ref})
+		return store.MergeSymbolShardsByID(ctx, g, []string{ref})
 	}
 	return store.MergeSymbolShards(ctx, g)
 }

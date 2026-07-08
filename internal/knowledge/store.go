@@ -171,8 +171,9 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 		return nil, err
 	}
 	// Refresh the derived symbol xref routing index (best-effort: a failure just
-	// means `magus refs` falls back to loading all symbol shards, never a wrong result).
-	if err := s.writeXref(shards); err != nil {
+	// means `magus refs` falls back to loading all symbol shards, never a wrong result -
+	// the index is bound to newMan so a stale one is detected and ignored on read).
+	if err := s.writeXref(shards, newMan); err != nil {
 		s.log.Debug("knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
 	}
 	if old != nil {
@@ -206,20 +207,28 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 		if IsSymbolsShard(name) {
 			continue // lazily loaded via MergeSymbolShards, not part of the default graph
 		}
-		sf, err := s.readShard(name)
-		if err != nil {
-			// The file may have been LRU-evicted while its manifest entry stayed.
-			// Restore it from remote by fingerprint before giving up.
-			if s.restoreShard(ctx, name, man.Shards[name].Fingerprint) == nil {
-				sf, err = s.readShard(name)
-			}
-			if err != nil {
-				return nil, fmt.Errorf("knowledge: load shard %q: %w", name, err)
-			}
+		if err := s.readMergeShard(ctx, g, man, name); err != nil {
+			return nil, err
 		}
-		g.Merge(sf.Nodes, sf.Edges)
 	}
 	return g, nil
+}
+
+// readMergeShard reads shard name and merges it into g, restoring an LRU-evicted file
+// from the remote by fingerprint first. Shared by Load and the symbol-shard loaders.
+func (s *Store) readMergeShard(ctx context.Context, g *Graph, man *manifest, name string) error {
+	sf, err := s.readShard(name)
+	if err != nil {
+		// The file may have been LRU-evicted while its manifest entry stayed.
+		if s.restoreShard(ctx, name, man.Shards[name].Fingerprint) == nil {
+			sf, err = s.readShard(name)
+		}
+		if err != nil {
+			return fmt.Errorf("knowledge: load shard %q: %w", name, err)
+		}
+	}
+	g.Merge(sf.Nodes, sf.Edges)
+	return nil
 }
 
 // MergeSymbolShards merges every persisted @symbols shard into g in place, restoring
@@ -247,16 +256,9 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		sf, err := s.readShard(name)
-		if err != nil {
-			if s.restoreShard(ctx, name, man.Shards[name].Fingerprint) == nil {
-				sf, err = s.readShard(name)
-			}
-			if err != nil {
-				return fmt.Errorf("knowledge: load symbol shard %q: %w", name, err)
-			}
+		if err := s.readMergeShard(ctx, g, man, name); err != nil {
+			return err
 		}
-		g.Merge(sf.Nodes, sf.Edges)
 	}
 	return nil
 }
