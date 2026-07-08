@@ -15,143 +15,7 @@
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
-  <style>
-    :root { --pad: clamp(0.75rem, 2vw, 1.25rem); }
-    main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
-    .lede { color: var(--pico-muted-color); margin-top: -0.4rem; }
-
-    /* Node-kind palette. Categorical hues chosen to stay distinct on both Pico
-       themes; the explorer reads each --gk-<kind> at paint time (like mermaid.js
-       reads Pico's own variables), so a theme toggle re-tints the graph. */
-    :root {
-      --gk-project: #0a7ea4; --gk-spell: #8b5cf6; --gk-op: #a855f7; --gk-charm: #ec4899;
-      --gk-target: #2563eb; --gk-module: #059669; --gk-method: #10b981; --gk-import: #d97706;
-      --gk-function: #64748b; --gk-file: #94a3b8; --gk-doc: #0891b2; --gk-rationale: #ca8a04;
-      --gk-diagnostic: #dc2626;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
-        --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
-        --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
-        --gk-function: #94a3b8; --gk-file: #cbd5e1; --gk-doc: #22d3ee; --gk-rationale: #facc15;
-        --gk-diagnostic: #f87171;
-      }
-    }
-    [data-theme="dark"] {
-      --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
-      --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
-      --gk-function: #94a3b8; --gk-file: #cbd5e1; --gk-doc: #22d3ee; --gk-rationale: #facc15;
-      --gk-diagnostic: #f87171;
-    }
-
-    .pg-title { margin-bottom: 0.3rem; }
-    .pg-note {
-      margin: -0.15rem 0 var(--pad); font-size: 0.85rem; color: var(--pico-muted-color);
-    }
-    .pg-note code { font-size: 0.85em; }
-
-    /* The explorer is one app panel: a sidebar (search + node list), the canvas
-       stage, and an explain card that appears on selection. Uses Pico's stock
-       light/dark palette; regions are set apart by borders, not custom color. */
-    .graph-app {
-      display: grid;
-      grid-template-columns: 18rem 1fr;
-      grid-template-rows: minmax(0, 1fr);
-      gap: 0;
-      height: calc(100svh - 12rem);
-      min-height: 460px;
-      border: 1px solid var(--pico-muted-border-color);
-      border-radius: var(--pico-border-radius);
-      overflow: hidden;
-      background: var(--pico-card-background-color);
-      box-shadow: var(--pico-card-box-shadow);
-    }
-    /* When an explain card is present the app becomes three columns. The body
-       toggles .has-card via the explorer once a node is selected. */
-    body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
-
-    .graph-sidebar {
-      display: flex; flex-direction: column; min-height: 0;
-      border-right: 1px solid var(--pico-muted-border-color);
-      background: var(--pico-card-sectioning-background-color);
-    }
-    .sidebar-search { padding: 0.6rem; border-bottom: 1px solid var(--pico-muted-border-color); }
-    .sidebar-search input { margin: 0; font-size: 0.85rem; }
-    .sidebar-count { padding: 0.4rem 0.7rem; font-size: 0.72rem; color: var(--pico-muted-color); border-bottom: 1px solid var(--pico-muted-border-color); }
-    #node-list { flex: 1 1 auto; overflow-y: auto; margin: 0; padding: 0.3rem; list-style: none; }
-    #node-list li { list-style: none; margin: 0; }
-    .node-row {
-      width: 100%; margin: 0; padding: 0.32rem 0.45rem;
-      display: flex; align-items: center; gap: 0.5rem;
-      background: transparent; border: 0; border-radius: var(--pico-border-radius);
-      font-size: 0.8rem; text-align: left; color: var(--pico-color); cursor: pointer;
-    }
-    .node-row:hover { background: var(--pico-card-background-color); }
-    .node-row[aria-current="true"] { background: var(--pico-card-background-color); box-shadow: inset 0 0 0 1px var(--pico-primary); }
-    .row-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--pico-font-family-monospace); }
-    .row-kind { flex: 0 0 auto; font-size: 0.68rem; color: var(--pico-muted-color); }
-    .list-more { padding: 0.5rem 0.6rem; font-size: 0.72rem; }
-
-    .graph-stage { position: relative; min-width: 0; overflow: hidden; }
-    #graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-    #graph-legend {
-      position: absolute; top: 0.6rem; left: 0.6rem; margin: 0; padding: 0.5rem 0.65rem;
-      list-style: none; display: flex; flex-direction: column; gap: 0.15rem;
-      font-size: 0.72rem; line-height: 1.5;
-      background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
-      border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-      max-height: calc(100% - 1.2rem); overflow-y: auto;
-    }
-    #graph-legend li { list-style: none; display: flex; align-items: center; gap: 0.4rem; }
-    #graph-status {
-      position: absolute; bottom: 0.6rem; left: 0.6rem; right: 0.6rem;
-      padding: 0.35rem 0.6rem; font-size: 0.72rem; color: var(--pico-muted-color);
-      background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
-      border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-      pointer-events: none;
-    }
-    #graph-status.err { color: var(--pico-del-color); }
-
-    .kind-dot { flex: 0 0 auto; width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--dot, #888); display: inline-block; }
-
-    /* Explain card: a third column on wide screens; plain HTML dl content. */
-    #explain-card {
-      min-height: 0; overflow-y: auto; padding: 0.8rem;
-      border-left: 1px solid var(--pico-muted-border-color);
-      font-size: 0.82rem;
-    }
-    #explain-card[hidden] { display: none; }
-    .card-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
-    .card-head h2 { margin: 0; font-size: 1rem; font-family: var(--pico-font-family-monospace); overflow-wrap: anywhere; }
-    .kind-tag { margin-left: auto; font-size: 0.68rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.04em; }
-    #explain-card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.7rem; }
-    #explain-card dt { color: var(--pico-muted-color); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; padding-top: 0.15rem; }
-    #explain-card dd { margin: 0; overflow-wrap: anywhere; }
-    #explain-card code { font-size: 0.78em; }
-    .rel-group { margin-bottom: 0.4rem; }
-    .rel-name { display: block; font-size: 0.72rem; color: var(--pico-muted-color); margin-bottom: 0.15rem; }
-    .rel-count { opacity: 0.7; }
-    .node-ref, .node-row { font-family: inherit; }
-    .node-ref {
-      display: inline-block; margin: 0 0.15rem 0.15rem 0; padding: 0.05rem 0.4rem; width: auto;
-      font-size: 0.74rem; font-family: var(--pico-font-family-monospace);
-      background: var(--pico-card-sectioning-background-color); color: var(--pico-color);
-      border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
-    }
-    .node-ref:hover { border-color: var(--pico-primary); }
-    .muted { color: var(--pico-muted-color); }
-
-    /* Narrow screens: stack the columns; canvas gets a fixed height, the list and
-       card flow beneath it. */
-    @media (max-width: 900px) {
-      .graph-app, body.has-card .graph-app { grid-template-columns: 1fr; grid-auto-rows: min-content; height: auto; }
-      .graph-stage { height: 60svh; min-height: 320px; }
-      .graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pico-muted-border-color); }
-      #explain-card { border-left: 0; border-top: 1px solid var(--pico-muted-border-color); max-height: 50svh; }
-    }
-
-    .site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
-  </style>
+  <link rel="stylesheet" href="graph.css">
 </head>
 <body>
     <header class="site-header">
@@ -179,19 +43,74 @@
 
   <main class="container-fluid">
     <h1 class="pg-title">Graph Explorer</h1>
-    <p class="lede">The magus knowledge graph, force-directed and searchable. New to magus? <a href="../documentation/">Read the docs</a> or <a href="../tour/">take the tour</a>.</p>
-    <p class="pg-note">This view runs entirely in your browser. Run <code>magus graph explore</code> to open it seeded with your <em>own</em> workspace &mdash; your graph rides in the link's <code>#fragment</code>, which browsers never send to this server, so nothing leaves your machine. <a href="../download/">Install magus</a> to try it.</p>
+    <p class="lede">See how everything in a magus workspace connects: projects, targets, spells, and the rest.</p>
+    <p class="pg-note">Runs in your browser; nothing leaves your machine. <code>magus graph open</code> loads your own workspace here. <a href="../download/">Install magus</a>.</p>
+
+    <details class="query-help">
+      <summary>Query syntax</summary>
+      <div class="disclosure-body">
+      <p>The filter box speaks the same grammar as <code>magus query</code>. Terms are combined with AND and matched case-insensitively; click an example to run it.</p>
+      <dl>
+        <dt><button type="button" class="q-example" data-q="render"><code>render</code></button></dt>
+        <dd>Free text: match a node's id, label, or doc.</dd>
+        <dt><button type="button" class="q-example" data-q="kind:spell"><code>kind:spell</code></button></dt>
+        <dd>Only nodes of one kind: <code>project</code>, <code>target</code>, <code>spell</code>, <code>op</code>, <code>charm</code>, <code>module</code>, <code>method</code>, <code>import</code>, <code>function</code>, <code>file</code>, <code>doc</code>, <code>rationale</code>, <code>diagnostic</code>. (Or click a legend color.)</dd>
+        <dt><button type="button" class="q-example" data-q="project:website"><code>project:website</code></button></dt>
+        <dd>A project node and its targets.</dd>
+        <dt><button type="button" class="q-example" data-q="relation:uses"><code>relation:uses</code></button></dt>
+        <dd>Nodes touching a <code>uses</code> edge (any of <code>depends_on</code>, <code>contains</code>, <code>uses</code>, <code>calls</code>, <code>imports</code>, <code>references</code>, <code>documents</code>, <code>rationale_for</code>).</dd>
+        <dt><button type="button" class="q-example" data-q="id:build"><code>id:build</code></button></dt>
+        <dd>Substring match on the node id (e.g. <code>target:.:build</code>).</dd>
+        <dt><button type="button" class="q-example" data-q="-kind:function"><code>-kind:function</code></button></dt>
+        <dd>A leading <code>-</code> negates a term - exclude these.</dd>
+        <dt><button type="button" class="q-example" data-q="&quot;spell op&quot;"><code>"spell op"</code></button></dt>
+        <dd>Quote a value that contains spaces to keep it one term.</dd>
+        <dt><button type="button" class="q-example" data-q="kind:target -id:generate"><code>kind:target -id:generate</code></button></dt>
+        <dd>Combine terms; all must match. This lists targets whose id doesn't contain <code>generate</code>.</dd>
+      </dl>
+      <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
+      <p><b>Lenses</b> (mirroring <code>magus graph stats</code>): <button type="button" class="lens-btn q-example" data-lens="hubs"><code>hubs</code></button> the highest-degree "god" nodes, <button type="button" class="lens-btn q-example" data-lens="orphans"><code>orphans</code></button> nodes with no edges. <b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
+      </div>
+    </details>
+
+    <details class="display-help">
+      <summary>Display</summary>
+      <div class="disclosure-body">
+        <p class="control-label">Layout forces</p>
+        <div class="force-controls" role="group" aria-label="Layout forces">
+          <label>Repel <input type="range" id="force-charge" min="20" max="200" value="60" step="5"></label>
+          <label>Link length <input type="range" id="force-link" min="10" max="140" value="40" step="5"></label>
+          <label>Gravity <input type="range" id="force-gravity" min="0" max="10" value="2" step="1"></label>
+        </div>
+        <p class="control-label">Color groups</p>
+        <p>Paint every node matching a query one color, on top of the kind palette - keep several at once to compare slices of the graph.</p>
+        <div class="group-add-row">
+          <input id="group-query" type="text" placeholder="kind:spell" aria-label="Color-group query" spellcheck="false" autocomplete="off">
+          <input id="group-color" type="color" value="#e8590c" aria-label="Color-group color">
+          <button id="group-add" type="button" class="group-add-btn">Add</button>
+        </div>
+        <div id="group-list" aria-label="Color groups"></div>
+      </div>
+    </details>
 
     <section class="graph-app">
       <aside class="graph-sidebar">
         <div class="sidebar-search">
-          <input id="node-search" type="search" placeholder="Filter nodes by name..." aria-label="Filter nodes" spellcheck="false" autocomplete="off" disabled>
+          <input id="node-search" type="text" placeholder="Query: kind:spell, project:web, text..." aria-label="Query the graph" spellcheck="false" autocomplete="off" disabled>
         </div>
-        <div id="graph-count" class="sidebar-count">loading...</div>
-        <ul id="node-list" aria-label="Graph nodes"></ul>
+        <button id="list-toggle" class="sidebar-count" type="button" aria-expanded="false" aria-controls="node-list">
+          <span id="graph-count">loading...</span>
+          <span class="list-chev" aria-hidden="true"></span>
+        </button>
+        <ul id="node-list" aria-label="Graph nodes" hidden></ul>
       </aside>
 
       <div class="graph-stage">
+        <div class="stage-tools">
+          <button id="fit-btn" class="outline" type="button" title="Zoom to fit the whole graph (or the current matches)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span class="btn-label">Fit</span></button>
+          <button id="open-file-btn" class="outline" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span class="btn-label">Open file</span></button>
+          <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg><span class="btn-label">Fullscreen</span></button>
+        </div>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <ul id="graph-legend" aria-label="Node kinds"></ul>
         <p id="graph-status" role="status">Loading graph...</p>
@@ -200,7 +119,25 @@
       <div id="explain-card" aria-live="polite" hidden></div>
     </section>
 
-    <p class="pg-note"><input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file"> or drag a <code>graph.json</code> onto the canvas to explore a graph you exported with <code>magus graph export -o json</code>.</p>
+    <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
+
+    <details class="url-help">
+      <summary>Loading a graph by URL</summary>
+      <div class="disclosure-body">
+      <p><code>magus graph open</code> builds these links for you; the fragment (after <code>#</code>) is never sent to the server, so an inline graph stays local. The schemes are:</p>
+      <dl>
+        <dt><code>#data=&lt;blob&gt;</code></dt>
+        <dd>An inline graph: the node-link JSON, gzipped then base64url-encoded. Decoded in the browser. Bounded by the browser's URL length.</dd>
+        <dt><code>#src=&lt;url&gt;</code></dt>
+        <dd>A URL-encoded address the page fetches the JSON from - a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
+        <dt><code>#node=&lt;id&gt;</code></dt>
+        <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
+        <dt><code>#q=&lt;query&gt;</code></dt>
+        <dd>Apply a query on load (same grammar as <code>magus query</code>), e.g. <code>#q=kind:spell</code>.</dd>
+      </dl>
+      <p>Combine them with <code>&amp;</code>: <code>#data=...&amp;node=target:.:build</code>. A raw <code>graph.json</code> (from <code>magus graph export -o json</code>) also loads via the <b>Open file</b> button or drag-and-drop.</p>
+      </div>
+    </details>
 
     <noscript>
       <p style="color:var(--pico-muted-color);">The graph explorer needs JavaScript to lay out and render the graph. You can still <a href="./graph.json">download the raw graph JSON</a>, or read the <a href="../documentation/">documentation</a>.</p>

@@ -66,12 +66,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-two-concept-model" title="The two-concept model">The two-concept model</a></li><li><a href="#query-grammar" title="Query grammar">Query grammar</a></li><li><a href="#schema" title="Schema">Schema</a></li><li><a href="#file-layout" title="File layout">File layout</a></li><li><a href="#runtime-enrichment" title="Runtime enrichment">Runtime enrichment</a></li><li><a href="#exporting-to-external-tools" title="Exporting to external tools">Exporting to external tools</a></li><li><a href="#global-graph-across-workspaces" title="Global graph (across workspaces)">Global graph (across workspaces)</a></li><li><a href="#extraction-diagnostics" title="Extraction diagnostics">Extraction diagnostics</a></li><li><a href="#for-agents" title="For agents">For agents</a></li></ul>
+        <ul><li><a href="#the-two-concept-model" title="The two-concept model">The two-concept model</a></li><li><a href="#query-grammar" title="Query grammar">Query grammar</a></li><li><a href="#graph-explorer" title="Graph Explorer">Graph Explorer</a></li><li><a href="#schema" title="Schema">Schema</a></li><li><a href="#file-layout" title="File layout">File layout</a></li><li><a href="#runtime-enrichment" title="Runtime enrichment">Runtime enrichment</a></li><li><a href="#exporting-to-external-tools" title="Exporting to external tools">Exporting to external tools</a></li><li><a href="#global-graph-across-workspaces" title="Global graph (across workspaces)">Global graph (across workspaces)</a></li><li><a href="#extraction-diagnostics" title="Extraction diagnostics">Extraction diagnostics</a></li><li><a href="#for-agents" title="For agents">For agents</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">5 min read</small>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="knowledge-graph">Knowledge graph</h1>
 <p>The knowledge graph is a deterministic, cache-backed graph of the magus domain.
@@ -142,6 +142,27 @@ are scored with the same leaf-anchored fuzzy match that powers <code>magus where
 <p>A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (<code>--budget</code>, default 50), so a match on a high-degree node
 cannot pull in the whole graph.</p>
+<h2 id="graph-explorer">Graph Explorer</h2>
+<p><code>magus graph open</code> opens the graph in an interactive, force-directed
+<a href="../graph/">Graph Explorer</a> in your browser - <strong>privately</strong>. Your graph never
+leaves your machine: by default it rides in the link's URL <code>#fragment</code> (which
+browsers never send to a server), and <code>--serve</code> instead hands it to the page from
+an ephemeral <code>127.0.0.1</code> loopback server that serves once and stops. The hosted
+page is static; it decodes or fetches the graph locally.</p>
+<pre><code class="language-sh">magus graph open           # default: gzip'd into the URL fragment (small/medium graphs)
+magus graph open --serve   # loopback server (no size limit; serves once, then stops)
+magus graph open --print   # print the URL instead of opening a browser
+magus graph open --url &lt;base&gt;   # point at a self-hosted mirror of the explorer
+</code></pre>
+<p>The explorer's filter box speaks the <strong>same fielded grammar</strong> as <code>magus query</code>
+(<code>kind:</code>, <code>project:</code>, <code>relation:</code>, <code>id:</code>, free text, <code>&quot;quotes&quot;</code>, <code>-negation</code>); a
+query dims non-matching nodes so the subgraph stands out. Beyond the filter:
+double-click a node for its <strong>local graph</strong> (its neighborhood, <code>[</code>/<code>]</code> to change
+depth), click a legend color to isolate a kind, and use the <strong>hubs</strong>/<strong>orphans</strong>
+lenses (the visual twin of <code>magus graph stats</code>). The page is fully client-side and
+data-agnostic - it also loads any <code>graph.json</code> from <code>magus graph export -o json</code>
+via the Open-file button or drag-and-drop. This site's own graph is the
+<a href="../graph/">live demo</a>.</p>
 <h2 id="schema">Schema</h2>
 <p>A node is a magus-domain entity with a stable, human-readable ID
 (<code>&lt;kind&gt;:&lt;qualified-name&gt;</code>, e.g. <code>target:pkg/foo:build</code>). The ID is stable across
@@ -249,7 +270,7 @@ table, which is already in context in a fresh clone.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../search/?q=tag%3A%22graphml%22">graphml</a><a class="tag" href="../search/?q=tag%3A%22mcp%22">mcp</a></div>
-    <small>Last updated <time datetime="2026-07-08T03:03:22Z">July 8, 2026, 3:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a0b6c90b1b14e6062a1032387e5da0aa5edd08c9" data-tooltip="a0b6c90b1b14e6062a1032387e5da0aa5edd08c9" title="a0b6c90b1b14e6062a1032387e5da0aa5edd08c9">a0b6c90</a>)</small>
+    <small>Last updated <time datetime="2026-07-08T06:40:20Z">July 8, 2026, 6:40 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/adec1206f412a395fa0761d71025127fd5dc64ee" data-tooltip="adec1206f412a395fa0761d71025127fd5dc64ee" title="adec1206f412a395fa0761d71025127fd5dc64ee">adec120</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/02cb124d6f58483c8e4583cdaf5effa2d648540a"><code>02cb124</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - document the knowledge graph: docs/knowledge.md reference and a documentation index link</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

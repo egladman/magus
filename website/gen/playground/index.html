@@ -342,7 +342,14 @@
     // owns the editor + console UI (see cmd/buzz-playground). Streaming
     // instantiation with an ArrayBuffer fallback for browsers that reject the
     // wasm MIME type.
-    (function () {
+    //
+    // #src=<addr> loads a .buzz FROM a URL (e.g. a file's raw source link): we
+    // fetch it and rewrite the hash to #source=<base64url> BEFORE booting, so the
+    // existing #source path (WASM seed + editor) handles it unchanged. #source=
+    // wins if both are present. The fetched code is public source the link names;
+    // your own edits still never leave the tab.
+    (async function () {
+      await applyUrlParam();
       const go = new Go();
       const start = (r) => go.run(r.instance);
       WebAssembly.instantiateStreaming(fetch("buzz.wasm"), go.importObject)
@@ -352,6 +359,25 @@
           start(await WebAssembly.instantiate(bytes, go.importObject));
         });
     })();
+
+    async function applyUrlParam() {
+      const m = /(?:^|[#&])src=([^&]+)/.exec(location.hash);
+      if (!m) return;
+      if (/(?:^|[#&])source=/.test(location.hash)) return; // an explicit #source wins
+      try {
+        const addr = decodeURIComponent(m[1]);
+        const u = new URL(addr, location.href);
+        if (u.protocol !== "https:" && u.protocol !== "http:") return;
+        const r = await fetch(addr, { headers: { Accept: "text/plain" } });
+        if (!r.ok) return;
+        const text = await r.text();
+        const b64 = btoa(unescape(encodeURIComponent(text)))
+          .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        history.replaceState(null, "", "#source=" + b64);
+      } catch (e) {
+        /* leave the default example on any failure (bad URL, CORS, offline) */
+      }
+    }
   </script>
   <!-- The syntax-highlight overlay (<pre id="highlight">) is absolutely positioned,
        but its flex ancestors hand it an indefinite height, so inset:0 / height:100%

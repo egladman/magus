@@ -2,7 +2,8 @@
 title: knowledge-graph diagnostics
 page_type: overview
 description: Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.
-tags: [knowledge graph, diagnostics, error codes, MGS7xxx, extraction, buzz, docs]
+tags:
+  [knowledge graph, diagnostics, error codes, MGS7xxx, extraction, buzz, docs]
 ---
 
 # Knowledge-graph diagnostics

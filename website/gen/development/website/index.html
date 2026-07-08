@@ -65,7 +65,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-playground-editor" title="build-playground-editor">build-playground-editor</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
+        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-playground-editor" title="build-playground-editor">build-playground-editor</a></li><li><a href="#build-graph-explorer" title="build-graph-explorer">build-graph-explorer</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -81,7 +81,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="#glossary">Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>491 nodes</strong> and <strong>591 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>493 nodes</strong> and <strong>594 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -106,9 +106,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">12</td>
+<td style="text-align:right">13</td>
 <td><code>magus query kind:target</code></td>
-<td><code>generate</code>, <code>ci</code>, <code>format</code></td>
+<td><code>generate</code>, <code>preflight</code>, <code>ci</code></td>
 </tr>
 <tr>
 <td>spell</td>
@@ -156,11 +156,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>file</td>
 <td style="text-align:right">23</td>
 <td><code>magus query kind:file</code></td>
-<td><code>scribe.buzz</code>, <code>scribe_html.buzz</code>, <code>tour/12-magusfile.buzz</code></td>
+<td><code>scribe.buzz</code>, <code>magusfile.buzz</code>, <code>scribe_html.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">183</td>
+<td style="text-align:right">184</td>
 <td><code>magus query kind:function</code></td>
 <td><code>site_render</code>, <code>renderPage</code>, <code>strLess</code></td>
 </tr>
@@ -184,9 +184,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">12</td>
+<td style="text-align:right">13</td>
 <td><code>magus query project:.</code></td>
-<td><code>generate</code>, <code>ci</code>, <code>format</code></td>
+<td><code>generate</code>, <code>preflight</code>, <code>ci</code></td>
 </tr>
 </tbody>
 </table></figure>
@@ -234,6 +234,7 @@ graph LR
     ci(&quot;ci&quot;)
     build_playground(&quot;build-playground&quot;)
     build_playground_editor(&quot;build-playground-editor&quot;)
+    build_graph_explorer(&quot;build-graph-explorer&quot;)
     serve(&quot;serve&quot;)
   end
   preflight(&quot;preflight&quot;)
@@ -256,9 +257,10 @@ graph LR
   test --&gt; ci
   preflight --&gt; build_playground
   preflight --&gt; build_playground_editor
+  preflight --&gt; build_graph_explorer
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_playground,build_playground_editor,ci,serve anchor
+  class build_graph_explorer,build_playground,build_playground_editor,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 </code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
@@ -334,6 +336,16 @@ graph LR
 <p>build_playground_editor bundles the vendored CodeMirror editor into the committed website/gen/playground/editor.js — the editor analog of build_playground's committed buzz.wasm.</p>
 <p><strong>Defaults</strong></p>
 <pre><code class="language-sh">magus run build-playground-editor  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#preflight"><code>preflight</code></a></li>
+</ul>
+<p><strong>Details:</strong> uncached (always runs)</p>
+<h3 id="build-graph-explorer"><code>build-graph-explorer</code></h3>
+<p>build_graph_explorer bundles js/graph-explorer.js (d3-force + d3-zoom) into the committed website/gen/graph/explorer.js - the graph analog of build_playground_editor.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run build-graph-explorer  # from the workspace root
 </code></pre>
 <p><strong>Depends on:</strong></p>
 <ul>

@@ -1,7 +1,18 @@
 ---
 title: Knowledge graph
 description: The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.
-tags: [knowledge graph, query, explain, path, graph, schema, node-link, graphml, mcp]
+tags:
+  [
+    knowledge graph,
+    query,
+    explain,
+    path,
+    graph,
+    schema,
+    node-link,
+    graphml,
+    mcp,
+  ]
 ---
 
 # Knowledge graph
@@ -40,15 +51,15 @@ nodes, so an agent knows what exists before running anything.
 `magus query` takes free-text terms (AND) plus field filters and negation. Terms
 are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 
-| Form | Meaning |
-| --- | --- |
-| `build` | free text: match node IDs, labels, and docs |
-| `kind:spell` | only nodes of that kind |
-| `project:pkg/foo` | the project node and its targets |
-| `relation:uses` | seed from nodes touching a `uses` edge |
-| `id:build` | substring match on the node ID |
-| `-kind:op` | negation: exclude these |
-| `"exact phrase"` | a quoted span stays one term |
+| Form              | Meaning                                     |
+| ----------------- | ------------------------------------------- |
+| `build`           | free text: match node IDs, labels, and docs |
+| `kind:spell`      | only nodes of that kind                     |
+| `project:pkg/foo` | the project node and its targets            |
+| `relation:uses`   | seed from nodes touching a `uses` edge      |
+| `id:build`        | substring match on the node ID              |
+| `-kind:op`        | negation: exclude these                     |
+| `"exact phrase"`  | a quoted span stays one term                |
 
 A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node

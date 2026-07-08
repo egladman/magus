@@ -1,7 +1,18 @@
 ---
 title: Knowledge graph
 description: The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.
-tags: [knowledge graph, query, explain, path, graph, schema, node-link, graphml, mcp]
+tags:
+  [
+    knowledge graph,
+    query,
+    explain,
+    path,
+    graph,
+    schema,
+    node-link,
+    graphml,
+    mcp,
+  ]
 ---
 
 # Knowledge graph
@@ -40,19 +51,45 @@ nodes, so an agent knows what exists before running anything.
 `magus query` takes free-text terms (AND) plus field filters and negation. Terms
 are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 
-| Form | Meaning |
-| --- | --- |
-| `build` | free text: match node IDs, labels, and docs |
-| `kind:spell` | only nodes of that kind |
-| `project:pkg/foo` | the project node and its targets |
-| `relation:uses` | seed from nodes touching a `uses` edge |
-| `id:build` | substring match on the node ID |
-| `-kind:op` | negation: exclude these |
-| `"exact phrase"` | a quoted span stays one term |
+| Form              | Meaning                                     |
+| ----------------- | ------------------------------------------- |
+| `build`           | free text: match node IDs, labels, and docs |
+| `kind:spell`      | only nodes of that kind                     |
+| `project:pkg/foo` | the project node and its targets            |
+| `relation:uses`   | seed from nodes touching a `uses` edge      |
+| `id:build`        | substring match on the node ID              |
+| `-kind:op`        | negation: exclude these                     |
+| `"exact phrase"`  | a quoted span stays one term                |
 
 A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node
 cannot pull in the whole graph.
+
+## Graph Explorer
+
+`magus graph open` opens the graph in an interactive, force-directed
+[Graph Explorer](graph.html) in your browser - **privately**. Your graph never
+leaves your machine: by default it rides in the link's URL `#fragment` (which
+browsers never send to a server), and `--serve` instead hands it to the page from
+an ephemeral `127.0.0.1` loopback server that serves once and stops. The hosted
+page is static; it decodes or fetches the graph locally.
+
+```sh
+magus graph open           # default: gzip'd into the URL fragment (small/medium graphs)
+magus graph open --serve   # loopback server (no size limit; serves once, then stops)
+magus graph open --print   # print the URL instead of opening a browser
+magus graph open --url <base>   # point at a self-hosted mirror of the explorer
+```
+
+The explorer's filter box speaks the **same fielded grammar** as `magus query`
+(`kind:`, `project:`, `relation:`, `id:`, free text, `"quotes"`, `-negation`); a
+query dims non-matching nodes so the subgraph stands out. Beyond the filter:
+double-click a node for its **local graph** (its neighborhood, `[`/`]` to change
+depth), click a legend color to isolate a kind, and use the **hubs**/**orphans**
+lenses (the visual twin of `magus graph stats`). The page is fully client-side and
+data-agnostic - it also loads any `graph.json` from `magus graph export -o json`
+via the Open-file button or drag-and-drop. This site's own graph is the
+[live demo](graph.html).
 
 ## Schema
 
