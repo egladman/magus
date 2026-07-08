@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/interactive"
@@ -156,6 +158,45 @@ var skillFooter = fmt.Sprintf(
 // leaves the leading YAML frontmatter the Agent Skills spec requires untouched).
 func stampSkill(body []byte) []byte {
 	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), skillFooter...)
+}
+
+// footerVersionRe pulls the two versions out of an installed skill's footer, so a
+// drift check can compare them against the running binary without a byte diff.
+var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-schema-version: (\d+)`)
+
+// installedSkillPath is where a Claude install writes the skill, relative to a repo.
+const installedSkillPath = ".claude/skills/magus/SKILL.md"
+
+// skillDrift is the verdict of checking an installed skill against this binary.
+type skillDrift struct {
+	Installed bool // the skill file exists
+	Stale     bool // it exists but its version predates the binary's
+	Detail    string
+}
+
+// checkSkillDrift reads the installed skill under dir and reports whether it is
+// missing, current, or stale (its stamped versions older than the binary's). It is
+// the read half of the generated-by footer: install stamps the version, this tells
+// an operator or CI when a re-install is due after a magus upgrade.
+func checkSkillDrift(dir string) skillDrift {
+	body, err := os.ReadFile(filepath.Join(dir, installedSkillPath))
+	if err != nil {
+		return skillDrift{Detail: "not installed (run: magus agent install claude)"}
+	}
+	m := footerVersionRe.FindStringSubmatch(string(body))
+	if m == nil {
+		return skillDrift{Installed: true, Stale: true, Detail: "installed skill has no version footer; re-run: magus agent install claude --force"}
+	}
+	skillVer, _ := strconv.Atoi(m[1])
+	schemaVer, _ := strconv.Atoi(m[2])
+	if skillVer < agentSkillVersion || schemaVer < types.KnowledgeSchemaVersion {
+		return skillDrift{
+			Installed: true, Stale: true,
+			Detail: fmt.Sprintf("installed skill is stale (skill v%d/schema v%d; binary v%d/schema v%d); re-run: magus agent install claude --force",
+				skillVer, schemaVer, agentSkillVersion, types.KnowledgeSchemaVersion),
+		}
+	}
+	return skillDrift{Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", skillVer, schemaVer)}
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
