@@ -225,6 +225,19 @@ type Knowledge struct {
 	// (default) is unlimited - the store self-reconciles deleted projects, so a cap
 	// mainly bounds transient bloat.
 	MaxSizeMB int `yaml:"max_size_mb" validate:"gte=0"`
+	// Symbols declares SCIP index files to ingest as per-project symbol shards. Each
+	// entry names a project and a workspace-relative path to a .scip file a
+	// per-language indexer (scip-go, scip-typescript, ...) produced - usually a target
+	// output. Ingestion is EXPLICIT and opt-in: no declaration, no symbol shard. A
+	// declared index that does not exist yet (its target has not run) is simply
+	// skipped, so the shard appears once the index is built.
+	Symbols []SymbolIndex `yaml:"symbols"`
+}
+
+// SymbolIndex declares one project's SCIP index for symbol ingestion.
+type SymbolIndex struct {
+	Project string `yaml:"project"` // workspace-relative project path the symbols belong to
+	Index   string `yaml:"index"`   // workspace-relative path to the .scip index file
 }
 
 // Telemetry holds OpenTelemetry exporter settings. OFF by default; no magus-operated backend exists.

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 )
 
@@ -137,6 +138,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		Root:        root,
 		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
 		Timings:     loadKnowledgeTimings(ctx, cfg),
+		Symbols:     loadKnowledgeSymbols(cfg, root, log),
 	}
 	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
@@ -177,6 +179,35 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 		}
 		return cmp.Compare(a.Target, b.Target)
 	})
+	return out
+}
+
+// loadKnowledgeSymbols reads each declared SCIP index (best-effort) into per-project
+// symbol records for the @symbols shards. A missing index (its target has not run) or
+// an unreadable/undecodable one is skipped with a debug log, never an error - symbol
+// ingestion is an optional enrichment, so a bad index degrades to "no symbols for
+// that project" rather than failing every graph query.
+func loadKnowledgeSymbols(cfg config.Config, root string, log *slog.Logger) map[string][]types.KnowledgeSymbol {
+	if len(cfg.Knowledge.Symbols) == 0 {
+		return nil
+	}
+	out := map[string][]types.KnowledgeSymbol{}
+	for _, decl := range cfg.Knowledge.Symbols {
+		if decl.Project == "" || decl.Index == "" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, decl.Index))
+		if err != nil {
+			log.Debug("knowledge: skipping unreadable symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
+			continue
+		}
+		syms, err := symbols.ParseIndex(data)
+		if err != nil {
+			log.Debug("knowledge: skipping undecodable symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
+			continue
+		}
+		out[decl.Project] = syms
+	}
 	return out
 }
 
