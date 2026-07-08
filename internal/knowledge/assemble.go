@@ -60,6 +60,12 @@ func AssembleShards(in Inputs) []Shard {
 	for _, p := range in.Graph.Projects {
 		shards = append(shards, assembleProject(p))
 	}
+	// The path-bearing nodes CODEOWNERS is matched against: every project, plus buzz
+	// files once that shard is built below. Projects are known up front from the graph.
+	owned := make([]ownedNode, 0, len(in.Graph.Projects))
+	for _, p := range in.Graph.Projects {
+		owned = append(owned, ownedNode{ID: projectID(p.Path), Path: p.Path})
+	}
 	// Docs and buzz-source extraction scan the filesystem, so they run only when a
 	// workspace root is set (synthetic-Inputs tests leave it empty). Empty shards
 	// are dropped so no empty files are persisted.
@@ -69,6 +75,14 @@ func AssembleShards(in Inputs) []Shard {
 		}
 		if b := assembleBuzz(in.Root); len(b.Nodes) > 0 {
 			shards = append(shards, b)
+			for _, n := range b.Nodes {
+				if n.Kind == types.KindFile {
+					owned = append(owned, ownedNode{ID: n.ID, Path: n.Source})
+				}
+			}
+		}
+		if o := assembleOwners(in.Root, owned); len(o.Edges) > 0 {
+			shards = append(shards, o)
 		}
 	}
 	// The runtime shard carries both non-deterministic inputs: emits edges from

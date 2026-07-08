@@ -38,6 +38,7 @@ const (
 	KindFunction   = "function"  // a function in a .buzz file (phase 4)
 	KindImport     = "import"    // an unresolvable buzz import literal (phase 4)
 	KindRationale  = "rationale" // a NOTE/WHY/HACK/TODO comment (phase 4)
+	KindOwner      = "owner"     // a CODEOWNERS owner (@user, @org/team, email)
 )
 
 // Knowledge edge relations. Values are stable wire strings.
@@ -51,6 +52,7 @@ const (
 	RelationImports      = "imports"       // file->file / file->import (phase 4)
 	RelationRationaleFor = "rationale_for" // rationale->function (phase 4)
 	RelationEmits        = "emits"         // target->diagnostic, runtime (phase 8)
+	RelationOwns         = "owns"          // owner->project/file, from CODEOWNERS
 )
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
