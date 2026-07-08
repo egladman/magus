@@ -1,0 +1,7 @@
+# Vendored npm dependencies (website playground/graph explorer). Their bundled
+# READMEs and CHANGELOGs are third-party markdown we neither own nor format.
+node_modules/
+
+# Claude Code session worktrees: full repo checkouts owned by other sessions.
+# A root-scoped markdownlint walk must never check them.
+.claude/

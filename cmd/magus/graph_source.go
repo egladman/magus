@@ -108,6 +108,9 @@ func parseGitRemote(remote string) (host, owner, repo string) {
 	case strings.Contains(remote, "@") && strings.Contains(remote, ":"):
 		rest := remote[strings.Index(remote, "@")+1:]
 		i := strings.Index(rest, ":")
+		if i < 0 {
+			return "", "", ""
+		}
 		host = rest[:i]
 		path = strings.TrimPrefix(rest[i+1:], "/")
 	default:

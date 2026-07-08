@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -142,7 +143,10 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 	if err != nil {
 		return fmt.Errorf("start loopback server: %w", err)
 	}
-	addr := ln.Addr().(*net.TCPAddr)
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return fmt.Errorf("loopback listener has unexpected address type %T", ln.Addr())
+	}
 	srcURL := fmt.Sprintf("http://127.0.0.1:%d/graph.json", addr.Port)
 
 	served := make(chan struct{})
@@ -199,7 +203,7 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 		fmt.Fprintln(os.Stderr, "\ncanceled; loopback server stopped.")
 		return nil
 	case err := <-errc:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("loopback server: %w", err)
 		}
 		return nil

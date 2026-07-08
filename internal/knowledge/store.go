@@ -175,9 +175,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 	}
 	// Enforce the soft size cap last, once every current shard is on disk, so the
 	// newest shards survive and only cold ones are evicted.
-	if err := s.pruneToSize(); err != nil {
-		s.log.Debug("knowledge: shard prune failed", slog.String("error", err.Error()))
-	}
+	s.pruneToSize()
 	return g, nil
 }
 
@@ -237,14 +235,14 @@ func (s *Store) restoreShard(ctx context.Context, name, fp string) error {
 // from remote (restoreShard) or rebuilt from memory on the next sync. Newly
 // written shards have the newest mtime, so they are evicted last. A no-op when no
 // cap is set. Never evicts the manifest itself.
-func (s *Store) pruneToSize() error {
+func (s *Store) pruneToSize() {
 	if s.maxBytes <= 0 {
-		return nil
+		return
 	}
 	dir := filepath.Join(s.dir, "shards")
 	ents, err := os.ReadDir(dir)
 	if err != nil {
-		return nil // no shards dir yet; nothing to prune
+		return // no shards dir yet; nothing to prune
 	}
 	type shardStat struct {
 		path  string
@@ -262,7 +260,7 @@ func (s *Store) pruneToSize() error {
 		total += info.Size()
 	}
 	if total <= s.maxBytes {
-		return nil
+		return
 	}
 	slices.SortFunc(files, func(a, b shardStat) int { return cmp.Compare(a.mtime, b.mtime) }) // oldest first
 	for _, f := range files {
@@ -274,7 +272,6 @@ func (s *Store) pruneToSize() error {
 		}
 		total -= f.size
 	}
-	return nil
 }
 
 // --- manifest / shard IO ---
