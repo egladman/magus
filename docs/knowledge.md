@@ -66,6 +66,7 @@ are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 | `project:pkg/foo` | the project node and its targets            |
 | `relation:uses`   | seed from nodes touching a `uses` edge      |
 | `id:build`        | substring match on the node ID              |
+| `id:target:*build` | `*` wildcard: matches any run (in a value or free-text term) |
 | `-kind:op`        | negation: exclude these                     |
 | `"exact phrase"`  | a quoted span stays one term                |
 

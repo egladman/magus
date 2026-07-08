@@ -43,6 +43,7 @@ Free-text terms (AND) plus field filters and negation:
 - `project:pkg/foo` - a project and its targets
 - `relation:uses` - seed from nodes touching that edge
 - `id:build` - substring match on the node ID
+- `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
 - `-kind:op` - negation, exclude these
 - `"exact phrase"` - keep a quoted span as one term
 
