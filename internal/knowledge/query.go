@@ -39,6 +39,11 @@ func SeedsSymbols(input string) bool {
 // high-degree node cannot pull in the whole graph.
 const DefaultBudget = 50
 
+// wildcardTermScore is the flat credit a matched wildcard term contributes: a glob is
+// a boolean filter, not a relevance signal, so it scores like a doc hit (1) and lets
+// kindRank and ID order break ties among wildcard matches.
+const wildcardTermScore = 1
+
 // knownFields are the recognized field:value prefixes. kind/project/id constrain
 // which nodes match; relation constrains which edges a neighborhood traverses.
 var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true}
@@ -145,10 +150,10 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 // A relation-only query (no node constraints) matches nodes that touch such an
 // edge, so `magus query relation:uses` still resolves seeds.
 func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int, bool) {
-	if vals, ok := q.fields["kind"]; ok && !slices.Contains(vals, n.Kind) {
+	if vals, ok := q.fields["kind"]; ok && !matchesKind(n.Kind, vals) {
 		return 0, false
 	}
-	if vals := q.negFields["kind"]; slices.Contains(vals, n.Kind) {
+	if vals := q.negFields["kind"]; matchesKind(n.Kind, vals) {
 		return 0, false
 	}
 	if vals, ok := q.fields["project"]; ok && !matchesAnyProject(id, vals) {
@@ -164,10 +169,15 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		return 0, false
 	}
 
-	// Negated free text must not appear anywhere in the node's text.
+	// Negated free text must not appear anywhere in the node's text (a wildcard term
+	// excludes any node whose ID or label matches the glob).
 	hay := strings.ToLower(id + " " + n.Label + " " + n.Doc)
 	for _, t := range q.negTerms {
-		if strings.Contains(hay, strings.ToLower(t)) {
+		if hasWildcard(t) {
+			if globMatch(t, id) || globMatch(t, n.Label) {
+				return 0, false
+			}
+		} else if strings.Contains(hay, strings.ToLower(t)) {
 			return 0, false
 		}
 	}
@@ -181,8 +191,17 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 
 	// Every positive term must match (AND); score is the sum of best per-term
 	// leaf-anchored scores against ID and label, with a small credit for a doc hit.
+	// A wildcard term is a boolean glob filter (no fuzzy score), matched against ID and
+	// label; it contributes a flat credit so it ranks like a doc hit, not a leaf match.
 	total := 0
 	for _, t := range q.terms {
+		if hasWildcard(t) {
+			if !globMatch(t, id) && !globMatch(t, n.Label) {
+				return 0, false
+			}
+			total += wildcardTermScore
+			continue
+		}
 		best := max(interactive.LeafScore(id, t), interactive.LeafScore(n.Label, t))
 		if best == 0 {
 			if !strings.Contains(strings.ToLower(n.Doc), strings.ToLower(t)) {
@@ -573,6 +592,12 @@ func (g *Graph) touchesRelation(id string, rels []string) bool {
 // projects (the project node itself or one of its targets).
 func matchesAnyProject(id string, projects []string) bool {
 	for _, p := range projects {
+		if hasWildcard(p) {
+			if proj, ok := projectPathOf(id); ok && globMatch(p, proj) {
+				return true
+			}
+			continue
+		}
 		if id == types.KindProject+":"+p || strings.HasPrefix(id, types.KindTarget+":"+p+":") {
 			return true
 		}
@@ -580,14 +605,71 @@ func matchesAnyProject(id string, projects []string) bool {
 	return false
 }
 
+// containsAny reports whether hay matches any needle: a needle with a '*' matches by
+// glob, otherwise by case-insensitive substring (the pre-wildcard behavior).
 func containsAny(hay string, needles []string) bool {
 	lh := strings.ToLower(hay)
 	for _, n := range needles {
-		if strings.Contains(lh, strings.ToLower(n)) {
+		if hasWildcard(n) {
+			if globMatch(n, hay) {
+				return true
+			}
+		} else if strings.Contains(lh, strings.ToLower(n)) {
 			return true
 		}
 	}
 	return false
+}
+
+// hasWildcard reports whether a term or field value uses the '*' glob metacharacter.
+func hasWildcard(s string) bool { return strings.IndexByte(s, '*') >= 0 }
+
+// globMatch reports whether s matches a shell-style glob where '*' matches any run of
+// characters, INCLUDING none and including separators like '/' and ':' (node IDs are
+// full of both, so the gitignore-style "* stops at /" would be surprising here).
+// Case-insensitive. A pattern with no '*' is an exact match.
+func globMatch(pattern, s string) bool {
+	p, str := strings.ToLower(pattern), strings.ToLower(s)
+	parts := strings.Split(p, "*")
+	if len(parts) == 1 {
+		return p == str
+	}
+	if !strings.HasPrefix(str, parts[0]) {
+		return false
+	}
+	str = str[len(parts[0]):]
+	for _, mid := range parts[1 : len(parts)-1] {
+		i := strings.Index(str, mid)
+		if i < 0 {
+			return false
+		}
+		str = str[i+len(mid):]
+	}
+	return strings.HasSuffix(str, parts[len(parts)-1])
+}
+
+// matchesKind reports whether kind matches any of vals: a val with '*' by glob, else
+// by exact match (kinds are a small fixed set, so substring would over-match).
+func matchesKind(kind string, vals []string) bool {
+	for _, v := range vals {
+		if hasWildcard(v) {
+			if globMatch(v, kind) {
+				return true
+			}
+		} else if v == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// projectPathOf returns the workspace-relative project path a node ID belongs to: the
+// path itself for a project node, or the owning project for a target node.
+func projectPathOf(id string) (string, bool) {
+	if p, ok := strings.CutPrefix(id, types.KindProject+":"); ok {
+		return p, true
+	}
+	return projectOfTargetID(id)
 }
 
 func toSet(vals []string) map[string]bool {
