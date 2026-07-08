@@ -291,6 +291,52 @@ func (g *Graph) Query(input string, budget int) types.KnowledgeQueryOutput {
 	}
 }
 
+// QueryPage is Query with a match window: it returns the total MatchCount but only
+// the matches in [offset, offset+limit) (limit <= 0 means "to the end"), and builds
+// the neighborhood from that page's seeds so a page is a self-contained result. It
+// is the substrate for MCP pagination, where a large match set (symbol references)
+// must be returned across several bounded responses. offset past the end yields an
+// empty page with the true MatchCount, so a caller can stop.
+func (g *Graph) QueryPage(input string, budget, offset, limit int) types.KnowledgeQueryOutput {
+	if budget <= 0 {
+		budget = DefaultBudget
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	q := parseQuery(input)
+	matches := g.Resolve(input, 0)
+	total := len(matches)
+
+	page := matches
+	if offset < total {
+		page = matches[offset:]
+	} else {
+		page = nil
+	}
+	if limit > 0 && len(page) > limit {
+		page = page[:limit]
+	}
+
+	seeds := make([]string, len(page))
+	for i, m := range page {
+		seeds[i] = m.ID
+	}
+	sub := g.Neighborhood(seeds, budget, q.fields["relation"])
+	out := sub.Output()
+	return types.KnowledgeQueryOutput{
+		Definition:    types.KnowledgeQueryDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Query:         strings.TrimSpace(input),
+		Budget:        budget,
+		MatchCount:    total,
+		Offset:        offset,
+		Matches:       page,
+		Nodes:         out.Nodes,
+		Links:         out.Links,
+	}
+}
+
 // Select resolves the input to seeds and returns the induced neighborhood as a
 // node-link export (the emit side of `magus graph export --select`), sharing the
 // seed+neighborhood logic with Query so graph and query stay one substrate. An

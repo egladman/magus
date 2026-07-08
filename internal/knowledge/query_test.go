@@ -128,6 +128,42 @@ func TestQueryDeterministic(t *testing.T) {
 	assert.Equal(t, string(a), string(b))
 }
 
+func TestQueryPagePaginatesMatches(t *testing.T) {
+	g := sampleGraph()
+	all := g.Query("kind:target", 50)
+	require.GreaterOrEqual(t, all.MatchCount, 3, "fixture has several targets")
+
+	var paged []string
+	limit := 2
+	for offset := 0; offset < all.MatchCount; offset += limit {
+		page := g.QueryPage("kind:target", 50, offset, limit)
+		assert.Equal(t, all.MatchCount, page.MatchCount, "total is stable across pages")
+		assert.Equal(t, offset, page.Offset)
+		assert.LessOrEqual(t, len(page.Matches), limit)
+		paged = append(paged, matchIDs(page.Matches)...)
+	}
+	// Paging covers exactly the full ranked match set, in order, no dup or gap.
+	assert.Equal(t, matchIDs(all.Matches), paged)
+}
+
+func TestQueryPageOffsetPastEnd(t *testing.T) {
+	g := sampleGraph()
+	total := g.Query("kind:target", 50).MatchCount
+	page := g.QueryPage("kind:target", 50, total+10, 5)
+	assert.Empty(t, page.Matches, "offset past the end yields no matches")
+	assert.Equal(t, total, page.MatchCount, "but still reports the true total so a caller can stop")
+}
+
+func TestFingerprintStableAndSensitive(t *testing.T) {
+	a := sampleGraph().Fingerprint()
+	b := sampleGraph().Fingerprint()
+	assert.Equal(t, a, b, "identical graphs fingerprint identically")
+
+	g := sampleGraph()
+	g.AddNode(types.KnowledgeNode{ID: "target:pkg/z:new", Kind: types.KindTarget, Label: "new"})
+	assert.NotEqual(t, a, g.Fingerprint(), "a new node changes the fingerprint")
+}
+
 func TestSelectNeighborhoodExport(t *testing.T) {
 	g := sampleGraph()
 	full := g.Output()

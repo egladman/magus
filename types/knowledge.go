@@ -123,15 +123,20 @@ type KnowledgeMatch struct {
 // KnowledgeQueryOutput is the result of `magus query`: the ranked seed matches
 // plus the induced subgraph (neighborhood) collected up to the node budget. The
 // Nodes/Links carry the node-link keys so the subgraph is itself a valid export.
+// MatchCount is the TOTAL matches; when a page is requested (Offset > 0 or a
+// smaller Matches slice than MatchCount) the caller pages via Offset + len(Matches).
 type KnowledgeQueryOutput struct {
-	Definition    string           `json:"definition"     yaml:"definition"`
-	SchemaVersion int              `json:"schema_version" yaml:"schema_version"`
-	Query         string           `json:"query"          yaml:"query"`
-	Budget        int              `json:"budget"         yaml:"budget"`
-	MatchCount    int              `json:"match_count"    yaml:"match_count"`
-	Matches       []KnowledgeMatch `json:"matches"        yaml:"matches"`
-	Nodes         []KnowledgeNode  `json:"nodes"          yaml:"nodes"`
-	Links         []KnowledgeEdge  `json:"links"          yaml:"links"`
+	Definition    string `json:"definition"     yaml:"definition"`
+	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	Query         string `json:"query"          yaml:"query"`
+	Budget        int    `json:"budget"         yaml:"budget"`
+	MatchCount    int    `json:"match_count"    yaml:"match_count"`
+	// Offset is the index of the first returned match within the full ranked list;
+	// 0 (omitted) for an unpaged query or the first page.
+	Offset  int              `json:"offset,omitempty" yaml:"offset,omitempty"`
+	Matches []KnowledgeMatch `json:"matches"        yaml:"matches"`
+	Nodes   []KnowledgeNode  `json:"nodes"          yaml:"nodes"`
+	Links   []KnowledgeEdge  `json:"links"          yaml:"links"`
 }
 
 // KnowledgeEdgeRef is one edge seen from a focus node: the relation, the node on

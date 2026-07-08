@@ -2,6 +2,8 @@ package knowledge
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 
 	"github.com/egladman/magus/types"
@@ -170,6 +172,29 @@ func (g *Graph) Output() types.KnowledgeGraphOutput {
 		Nodes:         nodes,
 		Links:         edges,
 	}
+}
+
+// Fingerprint is a content hash of the graph's shape: the sorted node IDs and
+// edge keys. It identifies the graph state so a stateless pagination cursor can
+// detect that the graph changed underneath it (a warm-graph invalidation between
+// pages) and fail loudly rather than return an incoherent slice. Deterministic
+// (fed from the sorted Nodes/Edges), SHA256 to match the rest of the store.
+func (g *Graph) Fingerprint() string {
+	h := sha256.New()
+	for _, n := range g.Nodes() {
+		h.Write([]byte(n.ID))
+		h.Write([]byte{0})
+	}
+	h.Write([]byte{'\n'})
+	for _, e := range g.Edges() {
+		h.Write([]byte(e.Source))
+		h.Write([]byte{0})
+		h.Write([]byte(e.Target))
+		h.Write([]byte{0})
+		h.Write([]byte(e.Relation))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)[:8]) // 64-bit prefix: ample to spot a change
 }
 
 // --- cross-workspace union ---
