@@ -69,6 +69,7 @@ Start here to understand the model magus is built on.
 - [Sandbox model](sandbox.md) - the threat model and allowlist semantics that confine spell execution.
 - [Services](services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
 - [Wards](wards.md) - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).
+- [Knowledge graph](knowledge.md) - the deterministic, cache-backed graph of the magus domain that `magus query`/`explain`/`path` and agents read instead of grepping.
 - [Engines](engines.md) - how magus loads and evaluates a magusfile.
 
 ## Going further
@@ -99,5 +100,5 @@ The magusfile API and diagnostics:
 - [Configuration](config.md) - every `magus.yaml` key with its `MAGUS_*` environment variable, CLI flag, and type.
 - [Standard library modules](buzz/modules/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
 - [Spells reference](spells.md#built-in-spells) - the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
-- Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](codes/services/MGS5002.md)). Browse by family: [magusfile](codes/magusfile/README.md), [race](codes/race/README.md), [sandbox](codes/sandbox/README.md), and [services](codes/services/README.md).
+- Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](codes/services/MGS5002.md)). Browse by family: [magusfile](codes/magusfile/README.md), [race](codes/race/README.md), [sandbox](codes/sandbox/README.md), [services](codes/services/README.md), and [knowledge graph](codes/knowledge/README.md).
 - [Documentation conventions](conventions.md) - how placeholders, shell commands, runnable examples, and admonitions are written across these docs.

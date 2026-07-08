@@ -31,6 +31,9 @@
   <url><loc>https://eli.gladman.cc/magus/charms/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/charms/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/charms/MGS6001/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/knowledge/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/knowledge/MGS7001/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/knowledge/MGS7002/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1002/</loc></url>
@@ -77,6 +80,7 @@
   <url><loc>https://eli.gladman.cc/magus/getting-started/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/insight/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/knowledge/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-affected/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-completion/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/manpage/magus-config/</loc></url>

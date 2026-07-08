@@ -182,6 +182,17 @@ type MergeDriverInstaller interface {
 	CheckMergeDriver(ctx context.Context, root string) (bool, error)
 }
 
+// RemoteReporter is an optional capability for VCSDriver implementations that can
+// report the repository's default remote URL (e.g. git's "origin" fetch URL). It
+// lets callers derive a forge browse/blob URL for turning a workspace-relative
+// source path into a link. Like the other optional capabilities, callers
+// type-assert for it and degrade gracefully (no link) when a backend lacks it.
+type RemoteReporter interface {
+	// RemoteURL returns the default remote URL for the repository containing dir,
+	// or "" with ErrVCSUnsupported when there is no remote configured.
+	RemoteURL(ctx context.Context, dir string) (string, error)
+}
+
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {

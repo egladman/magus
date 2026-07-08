@@ -17,7 +17,7 @@ import "scribe";
 magus.project({
     // scribe.buzz is listed explicitly: magus tracks affected/drift off this
     // sources glob, not the import graph, so it must be named to be watched.
-    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html",
+    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html", "graph.html",
                 "tour/*.buzz",
                 "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
     "outputs": ["gen/**", "MAGUS.md"],
@@ -41,6 +41,10 @@ magus.project({
         // and is run by hand when the editor source changes; skipCache so a hit
         // never replays a stale bundle.
         "build-playground-editor": {"skipCache": true},
+        // build-graph-explorer bundles js/graph-explorer.js (d3-force) into the
+        // committed gen/graph/explorer.js - the graph analog of build-playground-editor.
+        // Same npm + esbuild path; run by hand when the explorer source changes.
+        "build-graph-explorer": {"skipCache": true},
     },
 });
 
@@ -150,6 +154,18 @@ export fun build_playground_editor(args: [str]) > void {
     os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
     os.exec("npm", ["run", "build-editor"], ".", {});
     magus.info("rebuilt website/gen/playground/editor.js - commit the result");
+}
+
+// build_graph_explorer bundles js/graph-explorer.js (d3-force + d3-zoom) into the
+// committed website/gen/graph/explorer.js - the graph analog of
+// build_playground_editor. The /graph/ page loads it to lay out and render the
+// knowledge graph on a canvas. Run by hand when js/graph-explorer.js or the pinned
+// d3 versions change, then commit explorer.js. Same npm ci + esbuild path.
+export fun build_graph_explorer(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+    os.exec("npm", ["run", "build-graph-explorer"], ".", {});
+    magus.info("rebuilt website/gen/graph/explorer.js - commit the result");
 }
 
 // serve watches ../docs and re-renders gen/ on change — handy for local docs

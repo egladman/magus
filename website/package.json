@@ -2,10 +2,11 @@
   "name": "magus-website-editor",
   "version": "0.0.0",
   "private": true,
-  "description": "Build-only dependencies for the playground's CodeMirror editor bundle. esbuild bundles js/editor.js into gen/playground/editor.js (a committed artifact, like gen/playground/buzz.wasm). Not part of the site's runtime dependency graph.",
+  "description": "Build-only dependencies for the committed browser bundles: the playground's CodeMirror editor (js/editor.js -> gen/playground/editor.js) and the graph explorer's d3-force view (js/graph-explorer.js -> gen/graph/explorer.js). esbuild bundles each into a committed artifact, like gen/playground/buzz.wasm. Not part of the site's runtime dependency graph.",
   "type": "module",
   "scripts": {
-    "build-editor": "esbuild js/editor.js --bundle --minify --format=esm --outfile=gen/playground/editor.js"
+    "build-editor": "esbuild js/editor.js --bundle --minify --format=esm --outfile=gen/playground/editor.js",
+    "build-graph-explorer": "esbuild js/graph-explorer.js --bundle --minify --format=esm --outfile=gen/graph/explorer.js"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.18.6",
@@ -15,6 +16,10 @@
     "@codemirror/search": "6.5.11",
     "@codemirror/state": "6.5.2",
     "@codemirror/view": "6.36.8",
-    "@lezer/highlight": "1.2.1"
+    "@lezer/highlight": "1.2.1",
+    "d3-drag": "3.0.0",
+    "d3-force": "3.0.0",
+    "d3-selection": "3.0.0",
+    "d3-zoom": "3.0.0"
   }
 }

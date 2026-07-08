@@ -24,7 +24,7 @@ import (
 // merged knowledge graph for external tools (export), and report its shape
 // (stats). One home instead of surfaces scattered across describe and insight.
 
-var graphSubs = []string{"deps", "export", "stats"}
+var graphSubs = []string{"deps", "export", "stats", "open"}
 
 func graphCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -39,6 +39,8 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 		return graphExport(ctx, root, rest)
 	case "stats":
 		return graphStats(ctx, root, rest)
+	case "open":
+		return graphOpen(ctx, root, rest)
 	default:
 		fmt.Fprintf(os.Stderr, "magus graph: unknown subcommand %q\n", sub)
 		if sug := interactive.SuggestNearest(sub, graphSubs); sug != "" {
@@ -60,6 +62,7 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|mermaid|tree)")
 	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot|mermaid neighborhood)")
 	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
+	fmt.Fprintln(os.Stderr, "  open     open this workspace's graph in the hosted explorer (delivered privately; data never leaves your machine)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "See also: magus query/explain/path (read the graph), magus insight (git-history analytics).")
 }
@@ -166,6 +169,11 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		if out.NodeCount == 0 {
 			fmt.Fprintf(os.Stderr, "magus graph export: no nodes matched --select %q\n", sel)
 		}
+	}
+	// The blob base lets a viewer link a node's relative `source` to the right repo.
+	// A --global union spans many repos, so a single base would be wrong: leave it off.
+	if !globalScope {
+		out.SourceBaseURL = deriveSourceBase(ctx, root)
 	}
 
 	switch opts.Format {

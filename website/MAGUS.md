@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](#glossary).
 
 ## Query first
 
-This workspace has a knowledge graph of **488 nodes** and **587 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **493 nodes** and **594 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -29,21 +29,21 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `.` |
-| target | 12 | `magus query kind:target` | `generate`, `ci`, `format` |
+| target | 13 | `magus query kind:target` | `generate`, `preflight`, `ci` |
 | spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
 | op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 21 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
+| diagnostic | 23 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
 | doc | 1 | `magus query kind:doc` | `MAGUS.md` |
-| file | 23 | `magus query kind:file` | `scribe.buzz`, `scribe_html.buzz`, `tour/12-magusfile.buzz` |
-| function | 182 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
+| file | 23 | `magus query kind:file` | `scribe.buzz`, `magusfile.buzz`, `scribe_html.buzz` |
+| function | 184 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
 | import | 23 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 12 | `magus query project:.` | `generate`, `ci`, `format` |
+| . | 13 | `magus query project:.` | `generate`, `preflight`, `ci` |
 
 ## Reading the graphs
 
@@ -98,6 +98,7 @@ graph LR
     ci("ci")
     build_playground("build-playground")
     build_playground_editor("build-playground-editor")
+    build_graph_explorer("build-graph-explorer")
     serve("serve")
   end
   preflight("preflight")
@@ -120,9 +121,10 @@ graph LR
   test --> ci
   preflight --> build_playground
   preflight --> build_playground_editor
+  preflight --> build_graph_explorer
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_playground,build_playground_editor,ci,serve anchor
+  class build_graph_explorer,build_playground,build_playground_editor,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 ```
@@ -239,6 +241,22 @@ build_playground_editor bundles the vendored CodeMirror editor into the committe
 
 ```sh
 magus run build-playground-editor  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+**Details:** uncached (always runs)
+
+### `build-graph-explorer`
+
+build_graph_explorer bundles js/graph-explorer.js (d3-force + d3-zoom) into the committed website/gen/graph/explorer.js - the graph analog of build_playground_editor.
+
+**Defaults**
+
+```sh
+magus run build-graph-explorer  # from the workspace root
 ```
 
 **Depends on:**

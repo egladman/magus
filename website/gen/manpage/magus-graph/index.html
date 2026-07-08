@@ -47,6 +47,7 @@
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../graph/">Graph</a></li>
         <li><a href="../../development/">Development</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -89,7 +90,10 @@ export   The merged knowledge graph: the deterministic, cache-backed graph of
 the magus domain (projects, targets, spells, ops, charms, modules,
 methods, diagnostics, docs, buzz sources). -o json emits the
 node-link form; -o graphml emits GraphML. External graph viewers
-(Gephi, yEd) read both directly. The graph is cache-backed under
+(Gephi, yEd) read both directly. --select &quot;&lt;terms&gt;&quot; narrows the
+export to a query's neighborhood (same engine as magus query); -o dot
+and -o mermaid render only with --select, since the full graph has too
+many nodes to lay out. The graph is cache-backed under
 &lt;cache&gt;/knowledge; only shards whose sources changed are rebuilt.
 stats    The graph's shape: god nodes (the most connected spells, modules,
 targets - where structural risk concentrates), orphans (docs that
@@ -109,11 +113,19 @@ every section to one node kind. insight report embeds this section.</p>
 </dl>
 <h3 id="graph-export-options">graph export options</h3>
 <dl>
+<dt><strong>--budget</strong> <em>int</em> (default: 50)</dt>
+<dd>Node budget for --select (how many nodes the neighborhood may collect)</dd>
+<dt><strong>--global</strong></dt>
+<dd>Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace</dd>
 <dt><strong>--refresh</strong></dt>
 <dd>Force a full graph rebuild before exporting</dd>
+<dt><strong>--select</strong> <em>string</em></dt>
+<dd>Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid</dd>
 </dl>
 <h3 id="graph-stats-options">graph stats options</h3>
 <dl>
+<dt><strong>--global</strong></dt>
+<dd>Union the workspaces registered in config (knowledge.workspaces) before computing stats</dd>
 <dt><strong>--kind</strong> <em>string</em></dt>
 <dd>Scope every section to one node kind (spell, target, doc, ...)</dd>
 <dt><strong>--refresh</strong></dt>
@@ -141,6 +153,9 @@ every section to one node kind. insight report embeds this section.</p>
 <p><em>GraphML for Gephi or yEd</em></p>
 <pre><code class="language-sh">magus graph export -o graphml &gt; graph.graphml
 </code></pre>
+<p><em>A query's neighborhood as Mermaid</em></p>
+<pre><code class="language-sh">magus graph export --select 'kind:spell go' -o mermaid
+</code></pre>
 <p><em>Where structural risk concentrates</em></p>
 <pre><code class="language-sh">magus graph stats
 </code></pre>
@@ -160,15 +175,15 @@ every section to one node kind. insight report embeds this section.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
         <a class="related-card" href="../../manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
         <a class="related-card" href="../../manpage/magus-completion/"><span class="related-card-title">magus completion</span><span class="related-card-desc">Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.</span></a>
         <a class="related-card" href="../../manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
-        <a class="related-card" href="../../manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+graph%22">magus graph</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22dependency+graph%22">dependency graph</a><a class="tag" href="../../search/?q=tag%3A%22export%22">export</a><a class="tag" href="../../search/?q=tag%3A%22graphml%22">graphml</a></div>
-    <small>Last updated <time datetime="2026-07-07T23:47:57Z">July 7, 2026, 11:47 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac" data-tooltip="b79201db380e5cd1ae586860878dce3571cddaac" title="b79201db380e5cd1ae586860878dce3571cddaac">b79201d</a>)</small>
+    <small>Last updated <time datetime="2026-07-08T03:03:22Z">July 8, 2026, 3:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/bdc3932d7c2e52998438ae95dac199aab709bb74" data-tooltip="bdc3932d7c2e52998438ae95dac199aab709bb74" title="bdc3932d7c2e52998438ae95dac199aab709bb74">bdc3932</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac"><code>b79201d</code></a> <small><time datetime="2026-07-07T23:47:57Z">Jul 7, 2026</time></small> - consolidate the knowledge-graph surface under a new magus graph verb: graph deps (standalone project DAG; run/affected --graph remain), graph export (was describe knowledge; adds -o graphml), graph stats (was insight structure; insight report still embeds it as graph_stats); hard-break the old spellings with pointers to the new home; rename KnowledgeStructure to KnowledgeStats; add a typed markdown builder (internal/render/md) and rewrite the MAGUS.md and insight-report renderers on it; ignore .claude/ in prettier; regenerate MAGUS.md, manpages, api.lock, and the website, sweeping in stale buf-spell docs and site drift from earlier commits</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-graph.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-graph.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>

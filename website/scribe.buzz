@@ -1165,7 +1165,7 @@ fun writeServiceWorker(site: Site) > void {
     // the old "magus-<HEAD short hash>" form, which changed on every commit, could
     // never contain its own commit's hash, and so perpetually drifted the gen gate.
     final precached = ["search-index.json", "playground/wasm_exec.js",
-        "playground/buzz.wasm", "main.js", "theme.js", "site.css", "theme.css"];
+        "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css", "main.js", "theme.js", "site.css", "theme.css"];
     var manifest = "";
     foreach (rel in precached) {
         final p = site.outDir + "/" + rel;
@@ -1493,6 +1493,7 @@ fun renderSiteNav(root: str, active: str) > str {
     links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
+    links.append({"href": root + "graph/", "label": "Graph", "current": active == "graph"});
     links.append({"href": root + "development/", "label": "Development", "current": active == "development"});
     return template.render(tmpl, {"root": root, "links": links});
 }
@@ -1550,6 +1551,23 @@ fun renderPlayground(site: Site) > void {
     html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
     fs.makeDirectory(site.outDir + "/playground");
     fs.writeFile(site.outDir + "/playground/index.html", html);
+}
+
+// renderGraph writes gen/graph/index.html from the hand-authored graph.html, injecting
+// the shared nav/footer - the graph-explorer analog of renderPlayground. The d3-force
+// bundle (gen/graph/explorer.js) is committed and rebuilt out of band by
+// build-graph-explorer, never by this render; graph.json is the committed demo graph
+// (the magus repo's own knowledge graph). Both sit alongside index.html and are left
+// untouched here (and by pruneStaleOutputs' alwaysKeep set), exactly like the
+// playground's WASM/editor bundle.
+fun renderGraph(site: Site) > void {
+    final f = io.File.open("graph.html", io.FileMode.read);
+    var html = f.readAll();
+    f.close();
+    html = html.replace("<!-- site-nav -->", renderSiteNav("../", "graph"));
+    html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
+    fs.makeDirectory(site.outDir + "/graph");
+    fs.writeFile(site.outDir + "/graph/index.html", html);
 }
 
 // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
@@ -2584,6 +2602,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
     os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + site.outDir + "/site.css"]);
     os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
+    // graph.css: the /graph/ Graph Explorer page's own stylesheet (its rules are
+    // page-scoped, so it loads only on /graph/, not every page like site.css).
+    fs.makeDirectory(site.outDir + "/graph");
+    os.execute(["sh", "-c", "esbuild graph.css --minify --outfile=" + site.outDir + "/graph/graph.css"]);
     os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + site.outDir + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
@@ -2596,6 +2618,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // so there is no external source copy to merge in; pruneStaleOutputs() also knows
     // to leave these three paths alone (see its alwaysKeep set).
     renderPlayground(site);
+    renderGraph(site);
 
     // Parse the changelog BEFORE the walk so renderPage() knows whether the releases
     // Atom feed will be written and can gate its <link rel=alternate> discovery
@@ -2784,6 +2807,8 @@ fun pruneStaleOutputs(site: Site) > void {
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,
         "playground/wasm_exec.js": true, "playground/editor.js": true,
+        "graph/index.html": true, "graph/explorer.js": true, "graph/graph.json": true,
+        "graph/graph.css": true,
     };
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);

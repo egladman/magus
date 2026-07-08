@@ -1,0 +1,46 @@
+# graph open opens the hosted, data-agnostic Graph Explorer seeded with this
+# workspace's graph carried in a URL fragment (private: a fragment is never sent
+# to the server). --print emits the URL instead of launching a browser, so it is
+# testable headlessly.
+exec magus graph open --print
+stdout 'https://eli\.gladman\.cc/magus/graph/#data='
+# the fragment is gzip+base64url (starts with the gzip magic H4sI in base64url)
+stdout '#data=H4sI'
+
+# the store is built cache-first, like export - no separate build verb.
+exists .magus/knowledge/manifest.json
+
+# --url points the same fragment at a self-hosted mirror (base gets one slash).
+exec magus graph open --print --url http://localhost:9999/graph/
+stdout 'http://localhost:9999/graph/#data=H4sI'
+
+# a base URL without a trailing slash still yields exactly one slash before #.
+exec magus graph open --print --url http://localhost:9999/graph
+stdout 'http://localhost:9999/graph/#data='
+! stdout 'graph//#data'
+
+# open is discoverable from the graph home and its usage explains privacy and
+# advertises both delivery modes (fragment + loopback --serve).
+exec magus graph -h
+stderr 'open'
+exec magus graph open -h
+stderr 'never leaves your machine'
+stderr '--serve'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+export fun build(args: [str]) > void {
+    magus.needs(magus.target.literal("lint"));
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

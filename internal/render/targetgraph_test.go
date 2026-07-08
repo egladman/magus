@@ -20,7 +20,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	for _, want := range []string{
 		"# Targets",
@@ -60,7 +60,7 @@ func TestWriteTargetGraphMarkdownHeadingAndOrder(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	assert.Contains(t, got, "## Project: magus", "heading should use the repo-relative path")
 	// The root project's invocation needs no path (it is the workspace root), so it
@@ -83,7 +83,7 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 
 	// Without routing, the section is absent.
 	var plain bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, nil, nil, ""))
 	assert.NotContains(t, plain.String(), "## Query first")
 
 	routing := &types.KnowledgeRouting{
@@ -92,7 +92,7 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 3, KeyTargets: []string{"ci"}}},
 	}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, routing))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, routing, ""))
 	got := b.String()
 	for _, want := range []string{
 		"## Query first",
@@ -116,7 +116,7 @@ func TestWriteTargetGraphMarkdownNestedInvocation(t *testing.T) {
 		Nodes:  []types.TargetGraphNode{{Name: "build"}},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	assert.Contains(t, got, "magus run build pkg/foo", "nested invocation names its project path")
 }
@@ -132,7 +132,7 @@ func TestWriteTargetGraphMarkdownInlineGraphs(t *testing.T) {
 		{Path: "web", Engine: "buzz", DependsOn: []string{"api"}, Nodes: []types.TargetGraphNode{{Name: "build"}}},
 	}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	assert.NotContains(t, got, "## Workspace overview", "the workspace-overview graph should be gone")
 	assert.Equal(t, 2, strings.Count(got, "**Run order**"), "want one inline graph per project (2)")
@@ -171,7 +171,7 @@ func TestWriteTargetGraphMarkdownDispatch(t *testing.T) {
 		},
 	}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, eval, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, eval, nil, ""))
 	got := b.String()
 	for _, want := range []string{
 		"<summary><b>Shared defaults</b>", // collapsed shared block
@@ -218,7 +218,7 @@ func TestWriteTargetGraphMarkdownLegend(t *testing.T) {
 		Nodes:  []types.TargetGraphNode{{Name: "build"}},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	for _, want := range []string{
 		"## Reading the graphs",
@@ -248,7 +248,7 @@ func TestWriteTargetGraphMarkdownCrossTargetDependencies(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	for _, want := range []string{
 		`xt_api_compile[["api:compile"]]`, // external target node
@@ -271,7 +271,7 @@ func TestWriteTargetGraphMarkdownDirection(t *testing.T) {
 		Nodes:  []types.TargetGraphNode{{Name: "ci", Dependencies: []string{"build"}}, {Name: "build"}},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	assert.Contains(t, got, "graph LR", "per-project graph should read left-to-right (graph LR)")
 	// Layout spacing rides in the Mermaid frontmatter config (no ELK on GitHub).
@@ -343,7 +343,7 @@ func TestWriteTargetGraphMarkdownToolchain(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
 	got := b.String()
 	for _, want := range []string{
 		"**Toolchain**",

@@ -69,6 +69,13 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 |------------|----------------------|------|------|
 | `hints.enabled` | `MAGUS_HINTS_ENABLED` | _(env only)_ | bool _(env only)_ |
 
+## knowledge
+
+| Config key | Environment variable | Flag | Type |
+|------------|----------------------|------|------|
+| `knowledge.max_size_mb` | `MAGUS_KNOWLEDGE_MAX_SIZE_MB` | `--knowledge-max-size-mb` | int |
+| `knowledge.workspaces` | `MAGUS_KNOWLEDGE_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
+
 ## log
 
 | Config key | Environment variable | Flag | Type |

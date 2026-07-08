@@ -20,6 +20,18 @@
   var ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
   var hadController = !!navigator.serviceWorker.controller;
 
+  // Name the surface the reader is actually on, so the update prompt reads
+  // naturally on the app-like pages ("the playground", "the graph explorer")
+  // instead of the generic "the docs". The service worker still updates the whole
+  // site at once - this is friendlier copy for where the reader stands, not a
+  // claim that only that page changed.
+  function pageSubject() {
+    var p = location.pathname.replace(/\/+$/, "");
+    if (/\/playground$/.test(p)) return "the playground";
+    if (/\/graph$/.test(p)) return "the graph explorer";
+    return "the docs";
+  }
+
   function showUpdateToast() {
     if (document.querySelector(".sw-toast")) return;
     var toast = document.createElement("div");
@@ -27,7 +39,7 @@
     toast.setAttribute("role", "status");
 
     var msg = document.createElement("span");
-    msg.textContent = "A newer version of the docs is available.";
+    msg.textContent = "A newer version of " + pageSubject() + " is available.";
     toast.appendChild(msg);
 
     var refresh = document.createElement("button");

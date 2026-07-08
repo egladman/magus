@@ -23,7 +23,7 @@ import (
 // it for any magus workspace, which is how a project's MAGUS.md is generated and
 // drift-checked. Markdown is target-graph-only (it backs MAGUS.md); the project
 // dependency graph offers only Mermaid/DOT (WriteGraphMermaid / WriteGraphDOT).
-func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map[string]types.EvaluatedTargetEntry, routing *types.KnowledgeRouting) error {
+func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map[string]types.EvaluatedTargetEntry, routing *types.KnowledgeRouting, explorerURL string) error {
 	var b md.Builder
 
 	b.Heading(1, "Targets")
@@ -40,6 +40,13 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 		{Code: "magus run <target>:<charm>", Note: "change HOW it runs (e.g. lint:rw)"},
 	})
 	b.Paragraph("Unfamiliar with a term? See the " + md.Link("Glossary", "#glossary") + ".")
+
+	// Prefer a picture: a link to the hosted Graph Explorer preloaded with this
+	// repo's committed graph.json (emitted only when that link resolves).
+	if explorerURL != "" {
+		b.Paragraph("Prefer a picture? Explore this graph in the " + md.Link("Graph Explorer", explorerURL) +
+			" - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).")
+	}
 
 	if routing != nil {
 		writeRouting(&b, *routing)

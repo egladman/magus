@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Graph Explorer — magus</title>
+  <meta name="description" content="Explore the magus knowledge graph in your browser: projects, targets, spells, ops, modules and their relations, force-directed and searchable. Open it seeded with your own workspace via `magus graph explore` — your data never leaves your machine.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/graph/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+  <style>
+    :root { --pad: clamp(0.75rem, 2vw, 1.25rem); }
+    main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
+    .lede { color: var(--pico-muted-color); margin-top: -0.4rem; }
+
+    /* Node-kind palette. Categorical hues chosen to stay distinct on both Pico
+       themes; the explorer reads each --gk-<kind> at paint time (like mermaid.js
+       reads Pico's own variables), so a theme toggle re-tints the graph. */
+    :root {
+      --gk-project: #0a7ea4; --gk-spell: #8b5cf6; --gk-op: #a855f7; --gk-charm: #ec4899;
+      --gk-target: #2563eb; --gk-module: #059669; --gk-method: #10b981; --gk-import: #d97706;
+      --gk-function: #64748b; --gk-file: #94a3b8; --gk-doc: #0891b2; --gk-rationale: #ca8a04;
+      --gk-diagnostic: #dc2626;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
+        --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
+        --gk-function: #94a3b8; --gk-file: #cbd5e1; --gk-doc: #22d3ee; --gk-rationale: #facc15;
+        --gk-diagnostic: #f87171;
+      }
+    }
+    [data-theme="dark"] {
+      --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
+      --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
+      --gk-function: #94a3b8; --gk-file: #cbd5e1; --gk-doc: #22d3ee; --gk-rationale: #facc15;
+      --gk-diagnostic: #f87171;
+    }
+
+    .pg-title { margin-bottom: 0.3rem; }
+    .pg-note {
+      margin: -0.15rem 0 var(--pad); font-size: 0.85rem; color: var(--pico-muted-color);
+    }
+    .pg-note code { font-size: 0.85em; }
+
+    /* The explorer is one app panel: a sidebar (search + node list), the canvas
+       stage, and an explain card that appears on selection. Uses Pico's stock
+       light/dark palette; regions are set apart by borders, not custom color. */
+    .graph-app {
+      display: grid;
+      grid-template-columns: 18rem 1fr;
+      grid-template-rows: minmax(0, 1fr);
+      gap: 0;
+      height: calc(100svh - 12rem);
+      min-height: 460px;
+      border: 1px solid var(--pico-muted-border-color);
+      border-radius: var(--pico-border-radius);
+      overflow: hidden;
+      background: var(--pico-card-background-color);
+      box-shadow: var(--pico-card-box-shadow);
+    }
+    /* When an explain card is present the app becomes three columns. The body
+       toggles .has-card via the explorer once a node is selected. */
+    body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
+
+    .graph-sidebar {
+      display: flex; flex-direction: column; min-height: 0;
+      border-right: 1px solid var(--pico-muted-border-color);
+      background: var(--pico-card-sectioning-background-color);
+    }
+    .sidebar-search { padding: 0.6rem; border-bottom: 1px solid var(--pico-muted-border-color); }
+    .sidebar-search input { margin: 0; font-size: 0.85rem; }
+    .sidebar-count { padding: 0.4rem 0.7rem; font-size: 0.72rem; color: var(--pico-muted-color); border-bottom: 1px solid var(--pico-muted-border-color); }
+    #node-list { flex: 1 1 auto; overflow-y: auto; margin: 0; padding: 0.3rem; list-style: none; }
+    #node-list li { list-style: none; margin: 0; }
+    .node-row {
+      width: 100%; margin: 0; padding: 0.32rem 0.45rem;
+      display: flex; align-items: center; gap: 0.5rem;
+      background: transparent; border: 0; border-radius: var(--pico-border-radius);
+      font-size: 0.8rem; text-align: left; color: var(--pico-color); cursor: pointer;
+    }
+    .node-row:hover { background: var(--pico-card-background-color); }
+    .node-row[aria-current="true"] { background: var(--pico-card-background-color); box-shadow: inset 0 0 0 1px var(--pico-primary); }
+    .row-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--pico-font-family-monospace); }
+    .row-kind { flex: 0 0 auto; font-size: 0.68rem; color: var(--pico-muted-color); }
+    .list-more { padding: 0.5rem 0.6rem; font-size: 0.72rem; }
+
+    .graph-stage { position: relative; min-width: 0; overflow: hidden; }
+    #graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+    #graph-legend {
+      position: absolute; top: 0.6rem; left: 0.6rem; margin: 0; padding: 0.5rem 0.65rem;
+      list-style: none; display: flex; flex-direction: column; gap: 0.15rem;
+      font-size: 0.72rem; line-height: 1.5;
+      background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
+      border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+      max-height: calc(100% - 1.2rem); overflow-y: auto;
+    }
+    #graph-legend li { list-style: none; display: flex; align-items: center; gap: 0.4rem; }
+    #graph-status {
+      position: absolute; bottom: 0.6rem; left: 0.6rem; right: 0.6rem;
+      padding: 0.35rem 0.6rem; font-size: 0.72rem; color: var(--pico-muted-color);
+      background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
+      border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+      pointer-events: none;
+    }
+    #graph-status.err { color: var(--pico-del-color); }
+
+    .kind-dot { flex: 0 0 auto; width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--dot, #888); display: inline-block; }
+
+    /* Explain card: a third column on wide screens; plain HTML dl content. */
+    #explain-card {
+      min-height: 0; overflow-y: auto; padding: 0.8rem;
+      border-left: 1px solid var(--pico-muted-border-color);
+      font-size: 0.82rem;
+    }
+    #explain-card[hidden] { display: none; }
+    .card-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+    .card-head h2 { margin: 0; font-size: 1rem; font-family: var(--pico-font-family-monospace); overflow-wrap: anywhere; }
+    .kind-tag { margin-left: auto; font-size: 0.68rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.04em; }
+    #explain-card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.7rem; }
+    #explain-card dt { color: var(--pico-muted-color); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; padding-top: 0.15rem; }
+    #explain-card dd { margin: 0; overflow-wrap: anywhere; }
+    #explain-card code { font-size: 0.78em; }
+    .rel-group { margin-bottom: 0.4rem; }
+    .rel-name { display: block; font-size: 0.72rem; color: var(--pico-muted-color); margin-bottom: 0.15rem; }
+    .rel-count { opacity: 0.7; }
+    .node-ref, .node-row { font-family: inherit; }
+    .node-ref {
+      display: inline-block; margin: 0 0.15rem 0.15rem 0; padding: 0.05rem 0.4rem; width: auto;
+      font-size: 0.74rem; font-family: var(--pico-font-family-monospace);
+      background: var(--pico-card-sectioning-background-color); color: var(--pico-color);
+      border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
+    }
+    .node-ref:hover { border-color: var(--pico-primary); }
+    .muted { color: var(--pico-muted-color); }
+
+    /* Narrow screens: stack the columns; canvas gets a fixed height, the list and
+       card flow beneath it. */
+    @media (max-width: 900px) {
+      .graph-app, body.has-card .graph-app { grid-template-columns: 1fr; grid-auto-rows: min-content; height: auto; }
+      .graph-stage { height: 60svh; min-height: 320px; }
+      .graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pico-muted-border-color); }
+      #explain-card { border-left: 0; border-top: 1px solid var(--pico-muted-border-color); max-height: 50svh; }
+    }
+
+    .site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
+  </style>
+</head>
+<body>
+    <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../graph/" aria-current="page">Graph</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+<!-- injected at build time by renderGraph() in scribe.buzz; edit renderSiteNav there -->
+
+  <main class="container-fluid">
+    <h1 class="pg-title">Graph Explorer</h1>
+    <p class="lede">The magus knowledge graph, force-directed and searchable. New to magus? <a href="../documentation/">Read the docs</a> or <a href="../tour/">take the tour</a>.</p>
+    <p class="pg-note">This view runs entirely in your browser. Run <code>magus graph explore</code> to open it seeded with your <em>own</em> workspace &mdash; your graph rides in the link's <code>#fragment</code>, which browsers never send to this server, so nothing leaves your machine. <a href="../download/">Install magus</a> to try it.</p>
+
+    <section class="graph-app">
+      <aside class="graph-sidebar">
+        <div class="sidebar-search">
+          <input id="node-search" type="search" placeholder="Filter nodes by name..." aria-label="Filter nodes" spellcheck="false" autocomplete="off" disabled>
+        </div>
+        <div id="graph-count" class="sidebar-count">loading...</div>
+        <ul id="node-list" aria-label="Graph nodes"></ul>
+      </aside>
+
+      <div class="graph-stage">
+        <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
+        <ul id="graph-legend" aria-label="Node kinds"></ul>
+        <p id="graph-status" role="status">Loading graph...</p>
+      </div>
+
+      <div id="explain-card" aria-live="polite" hidden></div>
+    </section>
+
+    <p class="pg-note"><input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file"> or drag a <code>graph.json</code> onto the canvas to explore a graph you exported with <code>magus graph export -o json</code>.</p>
+
+    <noscript>
+      <p style="color:var(--pico-muted-color);">The graph explorer needs JavaScript to lay out and render the graph. You can still <a href="./graph.json">download the raw graph JSON</a>, or read the <a href="../documentation/">documentation</a>.</p>
+    </noscript>
+  </main>
+
+    <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+
+
+  <script type="module" src="../main.js"></script>
+  <script type="module" src="explorer.js"></script>
+</body>
+</html>

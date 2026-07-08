@@ -47,6 +47,7 @@
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../graph/">Graph</a></li>
         <li><a href="../../development/" aria-current="page">Development</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -80,10 +81,11 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="#glossary">Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>1642 nodes</strong> and <strong>2842 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>1648 nodes</strong> and <strong>2856 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
+magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
 magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 </code></pre>
 <figure class="table-scroll"><table>
@@ -140,13 +142,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>diagnostic</td>
-<td style="text-align:right">21</td>
+<td style="text-align:right">23</td>
 <td><code>magus query kind:diagnostic</code></td>
 <td><code>MGS5002</code>, <code>MGS4001</code>, <code>MGS2001</code></td>
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">94</td>
+<td style="text-align:right">98</td>
 <td><code>magus query kind:doc</code></td>
 <td><code>docs/spells.md</code>, <code>docs/documentation.md</code>, <code>docs/sandbox.md</code></td>
 </tr>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Knowledge graph — magus</title>
+  <meta name="description" content="The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/knowledge/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Knowledge graph — magus">
+  <meta property="og:description" content="The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/knowledge/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#3178c6">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../graph/">Graph</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Knowledge graph</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/knowledge.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#the-two-concept-model" title="The two-concept model">The two-concept model</a></li><li><a href="#query-grammar" title="Query grammar">Query grammar</a></li><li><a href="#schema" title="Schema">Schema</a></li><li><a href="#file-layout" title="File layout">File layout</a></li><li><a href="#runtime-enrichment" title="Runtime enrichment">Runtime enrichment</a></li><li><a href="#exporting-to-external-tools" title="Exporting to external tools">Exporting to external tools</a></li><li><a href="#global-graph-across-workspaces" title="Global graph (across workspaces)">Global graph (across workspaces)</a></li><li><a href="#extraction-diagnostics" title="Extraction diagnostics">Extraction diagnostics</a></li><li><a href="#for-agents" title="For agents">For agents</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">5 min read</small>
+    <article>
+<h1 id="knowledge-graph">Knowledge graph</h1>
+<p>The knowledge graph is a deterministic, cache-backed graph of the magus domain.
+Every node and edge is EXTRACTED or rubric-INFERRED from workspace sources - no
+LLM pass, ever - so it is safe to rebuild implicitly and byte-for-byte
+reproducible from the same inputs. It is assembled from machinery magus already
+owns: the verified project dependency DAG, static magusfile extraction, the
+spell/module/diagnostic registries, markdown docs, and buzz source parsing.</p>
+<p>It exists so agents and humans can ask &quot;what is this, what touches it, how do
+these relate&quot; and get a precise answer instead of grepping. Agents reach it over
+MCP; humans reach it through three verbs and the <code>magus graph</code> home.</p>
+<h2 id="the-two-concept-model">The two-concept model</h2>
+<ul>
+<li><strong>query / explain / path READ the graph</strong> - daily retrieval.</li>
+<li><strong><code>magus graph</code> IS the graph</strong> - emit it (<code>deps</code>), export it (<code>export</code>), or
+measure its shape (<code>stats</code>).</li>
+</ul>
+<pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # ranked node matches plus their neighborhood
+magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
+magus path &lt;a&gt; &lt;b&gt;          # the shortest chain of edges between two nodes
+magus graph stats           # god nodes, orphans, doc coverage
+magus graph export -o json  # the whole graph as node-link JSON
+</code></pre>
+<p>The committed <code>MAGUS.md</code> routing table is the entry point: it lists every node
+kind with its count, the query that lists it, and the highest-degree anchor
+nodes, so an agent knows what exists before running anything.</p>
+<h2 id="query-grammar">Query grammar</h2>
+<p><code>magus query</code> takes free-text terms (AND) plus field filters and negation. Terms
+are scored with the same leaf-anchored fuzzy match that powers <code>magus where</code>.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Form</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>build</code></td>
+<td>free text: match node IDs, labels, and docs</td>
+</tr>
+<tr>
+<td><code>kind:spell</code></td>
+<td>only nodes of that kind</td>
+</tr>
+<tr>
+<td><code>project:pkg/foo</code></td>
+<td>the project node and its targets</td>
+</tr>
+<tr>
+<td><code>relation:uses</code></td>
+<td>seed from nodes touching a <code>uses</code> edge</td>
+</tr>
+<tr>
+<td><code>id:build</code></td>
+<td>substring match on the node ID</td>
+</tr>
+<tr>
+<td><code>-kind:op</code></td>
+<td>negation: exclude these</td>
+</tr>
+<tr>
+<td><code>&quot;exact phrase&quot;</code></td>
+<td>a quoted span stays one term</td>
+</tr>
+</tbody>
+</table></figure>
+<p>A query resolves terms to seed nodes, then collects the induced neighborhood up
+to a node budget (<code>--budget</code>, default 50), so a match on a high-degree node
+cannot pull in the whole graph.</p>
+<h2 id="schema">Schema</h2>
+<p>A node is a magus-domain entity with a stable, human-readable ID
+(<code>&lt;kind&gt;:&lt;qualified-name&gt;</code>, e.g. <code>target:pkg/foo:build</code>). The ID is stable across
+builds so external consumers and agent memory can key on it. A rename is a
+delete-plus-add.</p>
+<p>Node kinds: <code>project</code>, <code>target</code>, <code>spell</code>, <code>op</code>, <code>charm</code>, <code>module</code>, <code>method</code>,
+<code>diagnostic</code>, <code>doc</code>, <code>file</code>, <code>function</code>, <code>import</code>, <code>rationale</code>.</p>
+<p>Edges are directed and carry provenance and a confidence tag - <code>extracted</code> (1.0,
+from a parseable source) or <code>inferred</code> (a rubric score, from a fuzzy match).</p>
+<p>Relations: <code>depends_on</code>, <code>contains</code>, <code>uses</code>, <code>calls</code>, <code>imports</code>, <code>references</code>,
+<code>documents</code>, <code>rationale_for</code>.</p>
+<p>Both node-link JSON and GraphML carry a <code>schema_version</code>; external consumers and
+agent skills should check it, since a bump is a changelog event.</p>
+<h2 id="file-layout">File layout</h2>
+<p>The graph lives under the cache dir at <code>.magus/knowledge/</code>, cache-owned and NOT
+committed by default - the build is cheap and deterministic, so committing
+derived data buys nothing (<code>export</code> exists for teams that want a snapshot).</p>
+<pre><code class="language-text">.magus/knowledge/
+  manifest.json        per-shard fingerprints and counts (the routing index)
+  shards/&lt;name&gt;.json   one file per shard; SHARDS ARE AUTHORITATIVE
+</code></pre>
+<p>There is no continuously maintained merged <code>graph.json</code>: at scale, rewriting a
+merged file on every edit is an O(graph) write. Merging happens in memory at load
+time; the merged export is produced on demand. Shards are per-project plus
+singletons for the registry (spells/modules/diagnostics), docs, buzz sources, and
+run history (<code>@runtime</code>, below). A query loads the store, fingerprint-checks each
+shard, and rebuilds only the stale ones - the &quot;cache that gets hit first&quot;. First
+run pays a full build; steady state is a fingerprint check. <code>--refresh</code> forces a
+full rebuild.</p>
+<p>Two optional knobs bound and share the store. <code>knowledge.max_size_mb</code> soft-caps
+the shard directory: over the cap, least-recently-used shard files are evicted
+(their manifest entries stay, so an evicted shard is restored from the remote
+cache or rebuilt on the next query; 0, the default, is unlimited). When a remote
+build cache is configured, deterministic shards ride it - pushed on build,
+restored by fingerprint - so teammates and CI can reuse them. The <code>@runtime</code> shard
+is never pushed: it is local run history, not shareable derived data.</p>
+<h2 id="runtime-enrichment">Runtime enrichment</h2>
+<p>Beyond the static graph, magus records which diagnostics (<code>MGSxxxx</code> codes) each
+target trips during real runs, as <code>emits</code> edges in the isolated <code>@runtime</code> shard.
+A run captures every fired diagnostic through one sink that also feeds the report
+stream, and persists the set to <code>&lt;cache&gt;/knowledge/runtime.json</code>. This answers
+&quot;what has this target tripped&quot; - history the static <code>documents</code> edge cannot. It is
+the graph's only non-deterministic input, so it is quarantined: a distinct shard,
+excluded from remote export, derived from local run records rather than workspace
+sources.</p>
+<h2 id="exporting-to-external-tools">Exporting to external tools</h2>
+<p>magus emits; it does not render. To look at the graph, export it and open the
+file in a graph tool - files are the interface.</p>
+<pre><code class="language-sh">magus graph export -o json &gt; graph.json       # node-link JSON (NetworkX, D3, ...)
+magus graph export -o graphml &gt; graph.graphml  # GraphML (Gephi, yEd, ...)
+</code></pre>
+<p>For a specific neighborhood rather than the whole graph, <code>--select</code> reuses the
+query engine, and the layout formats become available (they are unreadable on the
+full graph, so they require a scope):</p>
+<pre><code class="language-sh">magus graph export --select &quot;kind:spell go&quot; -o mermaid
+magus graph export --select &quot;project:pkg/foo&quot; --budget 80 -o dot
+</code></pre>
+<h2 id="global-graph-across-workspaces">Global graph (across workspaces)</h2>
+<p>An org running magus across many repos can query all of them at once. Register
+extra workspace roots in config, then pass <code>--global</code>:</p>
+<pre><code class="language-yaml"># magus.yaml
+knowledge:
+  workspaces:
+    - ../api
+    - ../web
+</code></pre>
+<pre><code class="language-sh">magus query &quot;kind:spell&quot; --global   # matches across every registered workspace
+magus graph stats --global          # union shape across repos
+</code></pre>
+<p><code>--global</code> is available on query, explain, path, and <code>magus graph export</code>/<code>stats</code>.
+Each workspace's node IDs are namespaced by the workspace (<code>api//spell:go</code>,
+<code>web//spell:go</code>) so IDs from different repos cannot collide; the unqualified ID
+stays a readable substring, so <code>magus explain go --global</code> still resolves. A
+registered workspace that cannot be opened is skipped rather than failing the
+query. There is no cross-workspace edge inference - a union with qualified IDs
+only.</p>
+<h2 id="extraction-diagnostics">Extraction diagnostics</h2>
+<p>When extraction cannot resolve something cleanly it records a silent
+<a href="../codes/knowledge/"><code>MGS7xxx</code></a> code as a node attribute (visible via
+<code>magus explain</code>), rather than logging - so an implicit rebuild stays quiet while
+the ambiguity stays queryable. The first two are
+<a href="../codes/knowledge/MGS7001/">MGS7001</a> (a buzz import that resolves to no file)
+and <a href="../codes/knowledge/MGS7002/">MGS7002</a> (a doc citing an unregistered code).</p>
+<h2 id="for-agents">For agents</h2>
+<p>The MCP daemon exposes the verbs as tools: <code>magus_query</code>, <code>magus_explain</code>,
+<code>magus_path</code>, and <code>magus_stats</code>. See <a href="../mcp/">MCP</a> for wiring. Prefer these over
+grep to find and relate magus-domain entities; start from the <code>MAGUS.md</code> routing
+table, which is already in context in a fresh clone.</p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../insight/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Insight</span></a>
+      <a class="page-nav-next" href="../mcp/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MCP</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../manpage/magus-graph/"><span class="related-card-title">magus graph</span><span class="related-card-desc">Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).</span></a>
+        <a class="related-card" href="../codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../search/?q=tag%3A%22graphml%22">graphml</a><a class="tag" href="../search/?q=tag%3A%22mcp%22">mcp</a></div>
+    <small>Last updated <time datetime="2026-07-08T03:03:22Z">July 8, 2026, 3:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a0b6c90b1b14e6062a1032387e5da0aa5edd08c9" data-tooltip="a0b6c90b1b14e6062a1032387e5da0aa5edd08c9" title="a0b6c90b1b14e6062a1032387e5da0aa5edd08c9">a0b6c90</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

@@ -250,12 +250,18 @@ type KnowledgeRoutingProject struct {
 // the extra magus fields (definition, schema_version, counts) are additive and
 // ignored by strict node-link readers. Directed and non-multigraph by construction.
 type KnowledgeGraphOutput struct {
-	Definition    string          `json:"definition"    yaml:"definition"`
-	SchemaVersion int             `json:"schema_version" yaml:"schema_version"`
-	Directed      bool            `json:"directed"      yaml:"directed"`
-	Multigraph    bool            `json:"multigraph"    yaml:"multigraph"`
-	NodeCount     int             `json:"node_count"    yaml:"node_count"`
-	EdgeCount     int             `json:"edge_count"    yaml:"edge_count"`
+	Definition    string `json:"definition"    yaml:"definition"`
+	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	Directed      bool   `json:"directed"      yaml:"directed"`
+	Multigraph    bool   `json:"multigraph"    yaml:"multigraph"`
+	NodeCount     int    `json:"node_count"    yaml:"node_count"`
+	EdgeCount     int    `json:"edge_count"    yaml:"edge_count"`
+	// SourceBaseURL is the workspace's repo blob base (e.g.
+	// "https://github.com/owner/repo/blob/main"), derived from the VCS remote, so a
+	// viewer can turn a node's relative `source` path into a link to the RIGHT repo.
+	// Empty when there is no remote or the forge is unrecognized. Additive; omitted
+	// when empty, so it never bumps the schema version.
+	SourceBaseURL string          `json:"source_base,omitempty" yaml:"source_base,omitempty"`
 	Nodes         []KnowledgeNode `json:"nodes"         yaml:"nodes"`
 	Links         []KnowledgeEdge `json:"links"         yaml:"links"`
 }

@@ -47,6 +47,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
+        <li><a href="../graph/">Graph</a></li>
         <li><a href="../development/">Development</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -65,7 +66,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#cache" title="cache">cache</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#daemon" title="daemon">daemon</a></li><li><a href="#flake" title="flake">flake</a></li><li><a href="#general" title="general">general</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#hints" title="hints">hints</a></li><li><a href="#log" title="log">log</a></li><li><a href="#mcp" title="mcp">mcp</a></li><li><a href="#report" title="report">report</a></li><li><a href="#sandbox" title="sandbox">sandbox</a></li><li><a href="#telemetry" title="telemetry">telemetry</a></li><li><a href="#vcs" title="vcs">vcs</a></li></ul>
+        <ul><li><a href="#cache" title="cache">cache</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#daemon" title="daemon">daemon</a></li><li><a href="#flake" title="flake">flake</a></li><li><a href="#general" title="general">general</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#hints" title="hints">hints</a></li><li><a href="#knowledge" title="knowledge">knowledge</a></li><li><a href="#log" title="log">log</a></li><li><a href="#mcp" title="mcp">mcp</a></li><li><a href="#report" title="report">report</a></li><li><a href="#sandbox" title="sandbox">sandbox</a></li><li><a href="#telemetry" title="telemetry">telemetry</a></li><li><a href="#vcs" title="vcs">vcs</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -321,6 +322,31 @@
 </tr>
 </tbody>
 </table></figure>
+<h2 id="knowledge">knowledge</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>knowledge.max_size_mb</code></td>
+<td><code>MAGUS_KNOWLEDGE_MAX_SIZE_MB</code></td>
+<td><code>--knowledge-max-size-mb</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>knowledge.workspaces</code></td>
+<td><code>MAGUS_KNOWLEDGE_WORKSPACES</code></td>
+<td><em>(env only)</em></td>
+<td>list <em>(comma-separated, env only)</em></td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="log">log</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -520,7 +546,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../search/?q=tag%3A%22config%22">config</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22configuration%22">configuration</a><a class="tag" href="../search/?q=tag%3A%22environment+variables%22">environment variables</a><a class="tag" href="../search/?q=tag%3A%22flags%22">flags</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a></div>
-    <small>Last updated <time datetime="2026-07-05T02:24:18Z">July 5, 2026, 2:24 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8" data-tooltip="7bbecbc5a122147d3f1db4a29e2b3fd9734781c8" title="7bbecbc5a122147d3f1db4a29e2b3fd9734781c8">7bbecbc</a>)</small>
+    <small>Last updated <time datetime="2026-07-08T03:03:22Z">July 8, 2026, 3:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/bdc3932d7c2e52998438ae95dac199aab709bb74" data-tooltip="bdc3932d7c2e52998438ae95dac199aab709bb74" title="bdc3932d7c2e52998438ae95dac199aab709bb74">bdc3932</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

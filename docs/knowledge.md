@@ -54,6 +54,32 @@ A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node
 cannot pull in the whole graph.
 
+## Graph Explorer
+
+`magus graph open` opens the graph in an interactive, force-directed
+[Graph Explorer](graph.html) in your browser - **privately**. Your graph never
+leaves your machine: by default it rides in the link's URL `#fragment` (which
+browsers never send to a server), and `--serve` instead hands it to the page from
+an ephemeral `127.0.0.1` loopback server that serves once and stops. The hosted
+page is static; it decodes or fetches the graph locally.
+
+```sh
+magus graph open           # default: gzip'd into the URL fragment (small/medium graphs)
+magus graph open --serve   # loopback server (no size limit; serves once, then stops)
+magus graph open --print   # print the URL instead of opening a browser
+magus graph open --url <base>   # point at a self-hosted mirror of the explorer
+```
+
+The explorer's filter box speaks the **same fielded grammar** as `magus query`
+(`kind:`, `project:`, `relation:`, `id:`, free text, `"quotes"`, `-negation`); a
+query dims non-matching nodes so the subgraph stands out. Beyond the filter:
+double-click a node for its **local graph** (its neighborhood, `[`/`]` to change
+depth), click a legend color to isolate a kind, and use the **hubs**/**orphans**
+lenses (the visual twin of `magus graph stats`). The page is fully client-side and
+data-agnostic - it also loads any `graph.json` from `magus graph export -o json`
+via the Open-file button or drag-and-drop. This site's own graph is the
+[live demo](graph.html).
+
 ## Schema
 
 A node is a magus-domain entity with a stable, human-readable ID

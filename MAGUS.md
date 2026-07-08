@@ -14,9 +14,11 @@ magus run <target>:<charm>  # change HOW it runs (e.g. lint:rw)
 
 Unfamiliar with a term? See the [Glossary](#glossary).
 
+Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
+
 ## Query first
 
-This workspace has a knowledge graph of **1648 nodes** and **2856 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1651 nodes** and **2863 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -29,7 +31,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 4 | `magus query kind:project` | `.`, `website`, `gopherbuzz` |
-| target | 52 | `magus query kind:target` | `generate`, `format`, `image-build` |
+| target | 53 | `magus query kind:target` | `generate`, `format`, `image-build` |
 | spell | 12 | `magus query kind:spell` | `go`, `buf`, `buzz` |
 | op | 43 | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | charm | 5 | `magus query kind:charm` | `rw`, `static`, `cd` |
@@ -38,7 +40,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS5002`, `MGS4001`, `MGS2001` |
 | doc | 98 | `magus query kind:doc` | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
 | file | 195 | `magus query kind:file` | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 952 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 954 | `magus query kind:function` | `sel`, `sendObject`, `site_render` |
 | import | 90 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 
@@ -47,7 +49,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | . | 24 | `magus query project:.` | `generate`, `format`, `image-build` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | gopherbuzz | 9 | `magus query project:gopherbuzz` | `build`, `format`, `generate` |
-| website | 12 | `magus query project:website` | `generate`, `ci`, `format` |
+| website | 13 | `magus query project:website` | `generate`, `preflight`, `ci` |
 
 ## Reading the graphs
 
@@ -880,6 +882,7 @@ graph LR
     ci("ci")
     build_playground("build-playground")
     build_playground_editor("build-playground-editor")
+    build_graph_explorer("build-graph-explorer")
     serve("serve")
   end
   preflight("preflight")
@@ -903,11 +906,12 @@ graph LR
   test --> ci
   preflight --> build_playground
   preflight --> build_playground_editor
+  preflight --> build_graph_explorer
   xt_gopherbuzz_build -.-> build_playground
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
   classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
-  class build_playground,build_playground_editor,ci,serve anchor
+  class build_graph_explorer,build_playground,build_playground_editor,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   class xt_gopherbuzz_build external
   style entry_cluster fill:transparent,stroke:transparent
@@ -1025,6 +1029,22 @@ build_playground_editor bundles the vendored CodeMirror editor into the committe
 
 ```sh
 magus run build-playground-editor website  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+**Details:** uncached (always runs)
+
+### `build-graph-explorer`
+
+build_graph_explorer bundles js/graph-explorer.js (d3-force + d3-zoom) into the committed website/gen/graph/explorer.js - the graph analog of build_playground_editor.
+
+**Defaults**
+
+```sh
+magus run build-graph-explorer website  # from the workspace root
 ```
 
 **Depends on:**

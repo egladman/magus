@@ -246,6 +246,16 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 	return vcsOutput(ctx, dir, "git", "describe", "--tags", "--always", "--dirty")
 }
 
+// RemoteURL returns the "origin" remote's fetch URL (types.RemoteReporter). A repo
+// with no origin configured yields ErrVCSUnsupported, so callers degrade to no link.
+func (v gitVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
+	out, err := vcsOutput(ctx, dir, "git", "remote", "get-url", "origin")
+	if err != nil || out == "" {
+		return "", types.ErrVCSUnsupported
+	}
+	return out, nil
+}
+
 // gitCommitFormat emits the NUL-delimited fields parseCommit expects: id, short,
 // author name/email, the commit (record) date as strict ISO 8601 / RFC 3339 (%cI),
 // parents, and the raw message (%B).

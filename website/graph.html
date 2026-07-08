@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Graph Explorer — magus</title>
+  <meta name="description" content="Explore the magus knowledge graph in your browser: projects, targets, spells, ops, modules and their relations, force-directed and searchable. Open it seeded with your own workspace via `magus graph explore` — your data never leaves your machine.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/graph/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+  <link rel="stylesheet" href="graph.css">
+</head>
+<body>
+  <!-- site-nav --><!-- injected at build time by renderGraph() in scribe.buzz; edit renderSiteNav there -->
+
+  <main class="container-fluid">
+    <h1 class="pg-title">Graph Explorer</h1>
+    <p class="lede">See how everything in a magus workspace connects: projects, targets, spells, and the rest.</p>
+    <p class="pg-note">Runs in your browser; nothing leaves your machine. <code>magus graph open</code> loads your own workspace here. <a href="../download/">Install magus</a>.</p>
+
+    <details class="query-help">
+      <summary>Query syntax</summary>
+      <div class="disclosure-body">
+      <p>The filter box speaks the same grammar as <code>magus query</code>. Terms are combined with AND and matched case-insensitively; click an example to run it.</p>
+      <dl>
+        <dt><button type="button" class="q-example" data-q="render"><code>render</code></button></dt>
+        <dd>Free text: match a node's id, label, or doc.</dd>
+        <dt><button type="button" class="q-example" data-q="kind:spell"><code>kind:spell</code></button></dt>
+        <dd>Only nodes of one kind: <code>project</code>, <code>target</code>, <code>spell</code>, <code>op</code>, <code>charm</code>, <code>module</code>, <code>method</code>, <code>import</code>, <code>function</code>, <code>file</code>, <code>doc</code>, <code>rationale</code>, <code>diagnostic</code>. (Or click a legend color.)</dd>
+        <dt><button type="button" class="q-example" data-q="project:website"><code>project:website</code></button></dt>
+        <dd>A project node and its targets.</dd>
+        <dt><button type="button" class="q-example" data-q="relation:uses"><code>relation:uses</code></button></dt>
+        <dd>Nodes touching a <code>uses</code> edge (any of <code>depends_on</code>, <code>contains</code>, <code>uses</code>, <code>calls</code>, <code>imports</code>, <code>references</code>, <code>documents</code>, <code>rationale_for</code>).</dd>
+        <dt><button type="button" class="q-example" data-q="id:build"><code>id:build</code></button></dt>
+        <dd>Substring match on the node id (e.g. <code>target:.:build</code>).</dd>
+        <dt><button type="button" class="q-example" data-q="-kind:function"><code>-kind:function</code></button></dt>
+        <dd>A leading <code>-</code> negates a term - exclude these.</dd>
+        <dt><button type="button" class="q-example" data-q="&quot;spell op&quot;"><code>"spell op"</code></button></dt>
+        <dd>Quote a value that contains spaces to keep it one term.</dd>
+        <dt><button type="button" class="q-example" data-q="kind:target -id:generate"><code>kind:target -id:generate</code></button></dt>
+        <dd>Combine terms; all must match. This lists targets whose id doesn't contain <code>generate</code>.</dd>
+      </dl>
+      <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
+      <p><b>Lenses</b> (mirroring <code>magus graph stats</code>): <button type="button" class="lens-btn q-example" data-lens="hubs"><code>hubs</code></button> the highest-degree "god" nodes, <button type="button" class="lens-btn q-example" data-lens="orphans"><code>orphans</code></button> nodes with no edges. <b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
+      </div>
+    </details>
+
+    <details class="display-help">
+      <summary>Display</summary>
+      <div class="disclosure-body">
+        <p class="control-label">Layout forces</p>
+        <div class="force-controls" role="group" aria-label="Layout forces">
+          <label>Repel <input type="range" id="force-charge" min="20" max="200" value="60" step="5"></label>
+          <label>Link length <input type="range" id="force-link" min="10" max="140" value="40" step="5"></label>
+          <label>Gravity <input type="range" id="force-gravity" min="0" max="10" value="2" step="1"></label>
+        </div>
+        <p class="control-label">Color groups</p>
+        <p>Paint every node matching a query one color, on top of the kind palette - keep several at once to compare slices of the graph.</p>
+        <div class="group-add-row">
+          <input id="group-query" type="text" placeholder="kind:spell" aria-label="Color-group query" spellcheck="false" autocomplete="off">
+          <input id="group-color" type="color" value="#e8590c" aria-label="Color-group color">
+          <button id="group-add" type="button" class="group-add-btn">Add</button>
+        </div>
+        <div id="group-list" aria-label="Color groups"></div>
+      </div>
+    </details>
+
+    <section class="graph-app">
+      <aside class="graph-sidebar">
+        <div class="sidebar-search">
+          <input id="node-search" type="text" placeholder="Query: kind:spell, project:web, text..." aria-label="Query the graph" spellcheck="false" autocomplete="off" disabled>
+        </div>
+        <button id="list-toggle" class="sidebar-count" type="button" aria-expanded="false" aria-controls="node-list">
+          <span id="graph-count">loading...</span>
+          <span class="list-chev" aria-hidden="true"></span>
+        </button>
+        <ul id="node-list" aria-label="Graph nodes" hidden></ul>
+      </aside>
+
+      <div class="graph-stage">
+        <div class="stage-tools">
+          <button id="fit-btn" class="outline" type="button" title="Zoom to fit the whole graph (or the current matches)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span class="btn-label">Fit</span></button>
+          <button id="open-file-btn" class="outline" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span class="btn-label">Open file</span></button>
+          <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg><span class="btn-label">Fullscreen</span></button>
+        </div>
+        <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
+        <ul id="graph-legend" aria-label="Node kinds"></ul>
+        <p id="graph-status" role="status">Loading graph...</p>
+      </div>
+
+      <div id="explain-card" aria-live="polite" hidden></div>
+    </section>
+
+    <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
+
+    <details class="url-help">
+      <summary>Loading a graph by URL</summary>
+      <div class="disclosure-body">
+      <p><code>magus graph open</code> builds these links for you; the fragment (after <code>#</code>) is never sent to the server, so an inline graph stays local. The schemes are:</p>
+      <dl>
+        <dt><code>#data=&lt;blob&gt;</code></dt>
+        <dd>An inline graph: the node-link JSON, gzipped then base64url-encoded. Decoded in the browser. Bounded by the browser's URL length.</dd>
+        <dt><code>#src=&lt;url&gt;</code></dt>
+        <dd>A URL-encoded address the page fetches the JSON from - a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
+        <dt><code>#node=&lt;id&gt;</code></dt>
+        <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
+        <dt><code>#q=&lt;query&gt;</code></dt>
+        <dd>Apply a query on load (same grammar as <code>magus query</code>), e.g. <code>#q=kind:spell</code>.</dd>
+      </dl>
+      <p>Combine them with <code>&amp;</code>: <code>#data=...&amp;node=target:.:build</code>. A raw <code>graph.json</code> (from <code>magus graph export -o json</code>) also loads via the <b>Open file</b> button or drag-and-drop.</p>
+      </div>
+    </details>
+
+    <noscript>
+      <p style="color:var(--pico-muted-color);">The graph explorer needs JavaScript to lay out and render the graph. You can still <a href="./graph.json">download the raw graph JSON</a>, or read the <a href="../documentation/">documentation</a>.</p>
+    </noscript>
+  </main>
+
+  <!-- site-footer -->
+
+  <script type="module" src="../main.js"></script>
+  <script type="module" src="explorer.js"></script>
+</body>
+</html>

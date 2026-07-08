@@ -179,7 +179,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 			r := g.Routing()
 			routing = &r
 		}
-		return render.WriteTargetGraphMarkdown(os.Stdout, out, eval, routing)
+		return render.WriteTargetGraphMarkdown(os.Stdout, out, eval, routing, graphExplorerLink(ctx, root))
 	}
 
 	// text / wide

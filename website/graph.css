@@ -1,0 +1,293 @@
+/* graph.css - styles for the /graph/ Graph Explorer page (linked from graph.html;
+   esbuild-minified into gen/graph/graph.css, like site.css). Kept out of the inline
+   <style> and off the JS: colors are data-driven via kind CLASSES, not element
+   style attributes. */
+
+:root {
+  --pad: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+/* --node-fg carries the PAGE text color (correct per theme). The custom
+   text-buttons read it because Pico pins --pico-color to a fixed inverse INSIDE a
+   <button> (invisible in one theme), and its button color rule out-specifies a
+   plain class; a var inherited from this non-button element dodges both, and the
+   id/container-scoped rule below outranks Pico. */
+main.container-fluid {
+  max-width: var(--content-wide);
+  margin-inline: auto;
+  --node-fg: var(--pico-color);
+}
+#node-list .node-pill,
+#list-toggle,
+#graph-legend .legend-row,
+.query-help .q-example,
+#explain-card .node-ref {
+  color: var(--node-fg);
+}
+.lede {
+  color: var(--pico-muted-color);
+  margin: 0 0 0.5rem;
+}
+
+/* Node-kind palette. Categorical hues chosen to stay distinct on both Pico themes.
+   The canvas reads each --gk-<kind> at paint time (like js/mermaid.js reads Pico's
+   own variables), so a theme toggle re-tints the graph; the sidebar/legend dots use
+   the .k-<kind> classes below, so no element carries an inline style. */
+:root {
+  --gk-project: #0a7ea4; --gk-spell: #8b5cf6; --gk-op: #a855f7; --gk-charm: #ec4899;
+  --gk-target: #2563eb; --gk-module: #059669; --gk-method: #10b981; --gk-import: #d97706;
+  --gk-function: #6366f1; --gk-file: #0d9488; --gk-doc: #0891b2; --gk-rationale: #ca8a04;
+  --gk-diagnostic: #dc2626;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
+    --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
+    --gk-function: #818cf8; --gk-file: #2dd4bf; --gk-doc: #22d3ee; --gk-rationale: #facc15;
+    --gk-diagnostic: #f87171;
+  }
+}
+[data-theme="dark"] {
+  --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
+  --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
+  --gk-function: #818cf8; --gk-file: #2dd4bf; --gk-doc: #22d3ee; --gk-rationale: #facc15;
+  --gk-diagnostic: #f87171;
+}
+
+.pg-title { margin-bottom: 0.6rem; }
+.pg-note { margin: 0 0 var(--pad); font-size: 0.85rem; color: var(--pico-muted-color); }
+.pg-note code { font-size: 0.85em; }
+
+/* One app panel: a sidebar (search + node list), the canvas stage, and an explain
+   card that appears on selection. Pico's stock palette; regions set apart by
+   borders, not custom color. */
+.graph-app {
+  display: grid;
+  grid-template-columns: 18rem 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  height: calc(100svh - 12rem);
+  min-height: 460px;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  overflow: hidden;
+  background: var(--pico-card-background-color);
+  box-shadow: var(--pico-card-box-shadow);
+}
+/* When an explain card is present the app becomes three columns (.has-card is
+   toggled by the explorer on selection). */
+body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
+
+.graph-sidebar {
+  display: flex; flex-direction: column; min-height: 0;
+  border-right: 1px solid var(--pico-muted-border-color);
+  background: var(--pico-card-sectioning-background-color);
+}
+/* A quiet filter, not a headline search: the site search field's look (left
+   magnifier, angular radius) but small and muted - the canvas is the main event. */
+.sidebar-search { padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pico-muted-border-color); }
+#node-search {
+  margin: 0; width: 100%; height: auto;
+  font-size: 0.78rem; line-height: 1.4;
+  padding: 0.25rem 0.5rem 0.25rem 1.7rem;
+  border-radius: var(--pico-border-radius);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238891a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 0.5rem center; background-size: 0.85rem 0.85rem;
+}
+/* The count doubles as the collapse toggle for the node cloud (collapsed by default
+   so the canvas is the focus on first load). */
+.sidebar-count {
+  width: 100%; margin: 0; text-align: left; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.35rem 0.6rem; font-size: 0.68rem; line-height: 1.3;
+  background: transparent;
+  border: 0; border-bottom: 1px solid var(--pico-muted-border-color); border-radius: 0;
+}
+.sidebar-count:hover { text-decoration: underline; }
+/* Links inside the app must not fall to Pico's low-contrast :visited color in dark
+   mode (the explain-card source/reference links especially). */
+.graph-app a:visited, #explain-card a:visited { color: var(--pico-primary); }
+.list-chev { flex: 0 0 auto; transition: transform 0.12s ease; }
+.list-chev::before { content: "\25B8"; }
+#list-toggle[aria-expanded="true"] .list-chev { transform: rotate(90deg); }
+
+/* Node cloud: wrapping pills (the page-footer tag chip look), not one-per-row, so
+   the cloud fills horizontal space and uses the sidebar (and mobile strip) well. */
+#node-list {
+  flex: 1 1 auto; overflow-y: auto; margin: 0; padding: 0.5rem;
+  display: flex; flex-wrap: wrap; gap: 0.3rem; align-content: flex-start;
+  list-style: none;
+}
+#node-list li { display: contents; }
+.node-pill {
+  flex: 1 1 auto; min-width: 0; /* grow to fill each row edge-to-edge (justified) */
+  display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%;
+  margin: 0; padding: 0.2rem 0.5rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: transparent; cursor: pointer;
+  font-size: 0.72rem; line-height: 1.2;
+}
+.node-pill:hover { border-color: var(--pico-primary); background: var(--pico-card-background-color); }
+.node-pill[aria-current="true"] { border-color: var(--pico-primary); box-shadow: inset 0 0 0 1px var(--pico-primary); }
+.row-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--pico-font-family-monospace); }
+/* The "+N more" hint is a real box (not display:contents), spanning the row. */
+#node-list li.list-more { display: block; flex-basis: 100%; width: 100%; padding: 0.35rem 0.2rem 0; font-size: 0.68rem; color: var(--pico-muted-color); }
+
+.graph-stage { position: relative; min-width: 0; overflow: hidden; }
+#graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+/* Built-in action buttons floating at the stage's top-right (the playground
+   file-bar look): compact outline buttons, icon + label. */
+.stage-tools { position: absolute; top: 0.6rem; right: 0.6rem; z-index: 3; display: flex; gap: 0.4rem; }
+.stage-tools button {
+  width: auto; margin: 0; padding: 0.25rem 0.6rem;
+  font-size: 0.72rem; line-height: 1.3;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: color-mix(in srgb, var(--pico-card-background-color) 90%, transparent);
+}
+.stage-tools .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+/* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
+   the opaque background is required or the element shows through to black. */
+.graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pico-background-color); }
+#graph-legend {
+  position: absolute; top: 0.6rem; left: 0.6rem; margin: 0; padding: 0.5rem 0.65rem;
+  list-style: none; display: flex; flex-direction: column; gap: 0.15rem;
+  font-size: 0.72rem; line-height: 1.5;
+  background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  max-height: calc(100% - 1.2rem); overflow-y: auto;
+}
+#graph-legend li { list-style: none; }
+.legend-row {
+  width: 100%; margin: 0; padding: 0.08rem 0.25rem;
+  display: flex; align-items: center; gap: 0.4rem;
+  background: transparent; border: 0; border-radius: var(--pico-border-radius);
+  cursor: pointer; font-size: inherit; line-height: 1.5; text-align: left;
+}
+.legend-row:hover { background: color-mix(in srgb, var(--pico-primary) 14%, transparent); }
+#graph-status {
+  position: absolute; bottom: 0.6rem; left: 0.6rem; right: 0.6rem;
+  padding: 0.35rem 0.6rem; font-size: 0.72rem; color: var(--pico-muted-color);
+  background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  pointer-events: none;
+}
+/* Status is for loading/errors only; empty by default so it doesn't sit as a
+   persistent nag over the graph. Hidden when it has no text. */
+#graph-status:empty { display: none; }
+#graph-status.err { color: var(--pico-del-color); }
+
+/* Kind dots: shape here, color from a .k-<kind> class (data-driven, no inline
+   style). The same classes color the legend swatches and the explain-card head. */
+.kind-dot { flex: 0 0 auto; width: 0.7em; height: 0.7em; border-radius: 50%; display: inline-block; background: #888; }
+.k-project { background: var(--gk-project); }
+.k-spell { background: var(--gk-spell); }
+.k-op { background: var(--gk-op); }
+.k-charm { background: var(--gk-charm); }
+.k-target { background: var(--gk-target); }
+.k-module { background: var(--gk-module); }
+.k-method { background: var(--gk-method); }
+.k-import { background: var(--gk-import); }
+.k-function { background: var(--gk-function); }
+.k-file { background: var(--gk-file); }
+.k-doc { background: var(--gk-doc); }
+.k-rationale { background: var(--gk-rationale); }
+.k-diagnostic { background: var(--gk-diagnostic); }
+
+/* Explain card: a third column on wide screens; plain HTML dl content. */
+#explain-card {
+  min-height: 0; overflow-y: auto; padding: 0.8rem;
+  border-left: 1px solid var(--pico-muted-border-color);
+  font-size: 0.82rem;
+}
+#explain-card[hidden] { display: none; }
+/* Overline label so the card reads as a distinct "Node details" panel. */
+.card-section { margin: 0 0 0.4rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
+.card-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+.card-head h2 { margin: 0; font-size: 1rem; font-family: var(--pico-font-family-monospace); overflow-wrap: anywhere; }
+.kind-tag { margin-left: auto; font-size: 0.68rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.04em; }
+#explain-card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.7rem; }
+#explain-card dt { color: var(--pico-muted-color); font-size: 0.72rem; padding-top: 0.15rem; }
+#explain-card dd { margin: 0; overflow-wrap: anywhere; }
+#explain-card code { font-size: 0.78em; }
+.rel-group { margin-bottom: 0.4rem; }
+.rel-name { display: block; font-size: 0.72rem; color: var(--pico-muted-color); margin-bottom: 0.15rem; }
+.rel-count { opacity: 0.7; }
+.node-ref { font-family: inherit; }
+.node-ref {
+  display: inline-block; margin: 0 0.15rem 0.15rem 0; padding: 0.05rem 0.4rem; width: auto;
+  font-size: 0.74rem; font-family: var(--pico-font-family-monospace);
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
+}
+.node-ref:hover { border-color: var(--pico-primary); }
+.muted { color: var(--pico-muted-color); }
+
+/* Narrow screens: stack the columns; canvas gets a fixed height, the list and card
+   flow beneath it. */
+@media (max-width: 900px) {
+  .graph-app, body.has-card .graph-app { grid-template-columns: 1fr; grid-auto-rows: min-content; height: auto; }
+  .graph-stage { height: 60svh; min-height: 320px; }
+  .graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pico-muted-border-color); }
+  #explain-card { border-left: 0; border-top: 1px solid var(--pico-muted-border-color); max-height: 50svh; }
+}
+
+/* Reference disclosures (Query syntax, Loading a graph by URL): the same
+   "what's changed"-footer treatment as the docs pages - an uppercase, muted,
+   tracked summary label over a bordered, tinted panel (--syntax-panel-bg) that
+   expands beneath it. The body is wrapped so only the content gets panel chrome. */
+.query-help, .url-help, .display-help { margin: 0.3rem 0 var(--pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
+.query-help > summary:not([role]), .url-help > summary:not([role]), .display-help > summary:not([role]) {
+  width: fit-content; cursor: pointer;
+  color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+main .query-help > summary:not([role]), main .query-help[open] > summary:not([role]),
+main .url-help > summary:not([role]), main .url-help[open] > summary:not([role]),
+main .display-help > summary:not([role]), main .display-help[open] > summary:not([role]) { color: var(--pico-muted-color); }
+.query-help[open] > summary, .url-help[open] > summary, .display-help[open] > summary { margin-bottom: 0.5rem; }
+.disclosure-body {
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--syntax-panel-bg);
+}
+.query-help p, .url-help p, .display-help p { color: var(--pico-muted-color); margin: 0 0 0.5rem; max-width: 72ch; }
+.query-help p:last-child, .url-help :last-child { margin-bottom: 0; }
+.query-help dl { margin: 0 0 0.5rem; display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 0.8rem; align-items: baseline; }
+.url-help dl { margin: 0 0 0.6rem; display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.9rem; }
+.query-help dt, .url-help dt { margin: 0; white-space: nowrap; }
+.query-help dd, .url-help dd { margin: 0; color: var(--pico-muted-color); }
+.query-help code, .url-help code { font-size: 0.85em; }
+.q-example {
+  width: auto; margin: 0; padding: 0.12rem 0.45rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
+}
+.q-example:hover, .q-example:focus-visible { border-color: var(--pico-primary); }
+.q-example code { color: inherit; }
+/* Live layout-force sliders (the "alive" wobble is tunable). */
+.force-controls { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; margin-top: 0.2rem; }
+.force-controls label { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--pico-muted-color); margin: 0; }
+.force-controls input[type="range"] { width: 8rem; margin: 0; }
+
+/* Color groups: paint query matches a chosen color on top of the kind palette.
+   The swatch color is genuinely dynamic (a user pick), so it rides an inline style
+   here - unlike the fixed kind palette, which uses .k-<kind> classes. */
+/* A small bold sub-heading inside the Display panel (Layout forces / Color groups). */
+.control-label { margin: 0.1rem 0 0.3rem; font-size: 0.72rem; font-weight: 600; color: var(--pico-color); }
+.control-label:not(:first-child) { margin-top: 0.7rem; }
+.group-add-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.4rem; }
+.group-add-row input[type="text"] { width: auto; flex: 1 1 8rem; min-width: 6rem; margin: 0; height: 1.7rem; font-size: 0.78rem; padding: 0.15rem 0.4rem; }
+.group-add-row input[type="color"] { flex: 0 0 auto; width: 1.9rem; height: 1.7rem; margin: 0; padding: 0.1rem; }
+/* Compact add button sized to match the row inputs (not a full-width Pico button). */
+.group-add-btn {
+  flex: 0 0 auto; width: auto; height: 1.7rem; margin: 0; padding: 0 0.7rem;
+  font-size: 0.75rem; line-height: 1;
+}
+#group-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.group-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.12rem 0.15rem 0.12rem 0.4rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); font-size: 0.72rem; font-family: var(--pico-font-family-monospace); }
+.group-swatch { width: 0.7em; height: 0.7em; border-radius: 50%; flex: 0 0 auto; }
+.group-x { width: auto; margin: 0; padding: 0 0.25rem; background: transparent; border: 0; color: var(--pico-muted-color); cursor: pointer; font-size: 0.95rem; line-height: 1; }
+.group-x:hover { color: var(--pico-del-color); }
+
+.site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
