@@ -106,7 +106,7 @@ builds so external consumers and agent memory can key on it. A rename is a
 delete-plus-add.
 
 Node kinds: `project`, `target`, `spell`, `op`, `charm`, `module`, `method`,
-`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`.
+`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`.
 
 Nodes also carry static metadata the extractors already parse, surfaced as
 attributes so `magus explain` answers a question without a second describe: a
@@ -119,7 +119,14 @@ Edges are directed and carry provenance and a confidence tag - `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
 Relations: `depends_on`, `contains`, `uses`, `calls`, `imports`, `references`,
-`documents`, `rationale_for`.
+`documents`, `rationale_for`, `owns`.
+
+Ownership is extracted from a committed `CODEOWNERS` file (checked at the repo
+root, `.github/`, or `docs/`): each owner becomes an `owner` node with an `owns`
+edge to every project and buzz file it covers, under GitHub's last-match-wins rule,
+with `CODEOWNERS:<line>` provenance. Only declared ownership is taken - blame-derived
+ownership is insight's job, not a graph edge - so "who owns the blast radius of this
+change" is one path query.
 
 Both node-link JSON and GraphML carry a `schema_version`; external consumers and
 agent skills should check it, since a bump is a changelog event.
