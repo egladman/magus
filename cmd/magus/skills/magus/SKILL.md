@@ -28,6 +28,7 @@ only when the tool surface does.
    | how do two nodes relate | `magus_path` | `magus path <a> <b>` |
    | where risk concentrates | `magus_stats` | `magus graph stats` |
    | where a code symbol is defined and used | `magus_refs` | `magus refs <symbol>` |
+   | what a branch changed in the graph | (export + diff) | `magus graph diff <baseline.json>` |
 
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
@@ -78,6 +79,9 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
 - `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
+- To show a PR's domain impact, export a baseline from the base branch and run
+  `magus graph diff <baseline.json> -o markdown` for a CI comment (nodes/edges added,
+  removed, or changed).
 
 ## Do not render the graph yourself
 

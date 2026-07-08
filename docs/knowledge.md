@@ -41,6 +41,7 @@ magus path <a> <b>          # the shortest chain of edges between two nodes
 magus refs <symbol>         # where an ingested code symbol is defined and referenced
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
+magus graph diff base.json  # what this branch changed vs an exported baseline
 magus graph open            # explore it visually in your browser (data stays local)
 ```
 
@@ -226,6 +227,24 @@ full graph, so they require a scope):
 magus graph export --select "kind:spell go" -o mermaid
 magus graph export --select "project:pkg/foo" --budget 80 -o dot
 ```
+
+## Diffing against a baseline
+
+`magus graph diff` reports what a branch did to the domain's shape: the nodes and
+edges added or removed, and (for nodes) which fields changed. Export a baseline on
+the base branch, then diff the working tree against it - the PR blast-radius artifact.
+
+```sh
+git stash && magus graph export -o json > /tmp/base.json && git stash pop
+magus graph diff /tmp/base.json                 # human summary
+magus graph diff /tmp/base.json -o markdown     # a CI comment
+magus graph diff /tmp/base.json -o json         # machine-readable, with before/after
+```
+
+The baseline must be a whole-graph `graph export -o json` (symbol shards in it are
+matched automatically; pass `--global` if the baseline was global). Edge diffs are
+structural - an edge is identified by (source, target, relation), so a re-scored or
+re-provenanced edge that keeps those three is not reported as a change.
 
 ## Global graph (across workspaces)
 

@@ -154,6 +154,37 @@ type KnowledgeMatch struct {
 	Score int    `json:"score" yaml:"score"`
 }
 
+// KnowledgeGraphDiffDefinition is the human-readable description of `magus graph diff`.
+const KnowledgeGraphDiffDefinition = "graph diff reports how the knowledge graph " +
+	"changed between a base revision and the working tree: the nodes and edges added, " +
+	"removed, or (for nodes) changed. It is the PR-review blast-radius artifact - what " +
+	"a change did to the domain's shape - emitted as json or markdown, never rendered. " +
+	"Edge diffs are structural: an edge is identified by (source, target, relation), so " +
+	"a re-scored or re-provenanced edge that keeps those three is not reported as changed."
+
+// KnowledgeGraphDiff is the result of `magus graph diff`: the node/edge deltas between
+// a base graph and the current one. Slices are sorted (by node ID, then edge key) so
+// the diff is deterministic and reviewable.
+type KnowledgeGraphDiff struct {
+	Definition    string                `json:"definition"     yaml:"definition"`
+	SchemaVersion int                   `json:"schema_version" yaml:"schema_version"`
+	Base          string                `json:"base"           yaml:"base"` // the base revision or baseline label
+	NodesAdded    []KnowledgeNode       `json:"nodes_added,omitempty"    yaml:"nodes_added,omitempty"`
+	NodesRemoved  []KnowledgeNode       `json:"nodes_removed,omitempty"  yaml:"nodes_removed,omitempty"`
+	NodesChanged  []KnowledgeNodeChange `json:"nodes_changed,omitempty"  yaml:"nodes_changed,omitempty"`
+	EdgesAdded    []KnowledgeEdge       `json:"edges_added,omitempty"    yaml:"edges_added,omitempty"`
+	EdgesRemoved  []KnowledgeEdge       `json:"edges_removed,omitempty"  yaml:"edges_removed,omitempty"`
+}
+
+// KnowledgeNodeChange is one node present in both graphs whose data differs: the
+// before/after nodes plus the names of the fields that changed.
+type KnowledgeNodeChange struct {
+	ID     string        `json:"id"     yaml:"id"`
+	Fields []string      `json:"fields" yaml:"fields"` // kind|label|doc|source|attrs
+	Before KnowledgeNode `json:"before" yaml:"before"`
+	After  KnowledgeNode `json:"after"  yaml:"after"`
+}
+
 // KnowledgeRefsDefinition is the human-readable description of `magus refs`.
 const KnowledgeRefsDefinition = "refs lists where an ingested code symbol is " +
 	"defined and every file that references it, as file:line rows drawn from the " +
