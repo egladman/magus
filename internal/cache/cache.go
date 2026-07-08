@@ -100,10 +100,19 @@ type runCtx struct {
 	onMiss      func(*Result)
 	onError     func(error)
 	onStep      func(*Step)
-	onResult    func(*Step, *Result, error)
+	// onResults all fire after each Run (in registration order); multiple
+	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
+	onResults []func(*Step, *Result, error)
 	// deferMtimeFlush suppresses the per-Run mtime flush so a RunAll batch can
 	// flush once after all steps complete instead of once per step.
 	deferMtimeFlush bool
+}
+
+// fireResults notifies every registered result observer, in registration order.
+func (rc *runCtx) fireResults(step *Step, result *Result, err error) {
+	for _, fn := range rc.onResults {
+		fn(step, result, err)
+	}
 }
 
 // deferMtimeFlush is an internal RunOption set by RunAll so member Run calls skip
@@ -306,9 +315,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				if rc.onHit != nil {
 					rc.onHit(&result)
 				}
-				if rc.onResult != nil {
-					rc.onResult(rc.step, &result, nil)
-				}
+				rc.fireResults(rc.step, &result, nil)
 				return result, nil
 			}
 			c.log.Warn(
@@ -339,9 +346,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		if rc.onError != nil {
 			rc.onError(runErr)
 		}
-		if rc.onResult != nil {
-			rc.onResult(rc.step, &result, runErr)
-		}
+		rc.fireResults(rc.step, &result, runErr)
 		return result, runErr
 	}
 
@@ -381,9 +386,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if rc.onMiss != nil {
 		rc.onMiss(&result)
 	}
-	if rc.onResult != nil {
-		rc.onResult(rc.step, &result, nil)
-	}
+	rc.fireResults(rc.step, &result, nil)
 	return result, nil
 }
 

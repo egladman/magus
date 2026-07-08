@@ -93,8 +93,9 @@ func OnError(fn func(error)) RunOption {
 }
 
 // OnResult fires after every Cache.Run regardless of outcome (after OnHit/OnMiss/OnError).
+// Multiple OnResult options accumulate; all fire in registration order.
 func OnResult(fn func(*Step, *Result, error)) RunOption {
-	return func(rc *runCtx) { rc.onResult = fn }
+	return func(rc *runCtx) { rc.onResults = append(rc.onResults, fn) }
 }
 
 // OnStep fires before hashing, allowing the caller to mutate the Step (e.g. extend EnvAllow).

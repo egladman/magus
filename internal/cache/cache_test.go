@@ -389,6 +389,30 @@ func TestOnResult(t *testing.T) {
 	assert.Error(t, calls[2].err, "OnResult must fire with the error")
 }
 
+// TestOnResultMultiple verifies that multiple OnResult callbacks accumulate and
+// all fire, rather than the last registration clobbering the earlier ones. This
+// guards the coexistence of independent result observers (report, telemetry,
+// diagnostic capture), which each register their own OnResult on the same run.
+func TestOnResultMultiple(t *testing.T) {
+	t.Parallel()
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+
+	var first, second int
+	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
+		return os.WriteFile(out, []byte("ok"), 0o644)
+	},
+		OnResult(func(*Step, *Result, error) { first++ }),
+		OnResult(func(*Step, *Result, error) { second++ }),
+	)
+	require.NoError(t, err, "Run")
+	assert.Equal(t, 1, first, "first OnResult must fire")
+	assert.Equal(t, 1, second, "second OnResult must fire (not clobbered by the first)")
+}
+
 // TestExportImportUnsafePath verifies that Import rejects tar entries
 // that would escape the cache directory via path traversal.
 func TestExportImportUnsafePath(t *testing.T) {
