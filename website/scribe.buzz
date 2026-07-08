@@ -1120,6 +1120,9 @@ fun writeManifest(site: Site) > void {
     if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
     // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
     // (see gopherbuzz/testdata/54_raw_string.buzz).
+    // Icons: favicon-32 and apple-touch-icon are the legacy set; icon-192/512 target
+    // Android/Windows install prompts; icon-512-maskable carries a solid #13171f
+    // background so the hat mark stays centered in the safe zone for circular crops.
     final body = "\{\n"
         + "  \"name\": \"magus\",\n"
         + "  \"short_name\": \"magus\",\n"
@@ -1130,9 +1133,18 @@ fun writeManifest(site: Site) > void {
         + "  \"background_color\": \"#ffffff\",\n"
         + "  \"theme_color\": \"#3178c6\",\n"
         + "  \"icons\": [\n"
-        + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \}\n"
-        + "  ]\n"
+        + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/icon-192.png\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/icon-512.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/icon-512-maskable.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"maskable\" \}\n"
+        + "  ],\n"
+        + "  \"shortcuts\": [\n"
+        + "    \{ \"name\": \"Graph\", \"url\": \"" + basePath + "graph/\" \},\n"
+        + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
+        + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
+        + "  ],\n"
+        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
         + "\}\n";
     fs.writeFile(site.outDir + "/manifest.webmanifest", body);
 }
@@ -1512,6 +1524,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
     // collide with Buzz's own {expr} interpolation).
     final tmpl = `  <footer class="site-footer container">
     <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
+    <small class="footer-group"><a href="{{root}}graph/">Graph</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
@@ -1812,7 +1825,8 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
   <link rel="icon" type="image/png" sizes="32x32" href="{{root}}assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
   <link rel="manifest" href="{{root}}manifest.webmanifest">
-  <meta name="theme-color" content="#3178c6">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
   <link rel="stylesheet" href="{{root}}assets/pico.min.css">
   <link rel="stylesheet" href="{{root}}theme.css">
   <link rel="stylesheet" href="{{root}}site.css">

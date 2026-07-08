@@ -2081,3 +2081,58 @@ a code {
   letter-spacing: 0.06em;
 }
 
+/* MPA view transitions: cross-fade between doc pages in browsers that support
+   the Navigation API. ~150ms keeps it snappy without feeling jarring. Pure
+   progressive enhancement - browsers without support (Firefox) behave as
+   before; no JS involved. */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+  animation-timing-function: ease;
+}
+
+/* Standalone PWA chrome polish. Applied only when the app is installed and
+   running outside the browser frame. None of these rules affect the normal
+   browser experience. */
+@media (display-mode: standalone) {
+  /* Pull content away from device notches / rounded corners / home indicator. */
+  .site-header {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+  }
+  .site-footer {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Disable pull-to-refresh and bounce scroll - standard PWA behaviour. */
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  /* Remove the tap flash on interactive elements; the site uses focus/hover
+     states for feedback instead. Applied globally so no element is missed. */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent accidental text selection on navigation and action surfaces.
+     NEVER applied to content text (article, p, li, etc.). touch-action:
+     manipulation disables double-tap-to-zoom on these controls so tap
+     targets feel instant. */
+  .site-header .nav-links a,
+  .site-header .nav-toggle,
+  .site-footer a,
+  button,
+  [role="button"],
+  #graph-legend .legend-row {
+    user-select: none;
+    touch-action: manipulation;
+  }
+}
+

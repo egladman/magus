@@ -35,6 +35,26 @@
     }
   }
 
+  // Update the split theme-color metas (light + dark) so the browser chrome (tab
+  // bar, address bar on Android) matches the current theme on manual override.
+  // When "auto", clear both overrides and let the media-query pair decide again.
+  function updateThemeColorMeta(t) {
+    var lightMeta = document.querySelector('meta[name="theme-color"][media*="light"]');
+    var darkMeta  = document.querySelector('meta[name="theme-color"][media*="dark"]');
+    if (!lightMeta || !darkMeta) return;
+    if (t === "light") {
+      lightMeta.setAttribute("content", "#ffffff");
+      darkMeta.setAttribute("content", "#ffffff");
+    } else if (t === "dark") {
+      lightMeta.setAttribute("content", "#13171f");
+      darkMeta.setAttribute("content", "#13171f");
+    } else {
+      // "auto": restore originals so the media-query condition governs again
+      lightMeta.setAttribute("content", "#ffffff");
+      darkMeta.setAttribute("content", "#13171f");
+    }
+  }
+
   function set(t) {
     if (t === "auto") {
       root.removeAttribute("data-theme");
@@ -43,6 +63,7 @@
       root.setAttribute("data-theme", t);
       try { localStorage.setItem("theme", t); } catch (e) {}
     }
+    updateThemeColorMeta(t);
     var btn = document.getElementById("theme-toggle");
     if (btn) {
       btn.innerHTML = ICON[t];
