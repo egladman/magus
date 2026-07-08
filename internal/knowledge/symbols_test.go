@@ -38,6 +38,26 @@ func TestAssembleSymbols(t *testing.T) {
 	assert.Contains(t, e.Provenance, "lines=5,8")
 }
 
+// TestAssembleShardsIngestsSymbols: a project with declared symbols yields a
+// per-project @symbols shard in the assembled set, merged into the graph.
+func TestAssembleShardsIngestsSymbols(t *testing.T) {
+	in := sampleInputs()
+	in.Symbols = map[string][]types.KnowledgeSymbol{
+		"pkg/a": {{Key: "example.com/foo Bar#", Label: "Bar", Language: "go", Source: "pkg/a/a.go:1", Defs: []string{"pkg/a/a.go"}}},
+	}
+	shards := AssembleShards(in)
+
+	var names []string
+	for _, sh := range shards {
+		names = append(names, sh.Name)
+	}
+	assert.Contains(t, names, "pkg/a@symbols", "a declared project gets an @symbols shard")
+
+	out := mergeAll(shards).Output()
+	_, ok := nodeByID(out, "symbol:example.com/foo Bar#")
+	assert.True(t, ok, "the ingested symbol node is in the merged graph")
+}
+
 func TestSymbolsShardNaming(t *testing.T) {
 	assert.Equal(t, "pkg/foo@symbols", SymbolsShardName("pkg/foo"))
 	assert.True(t, IsSymbolsShard("pkg/foo@symbols"))

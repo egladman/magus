@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -40,6 +41,11 @@ type Inputs struct {
 	// in the @runtime shard; it annotates existing target nodes rather than adding
 	// edges.
 	Timings []types.KnowledgeTiming
+	// Symbols maps a project path to the code symbols ingested from its SCIP index
+	// (empty unless the project declares one in config). Each becomes a per-project
+	// @symbols shard - deterministic, so remote-shareable like the other extracted
+	// shards, and destined for lazy loading (it can dwarf the domain graph).
+	Symbols map[string][]types.KnowledgeSymbol
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -91,7 +97,27 @@ func AssembleShards(in Inputs) []Shard {
 	if r := assembleRuntime(in.Runtime, in.Timings, knownTargetIDs(in.Graph)); len(r.Edges) > 0 || len(r.Nodes) > 0 {
 		shards = append(shards, r)
 	}
+	// One @symbols shard per project that declared an index, in sorted project order
+	// so the shard slice is deterministic despite the map input.
+	for _, project := range sortedStringKeys(in.Symbols) {
+		if s := assembleSymbols(project, in.Symbols[project]); len(s.Nodes) > 0 {
+			shards = append(shards, s)
+		}
+	}
 	return shards
+}
+
+// sortedStringKeys returns m's keys in sorted order (deterministic iteration).
+func sortedStringKeys[V any](m map[string]V) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // knownTargetIDs collects every target node ID the project shards will define, so
