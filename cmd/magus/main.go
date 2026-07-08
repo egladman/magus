@@ -132,6 +132,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		return dispatchProfile{}
 	case "completion", "self":
 		return dispatchProfile{needsConfig: true}
+	case "agent":
+		// agent install writes embedded skill files into a repo dir; it needs no
+		// workspace resolution and must not forward to a daemon (the install is
+		// local to the caller's directory).
+		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
 	case "config":
@@ -452,6 +457,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return completion(subArgs)
 	case "init":
 		return initCmd(ctx, root, subArgs)
+	case "agent":
+		return agentCmd(ctx, root, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":
@@ -471,7 +478,7 @@ var knownSubcommands = []string{
 	"ls", "describe", "run", "x", "where", "tail",
 	"affected", "insight", "query", "explain", "path", "graph", "watch", "status", "doctor",
 	"config", "server", "repl", "completion", "init", "self", "version",
-	"clean", "merge-driver", "buzz",
+	"clean", "merge-driver", "buzz", "agent",
 	"help",
 }
 
@@ -501,6 +508,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (stdlib only; no host bindings)")
 	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
 	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
+	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skill into a repo (agent install claude)")
 	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")
 	fmt.Fprintln(os.Stderr, "  version        print version, commit, and build date")
 	fmt.Fprintln(os.Stderr, "  help           show this message")

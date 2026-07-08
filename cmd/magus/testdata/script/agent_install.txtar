@@ -1,0 +1,21 @@
+# magus agent install writes the knowledge-graph skill into the repo
+exec magus agent install claude
+exists .claude/skills/magus/SKILL.md
+grep 'name: magus-knowledge-graph' .claude/skills/magus/SKILL.md
+grep 'agent-skill-version: 1' .claude/skills/magus/SKILL.md
+
+# a second install refuses to clobber without --force
+! exec magus agent install claude
+stderr 'already exists'
+
+# --force overwrites in place
+exec magus agent install claude --force
+exists .claude/skills/magus/SKILL.md
+
+# an unsupported platform errors explicitly rather than doing nothing
+! exec magus agent install codex
+stderr 'not supported yet'
+
+# a missing platform is an error
+! exec magus agent install
+stderr 'platform is required'
