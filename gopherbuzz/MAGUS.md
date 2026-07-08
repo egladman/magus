@@ -22,6 +22,7 @@ This workspace has a knowledge graph of **934 nodes** and **1499 edges** (schema
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # how two nodes connect
+magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
 magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 ```
 

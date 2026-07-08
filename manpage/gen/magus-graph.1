@@ -19,7 +19,10 @@ deps     The project dependency DAG. A trailing list of project paths roots
            the magus domain (projects, targets, spells, ops, charms, modules,
            methods, diagnostics, docs, buzz sources). \-o json emits the
            node\-link form; \-o graphml emits GraphML. External graph viewers
-           (Gephi, yEd) read both directly. The graph is cache\-backed under
+           (Gephi, yEd) read both directly. \-\-select "<terms>" narrows the
+           export to a query's neighborhood (same engine as magus query); \-o dot
+           and \-o mermaid render only with \-\-select, since the full graph has too
+           many nodes to lay out. The graph is cache\-backed under
            <cache>/knowledge; only shards whose sources changed are rebuilt.
   stats    The graph's shape: god nodes (the most connected spells, modules,
            targets \- where structural risk concentrates), orphans (docs that
@@ -44,11 +47,23 @@ Show dependents instead of dependencies
 .SS graph export options
 .RS
 .TP
+\fB\-\-budget\fR \fIint\fR (default: 50)
+Node budget for \-\-select (how many nodes the neighborhood may collect)
+.TP
+\fB\-\-global\fR
+Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace
+.TP
 \fB\-\-refresh\fR
 Force a full graph rebuild before exporting
+.TP
+\fB\-\-select\fR \fIstring\fR
+Export only the neighborhood of a query (same grammar as magus query); required for \-o dot and \-o mermaid
 .RE
 .SS graph stats options
 .RS
+.TP
+\fB\-\-global\fR
+Union the workspaces registered in config (knowledge.workspaces) before computing stats
 .TP
 \fB\-\-kind\fR \fIstring\fR
 Scope every section to one node kind (spell, target, doc, ...)
@@ -91,6 +106,12 @@ magus graph export -o json > graph.json
 .PP
 .EX
 magus graph export -o graphml > graph.graphml
+.EE
+.PP
+\fIA query's neighborhood as Mermaid\fR
+.PP
+.EX
+magus graph export --select 'kind:spell go' -o mermaid
 .EE
 .PP
 \fIWhere structural risk concentrates\fR

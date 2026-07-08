@@ -16,12 +16,13 @@ Unfamiliar with a term? See the [Glossary](#glossary).
 
 ## Query first
 
-This workspace has a knowledge graph of **1642 nodes** and **2842 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1648 nodes** and **2856 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # how two nodes connect
+magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
 magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 ```
 
@@ -34,8 +35,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm | 5 | `magus query kind:charm` | `rw`, `static`, `cd` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 21 | `magus query kind:diagnostic` | `MGS5002`, `MGS4001`, `MGS2001` |
-| doc | 94 | `magus query kind:doc` | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
+| diagnostic | 23 | `magus query kind:diagnostic` | `MGS5002`, `MGS4001`, `MGS2001` |
+| doc | 98 | `magus query kind:doc` | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
 | file | 195 | `magus query kind:file` | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
 | function | 952 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 90 | `magus query kind:import` | `std`, `magus`, `fs` |

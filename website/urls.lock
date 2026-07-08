@@ -30,6 +30,9 @@ charms/
 ci/
 codes/charms/
 codes/charms/MGS6001/
+codes/knowledge/
+codes/knowledge/MGS7001/
+codes/knowledge/MGS7002/
 codes/magusfile/
 codes/magusfile/MGS1001/
 codes/magusfile/MGS1002/
@@ -80,6 +83,7 @@ flaky-builds/
 getting-started/
 index.html
 insight/
+knowledge/
 manpage/magus-affected/
 manpage/magus-completion/
 manpage/magus-config/
