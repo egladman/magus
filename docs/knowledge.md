@@ -228,3 +228,9 @@ The MCP daemon exposes the verbs as tools: `magus_query`, `magus_explain`,
 `magus_path`, and `magus_stats`. See [MCP](mcp.md) for wiring. Prefer these over
 grep to find and relate magus-domain entities; start from the `MAGUS.md` routing
 table, which is already in context in a fresh clone.
+
+For a large match set, `magus_query` pages: pass `limit` to cap the matches per
+response and echo the returned `next_cursor` to fetch the next page. The cursor is
+stateless and self-validating - it carries the query and a graph fingerprint, so a
+cursor reused against a different query or a graph that changed between pages is
+rejected rather than returning an incoherent slice.
