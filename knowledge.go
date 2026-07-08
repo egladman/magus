@@ -3,7 +3,9 @@ package magus
 import (
 	"cmp"
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -196,14 +198,28 @@ func loadKnowledgeSymbols(cfg config.Config, root string, log *slog.Logger) map[
 		if decl.Project == "" || decl.Index == "" {
 			continue
 		}
+		// The index is declared as a workspace-relative path (typically a target
+		// output); reject one that escapes the root rather than reading an arbitrary file.
+		if !filepath.IsLocal(decl.Index) {
+			log.Warn("knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
+			continue
+		}
 		data, err := os.ReadFile(filepath.Join(root, decl.Index))
 		if err != nil {
-			log.Debug("knowledge: skipping unreadable symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
+			// A not-yet-built index (the target has not run) is expected and quiet; any
+			// other read error (typo, permissions) is a misconfig the user asked about.
+			if errors.Is(err, fs.ErrNotExist) {
+				log.Debug("knowledge: symbol index not built yet, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
+			} else {
+				log.Warn("knowledge: cannot read declared symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
+			}
 			continue
 		}
 		syms, err := symbols.ParseIndex(data)
 		if err != nil {
-			log.Debug("knowledge: skipping undecodable symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
+			// A declared index that exists but will not decode is a real problem (wrong
+			// file, corrupt output), not a benign miss - surface it.
+			log.Warn("knowledge: cannot decode symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
 			continue
 		}
 		out[decl.Project] = syms

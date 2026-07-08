@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -99,25 +100,12 @@ func AssembleShards(in Inputs) []Shard {
 	}
 	// One @symbols shard per project that declared an index, in sorted project order
 	// so the shard slice is deterministic despite the map input.
-	for _, project := range sortedStringKeys(in.Symbols) {
+	for _, project := range slices.Sorted(maps.Keys(in.Symbols)) {
 		if s := assembleSymbols(project, in.Symbols[project]); len(s.Nodes) > 0 {
 			shards = append(shards, s)
 		}
 	}
 	return shards
-}
-
-// sortedStringKeys returns m's keys in sorted order (deterministic iteration).
-func sortedStringKeys[V any](m map[string]V) []string {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
 }
 
 // knownTargetIDs collects every target node ID the project shards will define, so

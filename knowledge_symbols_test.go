@@ -53,3 +53,22 @@ func TestLoadKnowledgeSymbolsNoneDeclared(t *testing.T) {
 	got := loadKnowledgeSymbols(config.Config{}, t.TempDir(), slog.Default())
 	assert.Nil(t, got)
 }
+
+func TestLoadKnowledgeSymbolsSkipsCorrupt(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "bad.scip"), []byte("not a protobuf"), 0o644))
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{
+		{Project: "pkg/a", Index: "bad.scip"},
+	}}}
+	got := loadKnowledgeSymbols(cfg, root, slog.Default())
+	assert.Empty(t, got, "an undecodable index is skipped, not fatal")
+}
+
+func TestLoadKnowledgeSymbolsRejectsPathEscape(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{
+		{Project: "pkg/a", Index: "../outside.scip"},
+	}}}
+	got := loadKnowledgeSymbols(cfg, root, slog.Default())
+	assert.Empty(t, got, "an index path that escapes the workspace is rejected")
+}
