@@ -13,6 +13,10 @@ const PRECACHE = [
   BASE + "theme.js",
   BASE + "site.css",
   BASE + "theme.css",
+  // pico.min.css is same-origin (no CDN); precache so every page is styled on a
+  // cold offline load. The large mermaid bundle (gen/assets/mermaid.js) is NOT
+  // precached - it caches on first use via the cache-first same-origin asset path.
+  BASE + "assets/pico.min.css",
 ];
 
 self.addEventListener("install", (e) => {

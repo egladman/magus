@@ -20,8 +20,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
   <link rel="manifest" href="../manifest.webmanifest">
   <meta name="theme-color" content="#3178c6">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
   <script src="../theme.js"></script>
@@ -66,12 +65,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-two-concept-model" title="The two-concept model">The two-concept model</a></li><li><a href="#query-grammar" title="Query grammar">Query grammar</a></li><li><a href="#graph-explorer" title="Graph Explorer">Graph Explorer</a></li><li><a href="#schema" title="Schema">Schema</a></li><li><a href="#file-layout" title="File layout">File layout</a></li><li><a href="#runtime-enrichment" title="Runtime enrichment">Runtime enrichment</a></li><li><a href="#exporting-to-external-tools" title="Exporting to external tools">Exporting to external tools</a></li><li><a href="#global-graph-across-workspaces" title="Global graph (across workspaces)">Global graph (across workspaces)</a></li><li><a href="#extraction-diagnostics" title="Extraction diagnostics">Extraction diagnostics</a></li><li><a href="#for-agents" title="For agents">For agents</a></li></ul>
+        <ul><li><a href="#the-two-concept-model" title="The two-concept model">The two-concept model</a></li><li><a href="#query-grammar" title="Query grammar">Query grammar</a></li><li><a href="#graph-explorer" title="Graph Explorer">Graph Explorer</a></li><li><a href="#schema" title="Schema">Schema</a></li><li><a href="#file-layout" title="File layout">File layout</a></li><li><a href="#runtime-enrichment" title="Runtime enrichment">Runtime enrichment</a></li><li><a href="#code-symbols-scip-ingestion" title="Code symbols (SCIP ingestion)">Code symbols (SCIP ingestion)</a></li><li><a href="#exporting-to-external-tools" title="Exporting to external tools">Exporting to external tools</a></li><li><a href="#global-graph-across-workspaces" title="Global graph (across workspaces)">Global graph (across workspaces)</a></li><li><a href="#extraction-diagnostics" title="Extraction diagnostics">Extraction diagnostics</a></li><li><a href="#for-agents" title="For agents">For agents</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">6 min read</small>
+    <small class="reading-time" title="Estimated reading time">9 min read</small>
     <article>
 <h1 id="knowledge-graph">Knowledge graph</h1>
 <p>The knowledge graph is a deterministic, cache-backed graph of the magus domain.
@@ -92,9 +91,16 @@ measure its shape (<code>stats</code>).</li>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # ranked node matches plus their neighborhood
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # the shortest chain of edges between two nodes
+magus refs &lt;symbol&gt;         # where an ingested code symbol is defined and referenced
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
+magus graph open            # explore it visually in your browser (data stays local)
 </code></pre>
+<p>Prefer a picture? <code>magus graph open</code> launches the interactive <a href="../graph/">Graph
+Explorer</a> seeded with your own workspace - a force-directed, searchable
+view of the same graph. Your data never leaves your machine: it rides in the URL
+fragment (or a local loopback server with <code>--serve</code>), never reaching the site. This
+site's own graph is the <a href="../graph/">live demo</a>.</p>
 <p>The committed <code>MAGUS.md</code> routing table is the entry point: it lists every node
 kind with its count, the query that lists it, and the highest-degree anchor
 nodes, so an agent knows what exists before running anything.</p>
@@ -128,6 +134,10 @@ are scored with the same leaf-anchored fuzzy match that powers <code>magus where
 <tr>
 <td><code>id:build</code></td>
 <td>substring match on the node ID</td>
+</tr>
+<tr>
+<td><code>id:target:*build</code></td>
+<td><code>*</code> wildcard: matches any run (in a value or term)</td>
 </tr>
 <tr>
 <td><code>-kind:op</code></td>
@@ -169,11 +179,23 @@ via the Open-file button or drag-and-drop. This site's own graph is the
 builds so external consumers and agent memory can key on it. A rename is a
 delete-plus-add.</p>
 <p>Node kinds: <code>project</code>, <code>target</code>, <code>spell</code>, <code>op</code>, <code>charm</code>, <code>module</code>, <code>method</code>,
-<code>diagnostic</code>, <code>doc</code>, <code>file</code>, <code>function</code>, <code>import</code>, <code>rationale</code>.</p>
+<code>diagnostic</code>, <code>doc</code>, <code>file</code>, <code>function</code>, <code>import</code>, <code>rationale</code>, <code>owner</code>.</p>
+<p>Nodes also carry static metadata the extractors already parse, surfaced as
+attributes so <code>magus explain</code> answers a question without a second describe: a
+project reports its <code>engine</code> and <code>target_count</code>, each target inherits its
+project's <code>engine</code>, and a doc page carries its frontmatter <code>title</code> and <code>tags</code>.
+Attributes are additive and absent when unknown, so they never bump the schema
+version.</p>
 <p>Edges are directed and carry provenance and a confidence tag - <code>extracted</code> (1.0,
 from a parseable source) or <code>inferred</code> (a rubric score, from a fuzzy match).</p>
 <p>Relations: <code>depends_on</code>, <code>contains</code>, <code>uses</code>, <code>calls</code>, <code>imports</code>, <code>references</code>,
-<code>documents</code>, <code>rationale_for</code>.</p>
+<code>documents</code>, <code>rationale_for</code>, <code>owns</code>.</p>
+<p>Ownership is extracted from a committed <code>CODEOWNERS</code> file (checked at the repo
+root, <code>.github/</code>, or <code>docs/</code>): each owner becomes an <code>owner</code> node with an <code>owns</code>
+edge to every project and buzz file it covers, under GitHub's last-match-wins rule,
+with <code>CODEOWNERS:&lt;line&gt;</code> provenance. Only declared ownership is taken - blame-derived
+ownership is insight's job, not a graph edge - so &quot;who owns the blast radius of this
+change&quot; is one path query.</p>
 <p>Both node-link JSON and GraphML carry a <code>schema_version</code>; external consumers and
 agent skills should check it, since a bump is a changelog event.</p>
 <h2 id="file-layout">File layout</h2>
@@ -204,10 +226,39 @@ is never pushed: it is local run history, not shareable derived data.</p>
 target trips during real runs, as <code>emits</code> edges in the isolated <code>@runtime</code> shard.
 A run captures every fired diagnostic through one sink that also feeds the report
 stream, and persists the set to <code>&lt;cache&gt;/knowledge/runtime.json</code>. This answers
-&quot;what has this target tripped&quot; - history the static <code>documents</code> edge cannot. It is
-the graph's only non-deterministic input, so it is quarantined: a distinct shard,
-excluded from remote export, derived from local run records rather than workspace
-sources.</p>
+&quot;what has this target tripped&quot; - history the static <code>documents</code> edge cannot. The
+same shard also folds observed performance onto target nodes from the local timing
+history: <code>duration_p75_ms</code>, <code>cache_hit_rate</code>, and <code>run_samples</code>, so an agent
+planning work sees a target's cost without a separate history query. Timings for a
+target no longer in any magusfile are dropped rather than left as phantom nodes.
+This is the graph's only non-deterministic input, so it is quarantined: a distinct
+shard, excluded from remote export, derived from local run records rather than
+workspace sources.</p>
+<h2 id="code-symbols-scip-ingestion">Code symbols (SCIP ingestion)</h2>
+<p>magus never parses source code. To bring code symbols into the graph, it ingests a
+<a href="https://docs.sourcegraph.com/code_navigation/explanations/scip" rel="noopener noreferrer" target="_blank" data-external>SCIP</a> index file
+that a per-language indexer (<code>scip-go</code>, <code>scip-typescript</code>, ...) emits - so any
+language with an indexer works, with no magus code per language. The index is a
+declared target output; point config at it (explicit, opt-in, never auto-detected):</p>
+<pre><code class="language-yaml"># magus.yaml
+knowledge:
+  symbols:
+    - project: pkg/foo
+      index: pkg/foo/index.scip   # produced by a `pkg/foo:scip` target
+</code></pre>
+<p>Each declared index becomes a per-project <code>&lt;project&gt;@symbols</code> shard: <code>symbol</code> nodes
+(keyed by their version-stripped SCIP moniker), <code>defines</code> edges from the defining
+file, and <code>references</code> edges from each using file (one per file, carrying an
+occurrence count and capped lines). A symbol seen only as a reference still gets a
+node, so cross-project usage resolves.</p>
+<p>Symbol shards can dwarf the domain graph, so they are <strong>lazily loaded</strong>: the default
+query/stats/<code>graph open</code>/warm graph never touch them. They load only when a query is
+symbol-seeded - <code>kind:symbol</code>, a <code>symbol:</code> ID, <code>relation:defines</code>/<code>references</code>, or
+the <code>refs</code> verb. <code>magus refs &lt;symbol&gt;</code> lists a symbol's definition and every
+referencing file (<code>magus_refs</code> over MCP, paginated). At very large scale a derived
+<code>shards/@symbols.routing.json</code> (symbol hash to referencing shard names, rebuilt with
+the shards) lets an exact-ID lookup load only the shards that mention the symbol
+rather than all of them; a missing routing file just falls back to loading all.</p>
 <h2 id="exporting-to-external-tools">Exporting to external tools</h2>
 <p>magus emits; it does not render. To look at the graph, export it and open the
 file in a graph tool - files are the interface.</p>
@@ -248,9 +299,21 @@ the ambiguity stays queryable. The first two are
 and <a href="../codes/knowledge/MGS7002/">MGS7002</a> (a doc citing an unregistered code).</p>
 <h2 id="for-agents">For agents</h2>
 <p>The MCP daemon exposes the verbs as tools: <code>magus_query</code>, <code>magus_explain</code>,
-<code>magus_path</code>, and <code>magus_stats</code>. See <a href="../mcp/">MCP</a> for wiring. Prefer these over
-grep to find and relate magus-domain entities; start from the <code>MAGUS.md</code> routing
-table, which is already in context in a fresh clone.</p>
+<code>magus_path</code>, <code>magus_stats</code>, and <code>magus_refs</code>. See <a href="../mcp/">MCP</a> for wiring. Prefer
+these over grep to find and relate magus-domain entities; start from the <code>MAGUS.md</code>
+routing table, which is already in context in a fresh clone.</p>
+<p>For a large result set, <code>magus_query</code> and <code>magus_refs</code> page: pass <code>limit</code> to cap the
+rows per response and echo the returned <code>next_cursor</code> to fetch the next page. The
+cursor is stateless and self-validating - it carries the query and a graph
+fingerprint, so a cursor reused against a different query or a graph that changed
+between pages is rejected rather than returning an incoherent slice.</p>
+<p><code>magus agent install claude</code> writes a skill into <code>.claude/skills/magus/</code> that
+teaches an agent HOW to use these verbs (the repo's <code>MAGUS.md</code> says WHAT is in the
+workspace). The skill ships with the binary and teaches only the tool surface, so
+it stays current with the magus version rather than the workspace. Platform is an
+explicit argument; only <code>claude</code> is supported today. The installed file carries a
+version footer, and <code>magus graph verify</code> (with <code>--strict</code> for CI) reports when an
+installed skill has fallen behind the binary after an upgrade.</p>
     </article>
     </div>
     </div>
@@ -270,7 +333,7 @@ table, which is already in context in a fresh clone.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../search/?q=tag%3A%22graphml%22">graphml</a><a class="tag" href="../search/?q=tag%3A%22mcp%22">mcp</a></div>
-    <small>Last updated <time datetime="2026-07-08T07:05:25Z">July 8, 2026, 7:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a2d96c8315992d732a745bc4d1f579d53e8faee6" data-tooltip="a2d96c8315992d732a745bc4d1f579d53e8faee6" title="a2d96c8315992d732a745bc4d1f579d53e8faee6">a2d96c8</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/adec1206f412a395fa0761d71025127fd5dc64ee"><code>adec120</code></a> <small><time datetime="2026-07-08T06:40:20Z">Jul 8, 2026</time></small> - add the Graph Explorer and `magus graph open`; derive repo source links from a new VCS remote capability; link the explorer from MAGUS.md</li><li><a href="https://github.com/egladman/magus/commit/02cb124d6f58483c8e4583cdaf5effa2d648540a"><code>02cb124</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - document the knowledge graph: docs/knowledge.md reference and a documentation index link</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-08T22:53:04Z">July 8, 2026, 10:53 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/08597bdb468e3fcbedb5143bf189631962c67d72" data-tooltip="08597bdb468e3fcbedb5143bf189631962c67d72" title="08597bdb468e3fcbedb5143bf189631962c67d72">08597bd</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/d0d1db85651e263ad5bc7df3c6befe3fa49e8aef"><code>d0d1db8</code></a> <small><time datetime="2026-07-08T22:45:50Z">Jul 8, 2026</time></small> - document the * wildcard in the query grammar and the agent skill; bump agent-skill-version to 4</li><li><a href="https://github.com/egladman/magus/commit/10f35f9d00e18d4cccb605d9e75927a5bd895573"><code>10f35f9</code></a> <small><time datetime="2026-07-08T22:25:07Z">Jul 8, 2026</time></small> - document SCIP code-symbol ingestion: declaring an index, the @symbols shards, lazy loading, refs, and the xref routing file</li><li><a href="https://github.com/egladman/magus/commit/8f12fe627598534ad295982ea62efc143b986955"><code>8f12fe6</code></a> <small><time datetime="2026-07-08T22:08:27Z">Jul 8, 2026</time></small> - document the refs verb and magus_refs tool; teach them in the agent skill and bump agent-skill-version to 3</li><li><a href="https://github.com/egladman/magus/commit/342090a5c182541ef94cd29239e668e4776161e3"><code>342090a</code></a> <small><time datetime="2026-07-08T21:51:38Z">Jul 8, 2026</time></small> - document magus graph verify drift check</li><li><a href="https://github.com/egladman/magus/commit/6eb00688e74a88d300c25140f3601b90fb79ded4"><code>6eb0068</code></a> <small><time datetime="2026-07-08T21:50:50Z">Jul 8, 2026</time></small> - document owner nodes and the owns relation in the knowledge schema</li><li><a href="https://github.com/egladman/magus/commit/2c9e71983378bd10939f70fb58a54fc2e9db37e6"><code>2c9e719</code></a> <small><time datetime="2026-07-08T21:50:50Z">Jul 8, 2026</time></small> - document magus agent install in the for-agents section</li><li><a href="https://github.com/egladman/magus/commit/d0edf39d2c0ff60511cc48126d68afbdee78a97e"><code>d0edf39</code></a> <small><time datetime="2026-07-08T21:50:50Z">Jul 8, 2026</time></small> - document magus_query pagination in the for-agents section</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

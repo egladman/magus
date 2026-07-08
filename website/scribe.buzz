@@ -42,12 +42,12 @@ import "scribe_html" as _;
 // Path config, set by site_render() from the arguments the magusfile passes in - the
 // generator does not hardcode where the workspace, docs, or output live, so it stays
 // a config-agnostic library rather than owning project layout the caller reaches into.
-// PICO is pinned to an EXACT version so PICO_SRI stays valid (the @2 moving
-// range would silently invalidate the integrity hash on a Pico release). Bump
-// both together; the SRI hash is:
-//   curl -sL <PICO> | openssl dgst -sha384 -binary | openssl base64 -A
-final PICO = "https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css";
-final PICO_SRI = "sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU";
+// Pico CSS is vendored at assets/pico.min.css (copied to gen/assets/ on each generate).
+// Same-origin; no CDN. Version: @picocss/pico@2.1.1.
+// SRI provenance (for reference, not used with same-origin link):
+//   sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU
+// To upgrade: download the new pico.min.css into assets/ (not gen/assets/), update the
+// version comment, recompute the SRI if ever reverting to CDN delivery, and regenerate.
 final GH   = "https://github.com/egladman/magus";
 
 // SITE_URL is the site's public base (with trailing slash), used for the canonical
@@ -1035,8 +1035,7 @@ fun render404(site: Site) > void {
   <meta name="description" content="{{desc}}">
   <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="{{basePath}}assets/apple-touch-icon.png">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="{{pico}}" integrity="{{picoSri}}" crossorigin="anonymous">
+  <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
   <link rel="stylesheet" href="{{basePath}}theme.css">
   <link rel="stylesheet" href="{{basePath}}site.css">
   <script src="{{basePath}}theme.js"></script>
@@ -1060,7 +1059,7 @@ fun render404(site: Site) > void {
 </html>
 `;
     final doc = template.render(tmpl, {
-        "title": title, "desc": desc, "basePath": basePath, "pico": PICO, "picoSri": PICO_SRI,
+        "title": title, "desc": desc, "basePath": basePath,
         "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath, site),
     });
     fs.writeFile(site.outDir + "/404.html", doc);
@@ -1165,7 +1164,8 @@ fun writeServiceWorker(site: Site) > void {
     // the old "magus-<HEAD short hash>" form, which changed on every commit, could
     // never contain its own commit's hash, and so perpetually drifted the gen gate.
     final precached = ["search-index.json", "playground/wasm_exec.js",
-        "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css", "main.js", "theme.js", "site.css", "theme.css"];
+        "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css", "main.js", "theme.js", "site.css", "theme.css",
+        "assets/pico.min.css"];
     var manifest = "";
     foreach (rel in precached) {
         final p = site.outDir + "/" + rel;
@@ -1813,8 +1813,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
   <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
   <link rel="manifest" href="{{root}}manifest.webmanifest">
   <meta name="theme-color" content="#3178c6">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="{{pico}}" integrity="{{picoSri}}" crossorigin="anonymous">
+  <link rel="stylesheet" href="{{root}}assets/pico.min.css">
   <link rel="stylesheet" href="{{root}}theme.css">
   <link rel="stylesheet" href="{{root}}site.css">
   <script src="{{root}}theme.js"></script>
@@ -1842,8 +1841,6 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
         "isHome": isHome,
         "bodyClass": bodyClass,
         "root": root,
-        "pico": PICO,
-        "picoSri": PICO_SRI,
         "gh": GH,
         "announcement": renderAnnouncementBar(site),
         "nav": renderSiteNav(root, active),
@@ -2597,8 +2594,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // The nine flat scripts became a js/ ES-module tree (feature modules + lib/);
     // esbuild writes two outputs: theme.js (head, critical, minified — no bundle
     // needed, it has no imports) and main.js (the deferred bundle of every feature
-    // module). The heavy hljs/mermaid CDN libs stay lazy dynamic import()s, which
-    // esbuild leaves as external runtime imports. CSS is minified per-file (not
+    // module). mermaid is a lazy dynamic import() pointing to the same-origin
+    // gen/assets/mermaid.js bundle (built by build-mermaid); esbuild leaves dynamic
+    // imports as external runtime imports. CSS is minified per-file (not
     // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
     os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + site.outDir + "/site.css"]);
     os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);

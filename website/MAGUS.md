@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](#glossary).
 
 ## Query first
 
-This workspace has a knowledge graph of **490 nodes** and **590 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **494 nodes** and **596 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -29,7 +29,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `.` |
-| target | 11 | `magus query kind:target` | `generate`, `ci`, `format` |
+| target | 13 | `magus query kind:target` | `generate`, `preflight`, `ci` |
 | spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
 | op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | charm | 1 | `magus query kind:charm` | `rw` |
@@ -37,13 +37,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
 | doc | 1 | `magus query kind:doc` | `MAGUS.md` |
-| file | 23 | `magus query kind:file` | `scribe.buzz`, `scribe_html.buzz`, `tour/12-magusfile.buzz` |
-| function | 183 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
+| file | 23 | `magus query kind:file` | `scribe.buzz`, `magusfile.buzz`, `scribe_html.buzz` |
+| function | 185 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
 | import | 23 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 11 | `magus query project:.` | `generate`, `ci`, `format` |
+| . | 13 | `magus query project:.` | `generate`, `preflight`, `ci` |
 
 ## Reading the graphs
 
@@ -97,6 +97,8 @@ graph LR
   subgraph entry_cluster[" "]
     ci("ci")
     build_playground("build-playground")
+    build_mermaid("build-mermaid")
+    build_hljs("build-hljs")
     serve("serve")
   end
   preflight("preflight")
@@ -118,9 +120,11 @@ graph LR
   build --> ci
   test --> ci
   preflight --> build_playground
+  preflight --> build_mermaid
+  preflight --> build_hljs
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_playground,ci,serve anchor
+  class build_hljs,build_mermaid,build_playground,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 ```
@@ -221,6 +225,38 @@ build-playground rebuilds the WebAssembly interpreter the playground loads: Tiny
 
 ```sh
 magus run build-playground  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+**Details:** uncached (always runs)
+
+### `build-mermaid`
+
+build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -> mermaid@11) into the committed gen/assets/mermaid.js.
+
+**Defaults**
+
+```sh
+magus run build-mermaid  # from the workspace root
+```
+
+**Depends on:**
+
+- [`preflight`](#preflight)
+
+**Details:** uncached (always runs)
+
+### `build-hljs`
+
+build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11) into the committed gen/assets/hljs.js.
+
+**Defaults**
+
+```sh
+magus run build-hljs  # from the workspace root
 ```
 
 **Depends on:**

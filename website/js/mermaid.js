@@ -3,16 +3,21 @@
 //
 // goldmark emits a mermaid fence as <pre><code class="language-mermaid">. We swap
 // each one for a <div class="mermaid"> and run mermaid over it. The library is
-// only pulled from the CDN on pages that actually contain a diagram (today, just
-// the home page), so other pages pay nothing.
+// loaded from the committed same-origin bundle (gen/assets/mermaid.js, built by
+// `magus run build-mermaid website` from js/mermaid-vendor.js) only on pages that
+// actually contain a diagram, so other pages pay nothing.
 //
 // Mermaid's stock "default"/"dark" palettes know nothing about Pico and clash
 // with it. Instead we drive mermaid's "base" theme from Pico's own CSS variables,
 // read off the live page, so nodes read like Pico code blocks and edges/labels use
 // the Pico text palette. Toggling the site theme re-reads the variables and re-renders
 // the diagrams, so they track light/dark exactly like every other component.
+//
+// The bundle is NOT precached by the SW (3 MB; cache-first same-origin on first use).
+// The import path resolves relative to gen/main.js (where this module is bundled),
+// so ./assets/mermaid.js is correct regardless of the page's URL depth.
 if (document.querySelector("code.language-mermaid")) {
-  import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs").then((m) => {
+  import("./assets/mermaid.js").then((m) => {
     const root = document.documentElement;
 
     // Capture each diagram's source once. Mermaid replaces the .mermaid node's
@@ -104,7 +109,8 @@ if (document.querySelector("code.language-mermaid")) {
     });
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
   }).catch(function () {
-    // CDN blocked or offline: leave the <pre> source visible rather than letting
-    // the import reject unhandled. The diagram reads as its (legible) source text.
+    // Load failed (e.g. not yet cached offline): leave the <pre> source visible
+    // rather than letting the import reject unhandled. The diagram reads as its
+    // (legible) source text.
   });
 }

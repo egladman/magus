@@ -20,8 +20,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
   <link rel="manifest" href="../../manifest.webmanifest">
   <meta name="theme-color" content="#3178c6">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css" integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU" crossorigin="anonymous">
+  <link rel="stylesheet" href="../../assets/pico.min.css">
   <link rel="stylesheet" href="../../theme.css">
   <link rel="stylesheet" href="../../site.css">
   <script src="../../theme.js"></script>
@@ -65,7 +64,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
+        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-mermaid" title="build-mermaid">build-mermaid</a></li><li><a href="#build-hljs" title="build-hljs">build-hljs</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -81,7 +80,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="#glossary">Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>490 nodes</strong> and <strong>590 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>494 nodes</strong> and <strong>596 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -106,9 +105,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">11</td>
+<td style="text-align:right">13</td>
 <td><code>magus query kind:target</code></td>
-<td><code>generate</code>, <code>ci</code>, <code>format</code></td>
+<td><code>generate</code>, <code>preflight</code>, <code>ci</code></td>
 </tr>
 <tr>
 <td>spell</td>
@@ -156,11 +155,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>file</td>
 <td style="text-align:right">23</td>
 <td><code>magus query kind:file</code></td>
-<td><code>scribe.buzz</code>, <code>scribe_html.buzz</code>, <code>tour/12-magusfile.buzz</code></td>
+<td><code>scribe.buzz</code>, <code>magusfile.buzz</code>, <code>scribe_html.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">183</td>
+<td style="text-align:right">185</td>
 <td><code>magus query kind:function</code></td>
 <td><code>site_render</code>, <code>renderPage</code>, <code>strLess</code></td>
 </tr>
@@ -184,9 +183,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">11</td>
+<td style="text-align:right">13</td>
 <td><code>magus query project:.</code></td>
-<td><code>generate</code>, <code>ci</code>, <code>format</code></td>
+<td><code>generate</code>, <code>preflight</code>, <code>ci</code></td>
 </tr>
 </tbody>
 </table></figure>
@@ -233,6 +232,8 @@ graph LR
   subgraph entry_cluster[&quot; &quot;]
     ci(&quot;ci&quot;)
     build_playground(&quot;build-playground&quot;)
+    build_mermaid(&quot;build-mermaid&quot;)
+    build_hljs(&quot;build-hljs&quot;)
     serve(&quot;serve&quot;)
   end
   preflight(&quot;preflight&quot;)
@@ -254,9 +255,11 @@ graph LR
   build --&gt; ci
   test --&gt; ci
   preflight --&gt; build_playground
+  preflight --&gt; build_mermaid
+  preflight --&gt; build_hljs
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_playground,ci,serve anchor
+  class build_hljs,build_mermaid,build_playground,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 </code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
@@ -322,6 +325,26 @@ graph LR
 <p>build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.</p>
 <p><strong>Defaults</strong></p>
 <pre><code class="language-sh">magus run build-playground  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#preflight"><code>preflight</code></a></li>
+</ul>
+<p><strong>Details:</strong> uncached (always runs)</p>
+<h3 id="build-mermaid"><code>build-mermaid</code></h3>
+<p>build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -&gt; mermaid@11) into the committed gen/assets/mermaid.js.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run build-mermaid  # from the workspace root
+</code></pre>
+<p><strong>Depends on:</strong></p>
+<ul>
+<li><a href="#preflight"><code>preflight</code></a></li>
+</ul>
+<p><strong>Details:</strong> uncached (always runs)</p>
+<h3 id="build-hljs"><code>build-hljs</code></h3>
+<p>build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -&gt; highlight.js@11) into the committed gen/assets/hljs.js.</p>
+<p><strong>Defaults</strong></p>
+<pre><code class="language-sh">magus run build-hljs  # from the workspace root
 </code></pre>
 <p><strong>Depends on:</strong></p>
 <ul>

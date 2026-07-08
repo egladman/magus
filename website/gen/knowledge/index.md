@@ -38,9 +38,17 @@ MCP; humans reach it through three verbs and the `magus graph` home.
 magus query "<terms>"       # ranked node matches plus their neighborhood
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # the shortest chain of edges between two nodes
+magus refs <symbol>         # where an ingested code symbol is defined and referenced
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
+magus graph open            # explore it visually in your browser (data stays local)
 ```
+
+Prefer a picture? `magus graph open` launches the interactive [Graph
+Explorer](graph.html) seeded with your own workspace - a force-directed, searchable
+view of the same graph. Your data never leaves your machine: it rides in the URL
+fragment (or a local loopback server with `--serve`), never reaching the site. This
+site's own graph is the [live demo](graph.html).
 
 The committed `MAGUS.md` routing table is the entry point: it lists every node
 kind with its count, the query that lists it, and the highest-degree anchor
@@ -51,15 +59,16 @@ nodes, so an agent knows what exists before running anything.
 `magus query` takes free-text terms (AND) plus field filters and negation. Terms
 are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 
-| Form              | Meaning                                     |
-| ----------------- | ------------------------------------------- |
-| `build`           | free text: match node IDs, labels, and docs |
-| `kind:spell`      | only nodes of that kind                     |
-| `project:pkg/foo` | the project node and its targets            |
-| `relation:uses`   | seed from nodes touching a `uses` edge      |
-| `id:build`        | substring match on the node ID              |
-| `-kind:op`        | negation: exclude these                     |
-| `"exact phrase"`  | a quoted span stays one term                |
+| Form                | Meaning                                             |
+| ------------------- | --------------------------------------------------- |
+| `build`             | free text: match node IDs, labels, and docs         |
+| `kind:spell`        | only nodes of that kind                             |
+| `project:pkg/foo`   | the project node and its targets                    |
+| `relation:uses`     | seed from nodes touching a `uses` edge              |
+| `id:build`          | substring match on the node ID                      |
+| `id:target:*build`  | `*` wildcard: matches any run (in a value or term)  |
+| `-kind:op`          | negation: exclude these                             |
+| `"exact phrase"`    | a quoted span stays one term                        |
 
 A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node
@@ -99,13 +108,27 @@ builds so external consumers and agent memory can key on it. A rename is a
 delete-plus-add.
 
 Node kinds: `project`, `target`, `spell`, `op`, `charm`, `module`, `method`,
-`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`.
+`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`.
+
+Nodes also carry static metadata the extractors already parse, surfaced as
+attributes so `magus explain` answers a question without a second describe: a
+project reports its `engine` and `target_count`, each target inherits its
+project's `engine`, and a doc page carries its frontmatter `title` and `tags`.
+Attributes are additive and absent when unknown, so they never bump the schema
+version.
 
 Edges are directed and carry provenance and a confidence tag - `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
 Relations: `depends_on`, `contains`, `uses`, `calls`, `imports`, `references`,
-`documents`, `rationale_for`.
+`documents`, `rationale_for`, `owns`.
+
+Ownership is extracted from a committed `CODEOWNERS` file (checked at the repo
+root, `.github/`, or `docs/`): each owner becomes an `owner` node with an `owns`
+edge to every project and buzz file it covers, under GitHub's last-match-wins rule,
+with `CODEOWNERS:<line>` provenance. Only declared ownership is taken - blame-derived
+ownership is insight's job, not a graph edge - so "who owns the blast radius of this
+change" is one path query.
 
 Both node-link JSON and GraphML carry a `schema_version`; external consumers and
 agent skills should check it, since a bump is a changelog event.
@@ -145,10 +168,45 @@ Beyond the static graph, magus records which diagnostics (`MGSxxxx` codes) each
 target trips during real runs, as `emits` edges in the isolated `@runtime` shard.
 A run captures every fired diagnostic through one sink that also feeds the report
 stream, and persists the set to `<cache>/knowledge/runtime.json`. This answers
-"what has this target tripped" - history the static `documents` edge cannot. It is
-the graph's only non-deterministic input, so it is quarantined: a distinct shard,
-excluded from remote export, derived from local run records rather than workspace
-sources.
+"what has this target tripped" - history the static `documents` edge cannot. The
+same shard also folds observed performance onto target nodes from the local timing
+history: `duration_p75_ms`, `cache_hit_rate`, and `run_samples`, so an agent
+planning work sees a target's cost without a separate history query. Timings for a
+target no longer in any magusfile are dropped rather than left as phantom nodes.
+This is the graph's only non-deterministic input, so it is quarantined: a distinct
+shard, excluded from remote export, derived from local run records rather than
+workspace sources.
+
+## Code symbols (SCIP ingestion)
+
+magus never parses source code. To bring code symbols into the graph, it ingests a
+[SCIP](https://docs.sourcegraph.com/code_navigation/explanations/scip) index file
+that a per-language indexer (`scip-go`, `scip-typescript`, ...) emits - so any
+language with an indexer works, with no magus code per language. The index is a
+declared target output; point config at it (explicit, opt-in, never auto-detected):
+
+```yaml
+# magus.yaml
+knowledge:
+  symbols:
+    - project: pkg/foo
+      index: pkg/foo/index.scip   # produced by a `pkg/foo:scip` target
+```
+
+Each declared index becomes a per-project `<project>@symbols` shard: `symbol` nodes
+(keyed by their version-stripped SCIP moniker), `defines` edges from the defining
+file, and `references` edges from each using file (one per file, carrying an
+occurrence count and capped lines). A symbol seen only as a reference still gets a
+node, so cross-project usage resolves.
+
+Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the default
+query/stats/`graph open`/warm graph never touch them. They load only when a query is
+symbol-seeded - `kind:symbol`, a `symbol:` ID, `relation:defines`/`references`, or
+the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
+referencing file (`magus_refs` over MCP, paginated). At very large scale a derived
+`shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
+the shards) lets an exact-ID lookup load only the shards that mention the symbol
+rather than all of them; a missing routing file just falls back to loading all.
 
 ## Exporting to external tools
 
@@ -207,6 +265,20 @@ and [MGS7002](codes/knowledge/MGS7002.md) (a doc citing an unregistered code).
 ## For agents
 
 The MCP daemon exposes the verbs as tools: `magus_query`, `magus_explain`,
-`magus_path`, and `magus_stats`. See [MCP](mcp.md) for wiring. Prefer these over
-grep to find and relate magus-domain entities; start from the `MAGUS.md` routing
-table, which is already in context in a fresh clone.
+`magus_path`, `magus_stats`, and `magus_refs`. See [MCP](mcp.md) for wiring. Prefer
+these over grep to find and relate magus-domain entities; start from the `MAGUS.md`
+routing table, which is already in context in a fresh clone.
+
+For a large result set, `magus_query` and `magus_refs` page: pass `limit` to cap the
+rows per response and echo the returned `next_cursor` to fetch the next page. The
+cursor is stateless and self-validating - it carries the query and a graph
+fingerprint, so a cursor reused against a different query or a graph that changed
+between pages is rejected rather than returning an incoherent slice.
+
+`magus agent install claude` writes a skill into `.claude/skills/magus/` that
+teaches an agent HOW to use these verbs (the repo's `MAGUS.md` says WHAT is in the
+workspace). The skill ships with the binary and teaches only the tool surface, so
+it stays current with the magus version rather than the workspace. Platform is an
+explicit argument; only `claude` is supported today. The installed file carries a
+version footer, and `magus graph verify` (with `--strict` for CI) reports when an
+installed skill has fallen behind the binary after an upgrade.

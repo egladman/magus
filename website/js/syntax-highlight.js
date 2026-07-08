@@ -2,11 +2,14 @@
 // --syn-* variables in theme.css (so it tracks light/dark like everything else).
 //
 // goldmark emits ```lang fences as <pre><code class="language-lang">. We pull the
-// highlight.js "common" bundle from the CDN (same pattern as mermaid-init) only
-// when a highlightable block exists, register a small Buzz grammar the common
-// bundle lacks (magusfile examples are the site's most frequent code), then
-// highlight each block whose language we actually know - unknown languages are
-// left as legible plain text rather than mis-highlighted.
+// highlight.js bundle from the committed same-origin artifact (gen/assets/hljs.js,
+// built by `magus run build-hljs website` from js/hljs-vendor.js) only when a
+// highlightable block exists, register a small Buzz grammar the common bundle lacks
+// (magusfile examples are the site's most frequent code), then highlight each block
+// whose language we actually know - unknown languages are left as legible plain text
+// rather than mis-highlighted.
+//
+// The import path resolves relative to gen/main.js (where this module is bundled).
 (function () {
   var blocks = document.querySelectorAll('pre > code[class*="language-"]');
   if (!blocks.length) return;
@@ -18,7 +21,7 @@
   });
   if (!work.length) return;
 
-  import("https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/es/highlight.min.js")
+  import("./assets/hljs.js")
     .then(function (m) {
       var hljs = m.default;
 
@@ -62,6 +65,6 @@
       });
     })
     .catch(function () {
-      // CDN blocked or offline: code blocks stay as legible plain text.
+      // Load failed (e.g. not yet cached offline): code blocks stay as legible plain text.
     });
 })();

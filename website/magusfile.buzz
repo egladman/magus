@@ -28,6 +28,14 @@ magus.project({
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
         // wasm binary; skipCache so a hit never replays a stale one. Run by hand.
         "build-playground": {"skipCache": true},
+        // build-mermaid bundles js/mermaid-vendor.js (mermaid@11) into the committed
+        // gen/assets/mermaid.js - same npm + esbuild pattern as the graph explorer.
+        // Run by hand when the mermaid version is bumped; commit the new artifact.
+        "build-mermaid": {"skipCache": true},
+        // build-hljs bundles js/hljs-vendor.js (highlight.js@11) into the committed
+        // gen/assets/hljs.js - same pattern as build-mermaid.
+        // Run by hand when the hljs version is bumped; commit the new artifact.
+        "build-hljs": {"skipCache": true},
     },
 });
 
@@ -128,6 +136,32 @@ export fun build_playground(args: [str]) > void {
         ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" website/gen/playground/wasm_exec.js"],
         "..", {});
     magus.info("rebuilt website/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
+}
+
+// build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -> mermaid@11)
+// into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports
+// it same-origin so diagrams and page styling work offline without any CDN. Run after
+// bumping the mermaid version in package.json; commit the regenerated artifact.
+export fun build_mermaid(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    if (!fs.isDir("node_modules")) {
+        os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+    }
+    os.exec("npm", ["run", "build-mermaid"], ".", {});
+    magus.info("rebuilt gen/assets/mermaid.js - commit the result");
+}
+
+// build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11)
+// into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so
+// syntax highlighting works offline without any CDN. Run after bumping the version in
+// package.json; commit the regenerated artifact.
+export fun build_hljs(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    if (!fs.isDir("node_modules")) {
+        os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+    }
+    os.exec("npm", ["run", "build-hljs"], ".", {});
+    magus.info("rebuilt gen/assets/hljs.js - commit the result");
 }
 
 // serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change -
