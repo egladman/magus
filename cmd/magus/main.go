@@ -433,6 +433,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return explainCmd(ctx, root, subArgs)
 	case "path":
 		return pathCmd(ctx, root, subArgs)
+	case "refs":
+		return refsCmd(ctx, root, subArgs)
 	case "graph":
 		return graphCmd(ctx, root, subArgs)
 	case "watch":
@@ -476,7 +478,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 
 var knownSubcommands = []string{
 	"ls", "describe", "run", "x", "where", "tail",
-	"affected", "insight", "query", "explain", "path", "graph", "watch", "status", "doctor",
+	"affected", "insight", "query", "explain", "path", "refs", "graph", "watch", "status", "doctor",
 	"config", "server", "repl", "completion", "init", "self", "version",
 	"clean", "merge-driver", "buzz", "agent",
 	"help",
@@ -496,6 +498,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  query          search the knowledge graph and show a node's neighborhood")
 	fmt.Fprintln(os.Stderr, "  explain        show one knowledge-graph node: its edges, provenance, blast radius")
 	fmt.Fprintln(os.Stderr, "  path           show the shortest path between two knowledge-graph nodes")
+	fmt.Fprintln(os.Stderr, "  refs           list where an ingested code symbol is defined and referenced")
 	fmt.Fprintln(os.Stderr, "  graph          the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)")
 	fmt.Fprintln(os.Stderr, "  watch          emit changed file paths (pipe into affected --stdin)")
 	fmt.Fprintln(os.Stderr, "  status         inspect the concurrency pool of a running parent magus")

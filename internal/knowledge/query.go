@@ -399,6 +399,41 @@ func (g *Graph) Path(a, b string) (types.KnowledgePathOutput, bool) {
 	return out, true
 }
 
+// Refs resolves ref to a node and lists where it is defined and every file that
+// references it, as occurrence-shaped sites (file + count + lines) rather than a
+// node-link neighborhood. The reference counts and lines come from the SCIP-ingested
+// `references` edges' provenance; `defines` edges give the definition file(s). Sites
+// are sorted by file for determinism. ok=false when ref does not resolve.
+func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
+	id, ok := g.resolveSymbol(ref)
+	if !ok {
+		return types.KnowledgeRefsOutput{}, false
+	}
+	g.ensureAdj()
+	n, _ := g.node(id)
+	out := types.KnowledgeRefsOutput{
+		Definition:    types.KnowledgeRefsDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Symbol:        id,
+		Label:         n.Label,
+	}
+	for _, e := range g.in[id] {
+		file := strings.TrimPrefix(e.Source, types.KindFile+":")
+		switch e.Relation {
+		case types.RelationDefines:
+			out.Defs = append(out.Defs, types.KnowledgeRefSite{File: file})
+		case types.RelationReferences:
+			count, lines, _ := parseRefProvenance(e.Provenance)
+			out.Refs = append(out.Refs, types.KnowledgeRefSite{File: file, Count: count, Lines: lines})
+			out.RefCount += count
+		}
+	}
+	slices.SortFunc(out.Defs, func(a, b types.KnowledgeRefSite) int { return cmp.Compare(a.File, b.File) })
+	slices.SortFunc(out.Refs, func(a, b types.KnowledgeRefSite) int { return cmp.Compare(a.File, b.File) })
+	out.FileCount = len(out.Refs)
+	return out, true
+}
+
 // --- resolution & traversal helpers ---
 
 // resolveOne maps a ref to a single node ID: an exact ID hit wins; otherwise the
@@ -408,6 +443,21 @@ func (g *Graph) resolveOne(ref string) (string, bool) {
 		return ref, true
 	}
 	matches := g.Resolve(ref, 1)
+	if len(matches) == 0 {
+		return "", false
+	}
+	return matches[0].ID, true
+}
+
+// resolveSymbol maps a ref to a SYMBOL node specifically, so `magus refs Foo` resolves
+// to the ingested symbol rather than a same-named buzz function or target. An exact
+// symbol-ID hit wins; otherwise the ref is resolved with a kind:symbol filter. A ref
+// that matches no symbol yields ok=false (refs is symbol-only).
+func (g *Graph) resolveSymbol(ref string) (string, bool) {
+	if n, ok := g.node(ref); ok && n.Kind == types.KindSymbol {
+		return ref, true
+	}
+	matches := g.Resolve("kind:"+types.KindSymbol+" "+ref, 1)
 	if len(matches) == 0 {
 		return "", false
 	}

@@ -63,14 +63,16 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol) Shard {
 }
 
 // refProvenance encodes a reference's occurrence count and capped line list into the
-// edge provenance string, e.g. "scip count=3 lines=10,20". This is HUMAN-FACING
-// provenance (how every edge carries its origin), not a machine-readable field:
-// KnowledgeEdge has only a flat Provenance string, no attr map. Making the count
-// programmatically queryable would mean adding structured attrs to KnowledgeEdge - a
-// wire-schema change touching every edge - which is deliberately out of scope here.
+// edge provenance string, e.g. "scip count=3 lines=10,20". KnowledgeEdge has only a
+// flat Provenance string (no attr map), so `magus refs` reads the count/lines back
+// with parseRefProvenance - the two are kept together so the format has one home
+// rather than being defined implicitly at the write site.
+const refProvenancePrefix = "scip "
+
 func refProvenance(ref types.KnowledgeSymbolRef) string {
 	var b strings.Builder
-	b.WriteString("scip count=")
+	b.WriteString(refProvenancePrefix)
+	b.WriteString("count=")
 	b.WriteString(strconv.Itoa(ref.Count))
 	if len(ref.Lines) > 0 {
 		b.WriteString(" lines=")
@@ -82,4 +84,27 @@ func refProvenance(ref types.KnowledgeSymbolRef) string {
 		}
 	}
 	return b.String()
+}
+
+// parseRefProvenance decodes a refProvenance string back into its count and lines.
+// ok=false for any provenance that is not this format (e.g. a defines edge, whose
+// provenance is the plain file path), so a caller can tell a reference edge from the rest.
+func parseRefProvenance(prov string) (count int, lines []int, ok bool) {
+	rest, found := strings.CutPrefix(prov, refProvenancePrefix)
+	if !found {
+		return 0, nil, false
+	}
+	for _, field := range strings.Fields(rest) {
+		switch {
+		case strings.HasPrefix(field, "count="):
+			count, _ = strconv.Atoi(strings.TrimPrefix(field, "count="))
+		case strings.HasPrefix(field, "lines="):
+			for _, s := range strings.Split(strings.TrimPrefix(field, "lines="), ",") {
+				if n, err := strconv.Atoi(s); err == nil {
+					lines = append(lines, n)
+				}
+			}
+		}
+	}
+	return count, lines, true
 }

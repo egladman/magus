@@ -154,6 +154,34 @@ type KnowledgeMatch struct {
 	Score int    `json:"score" yaml:"score"`
 }
 
+// KnowledgeRefsDefinition is the human-readable description of `magus refs`.
+const KnowledgeRefsDefinition = "refs lists where an ingested code symbol is " +
+	"defined and every file that references it, as file:line rows drawn from the " +
+	"SCIP index. It is the occurrence-shaped view (a flat list) that a symbol's fan-in " +
+	"needs, which query's node-link neighborhood renders poorly."
+
+// KnowledgeRefsOutput is the result of `magus refs <symbol>`: the resolved symbol,
+// its definition site(s), and every referencing file with the per-file occurrence
+// count and (capped) line list. Occurrence-shaped, not node-link.
+type KnowledgeRefsOutput struct {
+	Definition    string             `json:"definition"     yaml:"definition"`
+	SchemaVersion int                `json:"schema_version" yaml:"schema_version"`
+	Symbol        string             `json:"symbol"         yaml:"symbol"`
+	Label         string             `json:"label"          yaml:"label"`
+	FileCount     int                `json:"file_count"     yaml:"file_count"`
+	RefCount      int                `json:"ref_count"      yaml:"ref_count"`
+	Defs          []KnowledgeRefSite `json:"defs,omitempty" yaml:"defs,omitempty"`
+	Refs          []KnowledgeRefSite `json:"refs,omitempty" yaml:"refs,omitempty"`
+}
+
+// KnowledgeRefSite is one file that defines or references a symbol, with the
+// occurrence count and the (capped) lines where it appears.
+type KnowledgeRefSite struct {
+	File  string `json:"file"            yaml:"file"`
+	Count int    `json:"count,omitempty" yaml:"count,omitempty"`
+	Lines []int  `json:"lines,omitempty" yaml:"lines,omitempty"`
+}
+
 // KnowledgeQueryOutput is the result of `magus query`: the ranked seed matches
 // plus the induced subgraph (neighborhood) collected up to the node budget. The
 // Nodes/Links carry the node-link keys so the subgraph is itself a valid export.

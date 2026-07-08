@@ -58,6 +58,57 @@ func TestAssembleShardsIngestsSymbols(t *testing.T) {
 	assert.True(t, ok, "the ingested symbol node is in the merged graph")
 }
 
+func TestRefProvenanceRoundTrip(t *testing.T) {
+	prov := refProvenance(types.KnowledgeSymbolRef{Path: "a.go", Count: 3, Lines: []int{10, 20, 30}})
+	assert.Equal(t, "scip count=3 lines=10,20,30", prov)
+	count, lines, ok := parseRefProvenance(prov)
+	require.True(t, ok)
+	assert.Equal(t, 3, count)
+	assert.Equal(t, []int{10, 20, 30}, lines)
+
+	// A non-scip provenance (e.g. a defines edge's file path) is not a ref provenance.
+	_, _, ok = parseRefProvenance("pkg/foo/foo.go")
+	assert.False(t, ok)
+}
+
+func TestGraphRefs(t *testing.T) {
+	syms := []types.KnowledgeSymbol{{
+		Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11",
+		Defs: []string{"pkg/foo/foo.go"},
+		Refs: []types.KnowledgeSymbolRef{
+			{Path: "pkg/b/b.go", Count: 1, Lines: []int{3}},
+			{Path: "pkg/a/a.go", Count: 2, Lines: []int{5, 8}},
+		},
+	}}
+	g := mergeAll([]Shard{assembleSymbols("pkg/foo", syms)})
+
+	out, ok := g.Refs("symbol:example.com/foo Bar#")
+	require.True(t, ok)
+	assert.Equal(t, "Bar", out.Label)
+	require.Len(t, out.Defs, 1)
+	assert.Equal(t, "pkg/foo/foo.go", out.Defs[0].File)
+	assert.Equal(t, 2, out.FileCount)
+	assert.Equal(t, 3, out.RefCount, "1 + 2 occurrences")
+	// Refs are sorted by file: pkg/a before pkg/b.
+	require.Len(t, out.Refs, 2)
+	assert.Equal(t, "pkg/a/a.go", out.Refs[0].File)
+	assert.Equal(t, []int{5, 8}, out.Refs[0].Lines)
+	assert.Equal(t, "pkg/b/b.go", out.Refs[1].File)
+}
+
+// TestGraphRefsPrefersSymbol: a fuzzy name that collides with a non-symbol node
+// still resolves to the symbol, since refs is symbol-only.
+func TestGraphRefsPrefersSymbol(t *testing.T) {
+	g := mergeAll([]Shard{
+		assembleSymbols("pkg/foo", []types.KnowledgeSymbol{{Key: "example.com/foo Bar#", Label: "Bar"}}),
+	})
+	g.AddNode(types.KnowledgeNode{ID: "function:pkg/foo/foo.buzz:Bar", Kind: types.KindFunction, Label: "Bar"})
+
+	out, ok := g.Refs("Bar")
+	require.True(t, ok)
+	assert.Equal(t, "symbol:example.com/foo Bar#", out.Symbol, "resolves to the symbol, not the function")
+}
+
 func TestSymbolsShardNaming(t *testing.T) {
 	assert.Equal(t, "pkg/foo@symbols", SymbolsShardName("pkg/foo"))
 	assert.True(t, IsSymbolsShard("pkg/foo@symbols"))
