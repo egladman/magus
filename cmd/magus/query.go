@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
 )
 
@@ -60,7 +61,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		input += " kind:" + k
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.SeedsSymbols(input))
 	if err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.SeedsSymbols(pos[0]))
 	if err != nil {
 		return err
 	}
@@ -202,7 +203,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.SeedsSymbols(pos[0]) || knowledge.SeedsSymbols(pos[1]))
 	if err != nil {
 		return err
 	}

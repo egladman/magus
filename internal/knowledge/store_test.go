@@ -64,6 +64,36 @@ func TestBuildPersistsAndReloads(t *testing.T) {
 	assert.Equal(t, string(built), string(fromDisk))
 }
 
+// TestSymbolShardsLazyExcludeAndMerge: a declared symbol shard is persisted but
+// kept OUT of the default graph (Sync and Load), and pulled in on demand by
+// MergeSymbolShards - the lazy-loading contract that keeps symbols off the hot path.
+func TestSymbolShardsLazyExcludeAndMerge(t *testing.T) {
+	cacheDir, in := buildFixture(t)
+	in.Symbols = map[string][]types.KnowledgeSymbol{
+		"pkg/a": {{Key: "example.com/a Foo#", Label: "Foo", Source: "pkg/a/a.go:1", Defs: []string{"pkg/a/a.go"}}},
+	}
+	g := build(t, cacheDir, BuildOptions{}, in)
+
+	// Persisted in the manifest, but absent from the default (Sync) graph.
+	_, ok := readManifest(t, cacheDir).Shards["pkg/a@symbols"]
+	assert.True(t, ok, "symbol shard is persisted")
+	_, inGraph := g.node("symbol:example.com/a Foo#")
+	assert.False(t, inGraph, "symbol node excluded from the default graph")
+
+	store := NewStore(cacheDir, false, 0, nil, nil)
+
+	// A pure disk Load also excludes symbol shards.
+	loaded, err := store.Load(context.Background())
+	require.NoError(t, err)
+	_, inLoad := loaded.node("symbol:example.com/a Foo#")
+	assert.False(t, inLoad, "Load excludes symbol shards too")
+
+	// MergeSymbolShards pulls them in on demand.
+	require.NoError(t, store.MergeSymbolShards(context.Background(), loaded))
+	_, nowIn := loaded.node("symbol:example.com/a Foo#")
+	assert.True(t, nowIn, "symbol node present after the lazy merge")
+}
+
 // TestFingerprintInvalidation: changing one project's assembled inputs rewrites
 // only that shard; untouched projects and the registry keep their fingerprint.
 func TestFingerprintInvalidation(t *testing.T) {

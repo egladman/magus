@@ -162,7 +162,9 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export; the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
+	// The whole-graph export stays domain-only; a --select neighborhood pulls in the
+	// symbol shards only when the selection actually targets symbols.
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, sel != "" && knowledge.SeedsSymbols(sel))
 	if err != nil {
 		return err
 	}
@@ -218,11 +220,13 @@ func graphStats(ctx context.Context, root string, args []string) error {
 		kind        string
 		refresh     bool
 		globalScope bool
+		withSymbols bool
 	)
 	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&kind, "kind", "", "scope every section to one node kind (e.g. spell, target, doc, diagnostic)")
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild first")
 		fs.BoolVar(&globalScope, "global", false, "union the workspaces registered in config (knowledge.workspaces) before computing stats")
+		fs.BoolVar(&withSymbols, "symbols", false, "include the lazily-loaded symbol shards in the stats (excluded by default; they can dwarf the domain graph)")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
 			fs.PrintDefaults()
@@ -235,7 +239,8 @@ func graphStats(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
+	// Stats stay domain-only unless --symbols (or a --kind symbol scope) opts in.
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, withSymbols || kind == types.KindSymbol)
 	if err != nil {
 		return err
 	}
@@ -284,16 +289,28 @@ func statsText(out types.KnowledgeStats) error {
 // returning the merged in-memory graph. Shared by the graph subcommands and the
 // query/explain/path verbs so they all sit on one substrate. When global is set,
 // it unions the workspaces registered in config (knowledge.workspaces) with the
-// current one, namespacing node IDs by workspace.
-func loadKnowledgeGraph(ctx context.Context, root string, refresh, global bool) (*knowledge.Graph, error) {
+// current one, namespacing node IDs by workspace. When includeSymbols is set (a
+// symbol-seeded query), the lazily-loaded @symbols shards are merged in on top of
+// the default domain graph.
+func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return nil, err
 	}
 	if global {
+		// Cross-workspace symbol federation is a later phase; --global stays domain-only.
 		return magus.BuildGlobalKnowledgeGraph(ctx, ws, globalCfg, refresh, slog.Default())
 	}
-	return magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
+	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
+	if err != nil {
+		return nil, err
+	}
+	if includeSymbols {
+		if err := magus.MergeWorkspaceSymbols(ctx, ws, ws.Root(), globalCfg, g, slog.Default()); err != nil {
+			return nil, err
+		}
+	}
+	return g, nil
 }
 
 type keyCount struct {

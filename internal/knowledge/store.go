@@ -119,7 +119,13 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 		}
 		present[sh.Name] = true
 		fp := fps[sh.Name]
-		g.Merge(sh.Nodes, sh.Edges)
+		// Symbol shards are PERSISTED (fingerprinted, written, manifested) but NOT
+		// merged into the default graph: they can dwarf the domain graph, so a query
+		// that needs them loads them lazily (MergeSymbolShards). The @symbols name
+		// suffix is the routing marker.
+		if !IsSymbolsShard(sh.Name) {
+			g.Merge(sh.Nodes, sh.Edges)
+		}
 		newMan.Shards[sh.Name] = shardMeta{Fingerprint: fp, NodeCount: len(sh.Nodes), EdgeCount: len(sh.Edges)}
 
 		prev, ok := old.shard(sh.Name)
@@ -192,6 +198,9 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		if IsSymbolsShard(name) {
+			continue // lazily loaded via MergeSymbolShards, not part of the default graph
+		}
 		sf, err := s.readShard(name)
 		if err != nil {
 			// The file may have been LRU-evicted while its manifest entry stayed.
@@ -206,6 +215,38 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 		g.Merge(sf.Nodes, sf.Edges)
 	}
 	return g, nil
+}
+
+// MergeSymbolShards merges every persisted @symbols shard into g in place, restoring
+// an LRU-evicted shard from the remote by fingerprint if needed. It is the on-demand
+// half of lazy symbol loading: the default graph (Sync/Load) omits symbol shards for
+// scale, and a symbol-seeded query calls this to pull them in. Best-effort by design:
+// no store yet is not an error (a workspace that never ingested symbols just finds
+// nothing), but a present-but-unreadable shard is surfaced.
+func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
+	man := s.readManifestOrNil()
+	if man == nil {
+		return nil
+	}
+	for name := range man.Shards {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !IsSymbolsShard(name) {
+			continue
+		}
+		sf, err := s.readShard(name)
+		if err != nil {
+			if s.restoreShard(ctx, name, man.Shards[name].Fingerprint) == nil {
+				sf, err = s.readShard(name)
+			}
+			if err != nil {
+				return fmt.Errorf("knowledge: load symbol shard %q: %w", name, err)
+			}
+		}
+		g.Merge(sf.Nodes, sf.Edges)
+	}
+	return nil
 }
 
 // restoreShard pulls a shard file from the remote backend by fingerprint and

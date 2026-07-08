@@ -184,6 +184,19 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 	return out
 }
 
+// MergeWorkspaceSymbols pulls the persisted per-project @symbols shards into g, for
+// a symbol-seeded query (the default graph excludes them for scale). It opens the
+// same store BuildKnowledgeGraph writes, so the shards a build just persisted are
+// available. Best-effort: no store or no symbol shards is a no-op.
+func MergeWorkspaceSymbols(ctx context.Context, ws types.Describer, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
+	if log == nil {
+		log = slog.Default()
+	}
+	cacheDir := resolveCacheDir(root, cfg)
+	store := knowledge.NewStore(cacheDir, cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShardsFor(ws), log)
+	return store.MergeSymbolShards(ctx, g)
+}
+
 // loadKnowledgeSymbols reads each declared SCIP index (best-effort) into per-project
 // symbol records for the @symbols shards. A missing index (its target has not run) or
 // an unreadable/undecodable one is skipped with a debug log, never an error - symbol

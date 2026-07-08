@@ -17,6 +17,24 @@ import (
 // full boolean grammar (OR/parens/wildcards) and the search.js conformance
 // fixture are a later increment.
 
+// SeedsSymbols reports whether an input (a query string, or an explain/path node
+// ref) targets symbol nodes, so a caller knows to lazily load the symbol shards the
+// default graph omits. True when the input names the symbol kind, a symbol: node ID,
+// or a defines/references relation. Over-eager on relation:references (which charms
+// also use) is safe - it only loads more; the cost is a missed load, not a wrong one.
+func SeedsSymbols(input string) bool {
+	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
+		return true
+	}
+	q := parseQuery(input)
+	if slices.Contains(q.fields["kind"], types.KindSymbol) {
+		return true
+	}
+	return slices.ContainsFunc(q.fields["relation"], func(r string) bool {
+		return r == types.RelationDefines || r == types.RelationReferences
+	})
+}
+
 // DefaultBudget bounds the neighborhood a query collects, so a match on a
 // high-degree node cannot pull in the whole graph.
 const DefaultBudget = 50

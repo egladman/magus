@@ -19,6 +19,15 @@ func matchIDs(ms []types.KnowledgeMatch) []string {
 	return out
 }
 
+func TestSeedsSymbols(t *testing.T) {
+	for _, in := range []string{"kind:symbol Foo", "symbol:example.com/a Foo#", "relation:defines", "relation:references", "id:symbol:x"} {
+		assert.Truef(t, SeedsSymbols(in), "%q should seed symbols", in)
+	}
+	for _, in := range []string{"kind:target build", "build", "project:pkg/a", "relation:uses"} {
+		assert.Falsef(t, SeedsSymbols(in), "%q should NOT seed symbols", in)
+	}
+}
+
 func TestParseQuery(t *testing.T) {
 	q := parseQuery(`kind:spell project:pkg/foo build -kind:op -legacy`)
 	assert.Equal(t, []string{"build"}, q.terms)
