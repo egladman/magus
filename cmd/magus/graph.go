@@ -299,6 +299,11 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 	}
 	if global {
 		// Cross-workspace symbol federation is a later phase; --global stays domain-only.
+		// Warn rather than silently drop a symbol-seeded selection, so an empty result
+		// is not mistaken for "no such symbol".
+		if includeSymbols {
+			interactive.Emit(os.Stderr, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
+		}
 		return magus.BuildGlobalKnowledgeGraph(ctx, ws, globalCfg, refresh, slog.Default())
 	}
 	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())

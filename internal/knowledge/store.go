@@ -228,12 +228,19 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 	if man == nil {
 		return nil
 	}
+	// Merge in sorted shard order: if a symbol ID appears in two projects' shards
+	// with a different label/source, AddNode is first-writer-wins, so a stable order
+	// keeps the merged node deterministic (the domain Sync path merges a sorted slice).
+	names := make([]string, 0, len(man.Shards))
 	for name := range man.Shards {
+		if IsSymbolsShard(name) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return err
-		}
-		if !IsSymbolsShard(name) {
-			continue
 		}
 		sf, err := s.readShard(name)
 		if err != nil {

@@ -17,7 +17,12 @@ import (
 // answers from memory without re-parsing magusfiles; otherwise it rebuilds
 // cache-first. Either way it is fresh.
 
-// knowledgeGraph resolves the workspace knowledge graph for a tool invocation.
+// knowledgeGraph resolves the workspace knowledge graph for a tool invocation. This
+// is the domain graph: it excludes the lazily-loaded @symbols shards, so a
+// symbol-seeded query over MCP currently returns no symbol nodes. Symbol support on
+// the agent surface (a magus_refs tool and symbol routing on magus_query) lands with
+// Phase B; wiring it here means merging symbols WITHOUT mutating the shared daemon
+// warm graph, which the CLI's fresh-per-invocation build sidesteps.
 func knowledgeGraph(ctx context.Context, opts ServerOptions) (*knowledge.Graph, error) {
 	return opts.Magus.KnowledgeGraph(ctx, false)
 }
