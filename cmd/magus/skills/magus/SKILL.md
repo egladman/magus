@@ -59,6 +59,14 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
   derived from sources - read them as history, not guarantees.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
 
+## Ownership and blast radius
+
+If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
+edges to the projects and files they cover. Combine that with dependency edges to
+answer "who owns the blast radius of this change": `magus explain <node>` for the
+node's owners and dependents, or `magus query kind:owner` to list owners. Only
+declared CODEOWNERS ownership appears - it is not blame-inferred.
+
 ## Across workspaces and neighbors
 
 - `--global` unions every workspace registered in config

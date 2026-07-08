@@ -28,9 +28,12 @@ var skillFS embed.FS
 
 // agentSkillVersion is bumped whenever the installed skill content, or the tool
 // surface it documents, changes. Together with the knowledge schema version it
-// stamps the install footer, so a future drift check can tell a stale installed
-// skill from a current one without diffing bytes.
-const agentSkillVersion = 1
+// stamps the install footer, so the drift check (magus graph verify) can tell a
+// stale installed skill from a current one without diffing bytes.
+//
+//	v1: initial skill (verbs, grammar, reading results, MCP, --global, pagination)
+//	v2: teach CODEOWNERS ownership and the owns relation
+const agentSkillVersion = 2
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
 // Today the one verb is `install <platform>`, which writes the embedded skill into

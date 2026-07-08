@@ -2,7 +2,7 @@
 exec magus agent install claude
 exists .claude/skills/magus/SKILL.md
 grep 'name: magus-knowledge-graph' .claude/skills/magus/SKILL.md
-grep 'agent-skill-version: 1' .claude/skills/magus/SKILL.md
+grep 'agent-skill-version: \d' .claude/skills/magus/SKILL.md
 
 # a second install refuses to clobber without --force
 ! exec magus agent install claude

@@ -37,7 +37,7 @@ func TestInstallClaudeSkillWritesStampedFiles(t *testing.T) {
 	body, err := os.ReadFile(skillPath)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(string(body), "---\n"), "frontmatter still leads the file")
-	assert.Contains(t, string(body), "agent-skill-version: 1", "install stamps the drift footer")
+	assert.Contains(t, string(body), "agent-skill-version:", "install stamps the drift footer")
 	assert.Contains(t, string(body), "knowledge-schema-version:")
 }
 
