@@ -113,7 +113,7 @@ Return the value of name, or raise when it is unset or stripped by the sandbox. 
 
 ### parse_dotenv
 
-Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export `, single/double quotes (double-quoted values honor \n \t \" \\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.
+Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \n \t \" \\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.
 
 **Signature:** `env.parseDotenv(content) → map[string]string` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L237)
 

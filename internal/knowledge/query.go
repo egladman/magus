@@ -167,11 +167,10 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	for _, t := range q.terms {
 		best := max(interactive.LeafScore(id, t), interactive.LeafScore(n.Label, t))
 		if best == 0 {
-			if strings.Contains(strings.ToLower(n.Doc), strings.ToLower(t)) {
-				best = 1
-			} else {
+			if !strings.Contains(strings.ToLower(n.Doc), strings.ToLower(t)) {
 				return 0, false
 			}
+			best = 1
 		}
 		total += best
 	}

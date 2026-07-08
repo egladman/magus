@@ -79,7 +79,7 @@
 <pre><code class="language-sh">magus status --compact --watch=1s
 </code></pre>
 <p>Sample output:</p>
-<pre><code>daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
+<pre><code class="language-text">daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 </code></pre>
 <p>When no daemon is running the line reads <code>daemon: off</code>, with no error and no hang. Drop <code>--compact</code> for the full grid view when you have a wider pane to spare.</p>
 <h2 id="step-through-a-target-to-diagnose-a-flaky-build">Step through a target to diagnose a flaky build</h2>

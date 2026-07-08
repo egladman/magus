@@ -85,7 +85,7 @@ var Env = Module{
 		},
 		{
 			Name:    "parse_dotenv",
-			Doc:     "Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export `, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
+			Doc:     "Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
 			Args:    []Arg{{Name: "content", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringMap}},
 			Impl:    EnvParseDotenv,

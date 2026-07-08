@@ -18,7 +18,7 @@ magus status --compact --watch=1s
 
 Sample output:
 
-```
+```text
 daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 ```
 

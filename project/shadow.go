@@ -32,7 +32,7 @@ func SpellShadows(root string) ([]ShadowConflict, error) {
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // unreadable entry: skip, do not fail the whole scan
+			return nil //nolint:nilerr // unreadable entry: skip, do not fail the whole scan
 		}
 		if d.IsDir() {
 			if IsIgnoreDir(d.Name()) {

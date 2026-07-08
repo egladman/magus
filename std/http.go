@@ -134,9 +134,16 @@ func HTTPServer(ctx context.Context, dir string, port int) (int, error) {
 	// Resolve dir against the run's working directory (the project dir), the same
 	// way fs/io/os do, since the magusfile runner sets a context cwd instead of
 	// chdir-ing the process.
-	srv := &http.Server{Handler: http.FileServer(http.Dir(resolvePath(ctx, dir)))}
+	srv := &http.Server{
+		Handler:           http.FileServer(http.Dir(resolvePath(ctx, dir))),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	go func() { _ = srv.Serve(ln) }()
-	return ln.Addr().(*net.TCPAddr).Port, nil
+	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("http server: unexpected listener address type %T", ln.Addr())
+	}
+	return tcpAddr.Port, nil
 }
 
 // httpServerBasePort is where http.server starts scanning when the caller does

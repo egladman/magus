@@ -241,6 +241,10 @@ func renderModule(m std.Module) string {
 	// Run-clickable examples; the IO leaves cannot, so where such a module carries
 	// examples, explain the missing Run button rather than leaving it unexplained.
 	if _, wasmCompatible := dry.WASMCompatibleMagusModules[m.Name]; !wasmCompatible && moduleHasExample(m) {
+		// A blank line alone would merge this into the naming-convention blockquote
+		// above (CommonMark quirk); an HTML comment keeps them visually and
+		// structurally distinct.
+		fmt.Fprint(&b, "<!-- -->\n\n")
 		fmt.Fprintf(&b, "> [!NOTE]\n"+
 			"> The examples below are reference-only. `%s` performs real IO "+
 			"(filesystem, process, network, or environment access) that the in-browser "+

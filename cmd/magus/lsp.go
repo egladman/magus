@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -110,7 +111,7 @@ func (s *lspServer) serve(in io.Reader, out io.Writer) error {
 	s.writeBuf = bufio.NewWriter(out)
 	for {
 		body, err := readMessage(r)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
@@ -387,7 +388,10 @@ func (s *lspServer) writeMessage(v any) {
 		return
 	}
 	fmt.Fprintf(s.writeBuf, "Content-Length: %d\r\n\r\n", len(body))
-	s.writeBuf.Write(body)
+	if _, err := s.writeBuf.Write(body); err != nil {
+		fmt.Fprintf(os.Stderr, "lsp: write: %v\n", err)
+		return
+	}
 	_ = s.writeBuf.Flush()
 }
 

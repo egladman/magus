@@ -18,10 +18,6 @@ import (
 // spell buffer from a magusfile (whose targets are the exported funs themselves).
 const mgsListTargets = "mgs_listTargets"
 
-// mgsGetName is the required spell name export. Not load-bearing for the dry run,
-// but its presence alongside mgs_listTargets confirms a well-formed spell buffer.
-const mgsGetName = "mgs_getName"
-
 // isSpell reports whether a session's exports look like a SPELL buffer rather than
 // a magusfile: a spell exports mgs_listTargets (op name -> handler map) instead of
 // exporting each target as a top-level fun.

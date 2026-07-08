@@ -11,9 +11,9 @@ import (
 // scripts: `exec magus ...` in a .txtar file runs the real CLI in process (via
 // run), so behavior tests exercise the actual command, not a mock.
 func TestMain(m *testing.M) {
-	os.Exit(testscript.RunMain(m, map[string]func() int{
-		"magus": runCLI,
-	}))
+	testscript.Main(m, map[string]func(){
+		"magus": func() { os.Exit(runCLI()) },
+	})
 }
 
 // TestScripts replays every testdata/script/*.txtar as a black-box CLI behavior

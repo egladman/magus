@@ -876,7 +876,7 @@ func verifyReadOnly(ctx context.Context, dir, target string, fn func() error) er
 	// check, matching the prior "skip when git is unavailable" behavior.
 	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
-		return nil
+		return nil //nolint:nilerr // VCS unavailable or unresolved: skip the post-write cleanliness check
 	}
 	files, err := res.VCS.DirtyFiles(ctx, dir, []string{"."})
 	if err != nil {

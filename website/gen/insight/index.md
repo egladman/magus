@@ -39,8 +39,10 @@ The first argument selects a lens:
   distinct author count (the bus factor), and abandonment (projects gone quiet).
 - **trend** - the recent half of the window against the earlier half. A positive
   delta is a rising hotspot; a negative one is cooling.
-- **report** - every lens as one whole-workspace Markdown document. The magusfile's
-  postflight target writes it to the GitHub Actions step summary.
+- **report** - every lens, plus the knowledge graph's shape from
+  [`magus graph stats`](manpage/gen/magus-graph.md), as one whole-workspace
+  Markdown document. The magusfile's postflight target writes it to the GitHub
+  Actions step summary.
 
 ## Bounding the scan
 

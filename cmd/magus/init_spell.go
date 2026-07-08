@@ -170,5 +170,5 @@ func printInitSpellNextSteps(name, pkgDir, path string) {
 	importPath := filepath.ToSlash(pkgDir)
 	interactive.Emit(os.Stderr, fmt.Sprintf("spell scaffolded: %s", path))
 	interactive.Emit(os.Stderr, fmt.Sprintf("test it:  magus buzz -t --embedded %s", filepath.ToSlash(path)))
-	interactive.Emit(os.Stderr, fmt.Sprintf("bind it:  import \"%s\" as %s;  then  magus.project({ \"spells\": [%s] });", importPath, name, name))
+	interactive.Emit(os.Stderr, fmt.Sprintf("bind it:  import %q as %s;  then  magus.project({ \"spells\": [%q] });", importPath, name, name))
 }

@@ -11,6 +11,8 @@ HTTP client with automatic retry on transient errors.
 
 > **Naming convention:** import the module under its bare name (`import "http"`) and call methods in `camelCase` (`http.someMethod`).
 
+<!-- -->
+
 > [!NOTE]
 > The examples below are reference-only. `http` performs real IO (filesystem, process, network, or environment access) that the in-browser playground's sandbox cannot provide, so it is not registered there and its examples have no Run button. Pure-compute modules such as `strings` and `json` run their examples live in the page.
 

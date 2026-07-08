@@ -46,6 +46,8 @@ per type:
 > [!NOTE]
 > Context worth knowing, but not a warning.
 
+<!-- -->
+
 > [!WARNING]
 > Something that can bite you if ignored.
 

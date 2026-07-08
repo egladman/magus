@@ -251,7 +251,7 @@
 </table></figure>
 <p><strong>Returns:</strong> string</p>
 <h3 id="parse-dotenv">parse_dotenv</h3>
-<p>Parse .env-format content into a name-&gt;value map. Supports KEY=VALUE, blank lines, # comments, a leading <code>export </code>, single/double quotes (double-quoted values honor \n \t &quot; \ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.</p>
+<p>Parse .env-format content into a name-&gt;value map. Supports KEY=VALUE, blank lines, # comments, a leading <code>export</code> keyword, single/double quotes (double-quoted values honor \n \t &quot; \ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.</p>
 <p><strong>Signature:</strong> <code>env.parseDotenv(content) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L237" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>

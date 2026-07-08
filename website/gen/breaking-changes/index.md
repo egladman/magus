@@ -59,7 +59,7 @@ format as `urls.lock`. The snapshot lives at
 memory and compares. Change the CLI and the test fails until you regenerate:
 
 ```console
-$ go generate ./internal/manpage/...
+go generate ./internal/manpage/...
 ```
 
 The regenerated diff is the review artifact. A new line is a new flag or command;

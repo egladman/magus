@@ -155,12 +155,12 @@ func recordOp(ctx context.Context, sess *buzz.Session, fn vm.Value) (vm.Value, e
 // strings, when present.
 func validateCmdFields(m vm.Value) error {
 	if bin, ok := m.MapGet("bin"); ok && !bin.IsStr() {
-		return fmt.Errorf("Command bin must be a string")
+		return fmt.Errorf("command bin must be a string")
 	}
 	if args, ok := m.MapGet("args"); ok && args.IsList() {
 		for _, a := range args.ListItems() {
 			if !a.IsStr() {
-				return fmt.Errorf("Command args must all be strings")
+				return fmt.Errorf("command args must all be strings")
 			}
 		}
 	}

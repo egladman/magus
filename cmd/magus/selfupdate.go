@@ -159,7 +159,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		var answer string
 		if _, err := fmt.Scanln(&answer); err != nil || strings.ToLower(strings.TrimSpace(answer)) != "y" {
 			fmt.Fprintln(os.Stderr, "aborted")
-			return nil
+			return nil //nolint:nilerr // Scanln failure (e.g. empty line) is treated as a declined prompt, not a fatal error
 		}
 	}
 

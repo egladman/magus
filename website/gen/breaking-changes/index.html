@@ -107,7 +107,7 @@ target, and config key) as a sorted, newline-delimited <code>.lock</code> file, 
 format as <code>urls.lock</code>. The snapshot lives at
 <code>internal/manpage/testdata/api.lock</code>, and <code>TestAPIUpToDate</code> regenerates it in
 memory and compares. Change the CLI and the test fails until you regenerate:</p>
-<pre><code class="language-console">$ go generate ./internal/manpage/...
+<pre><code class="language-console">go generate ./internal/manpage/...
 </code></pre>
 <p>The regenerated diff is the review artifact. A new line is a new flag or command;
 a removed line is a removed one. A reviewer reads the removed lines and decides
@@ -150,7 +150,7 @@ same review every other change already goes through.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22breaking-changes%22">breaking-changes</a><a class="tag" href="../search/?q=tag%3A%22compatibility%22">compatibility</a><a class="tag" href="../search/?q=tag%3A%22buf-breaking%22">buf-breaking</a><a class="tag" href="../search/?q=tag%3A%22api-lock%22">api-lock</a><a class="tag" href="../search/?q=tag%3A%22drift-gate%22">drift-gate</a><a class="tag" href="../search/?q=tag%3A%22changelog%22">changelog</a><a class="tag" href="../search/?q=tag%3A%22proto%22">proto</a></div>
-    <small>Last updated <time datetime="2026-07-07T18:12:24Z">July 7, 2026, 6:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/4917cbc8d4448942c00b377e17e6535d86c16ac0" data-tooltip="4917cbc8d4448942c00b377e17e6535d86c16ac0" title="4917cbc8d4448942c00b377e17e6535d86c16ac0">4917cbc</a>)</small>
+    <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/4917cbc8d4448942c00b377e17e6535d86c16ac0"><code>4917cbc</code></a> <small><time datetime="2026-07-07T18:12:24Z">Jul 7, 2026</time></small> - add a buf-breaking lint example and a breaking-changes doc; record the unreleased features in the changelog</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/breaking-changes.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/breaking-changes.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

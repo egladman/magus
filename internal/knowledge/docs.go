@@ -147,7 +147,7 @@ func findDocFiles(root string) []string {
 	}
 	_ = filepath.WalkDir(filepath.Join(root, "docs"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
 		}
 		if d.IsDir() {
 			if project.IsIgnoreDir(d.Name()) {

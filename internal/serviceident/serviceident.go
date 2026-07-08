@@ -64,14 +64,14 @@ func Fingerprint(s types.Service) string {
 		// A stable, field-tagged serialization so two orderings of the same flags
 		// hash equal (Parse sorts the repeatable groups) while distinct fields can
 		// never collide across the delimiters.
-		h.Write([]byte("image=" + id.Image + "\x00tag=" + id.Tag))
+		mustWrite(h, []byte("image="+id.Image+"\x00tag="+id.Tag))
 		writeTagged(h, "port", id.Ports)
 		writeTagged(h, "env", id.Env)
 		writeTagged(h, "vol", id.Volumes)
 	} else {
-		h.Write([]byte("argv=" + s.Command.Bin))
+		mustWrite(h, []byte("argv="+s.Command.Bin))
 		for _, a := range s.Command.Args {
-			h.Write([]byte("\x00" + a))
+			mustWrite(h, []byte("\x00"+a))
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))
@@ -79,9 +79,17 @@ func Fingerprint(s types.Service) string {
 
 // writeTagged folds a sorted, field-tagged group into the hash.
 func writeTagged(h io.Writer, tag string, vals []string) {
-	h.Write([]byte("\x01" + tag))
+	mustWrite(h, []byte("\x01"+tag))
 	for _, v := range vals {
-		h.Write([]byte("\x00" + v))
+		mustWrite(h, []byte("\x00"+v))
+	}
+}
+
+// mustWrite writes to h, a hash.Hash whose Write is documented to never
+// return an error.
+func mustWrite(h io.Writer, p []byte) {
+	if _, err := h.Write(p); err != nil {
+		panic(err)
 	}
 }
 

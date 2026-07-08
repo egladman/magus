@@ -104,8 +104,10 @@ architectural smell: a hidden coupling the graph does not know about.</li>
 distinct author count (the bus factor), and abandonment (projects gone quiet).</li>
 <li><strong>trend</strong> - the recent half of the window against the earlier half. A positive
 delta is a rising hotspot; a negative one is cooling.</li>
-<li><strong>report</strong> - every lens as one whole-workspace Markdown document. The magusfile's
-postflight target writes it to the GitHub Actions step summary.</li>
+<li><strong>report</strong> - every lens, plus the knowledge graph's shape from
+<a href="../manpage/magus-graph/"><code>magus graph stats</code></a>, as one whole-workspace
+Markdown document. The magusfile's postflight target writes it to the GitHub
+Actions step summary.</li>
 </ul>
 <h2 id="bounding-the-scan">Bounding the scan</h2>
 <p><code>--commits</code> caps the scan by count; <code>--since</code> bounds it by date (<code>90d</code>, <code>12w</code>,
@@ -143,7 +145,7 @@ run.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22insight%22">insight</a><a class="tag" href="../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../search/?q=tag%3A%22history%22">history</a><a class="tag" href="../search/?q=tag%3A%22hotspots%22">hotspots</a><a class="tag" href="../search/?q=tag%3A%22coupling%22">coupling</a><a class="tag" href="../search/?q=tag%3A%22ownership%22">ownership</a><a class="tag" href="../search/?q=tag%3A%22churn%22">churn</a><a class="tag" href="../search/?q=tag%3A%22analysis%22">analysis</a></div>
-    <small>Last updated <time datetime="2026-07-07T19:03:04Z">July 7, 2026, 7:03 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ca09313b48e48935d7f436760aa73def6909cd1a" data-tooltip="ca09313b48e48935d7f436760aa73def6909cd1a" title="ca09313b48e48935d7f436760aa73def6909cd1a">ca09313</a>)</small>
+    <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac"><code>b79201d</code></a> <small><time datetime="2026-07-07T23:47:57Z">Jul 7, 2026</time></small> - consolidate the knowledge-graph surface under a new magus graph verb: graph deps (standalone project DAG; run/affected --graph remain), graph export (was describe knowledge; adds -o graphml), graph stats (was insight structure; insight report still embeds it as graph_stats); hard-break the old spellings with pointers to the new home; rename KnowledgeStructure to KnowledgeStats; add a typed markdown builder (internal/render/md) and rewrite the MAGUS.md and insight-report renderers on it; ignore .claude/ in prettier; regenerate MAGUS.md, manpages, api.lock, and the website, sweeping in stale buf-spell docs and site drift from earlier commits</li><li><a href="https://github.com/egladman/magus/commit/ca09313b48e48935d7f436760aa73def6909cd1a"><code>ca09313</code></a> <small><time datetime="2026-07-07T19:03:04Z">Jul 7, 2026</time></small> - add affected and insight concept pages explaining the mental model behind each command; the man pages stay the flag reference</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/insight.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/insight.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

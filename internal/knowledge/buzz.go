@@ -67,7 +67,7 @@ func assembleBuzz(root string) Shard {
 		for _, stmt := range prog.Stmts {
 			if d, ok := stmt.(*ast.FunDecl); ok {
 				sameFile[d.Name] = true
-				fnLines = append(fnLines, fnLine{d.Name, d.Pos.Line})
+				fnLines = append(fnLines, fnLine{d.Name, d.Line})
 			}
 		}
 
@@ -81,7 +81,7 @@ func assembleBuzz(root string) Shard {
 				}
 				s.Nodes = append(s.Nodes, types.KnowledgeNode{
 					ID: fnID, Kind: types.KindFunction, Label: d.Name, Doc: d.Doc,
-					Source: rel + ":" + strconv.Itoa(d.Pos.Line), Attrs: nilIfEmpty(attrs),
+					Source: rel + ":" + strconv.Itoa(d.Line), Attrs: nilIfEmpty(attrs),
 				})
 				s.Edges = append(s.Edges, extractedEdge(fID, fnID, types.RelationContains, rel))
 				s.Edges = append(s.Edges, callEdges(rel, d, sameFile)...)
@@ -198,7 +198,7 @@ func findBuzzFiles(root string) []string {
 	var out []string
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
 		}
 		if d.IsDir() {
 			if path != root && (project.IsIgnoreDir(d.Name()) || d.Name() == "testdata") {
