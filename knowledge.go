@@ -162,12 +162,12 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 	for project, targets := range h.Projects {
 		for target, st := range targets {
 			out = append(out, types.KnowledgeTiming{
-				Project:    project,
-				Target:     target,
-				P75Ms:      st.P75Ms,
-				Samples:    st.Samples,
-				HitRate:    st.HitRate,
-				HitSamples: st.HitCount + st.MissCount,
+				Project:        project,
+				Target:         target,
+				P75Ms:          st.P75Ms,
+				Samples:        st.Samples,
+				HitRate:        st.HitRate,
+				HitRateSamples: st.HitCount + st.MissCount,
 			})
 		}
 	}

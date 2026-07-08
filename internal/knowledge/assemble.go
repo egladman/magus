@@ -175,6 +175,8 @@ func assembleRegistry(in Inputs) Shard {
 func assembleProject(p types.TargetGraphProject) Shard {
 	s := Shard{Name: p.Path}
 	pID := projectID(p.Path)
+	// target_count is always present, so projAttrs is never empty and needs no
+	// nilIfEmpty guard (unlike the per-target attrs below, which are engine-only).
 	projAttrs := map[string]string{AttrTargetCount: strconv.Itoa(len(p.Nodes))}
 	if p.Engine != "" {
 		projAttrs[AttrEngine] = p.Engine
@@ -329,7 +331,7 @@ func timingAttrs(t types.KnowledgeTiming) map[string]string {
 		attrs[AttrDurationP75Ms] = strconv.FormatInt(t.P75Ms, 10)
 		attrs[AttrRunSamples] = strconv.Itoa(t.Samples)
 	}
-	if t.HitSamples > 0 {
+	if t.HitRateSamples > 0 {
 		attrs[AttrCacheHitRate] = strconv.FormatFloat(t.HitRate, 'f', 2, 64)
 	}
 	return attrs

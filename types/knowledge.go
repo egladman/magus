@@ -67,15 +67,15 @@ const (
 // timing history and folded onto the target node in the isolated @runtime shard
 // (observed, non-deterministic, never remote-shared). It is an assembly input, not
 // a wire type: Project and Target name the node, the rest annotate it. Samples is
-// the duration-percentile sample count; HitSamples is the hit-rate denominator
+// the duration-percentile sample count; HitRateSamples is the hit-rate denominator
 // (hits + misses), so a consumer can tell a cold rate from a settled one.
 type KnowledgeTiming struct {
-	Project    string
-	Target     string
-	P75Ms      int64
-	Samples    int
-	HitRate    float64
-	HitSamples int
+	Project        string
+	Target         string
+	P75Ms          int64
+	Samples        int
+	HitRate        float64
+	HitRateSamples int
 }
 
 // KnowledgeNode is one vertex: a magus-domain entity with stable identity and
@@ -134,7 +134,9 @@ type KnowledgeQueryOutput struct {
 	Budget        int    `json:"budget"         yaml:"budget"`
 	MatchCount    int    `json:"match_count"    yaml:"match_count"`
 	// Offset is the index of the first returned match within the full ranked list;
-	// 0 (omitted) for an unpaged query or the first page.
+	// 0 (omitted) for an unpaged query or the first page. Offset alone does not
+	// signal paging - page 0 of a paged query and an unpaged query look the same
+	// here; the MCP layer's next_cursor is what signals more pages remain.
 	Offset  int              `json:"offset,omitempty" yaml:"offset,omitempty"`
 	Matches []KnowledgeMatch `json:"matches"        yaml:"matches"`
 	Nodes   []KnowledgeNode  `json:"nodes"          yaml:"nodes"`

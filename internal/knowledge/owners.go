@@ -22,8 +22,9 @@ import (
 const OwnersShardName = "@owners"
 
 // codeownersPaths are the locations GitHub recognizes for a CODEOWNERS file, in
-// precedence order (first found wins); we read the first that exists.
-var codeownersPaths = []string{"CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"}
+// GitHub's precedence order (first found wins): .github/ takes precedence over the
+// root, which takes precedence over docs/. We read the first that exists.
+var codeownersPaths = []string{".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"}
 
 // ownedNode is one path-bearing node CODEOWNERS patterns are matched against: a
 // project or a buzz file. Its ID gets the owns edge; its Path drives the match.
@@ -102,6 +103,9 @@ func readCodeowners(root string) []codeownersRule {
 			continue
 		}
 		fields := strings.Fields(text)
+		if len(fields) == 0 { // TrimSpace + non-empty guard makes this unreachable; kept defensive
+			continue
+		}
 		rules = append(rules, codeownersRule{pattern: fields[0], owners: fields[1:], line: line})
 	}
 	return rules
@@ -123,9 +127,12 @@ func lastMatch(rules []codeownersRule, path string) (codeownersRule, bool) {
 // codeownersMatch reports whether a CODEOWNERS pattern covers a workspace-relative
 // path. It implements the common subset of the gitignore-style syntax CODEOWNERS
 // uses: a bare "*" matches everything; a trailing "/" is a directory prefix; a glob
-// (containing * ? [) matches by segment, also anchored at any depth so "*.go"
-// covers nested files; a plain path matches itself or anything beneath it.
+// (containing * ? [) matches by segment; a plain path matches itself or anything
+// beneath it. A leading "/" anchors the pattern to the repo root - an anchored glob
+// matches only at that depth, while an UNanchored glob ("*.go") also matches at any
+// depth, per gitignore semantics.
 func codeownersMatch(pattern, path string) bool {
+	anchored := strings.HasPrefix(pattern, "/")
 	pattern = strings.TrimPrefix(pattern, "/")
 	if pattern == "" || pattern == "*" || pattern == "**" {
 		return true
@@ -137,6 +144,9 @@ func codeownersMatch(pattern, path string) bool {
 	if strings.ContainsAny(pattern, "*?[") {
 		if ok, _ := doublestar.Match(pattern, path); ok {
 			return true
+		}
+		if anchored { // anchored to root: do not let it match at arbitrary depth
+			return false
 		}
 		ok, _ := doublestar.Match("**/"+pattern, path)
 		return ok

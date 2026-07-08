@@ -81,11 +81,10 @@ func TestQueryHashDiffersByQuery(t *testing.T) {
 // TestPagedQueryUnpaged: no limit and no cursor returns the plain result with no
 // cursor attached (backward compatible).
 func TestPagedQueryUnpaged(t *testing.T) {
-	data, err := pagedQuery(pagedGraph(5), "kind:target", 50, 0, "")
+	resp, err := pagedQuery(pagedGraph(5), "kind:target", 50, 0, "")
 	require.NoError(t, err)
-	out, ok := data.(types.KnowledgeQueryOutput)
-	require.True(t, ok, "unpaged returns the plain output, not the cursor wrapper")
-	assert.Equal(t, 5, out.MatchCount)
+	assert.Equal(t, 5, resp.MatchCount)
+	assert.Empty(t, resp.NextCursor, "an unpaged query has no next cursor")
 }
 
 // TestPagedQueryWalksAllPages: limit pages the matches and the returned cursor
@@ -96,9 +95,8 @@ func TestPagedQueryWalksAllPages(t *testing.T) {
 	cursor := ""
 	pages := 0
 	for {
-		data, err := pagedQuery(g, "kind:target", 50, 2, cursor)
+		resp, err := pagedQuery(g, "kind:target", 50, 2, cursor)
 		require.NoError(t, err)
-		resp := data.(paginatedQuery)
 		assert.Equal(t, 5, resp.MatchCount)
 		seen += len(resp.Matches)
 		pages++
@@ -114,9 +112,8 @@ func TestPagedQueryWalksAllPages(t *testing.T) {
 
 func TestPagedQueryRejectsStaleCursor(t *testing.T) {
 	g := pagedGraph(5)
-	data, err := pagedQuery(g, "kind:target", 50, 2, "")
+	first, err := pagedQuery(g, "kind:target", 50, 2, "")
 	require.NoError(t, err)
-	first := data.(paginatedQuery)
 	require.NotEmpty(t, first.NextCursor)
 
 	// A cursor from a different query is rejected.

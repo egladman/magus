@@ -48,8 +48,17 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	n.Source = sanitize(n.Source, maxSrcLen)
 	// Attr values now carry file-derived text (doc frontmatter title/tags), so they
 	// get the same control-char strip and length cap as the other free-form fields.
-	for k, v := range n.Attrs {
-		n.Attrs[k] = sanitize(v, maxLabelLen)
+	// Sanitize into a FRESH map rather than in place: on the read paths (Output,
+	// Select, Neighborhood) AddNode is fed nodes straight from g.Nodes(), whose
+	// Attrs alias the live graph's own maps - mutating them there would write shared
+	// state during what is logically a query. (maxLabelLen is a short cap; attrs are
+	// keys and small scalars, so a label's budget is ample.)
+	if len(n.Attrs) > 0 {
+		clean := make(map[string]string, len(n.Attrs))
+		for k, v := range n.Attrs {
+			clean[k] = sanitize(v, maxLabelLen)
+		}
+		n.Attrs = clean
 	}
 	existing, ok := g.nodes[n.ID]
 	if !ok {

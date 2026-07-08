@@ -24,6 +24,12 @@ func TestCodeownersMatch(t *testing.T) {
 		{"*.go", "pkg/a/main.rs", false},
 		{"/docs/", "pkg/a", false},
 		{"docs/", "docs", true},
+		// An anchored glob matches only at its depth; an unanchored one at any depth.
+		{"/*.md", "readme.md", true},
+		{"/*.md", "pkg/a/readme.md", false},
+		{"*.md", "pkg/a/readme.md", true},
+		{"/pkg/*/main.go", "pkg/a/main.go", true},
+		{"/pkg/*/main.go", "x/pkg/a/main.go", false},
 	} {
 		assert.Equalf(t, tc.want, codeownersMatch(tc.pattern, tc.path), "match(%q, %q)", tc.pattern, tc.path)
 	}

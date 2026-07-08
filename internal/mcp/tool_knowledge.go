@@ -57,10 +57,12 @@ func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.
 // it is the plain query (every match, no fingerprint cost). Otherwise it validates
 // the cursor against the query and the current graph fingerprint - failing loudly
 // on a mismatch - returns the requested page, and attaches a next_cursor when more
-// matches remain. Split from Invoke so it is testable with a hand-built graph.
-func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor string) (any, error) {
+// matches remain. Split from Invoke so it is testable with a hand-built graph. The
+// unpaged result is wrapped too (with an empty, omitted NextCursor) so the return
+// type is always concrete.
+func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor string) (paginatedQuery, error) {
 	if limit <= 0 && cursor == "" {
-		return g.Query(terms, budget), nil
+		return paginatedQuery{KnowledgeQueryOutput: g.Query(terms, budget)}, nil
 	}
 	qh := queryHash(terms)
 	fp := g.Fingerprint()
@@ -68,13 +70,13 @@ func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor stri
 	if cursor != "" {
 		cur, err := decodeCursor(cursor)
 		if err != nil {
-			return nil, errors.New("mcp: invalid cursor")
+			return paginatedQuery{}, errors.New("mcp: invalid cursor")
 		}
 		if cur.QueryHash != qh {
-			return nil, errors.New("mcp: cursor does not match this query; restart pagination without a cursor")
+			return paginatedQuery{}, errors.New("mcp: cursor does not match this query; restart pagination without a cursor")
 		}
 		if cur.GraphFP != fp {
-			return nil, errors.New("mcp: graph changed since this cursor was issued; restart pagination without a cursor")
+			return paginatedQuery{}, errors.New("mcp: graph changed since this cursor was issued; restart pagination without a cursor")
 		}
 		offset = cur.Offset
 	}

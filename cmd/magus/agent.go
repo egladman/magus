@@ -5,6 +5,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -40,13 +41,13 @@ const agentSkillVersion = 2
 // the consuming repo. Platform is an explicit argument, never auto-detected (per
 // the explicit-and-granular preference); writing into a repo's agent-config dirs
 // happens only through this command, never as a side effect of another.
-func agentCmd(ctx context.Context, root string, args []string) error {
+func agentCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return agentUsageErr()
 	}
 	switch args[0] {
 	case "install":
-		return agentInstallCmd(ctx, root, args[1:])
+		return agentInstallCmd(ctx, args[1:])
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
@@ -55,7 +56,7 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 	}
 }
 
-func agentUsage(w *os.File) {
+func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus agent install <platform> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Install the magus agent skill into the current repo so an agent knows")
@@ -73,26 +74,27 @@ func agentUsageErr() error {
 // agentInstallCmd writes the embedded skill for the named platform into dir
 // (default CWD). Only claude is supported today; other platforms error explicitly
 // rather than silently doing nothing, so demand is visible.
-func agentInstallCmd(ctx context.Context, _ string, args []string) error {
-	fs := flag.NewFlagSet("agent install", flag.ContinueOnError)
-	dir := fs.String("dir", ".", "Repo directory to install into")
-	force := fs.Bool("force", false, "Overwrite existing installed skill files")
-	fs.Usage = func() { agentUsage(os.Stderr) }
-	if err := fs.Parse(args); err != nil {
+func agentInstallCmd(ctx context.Context, args []string) error {
+	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
+	dir := fset.String("dir", ".", "Repo directory to install into")
+	force := fset.Bool("force", false, "Overwrite existing installed skill files")
+	fset.Usage = func() { agentUsage(os.Stderr) }
+	if err := fset.Parse(args); err != nil {
 		return err
 	}
-	rest := fs.Args()
+	rest := fset.Args()
 	if len(rest) == 0 {
 		agentUsage(os.Stderr)
 		return fmt.Errorf("agent install: a platform is required (supported: claude)")
 	}
-	// The platform is the first positional; re-parse the tail so flags written AFTER
-	// it (agent install claude --force) are honored, not just flags written before.
+	// The platform is the first positional. Re-parse the tail so a flag written after
+	// it (agent install claude --force) is honored, not only flags written before.
+	// A second positional is rejected below, so the re-parse only ever sees flags.
 	platform := rest[0]
-	if err := fs.Parse(rest[1:]); err != nil {
+	if err := fset.Parse(rest[1:]); err != nil {
 		return err
 	}
-	if extra := fs.Args(); len(extra) > 0 {
+	if extra := fset.Args(); len(extra) > 0 {
 		return fmt.Errorf("agent install: one platform at a time, unexpected %q", extra[0])
 	}
 	if platform != "claude" {
@@ -158,7 +160,9 @@ var skillFooter = fmt.Sprintf(
 	agentSkillVersion, types.KnowledgeSchemaVersion)
 
 // stampSkill appends the footer to a skill file's content (a trailing HTML comment
-// leaves the leading YAML frontmatter the Agent Skills spec requires untouched).
+// leaves the leading YAML frontmatter the Agent Skills spec requires untouched). The
+// footer begins with its own newline, so it sits one blank line below the body -
+// deliberate, for readability in the rendered file.
 func stampSkill(body []byte) []byte {
 	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), skillFooter...)
 }
@@ -170,8 +174,10 @@ var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-
 // installedSkillPath is where a Claude install writes the skill, relative to a repo.
 const installedSkillPath = ".claude/skills/magus/SKILL.md"
 
-// skillDrift is the verdict of checking an installed skill against this binary.
-type skillDrift struct {
+// skillStatus is the verdict of checking an installed skill against this binary:
+// whether it is present, and whether it has fallen behind (Stale). The happy value
+// is {Installed: true, Stale: false}.
+type skillStatus struct {
 	Installed bool // the skill file exists
 	Stale     bool // it exists but its version predates the binary's
 	Detail    string
@@ -181,25 +187,31 @@ type skillDrift struct {
 // missing, current, or stale (its stamped versions older than the binary's). It is
 // the read half of the generated-by footer: install stamps the version, this tells
 // an operator or CI when a re-install is due after a magus upgrade.
-func checkSkillDrift(dir string) skillDrift {
+func checkSkillDrift(dir string) skillStatus {
 	body, err := os.ReadFile(filepath.Join(dir, installedSkillPath))
 	if err != nil {
-		return skillDrift{Detail: "not installed (run: magus agent install claude)"}
+		if os.IsNotExist(err) {
+			return skillStatus{Detail: "not installed (run: magus agent install claude)"}
+		}
+		// Present but unreadable (permissions, IO) is a real problem, not "absent":
+		// report it as drift so a --strict CI gate fails instead of passing green.
+		return skillStatus{Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()}
 	}
 	m := footerVersionRe.FindStringSubmatch(string(body))
 	if m == nil {
-		return skillDrift{Installed: true, Stale: true, Detail: "installed skill has no version footer; re-run: magus agent install claude --force"}
+		return skillStatus{Installed: true, Stale: true, Detail: "installed skill has no version footer; re-run: magus agent install claude --force"}
 	}
+	// The regex captured \d+ for both groups, so Atoi cannot fail here.
 	skillVer, _ := strconv.Atoi(m[1])
 	schemaVer, _ := strconv.Atoi(m[2])
 	if skillVer < agentSkillVersion || schemaVer < types.KnowledgeSchemaVersion {
-		return skillDrift{
+		return skillStatus{
 			Installed: true, Stale: true,
 			Detail: fmt.Sprintf("installed skill is stale (skill v%d/schema v%d; binary v%d/schema v%d); re-run: magus agent install claude --force",
 				skillVer, schemaVer, agentSkillVersion, types.KnowledgeSchemaVersion),
 		}
 	}
-	return skillDrift{Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", skillVer, schemaVer)}
+	return skillStatus{Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", skillVer, schemaVer)}
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on

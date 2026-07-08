@@ -28,8 +28,11 @@ type Frontmatter struct {
 // body, then a closing "---" line) off a markdown document, returning the parsed
 // fields and ok=true. A document with no leading block, or one whose YAML does not
 // parse, yields a zero Frontmatter and ok=false - callers treat frontmatter as
-// best-effort metadata, never a hard error. It is the read counterpart to
-// WriteFrontmatter, kept here so both halves of the format live together.
+// best-effort metadata, never a hard error. The two failure modes (no block present
+// vs. a present-but-malformed block) deliberately collapse to the same ok=false:
+// the sole caller wants the fields or nothing, and cares about neither reason. It is
+// the read counterpart to WriteFrontmatter, kept here so both halves of the format
+// live together.
 func ParseFrontmatter(content string) (Frontmatter, bool) {
 	// A frontmatter block must open on the very first line. Tolerate a UTF-8 BOM
 	// and either newline style, but nothing else before the fence.
@@ -43,15 +46,15 @@ func ParseFrontmatter(content string) (Frontmatter, bool) {
 	// bare "---" as a document separator, so scan lines rather than yaml-parse).
 	end := -1
 	for off := 0; off < len(body); {
+		nlAt := strings.IndexByte(body[off:], '\n')
 		line := body[off:]
-		if i := strings.IndexByte(line, '\n'); i >= 0 {
-			line = line[:i]
+		if nlAt >= 0 {
+			line = line[:nlAt]
 		}
 		if strings.TrimRight(line, "\r") == "---" {
 			end = off
 			break
 		}
-		nlAt := strings.IndexByte(body[off:], '\n')
 		if nlAt < 0 {
 			break
 		}

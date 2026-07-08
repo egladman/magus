@@ -266,29 +266,10 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 }
 
 // Query resolves the input to seeds and returns the ranked matches plus their
-// neighborhood subgraph, bounded by budget.
+// neighborhood subgraph, bounded by budget. It is the unpaged view: every match, in
+// one response - QueryPage with a zero offset and no limit, so the two cannot drift.
 func (g *Graph) Query(input string, budget int) types.KnowledgeQueryOutput {
-	if budget <= 0 {
-		budget = DefaultBudget
-	}
-	q := parseQuery(input)
-	matches := g.Resolve(input, 0)
-	seeds := make([]string, len(matches))
-	for i, m := range matches {
-		seeds[i] = m.ID
-	}
-	sub := g.Neighborhood(seeds, budget, q.fields["relation"])
-	out := sub.Output()
-	return types.KnowledgeQueryOutput{
-		Definition:    types.KnowledgeQueryDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Query:         strings.TrimSpace(input),
-		Budget:        budget,
-		MatchCount:    len(matches),
-		Matches:       matches,
-		Nodes:         out.Nodes,
-		Links:         out.Links,
-	}
+	return g.QueryPage(input, budget, 0, 0)
 }
 
 // QueryPage is Query with a match window: it returns the total MatchCount but only
@@ -308,11 +289,9 @@ func (g *Graph) QueryPage(input string, budget, offset, limit int) types.Knowled
 	matches := g.Resolve(input, 0)
 	total := len(matches)
 
-	page := matches
+	var page []types.KnowledgeMatch
 	if offset < total {
 		page = matches[offset:]
-	} else {
-		page = nil
 	}
 	if limit > 0 && len(page) > limit {
 		page = page[:limit]

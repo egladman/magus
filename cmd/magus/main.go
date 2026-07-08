@@ -458,7 +458,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "init":
 		return initCmd(ctx, root, subArgs)
 	case "agent":
-		return agentCmd(ctx, root, subArgs)
+		return agentCmd(ctx, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":

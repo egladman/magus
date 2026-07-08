@@ -250,9 +250,9 @@ func TestRuntimeShardBuildsIntoGraph(t *testing.T) {
 func TestAssembleRuntimeTimingAttrs(t *testing.T) {
 	known := map[string]bool{"target:pkg/a:build": true}
 	timings := []types.KnowledgeTiming{
-		{Project: "pkg/a", Target: "build", P75Ms: 4200, Samples: 9, HitRate: 0.75, HitSamples: 12},
-		{Project: "pkg/a", Target: "ghost", P75Ms: 100, Samples: 3, HitSamples: 3}, // unknown target -> dropped
-		{Project: "pkg/a", Target: "cold", HitSamples: 0},                          // no signal at all -> no node
+		{Project: "pkg/a", Target: "build", P75Ms: 4200, Samples: 9, HitRate: 0.75, HitRateSamples: 12},
+		{Project: "pkg/a", Target: "ghost", P75Ms: 100, Samples: 3, HitRateSamples: 3}, // unknown target -> dropped
+		{Project: "pkg/a", Target: "cold", HitRateSamples: 0},                          // no signal at all -> no node
 	}
 	s := assembleRuntime(nil, timings, known)
 
@@ -270,7 +270,7 @@ func TestAssembleRuntimeTimingAttrs(t *testing.T) {
 // the static engine attr.
 func TestRuntimeTimingMergesOntoTarget(t *testing.T) {
 	in := sampleInputs()
-	in.Timings = []types.KnowledgeTiming{{Project: "pkg/a", Target: "build", P75Ms: 500, Samples: 5, HitRate: 0.5, HitSamples: 8}}
+	in.Timings = []types.KnowledgeTiming{{Project: "pkg/a", Target: "build", P75Ms: 500, Samples: 5, HitRate: 0.5, HitRateSamples: 8}}
 	out := mergeAll(AssembleShards(in)).Output()
 
 	build, ok := nodeByID(out, "target:pkg/a:build")
