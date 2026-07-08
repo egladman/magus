@@ -38,6 +38,7 @@ MCP; humans reach it through three verbs and the `magus graph` home.
 magus query "<terms>"       # ranked node matches plus their neighborhood
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # the shortest chain of edges between two nodes
+magus refs <symbol>         # where an ingested code symbol is defined and referenced
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
 magus graph open            # explore it visually in your browser (data stays local)
@@ -232,15 +233,15 @@ and [MGS7002](codes/knowledge/MGS7002.md) (a doc citing an unregistered code).
 ## For agents
 
 The MCP daemon exposes the verbs as tools: `magus_query`, `magus_explain`,
-`magus_path`, and `magus_stats`. See [MCP](mcp.md) for wiring. Prefer these over
-grep to find and relate magus-domain entities; start from the `MAGUS.md` routing
-table, which is already in context in a fresh clone.
+`magus_path`, `magus_stats`, and `magus_refs`. See [MCP](mcp.md) for wiring. Prefer
+these over grep to find and relate magus-domain entities; start from the `MAGUS.md`
+routing table, which is already in context in a fresh clone.
 
-For a large match set, `magus_query` pages: pass `limit` to cap the matches per
-response and echo the returned `next_cursor` to fetch the next page. The cursor is
-stateless and self-validating - it carries the query and a graph fingerprint, so a
-cursor reused against a different query or a graph that changed between pages is
-rejected rather than returning an incoherent slice.
+For a large result set, `magus_query` and `magus_refs` page: pass `limit` to cap the
+rows per response and echo the returned `next_cursor` to fetch the next page. The
+cursor is stateless and self-validating - it carries the query and a graph
+fingerprint, so a cursor reused against a different query or a graph that changed
+between pages is rejected rather than returning an incoherent slice.
 
 `magus agent install claude` writes a skill into `.claude/skills/magus/` that
 teaches an agent HOW to use these verbs (the repo's `MAGUS.md` says WHAT is in the

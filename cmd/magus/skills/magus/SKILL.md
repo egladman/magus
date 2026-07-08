@@ -27,8 +27,12 @@ only when the tool surface does.
    | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>` |
    | how do two nodes relate | `magus_path` | `magus path <a> <b>` |
    | where risk concentrates | `magus_stats` | `magus graph stats` |
+   | where a code symbol is defined and used | `magus_refs` | `magus refs <symbol>` |
 
-   Prefer these over grep and glob for anything in the magus domain.
+   Prefer these over grep and glob for anything in the magus domain. `magus_refs`
+   needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
+   is the occurrence-shaped def/references answer, so use it over `magus_query` for a
+   symbol's fan-in.
 
 ## Query grammar
 
