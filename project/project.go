@@ -41,7 +41,7 @@ func Discover(_ context.Context, root string) (*types.Workspace, error) {
 		}
 		base := d.Name()
 		if path != abs {
-			if IsIgnoreDir(base) {
+			if IsIgnoreDir(base) || IsNestedWorktree(path) {
 				return fs.SkipDir
 			}
 		}

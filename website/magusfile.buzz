@@ -1,101 +1,98 @@
 import "magus";
-// Only the modules the TARGETS below use: fs (writes MAGUS.md), os (TinyGo build),
-// vcs (drift gate), http (serve). The rendering machinery's own module imports
-// (markdown, io, std, serialize, encoding) live in scribe.buzz.
+// Modules the targets use: fs (writes MAGUS.md, node_modules guard), os (esbuild,
+// TinyGo, npm), vcs (drift gate), http (serve). scribe.buzz owns the rendering
+// machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
 import "os";
 import "vcs";
 import "http";
-// The playground embeds the gopherbuzz Buzz VM, so build-playground depends on
-// gopherbuzz's build. Importing it by path binds its targets as cross-project
-// handles (gopherbuzz.build), referenced from build_playground below.
+// build-playground compiles the gopherbuzz Buzz VM to wasm, so it depends on
+// gopherbuzz's build. The path import binds its targets as cross-project handles
+// (gopherbuzz.build), and folds gopherbuzz into this project's affected set.
 import "project/../gopherbuzz" as gopherbuzz;
-// The static site generator, split into its own sibling module. The targets below
-// call its exported entry points, passing in the paths declared below.
+// The static site generator, a sibling module; the targets call its entry points.
 import "scribe";
 
 magus.project({
-    // scribe.buzz is listed explicitly: magus tracks affected/drift off this
-    // sources glob, not the import graph, so it must be named to be watched.
+    // Affected/drift tracks this sources glob, not the import graph, so scribe.buzz
+    // (and every other input) must be named to be watched.
     "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html", "graph.html",
                 "tour/*.buzz",
                 "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
     "outputs": ["gen/**", "MAGUS.md"],
-    // The cross-project dependency on gopherbuzz is declared via the project import
-    // above (build_playground uses gopherbuzz.build); magus folds that into this
-    // project's affected set, so a gopherbuzz change still marks the site affected —
-    // no separate project-level depends_on.
     "targets": {
-        // generate renders the site and then gates on drift, mirroring the root
-        // project's generate: a cache hit would skip the render, and the gate
-        // must run every time. exclusive: true (exclusive) so its git-status check
-        // isn't tripped by a peer target mutating the tree mid-check.
+        // generate renders + gates on drift, so it must run every time (skipCache) and
+        // alone (exclusive), so a peer mutating gen/ can't trip its git-status check.
         "generate": {"skipCache": true, "exclusive": true},
         "serve": {"skipCache": true},
-        // build-playground shells out to TinyGo to rebuild a non-deterministic
-        // binary; a cache hit would replay a stale one. Run by hand when the
-        // interpreter or playground host changes (TinyGo is not a CI tool).
+        // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
+        // wasm binary; skipCache so a hit never replays a stale one. Run by hand.
         "build-playground": {"skipCache": true},
-        // build-playground-editor bundles vendored CodeMirror into the committed
-        // gen/playground/editor.js. Like build-playground it shells out (npm + esbuild)
-        // and is run by hand when the editor source changes; skipCache so a hit
-        // never replays a stale bundle.
-        "build-playground-editor": {"skipCache": true},
-        // build-graph-explorer bundles js/graph-explorer.js (d3-force) into the
-        // committed gen/graph/explorer.js - the graph analog of build-playground-editor.
-        // Same npm + esbuild path; run by hand when the explorer source changes.
-        "build-graph-explorer": {"skipCache": true},
     },
 });
 
-// Where this project reads from and writes to. Owned here (not in the generator) and
-// passed into scribe.site_render, so the generator stays a config-agnostic
-// library; the targets below also use OUT/ROOT/DOCS/BLOG for the drift gate and serve.
+// Paths this project reads from and writes to, owned here and passed into
+// scribe.site_render so the generator stays config-agnostic.
 final ROOT = "..";          // the magus/ workspace dir, relative to this project
 final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
-final OUT  = "gen";          // generated site output, under this project
+final OUT  = "gen";         // generated site output, under this project
 
 export fun preflight(args: [str]) > void {}
 
-// md-generate renders MAGUS.md (the target catalog + dependency graph) via
-// `magus describe graph`, parsed statically from this magusfile so it stays in
-// lockstep with the project's targets. Re-run after editing targets and commit:
-// `magus run md-generate site`.
+// md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
+// magusfile, so it stays in lockstep with the targets. generate calls it; run
+// standalone after editing targets: `magus run md-generate website`.
 export fun md_generate(args: [str]) > void {
     final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
-// generate renders the site and refreshes MAGUS.md, then gates on drift: a clean
-// checkout only goes dirty when gen/ or MAGUS.md actually changed (i.e. a doc edit
-// or target change wasn't re-rendered and committed). Run the `rw` charm
-// (`generate:rw`) to keep the result instead of gating.
+// generateJsBundles builds the two committed browser bundles that import npm
+// packages - the d3-force graph explorer and the CodeMirror playground editor.
+// These are npm packages (package.json + lockfile), so they follow the JS
+// convention: `npm ci` restores the pinned deps, `npm run build` runs the esbuild
+// invocations, which live in package.json "scripts" as their single source of
+// truth. (The render's own theme/main/css are minified inline in scribe instead:
+// they have no npm deps and are driven by the render loop, so they aren't an npm
+// package build.) npm ci is guarded on node_modules so a warm local tree skips it
+// while a cold CI checkout installs. Running here - inside generate - is what lets
+// both the gen/** drift gate and the merge driver regenerate the bundles.
+fun generateJsBundles() > void {
+    if (!fs.isDir("node_modules")) {
+        os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+    }
+    os.exec("npm", ["run", "build"], ".", {});
+}
+
+// generate renders the site, refreshes MAGUS.md, and rebuilds the client bundles,
+// then gates on drift: a clean checkout only goes dirty when a source edit wasn't
+// re-rendered/rebuilt and committed. The `rw` charm (`generate:rw`) keeps the
+// result instead of gating.
 export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
     final clean_before = vcs.isDirty([OUT, "MAGUS.md"]) == false;
     magus.needs(magus.target.literal("md-generate"));
     final site = scribe.site_render(ROOT, DOCS, BLOG, OUT);
+    generateJsBundles();
     if (magus.has_charm("rw")) {
-        // Record this build's URLs in the append-only ledger the abandoned-link
-        // gate checks against. Only under rw, so a checking render never mutates.
-        // The render's populated state is threaded in explicitly (no module global).
+        // Record this build's URLs in the append-only ledger the abandoned-link gate
+        // checks against - only under rw, so a checking render never mutates.
         scribe.updateUrlLock(site);
         return;
     }
-
     if (clean_before and vcs.isDirty([OUT, "MAGUS.md"])) {
-        throw "generate: " + OUT + " or MAGUS.md drifted; re-run `magus run generate:rw site` and commit";
+        throw "generate: " + OUT + " or MAGUS.md drifted; re-run `magus run generate:rw website` and commit";
     }
 }
 
 export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
 export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); }
 export fun build(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
-// buzz-test runs scribe's unit tests (the `test "..." {}` blocks in scribe.buzz)
-// through `magus buzz`, in --embedded mode with the pure magus modules registered so
-// scribe's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit,
-// so a failing assertion fails this target.
+
+// buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in
+// --embedded mode so scribe's markdown/encoding imports resolve. magus.cmd raises
+// on a non-zero exit, so a failing assertion fails this target.
 export fun buzz_test(args: [str]) > void {
     magus.cmd(["buzz", "-t", "--embedded", "scribe.buzz"]);
 }
@@ -104,33 +101,25 @@ export fun test(args: [str]) > void {
     magus.needs(magus.target.literal("format"), magus.target.literal("buzz-test"));
 }
 
-// 'ci' is the conventional anchor `magus affected ci` keys off; it fans out
-// lint/build/test, each of which waits for the render via generate.
+// 'ci' is the anchor `magus affected ci` keys off; it fans out lint/build/test,
+// each of which reaches the render (and its drift gate) via generate.
 export fun ci(args: [str]) > void {
     magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }
 
-// build-playground rebuilds the WebAssembly interpreter the playground page
-// loads: TinyGo compiles ../cmd/buzz-playground straight to website/gen/playground/buzz.wasm
-// and the matching wasm_exec.js glue is copied beside it. Both are committed (like
-// default.pgo), so CI — which has no TinyGo — never rebuilds them. Building directly
-// into gen/ (rather than a separate website/playground/ source dir the render would
-// then copy) avoids keeping two committed copies of the same artifact in sync; gen/
-// is itself committed and drift-gated, and nothing else in the render pipeline
-// touches these three files, so they simply survive regeneration untouched. Run this
-// after changing the interpreter (../gopherbuzz) or the playground host
-// (../internal/playground), then commit the refreshed artifacts. TinyGo >= 0.40 is
-// required; the glue must come from the same TinyGo that built the wasm.
+// build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo
+// compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the
+// matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm
+// itself) and survive regeneration untouched, so CI - which has no TinyGo - never
+// rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground
+// host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from
+// the same TinyGo that built the wasm.
 export fun build_playground(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
-    // The playground embeds the gopherbuzz Buzz VM, so this target depends on
-    // gopherbuzz's build specifically — a target-level cross-project dependency.
     magus.needs(gopherbuzz.build);
-    // Run from the magus module root (..) so TinyGo resolves the go.mod there.
-    // -stack-size lifts TinyGo's small default goroutine stack so the embedded
-    // interpreter has ample room for deep magusfile evaluation and recursion.
-    // -scheduler=asyncify is the wasm default, pinned so the status banner's
-    // reported scheduler is guaranteed to match the build.
+    // Run from the module root (..) so TinyGo resolves its go.mod. -stack-size lifts
+    // TinyGo's small default goroutine stack for deep magusfile evaluation;
+    // -scheduler=asyncify pins the wasm default so the status banner matches the build.
     os.exec("tinygo",
         ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
          "-o", "website/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
@@ -141,48 +130,19 @@ export fun build_playground(args: [str]) > void {
     magus.info("rebuilt website/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
 }
 
-// build_playground_editor bundles the vendored CodeMirror editor into the committed
-// website/gen/playground/editor.js — the editor analog of build_playground's committed
-// buzz.wasm. The playground page loads this bundle to upgrade its textarea into a
-// CodeMirror editor with diagnostics, autocompletion, and hover (driven by the wasm
-// language service, globalThis.buzz). Run by hand when js/editor.js or the
-// pinned CodeMirror versions change, then commit editor.js. npm ci restores the
-// build-only deps from package-lock.json; esbuild (pinned in mise.toml) bundles them.
-export fun build_playground_editor(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
-    // Run from this project dir (.), where package.json / package-lock.json live.
-    os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
-    os.exec("npm", ["run", "build-editor"], ".", {});
-    magus.info("rebuilt website/gen/playground/editor.js - commit the result");
-}
-
-// build_graph_explorer bundles js/graph-explorer.js (d3-force + d3-zoom) into the
-// committed website/gen/graph/explorer.js - the graph analog of
-// build_playground_editor. The /graph/ page loads it to lay out and render the
-// knowledge graph on a canvas. Run by hand when js/graph-explorer.js or the pinned
-// d3 versions change, then commit explorer.js. Same npm ci + esbuild path.
-export fun build_graph_explorer(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
-    os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
-    os.exec("npm", ["run", "build-graph-explorer"], ".", {});
-    magus.info("rebuilt website/gen/graph/explorer.js - commit the result");
-}
-
-// serve watches ../docs and re-renders gen/ on change — handy for local docs
-// work. fs.watch BLOCKS until interrupted (Ctrl-C); the output lives
-// outside the watched tree (under gen), so a render can't retrigger the watch.
-// try/catch keeps a bad render from ending the watch; returning false keeps watching.
+// serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change -
+// handy for local docs work. fs.watch blocks until Ctrl-C; the output lives outside
+// the watched tree, so a render can't retrigger the watch. try/catch keeps a bad
+// render from ending the watch (return false keeps watching).
 export fun serve(args: [str]) > void {
     scribe.site_render(ROOT, DOCS, BLOG, OUT);
-    // Serve the generated site over HTTP (background goroutine; fs.watch below
-    // keeps the process alive). With no port, http.server scans from 8080 for the
-    // first free port and returns it, so the printed URL is always correct even if
-    // 8080 is busy.
+    // No port -> http.server scans from 8080 for the first free one and returns it,
+    // so the printed URL is correct even when 8080 is busy.
     final port = http.server(OUT);
     magus.info("serving " + OUT + " at http://localhost:{port}");
-    magus.info("watching " + ROOT + "/" + DOCS + " + " + ROOT + "/" + BLOG + " — re-rendering " + OUT + " on change (Ctrl-C to stop)");
+    magus.info("watching " + ROOT + "/" + DOCS + " + " + ROOT + "/" + BLOG + " - re-rendering " + OUT + " on change (Ctrl-C to stop)");
     fs.watch([ROOT + "/" + DOCS, ROOT + "/" + BLOG], fun(changed: [str]) > bool {
-        magus.info("change detected — re-rendering");
+        magus.info("change detected - re-rendering");
         try {
             scribe.site_render(ROOT, DOCS, BLOG, OUT);
         } catch (e) {

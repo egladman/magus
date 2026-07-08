@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](#glossary).
 
 ## Query first
 
-This workspace has a knowledge graph of **493 nodes** and **594 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **490 nodes** and **590 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -29,7 +29,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `.` |
-| target | 13 | `magus query kind:target` | `generate`, `preflight`, `ci` |
+| target | 11 | `magus query kind:target` | `generate`, `ci`, `format` |
 | spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
 | op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | charm | 1 | `magus query kind:charm` | `rw` |
@@ -37,13 +37,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
 | doc | 1 | `magus query kind:doc` | `MAGUS.md` |
-| file | 23 | `magus query kind:file` | `scribe.buzz`, `magusfile.buzz`, `scribe_html.buzz` |
-| function | 184 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
+| file | 23 | `magus query kind:file` | `scribe.buzz`, `scribe_html.buzz`, `tour/12-magusfile.buzz` |
+| function | 183 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
 | import | 23 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 13 | `magus query project:.` | `generate`, `preflight`, `ci` |
+| . | 11 | `magus query project:.` | `generate`, `ci`, `format` |
 
 ## Reading the graphs
 
@@ -97,8 +97,6 @@ graph LR
   subgraph entry_cluster[" "]
     ci("ci")
     build_playground("build-playground")
-    build_playground_editor("build-playground-editor")
-    build_graph_explorer("build-graph-explorer")
     serve("serve")
   end
   preflight("preflight")
@@ -120,18 +118,16 @@ graph LR
   build --> ci
   test --> ci
   preflight --> build_playground
-  preflight --> build_playground_editor
-  preflight --> build_graph_explorer
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_graph_explorer,build_playground,build_playground_editor,ci,serve anchor
+  class build_playground,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 ```
 
 ### `generate`
 
-generate renders the site and refreshes MAGUS.md, then gates on drift: a clean checkout only goes dirty when gen/ or MAGUS.md actually changed (i.e.
+generate renders the site, refreshes MAGUS.md, and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.
 
 **Defaults**
 
@@ -203,7 +199,7 @@ magus run test  # from the workspace root
 
 ### `ci`
 
-'ci' is the conventional anchor `magus affected ci` keys off; it fans out lint/build/test, each of which waits for the render via generate.
+'ci' is the anchor `magus affected ci` keys off; it fans out lint/build/test, each of which reaches the render (and its drift gate) via generate.
 
 **Defaults**
 
@@ -219,7 +215,7 @@ magus run ci  # from the workspace root
 
 ### `build-playground`
 
-build-playground rebuilds the WebAssembly interpreter the playground page loads: TinyGo compiles ../cmd/buzz-playground straight to website/gen/playground/buzz.wasm and the matching wasm_exec.js glue is copied beside it.
+build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.
 
 **Defaults**
 
@@ -233,41 +229,9 @@ magus run build-playground  # from the workspace root
 
 **Details:** uncached (always runs)
 
-### `build-playground-editor`
-
-build_playground_editor bundles the vendored CodeMirror editor into the committed website/gen/playground/editor.js — the editor analog of build_playground's committed buzz.wasm.
-
-**Defaults**
-
-```sh
-magus run build-playground-editor  # from the workspace root
-```
-
-**Depends on:**
-
-- [`preflight`](#preflight)
-
-**Details:** uncached (always runs)
-
-### `build-graph-explorer`
-
-build_graph_explorer bundles js/graph-explorer.js (d3-force + d3-zoom) into the committed website/gen/graph/explorer.js - the graph analog of build_playground_editor.
-
-**Defaults**
-
-```sh
-magus run build-graph-explorer  # from the workspace root
-```
-
-**Depends on:**
-
-- [`preflight`](#preflight)
-
-**Details:** uncached (always runs)
-
 ### `serve`
 
-serve watches ../docs and re-renders gen/ on change — handy for local docs work.
+serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change - handy for local docs work.
 
 **Defaults**
 
@@ -287,7 +251,7 @@ magus run preflight  # from the workspace root
 
 ### `md-generate`
 
-md-generate renders MAGUS.md (the target catalog + dependency graph) via `magus describe graph`, parsed statically from this magusfile so it stays in lockstep with the project's targets.
+md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.
 
 **Defaults**
 
@@ -297,7 +261,7 @@ magus run md-generate  # from the workspace root
 
 ### `buzz-test`
 
-buzz-test runs scribe's unit tests (the `test "..." {}` blocks in scribe.buzz) through `magus buzz`, in --embedded mode with the pure magus modules registered so scribe's markdown/encoding imports resolve.
+buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so scribe's markdown/encoding imports resolve.
 
 **Defaults**
 

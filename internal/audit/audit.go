@@ -140,7 +140,7 @@ outer:
 }
 
 // walkFiles iterates regular files under root; buf passed to fn is reused (callers must copy to retain).
-// Skips .git; does not follow symlinks; checks ctx cancellation between directories.
+// Skips tool/VCS metadata dirs (see isMetaDir); no symlink follow; checks ctx cancellation between directories.
 func walkFiles(ctx context.Context, root string, fn func(buf []byte, modTimeNs, size int64)) error {
 	// 256 B handles paths up to /tmp/... TempDir + small subtree without
 	// realloc; longer paths grow naturally via append.
@@ -170,7 +170,7 @@ func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, modTimeNs, siz
 		if errAcc != nil {
 			return
 		}
-		if kind == dentDir && isDotGit(name) {
+		if kind == dentDir && isMetaDir(name) {
 			return
 		}
 		buf = append(buf, filepath.Separator)
@@ -194,13 +194,21 @@ func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, modTimeNs, siz
 	return errAcc
 }
 
-// isDotGit returns true for ".git" (the wholesale-skipped directory).
-func isDotGit(name []byte) bool {
-	return len(name) == 4 && name[0] == '.' && name[1] == 'g' && name[2] == 'i' && name[3] == 't'
+// isMetaDir reports whether name is a tool or VCS metadata directory the audit
+// skips wholesale. magus and the VCSes write into these during normal operation
+// (e.g. a nested project's .magus cache/logs populated by a child magus run), so
+// their churn is bookkeeping, not a cross-project source write. Mirrors the
+// metadata subset of cache.isIgnoreDir. switch string(name) is allocation-free.
+func isMetaDir(name []byte) bool {
+	switch string(name) {
+	case ".git", ".hg", ".jj", ".magus", ".build":
+		return true
+	}
+	return false
 }
 
 // take walks each descendant root once and records (mtime, size) per
-// regular file. .git is skipped wholesale; symlinks are not followed.
+// regular file. Tool/VCS metadata dirs are skipped wholesale; symlinks are not followed.
 // Missing roots are tolerated. roots must already be deduped against
 // nesting via topmostRoots so each file is walked exactly once.
 func take(ctx context.Context, roots []descendant) (snapshot, error) {

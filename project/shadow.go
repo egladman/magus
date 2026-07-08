@@ -35,7 +35,7 @@ func SpellShadows(root string) ([]ShadowConflict, error) {
 			return nil //nolint:nilerr // unreadable entry: skip, do not fail the whole scan
 		}
 		if d.IsDir() {
-			if IsIgnoreDir(d.Name()) {
+			if IsIgnoreDir(d.Name()) || IsNestedWorktree(path) {
 				return filepath.SkipDir
 			}
 			if d.Name() == "spells" {
