@@ -235,16 +235,22 @@ edges added or removed, and (for nodes) which fields changed. Export a baseline 
 the base branch, then diff the working tree against it - the PR blast-radius artifact.
 
 ```sh
+magus graph diff --rev HEAD~1                    # against a git revision, no export needed
+magus graph diff --rev main -o markdown          # a CI comment vs the base branch
+
 git stash && magus graph export -o json > /tmp/base.json && git stash pop
-magus graph diff /tmp/base.json                 # human summary
-magus graph diff /tmp/base.json -o markdown     # a CI comment
-magus graph diff /tmp/base.json -o json         # machine-readable, with before/after
+magus graph diff /tmp/base.json                  # against an export file
+magus graph diff /tmp/base.json -o json          # machine-readable, with before/after
 ```
 
-The baseline must be a whole-graph `graph export -o json` (symbol shards in it are
-matched automatically; pass `--global` if the baseline was global). Edge diffs are
-structural - an edge is identified by (source, target, relation), so a re-scored or
-re-provenanced edge that keeps those three is not reported as a change.
+`--rev` builds the base graph from that revision's tracked files (domain-only, using
+the current config) in an isolated throwaway tree that never touches your real cache;
+it and the positional baseline are mutually exclusive, and it cannot be combined with
+`--global` (the base is a single-workspace build). A baseline file must be a whole-graph
+`graph export -o json` (symbol shards in it are matched automatically; pass `--global`
+if the baseline was global). Edge diffs are structural -
+an edge is identified by (source, target, relation), so a re-scored or re-provenanced
+edge that keeps those three is not reported as a change.
 
 ## Global graph (across workspaces)
 

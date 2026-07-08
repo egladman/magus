@@ -66,7 +66,7 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|mermaid|tree)")
 	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot|mermaid neighborhood)")
 	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
-	fmt.Fprintln(os.Stderr, "  diff     nodes/edges added/removed/changed vs a baseline export (-o json|markdown); PR blast-radius")
+	fmt.Fprintln(os.Stderr, "  diff     nodes/edges added/removed/changed vs a baseline export or --rev; PR blast-radius")
 	fmt.Fprintln(os.Stderr, "  open     open this workspace's graph in the hosted explorer (delivered privately; data never leaves your machine)")
 	fmt.Fprintln(os.Stderr, "  verify   check derived artifacts for drift (installed agent skill vs this binary); CI guard")
 	fmt.Fprintln(os.Stderr, "")

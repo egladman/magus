@@ -79,9 +79,9 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
 - `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
-- To show a PR's domain impact, export a baseline from the base branch and run
-  `magus graph diff <baseline.json> -o markdown` for a CI comment (nodes/edges added,
-  removed, or changed).
+- To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
+  comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
+  that revision's files, or pass a `graph export -o json` baseline file instead.
 
 ## Do not render the graph yourself
 
