@@ -63,6 +63,14 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
 		slog.Warn("[AGENT] skipping: workspace unavailable", slog.String("error", err.Error()))
 		return
 	}
+	// Keep a warm knowledge graph for MCP queries: the watcher invalidates it on
+	// source changes, so query/explain/path/stats answer from memory without
+	// re-parsing every magusfile per call. Non-fatal if it cannot start - the
+	// tools fall back to a cache-first rebuild per call (equally fresh). The
+	// watcher lives for the daemon's context.
+	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {
+		slog.Warn("[AGENT] knowledge-graph watcher unavailable; MCP queries will rebuild per call", slog.String("error", werr.Error()))
+	}
 	// Capture the daemon's own socket now (set by startMultiWorkspaceDaemon)
 	// so the health handlers query this daemon, not whatever a per-request
 	// discovery scan happens to find.

@@ -19,14 +19,16 @@ import (
 
 func queryCmd(ctx context.Context, root string, args []string) error {
 	var (
-		budget  int
-		kinds   string
-		refresh bool
+		budget      int
+		kinds       string
+		refresh     bool
+		globalScope bool
 	)
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
 		fs.StringVar(&kinds, "kind", "", "restrict matches to these node kinds (comma-separated)")
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before querying")
+		fs.BoolVar(&globalScope, "global", false, "query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -58,7 +60,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		input += " kind:" + k
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
 	if err != nil {
 		return err
 	}
@@ -92,9 +94,13 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 }
 
 func explainCmd(ctx context.Context, root string, args []string) error {
-	var refresh bool
+	var (
+		refresh     bool
+		globalScope bool
+	)
 	pos, err := cmdParse("explain", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before explaining")
+		fs.BoolVar(&globalScope, "global", false, "resolve across the workspaces registered in config (knowledge.workspaces)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus explain <node-id-or-name> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -118,7 +124,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
 	if err != nil {
 		return err
 	}
@@ -166,9 +172,13 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 }
 
 func pathCmd(ctx context.Context, root string, args []string) error {
-	var refresh bool
+	var (
+		refresh     bool
+		globalScope bool
+	)
 	pos, err := cmdParse("path", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before pathfinding")
+		fs.BoolVar(&globalScope, "global", false, "resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus path <a> <b> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -192,7 +202,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
 	if err != nil {
 		return err
 	}

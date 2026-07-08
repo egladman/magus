@@ -25,6 +25,7 @@ type Config struct {
 	Report    Report    `yaml:"report"`
 	Log       Log       `yaml:"log"`
 	Hints     Hints     `yaml:"hints"`
+	Knowledge Knowledge `yaml:"knowledge"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -208,6 +209,22 @@ type Graph struct {
 	Spell     string `yaml:"spell"`                                                    // filter to a single spell
 	Depth     int    `yaml:"depth" validate:"gte=0"`                                   // 0 = unlimited
 	Roots     string `yaml:"roots"`                                                    // comma-separated starting nodes
+}
+
+// Knowledge configures the cross-workspace knowledge graph.
+type Knowledge struct {
+	// Workspaces are additional workspace roots to union into a `--global`
+	// knowledge-graph query (query/explain/path and graph export/stats). Each is
+	// loaded and its node IDs are namespaced by the workspace ("<name>//<id>") so
+	// IDs from different repos cannot collide. Empty means --global covers only the
+	// current workspace.
+	Workspaces []string `yaml:"workspaces"`
+	// MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When
+	// exceeded after a build, least-recently-used shard files are evicted; an evicted
+	// shard is restored from the remote cache or rebuilt on the next query. 0
+	// (default) is unlimited - the store self-reconciles deleted projects, so a cap
+	// mainly bounds transient bloat.
+	MaxSizeMB int `yaml:"max_size_mb" validate:"gte=0"`
 }
 
 // Telemetry holds OpenTelemetry exporter settings. OFF by default; no magus-operated backend exists.

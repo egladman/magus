@@ -90,7 +90,14 @@ func assembleBuzz(root string) Shard {
 					s.Edges = append(s.Edges, extractedEdge(fID, fileID(target), types.RelationImports, rel))
 				} else {
 					iID := importID(d.Path)
-					s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: iID, Kind: types.KindImport, Label: d.Path})
+					n := types.KnowledgeNode{ID: iID, Kind: types.KindImport, Label: d.Path}
+					// A dangling workspace-relative import is an extraction ambiguity
+					// (MGS7001); a compiled-in module (magus/*, buzz stdlib) is expected
+					// to be unresolvable and stays untagged.
+					if !isBuiltinImport(d.Path) {
+						n.Attrs = map[string]string{AttrDiagnostic: string(types.UnresolvableBuzzImport)}
+					}
+					s.Nodes = append(s.Nodes, n)
 					s.Edges = append(s.Edges, inferredEdge(fID, iID, types.RelationImports, rel, 0.7))
 				}
 			}
@@ -174,6 +181,30 @@ func enclosingFunction(fnLines []fnLine, line int) string {
 		}
 	}
 	return name
+}
+
+// buzzStdlibModules are the bare-name imports gopherbuzz registers as its
+// standard library (mirrors gopherbuzz/std Modules). An unresolved import of one
+// is a compiled-in module, not a dangling workspace file, so it is not flagged
+// MGS7001. Kept as a small static set rather than wired to the gopherbuzz
+// registry: the upstream stdlib surface is stable, and a new module is a rare,
+// deliberate event. magus's own stdlib is the "magus"/"magus/*" namespace.
+var buzzStdlibModules = map[string]bool{
+	"std": true, "math": true, "fs": true, "os": true, "crypto": true,
+	"gc": true, "debug": true, "io": true, "serialize": true, "buffer": true,
+	"ffi": true, "assertcore": true, "assert": true, "suite": true, "testing": true,
+}
+
+// isBuiltinImport reports whether path names a compiled-in module (magus stdlib
+// or a buzz stdlib module) rather than a workspace .buzz file. The upstream
+// `buzz:` package-scheme prefix is stripped first, so `import "buzz:os"` is the
+// stdlib os, same as a bare `import "os"`.
+func isBuiltinImport(path string) bool {
+	path = strings.TrimPrefix(path, "buzz:")
+	if path == "magus" || strings.HasPrefix(path, "magus/") {
+		return true
+	}
+	return buzzStdlibModules[path]
 }
 
 // resolveBuzzImport best-effort maps an import path to a scanned .buzz file (rel to

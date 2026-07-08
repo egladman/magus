@@ -1,6 +1,10 @@
 package knowledge
 
-import "github.com/egladman/magus/types"
+import (
+	"strings"
+
+	"github.com/egladman/magus/types"
+)
 
 // Assembly is composition, not analysis: it maps machinery magus already owns
 // (the static magusfile extraction behind DescribeGraph, the spell/module/
@@ -25,6 +29,11 @@ type Inputs struct {
 	// extractors to scan the filesystem. Empty disables those extractors (the
 	// store tests build from synthetic Inputs with no tree to scan).
 	Root string
+	// Runtime carries diagnostics fired during prior runs, read from the local
+	// runtime records. It is the ONLY non-deterministic input: derived from run
+	// history, not workspace sources, so it lands in an isolated @runtime shard
+	// that is excluded from remote export and skippable at load.
+	Runtime []types.DiagnosticEvent
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -55,6 +64,9 @@ func AssembleShards(in Inputs) []Shard {
 		if b := assembleBuzz(in.Root); len(b.Nodes) > 0 {
 			shards = append(shards, b)
 		}
+	}
+	if r := assembleRuntime(in.Runtime); len(r.Edges) > 0 {
+		shards = append(shards, r)
 	}
 	return shards
 }
@@ -209,3 +221,53 @@ func nilIfEmpty(m map[string]string) map[string]string {
 	}
 	return m
 }
+
+// The runtime shard is the graph's one non-deterministic input: "emits" edges from
+// a unit to each MGS code it tripped in actual runs, answering "what has this
+// target tripped" - history the static "documents" edge cannot. Derived from local
+// run records (see the persistence half in store.go), not workspace sources, so it
+// is isolated in a dedicated @runtime shard and excluded from remote export.
+
+// RuntimeShardName is the isolated shard holding runtime "emits" edges; the leading
+// "@" keeps it clear of any project path and is the remote-export exclusion key.
+const RuntimeShardName = "@runtime"
+
+// assembleRuntime turns runtime diagnostic records into the isolated shard: one
+// "emits" edge per (unit, code) from the target/project node to the diagnostic
+// node. The endpoints come from the registry and project shards, so these edges
+// connect existing nodes.
+func assembleRuntime(events []types.DiagnosticEvent) Shard {
+	s := Shard{Name: RuntimeShardName}
+	seen := map[string]bool{}
+	for _, ev := range events {
+		unit := runtimeUnitID(ev.Unit)
+		if unit == "" || ev.Code == "" {
+			continue
+		}
+		diag := diagnosticID(string(ev.Code))
+		key := unit + "\x00" + diag
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		s.Edges = append(s.Edges, extractedEdge(unit, diag, types.RelationEmits, "runtime"))
+	}
+	return s
+}
+
+// runtimeUnitID maps a DiagnosticEvent.Unit to a node ID: "<project>:<target>" for
+// a target-scoped diagnostic or "<project>" for a project-scoped one. Project paths
+// carry no colon, so a single colon marks the target boundary.
+func runtimeUnitID(unit string) string {
+	if unit == "" {
+		return ""
+	}
+	if i := strings.IndexByte(unit, ':'); i > 0 {
+		return targetID(unit[:i], unit[i+1:])
+	}
+	return projectID(unit)
+}
+
+// IsRuntimeShard reports whether name is the isolated runtime shard, excluded from
+// remote export (local run history, not shareable derived data).
+func IsRuntimeShard(name string) bool { return name == RuntimeShardName }

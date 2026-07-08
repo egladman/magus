@@ -76,3 +76,10 @@ const (
 	maxDocLen   = 512
 	maxSrcLen   = 512
 )
+
+// AttrDiagnostic is the node-attribute key under which an extractor records the
+// MGS#### code for an ambiguity it found on that node (an unresolvable import,
+// a dangling doc reference), so the ambiguity is queryable via `magus explain`
+// rather than logged and lost. Silent metadata, not a warning: implicit graph
+// rebuilds stay quiet.
+const AttrDiagnostic = "diagnostic"

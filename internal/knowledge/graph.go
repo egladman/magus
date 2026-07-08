@@ -166,3 +166,32 @@ func (g *Graph) Output() types.KnowledgeGraphOutput {
 		Links:         edges,
 	}
 }
+
+// --- cross-workspace union ---
+
+// QualifierSep joins a workspace to a node ID in a global graph ("web//spell:go");
+// kept a substring so fuzzy resolution still matches the bare ID.
+const QualifierSep = "//"
+
+// Qualified returns a copy of g with every node ID and edge endpoint prefixed by
+// "<workspace>//", so a global graph can union many workspaces without ID
+// collisions. The input graph is not modified.
+func Qualified(g *Graph, workspace string) *Graph {
+	q := workspace + QualifierSep
+	out := NewGraph()
+	for _, n := range g.Nodes() {
+		n.ID = q + n.ID
+		out.AddNode(n)
+	}
+	for _, e := range g.Edges() {
+		e.Source = q + e.Source
+		e.Target = q + e.Target
+		out.AddEdge(e)
+	}
+	return out
+}
+
+// UnionInto merges src's nodes and edges into dst.
+func UnionInto(dst, src *Graph) {
+	dst.Merge(src.Nodes(), src.Edges())
+}

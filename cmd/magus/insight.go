@@ -271,7 +271,7 @@ func insightReport(ctx context.Context, root string, args []string) error {
 	report := types.InsightReport{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}
 	// The report spans both axes: add graph stats (best-effort - a graph build
 	// failure just omits the section rather than failing the whole report).
-	if g, gerr := loadKnowledgeGraph(ctx, root, false); gerr == nil {
+	if g, gerr := loadKnowledgeGraph(ctx, root, false, false); gerr == nil {
 		report.GraphStats = g.Stats("")
 	}
 

@@ -1,6 +1,8 @@
 package knowledge
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/codec"
@@ -76,6 +78,23 @@ func hasEdge(out types.KnowledgeGraphOutput, source, target, relation string) bo
 		}
 	}
 	return false
+}
+
+// findEdge returns the edge matching (source, target, relation), or ok=false.
+func findEdge(out types.KnowledgeGraphOutput, source, target, relation string) (types.KnowledgeEdge, bool) {
+	for _, e := range out.Links {
+		if e.Source == source && e.Target == target && e.Relation == relation {
+			return e, true
+		}
+	}
+	return types.KnowledgeEdge{}, false
+}
+
+func writeFile(t *testing.T, root, rel, content string) {
+	t.Helper()
+	p := filepath.Join(root, rel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
 }
 
 func TestAssembleNodes(t *testing.T) {
@@ -169,4 +188,42 @@ func TestMergeOrderIndependence(t *testing.T) {
 	fwd, _ := codec.Marshal(forward)
 	bwd, _ := codec.Marshal(backward)
 	assert.Equal(t, string(fwd), string(bwd))
+}
+
+func TestAssembleRuntimeEmitsEdges(t *testing.T) {
+	events := []types.DiagnosticEvent{
+		{Unit: "pkg/foo:build", Code: types.ExecDenied},
+		{Unit: "pkg/foo:build", Code: types.ExecDenied}, // dup -> one edge
+		{Unit: "pkg/bar", Code: types.SandboxPolicyMismatch},
+		{Unit: "", Code: types.ExecDenied}, // no unit -> skipped
+	}
+	s := assembleRuntime(events)
+	require.Equal(t, RuntimeShardName, s.Name)
+	require.Len(t, s.Edges, 2)
+
+	// A target-scoped event becomes a target->diagnostic emits edge.
+	assert.Contains(t, s.Edges, types.KnowledgeEdge{
+		Source: "target:pkg/foo:build", Target: "diagnostic:MGS2007",
+		Relation: types.RelationEmits, Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: "runtime",
+	})
+	// A project-scoped event becomes a project->diagnostic edge.
+	assert.Contains(t, s.Edges, types.KnowledgeEdge{
+		Source: "project:pkg/bar", Target: "diagnostic:MGS2010",
+		Relation: types.RelationEmits, Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: "runtime",
+	})
+}
+
+func TestRuntimeShardBuildsIntoGraph(t *testing.T) {
+	in := sampleInputs()
+	in.Runtime = []types.DiagnosticEvent{{Unit: "pkg/a:build", Code: types.ExecDenied}}
+	out := mergeAll(AssembleShards(in)).Output()
+	// The emits edge connects the existing target node to the existing diagnostic node.
+	assert.True(t, hasEdge(out, "target:pkg/a:build", "diagnostic:MGS2007", types.RelationEmits),
+		"runtime emits edge present in the merged graph")
+}
+
+func TestIsRuntimeShard(t *testing.T) {
+	assert.True(t, IsRuntimeShard(RuntimeShardName))
+	assert.False(t, IsRuntimeShard(RegistryShardName))
+	assert.False(t, IsRuntimeShard("pkg/foo"))
 }

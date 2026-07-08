@@ -10,6 +10,109 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// WriteKnowledgeDOT emits a knowledge-graph export as a Graphviz DOT digraph.
+// Node identity is the raw node ID; the format is structural (edges only), so
+// relations and Attrs are dropped - GraphML carries the full detail. Meant for a
+// selected neighborhood, not the whole graph (an unfiltered dump is unreadable).
+func WriteKnowledgeDOT(w io.Writer, out types.KnowledgeGraphOutput) error {
+	return writeDOT(w, knowledgeGraphIR(out))
+}
+
+// WriteKnowledgeMermaid emits a knowledge-graph export as a Mermaid flowchart:
+// nodes colored by kind, edges labeled with their relation. Meant for a selected
+// neighborhood - Mermaid chokes on thousands of nodes, so the CLI gates it behind
+// --select.
+func WriteKnowledgeMermaid(w io.Writer, out types.KnowledgeGraphOutput) error {
+	return writeMermaid(w, knowledgeGraphIR(out))
+}
+
+// knowledgeGraphIR maps a knowledge-graph export onto the shared renderGraph:
+// each node keeps its raw ID as the DOT identity and a Mermaid-safe alias, is
+// colored by a per-kind class, and takes a kind-specific shape; each edge carries
+// its relation as the label. Deterministic: the export is already sorted, and the
+// alias assignment (mermaidIDs) sorts internally.
+func knowledgeGraphIR(out types.KnowledgeGraphOutput) renderGraph {
+	rawIDs := make([]string, len(out.Nodes))
+	for i, n := range out.Nodes {
+		rawIDs[i] = n.ID
+	}
+	alias := mermaidIDs(rawIDs)
+
+	g := renderGraph{Title: "magus knowledge graph", DOTName: "knowledge"}
+
+	kindSet := map[string]bool{}
+	for _, n := range out.Nodes {
+		label := n.Label
+		if label == "" {
+			label = n.ID
+		}
+		kindSet[n.Kind] = true
+		g.Nodes = append(g.Nodes, renderNode{
+			ID:      alias[n.ID],
+			DOTID:   n.ID,
+			Label:   label,
+			Shape:   knowledgeShape(n.Kind),
+			Classes: []string{"kind_" + mermaidID(n.Kind)},
+		})
+	}
+	for _, e := range out.Links {
+		from, okF := alias[e.Source]
+		to, okT := alias[e.Target]
+		if !okF || !okT {
+			continue // edge to a node outside the selected subgraph; skip
+		}
+		g.Edges = append(g.Edges, renderEdge{From: from, To: to, Label: e.Relation})
+	}
+
+	kinds := make([]string, 0, len(kindSet))
+	for k := range kindSet {
+		kinds = append(kinds, k)
+	}
+	slices.Sort(kinds)
+	for _, k := range kinds {
+		fill, text := knowledgeKindColor(k)
+		g.Classes = append(g.Classes, renderClass{Name: "kind_" + mermaidID(k), Style: fmt.Sprintf("fill:%s,color:%s", fill, text)})
+	}
+	return g
+}
+
+// knowledgeShape anchors the primary containers (project, spell) with distinct
+// Mermaid shapes so a neighborhood reads at a glance; everything else is a box.
+// DOT ignores shape.
+func knowledgeShape(kind string) renderShape {
+	switch kind {
+	case types.KindProject:
+		return shapeHexagon
+	case types.KindSpell:
+		return shapeRounded
+	case types.KindDoc:
+		return shapeSubroutine
+	default:
+		return shapeBox
+	}
+}
+
+// knowledgeKindPalette maps a node kind to a fill/text color. Unknown kinds fall
+// back to a neutral gray.
+var knowledgeKindPalette = map[string]struct{ fill, text string }{
+	types.KindProject:    {"#00ADD8", "#fff"},
+	types.KindTarget:     {"#3178C6", "#fff"},
+	types.KindSpell:      {"#5d4d7a", "#fff"},
+	types.KindOp:         {"#8a7ca8", "#fff"},
+	types.KindCharm:      {"#b5651d", "#fff"},
+	types.KindModule:     {"#2e8b57", "#fff"},
+	types.KindMethod:     {"#3cb371", "#000"},
+	types.KindDiagnostic: {"#c0392b", "#fff"},
+	types.KindDoc:        {"#d4a017", "#000"},
+}
+
+func knowledgeKindColor(kind string) (fill, text string) {
+	if c, ok := knowledgeKindPalette[kind]; ok {
+		return c.fill, c.text
+	}
+	return "#888888", "#fff"
+}
+
 // WriteKnowledgeGraphML emits the merged knowledge graph as GraphML, the XML
 // graph format external viewers (Gephi, yEd) open directly - the second export
 // format next to node-link JSON. Every node/edge field becomes a declared

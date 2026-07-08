@@ -1,12 +1,13 @@
 package types
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 )
 
-// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms.
+// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms, 7000=knowledge-graph extraction.
 
 // Base URLs for diagnostic documentation, keyed by code-prefix subdir.
 const (
@@ -15,6 +16,7 @@ const (
 	diagnosticMagusfileBase = "https://github.com/egladman/magus/blob/main/docs/codes/magusfile/"
 	diagnosticServicesBase  = "https://github.com/egladman/magus/blob/main/docs/codes/services/"
 	diagnosticCharmsBase    = "https://github.com/egladman/magus/blob/main/docs/codes/charms/"
+	diagnosticKnowledgeBase = "https://github.com/egladman/magus/blob/main/docs/codes/knowledge/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code).
@@ -23,6 +25,8 @@ type DiagnosticCode string
 // URL returns the documentation URL for this code.
 func (c DiagnosticCode) URL() string {
 	switch {
+	case strings.HasPrefix(string(c), "MGS7"):
+		return diagnosticKnowledgeBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS6"):
 		return diagnosticCharmsBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS5"):
@@ -58,6 +62,8 @@ const (
 	ServiceOpDetached         DiagnosticCode = "MGS5002"
 	CommandOpNeverExits       DiagnosticCode = "MGS5003"
 	CharmPatchInvalid         DiagnosticCode = "MGS6001"
+	UnresolvableBuzzImport    DiagnosticCode = "MGS7001"
+	DanglingDocReference      DiagnosticCode = "MGS7002"
 )
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
@@ -73,6 +79,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
 	CharmPatchInvalid,
+	UnresolvableBuzzImport, DanglingDocReference,
 }
 
 // AllDiagnosticCodes returns every registered diagnostic code in ascending MGS
@@ -113,4 +120,35 @@ func DiagnosticErrorf(c DiagnosticCode, format string, args ...any) *DiagnosticE
 // FormatDiagnostic formats a diagnostic message with code and doc URL for slog logging.
 func FormatDiagnostic(c DiagnosticCode, msg string) string {
 	return fmt.Sprintf("[%s] %s (see %s)", c, msg, c.URL())
+}
+
+// DiagnosticEvent is one diagnostic fired during a run: the code, a message, and
+// the unit that emitted it ("<project>:<target>", or a project path, or empty).
+type DiagnosticEvent struct {
+	Code    DiagnosticCode `json:"code"              yaml:"code"`
+	Message string         `json:"message,omitempty" yaml:"message,omitempty"`
+	Unit    string         `json:"unit,omitempty"    yaml:"unit,omitempty"`
+}
+
+// DiagnosticSink records diagnostics fired during a run; it must be safe for
+// concurrent use. A run installs one in its context so emission sites reach it via
+// EmitDiagnostic; consumers (the runtime shard, the report stream) drain it.
+type DiagnosticSink interface {
+	RecordDiagnostic(DiagnosticEvent)
+}
+
+type diagSinkKey struct{}
+
+// WithDiagnosticSink returns ctx carrying s, so a deep emission site can reach the
+// sink without threading it through every signature.
+func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
+	return context.WithValue(ctx, diagSinkKey{}, s)
+}
+
+// EmitDiagnostic records ev to the sink in ctx, or is a no-op when none is
+// installed (the common CLI path).
+func EmitDiagnostic(ctx context.Context, ev DiagnosticEvent) {
+	if s, ok := ctx.Value(diagSinkKey{}).(DiagnosticSink); ok && s != nil {
+		s.RecordDiagnostic(ev)
+	}
 }

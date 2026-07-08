@@ -118,4 +118,11 @@ var Registry = []ToolDescriptor{
 			{Name: "to", Type: "string", Required: true, Description: "End node ID or a name that resolves to one."},
 		},
 	},
+	{
+		Name:        "magus_stats",
+		Description: "Report the knowledge graph's shape - where the workspace concentrates and neglects. Returns god nodes (the most connected spells, targets, modules, where structural risk concentrates), orphans (docs that document nothing, spells no target uses), and doc coverage. Answers \"where is risk concentrated\" without shelling out.",
+		Params: []ParamDescriptor{
+			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
+		},
+	},
 }

@@ -36,6 +36,36 @@ stdout 'edgedefault="directed"'
 stdout '<node id="spell:acme">'
 stdout '<data key="relation">uses</data>'
 
+# dot/mermaid on the whole graph is refused: too many nodes to lay out. The
+# error points at --select and the whole-graph formats that do work.
+! exec magus graph export -o dot
+stderr 'requires --select'
+! exec magus graph export -o mermaid
+stderr 'requires --select'
+
+# --select narrows the export to a query's neighborhood, sharing the query
+# engine. With a scope, dot and mermaid render.
+exec magus graph export --select 'spell:acme' -o mermaid
+stdout 'graph TD'
+stdout 'classDef kind_spell'
+stdout '"contains"'
+# the neighborhood is scoped: an unrelated diagnostic node is not pulled in.
+! stdout 'MGS'
+
+exec magus graph export --select 'spell:acme' -o dot
+stdout 'digraph knowledge'
+stdout '"spell:acme"'
+
+# the same neighborhood in json/graphml is a valid export of just the subgraph.
+exec magus graph export --select 'spell:acme' -o json
+stdout '"schema_version"'
+stdout 'spell:acme'
+
+# a query that resolves to nothing yields an empty graph and a plain-ASCII note.
+exec magus graph export --select 'zzznotarealnode' -o json
+stderr 'no nodes matched'
+stdout '"node_count": 0'
+
 # the removed spelling points at the new home
 ! exec magus describe knowledge
 stderr 'moved to `magus graph export`'

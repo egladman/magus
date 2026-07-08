@@ -60,6 +60,9 @@ type Magus struct {
 	buzzPoolOnce sync.Once
 	buzzPoolReg  *buzz.PoolRegistry
 
+	warmGraphOnce sync.Once
+	warmGraph     *warmGraph
+
 	wsReg *WorkspaceRegistry
 
 	tel observability.Provider

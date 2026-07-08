@@ -9,6 +9,75 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func knowledgeSubgraph() types.KnowledgeGraphOutput {
+	return types.KnowledgeGraphOutput{
+		SchemaVersion: 1,
+		Directed:      true,
+		NodeCount:     3,
+		EdgeCount:     2,
+		Nodes: []types.KnowledgeNode{
+			{ID: "spell:go", Kind: types.KindSpell, Label: "go"},
+			{ID: "op:go:go-build", Kind: types.KindOp, Label: "go-build"},
+			{ID: "target:pkg/a:build", Kind: types.KindTarget, Label: "build"},
+		},
+		Links: []types.KnowledgeEdge{
+			{Source: "spell:go", Target: "op:go:go-build", Relation: "contains", Confidence: "extracted", Score: 1},
+			{Source: "target:pkg/a:build", Target: "spell:go", Relation: "uses", Confidence: "extracted", Score: 1},
+			// An edge to a node outside the subgraph is dropped by both formats.
+			{Source: "target:pkg/a:build", Target: "spell:missing", Relation: "uses", Confidence: "extracted", Score: 1},
+		},
+	}
+}
+
+func TestWriteKnowledgeMermaid(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteKnowledgeMermaid(&buf, knowledgeSubgraph()); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+
+	for _, want := range []string{
+		"graph TD",
+		`|"contains"|`,        // relation rides the edge label
+		`|"uses"|`,            // both intra-subgraph relations present
+		"classDef kind_spell", // nodes colored by kind
+		"classDef kind_op",
+		"classDef kind_target",
+		`("go")`, // spell shape is rounded
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("mermaid output missing %q\n%s", want, got)
+		}
+	}
+	// The edge to a node outside the subgraph must not appear.
+	if strings.Contains(got, "spell:missing") || strings.Contains(got, "spell_missing") {
+		t.Errorf("mermaid leaked an out-of-subgraph edge target\n%s", got)
+	}
+}
+
+func TestWriteKnowledgeDOT(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteKnowledgeDOT(&buf, knowledgeSubgraph()); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+
+	for _, want := range []string{
+		"digraph knowledge {",
+		`"spell:go";`,                         // raw IDs are the DOT identity
+		`"target:pkg/a:build";`,               // colon/slash IDs survive quoting
+		`"spell:go" -> "op:go:go-build";`,     // contains edge
+		`"target:pkg/a:build" -> "spell:go";`, // uses edge
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("dot output missing %q\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "spell:missing") {
+		t.Errorf("dot leaked an out-of-subgraph edge target\n%s", got)
+	}
+}
+
 func graphMLFixture() types.KnowledgeGraphOutput {
 	return types.KnowledgeGraphOutput{
 		SchemaVersion: 1,

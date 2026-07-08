@@ -57,7 +57,7 @@ func TestBuildPersistsAndReloads(t *testing.T) {
 	}
 
 	// A pure disk load (no assembly) reproduces the built graph byte-for-byte.
-	loaded, err := NewStore(cacheDir, false, nil).Load(context.Background())
+	loaded, err := NewStore(cacheDir, false, 0, nil, nil).Load(context.Background())
 	require.NoError(t, err)
 	built, _ := codec.Marshal(g1.Output())
 	fromDisk, _ := codec.Marshal(loaded.Output())
@@ -121,7 +121,7 @@ func TestDeletionReconciliation(t *testing.T) {
 	cacheDir, in := buildFixture(t)
 	build(t, cacheDir, BuildOptions{}, in)
 	require.Contains(t, readManifest(t, cacheDir).Shards, "pkg/b")
-	bShard := NewStore(cacheDir, false, nil).shardPath("pkg/b")
+	bShard := NewStore(cacheDir, false, 0, nil, nil).shardPath("pkg/b")
 	require.FileExists(t, bShard)
 
 	in.Graph.Projects = in.Graph.Projects[:1]
@@ -152,4 +152,22 @@ func snapshotDir(t *testing.T, dir string) map[string]string {
 		out[e.Name()] = string(b)
 	}
 	return out
+}
+
+func TestRuntimeRecordsRoundTripDedupAndCap(t *testing.T) {
+	dir := t.TempDir()
+	require.Empty(t, LoadRuntimeEvents(dir))
+
+	require.NoError(t, RecordRuntimeEvents(dir, []types.DiagnosticEvent{
+		{Unit: "a:build", Code: types.ExecDenied},
+		{Unit: "a:build", Code: types.ExecDenied}, // dup within the batch
+	}))
+	require.Len(t, LoadRuntimeEvents(dir), 1)
+
+	// A second run merges without re-adding the existing pair, and adds the new one.
+	require.NoError(t, RecordRuntimeEvents(dir, []types.DiagnosticEvent{
+		{Unit: "a:build", Code: types.ExecDenied},
+		{Unit: "b:test", Code: types.RaceDetected},
+	}))
+	assert.Len(t, LoadRuntimeEvents(dir), 2)
 }

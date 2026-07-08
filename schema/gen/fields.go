@@ -292,6 +292,22 @@ func init() {
 			Usage:    "MAGUS_HINTS_ENABLED: Enabled controls whether hint messages (actionable nudges) are printed",
 		},
 		{
+			GoPath:   "Knowledge.Workspaces",
+			YamlPath: "knowledge.workspaces",
+			EnvVar:   "MAGUS_KNOWLEDGE_WORKSPACES",
+			Flag:     FlagNames{Long: ""},
+			Kind:     KindStringSlice,
+			Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global'",
+		},
+		{
+			GoPath:   "Knowledge.MaxSizeMB",
+			YamlPath: "knowledge.max_size_mb",
+			EnvVar:   "MAGUS_KNOWLEDGE_MAX_SIZE_MB",
+			Flag:     FlagNames{Long: "knowledge-max-size-mb"},
+			Kind:     KindInt,
+			Usage:    "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When",
+		},
+		{
 			GoPath:   "Concurrency",
 			YamlPath: "concurrency",
 			EnvVar:   "MAGUS_CONCURRENCY",

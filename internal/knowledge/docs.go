@@ -44,6 +44,11 @@ func assembleDocs(root string, spells types.SpellsOutput) Shard {
 	}
 	slices.Sort(spellNames)
 
+	knownCode := make(map[string]bool)
+	for _, c := range types.AllDiagnosticCodes() {
+		knownCode[string(c)] = true
+	}
+
 	for _, rel := range files {
 		src, err := os.ReadFile(filepath.Join(root, rel))
 		if err != nil {
@@ -51,7 +56,7 @@ func assembleDocs(root string, spells types.SpellsOutput) Shard {
 		}
 		content := string(src)
 		dID := docID(rel)
-		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: dID, Kind: types.KindDoc, Label: rel, Source: rel})
+		node := types.KnowledgeNode{ID: dID, Kind: types.KindDoc, Label: rel, Source: rel}
 
 		if code, ok := diagnosticFromPath(rel); ok {
 			s.Edges = append(s.Edges, extractedEdge(dID, diagnosticID(code), types.RelationDocuments, rel))
@@ -63,9 +68,26 @@ func assembleDocs(root string, spells types.SpellsOutput) Shard {
 			s.Edges = append(s.Edges, extractedEdge(dID, moduleID(name), types.RelationDocuments, rel))
 		}
 
+		// A body mention of an MGS#### code links to its diagnostic node only when
+		// the code is registered. A mention of an unregistered code (typo, removed,
+		// never defined) has no node to link to, so record it on the doc as MGS7002
+		// instead of emitting a dangling edge to a phantom diagnostic.
+		var unknownCodes []string
 		for _, code := range uniqSortedStrings(mgsRe.FindAllString(content, -1)) {
-			s.Edges = append(s.Edges, inferredEdge(dID, diagnosticID(code), types.RelationDocuments, rel, 0.6))
+			if knownCode[code] {
+				s.Edges = append(s.Edges, inferredEdge(dID, diagnosticID(code), types.RelationDocuments, rel, 0.6))
+			} else {
+				unknownCodes = append(unknownCodes, code)
+			}
 		}
+		if len(unknownCodes) > 0 {
+			node.Attrs = map[string]string{
+				AttrDiagnostic:  string(types.DanglingDocReference),
+				"unknown_codes": strings.Join(unknownCodes, ","),
+			}
+		}
+		s.Nodes = append(s.Nodes, node)
+
 		for _, name := range spellNames {
 			if strings.Contains(content, "`"+name+"`") {
 				s.Edges = append(s.Edges, inferredEdge(dID, spellID(name), types.RelationDocuments, rel, 0.5))

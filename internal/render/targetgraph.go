@@ -87,6 +87,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting) {
 		{Code: `magus query "<terms>"`, Note: "kind:spell, project:pkg/foo, relation:uses, free text, -negation"},
 		{Code: "magus explain <node>", Note: "one node: its edges, provenance, blast radius"},
 		{Code: "magus path <a> <b>", Note: "how two nodes connect"},
+		{Code: "magus graph stats", Note: "god nodes, orphans, doc coverage (MCP: magus_stats)"},
 		{Code: "magus graph export -o json", Note: "the whole graph (MCP: magus_query, magus_explain, magus_path)"},
 	})
 

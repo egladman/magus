@@ -30,6 +30,7 @@ const (
 	TypeOutputOverlapDetected = "race.output_overlap"
 	TypeDeterminismMismatch   = "race.determinism_mismatch"
 	TypeMissingDependency     = "race.missing_dependency"
+	TypeDiagnosticEmitted     = "diagnostic.emitted"
 )
 
 // TargetResult reports the outcome of one target run — the single per-target event
@@ -128,7 +129,17 @@ type MissingDependency struct {
 	Target   string `json:"target"`
 }
 
+// DiagnosticEmitted reports one diagnostic (MGS code) fired during a run, captured
+// through the shared diagnostic sink - the same events that enrich the knowledge
+// graph's runtime shard, so the report stream and the graph read one capture.
+type DiagnosticEmitted struct {
+	Unit    string `json:"unit"`              // "<project>:<target>" or a project path
+	Code    string `json:"code"`              // MGS####
+	Message string `json:"message,omitempty"` // human message
+}
+
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
+	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
 	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
 	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
 	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,

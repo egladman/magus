@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -21,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/internal/mcp/origin"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/race"
@@ -468,6 +471,20 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if opts.Report != nil {
 		ctx = report.WithWriter(ctx, opts.Report)
 	}
+	// Capture diagnostics fired during this run into one sink: it forwards each to
+	// the report stream and, at run end, persists the set to the runtime records
+	// that enrich the knowledge graph's @runtime shard (one capture, two consumers).
+	diag := &diagCollector{report: opts.Report}
+	ctx = types.WithDiagnosticSink(ctx, diag)
+	if !cacheImmutable(m.cfg) {
+		defer func() {
+			if evs := diag.snapshot(); len(evs) > 0 {
+				if err := knowledge.RecordRuntimeEvents(resolveCacheDir(m.Root(), m.cfg), evs); err != nil {
+					slog.Debug("magus: could not persist runtime diagnostics", slog.String("error", err.Error()))
+				}
+			}
+		}()
+	}
 	if m.tel != nil {
 		ctx = observability.WithProvider(ctx, m.tel)
 		// Let cache.Run open phase spans (hash/replay/snapshot) without the cache
@@ -549,6 +566,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if opts.Report != nil {
 		cacheOpts = append(cacheOpts, report.RunOptions(opts.Report)...)
 	}
+	cacheOpts = append(cacheOpts, diagnosticCaptureOption(ctx))
 	if m.cache == nil {
 		return fmt.Errorf("magus: workspace was constructed with Inspect; use Open to enable Run")
 	}
@@ -912,4 +930,55 @@ func (*Magus) makeSpellFilteredHandler(name, spellName string) TargetHandler {
 			return invokeSpell(ctx, p, name, s)
 		})
 	}
+}
+
+// diagCollector is the run-scoped diagnostic sink: it forwards each captured
+// diagnostic to the report stream and retains the set for the run to persist to the
+// knowledge graph's @runtime shard. One capture, two consumers. Concurrency-safe.
+type diagCollector struct {
+	mu     sync.Mutex
+	events []types.DiagnosticEvent
+	report *report.Writer // forward target; nil when no report is configured (Record is a no-op)
+}
+
+func (d *diagCollector) RecordDiagnostic(ev types.DiagnosticEvent) {
+	d.mu.Lock()
+	d.events = append(d.events, ev)
+	d.mu.Unlock()
+	_ = report.Record(d.report, report.DiagnosticEmitted{Unit: ev.Unit, Code: string(ev.Code), Message: ev.Message})
+}
+
+// snapshot returns a copy of the collected events for persistence at run end.
+func (d *diagCollector) snapshot() []types.DiagnosticEvent {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]types.DiagnosticEvent(nil), d.events...)
+}
+
+// diagnosticCaptureOption records a failed target's DiagnosticError to the run's
+// sink, tagged with the target's identity, via the same EmitDiagnostic path a deep
+// emission site uses. This is the primary capture point: a diagnostic that fails a
+// target surfaces here as the run error, with s.ProjectPath/s.Target in hand.
+func diagnosticCaptureOption(ctx context.Context) cache.RunOption {
+	return cache.OnResult(func(s *cache.Step, _ *cache.Result, err error) {
+		if ev, ok := diagEventFromError(s.ProjectPath, s.Target, err); ok {
+			types.EmitDiagnostic(ctx, ev)
+		}
+	})
+}
+
+// diagEventFromError extracts a DiagnosticEvent from a target's run error when it
+// is a coded DiagnosticError, tagging it with the target's identity. Returns
+// ok=false for a nil or non-diagnostic error (a plain build failure is not an MGS
+// event).
+func diagEventFromError(projectPath, target string, err error) (types.DiagnosticEvent, bool) {
+	var de *types.DiagnosticError
+	if err == nil || !errors.As(err, &de) {
+		return types.DiagnosticEvent{}, false
+	}
+	unit := projectPath
+	if target != "" {
+		unit += ":" + target
+	}
+	return types.DiagnosticEvent{Code: de.Code, Message: de.Msg, Unit: unit}, true
 }

@@ -1,16 +1,21 @@
 package knowledge
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -18,6 +23,20 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
+
+// ErrShardMiss reports that a shard key is not on the remote. GetShard returns it
+// (not a nil reader) for a miss, so the contract is unambiguous: a nil error means
+// a non-nil reader.
+var ErrShardMiss = errors.New("knowledge: shard not on remote")
+
+// RemoteShards lets the store ride a remote cache backend: shards are
+// content-addressed by fingerprint, so Put is idempotent and Get restores an
+// evicted shard by the same key. GetShard returns a non-nil reader on a hit, or
+// ErrShardMiss on a miss. Nil = local-only.
+type RemoteShards interface {
+	GetShard(ctx context.Context, key string) (io.ReadCloser, error)
+	PutShard(ctx context.Context, key string, r io.Reader) error
+}
 
 // Storage layout under <cacheDir>/knowledge:
 //   manifest.json          per-shard fingerprints + counts (the routing index)
@@ -62,16 +81,19 @@ type shardFile struct {
 type Store struct {
 	dir       string
 	immutable bool
+	maxBytes  int64        // soft cap on the shards dir; 0 = unlimited (default)
+	remote    RemoteShards // optional shard backing; nil = local-only
 	log       *slog.Logger
 }
 
 // NewStore returns a store rooted at <cacheDir>/knowledge. immutable mirrors
-// MAGUS_CACHE_IMMUTABLE: when set, Sync writes nothing and warns if stale.
-func NewStore(cacheDir string, immutable bool, log *slog.Logger) *Store {
+// MAGUS_CACHE_IMMUTABLE (Sync writes nothing, warns if stale). maxBytes soft-caps
+// the shards dir (0 = unlimited); remote optionally backs shards (nil = local).
+func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShards, log *slog.Logger) *Store {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Store{dir: StoreDir(cacheDir), immutable: immutable, log: log}
+	return &Store{dir: StoreDir(cacheDir), immutable: immutable, maxBytes: maxBytes, remote: remote, log: log}
 }
 
 // Sync reconciles freshly-assembled shards against the persisted store and
@@ -151,6 +173,11 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 			}
 		}
 	}
+	// Enforce the soft size cap last, once every current shard is on disk, so the
+	// newest shards survive and only cold ones are evicted.
+	if err := s.pruneToSize(); err != nil {
+		s.log.Debug("knowledge: shard prune failed", slog.String("error", err.Error()))
+	}
 	return g, nil
 }
 
@@ -169,11 +196,85 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 		}
 		sf, err := s.readShard(name)
 		if err != nil {
-			return nil, fmt.Errorf("knowledge: load shard %q: %w", name, err)
+			// The file may have been LRU-evicted while its manifest entry stayed.
+			// Restore it from remote by fingerprint before giving up.
+			if s.restoreShard(ctx, name, man.Shards[name].Fingerprint) == nil {
+				sf, err = s.readShard(name)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("knowledge: load shard %q: %w", name, err)
+			}
 		}
 		g.Merge(sf.Nodes, sf.Edges)
 	}
 	return g, nil
+}
+
+// restoreShard pulls a shard file from the remote backend by fingerprint and
+// writes it locally, so an LRU-evicted (or never-fetched) shard is recovered
+// without a rebuild. Returns an error when there is no remote or the pull fails.
+func (s *Store) restoreShard(ctx context.Context, name, fp string) error {
+	if s.remote == nil || fp == "" {
+		return errors.New("knowledge: no remote to restore from")
+	}
+	rc, err := s.remote.GetShard(ctx, fp)
+	if err != nil {
+		return err // ErrShardMiss on a miss, or a real transport error
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(s.dir, "shards"), 0o755); err != nil {
+		return err
+	}
+	return file.WriteFileAtomic(s.shardPath(name), b, 0o644)
+}
+
+// pruneToSize evicts least-recently-used shard FILES until the shards directory is
+// within maxBytes, keeping their manifest entries so an evicted shard is restored
+// from remote (restoreShard) or rebuilt from memory on the next sync. Newly
+// written shards have the newest mtime, so they are evicted last. A no-op when no
+// cap is set. Never evicts the manifest itself.
+func (s *Store) pruneToSize() error {
+	if s.maxBytes <= 0 {
+		return nil
+	}
+	dir := filepath.Join(s.dir, "shards")
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return nil // no shards dir yet; nothing to prune
+	}
+	type shardStat struct {
+		path  string
+		size  int64
+		mtime int64
+	}
+	var files []shardStat
+	var total int64
+	for _, e := range ents {
+		info, err := e.Info()
+		if err != nil || e.IsDir() {
+			continue
+		}
+		files = append(files, shardStat{filepath.Join(dir, e.Name()), info.Size(), info.ModTime().UnixNano()})
+		total += info.Size()
+	}
+	if total <= s.maxBytes {
+		return nil
+	}
+	slices.SortFunc(files, func(a, b shardStat) int { return cmp.Compare(a.mtime, b.mtime) }) // oldest first
+	for _, f := range files {
+		if total <= s.maxBytes {
+			break
+		}
+		if err := os.Remove(f.path); err != nil {
+			continue
+		}
+		total -= f.size
+	}
+	return nil
 }
 
 // --- manifest / shard IO ---
@@ -240,15 +341,15 @@ func (s *Store) writeShards(ctx context.Context, writes []shardWrite) error {
 	if err := os.MkdirAll(filepath.Join(s.dir, "shards"), 0o755); err != nil {
 		return err
 	}
-	eg, _ := errgroup.WithContext(ctx)
+	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(runtime.GOMAXPROCS(0) * 2)
 	for _, w := range writes {
-		eg.Go(func() error { return s.writeShard(w.shard, w.fp) })
+		eg.Go(func() error { return s.writeShard(egctx, w.shard, w.fp) })
 	}
 	return eg.Wait()
 }
 
-func (s *Store) writeShard(sh Shard, fp string) error {
+func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	// Persist in canonical sorted order so identical inputs produce byte-identical
 	// files (diffable, and the content fingerprint is stable).
 	g := NewGraph()
@@ -264,7 +365,30 @@ func (s *Store) writeShard(sh Shard, fp string) error {
 	if err != nil {
 		return err
 	}
-	return file.WriteFileAtomic(s.shardPath(sh.Name), b, 0o644)
+	if err := file.WriteFileAtomic(s.shardPath(sh.Name), b, 0o644); err != nil {
+		return err
+	}
+	s.pushShard(ctx, sh.Name, fp, b)
+	return nil
+}
+
+// remotePushTimeout bounds a shard push so a slow or hung remote cannot stall the
+// build (Sync is on the cache-first query path). Pushes run in parallel, so a dead
+// remote costs at most this once per rebuild-with-changes, not per shard.
+const remotePushTimeout = 15 * time.Second
+
+// pushShard best-effort uploads a non-runtime shard to the remote, keyed by its
+// content fingerprint, so teammates and CI can restore it. A remote error or slow
+// backend is logged and dropped: the local write already succeeded.
+func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
+	if s.remote == nil || IsRuntimeShard(name) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)
+	defer cancel()
+	if err := s.remote.PutShard(ctx, fp, bytes.NewReader(b)); err != nil {
+		s.log.Debug("knowledge: remote shard push failed", slog.String("shard", name), slog.String("error", err.Error()))
+	}
 }
 
 func (s *Store) readShard(name string) (shardFile, error) {
@@ -330,3 +454,63 @@ func (m *manifest) prunable(present map[string]bool) bool {
 	}
 	return false
 }
+
+// --- runtime diagnostic records (the @runtime shard's persisted input) ---
+
+// defaultRuntimeCap bounds how many distinct (unit, code) records are retained, so
+// run history cannot grow the store without limit. Oldest records drop first.
+const defaultRuntimeCap = 5000
+
+// runtimeRecordsPath is where runtime diagnostic records live: next to the shards,
+// but not among them (it is the @runtime shard's input, not an output).
+func runtimeRecordsPath(cacheDir string) string {
+	return filepath.Join(StoreDir(cacheDir), "runtime.json")
+}
+
+// LoadRuntimeEvents reads the persisted runtime diagnostic records; a missing or
+// unreadable file yields no events (runtime enrichment is best-effort).
+func LoadRuntimeEvents(cacheDir string) []types.DiagnosticEvent {
+	b, err := os.ReadFile(runtimeRecordsPath(cacheDir))
+	if err != nil {
+		return nil
+	}
+	var evs []types.DiagnosticEvent
+	if err := codec.Unmarshal(b, &evs); err != nil {
+		return nil
+	}
+	return evs
+}
+
+// RecordRuntimeEvents merges fresh events into the persisted records, deduped by
+// (unit, code) and capped at defaultRuntimeCap (oldest dropped). Called once at run
+// end; best-effort (an unwritable cache is not fatal).
+func RecordRuntimeEvents(cacheDir string, fresh []types.DiagnosticEvent) error {
+	if len(fresh) == 0 {
+		return nil
+	}
+	merged := LoadRuntimeEvents(cacheDir)
+	seen := make(map[string]bool, len(merged))
+	for _, e := range merged {
+		seen[runtimeKey(e)] = true
+	}
+	for _, e := range fresh {
+		if e.Unit == "" || e.Code == "" || seen[runtimeKey(e)] {
+			continue
+		}
+		seen[runtimeKey(e)] = true
+		merged = append(merged, e)
+	}
+	if len(merged) > defaultRuntimeCap {
+		merged = merged[len(merged)-defaultRuntimeCap:]
+	}
+	b, err := codec.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(StoreDir(cacheDir), 0o755); err != nil {
+		return err
+	}
+	return file.WriteFileAtomic(runtimeRecordsPath(cacheDir), b, 0o644)
+}
+
+func runtimeKey(e types.DiagnosticEvent) string { return e.Unit + "\x00" + string(e.Code) }

@@ -17,6 +17,20 @@ func TestKnowledgeToolNames(t *testing.T) {
 	assert.Equal(t, "magus_query", (&queryTool{}).Name())
 	assert.Equal(t, "magus_explain", (&explainTool{}).Name())
 	assert.Equal(t, "magus_path", (&pathTool{}).Name())
+	assert.Equal(t, "magus_stats", (&statsTool{}).Name())
+}
+
+// TestRegistryHasStatsDriver pins that magus_stats is both described and wired:
+// registerTools panics if a descriptor lacks a driver, so a present descriptor
+// plus a present driver name is the contract.
+func TestRegistryHasStatsDriver(t *testing.T) {
+	var described bool
+	for _, d := range Registry {
+		if d.Name == "magus_stats" {
+			described = true
+		}
+	}
+	assert.True(t, described, "magus_stats missing from Registry")
 }
 
 func TestKnowledgeToolRequiredParams(t *testing.T) {

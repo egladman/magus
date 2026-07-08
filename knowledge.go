@@ -2,16 +2,81 @@ package magus
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/egladman/magus/host"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
 )
+
+// BuildGlobalKnowledgeGraph unions the current workspace with each registered one
+// (cfg.Knowledge.Workspaces), namespacing node IDs by workspace so repos can't
+// collide. A workspace that fails to open is skipped with a warning, not fatal:
+// the query degrades to what it can reach.
+func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+	if log == nil {
+		log = slog.Default()
+	}
+	root := ws.Root()
+	merged := knowledge.NewGraph()
+
+	cur, err := BuildKnowledgeGraph(ctx, ws, root, cfg, refresh, log)
+	if err != nil {
+		return nil, err
+	}
+	knowledge.UnionInto(merged, knowledge.Qualified(cur, workspaceName(root)))
+
+	seen := map[string]bool{cleanRoot(root): true}
+	for _, wr := range cfg.Knowledge.Workspaces {
+		abs := cleanRoot(wr)
+		if abs == "" || seen[abs] {
+			continue // skip blanks and the current workspace re-listed
+		}
+		seen[abs] = true
+		g, err := buildRegisteredWorkspace(ctx, abs, refresh, log)
+		if err != nil {
+			log.Warn("magus: skipping registered workspace in global graph", slog.String("workspace", wr), slog.String("error", err.Error()))
+			continue
+		}
+		knowledge.UnionInto(merged, knowledge.Qualified(g, workspaceName(abs)))
+	}
+	return merged, nil
+}
+
+// buildRegisteredWorkspace opens a registered workspace read-only, loads its own
+// config (its cache dir, immutability, etc.), and builds its graph cache-first.
+func buildRegisteredWorkspace(ctx context.Context, root string, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+	wcfg, err := config.LoadWithRoot("", root)
+	if err != nil {
+		return nil, err
+	}
+	wsRepo, err := Inspect(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	return BuildKnowledgeGraph(ctx, wsRepo, root, wcfg, refresh, log)
+}
+
+// workspaceName is the qualifier for a workspace root: its basename. Collisions
+// (two repos with the same directory name) merge in the union view, which is
+// acceptable - the alternative (full paths) makes node IDs unreadable.
+func workspaceName(root string) string {
+	return filepath.Base(filepath.Clean(root))
+}
+
+// cleanRoot resolves root to an absolute, cleaned path for de-duplication.
+func cleanRoot(root string) string {
+	if abs, err := filepath.Abs(root); err == nil {
+		return abs
+	}
+	return filepath.Clean(root)
+}
 
 // resolveCacheDir resolves the workspace cache directory: config Cache.Dir, then
 // MAGUS_CACHE_DIR, then <root>/.magus (relative values join to root). Open and the
@@ -60,15 +125,89 @@ func allModuleEntries() []types.ModuleEntry {
 // cache-first build. ws is any workspace view that can describe itself (the
 // read-only Inspect result or a full *Magus).
 func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+	cacheDir := resolveCacheDir(root, cfg)
 	in := knowledge.Inputs{
 		Graph:       ws.DescribeGraph(),
 		Spells:      ws.DescribeSpells(),
 		Modules:     allModuleEntries(),
 		Diagnostics: types.AllDiagnosticCodes(),
 		Root:        root,
+		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
 	}
-	return knowledge.Build(ctx, resolveCacheDir(root, cfg), knowledge.BuildOptions{
+	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
 		Refresh:   refresh,
+		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
+		Remote:    remoteShardsFor(ws),
 	}, in, log)
+}
+
+// knowledgeRemoteNamespace is the fixed "project path" the knowledge shard store
+// uses on the shared remote backend, keeping its shards clear of build artifacts.
+const knowledgeRemoteNamespace = "__knowledge__"
+
+// remoteShardAdapter rides a build-cache RemoteBackend as a knowledge.RemoteShards:
+// a shard is content-addressed by fingerprint, stored under a fixed namespace, and
+// signed/verified by the same cache trust set as build artifacts.
+type remoteShardAdapter struct{ b cache.RemoteBackend }
+
+func (a remoteShardAdapter) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
+	rc, err := a.b.GetArtifact(ctx, knowledgeRemoteNamespace, key)
+	if err != nil {
+		return nil, err
+	}
+	if rc == nil {
+		return nil, knowledge.ErrShardMiss // the cache backend signals a miss with (nil, nil); make it explicit
+	}
+	return rc, nil
+}
+
+func (a remoteShardAdapter) PutShard(ctx context.Context, key string, r io.Reader) error {
+	return a.b.PutArtifact(ctx, knowledgeRemoteNamespace, key, r)
+}
+
+// remoteShardsFor returns the shard backing for a workspace: the build cache's
+// remote backend when ws is a cache-backed *Magus, else nil (local-only). An
+// Inspect-constructed *Magus has no cache, so it stays local.
+func remoteShardsFor(ws types.Describer) knowledge.RemoteShards {
+	m, ok := ws.(*Magus)
+	if !ok || m.cache == nil {
+		return nil
+	}
+	rb := m.cache.Remote()
+	if rb == nil {
+		return nil
+	}
+	return remoteShardAdapter{rb}
+}
+
+// warmKnowledgeGraph returns this handle's lazily-created warm-graph holder. The
+// rebuild closure is the same cache-first BuildKnowledgeGraph the CLI runs; the
+// holder adds an in-memory cache that is trusted only while WatchKnowledgeGraph
+// has a watcher invalidating it.
+func (m *Magus) warmKnowledgeGraph() *warmGraph {
+	m.warmGraphOnce.Do(func() {
+		root := m.Root()
+		cfg := m.cfg
+		m.warmGraph = newWarmGraph(func(ctx context.Context) (*knowledge.Graph, error) {
+			return BuildKnowledgeGraph(ctx, m, root, cfg, false, slog.Default())
+		}, slog.Default())
+	})
+	return m.warmGraph
+}
+
+// KnowledgeGraph returns the workspace knowledge graph. In the daemon, once
+// WatchKnowledgeGraph is running, this answers from a warm in-memory graph without
+// re-parsing magusfiles; otherwise (and on refresh) it rebuilds cache-first. It is
+// always fresh: the warm graph is served only while a watcher can invalidate it.
+func (m *Magus) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
+	return m.warmKnowledgeGraph().Get(ctx, refresh)
+}
+
+// WatchKnowledgeGraph starts a file watcher that keeps the warm knowledge graph
+// fresh, so daemon MCP calls answer from memory. It returns a stop function; the
+// long-lived daemon calls it once at startup. A one-shot CLI never calls it and
+// pays the cache-first rebuild per command (equally fresh, just not warm).
+func (m *Magus) WatchKnowledgeGraph(ctx context.Context) (func(), error) {
+	return m.warmKnowledgeGraph().watch(ctx, m.Root())
 }

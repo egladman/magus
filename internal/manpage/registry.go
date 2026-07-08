@@ -340,7 +340,10 @@ Subcommands (the first argument):
            the magus domain (projects, targets, spells, ops, charms, modules,
            methods, diagnostics, docs, buzz sources). -o json emits the
            node-link form; -o graphml emits GraphML. External graph viewers
-           (Gephi, yEd) read both directly. The graph is cache-backed under
+           (Gephi, yEd) read both directly. --select "<terms>" narrows the
+           export to a query's neighborhood (same engine as magus query); -o dot
+           and -o mermaid render only with --select, since the full graph has too
+           many nodes to lay out. The graph is cache-backed under
            <cache>/knowledge; only shards whose sources changed are rebuilt.
   stats    The graph's shape: god nodes (the most connected spells, modules,
            targets - where structural risk concentrates), orphans (docs that
@@ -357,10 +360,14 @@ Subcommands (the first argument):
 		}},
 		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml)", BuildFlags: func(fs *flag.FlagSet) {
 			fs.Bool("refresh", false, "Force a full graph rebuild before exporting")
+			fs.Bool("global", false, "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace")
+			fs.String("select", "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
+			fs.Int("budget", 50, "Node budget for --select (how many nodes the neighborhood may collect)")
 		}},
 		{Name: "stats", Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", BuildFlags: func(fs *flag.FlagSet) {
 			fs.String("kind", "", "Scope every section to one node kind (spell, target, doc, ...)")
 			fs.Bool("refresh", false, "Force a full graph rebuild first")
+			fs.Bool("global", false, "Union the workspaces registered in config (knowledge.workspaces) before computing stats")
 		}},
 	},
 	Examples: []Example{
@@ -368,6 +375,7 @@ Subcommands (the first argument):
 		{"DAG rooted at one project, dependents up", "magus graph deps pkg/api --upstream"},
 		{"Knowledge graph for an external viewer", "magus graph export -o json > graph.json"},
 		{"GraphML for Gephi or yEd", "magus graph export -o graphml > graph.graphml"},
+		{"A query's neighborhood as Mermaid", "magus graph export --select 'kind:spell go' -o mermaid"},
 		{"Where structural risk concentrates", "magus graph stats"},
 		{"Doc coverage for spells only", "magus graph stats --kind spell"},
 	},

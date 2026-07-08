@@ -166,6 +166,21 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		b := parseBoolEnv(v, cfg.Hints.Enabled != nil && *cfg.Hints.Enabled)
 		cfg.Hints.Enabled = &b
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_WORKSPACES"); v != "" {
+		parts := strings.Split(v, ",")
+		out := parts[:0]
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		cfg.Knowledge.Workspaces = out
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_MAX_SIZE_MB"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Knowledge.MaxSizeMB = n
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Concurrency = n

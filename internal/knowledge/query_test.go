@@ -127,3 +127,26 @@ func TestQueryDeterministic(t *testing.T) {
 	b, _ := codec.Marshal(sampleGraph().Query("kind:target", 50))
 	assert.Equal(t, string(a), string(b))
 }
+
+func TestSelectNeighborhoodExport(t *testing.T) {
+	g := sampleGraph()
+	full := g.Output()
+	sub := g.Select("build", 5)
+	// The selected subgraph is a real neighborhood: non-empty but smaller than
+	// the whole graph, and its counts agree with the node/link slices.
+	assert.Positive(t, sub.NodeCount)
+	assert.Less(t, sub.NodeCount, full.NodeCount)
+	assert.Equal(t, sub.NodeCount, len(sub.Nodes))
+	assert.Equal(t, sub.EdgeCount, len(sub.Links))
+}
+
+func TestSelectRespectsBudget(t *testing.T) {
+	assert.LessOrEqual(t, sampleGraph().Select("build", 3).NodeCount, 3)
+}
+
+func TestSelectNoMatchEmpty(t *testing.T) {
+	sub := sampleGraph().Select("zzznotarealnode", 50)
+	assert.Zero(t, sub.NodeCount)
+	assert.Empty(t, sub.Nodes)
+	assert.Empty(t, sub.Links)
+}

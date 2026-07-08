@@ -192,6 +192,11 @@ func (c *Cache) Stats() Stats {
 	return Stats{Hit: int(c.hits.Load()), Miss: int(c.misses.Load()), Error: int(c.errs.Load())}
 }
 
+// Remote returns the configured remote backend, or nil when local-only. Exposed
+// so subsystems with their own artifacts (the knowledge-graph shard store) can
+// ride the same backend as build artifacts, under the same signing/verification.
+func (c *Cache) Remote() RemoteBackend { return c.remote }
+
 // Run executes fn under the cache. On a hash match it replays recorded outputs;
 // otherwise fn runs and its outputs are snapshotted. Per-hash locking prevents
 // manifest races when multiple RunAll goroutines share the same key.

@@ -24,6 +24,8 @@ config graph.roots
 config graph.spell
 config hints.enabled
 config history_path
+config knowledge.max_size_mb
+config knowledge.workspaces
 config log.format
 config log.level
 config log.silent

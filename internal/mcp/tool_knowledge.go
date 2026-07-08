@@ -6,19 +6,20 @@ import (
 	"context"
 	"errors"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
 )
 
-// The knowledge-graph retrieval tools (query/explain/path) mirror the CLI verbs
-// and sit on the same cache-first substrate. Each builds the graph (cache-first,
-// so steady state is a fingerprint check) then answers. A daemon-resident warm
-// graph is a later phase; for now every call goes through the shared builder.
+// The knowledge-graph retrieval tools (query/explain/path/stats) mirror the CLI
+// verbs and sit on the same cache-first substrate. Each resolves the graph then
+// answers. In the daemon, where a watcher keeps a warm graph invalidated on source
+// changes (see Magus.WatchKnowledgeGraph, started in startMCPWithDaemon), this
+// answers from memory without re-parsing magusfiles; otherwise it rebuilds
+// cache-first. Either way it is fresh.
 
-// knowledgeGraph builds the workspace knowledge graph for a tool invocation.
+// knowledgeGraph resolves the workspace knowledge graph for a tool invocation.
 func knowledgeGraph(ctx context.Context, opts ServerOptions) (*knowledge.Graph, error) {
-	return magus.BuildKnowledgeGraph(ctx, opts.Magus, opts.Magus.Root(), opts.Config, false, opts.Logger)
+	return opts.Magus.KnowledgeGraph(ctx, false)
 }
 
 type queryTool struct{ opts ServerOptions }
@@ -78,8 +79,21 @@ func (t *pathTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.I
 	return types.InvokeResponse{Data: out}, nil
 }
 
+type statsTool struct{ opts ServerOptions }
+
+func (t *statsTool) Name() string { return "magus_stats" }
+
+func (t *statsTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+	g, err := knowledgeGraph(ctx, t.opts)
+	if err != nil {
+		return types.InvokeResponse{}, err
+	}
+	return types.InvokeResponse{Data: g.Stats(paramString(req.Params, "kind", ""))}, nil
+}
+
 var (
 	_ types.SpellDriver = (*queryTool)(nil)
 	_ types.SpellDriver = (*explainTool)(nil)
 	_ types.SpellDriver = (*pathTool)(nil)
+	_ types.SpellDriver = (*statsTool)(nil)
 )

@@ -58,7 +58,7 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|mermaid|tree)")
-	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml for external graph tools)")
+	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot|mermaid neighborhood)")
 	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "See also: magus query/explain/path (read the graph), magus insight (git-history analytics).")
@@ -113,9 +113,17 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 // <cache>/knowledge, and writes the node-link export. The cache-first loader
 // makes building implicit - there is no separate build verb.
 func graphExport(ctx context.Context, root string, args []string) error {
-	var refresh bool
+	var (
+		refresh     bool
+		globalScope bool
+		sel         string
+		budget      int
+	)
 	_, err := cmdParse("graph export", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before exporting")
+		fs.BoolVar(&globalScope, "global", false, "union the workspaces registered in config (knowledge.workspaces) into one graph, IDs namespaced by workspace")
+		fs.StringVar(&sel, "select", "", "export only the neighborhood of a query (same grammar as `magus query`) instead of the whole graph")
+		fs.IntVar(&budget, "budget", knowledge.DefaultBudget, "node budget for --select (how many nodes the neighborhood may collect)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -126,6 +134,10 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
 			fmt.Fprintln(os.Stderr, "changed are rebuilt.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
+			fmt.Fprintln(os.Stderr, "the engine behind `magus query`. -o dot and -o mermaid render only with")
+			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for those layouts to be legible.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
@@ -134,22 +146,37 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	opts, err := ResolveOutput(global.output, outputGraphML)
+	opts, err := ResolveOutput(global.output, outputGraphML, outputDot, outputMermaid)
 	if err != nil {
 		return err
 	}
+	// dot/mermaid are graph-layout formats; on the whole graph (1000s of nodes)
+	// they are unreadable, so they require a --select neighborhood to scope down.
+	if (opts.Format == outputDot || opts.Format == outputMermaid) && sel == "" {
+		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export; the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
+	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
 	if err != nil {
 		return err
 	}
 	out := g.Output()
+	if sel != "" {
+		out = g.Select(sel, budget)
+		if out.NodeCount == 0 {
+			fmt.Fprintf(os.Stderr, "magus graph export: no nodes matched --select %q\n", sel)
+		}
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputGraphML:
 		return render.WriteKnowledgeGraphML(os.Stdout, out)
+	case outputDot:
+		return render.WriteKnowledgeDOT(os.Stdout, out)
+	case outputMermaid:
+		return render.WriteKnowledgeMermaid(os.Stdout, out)
 	case outputName:
 		for _, n := range out.Nodes {
 			fmt.Println(n.ID)
@@ -177,12 +204,14 @@ func graphExport(ctx context.Context, root string, args []string) error {
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
 	var (
-		kind    string
-		refresh bool
+		kind        string
+		refresh     bool
+		globalScope bool
 	)
 	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&kind, "kind", "", "scope every section to one node kind (e.g. spell, target, doc, diagnostic)")
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild first")
+		fs.BoolVar(&globalScope, "global", false, "union the workspaces registered in config (knowledge.workspaces) before computing stats")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
 			fs.PrintDefaults()
@@ -195,7 +224,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	g, err := loadKnowledgeGraph(ctx, root, refresh)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope)
 	if err != nil {
 		return err
 	}
@@ -242,11 +271,16 @@ func statsText(out types.KnowledgeStats) error {
 
 // loadKnowledgeGraph gathers the workspace inputs and runs the cache-first build,
 // returning the merged in-memory graph. Shared by the graph subcommands and the
-// query/explain/path verbs so they all sit on one substrate.
-func loadKnowledgeGraph(ctx context.Context, root string, refresh bool) (*knowledge.Graph, error) {
+// query/explain/path verbs so they all sit on one substrate. When global is set,
+// it unions the workspaces registered in config (knowledge.workspaces) with the
+// current one, namespacing node IDs by workspace.
+func loadKnowledgeGraph(ctx context.Context, root string, refresh, global bool) (*knowledge.Graph, error) {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return nil, err
+	}
+	if global {
+		return magus.BuildGlobalKnowledgeGraph(ctx, ws, globalCfg, refresh, slog.Default())
 	}
 	return magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
 }

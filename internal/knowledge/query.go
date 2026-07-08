@@ -201,7 +201,15 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 	relSet := toSet(relations)
 	visited := map[string]bool{}
 	queue := make([]string, 0, len(seeds))
+	// Seeds are ranked (best match first); cap them at the budget so a query that
+	// matches thousands of nodes (e.g. a common term across every project) returns
+	// the top budget matches, not the whole graph. Without this the budget only
+	// bounds neighborhood expansion, not the seed set - so the node count could
+	// exceed the documented "max nodes = budget" contract.
 	for _, s := range seeds {
+		if len(visited) >= budget {
+			break
+		}
 		if _, ok := g.node(s); ok && !visited[s] {
 			visited[s] = true
 			queue = append(queue, s)
@@ -281,6 +289,23 @@ func (g *Graph) Query(input string, budget int) types.KnowledgeQueryOutput {
 		Nodes:         out.Nodes,
 		Links:         out.Links,
 	}
+}
+
+// Select resolves the input to seeds and returns the induced neighborhood as a
+// node-link export (the emit side of `magus graph export --select`), sharing the
+// seed+neighborhood logic with Query so graph and query stay one substrate. An
+// input that resolves to nothing yields an empty graph.
+func (g *Graph) Select(input string, budget int) types.KnowledgeGraphOutput {
+	if budget <= 0 {
+		budget = DefaultBudget
+	}
+	q := parseQuery(input)
+	matches := g.Resolve(input, 0)
+	seeds := make([]string, len(matches))
+	for i, m := range matches {
+		seeds[i] = m.ID
+	}
+	return g.Neighborhood(seeds, budget, q.fields["relation"]).Output()
 }
 
 // Explain resolves ref to a node and returns its context card, or ok=false when
