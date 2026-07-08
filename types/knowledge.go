@@ -39,6 +39,7 @@ const (
 	KindImport     = "import"    // an unresolvable buzz import literal (phase 4)
 	KindRationale  = "rationale" // a NOTE/WHY/HACK/TODO comment (phase 4)
 	KindOwner      = "owner"     // a CODEOWNERS owner (@user, @org/team, email)
+	KindSymbol     = "symbol"    // a code symbol ingested from a SCIP index
 )
 
 // Knowledge edge relations. Values are stable wire strings.
@@ -53,6 +54,8 @@ const (
 	RelationRationaleFor = "rationale_for" // rationale->function (phase 4)
 	RelationEmits        = "emits"         // target->diagnostic, runtime (phase 8)
 	RelationOwns         = "owns"          // owner->project/file, from CODEOWNERS
+	RelationDefines      = "defines"       // file->symbol, from a SCIP index
+	// references is reused for file->symbol (a symbol used in that file).
 )
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
@@ -76,6 +79,35 @@ type KnowledgeTiming struct {
 	Samples        int
 	HitRate        float64
 	HitRateSamples int
+}
+
+// KnowledgeSymbol is one code symbol ingested from a SCIP index (an assembly input,
+// not a wire type). magus never parses source; a per-language indexer emits the
+// index file and this is the language-agnostic shape the reader distills it to. ID
+// is the version-stripped, stable moniker key; Moniker is the original. Defs are the
+// files that define the symbol (usually one); Refs are the files that use it, one
+// entry per file (never per occurrence, the scale decision) with a count and a
+// capped line list.
+type KnowledgeSymbol struct {
+	ID       string
+	Moniker  string
+	Label    string
+	Language string
+	Kind     string
+	// Source is "<path>:<line>" of the definition, or empty when only references
+	// were seen (the definition lives in another index).
+	Source string
+	Defs   []string
+	Refs   []KnowledgeSymbolRef
+}
+
+// KnowledgeSymbolRef is one referencing file: its path, how many times the symbol
+// appears, and a capped list of the first occurrence lines (bounded so a hot symbol
+// cannot blow up the edge's provenance).
+type KnowledgeSymbolRef struct {
+	Path  string
+	Count int
+	Lines []int
 }
 
 // KnowledgeNode is one vertex: a magus-domain entity with stable identity and

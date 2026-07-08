@@ -22,6 +22,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.3.0
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/samber/lo v1.53.0
+	github.com/scip-code/scip/bindings/go/scip v0.9.0
 	github.com/stretchr/testify v1.11.1
 	github.com/ulikunitz/xz v0.5.15
 	github.com/yuin/goldmark v1.8.2
@@ -38,6 +39,7 @@ require (
 	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -68,6 +70,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/sourcegraph/beaut v0.0.0-20240611013027-627e4c25335a // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
@@ -82,7 +85,6 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 )
 
 replace github.com/egladman/gopherbuzz => ./gopherbuzz
