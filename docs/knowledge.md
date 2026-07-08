@@ -59,16 +59,16 @@ nodes, so an agent knows what exists before running anything.
 `magus query` takes free-text terms (AND) plus field filters and negation. Terms
 are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 
-| Form              | Meaning                                     |
-| ----------------- | ------------------------------------------- |
-| `build`           | free text: match node IDs, labels, and docs |
-| `kind:spell`      | only nodes of that kind                     |
-| `project:pkg/foo` | the project node and its targets            |
-| `relation:uses`   | seed from nodes touching a `uses` edge      |
-| `id:build`        | substring match on the node ID              |
-| `id:target:*build` | `*` wildcard: matches any run (in a value or free-text term) |
-| `-kind:op`        | negation: exclude these                     |
-| `"exact phrase"`  | a quoted span stays one term                |
+| Form                | Meaning                                             |
+| ------------------- | --------------------------------------------------- |
+| `build`             | free text: match node IDs, labels, and docs         |
+| `kind:spell`        | only nodes of that kind                             |
+| `project:pkg/foo`   | the project node and its targets                    |
+| `relation:uses`     | seed from nodes touching a `uses` edge              |
+| `id:build`          | substring match on the node ID                      |
+| `id:target:*build`  | `*` wildcard: matches any run (in a value or term)  |
+| `-kind:op`          | negation: exclude these                             |
+| `"exact phrase"`    | a quoted span stays one term                        |
 
 A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node

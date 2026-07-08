@@ -19,20 +19,39 @@ import (
 
 // SeedsSymbols reports whether an input (a query string, or an explain/path node
 // ref) targets symbol nodes, so a caller knows to lazily load the symbol shards the
-// default graph omits. True when the input names the symbol kind, a symbol: node ID,
-// or a defines/references relation. Over-eager on relation:references (which charms
-// also use) is safe - it only loads more; the cost is a missed load, not a wrong one.
+// default graph omits. True when the input names the symbol kind (exactly or via a
+// wildcard like kind:sym*), a symbol: node ID (including a wildcard id: that could
+// match one), or a defines/references relation. It MUST agree with what scoreNode
+// actually matches: a wildcard that reaches symbols but does not seed here would load
+// no shards and return an empty result. Over-eager is safe - it only loads more.
 func SeedsSymbols(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
 		return true
 	}
 	q := parseQuery(input)
-	if slices.Contains(q.fields["kind"], types.KindSymbol) {
-		return true
+	for _, k := range q.fields["kind"] {
+		if k == types.KindSymbol || (hasWildcard(k) && globMatch(k, types.KindSymbol)) {
+			return true
+		}
+	}
+	for _, id := range q.fields["id"] {
+		if hasWildcard(id) && wildcardCouldMatchPrefix(id, types.KindSymbol+":") {
+			return true
+		}
 	}
 	return slices.ContainsFunc(q.fields["relation"], func(r string) bool {
 		return r == types.RelationDefines || r == types.RelationReferences
 	})
+}
+
+// wildcardCouldMatchPrefix reports whether a glob pattern could match some string that
+// starts with prefix - used to decide whether a wildcard id: query might target symbol
+// nodes (their IDs start with "symbol:") and so needs the symbol shards loaded. It
+// compares the pattern's literal head (before the first '*') against prefix; a leading
+// '*' (empty head) could match anything, so it seeds conservatively.
+func wildcardCouldMatchPrefix(pattern, prefix string) bool {
+	head, _, _ := strings.Cut(pattern, "*")
+	return strings.HasPrefix(prefix, head) || strings.HasPrefix(head, prefix)
 }
 
 // DefaultBudget bounds the neighborhood a query collects, so a match on a
@@ -192,7 +211,9 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	// Every positive term must match (AND); score is the sum of best per-term
 	// leaf-anchored scores against ID and label, with a small credit for a doc hit.
 	// A wildcard term is a boolean glob filter (no fuzzy score), matched against ID and
-	// label; it contributes a flat credit so it ranks like a doc hit, not a leaf match.
+	// label - NOT the doc (prose is not glob-shaped, unlike the plain-substring path
+	// which does search the doc). It contributes a flat credit so it ranks like a doc
+	// hit, not a leaf match.
 	total := 0
 	for _, t := range q.terms {
 		if hasWildcard(t) {
@@ -627,7 +648,11 @@ func hasWildcard(s string) bool { return strings.IndexByte(s, '*') >= 0 }
 // globMatch reports whether s matches a shell-style glob where '*' matches any run of
 // characters, INCLUDING none and including separators like '/' and ':' (node IDs are
 // full of both, so the gitignore-style "* stops at /" would be surprising here).
-// Case-insensitive. A pattern with no '*' is an exact match.
+// Case-insensitive. A pattern with no '*' is an exact match. (path.Match is rejected
+// because it treats '/' as significant and errors on some patterns.) The middle
+// segments are matched leftmost with no backtracking - provably correct for pure-'*'
+// globs since the surrounding '*' absorb any slack, and cheap for the short,
+// separator-dense patterns this sees.
 func globMatch(pattern, s string) bool {
 	p, str := strings.ToLower(pattern), strings.ToLower(s)
 	parts := strings.Split(p, "*")

@@ -53,9 +53,11 @@ func conformanceGraph() *Graph {
 }
 
 // TestGrammarConformance is the corpus that pins the deterministic grammar (fields,
-// wildcards, negation) so the Go query engine cannot silently drift - the same fixture
-// the website search should validate against. Free-text fuzzy ranking is intentionally
-// excluded; this table is about which nodes a query MATCHES, not their order.
+// wildcards, negation) so the Go query engine cannot silently drift. It is intended to
+// become the shared cross-language corpus the website search (search.js) also
+// validates against; the JS side is not wired to it yet, so for now it is a Go-only
+// regression gate. Free-text fuzzy ranking is intentionally excluded; this table is
+// about which nodes a query MATCHES, not their order.
 func TestGrammarConformance(t *testing.T) {
 	g := conformanceGraph()
 	for _, tc := range []struct {

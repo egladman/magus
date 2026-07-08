@@ -20,10 +20,18 @@ func matchIDs(ms []types.KnowledgeMatch) []string {
 }
 
 func TestSeedsSymbols(t *testing.T) {
-	for _, in := range []string{"kind:symbol Foo", "symbol:example.com/a Foo#", "relation:defines", "relation:references", "id:symbol:x"} {
+	// A wildcard that reaches symbols must seed too, or the query loads no symbol
+	// shards and silently returns empty (the match side and the load side must agree).
+	for _, in := range []string{
+		"kind:symbol Foo", "symbol:example.com/a Foo#", "relation:defines", "relation:references", "id:symbol:x",
+		"kind:sym*", "kind:symbol*", "kind:*", "id:sym*",
+	} {
 		assert.Truef(t, SeedsSymbols(in), "%q should seed symbols", in)
 	}
-	for _, in := range []string{"kind:target build", "build", "project:pkg/a", "relation:uses"} {
+	for _, in := range []string{
+		"kind:target build", "build", "project:pkg/a", "relation:uses",
+		"kind:tar*", "id:target:*", // wildcards that cannot reach symbols
+	} {
 		assert.Falsef(t, SeedsSymbols(in), "%q should NOT seed symbols", in)
 	}
 }
