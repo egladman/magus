@@ -15,24 +15,42 @@ _magus() {
         subcommand)
             local -a subcommands
             subcommands=(
-                'ls:list discovered projects'
-                'graph:print dependency tree'
-                'describe:explain affected membership'
-                'run:run a verb for selected projects'
-                'x:interactive shorthand: pick project + verb'
-                'affected:run a verb for VC-affected projects'
-                'mage:run a magefile/magusfile target'
-                'version:print version, commit, build date'
-                'help:show help'
-                'completion:generate shell completion'
+                'ls:list all discovered projects'
+                'describe:define a magus concept and list its entities'
+                'run:run a target for selected projects'
+                'x:interactive shorthand\: pick project + target (TTY only)'
+                'where:print the absolute path of a project (fuzzy match)'
+                'tail:stream the most recent cached log for cwd project'
+                'affected:run a target for VCS-diff affected projects'
+                'insight:mine VCS history for hotspots, affinity, ownership, trend'
+                "query:search the knowledge graph and show a node's neighborhood"
+                'explain:show one knowledge-graph node\: edges, provenance, blast radius'
+                'path:show the shortest path between two knowledge-graph nodes'
+                'graph:the graphs as objects\: deps, export, stats'
+                'watch:emit changed file paths (pipe into affected --stdin)'
+                'status:inspect the concurrency pool of a running parent magus'
                 'doctor:validate the workspace'
+                'config:view or update magus configuration'
+                'server:manage the persistent daemon (start / stop)'
+                'repl:open an interactive Buzz interpreter'
+                'completion:generate shell completion'
+                'init:bootstrap a workspace (magus.yaml + magusfile.buzz)'
+                'self:manage the magus binary (self update / install)'
+                'version:print version, commit, and build date'
+                'clean:remove declared Outputs (regenerable build artifacts)'
+                'merge-driver:VCS merge driver for generated outputs'
+                'buzz:run a Buzz script (stdlib only; no host bindings)'
+                'help:show this message'
             )
             _describe 'subcommand' subcommands
             ;;
         args)
             case $words[1] in
                 run)
-                    if (( CURRENT == 2 )); then
+                    local -a run_flags=(--dry-run --graph --upstream --depth --timeout --shard --n-shards --no-flake-retry --race --step --no-default-charms)
+                    if [[ $words[CURRENT] == -* ]]; then
+                        _describe 'flag' run_flags
+                    elif (( CURRENT == 2 )); then
                         local -a verbs=(
                             'ls:print selected projects'
                             'build:build selected projects'
@@ -53,12 +71,23 @@ _magus() {
                 affected)
                     if [[ $words[CURRENT] == -* ]]; then
                         local -a flags=(
-                            '--explain:show why a project is affected'
-                            '--plan:emit a CI shard plan for the affected set'
-                            '--bisect:find the commit that broke a project'
+                            '--dry-run:print what would run without executing'
                             '--base:override the VCS base ref'
                             '--stdin:read changed paths from a pipe'
+                            '--null:with --stdin, NUL-separate paths'
                             '--graph:render the affected dependency graph'
+                            '--upstream:with --graph, show dependents instead of dependencies'
+                            '--depth:with --graph, cap displayed depth'
+                            '--explain:show why a project is affected'
+                            '--plan:emit a CI shard plan for the affected set'
+                            '--max-shards:with --plan, maximum CI shards'
+                            '--max-parallel-budget:with --plan, cross-shard concurrency cap'
+                            '--bisect:find the commit that broke a project'
+                            '--good:with --bisect, known-good commit SHA'
+                            '--target:with --bisect, magus target to bisect'
+                            '--timeout:abort if not finished within this duration'
+                            '--step:pause before each subprocess'
+                            '--race:race-detection format'
                         )
                         _describe 'flag' flags
                     elif (( CURRENT == 2 )); then
@@ -76,14 +105,108 @@ _magus() {
                     fi
                     ;;
                 describe)
-                    local -a projects
-                    projects=("${(@f)$(magus ls -o name 2>/dev/null)}")
-                    _describe 'project' projects
+                    if (( CURRENT == 2 )); then
+                        local -a nouns=(
+                            'spell:list every spell'
+                            'charm:list every charm'
+                            'target:list every target'
+                            'project:list every project'
+                            'workspace:describe the workspace'
+                            'module:list every module'
+                            'mcp-tool:list every MCP tool'
+                        )
+                        _describe 'noun' nouns
+                    else
+                        local -a projects
+                        projects=("${(@f)$(magus ls -o name 2>/dev/null)}")
+                        _describe 'project' projects
+                    fi
                     ;;
                 x)
-                    local -a projects
-                    projects=("${(@f)$(magus ls -o name 2>/dev/null)}")
-                    _describe 'project' projects
+                    if [[ $words[CURRENT] == -* ]]; then
+                        local -a flags=('--step:pause before each subprocess')
+                        _describe 'flag' flags
+                    else
+                        local -a projects
+                        projects=("${(@f)$(magus ls -o name 2>/dev/null)}")
+                        _describe 'project' projects
+                    fi
+                    ;;
+                insight)
+                    if (( CURRENT == 2 )); then
+                        local -a lenses=(
+                            'hotspots:edit frequency x complexity, prime refactoring targets'
+                            'affinity:projects that change together (temporal coupling)'
+                            'ownership:author concentration and bus factor'
+                            'trend:rising vs cooling activity'
+                            'report:every lens plus graph stats as one document'
+                        )
+                        _describe 'lens' lenses
+                    else
+                        local -a flags=(--commits --since --workspace --files)
+                        _describe 'flag' flags
+                    fi
+                    ;;
+                graph)
+                    if (( CURRENT == 2 )); then
+                        local -a subs=(
+                            'deps:emit the project dependency DAG'
+                            'export:export the merged knowledge graph'
+                            "stats:report the graph's shape"
+                        )
+                        _describe 'subcommand' subs
+                    else
+                        local -a flags
+                        case $words[2] in
+                            deps)   flags=(--upstream --depth --spell --target) ;;
+                            export) flags=(--refresh) ;;
+                            stats)  flags=(--kind --refresh) ;;
+                        esac
+                        _describe 'flag' flags
+                    fi
+                    ;;
+                watch)
+                    local -a flags=(--debounce --initial --null --backend --ignore)
+                    _describe 'flag' flags
+                    ;;
+                status)
+                    local -a flags=(--watch --compact --socket --probe --workspace)
+                    _describe 'flag' flags
+                    ;;
+                clean)
+                    local -a flags=('--cache:also invalidate magus cache entries')
+                    _describe 'flag' flags
+                    ;;
+                config)
+                    if (( CURRENT == 2 )); then
+                        local -a subs=(
+                            'view:print the effective configuration'
+                            'set:write a key to the local (or global) config file'
+                            'history:manage forecaster runtime history'
+                            'cache:manage the build cache'
+                            'mcp:manage the MCP server auth token'
+                        )
+                        _describe 'subcommand' subs
+                    fi
+                    ;;
+                server)
+                    if (( CURRENT == 2 )); then
+                        local -a subs=(
+                            'start:start a persistent daemon'
+                            'stop:send a graceful shutdown request to a running daemon'
+                        )
+                        _describe 'subcommand' subs
+                    fi
+                    ;;
+                self)
+                    if (( CURRENT == 2 )); then
+                        local -a subs=('update:download and install the latest magus release')
+                        _describe 'subcommand' subs
+                    fi
+                    ;;
+                init)
+                    local -a flags=(--global --local --force --vcs)
+                    _describe 'flag' flags
                     ;;
                 completion)
                     if (( CURRENT == 2 )); then

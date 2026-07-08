@@ -4,17 +4,32 @@
 
 function __magus_subcommands
     printf '%s\t%s\n' \
-        ls        'list discovered projects' \
-        graph     'print dependency tree' \
-        describe  'explain affected membership' \
-        run       'run a verb for selected projects' \
-        x         'interactive shorthand: pick project + verb' \
-        affected  'run a verb for VC-affected projects' \
-        mage      'run a magefile/magusfile target' \
-        version   'print version, commit, build date' \
-        help      'show help' \
-        completion 'generate shell completion' \
-        doctor    'validate the workspace'
+        ls           'list all discovered projects' \
+        describe     'define a magus concept and list its entities' \
+        run          'run a target for selected projects' \
+        x            'interactive shorthand: pick project + target' \
+        where        'print the absolute path of a project' \
+        tail         'stream the most recent cached log for cwd project' \
+        affected     'run a target for VCS-diff affected projects' \
+        insight      'mine VCS history for hotspots, affinity, ownership, trend' \
+        query        'search the knowledge graph and show a node\'s neighborhood' \
+        explain      'show one knowledge-graph node: edges, provenance, blast radius' \
+        path         'show the shortest path between two knowledge-graph nodes' \
+        graph        'the graphs as objects: deps, export, stats' \
+        watch        'emit changed file paths (pipe into affected --stdin)' \
+        status       'inspect the concurrency pool of a running parent magus' \
+        doctor       'validate the workspace' \
+        config       'view or update magus configuration' \
+        server       'manage the persistent daemon (start / stop)' \
+        repl         'open an interactive Buzz interpreter' \
+        completion   'generate shell completion' \
+        init         'bootstrap a workspace (magus.yaml + magusfile.buzz)' \
+        self         'manage the magus binary (self update / install)' \
+        version      'print version, commit, and build date' \
+        clean        'remove declared Outputs (regenerable build artifacts)' \
+        merge-driver 'VCS merge driver for generated outputs' \
+        buzz         'run a Buzz script (stdlib only; no host bindings)' \
+        help         'show this message'
 end
 
 function __magus_verbs
@@ -29,11 +44,60 @@ function __magus_verbs
         ci       'full pipeline'
 end
 
+function __magus_describe_nouns
+    printf '%s\t%s\n' \
+        spell     'list every spell' \
+        charm     'list every charm' \
+        target    'list every target' \
+        project   'list every project' \
+        workspace 'describe the workspace' \
+        module    'list every module' \
+        mcp-tool  'list every MCP tool'
+end
+
+function __magus_insight_lenses
+    printf '%s\t%s\n' \
+        hotspots  'edit frequency x complexity, prime refactoring targets' \
+        affinity  'projects that change together (temporal coupling)' \
+        ownership 'author concentration and bus factor' \
+        trend     'rising vs cooling activity' \
+        report    'every lens plus graph stats as one document'
+end
+
+function __magus_graph_subs
+    printf '%s\t%s\n' \
+        deps   'emit the project dependency DAG' \
+        export 'export the merged knowledge graph' \
+        stats  'report the graph\'s shape'
+end
+
+function __magus_config_subs
+    printf '%s\t%s\n' \
+        view    'print the effective configuration' \
+        set     'write a key to the local (or global) config file' \
+        history 'manage forecaster runtime history' \
+        cache   'manage the build cache' \
+        mcp     'manage the MCP server auth token'
+end
+
+function __magus_server_subs
+    printf '%s\t%s\n' \
+        start 'start a persistent daemon' \
+        stop  'send a graceful shutdown request to a running daemon'
+end
+
+function __magus_self_subs
+    printf '%s\t%s\n' \
+        update 'download and install the latest magus release'
+end
+
 function __magus_projects
     magus ls -o name 2>/dev/null
 end
 
 set -l verb_set ls build test lint format clean generate ci
+set -l describe_noun_set spell charm target project workspace module mcp-tool
+set -l graph_sub_set deps export stats
 
 for _cmd in magus mgs
     complete -c $_cmd -f
@@ -41,13 +105,75 @@ for _cmd in magus mgs
 
     complete -c $_cmd -n "__fish_seen_subcommand_from run; and not __fish_seen_subcommand_from $verb_set" -a '(__magus_verbs)'
     complete -c $_cmd -n "__fish_seen_subcommand_from run; and __fish_seen_subcommand_from $verb_set" -a '(__magus_projects)'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l dry-run -d 'print what would run without executing'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l graph -d 'render the dependency graph instead of executing'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l upstream -d 'with --graph, show dependents instead of dependencies'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l depth -d 'with --graph, cap displayed depth'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l timeout -d 'abort if not finished within this duration'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l step -d 'pause before each subprocess'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l no-flake-retry -d 'disable flake auto-retry for this run'
+    complete -c $_cmd -n '__fish_seen_subcommand_from run' -l no-default-charms -d 'ignore magus.yaml default_charms for this run'
 
     complete -c $_cmd -n "__fish_seen_subcommand_from affected; and not __fish_seen_subcommand_from $verb_set" -a '(__magus_verbs)'
-
-    complete -c $_cmd -n '__fish_seen_subcommand_from describe' -a '(__magus_projects)'
-    complete -c $_cmd -n '__fish_seen_subcommand_from x'        -a '(__magus_projects)'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l dry-run -d 'print what would run without executing'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l base -d 'override the VCS base ref'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l stdin -d 'read changed file paths from stdin'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l null -d 'with --stdin, NUL-separate paths'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l graph -d 'render the affected dependency graph'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l upstream -d 'with --graph, show dependents instead of dependencies'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l depth -d 'with --graph, cap displayed depth'
     complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l explain -d 'show why a project is affected'
     complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l plan -d 'emit a CI shard plan for the affected set'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l max-shards -d 'with --plan, maximum CI shards'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l max-parallel-budget -d 'with --plan, cross-shard concurrency cap'
     complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l bisect -d 'find the commit that broke a project'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l good -d 'with --bisect, known-good commit SHA'
+    complete -c $_cmd -n '__fish_seen_subcommand_from affected' -l target -d 'with --bisect, magus target to bisect'
+
+    complete -c $_cmd -n "__fish_seen_subcommand_from describe; and not __fish_seen_subcommand_from $describe_noun_set" -a '(__magus_describe_nouns)'
+    complete -c $_cmd -n "__fish_seen_subcommand_from describe; and __fish_seen_subcommand_from $describe_noun_set" -a '(__magus_projects)'
+
+    complete -c $_cmd -n '__fish_seen_subcommand_from x' -a '(__magus_projects)'
+    complete -c $_cmd -n '__fish_seen_subcommand_from x' -l step -d 'pause before each subprocess'
+
+    complete -c $_cmd -n "__fish_seen_subcommand_from insight; and not __fish_seen_subcommand_from hotspots affinity ownership trend report" -a '(__magus_insight_lenses)'
+    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l commits -d 'cap on how many recent commits to scan'
+    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l since -d 'only commits within this window'
+    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l workspace -d 'analyze the whole workspace'
+    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l files -d 'hotspots: rank individual files instead of projects'
+
+    complete -c $_cmd -n "__fish_seen_subcommand_from graph; and not __fish_seen_subcommand_from $graph_sub_set" -a '(__magus_graph_subs)'
+    complete -c $_cmd -n '__fish_seen_subcommand_from graph deps' -l upstream -d 'show dependents instead of dependencies'
+    complete -c $_cmd -n '__fish_seen_subcommand_from graph deps' -l depth -d 'cap displayed depth'
+    complete -c $_cmd -n '__fish_seen_subcommand_from graph deps' -l spell -d 'only projects driven by this spell'
+    complete -c $_cmd -n '__fish_seen_subcommand_from graph deps' -l target -d 'target whose duration history annotates nodes'
+    complete -c $_cmd -n '__fish_seen_subcommand_from graph export' -l refresh -d 'force a full graph rebuild before exporting'
+    complete -c $_cmd -n '__fish_seen_subcommand_from graph stats' -l kind -d 'scope every section to one node kind'
+    complete -c $_cmd -n '__fish_seen_subcommand_from graph stats' -l refresh -d 'force a full graph rebuild first'
+
+    complete -c $_cmd -n '__fish_seen_subcommand_from watch' -l debounce -d 'quiet window before emitting a batch'
+    complete -c $_cmd -n '__fish_seen_subcommand_from watch' -l initial -d 'emit an --all batch on startup'
+    complete -c $_cmd -n '__fish_seen_subcommand_from watch' -l null -d 'NUL-separate paths and double-NUL between batches'
+    complete -c $_cmd -n '__fish_seen_subcommand_from watch' -l backend -d 'notification backend: fsnotify or poll'
+    complete -c $_cmd -n '__fish_seen_subcommand_from watch' -l ignore -d 'ignore pattern; repeatable'
+
+    complete -c $_cmd -n '__fish_seen_subcommand_from status' -l watch -d 'poll and reprint at this interval'
+    complete -c $_cmd -n '__fish_seen_subcommand_from status' -l compact -d 'single-line snapshot for sidebar/multiplexer use'
+    complete -c $_cmd -n '__fish_seen_subcommand_from status' -l socket -d 'adopt server address'
+    complete -c $_cmd -n '__fish_seen_subcommand_from status' -l probe -d 'exec-probe mode: liveness or readiness'
+
+    complete -c $_cmd -n '__fish_seen_subcommand_from clean' -l cache -d 'also invalidate magus cache entries'
+
+    complete -c $_cmd -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from view set history cache mcp" -a '(__magus_config_subs)'
+
+    complete -c $_cmd -n "__fish_seen_subcommand_from server; and not __fish_seen_subcommand_from start stop" -a '(__magus_server_subs)'
+
+    complete -c $_cmd -n "__fish_seen_subcommand_from self; and not __fish_seen_subcommand_from update" -a '(__magus_self_subs)'
+
+    complete -c $_cmd -n '__fish_seen_subcommand_from init' -l global -d 'write only the global config'
+    complete -c $_cmd -n '__fish_seen_subcommand_from init' -l local -d 'write config into the repo (CWD)'
+    complete -c $_cmd -n '__fish_seen_subcommand_from init' -l force -d 'overwrite an existing config file'
+    complete -c $_cmd -n '__fish_seen_subcommand_from init' -l vcs -d 'VCS to wire the merge driver for (git|hg)'
+
     complete -c $_cmd -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
 end

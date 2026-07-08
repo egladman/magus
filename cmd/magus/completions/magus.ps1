@@ -8,12 +8,44 @@
 $__magus_scriptblock = {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $subcommands = 'ls', 'graph', 'describe', 'run', 'x', 'affected',
-                   'mage', 'version', 'help', 'completion', 'doctor'
-    $verbs       = 'ls', 'build', 'test', 'lint', 'format', 'clean',
-                   'generate', 'ci'
-    $shells      = 'bash', 'zsh', 'fish', 'powershell'
-    $affectedFlags = '--explain', '--plan', '--bisect', '--base', '--stdin', '--graph'
+    $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'tail', 'affected',
+                   'insight', 'query', 'explain', 'path', 'graph', 'watch',
+                   'status', 'doctor', 'config', 'server', 'repl', 'completion',
+                   'init', 'self', 'version', 'clean', 'merge-driver', 'buzz', 'help'
+    $verbs         = 'ls', 'build', 'test', 'lint', 'format', 'clean', 'generate', 'ci'
+    $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
+    $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'report'
+    $graphSubs     = 'deps', 'export', 'stats'
+    $configSubs    = 'view', 'set', 'history', 'cache', 'mcp'
+    $serverSubs    = 'start', 'stop'
+    $selfSubs      = 'update'
+    $shells        = 'bash', 'zsh', 'fish', 'powershell'
+    $runFlags      = '--dry-run', '--graph', '--upstream', '--depth', '--timeout',
+                      '--shard', '--n-shards', '--no-flake-retry', '--race', '--step',
+                      '--no-default-charms'
+    $affectedFlags = '--dry-run', '--base', '--stdin', '--null', '--graph', '--upstream',
+                      '--depth', '--explain', '--plan', '--max-shards',
+                      '--max-parallel-budget', '--bisect', '--good', '--target',
+                      '--timeout', '--step', '--race'
+    $graphDepsFlags   = '--upstream', '--depth', '--spell', '--target'
+    $graphExportFlags = '--refresh'
+    $graphStatsFlags  = '--kind', '--refresh'
+    $insightFlags     = '--commits', '--since', '--workspace', '--files'
+    $watchFlags       = '--debounce', '--initial', '--null', '--backend', '--ignore'
+    $statusFlags      = '--watch', '--compact', '--socket', '--probe', '--workspace'
+    $initFlags        = '--global', '--local', '--force', '--vcs'
+
+    function Complete-From($values, $kind = 'ParameterValue') {
+        return $values |
+            Where-Object { $_ -like "$wordToComplete*" } |
+            ForEach-Object {
+                [System.Management.Automation.CompletionResult]::new($_, $_, $kind, $_)
+            }
+    }
+
+    function Get-MagusProjects {
+        try { & magus ls -o name 2>$null } catch { @() }
+    }
 
     # Tokenize the command line (splits on whitespace, respects quotes via CommandAst).
     $tokens = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
@@ -21,90 +53,90 @@ $__magus_scriptblock = {
 
     # Nothing beyond `magus` yet -> complete a subcommand.
     if ($tokenCount -le 1) {
-        return $subcommands |
-            Where-Object { $_ -like "$wordToComplete*" } |
-            ForEach-Object {
-                [System.Management.Automation.CompletionResult]::new(
-                    $_, $_, 'ParameterValue', $_)
-            }
+        return Complete-From $subcommands
     }
 
     $cmd = $tokens[1]
-
-    function Get-MagusProjects {
-        try { & magus ls -o name 2>$null } catch { @() }
-    }
+    $atArg2 = ($tokenCount -le 2 -or ($tokenCount -eq 3 -and $wordToComplete -ne ''))
 
     switch ($cmd) {
         'run' {
-            if ($tokenCount -le 2 -or ($tokenCount -eq 3 -and $wordToComplete -ne '')) {
-                # Second token: the verb.
-                return $verbs |
-                    Where-Object { $_ -like "$wordToComplete*" } |
-                    ForEach-Object {
-                        [System.Management.Automation.CompletionResult]::new(
-                            $_, $_, 'ParameterValue', $_)
-                    }
+            if ($wordToComplete.StartsWith('-')) {
+                return Complete-From $runFlags 'ParameterName'
             }
-            return Get-MagusProjects |
-                Where-Object { $_ -like "$wordToComplete*" } |
-                ForEach-Object {
-                    [System.Management.Automation.CompletionResult]::new(
-                        $_, $_, 'ParameterValue', $_)
-                }
+            if ($atArg2) {
+                return Complete-From $verbs
+            }
+            return Complete-From (Get-MagusProjects)
         }
         'affected' {
             if ($wordToComplete.StartsWith('-')) {
-                return $affectedFlags |
-                    Where-Object { $_ -like "$wordToComplete*" } |
-                    ForEach-Object {
-                        [System.Management.Automation.CompletionResult]::new(
-                            $_, $_, 'ParameterName', $_)
-                    }
+                return Complete-From $affectedFlags 'ParameterName'
             }
-            if ($tokenCount -le 2 -or ($tokenCount -eq 3 -and $wordToComplete -ne '')) {
-                return $verbs |
-                    Where-Object { $_ -like "$wordToComplete*" } |
-                    ForEach-Object {
-                        [System.Management.Automation.CompletionResult]::new(
-                            $_, $_, 'ParameterValue', $_)
-                    }
+            if ($atArg2) {
+                return Complete-From $verbs
             }
         }
         'describe' {
-            return Get-MagusProjects |
-                Where-Object { $_ -like "$wordToComplete*" } |
-                ForEach-Object {
-                    [System.Management.Automation.CompletionResult]::new(
-                        $_, $_, 'ParameterValue', $_)
-                }
+            if ($atArg2) {
+                return Complete-From $describeNouns
+            }
+            return Complete-From (Get-MagusProjects)
         }
         'x' {
-            return Get-MagusProjects |
-                Where-Object { $_ -like "$wordToComplete*" } |
-                ForEach-Object {
-                    [System.Management.Automation.CompletionResult]::new(
-                        $_, $_, 'ParameterValue', $_)
-                }
-        }
-        'completion' {
-            if ($tokenCount -le 2 -or ($tokenCount -eq 3 -and $wordToComplete -ne '')) {
-                return $shells |
-                    Where-Object { $_ -like "$wordToComplete*" } |
-                    ForEach-Object {
-                        [System.Management.Automation.CompletionResult]::new(
-                            $_, $_, 'ParameterValue', $_)
-                    }
+            if ($wordToComplete.StartsWith('-')) {
+                return Complete-From @('--step') 'ParameterName'
             }
+            return Complete-From (Get-MagusProjects)
+        }
+        'insight' {
+            if ($atArg2) {
+                return Complete-From $lenses
+            }
+            return Complete-From $insightFlags 'ParameterName'
         }
         'graph' {
-            $flags = '-upstream', '-lang', '-depth', '-root', '-o', '-output'
-            return $flags |
-                Where-Object { $_ -like "$wordToComplete*" } |
-                ForEach-Object {
-                    [System.Management.Automation.CompletionResult]::new(
-                        $_, $_, 'ParameterName', $_)
-                }
+            if ($atArg2) {
+                return Complete-From $graphSubs
+            }
+            $sub = $tokens[2]
+            switch ($sub) {
+                'deps'   { return Complete-From $graphDepsFlags 'ParameterName' }
+                'export' { return Complete-From $graphExportFlags 'ParameterName' }
+                'stats'  { return Complete-From $graphStatsFlags 'ParameterName' }
+            }
+        }
+        'watch' {
+            return Complete-From $watchFlags 'ParameterName'
+        }
+        'status' {
+            return Complete-From $statusFlags 'ParameterName'
+        }
+        'clean' {
+            return Complete-From @('--cache') 'ParameterName'
+        }
+        'config' {
+            if ($atArg2) {
+                return Complete-From $configSubs
+            }
+        }
+        'server' {
+            if ($atArg2) {
+                return Complete-From $serverSubs
+            }
+        }
+        'self' {
+            if ($atArg2) {
+                return Complete-From $selfSubs
+            }
+        }
+        'init' {
+            return Complete-From $initFlags 'ParameterName'
+        }
+        'completion' {
+            if ($atArg2) {
+                return Complete-From $shells
+            }
         }
     }
 }

@@ -8,10 +8,24 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    local subcommands="ls graph describe run x affected mage version help completion doctor"
+    local subcommands="ls describe run x where tail affected insight query explain path graph watch status doctor config server repl completion init self version clean merge-driver buzz help"
     local verbs="ls build test lint format clean generate ci"
+    local nouns="spell charm target project workspace module mcp-tool"
+    local lenses="hotspots affinity ownership trend report"
+    local graph_subs="deps export stats"
+    local config_subs="view set history cache mcp"
+    local server_subs="start stop"
+    local self_subs="update"
     local shells="bash zsh fish powershell"
-    local affected_flags="--explain --plan --bisect --base --stdin --graph"
+    local run_flags="--dry-run --graph --upstream --depth --timeout --shard --n-shards --no-flake-retry --race --step --no-default-charms"
+    local affected_flags="--dry-run --base --stdin --null --graph --upstream --depth --explain --plan --max-shards --max-parallel-budget --bisect --good --target --timeout --step --race"
+    local graph_deps_flags="--upstream --depth --spell --target"
+    local graph_export_flags="--refresh"
+    local graph_stats_flags="--kind --refresh"
+    local insight_flags="--commits --since --workspace --files"
+    local watch_flags="--debounce --initial --null --backend --ignore"
+    local status_flags="--watch --compact --socket --probe --workspace"
+    local init_flags="--global --local --force --vcs"
 
     if [[ "$COMP_CWORD" -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "$subcommands" -- "$cur") )
@@ -22,7 +36,9 @@ _magus_complete() {
 
     case "$cmd" in
         run)
-            if [[ "$COMP_CWORD" -eq 2 ]]; then
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "$run_flags" -- "$cur") )
+            elif [[ "$COMP_CWORD" -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "$verbs" -- "$cur") )
             else
                 local projects
@@ -38,22 +54,72 @@ _magus_complete() {
             fi
             ;;
         describe)
-            local projects
-            projects=$(magus ls -o name 2>/dev/null)
-            COMPREPLY=( $(compgen -W "$projects" -- "$cur") )
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$nouns" -- "$cur") )
+            else
+                local projects
+                projects=$(magus ls -o name 2>/dev/null)
+                COMPREPLY=( $(compgen -W "$projects" -- "$cur") )
+            fi
             ;;
         x)
-            local projects
-            projects=$(magus ls -o name 2>/dev/null)
-            COMPREPLY=( $(compgen -W "$projects" -- "$cur") )
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=( $(compgen -W "--step" -- "$cur") )
+            else
+                local projects
+                projects=$(magus ls -o name 2>/dev/null)
+                COMPREPLY=( $(compgen -W "$projects" -- "$cur") )
+            fi
+            ;;
+        insight)
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$lenses" -- "$cur") )
+            else
+                COMPREPLY=( $(compgen -W "$insight_flags" -- "$cur") )
+            fi
+            ;;
+        graph)
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$graph_subs" -- "$cur") )
+            else
+                case "${COMP_WORDS[2]}" in
+                    deps)   COMPREPLY=( $(compgen -W "$graph_deps_flags" -- "$cur") ) ;;
+                    export) COMPREPLY=( $(compgen -W "$graph_export_flags" -- "$cur") ) ;;
+                    stats)  COMPREPLY=( $(compgen -W "$graph_stats_flags" -- "$cur") ) ;;
+                esac
+            fi
+            ;;
+        watch)
+            COMPREPLY=( $(compgen -W "$watch_flags" -- "$cur") )
+            ;;
+        status)
+            COMPREPLY=( $(compgen -W "$status_flags" -- "$cur") )
+            ;;
+        clean)
+            COMPREPLY=( $(compgen -W "--cache" -- "$cur") )
+            ;;
+        config)
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$config_subs" -- "$cur") )
+            fi
+            ;;
+        server)
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$server_subs" -- "$cur") )
+            fi
+            ;;
+        self)
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "$self_subs" -- "$cur") )
+            fi
+            ;;
+        init)
+            COMPREPLY=( $(compgen -W "$init_flags" -- "$cur") )
             ;;
         completion)
             if [[ "$COMP_CWORD" -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "$shells" -- "$cur") )
             fi
-            ;;
-        graph)
-            COMPREPLY=( $(compgen -W "-upstream -lang -depth -root -o -output" -- "$cur") )
             ;;
     esac
     return 0
