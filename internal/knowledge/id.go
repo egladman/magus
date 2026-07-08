@@ -83,3 +83,22 @@ const (
 // rather than logged and lost. Silent metadata, not a warning: implicit graph
 // rebuilds stay quiet.
 const AttrDiagnostic = "diagnostic"
+
+// Static-metadata attribute keys. These surface data the extractors already parse
+// (the engine a project runs, its target count, a doc's frontmatter) directly onto
+// nodes, so `magus explain` answers "what toolchain / how big / what is this doc"
+// without a second describe or a cross-reference. Additive: absent when unknown.
+const (
+	// AttrEngine is the engine (toolchain runtime) a project runs, mirrored onto
+	// each of its targets so a target card names its engine without walking to the
+	// project node.
+	AttrEngine = "engine"
+	// AttrTargetCount is a project's target count - its size at a glance, without
+	// counting contains edges.
+	AttrTargetCount = "target_count"
+	// AttrTitle is a doc page's frontmatter title (its human name, distinct from the
+	// relative path that is the node label).
+	AttrTitle = "title"
+	// AttrTags is a doc page's frontmatter tags, comma-joined.
+	AttrTags = "tags"
+)

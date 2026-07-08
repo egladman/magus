@@ -44,6 +44,11 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	n.Label = sanitize(n.Label, maxLabelLen)
 	n.Doc = sanitize(n.Doc, maxDocLen)
 	n.Source = sanitize(n.Source, maxSrcLen)
+	// Attr values now carry file-derived text (doc frontmatter title/tags), so they
+	// get the same control-char strip and length cap as the other free-form fields.
+	for k, v := range n.Attrs {
+		n.Attrs[k] = sanitize(v, maxLabelLen)
+	}
 	existing, ok := g.nodes[n.ID]
 	if !ok {
 		g.nodes[n.ID] = n

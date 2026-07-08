@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -140,11 +141,16 @@ func assembleRegistry(in Inputs) Shard {
 func assembleProject(p types.TargetGraphProject) Shard {
 	s := Shard{Name: p.Path}
 	pID := projectID(p.Path)
+	projAttrs := map[string]string{AttrTargetCount: strconv.Itoa(len(p.Nodes))}
+	if p.Engine != "" {
+		projAttrs[AttrEngine] = p.Engine
+	}
 	s.Nodes = append(s.Nodes, types.KnowledgeNode{
 		ID:     pID,
 		Kind:   types.KindProject,
 		Label:  p.Path,
 		Source: p.Path,
+		Attrs:  projAttrs,
 	})
 	for _, dep := range p.DependsOn {
 		s.Edges = append(s.Edges, extractedEdge(pID, projectID(dep), types.RelationDependsOn, p.Path))
@@ -152,12 +158,17 @@ func assembleProject(p types.TargetGraphProject) Shard {
 
 	for _, n := range p.Nodes {
 		tID := targetID(p.Path, n.Name)
+		var tAttrs map[string]string
+		if p.Engine != "" {
+			tAttrs = map[string]string{AttrEngine: p.Engine}
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     tID,
 			Kind:   types.KindTarget,
 			Label:  n.Name,
 			Doc:    n.Doc,
 			Source: p.Path,
+			Attrs:  tAttrs,
 		})
 		s.Edges = append(s.Edges, extractedEdge(pID, tID, types.RelationContains, p.Path))
 

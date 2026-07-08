@@ -26,6 +26,41 @@ func TestDocsDanglingCodeReferenceMGS7002(t *testing.T) {
 	assert.Contains(t, d.Attrs["unknown_codes"], "MGS9998")
 }
 
+func TestDocsFrontmatterAttrs(t *testing.T) {
+	root := t.TempDir()
+	// A page with frontmatter title/tags, and one without: the second must carry
+	// neither attr (best-effort, not a hard requirement).
+	writeFile(t, root, "docs/charms.md", "---\ntitle: Charms\ntags: [reference, argv]\n---\n\nCharms modify argv.\n")
+	writeFile(t, root, "docs/plain.md", "# Plain\nNo frontmatter here.\n")
+
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{})}).Output()
+
+	charms, ok := nodeByID(out, "doc:docs/charms.md")
+	require.True(t, ok)
+	assert.Equal(t, "Charms", charms.Attrs[AttrTitle])
+	assert.Equal(t, "reference,argv", charms.Attrs[AttrTags])
+
+	plain, ok := nodeByID(out, "doc:docs/plain.md")
+	require.True(t, ok)
+	assert.Empty(t, plain.Attrs[AttrTitle], "no frontmatter, no title attr")
+	assert.Empty(t, plain.Attrs[AttrTags])
+}
+
+// TestDocsFrontmatterCoexistsWithDiagnostic guards that a page carrying BOTH
+// frontmatter and a dangling-code reference keeps both sets of attrs (the
+// diagnostic branch merges rather than clobbering the frontmatter map).
+func TestDocsFrontmatterCoexistsWithDiagnostic(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "docs/x.md", "---\ntitle: X\n---\n\nMentions MGS9998 which does not exist.\n")
+
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{})}).Output()
+
+	d, ok := nodeByID(out, "doc:docs/x.md")
+	require.True(t, ok)
+	assert.Equal(t, "X", d.Attrs[AttrTitle], "frontmatter survives the diagnostic branch")
+	assert.Equal(t, string(types.DanglingDocReference), d.Attrs[AttrDiagnostic])
+}
+
 func TestAssembleDocs(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "docs/codes/sandbox/MGS2010.md", "# MGS2010\nRelated to MGS2001. See [go spell](../../spells/go.md).\n")

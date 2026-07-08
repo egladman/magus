@@ -124,6 +124,14 @@ func TestAssembleNodes(t *testing.T) {
 	build, _ := nodeByID(out, "target:pkg/a:build")
 	assert.Equal(t, "Build A.", build.Doc)
 
+	// Static metadata enrichment: the project node carries its engine and target
+	// count, and each target inherits the engine, so an explain card answers "what
+	// toolchain / how big" without a second describe or a hop to the project.
+	projA, _ := nodeByID(out, "project:pkg/a")
+	assert.Equal(t, "buzz", projA.Attrs[AttrEngine])
+	assert.Equal(t, "2", projA.Attrs[AttrTargetCount], "pkg/a declares build+gen")
+	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "target inherits project engine")
+
 	// The registry op carries a doc; the project's minimal op node dedups into it
 	// without clobbering the richer description, regardless of merge order.
 	op, _ := nodeByID(out, "op:go:go-build")
@@ -134,6 +142,23 @@ func TestAssembleNodes(t *testing.T) {
 
 	diag, _ := nodeByID(out, "diagnostic:MGS2010")
 	assert.Equal(t, types.SandboxPolicyMismatch.URL(), diag.Attrs["url"])
+}
+
+// TestProjectAttrsWithoutEngine: a project that declares no engine still reports
+// its target count, but omits the engine attr entirely (absent, not empty).
+func TestProjectAttrsWithoutEngine(t *testing.T) {
+	in := Inputs{Graph: types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: "pkg/c", Nodes: []types.TargetGraphNode{{Name: "build"}, {Name: "test"}, {Name: "lint"}}},
+	}}}
+	out := mergeAll(AssembleShards(in)).Output()
+
+	projC, _ := nodeByID(out, "project:pkg/c")
+	assert.Equal(t, "3", projC.Attrs[AttrTargetCount])
+	_, hasEngine := projC.Attrs[AttrEngine]
+	assert.False(t, hasEngine, "no engine declared, no engine attr")
+
+	tgt, _ := nodeByID(out, "target:pkg/c:build")
+	assert.Nil(t, tgt.Attrs, "engine-less target carries no attrs")
 }
 
 func TestAssembleEdges(t *testing.T) {

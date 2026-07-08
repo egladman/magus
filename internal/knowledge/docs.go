@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -58,6 +59,20 @@ func assembleDocs(root string, spells types.SpellsOutput) Shard {
 		dID := docID(rel)
 		node := types.KnowledgeNode{ID: dID, Kind: types.KindDoc, Label: rel, Source: rel}
 
+		// Surface the page's frontmatter title/tags onto the node so a query result
+		// reads as the doc's human name, not just its path. Best-effort: a page with
+		// no frontmatter (README.md, a stub) simply carries neither attr.
+		if fm, ok := docs.ParseFrontmatter(content); ok {
+			docAttrs := map[string]string{}
+			if fm.Title != "" {
+				docAttrs[AttrTitle] = fm.Title
+			}
+			if len(fm.Tags) > 0 {
+				docAttrs[AttrTags] = strings.Join(fm.Tags, ",")
+			}
+			node.Attrs = nilIfEmpty(docAttrs)
+		}
+
 		if code, ok := diagnosticFromPath(rel); ok {
 			s.Edges = append(s.Edges, extractedEdge(dID, diagnosticID(code), types.RelationDocuments, rel))
 		}
@@ -81,10 +96,11 @@ func assembleDocs(root string, spells types.SpellsOutput) Shard {
 			}
 		}
 		if len(unknownCodes) > 0 {
-			node.Attrs = map[string]string{
-				AttrDiagnostic:  string(types.DanglingDocReference),
-				"unknown_codes": strings.Join(unknownCodes, ","),
+			if node.Attrs == nil {
+				node.Attrs = map[string]string{}
 			}
+			node.Attrs[AttrDiagnostic] = string(types.DanglingDocReference)
+			node.Attrs["unknown_codes"] = strings.Join(unknownCodes, ",")
 		}
 		s.Nodes = append(s.Nodes, node)
 
