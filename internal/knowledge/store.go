@@ -170,6 +170,11 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 	if err := s.writeManifest(newMan); err != nil {
 		return nil, err
 	}
+	// Refresh the derived symbol xref routing index (best-effort: a failure just
+	// means `magus refs` falls back to loading all symbol shards, never a wrong result).
+	if err := s.writeXref(shards); err != nil {
+		s.log.Debug("knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
+	}
 	if old != nil {
 		for name := range old.Shards {
 			if !present[name] {
