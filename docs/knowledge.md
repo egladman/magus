@@ -159,10 +159,14 @@ Beyond the static graph, magus records which diagnostics (`MGSxxxx` codes) each
 target trips during real runs, as `emits` edges in the isolated `@runtime` shard.
 A run captures every fired diagnostic through one sink that also feeds the report
 stream, and persists the set to `<cache>/knowledge/runtime.json`. This answers
-"what has this target tripped" - history the static `documents` edge cannot. It is
-the graph's only non-deterministic input, so it is quarantined: a distinct shard,
-excluded from remote export, derived from local run records rather than workspace
-sources.
+"what has this target tripped" - history the static `documents` edge cannot. The
+same shard also folds observed performance onto target nodes from the local timing
+history: `duration_p75_ms`, `cache_hit_rate`, and `run_samples`, so an agent
+planning work sees a target's cost without a separate history query. Timings for a
+target no longer in any magusfile are dropped rather than left as phantom nodes.
+This is the graph's only non-deterministic input, so it is quarantined: a distinct
+shard, excluded from remote export, derived from local run records rather than
+workspace sources.
 
 ## Exporting to external tools
 
