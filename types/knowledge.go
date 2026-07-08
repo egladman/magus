@@ -47,7 +47,7 @@ const (
 	RelationDependsOn    = "depends_on"    // project->project, target->target
 	RelationContains     = "contains"      // project->target, spell->op
 	RelationUses         = "uses"          // target->op
-	RelationReferences   = "references"    // charm->target/project
+	RelationReferences   = "references"    // charm->target/project; reused for file->symbol (SCIP)
 	RelationDocuments    = "documents"     // doc->spell/diagnostic/module (phase 4)
 	RelationCalls        = "calls"         // function->function (phase 4)
 	RelationImports      = "imports"       // file->file / file->import (phase 4)
@@ -55,7 +55,6 @@ const (
 	RelationEmits        = "emits"         // target->diagnostic, runtime (phase 8)
 	RelationOwns         = "owns"          // owner->project/file, from CODEOWNERS
 	RelationDefines      = "defines"       // file->symbol, from a SCIP index
-	// references is reused for file->symbol (a symbol used in that file).
 )
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
@@ -83,17 +82,18 @@ type KnowledgeTiming struct {
 
 // KnowledgeSymbol is one code symbol ingested from a SCIP index (an assembly input,
 // not a wire type). magus never parses source; a per-language indexer emits the
-// index file and this is the language-agnostic shape the reader distills it to. ID
-// is the version-stripped, stable moniker key; Moniker is the original. Defs are the
-// files that define the symbol (usually one); Refs are the files that use it, one
-// entry per file (never per occurrence, the scale decision) with a count and a
-// capped line list.
+// index file and this is the language-agnostic shape the reader distills it to. Key
+// is the version-stripped, stable moniker key (it becomes the node ID via symbolID);
+// Moniker is the original. SymbolKind is the SCIP classifier (function/type/...),
+// distinct from the node's own kind (always "symbol"). Defs are the files that define
+// the symbol (usually one); Refs are the files that use it, one entry per file (never
+// per occurrence, the scale decision) with a count and a capped line list.
 type KnowledgeSymbol struct {
-	ID       string
-	Moniker  string
-	Label    string
-	Language string
-	Kind     string
+	Key        string
+	Moniker    string
+	Label      string
+	Language   string
+	SymbolKind string
 	// Source is "<path>:<line>" of the definition, or empty when only references
 	// were seen (the definition lives in another index).
 	Source string

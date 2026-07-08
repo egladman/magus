@@ -10,7 +10,7 @@ import (
 )
 
 // monikerV1/V2 are the same symbol (example.com/foo Bar type) at two package
-// versions; ReadIndex must collapse them to one ID (version stripped).
+// versions; ParseIndex must collapse them to one ID (version stripped).
 const (
 	monikerV1 = "scip-go gomod example.com/foo v1 Bar#"
 	monikerV2 = "scip-go gomod example.com/foo v2 Bar#"
@@ -23,7 +23,7 @@ func marshalIndex(t *testing.T, idx *scip.Index) []byte {
 	return b
 }
 
-func TestReadIndexDefsRefsAndDedup(t *testing.T) {
+func TestParseIndexDefsRefsAndDedup(t *testing.T) {
 	idx := &scip.Index{Documents: []*scip.Document{
 		{
 			RelativePath: "pkg/foo/foo.go",
@@ -44,12 +44,12 @@ func TestReadIndexDefsRefsAndDedup(t *testing.T) {
 		},
 	}}
 
-	syms, err := ReadIndex(marshalIndex(t, idx))
+	syms, err := ParseIndex(marshalIndex(t, idx))
 	require.NoError(t, err)
 	require.Len(t, syms, 1, "v1 and v2 collapse to one symbol")
 
 	s := syms[0]
-	assert.Equal(t, "example.com/foo Bar#", s.ID, "version stripped from the ID")
+	assert.Equal(t, "gomod example.com/foo Bar#", s.Key, "manager kept, version stripped")
 	assert.Equal(t, "Bar", s.Label, "display name from SymbolInformation")
 	assert.Equal(t, "go", s.Language)
 	assert.Equal(t, "pkg/foo/foo.go:11", s.Source, "1-based definition line")
@@ -61,7 +61,24 @@ func TestReadIndexDefsRefsAndDedup(t *testing.T) {
 	assert.Equal(t, []int{5, 8}, s.Refs[0].Lines)
 }
 
-func TestReadIndexSkipsLocalAndUnparseable(t *testing.T) {
+// TestParseIndexTypedRange guards the fix for modern indexers: they set the typed
+// range oneof and NOT the deprecated packed `range` field, so reading `range` alone
+// would report line 0 everywhere. SourceRange must resolve the typed form.
+func TestParseIndexTypedRange(t *testing.T) {
+	defRange := scip.Range{Start: scip.Position{Line: 10, Character: 5}, End: scip.Position{Line: 10, Character: 8}}
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "pkg/foo/foo.go",
+		Occurrences: []*scip.Occurrence{
+			{Symbol: monikerV1, SymbolRoles: int32(scip.SymbolRole_Definition), TypedRange: defRange.AsTypedRange()},
+		},
+	}}}
+	syms, err := ParseIndex(marshalIndex(t, idx))
+	require.NoError(t, err)
+	require.Len(t, syms, 1)
+	assert.Equal(t, "pkg/foo/foo.go:11", syms[0].Source, "typed range resolved to the 1-based line, not 0")
+}
+
+func TestParseIndexSkipsLocalAndUnparseable(t *testing.T) {
 	idx := &scip.Index{Documents: []*scip.Document{{
 		RelativePath: "a.go",
 		Occurrences: []*scip.Occurrence{
@@ -70,27 +87,27 @@ func TestReadIndexSkipsLocalAndUnparseable(t *testing.T) {
 			{Symbol: "not a valid moniker", Range: []int32{2, 0, 1}},
 		},
 	}}}
-	syms, err := ReadIndex(marshalIndex(t, idx))
+	syms, err := ParseIndex(marshalIndex(t, idx))
 	require.NoError(t, err)
 	assert.Empty(t, syms, "local, empty, and unparseable monikers all skipped")
 }
 
-func TestReadIndexRefLineCap(t *testing.T) {
+func TestParseIndexRefLineCap(t *testing.T) {
 	occs := make([]*scip.Occurrence, 0, MaxRefLines+5)
 	for i := 0; i < MaxRefLines+5; i++ {
 		occs = append(occs, &scip.Occurrence{Symbol: monikerV1, Range: []int32{int32(i), 0, 1}})
 	}
 	idx := &scip.Index{Documents: []*scip.Document{{RelativePath: "big.go", Occurrences: occs}}}
 
-	syms, err := ReadIndex(marshalIndex(t, idx))
+	syms, err := ParseIndex(marshalIndex(t, idx))
 	require.NoError(t, err)
 	require.Len(t, syms, 1)
 	assert.Equal(t, MaxRefLines+5, syms[0].Refs[0].Count, "count is exact")
 	assert.Len(t, syms[0].Refs[0].Lines, MaxRefLines, "lines are capped")
 }
 
-func TestReadIndexBadBytes(t *testing.T) {
-	_, err := ReadIndex([]byte("not a protobuf"))
+func TestParseIndexBadBytes(t *testing.T) {
+	_, err := ParseIndex([]byte("not a protobuf"))
 	assert.Error(t, err)
 }
 

@@ -7,8 +7,10 @@
 package symbols
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/scip-code/scip/bindings/go/scip"
 	"google.golang.org/protobuf/proto"
@@ -20,34 +22,37 @@ import (
 // symbol used thousands of times in one file keeps a bounded provenance list.
 const MaxRefLines = 20
 
-// ReadIndex parses a SCIP index (protobuf bytes) into per-symbol records. Occurrence
-// granularity is collapsed to per (file, symbol): one Defs/Refs entry per file, with
-// a count and a capped line list, so a hot symbol yields at most one edge per file
-// rather than one per occurrence. `local N` symbols (index-scoped, not stable across
-// builds) are skipped; the version segment is dropped from the ID so a dependency
-// bump does not churn every symbol node. Output is sorted for deterministic assembly.
-func ReadIndex(data []byte) ([]types.KnowledgeSymbol, error) {
+// ParseIndex decodes a SCIP index (protobuf bytes) into per-symbol records - it does
+// no I/O, the caller supplies the bytes. Occurrence granularity is collapsed to per
+// (file, symbol): one Defs/Refs entry per file, with a count and a capped line list,
+// so a hot symbol yields at most one edge per file rather than one per occurrence.
+// `local N` symbols (index-scoped, not stable across builds) are skipped; the version
+// segment is dropped from the key so a dependency bump does not churn every symbol
+// node. Output is sorted by key for deterministic assembly.
+func ParseIndex(data []byte) ([]types.KnowledgeSymbol, error) {
 	var idx scip.Index
 	if err := proto.Unmarshal(data, &idx); err != nil {
 		return nil, err
 	}
 
 	// SymbolInformation (display name, kind) can live in any document; index it by
-	// moniker so a symbol referenced before its defining document is still named.
-	infoByMoniker := map[string]*scip.SymbolInformation{}
+	// the version-stripped KEY (not the raw moniker) so a symbol whose definition and
+	// first-seen reference carry different-version monikers is still named.
+	infoByKey := map[string]*scip.SymbolInformation{}
 	for _, doc := range idx.Documents {
 		for _, si := range doc.Symbols {
-			infoByMoniker[si.Symbol] = si
+			if key, _, ok := parseMoniker(si.Symbol); ok {
+				infoByKey[key] = si
+			}
 		}
 	}
 
 	type acc struct {
 		sym  types.KnowledgeSymbol
-		defs map[string]bool                      // def file -> seen
+		defs map[string]bool                      // set of defining files
 		refs map[string]*types.KnowledgeSymbolRef // ref file -> tally
 	}
-	byID := map[string]*acc{}
-	var order []string
+	byKey := map[string]*acc{}
 
 	for _, doc := range idx.Documents {
 		for _, occ := range doc.Occurrences {
@@ -55,31 +60,30 @@ func ReadIndex(data []byte) ([]types.KnowledgeSymbol, error) {
 			if moniker == "" || scip.IsLocalSymbol(moniker) {
 				continue
 			}
-			id, label, ok := parseMoniker(moniker)
+			key, label, ok := parseMoniker(moniker)
 			if !ok {
 				continue
 			}
-			a := byID[id]
+			a := byKey[key]
 			if a == nil {
 				a = &acc{
-					sym:  types.KnowledgeSymbol{ID: id, Moniker: moniker, Label: label, Language: doc.Language},
+					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: label, Language: doc.Language},
 					defs: map[string]bool{},
 					refs: map[string]*types.KnowledgeSymbolRef{},
 				}
-				if si := infoByMoniker[moniker]; si != nil {
+				if si := infoByKey[key]; si != nil {
 					if si.DisplayName != "" {
 						a.sym.Label = si.DisplayName
 					}
-					a.sym.Kind = si.Kind.String()
+					a.sym.SymbolKind = si.Kind.String()
 				}
-				byID[id] = a
-				order = append(order, id)
+				byKey[key] = a
 			}
 			line := occurrenceLine(occ)
 			if occ.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 {
-				if !a.defs[doc.RelativePath] {
-					a.defs[doc.RelativePath] = true
-				}
+				a.defs[doc.RelativePath] = true
+				// First definition seen (in document then occurrence order, both stable
+				// slices) wins the Source; later defs still add their defines edge.
 				if a.sym.Source == "" {
 					a.sym.Source = doc.RelativePath + ":" + strconv.Itoa(line)
 				}
@@ -97,41 +101,47 @@ func ReadIndex(data []byte) ([]types.KnowledgeSymbol, error) {
 		}
 	}
 
-	out := make([]types.KnowledgeSymbol, 0, len(order))
-	for _, id := range order {
-		a := byID[id]
+	out := make([]types.KnowledgeSymbol, 0, len(byKey))
+	for _, a := range byKey {
 		a.sym.Defs = sortedKeys(a.defs)
 		a.sym.Refs = sortedRefs(a.refs)
 		out = append(out, a.sym)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	// byKey iteration is unordered; the sort is what makes the output deterministic.
+	slices.SortFunc(out, func(x, y types.KnowledgeSymbol) int { return cmp.Compare(x.Key, y.Key) })
 	return out, nil
 }
 
-// parseMoniker turns a SCIP moniker into a stable, version-free node ID and a
-// display label. The ID is the package name plus the descriptor path, deliberately
-// excluding the package version so a dependency bump does not rename every symbol.
-// A local or unparseable moniker yields ok=false (the caller skips it).
-func parseMoniker(moniker string) (id, label string, ok bool) {
+// parseMoniker turns a SCIP moniker into a stable, version-free node key and a
+// display label. The key is the package manager and name plus the descriptor path,
+// deliberately excluding the package VERSION so a dependency bump does not rename
+// every symbol - but including the manager so two ecosystems that share a package
+// name (npm foo vs gomod foo) do not collide. A local or unparseable moniker yields
+// ok=false (the caller skips it).
+func parseMoniker(moniker string) (key, label string, ok bool) {
 	sym, err := scip.ParseSymbol(moniker)
 	if err != nil || sym.Package == nil {
 		return "", "", false
 	}
 	desc := scip.DescriptorOnlyFormatter.FormatSymbol(sym)
-	id = sym.Package.Name + " " + desc
+	pkg := strings.TrimSpace(sym.Package.Manager + " " + sym.Package.Name)
+	key = strings.TrimSpace(pkg + " " + desc)
 	if n := len(sym.Descriptors); n > 0 {
 		label = sym.Descriptors[n-1].Name
 	}
-	return id, label, true
+	return key, label, true
 }
 
-// occurrenceLine returns the 1-based start line of an occurrence (SCIP ranges are
-// 0-based [startLine, startChar, ...]), or 0 when the range is absent.
+// occurrenceLine returns the 1-based start line of an occurrence, or 0 when absent.
+// It reads SourceRange (which resolves both the modern typed_range and the deprecated
+// packed range) - reading the deprecated field alone would report 0 for every
+// occurrence a current indexer emits. A negative start (malformed index) clamps to 0.
 func occurrenceLine(occ *scip.Occurrence) int {
-	if len(occ.Range) == 0 {
+	r, ok := occ.SourceRange()
+	if !ok || r.Start.Line < 0 {
 		return 0
 	}
-	return int(occ.Range[0]) + 1
+	return int(r.Start.Line) + 1
 }
 
 func sortedKeys(m map[string]bool) []string {
@@ -142,7 +152,7 @@ func sortedKeys(m map[string]bool) []string {
 	for k := range m {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -154,6 +164,6 @@ func sortedRefs(m map[string]*types.KnowledgeSymbolRef) []types.KnowledgeSymbolR
 	for _, r := range m {
 		out = append(out, *r)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	slices.SortFunc(out, func(x, y types.KnowledgeSymbolRef) int { return cmp.Compare(x.Path, y.Path) })
 	return out
 }

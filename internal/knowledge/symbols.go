@@ -34,13 +34,13 @@ func IsSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsSh
 func assembleSymbols(project string, syms []types.KnowledgeSymbol) Shard {
 	s := Shard{Name: SymbolsShardName(project)}
 	for _, sym := range syms {
-		sID := symbolID(sym.ID)
+		sID := symbolID(sym.Key)
 		attrs := map[string]string{}
 		if sym.Language != "" {
 			attrs["language"] = sym.Language
 		}
-		if sym.Kind != "" {
-			attrs["symbol_kind"] = sym.Kind
+		if sym.SymbolKind != "" {
+			attrs["symbol_kind"] = sym.SymbolKind
 		}
 		if sym.Moniker != "" {
 			attrs["moniker"] = sym.Moniker
@@ -63,7 +63,11 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol) Shard {
 }
 
 // refProvenance encodes a reference's occurrence count and capped line list into the
-// edge provenance string (edges carry no attr map), e.g. "scip count=3 lines=10,20".
+// edge provenance string, e.g. "scip count=3 lines=10,20". This is HUMAN-FACING
+// provenance (how every edge carries its origin), not a machine-readable field:
+// KnowledgeEdge has only a flat Provenance string, no attr map. Making the count
+// programmatically queryable would mean adding structured attrs to KnowledgeEdge - a
+// wire-schema change touching every edge - which is deliberately out of scope here.
 func refProvenance(ref types.KnowledgeSymbolRef) string {
 	var b strings.Builder
 	b.WriteString("scip count=")

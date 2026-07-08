@@ -10,14 +10,14 @@ import (
 
 func TestAssembleSymbols(t *testing.T) {
 	syms := []types.KnowledgeSymbol{{
-		ID:       "example.com/foo Bar#",
-		Moniker:  "scip-go gomod example.com/foo v1 Bar#",
-		Label:    "Bar",
-		Language: "go",
-		Kind:     "Type",
-		Source:   "pkg/foo/foo.go:11",
-		Defs:     []string{"pkg/foo/foo.go"},
-		Refs:     []types.KnowledgeSymbolRef{{Path: "pkg/baz/baz.go", Count: 2, Lines: []int{5, 8}}},
+		Key:        "example.com/foo Bar#",
+		Moniker:    "scip-go gomod example.com/foo v1 Bar#",
+		Label:      "Bar",
+		Language:   "go",
+		SymbolKind: "Type",
+		Source:     "pkg/foo/foo.go:11",
+		Defs:       []string{"pkg/foo/foo.go"},
+		Refs:       []types.KnowledgeSymbolRef{{Path: "pkg/baz/baz.go", Count: 2, Lines: []int{5, 8}}},
 	}}
 	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms)}).Output()
 
@@ -49,7 +49,7 @@ func TestSymbolsShardNaming(t *testing.T) {
 // another index) still yields a node, with no def edge.
 func TestAssembleSymbolsRefOnly(t *testing.T) {
 	syms := []types.KnowledgeSymbol{{
-		ID:    "other.com/dep Qux#",
+		Key:   "other.com/dep Qux#",
 		Label: "Qux",
 		Refs:  []types.KnowledgeSymbolRef{{Path: "pkg/a/a.go", Count: 1, Lines: []int{3}}},
 	}}
