@@ -234,3 +234,9 @@ response and echo the returned `next_cursor` to fetch the next page. The cursor 
 stateless and self-validating - it carries the query and a graph fingerprint, so a
 cursor reused against a different query or a graph that changed between pages is
 rejected rather than returning an incoherent slice.
+
+`magus agent install claude` writes a skill into `.claude/skills/magus/` that
+teaches an agent HOW to use these verbs (the repo's `MAGUS.md` says WHAT is in the
+workspace). The skill ships with the binary and teaches only the tool surface, so
+it stays current with the magus version rather than the workspace. Platform is an
+explicit argument; only `claude` is supported today.
