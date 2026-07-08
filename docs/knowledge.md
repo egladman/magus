@@ -176,6 +176,37 @@ This is the graph's only non-deterministic input, so it is quarantined: a distin
 shard, excluded from remote export, derived from local run records rather than
 workspace sources.
 
+## Code symbols (SCIP ingestion)
+
+magus never parses source code. To bring code symbols into the graph, it ingests a
+[SCIP](https://docs.sourcegraph.com/code_navigation/explanations/scip) index file
+that a per-language indexer (`scip-go`, `scip-typescript`, ...) emits - so any
+language with an indexer works, with no magus code per language. The index is a
+declared target output; point config at it (explicit, opt-in, never auto-detected):
+
+```yaml
+# magus.yaml
+knowledge:
+  symbols:
+    - project: pkg/foo
+      index: pkg/foo/index.scip   # produced by a `pkg/foo:scip` target
+```
+
+Each declared index becomes a per-project `<project>@symbols` shard: `symbol` nodes
+(keyed by their version-stripped SCIP moniker), `defines` edges from the defining
+file, and `references` edges from each using file (one per file, carrying an
+occurrence count and capped lines). A symbol seen only as a reference still gets a
+node, so cross-project usage resolves.
+
+Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the default
+query/stats/`graph open`/warm graph never touch them. They load only when a query is
+symbol-seeded - `kind:symbol`, a `symbol:` ID, `relation:defines`/`references`, or
+the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
+referencing file (`magus_refs` over MCP, paginated). At very large scale a derived
+`shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
+the shards) lets an exact-ID lookup load only the shards that mention the symbol
+rather than all of them; a missing routing file just falls back to loading all.
+
 ## Exporting to external tools
 
 magus emits; it does not render. To look at the graph, export it and open the
