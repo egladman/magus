@@ -246,4 +246,6 @@ rejected rather than returning an incoherent slice.
 teaches an agent HOW to use these verbs (the repo's `MAGUS.md` says WHAT is in the
 workspace). The skill ships with the binary and teaches only the tool surface, so
 it stays current with the magus version rather than the workspace. Platform is an
-explicit argument; only `claude` is supported today.
+explicit argument; only `claude` is supported today. The installed file carries a
+version footer, and `magus graph verify` (with `--strict` for CI) reports when an
+installed skill has fallen behind the binary after an upgrade.
