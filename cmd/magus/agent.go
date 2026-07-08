@@ -183,11 +183,11 @@ type skillStatus struct {
 	Detail    string
 }
 
-// checkSkillDrift reads the installed skill under dir and reports whether it is
+// checkSkillStatus reads the installed skill under dir and reports whether it is
 // missing, current, or stale (its stamped versions older than the binary's). It is
 // the read half of the generated-by footer: install stamps the version, this tells
 // an operator or CI when a re-install is due after a magus upgrade.
-func checkSkillDrift(dir string) skillStatus {
+func checkSkillStatus(dir string) skillStatus {
 	body, err := os.ReadFile(filepath.Join(dir, installedSkillPath))
 	if err != nil {
 		if os.IsNotExist(err) {

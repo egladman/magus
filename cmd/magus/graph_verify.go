@@ -29,7 +29,7 @@ func graphVerify(_ context.Context, root string, args []string) error {
 		return err
 	}
 
-	status := checkSkillDrift(*dir)
+	status := checkSkillStatus(*dir)
 	if status.Stale {
 		fmt.Printf("agent skill: STALE - %s\n", status.Detail)
 	} else {

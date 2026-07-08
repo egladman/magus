@@ -46,11 +46,11 @@ func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}
-	data, err := pagedQuery(g, terms, budget, limit, cursor)
+	resp, err := pagedQuery(g, terms, budget, limit, cursor)
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}
-	return types.InvokeResponse{Data: data}, nil
+	return types.InvokeResponse{Data: resp}, nil
 }
 
 // pagedQuery runs a (possibly paged) query against g. With no limit and no cursor

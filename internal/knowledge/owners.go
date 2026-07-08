@@ -134,8 +134,13 @@ func lastMatch(rules []codeownersRule, path string) (codeownersRule, bool) {
 func codeownersMatch(pattern, path string) bool {
 	anchored := strings.HasPrefix(pattern, "/")
 	pattern = strings.TrimPrefix(pattern, "/")
-	if pattern == "" || pattern == "*" || pattern == "**" {
+	if pattern == "" || pattern == "**" {
 		return true
+	}
+	if pattern == "*" {
+		// An unanchored "*" matches everything; an anchored "/*" matches only
+		// root-level entries (no further separator), per gitignore semantics.
+		return !anchored || !strings.Contains(path, "/")
 	}
 	if strings.HasSuffix(pattern, "/") {
 		dir := strings.TrimSuffix(pattern, "/")

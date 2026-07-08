@@ -61,7 +61,7 @@ func TestStampSkillAppendsExactlyOneFooter(t *testing.T) {
 }
 
 func TestCheckSkillDriftNotInstalled(t *testing.T) {
-	d := checkSkillDrift(t.TempDir())
+	d := checkSkillStatus(t.TempDir())
 	assert.False(t, d.Installed)
 	assert.False(t, d.Stale)
 	assert.Contains(t, d.Detail, "not installed")
@@ -71,7 +71,7 @@ func TestCheckSkillDriftCurrent(t *testing.T) {
 	dir := t.TempDir()
 	_, err := installClaudeSkill(dir, false)
 	require.NoError(t, err)
-	d := checkSkillDrift(dir)
+	d := checkSkillStatus(dir)
 	assert.True(t, d.Installed)
 	assert.False(t, d.Stale, "a fresh install is current")
 }
@@ -82,7 +82,7 @@ func TestCheckSkillDriftStale(t *testing.T) {
 	// A footer stamped with an older skill version is stale.
 	stale := "---\nname: x\n---\nbody\n<!-- agent-skill-version: 0; knowledge-schema-version: 1 -->\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, installedSkillPath), []byte(stale), 0o644))
-	d := checkSkillDrift(dir)
+	d := checkSkillStatus(dir)
 	assert.True(t, d.Installed)
 	assert.True(t, d.Stale)
 	assert.Contains(t, d.Detail, "--force")
@@ -92,6 +92,6 @@ func TestCheckSkillDriftNoFooter(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".claude/skills/magus"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, installedSkillPath), []byte("---\nname: x\n---\nno footer\n"), 0o644))
-	d := checkSkillDrift(dir)
+	d := checkSkillStatus(dir)
 	assert.True(t, d.Stale, "a footer-less install reads as stale (predates versioning)")
 }
