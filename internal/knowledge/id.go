@@ -49,6 +49,8 @@ func rationaleID(relPath string, line int) string {
 
 func ownerID(name string) string { return types.KindOwner + ":" + name }
 
+func symbolID(key string) string { return types.KindSymbol + ":" + key }
+
 // sanitize normalizes free-form repo text (labels, docs, provenance) before it
 // enters the graph, per the plan's ingest-sanitization requirement: strip
 // control characters (which would corrupt MAGUS.md, MCP responses, and agent
