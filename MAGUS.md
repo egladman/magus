@@ -14,11 +14,11 @@ magus run <target>:<charm>  # change HOW it runs (e.g. lint:rw)
 
 Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary/).
 
-Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fpwa-p6%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
+Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
 
 ## Query first
 
-This workspace has a knowledge graph of **1665 nodes** and **2900 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1665 nodes** and **2907 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -77,10 +77,10 @@ graph LR
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 
-## Project: magus-p6
+## Project: magus
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus-p6</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
@@ -1110,4 +1110,3 @@ buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in 
 ```sh
 magus run buzz-test website  # from the workspace root
 ```
-

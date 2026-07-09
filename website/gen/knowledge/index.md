@@ -91,6 +91,22 @@ magus graph open --print   # print the URL instead of opening a browser
 magus graph open --url <base>   # point at a self-hosted mirror of the explorer
 ```
 
+### Open your target graph
+
+To open the **target dependency graph** (the `magus.needs` DAG, not the
+knowledge graph) in the same explorer:
+
+```sh
+magus graph open --targets                # whole workspace
+magus graph open --targets .              # scope to root project
+magus graph open --targets website        # scope to one project by path
+magus graph open --targets --print        # print the URL instead of opening
+```
+
+The `--targets` path always uses the URL fragment (no loopback server); it is
+incompatible with `--serve`. An unknown project path exits with code 2 and
+lists valid paths.
+
 The explorer's filter box speaks the **same fielded grammar** as `magus query`
 (`kind:`, `project:`, `relation:`, `id:`, free text, `"quotes"`, `-negation`); a
 query dims non-matching nodes so the subgraph stands out. Beyond the filter:

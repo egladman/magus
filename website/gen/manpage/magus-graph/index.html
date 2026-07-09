@@ -65,17 +65,17 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a><ul><li><a href="#graph-deps-options" title="graph deps options">graph deps options</a></li><li><a href="#graph-export-options" title="graph export options">graph export options</a></li><li><a href="#graph-stats-options" title="graph stats options">graph stats options</a></li></ul></li><li><a href="#subcommands" title="Subcommands">Subcommands</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
+        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a><ul><li><a href="#graph-deps-options" title="graph deps options">graph deps options</a></li><li><a href="#graph-export-options" title="graph export options">graph export options</a></li><li><a href="#graph-stats-options" title="graph stats options">graph stats options</a></li><li><a href="#graph-open-options" title="graph open options">graph open options</a></li></ul></li><li><a href="#subcommands" title="Subcommands">Subcommands</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="magus-graph">magus-graph</h1>
 <p>The workspace's graphs as objects: deps, export, stats</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> graph &lt;deps|export|stats&gt; [flags]</p>
+<p><strong>magus</strong> graph &lt;deps|export|stats|open&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>The workspace's graphs as objects: emit, export, and measure them. The
 query, explain, and path verbs read the knowledge graph; magus graph is the
@@ -98,7 +98,12 @@ stats    The graph's shape: god nodes (the most connected spells, modules,
 targets - where structural risk concentrates), orphans (docs that
 document nothing, spells no target uses), and doc coverage (the
 share of diagnostics, spells, and modules with a doc). --kind scopes
-every section to one node kind. insight report embeds this section.</p>
+every section to one node kind. insight report embeds this section.
+open     Open the workspace's knowledge graph (or target dependency graph with
+--targets) in the hosted, interactive Graph Explorer. The graph is
+delivered privately: by default it rides in the URL fragment
+(#data=...), which browsers never send to a server; --serve instead
+hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <h3 id="graph-deps-options">graph deps options</h3>
 <dl>
 <dt><strong>--depth</strong> <em>int</em></dt>
@@ -130,6 +135,19 @@ every section to one node kind. insight report embeds this section.</p>
 <dt><strong>--refresh</strong></dt>
 <dd>Force a full graph rebuild first</dd>
 </dl>
+<h3 id="graph-open-options">graph open options</h3>
+<dl>
+<dt><strong>--print</strong></dt>
+<dd>Print the explorer URL to stdout instead of opening a browser</dd>
+<dt><strong>--refresh</strong></dt>
+<dd>Force a full graph rebuild before opening (knowledge graph only)</dd>
+<dt><strong>--serve</strong></dt>
+<dd>Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)</dd>
+<dt><strong>--targets</strong></dt>
+<dd>Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project</dd>
+<dt><strong>--url</strong> <em>string</em> (default: <a href="https://eli.gladman.cc/magus/graph/" rel="noopener noreferrer" target="_blank" data-external>https://eli.gladman.cc/magus/graph/</a>)</dt>
+<dd>Base URL of the Graph Explorer page (override for a self-hosted mirror)</dd>
+</dl>
 <h2 id="subcommands">Subcommands</h2>
 <dl>
 <dt><strong>deps</strong></dt>
@@ -138,6 +156,8 @@ every section to one node kind. insight report embeds this section.</p>
 <dd>Export the merged knowledge graph (json node-link or graphml)</dd>
 <dt><strong>stats</strong></dt>
 <dd>Report the knowledge graph's shape: god nodes, orphans, doc coverage</dd>
+<dt><strong>open</strong></dt>
+<dd>Open the workspace graph in the hosted Graph Explorer (data never leaves your machine)</dd>
 </dl>
 <h2 id="examples">Examples</h2>
 <p><em>Project DAG as Mermaid</em></p>
@@ -161,6 +181,18 @@ every section to one node kind. insight report embeds this section.</p>
 <p><em>Doc coverage for spells only</em></p>
 <pre><code class="language-sh">magus graph stats --kind spell
 </code></pre>
+<p><em>Open knowledge graph in browser</em></p>
+<pre><code class="language-sh">magus graph open
+</code></pre>
+<p><em>Open target dependency graph</em></p>
+<pre><code class="language-sh">magus graph open --targets
+</code></pre>
+<p><em>Scope target graph to one project</em></p>
+<pre><code class="language-sh">magus graph open --targets website
+</code></pre>
+<p><em>Print the URL instead of opening</em></p>
+<pre><code class="language-sh">magus graph open --targets --print
+</code></pre>
 <h2 id="see-also">See Also</h2>
 <p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
@@ -182,7 +214,7 @@ every section to one node kind. insight report embeds this section.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+graph%22">magus graph</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22dependency+graph%22">dependency graph</a><a class="tag" href="../../search/?q=tag%3A%22export%22">export</a><a class="tag" href="../../search/?q=tag%3A%22graphml%22">graphml</a></div>
-    <small>Last updated <time datetime="2026-07-08T06:39:59Z">July 8, 2026, 6:39 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3" data-tooltip="c7924b6444a8377571d6ba830de6af74f87b99c3" title="c7924b6444a8377571d6ba830de6af74f87b99c3">c7924b6</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac"><code>b79201d</code></a> <small><time datetime="2026-07-07T23:47:57Z">Jul 7, 2026</time></small> - consolidate the knowledge-graph surface under a new magus graph verb: graph deps (standalone project DAG; run/affected --graph remain), graph export (was describe knowledge; adds -o graphml), graph stats (was insight structure; insight report still embeds it as graph_stats); hard-break the old spellings with pointers to the new home; rename KnowledgeStructure to KnowledgeStats; add a typed markdown builder (internal/render/md) and rewrite the MAGUS.md and insight-report renderers on it; ignore .claude/ in prettier; regenerate MAGUS.md, manpages, api.lock, and the website, sweeping in stale buf-spell docs and site drift from earlier commits</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-graph.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-graph.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-09T06:41:44Z">July 9, 2026, 6:41 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/9187ea11938bd5a6d8fc55f58d62bcb183d9a5ef" data-tooltip="9187ea11938bd5a6d8fc55f58d62bcb183d9a5ef" title="9187ea11938bd5a6d8fc55f58d62bcb183d9a5ef">9187ea1</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b6</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li><li><a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac"><code>b79201d</code></a> <small><time datetime="2026-07-07T23:47:57Z">Jul 7, 2026</time></small> - consolidate the knowledge-graph surface under a new magus graph verb: graph deps (standalone project DAG; run/affected --graph remain), graph export (was describe knowledge; adds -o graphml), graph stats (was insight structure; insight report still embeds it as graph_stats); hard-break the old spellings with pointers to the new home; rename KnowledgeStructure to KnowledgeStats; add a typed markdown builder (internal/render/md) and rewrite the MAGUS.md and insight-report renderers on it; ignore .claude/ in prettier; regenerate MAGUS.md, manpages, api.lock, and the website, sweeping in stale buf-spell docs and site drift from earlier commits</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-graph.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-graph.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>

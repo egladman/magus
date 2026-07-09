@@ -10,7 +10,7 @@ The workspace's graphs as objects: deps, export, stats
 
 ## Synopsis
 
-**magus** graph \<deps|export|stats\> [flags]
+**magus** graph \<deps|export|stats|open\> [flags]
 
 ## Description
 
@@ -38,6 +38,11 @@ deps     The project dependency DAG. A trailing list of project paths roots
            document nothing, spells no target uses), and doc coverage (the
            share of diagnostics, spells, and modules with a doc). --kind scopes
            every section to one node kind. insight report embeds this section.
+  open     Open the workspace's knowledge graph (or target dependency graph with
+           --targets) in the hosted, interactive Graph Explorer. The graph is
+           delivered privately: by default it rides in the URL fragment
+           (#data=...), which browsers never send to a server; --serve instead
+           hands it from an ephemeral 127.0.0.1 loopback server (no size limit).
 
 ### graph deps options
 
@@ -78,6 +83,23 @@ deps     The project dependency DAG. A trailing list of project paths roots
 **--refresh**
 : Force a full graph rebuild first
 
+### graph open options
+
+**--print**
+: Print the explorer URL to stdout instead of opening a browser
+
+**--refresh**
+: Force a full graph rebuild before opening (knowledge graph only)
+
+**--serve**
+: Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)
+
+**--targets**
+: Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project
+
+**--url** *string* (default: https://eli.gladman.cc/magus/graph/)
+: Base URL of the Graph Explorer page (override for a self-hosted mirror)
+
 ## Subcommands
 
 **deps**
@@ -88,6 +110,9 @@ deps     The project dependency DAG. A trailing list of project paths roots
 
 **stats**
 : Report the knowledge graph's shape: god nodes, orphans, doc coverage
+
+**open**
+: Open the workspace graph in the hosted Graph Explorer (data never leaves your machine)
 
 ## Examples
 
@@ -131,6 +156,30 @@ magus graph stats
 
 ```sh
 magus graph stats --kind spell
+```
+
+*Open knowledge graph in browser*
+
+```sh
+magus graph open
+```
+
+*Open target dependency graph*
+
+```sh
+magus graph open --targets
+```
+
+*Scope target graph to one project*
+
+```sh
+magus graph open --targets website
+```
+
+*Print the URL instead of opening*
+
+```sh
+magus graph open --targets --print
 ```
 
 ## See Also
