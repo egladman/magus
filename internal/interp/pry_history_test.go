@@ -2,11 +2,81 @@ package interp
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newHistory opens a fresh, uncapped history in a temp dir and appends lines,
+// so PrintHistory tests can drive a real *History without touching user state.
+func newHistory(t *testing.T, lines ...string) *History {
+	t.Helper()
+	h, err := Open(filepath.Join(t.TempDir(), "hist"), 0)
+	require.NoError(t, err)
+	for _, l := range lines {
+		h.Append(l)
+	}
+	return h
+}
+
+func TestPrintHistory_NilHistory(t *testing.T) {
+	var sb strings.Builder
+	PrintHistory(&sb, nil, "")
+	assert.Contains(t, sb.String(), "history unavailable")
+}
+
+func TestPrintHistory_DefaultListing(t *testing.T) {
+	h := newHistory(t, "one", "two", "three")
+	var sb strings.Builder
+	PrintHistory(&sb, h, "")
+	out := sb.String()
+	// Numbering counts down from most-recent-distance; every line is present.
+	assert.Contains(t, out, "one")
+	assert.Contains(t, out, "two")
+	assert.Contains(t, out, "three")
+}
+
+func TestPrintHistory_LimitLastN(t *testing.T) {
+	h := newHistory(t, "a", "b", "c", "d")
+	var sb strings.Builder
+	PrintHistory(&sb, h, "2")
+	out := sb.String()
+	// Only the last two lines are shown.
+	assert.NotContains(t, out, "a")
+	assert.NotContains(t, out, "b")
+	assert.Contains(t, out, "c")
+	assert.Contains(t, out, "d")
+}
+
+func TestPrintHistory_RecallByBang(t *testing.T) {
+	h := newHistory(t, "first", "second", "third")
+	var sb strings.Builder
+	PrintHistory(&sb, h, "!1")
+	assert.Equal(t, "third\n", sb.String())
+}
+
+func TestPrintHistory_RecallOutOfRange(t *testing.T) {
+	h := newHistory(t, "only")
+	var sb strings.Builder
+	PrintHistory(&sb, h, "!5")
+	assert.Contains(t, sb.String(), "out of range")
+}
+
+func TestPrintHistory_BangInvalidArg(t *testing.T) {
+	h := newHistory(t, "x")
+	var sb strings.Builder
+	PrintHistory(&sb, h, "!notanumber")
+	assert.Contains(t, sb.String(), "usage: .history")
+}
+
+func TestPrintHistory_BangZeroIsUsage(t *testing.T) {
+	h := newHistory(t, "x")
+	var sb strings.Builder
+	PrintHistory(&sb, h, "!0")
+	assert.Contains(t, sb.String(), "usage: .history")
+}
 
 func TestAppendAndLines(t *testing.T) {
 	dir := t.TempDir()

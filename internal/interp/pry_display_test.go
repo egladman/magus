@@ -36,6 +36,18 @@ func TestPrintSourceContext_ValidFile(t *testing.T) {
 	assert.Contains(t, out, "line4")
 }
 
+func TestPrintSourceContext_ClampsToFileBounds(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src.txt")
+	require.NoError(t, os.WriteFile(path, []byte("a\nb\n"), 0o644))
+	var sb strings.Builder
+	// Radius extends past both ends; output must clamp without panicking.
+	interp.PrintSourceContext(&sb, path, 1, 10, false)
+	out := sb.String()
+	assert.Contains(t, out, "a")
+	assert.Contains(t, out, "b")
+}
+
 func writeBzzBP(t *testing.T, dir, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(content), 0o644))
