@@ -15,9 +15,12 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // defaultExploreURL is the hosted, data-agnostic Graph Explorer. `open` points a
@@ -48,15 +51,17 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		base        string
 		printOnly   bool
 		serve       bool
+		useTargets  bool
 	)
-	_, err := cmdParse("graph open", args, func(fs *flag.FlagSet) {
+	pos, err := cmdParse("graph open", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before opening")
 		fs.BoolVar(&globalScope, "global", false, "union the workspaces registered in config (knowledge.workspaces) into one graph")
 		fs.StringVar(&base, "url", defaultExploreURL, "base URL of the Graph Explorer page (override for a self-hosted mirror)")
 		fs.BoolVar(&printOnly, "print", false, "print the explorer URL to stdout instead of opening a browser (fragment mode only)")
 		fs.BoolVar(&serve, "serve", false, "hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; the server serves once and stops)")
+		fs.BoolVar(&useTargets, "targets", false, "open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus graph open [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus graph open [flags] [project-path]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Open this workspace's knowledge graph in the hosted, interactive Graph")
 			fmt.Fprintln(os.Stderr, "Explorer. The graph is delivered privately and never leaves your machine:")
@@ -64,6 +69,11 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "never transmit; with --serve it is fetched from an ephemeral 127.0.0.1")
 			fmt.Fprintln(os.Stderr, "loopback server (no size limit). The page is static; it decodes or fetches")
 			fmt.Fprintln(os.Stderr, "the graph locally.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "With --targets, opens the target dependency graph instead of the knowledge")
+			fmt.Fprintln(os.Stderr, "graph. An optional project-path positional argument scopes the view to one")
+			fmt.Fprintln(os.Stderr, "project. Target graphs are always delivered via the URL fragment (--serve")
+			fmt.Fprintln(os.Stderr, "is incompatible with --targets).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "For a graph to hand to another tool, use `magus graph export -o json`.")
 			fmt.Fprintln(os.Stderr, "")
@@ -73,6 +83,15 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	if useTargets {
+		if serve {
+			fmt.Fprintln(os.Stderr, "magus graph open: --targets and --serve cannot be used together.")
+			fmt.Fprintln(os.Stderr, "Target graphs are small; they always use the URL fragment.")
+			return errSilent{exitCode: 2}
+		}
+		return graphOpenTargets(ctx, root, base, printOnly, pos)
 	}
 
 	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.
@@ -111,6 +130,67 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "opening the graph explorer for this workspace (%d nodes, %d edges).\n", out.NodeCount, out.EdgeCount)
+	fmt.Fprintln(os.Stderr, "your graph rides in the link fragment and is never uploaded - it does not leave your machine.")
+	if err := openBrowser(openURL); err != nil {
+		fmt.Fprintf(os.Stderr, "magus graph open: could not open a browser (%v).\n", err)
+		fmt.Fprintln(os.Stderr, "Re-run with --print to get the URL, or open it yourself.")
+		return errSilent{exitCode: 1}
+	}
+	return nil
+}
+
+// graphOpenTargets opens the workspace's target dependency graph in the hosted
+// Graph Explorer using the #data= fragment path. Target graphs are always
+// delivered via the fragment (they are small, so --serve is never needed).
+// If args contains a project path, only that project's targets are included.
+func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, args []string) error {
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	out := ws.DescribeGraph()
+
+	if len(args) > 0 {
+		scope := args[0]
+		var filtered []types.TargetGraphProject
+		for _, p := range out.Projects {
+			if p.Path == scope {
+				filtered = append(filtered, p)
+				break
+			}
+		}
+		if len(filtered) == 0 {
+			paths := make([]string, 0, len(out.Projects))
+			for _, p := range out.Projects {
+				paths = append(paths, p.Path)
+			}
+			sort.Strings(paths)
+			fmt.Fprintf(os.Stderr, "magus graph open --targets: unknown project %q\n", scope)
+			fmt.Fprintln(os.Stderr, "valid projects:")
+			for _, p := range paths {
+				fmt.Fprintf(os.Stderr, "  %s\n", p)
+			}
+			return errSilent{exitCode: 2}
+		}
+		out.Projects = filtered
+	}
+
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Errorf("encode target graph: %w", err)
+	}
+	encoded, err := encodeFragment(raw)
+	if err != nil {
+		return err
+	}
+	openURL := strings.TrimRight(base, "/") + "/#data=" + encoded
+
+	if printOnly {
+		fmt.Println(openURL)
+		return nil
+	}
+
+	fmt.Fprintln(os.Stderr, "opening the graph explorer for this workspace's target graph.")
 	fmt.Fprintln(os.Stderr, "your graph rides in the link fragment and is never uploaded - it does not leave your machine.")
 	if err := openBrowser(openURL); err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph open: could not open a browser (%v).\n", err)

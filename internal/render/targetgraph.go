@@ -1,8 +1,13 @@
 package render
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,6 +20,46 @@ import (
 // instead of embedding its own copy, so the term definitions have a single source
 // of truth on the docs site.
 const glossaryDocURL = "https://eli.gladman.cc/magus/glossary/"
+
+// fragmentCap is a conservative per-project ceiling for deep-link fragments.
+// Safari caps URLs near 80 KB and older Firefox near 64 KB; targets graphs are
+// much smaller than a full knowledge graph, but we skip silently rather than
+// emitting a link that won't open in constrained browsers.
+const fragmentCap = 200 * 1024
+
+// encodeDataFragment gzip-compresses then base64url-encodes (no padding) a value
+// for use in a #data= URL fragment. The browser reverses it with
+// DecompressionStream('gzip'). gzip header fields are left at their zero values
+// to guarantee byte-stable output across calls.
+func encodeDataFragment(v any) (string, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return "", err
+	}
+	if _, err := zw.Write(raw); err != nil {
+		return "", err
+	}
+	if err := zw.Close(); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+// queryLink returns a Markdown inline-code span for query when explorerURL is
+// empty, or a Markdown link whose text is the inline-code span and whose target
+// is explorerURL + "#q=" + url-encoded query, so clicking the cell opens the
+// Graph Explorer pre-seeded with that query.
+func queryLink(query, explorerURL string) string {
+	if explorerURL == "" {
+		return md.Code(query)
+	}
+	return md.Link(md.Code(query), explorerURL+"#q="+url.QueryEscape(query))
+}
 
 // WriteTargetGraphMarkdown renders a workspace's target graph as a one-stop
 // MAGUS.md cheat sheet: a quick-start, then a per-project section where every
@@ -55,7 +100,7 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 	}
 
 	if routing != nil {
-		writeRouting(&b, *routing)
+		writeRouting(&b, *routing, explorerURL)
 	}
 
 	projects := nonEmptyProjects(out)
@@ -76,6 +121,17 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 		if err := writeToolchainGraph(&b, p); err != nil {
 			return err // the builder never errors; satisfies the emitter interface
 		}
+		if explorerURL != "" {
+			singleOut := types.TargetGraphOutput{
+				Definition: out.Definition,
+				Projects:   []types.TargetGraphProject{p},
+			}
+			if frag, err := encodeDataFragment(singleOut); err == nil && len(frag) <= fragmentCap {
+				link := md.Link("Explore this project's graph interactively", strings.TrimRight(explorerURL, "/")+"/#data="+frag)
+				b.Paragraph(link)
+			}
+			// If encoding fails or the fragment exceeds the cap, skip silently.
+		}
 		for _, n := range catalogOrder(p.Nodes) {
 			writeTargetSection(&b, p.Path, n, eval)
 		}
@@ -90,7 +146,9 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 // reader's next action to a magus query (counts + the query to run + a few
 // high-degree anchor nodes); it never dumps graph data, so it stays diff-stable
 // across routine edits. Generated per-repo and drift-gated like the rest of MAGUS.md.
-func writeRouting(b *md.Builder, r types.KnowledgeRouting) {
+// When explorerURL is non-empty, the query-string cells are emitted as Markdown
+// links that open the Graph Explorer pre-seeded with that query (#q=...).
+func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	b.Heading(2, "Query first")
 	b.Paragraphf("This workspace has a knowledge graph of **%d nodes** and **%d edges** "+
 		"(schema v%d). Query it instead of grepping:", r.NodeCount, r.EdgeCount, r.SchemaVersion)
@@ -105,7 +163,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting) {
 	kindRows := make([][]string, 0, len(r.Kinds))
 	for _, k := range r.Kinds {
 		kindRows = append(kindRows, []string{
-			k.Kind, strconv.Itoa(k.Count), md.Code("magus query kind:" + k.Kind), md.Codes(k.Anchors),
+			k.Kind, strconv.Itoa(k.Count), queryLink("magus query kind:"+k.Kind, explorerURL), md.Codes(k.Anchors),
 		})
 	}
 	b.Table([]string{"Kind", "Count", "List them", "Anchors (most connected)"},
@@ -114,7 +172,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting) {
 	projectRows := make([][]string, 0, len(r.Projects))
 	for _, p := range r.Projects {
 		projectRows = append(projectRows, []string{
-			p.Path, strconv.Itoa(p.TargetCount), md.Code("magus query project:" + p.Path), md.Codes(p.KeyTargets),
+			p.Path, strconv.Itoa(p.TargetCount), queryLink("magus query project:"+p.Path, explorerURL), md.Codes(p.KeyTargets),
 		})
 	}
 	b.Table([]string{"Project", "Targets", "Scope a query", "Key targets"},

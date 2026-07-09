@@ -1,0 +1,53 @@
+# --targets opens the target dependency graph (instead of the knowledge graph)
+# in the Graph Explorer via the #data= fragment. --print emits the URL headlessly.
+exec magus graph open --targets --print
+stdout 'https://eli\.gladman\.cc/magus/graph/#data='
+# the fragment is gzip+base64url (starts with the gzip magic H4sI in base64url)
+stdout '#data=H4sI'
+
+# no knowledge store is written - --targets does not touch the knowledge graph.
+! exists .magus/knowledge/manifest.json
+
+# --targets scoped to a known project includes only that project.
+exec magus graph open --targets --print .
+stdout '#data=H4sI'
+
+# --targets scoped to an unknown project exits 2 and names valid projects.
+! exec magus graph open --targets --print no_such_project
+stderr 'unknown project'
+stderr 'no_such_project'
+stderr '\.'
+
+# --targets and --serve are incompatible.
+! exec magus graph open --targets --serve
+stderr 'cannot be used together'
+stderr 'fragment'
+
+# the URL is deterministic: two runs produce the same fragment.
+exec magus graph open --targets --print
+cp stdout url1.txt
+exec magus graph open --targets --print
+cp stdout url2.txt
+cmp url1.txt url2.txt
+
+# --url still works with --targets (self-hosted mirror).
+exec magus graph open --targets --print --url http://localhost:9999/graph/
+stdout 'http://localhost:9999/graph/#data=H4sI'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+export fun build(args: [str]) > void {
+    magus.needs(magus.target.literal("lint"));
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

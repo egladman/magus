@@ -452,3 +452,89 @@ func TestWriteTargetGraphDOTCrossProject(t *testing.T) {
 		assert.NotContains(t, got, bad, "DOT should not reference subgraph id (phantom node)")
 	}
 }
+
+// TestWriteTargetGraphMarkdownPerProjectDeepLinks pins the per-project deep links:
+// when explorerURL is set, each project section carries a link to the Graph
+// Explorer pre-seeded with just that project's graph fragment.
+func TestWriteTargetGraphMarkdownPerProjectDeepLinks(t *testing.T) {
+	const explorerURL = "https://example.com/graph/"
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
+		{Path: "web", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "serve"}}},
+	}}
+	var b bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, explorerURL))
+	got := b.String()
+	// Each project section carries a deep link with #data=.
+	assert.Contains(t, got, "Explore this project's graph interactively", "per-project deep link text missing")
+	assert.Contains(t, got, "https://example.com/graph/#data=H4sI", "per-project deep link fragment missing")
+	// Two projects -> two such links (one per project).
+	assert.Equal(t, 2, strings.Count(got, "Explore this project's graph interactively"),
+		"expected one deep link per project")
+}
+
+// TestWriteTargetGraphMarkdownNoDeepLinksWithoutURL pins that deep links are
+// absent when explorerURL is empty.
+func TestWriteTargetGraphMarkdownNoDeepLinksWithoutURL(t *testing.T) {
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
+	}}
+	var b bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
+	got := b.String()
+	assert.NotContains(t, got, "Explore this project's graph interactively", "deep link should be absent without explorerURL")
+	assert.NotContains(t, got, "#data=", "no data fragment without explorerURL")
+}
+
+// TestWriteTargetGraphMarkdownQueryLinks pins that routing query cells are
+// plain inline code when explorerURL is empty, and markdown links when it is set.
+func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+		Path: ".", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}},
+	}}}
+	routing := &types.KnowledgeRouting{
+		SchemaVersion: 1, NodeCount: 10, EdgeCount: 20,
+		Kinds:    []types.KnowledgeRoutingKind{{Kind: "spell", Count: 3, Anchors: []string{"go"}}},
+		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 2, KeyTargets: []string{"ci"}}},
+	}
+
+	// Without explorerURL: query cells are plain inline code, no href.
+	var plain bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, nil, routing, ""))
+	plainStr := plain.String()
+	assert.Contains(t, plainStr, "`magus query kind:spell`", "query cell should be inline code without explorerURL")
+	assert.NotContains(t, plainStr, "#q=", "no #q= link without explorerURL")
+
+	// With explorerURL: query cells are links wrapping inline code.
+	const explorerURL = "https://example.com/graph/"
+	var withLink bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&withLink, out, nil, routing, explorerURL))
+	linkedStr := withLink.String()
+	assert.Contains(t, linkedStr, "#q=magus+query+kind%3Aspell", "kind query cell should have #q= link")
+	assert.Contains(t, linkedStr, "#q=magus+query+project%3Apkg%2Ffoo", "project query cell should have #q= link")
+	// The link text is still the inline-code form.
+	assert.Contains(t, linkedStr, "[`magus query kind:spell`]", "query link text should be inline code")
+}
+
+// TestWriteTargetGraphMarkdownRenderDeterministic confirms that two calls to
+// WriteTargetGraphMarkdown with the same input produce byte-identical output.
+// This covers both the gzip fragment determinism (encodeDataFragment) and the
+// overall render pipeline.
+func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
+	const explorerURL = "https://example.com/graph/"
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: "pkg/foo", Engine: "buzz", Nodes: []types.TargetGraphNode{
+			{Name: "build", Dependencies: []string{"fmt"}},
+			{Name: "fmt"},
+		}},
+	}}
+	routing := &types.KnowledgeRouting{
+		SchemaVersion: 1, NodeCount: 5, EdgeCount: 7,
+		Kinds:    []types.KnowledgeRoutingKind{{Kind: "spell", Count: 2}},
+		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 2}},
+	}
+	var first, second bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&first, out, nil, routing, explorerURL))
+	require.NoError(t, WriteTargetGraphMarkdown(&second, out, nil, routing, explorerURL))
+	assert.Equal(t, first.String(), second.String(), "WriteTargetGraphMarkdown output is not deterministic")
+}
