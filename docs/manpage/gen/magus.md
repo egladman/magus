@@ -230,6 +230,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_SANDBOX_ENABLED**
 : When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: false). Equivalent magus.yaml key: **sandbox.enabled**.
 
+**MAGUS_UPDATE_URL**
+: Env-only, no magus.yaml equivalent: override the release index URL for \`magus self update\`; set to a self-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
+
 ## Files
 
 **magus.yaml**, **.magus.yaml**

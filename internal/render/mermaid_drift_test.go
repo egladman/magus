@@ -64,10 +64,10 @@ func TestMermaidClassDefDrift(t *testing.T) {
 		// A project with one depended-on target (target role) and one leaf (anchor role).
 		out := types.TargetGraphOutput{
 			Projects: []types.TargetGraphProject{{
-				Path:  ".",
+				Path: ".",
 				Nodes: []types.TargetGraphNode{
 					{Name: "ci", Dependencies: []string{"build"}}, // anchor (nothing depends on ci)
-					{Name: "build"},                               // target (ci depends on build)
+					{Name: "build"}, // target (ci depends on build)
 				},
 			}},
 		}
