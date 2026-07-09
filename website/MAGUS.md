@@ -239,7 +239,7 @@ magus run build-playground  # from the workspace root
 
 ### `build-mermaid`
 
-build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -> mermaid@11) into the committed gen/assets/mermaid.js.
+build-mermaid bundles the vendored mermaid library (js/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.
 
 **Defaults**
 
@@ -253,7 +253,7 @@ magus run build-mermaid  # from the workspace root
 
 ### `build-hljs`
 
-build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11) into the committed gen/assets/hljs.js.
+build-hljs bundles the vendored highlight.js library (js/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.
 
 **Defaults**
 

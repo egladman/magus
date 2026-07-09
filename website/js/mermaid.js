@@ -108,9 +108,11 @@ if (document.querySelector("code.language-mermaid")) {
       attributeFilter: ["data-theme"],
     });
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
-  }).catch(function () {
-    // Load failed (e.g. not yet cached offline): leave the <pre> source visible
-    // rather than letting the import reject unhandled. The diagram reads as its
-    // (legible) source text.
+  }).catch(function (err) {
+    // Load or render failed (e.g. not yet cached offline, or a bad diagram):
+    // leave the <pre> source visible rather than letting the import reject
+    // unhandled - the diagram reads as its (legible) source text. Warn (do not
+    // swallow): an empty catch here once hid a broken vendor bundle for a day.
+    console.warn("mermaid render skipped:", err);
   });
 }

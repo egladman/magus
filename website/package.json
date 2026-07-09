@@ -8,8 +8,8 @@
     "build": "pnpm run build-editor && pnpm run build-graph-explorer && pnpm run build-mermaid && pnpm run build-hljs",
     "build-editor": "esbuild js/editor.js --bundle --minify --format=esm --outfile=gen/playground/editor.js",
     "build-graph-explorer": "esbuild js/graph-explorer.js --bundle --minify --format=esm --outfile=gen/graph/explorer.js",
-    "build-mermaid": "esbuild js/mermaid-vendor.js --bundle --minify --format=esm --outfile=gen/assets/mermaid.js",
-    "build-hljs": "esbuild js/hljs-vendor.js --bundle --minify --format=esm --outfile=gen/assets/hljs.js"
+    "build-mermaid": "esbuild js/vendor/mermaid.js --bundle --minify --format=esm --outfile=gen/assets/mermaid.js",
+    "build-hljs": "esbuild js/vendor/hljs.js --bundle --minify --format=esm --outfile=gen/assets/hljs.js"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.18.6",

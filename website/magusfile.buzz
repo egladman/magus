@@ -155,7 +155,7 @@ export fun build_playground(args: [str]) > void {
     magus.info("rebuilt website/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
 }
 
-// build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -> mermaid@11)
+// build-mermaid bundles the vendored mermaid library (js/vendor/mermaid.js -> mermaid@11)
 // into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports
 // it same-origin so diagrams and page styling work offline without any CDN. Run after
 // bumping the mermaid version in package.json; commit the regenerated artifact.
@@ -168,7 +168,7 @@ export fun build_mermaid(args: [str]) > void {
     magus.info("rebuilt gen/assets/mermaid.js - commit the result");
 }
 
-// build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11)
+// build-hljs bundles the vendored highlight.js library (js/vendor/hljs.js -> highlight.js@11)
 // into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so
 // syntax highlighting works offline without any CDN. Run after bumping the version in
 // package.json; commit the regenerated artifact.

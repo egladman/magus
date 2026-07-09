@@ -64,7 +64,10 @@
         if (cls && hljs.getLanguage(cls)) hljs.highlightElement(el);
       });
     })
-    .catch(function () {
-      // Load failed (e.g. not yet cached offline): code blocks stay as legible plain text.
+    .catch(function (err) {
+      // Load or highlight failed (e.g. not yet cached offline): code blocks stay
+      // as legible plain text. Warn (do not swallow): an empty catch here once hid
+      // a broken vendor bundle for a day.
+      console.warn("syntax highlight skipped:", err);
     });
 })();
