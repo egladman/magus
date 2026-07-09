@@ -1,7 +1,0 @@
-# pnpm settings for the website's build-only bundle dependencies.
-# minimumReleaseAge: refuse to install any package version published less than
-# this many MINUTES ago. 10080 = 7 days. Supply-chain guard: a freshly published
-# (possibly compromised) release is never pulled into a build until it has been
-# public - and scrutinized - for a week. Bumping a dep therefore also means the
-# new version must be at least 7 days old. pnpm reads this here, not package.json.
-minimumReleaseAge: 10080
