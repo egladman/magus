@@ -26,24 +26,26 @@
     <p class="lede">See how everything in a magus workspace connects: projects, targets, spells, and the rest.</p>
     <p class="pg-note">Runs in your browser; nothing leaves your machine. <code>magus graph open</code> loads your own workspace here. <a href="../download/">Install magus</a>.</p>
 
-    <!-- Phase 5: Views panel - question-first navigation (max 7 modes). -->
-    <div class="views-panel" role="group" aria-label="Graph views">
-      <span class="views-label">Ask:</span>
-      <button type="button" class="view-btn" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
-      <button type="button" class="view-btn" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
-      <button type="button" class="view-btn view-conditional" data-view="critical" title="Longest duration-weighted chain. Hidden when no DurationMs data is present. CLI: magus graph deps -o json">What's slow?</button>
-      <button type="button" class="view-btn lens-btn" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
-      <button type="button" class="view-btn lens-btn" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
-      <button type="button" class="view-btn view-disabled" data-view="affected" disabled title="Requires live mode (Phase 9). CLI: magus affected">What does my diff touch?</button>
-      <button type="button" id="clear-view-btn" class="view-clear" hidden>Clear</button>
-    </div>
-
-    <!-- Phase 5: term-prompt view command bar (same idiom as playground.html). -->
-    <!-- Shows the CLI-equivalent command for the active view; hidden when no view is active -->
-    <!-- or the view has no exact CLI equivalent (earn the prompt rule, section 0.5). -->
-    <div id="view-cmd" class="term-prompt view-cmd-bar" hidden aria-live="polite" aria-label="CLI command for active view">
-      <!-- populated by renderViewCommand() -->
-    </div>
+    <!-- Phase 5: Views panel - question-first navigation (max 7 modes).
+         Formatted like the "Query syntax and views" / "Display" disclosures below
+         (uppercase section label over a tinted body panel) but always open: these
+         questions are suggestions we want visible, not tucked behind a toggle. The
+         buttons read as tappable suggestion chips (pill + chevron), not inert text. -->
+    <section class="views-panel" aria-label="Ask the graph a question">
+      <p class="section-heading">Ask</p>
+      <div class="disclosure-body">
+        <p class="views-hint">Questions you might ask about a workspace. Click one to explore, or write your own query below.</p>
+        <div class="views-body">
+        <button type="button" class="view-btn" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
+        <button type="button" class="view-btn" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
+        <button type="button" class="view-btn view-conditional" data-view="critical" title="Longest duration-weighted chain. Hidden when no DurationMs data is present. CLI: magus graph deps -o json">What's slow?</button>
+        <button type="button" class="view-btn lens-btn" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
+        <button type="button" class="view-btn lens-btn" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
+        <button type="button" class="view-btn view-disabled" data-view="affected" disabled title="Requires live mode (Phase 9). CLI: magus affected">What does my diff touch?</button>
+        <button type="button" id="clear-view-btn" class="view-clear" hidden>Clear</button>
+        </div>
+      </div>
+    </section>
 
     <details class="query-help">
       <summary>Query syntax and views</summary>
@@ -150,14 +152,47 @@
           <button id="copy-mermaid-btn" class="outline" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first.">&#10697;<span class="btn-label">Copy as Mermaid</span></button>
           <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg><span class="btn-label">Fullscreen</span></button>
         </div>
+        <!-- Legend toggle: only shown on mobile (CSS), where the legend is collapsed
+             by default so it doesn't cover the graph. Desktop keeps the legend open. -->
+        <button id="legend-toggle" class="outline legend-toggle" type="button" aria-expanded="false" aria-controls="graph-legend">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg><span class="btn-label">Legend</span></button>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <ul id="graph-legend" aria-label="Node kinds"></ul>
-        <p id="graph-status" role="status">Loading graph...</p>
         <p id="live-status-strip" class="live-status-strip" hidden aria-live="polite"></p>
+        <!-- Demo gate: shown over the (blurred) demo graph on first open, so it's clear
+             this is a preview of magus's OWN workspace and the explorer works for any
+             repo - not a magus-only toy. Dismissed by "Explore the demo" or by opening
+             a file. Never shown for a user's own graph (#data/#src/#live or a file). -->
+        <div id="demo-gate" class="demo-gate" hidden>
+          <div class="demo-gate-card">
+            <p class="demo-gate-eyebrow">Preview</p>
+            <h2 class="demo-gate-title">Explore any magus workspace</h2>
+            <p class="demo-gate-body">Behind this is the magus project's own graph, loaded as a demo. Run <code>magus graph open</code> in any repo to explore your own workspace here - it renders in your browser and nothing leaves your machine.</p>
+            <div class="demo-gate-actions">
+              <button id="demo-explore-btn" type="button">Explore the demo</button>
+              <button id="demo-open-btn" type="button" class="outline">Open a graph.json</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="explain-card" aria-live="polite" hidden></div>
     </section>
+
+    <!-- Phase 5: term-prompt view command bar (same idiom as playground.html).
+         Shows the CLI-equivalent command for the active view; hidden when no view is
+         active or the view has no exact CLI equivalent (earn the prompt rule, 0.5).
+         Lives BELOW the canvas with the status line - both are "what's happening now"
+         readouts, so the CLI echo sits next to the result it describes rather than
+         wedged into the controls stack above the graph. -->
+    <div id="view-cmd" class="term-prompt view-cmd-bar" hidden aria-live="polite" aria-label="CLI command for active view">
+      <!-- populated by renderViewCommand() -->
+    </div>
+
+    <!-- Status/hint line: lives OUT of the canvas overlay so it never obscures the
+         graph. A quiet in-flow line beneath the app; empty (display:none) unless
+         there's something to report (loading, a view result, or an error). -->
+    <p id="graph-status" role="status">Loading graph...</p>
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
 

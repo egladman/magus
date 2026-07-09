@@ -681,19 +681,50 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // Labels: only for big nodes, the selection, or when zoomed in - avoids
-  // painting 1600 labels into an unreadable smear.
+  // Labels: greedy collision-culling. Draw in priority order (the selection, then the
+  // highest-degree nodes) and skip any label whose box overlaps one already drawn this
+  // frame, so text stays readable instead of stacking into an unreadable smear. This is
+  // the d3fc "greedy / removeOverlaps" idea done inline - d3 core has no label placer,
+  // and this is what its greedy strategy does under the hood. Still gated to big nodes,
+  // the selection, or a zoomed-in view; and culled to the viewport first so the overlap
+  // scan stays cheap. Boxes are compared in world units (the same scale as the on-screen
+  // 11px text), so the overlap test is zoom-consistent.
   ctx.fillStyle = theme.text;
   ctx.font = "500 " + (11 / transform.k) + "px " + theme.font;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
+  const vw = canvas.width / dpr, vh = canvas.height / dpr; // viewport in CSS px
+  const labelPad = 2 / transform.k;
+  const lineH = 13 / transform.k; // ~1.2x the 11px font, in world units
+  const labelCandidates = [];
   for (const n of graph.nodes) {
     if (n.x == null) continue;
     if (projectionActive && !projectionSet.has(n.id)) continue;
     const show = n.id === highlight || n.degree > 24 || transform.k > 2.2;
     if (!show) continue;
     if (matchSet && !projectionActive && !matchSet.has(n.id) && n.id !== highlight) continue;
-    ctx.fillText(n.label, n.x + n.r + 2 / transform.k, n.y);
+    // Viewport cull (CSS px): drop off-screen labels so the greedy scan below only
+    // weighs what's actually visible.
+    const cx = transform.x + n.x * transform.k, cy = transform.y + n.y * transform.k;
+    if (cx < -120 || cx > vw + 20 || cy < -20 || cy > vh + 20) continue;
+    labelCandidates.push(n);
+  }
+  // Priority order: the selected node always wins a slot, then denser (more-connected)
+  // nodes, so the labels we keep are the ones carrying the most signal.
+  labelCandidates.sort((a, b) =>
+    (b.id === highlight) - (a.id === highlight) || b.degree - a.degree);
+  const placedLabels = [];
+  for (const n of labelCandidates) {
+    const lx = n.x + n.r + labelPad;
+    const ly = n.y - lineH / 2;
+    const lw = ctx.measureText(n.label).width;
+    let clash = false;
+    for (const p of placedLabels) {
+      if (lx < p.x + p.w && lx + lw > p.x && ly < p.y + lineH && ly + lineH > p.y) { clash = true; break; }
+    }
+    if (clash) continue;
+    placedLabels.push({ x: lx, y: ly, w: lw });
+    ctx.fillText(n.label, lx, n.y);
   }
   ctx.restore();
 }
@@ -846,14 +877,17 @@ function renderCard(id) {
   html += relSectionHtml("outgoing", out);
   html += relSectionHtml("incoming", inc);
   html += "</dl>";
-  // Copy as Mermaid button: copies the focus neighborhood (or current match set) as mermaid.
-  // The button lives in the card so it is immediately visible when a node is selected.
-  html += '<div class="card-actions"><button type="button" class="card-mermaid-btn outline" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id">&#10697; Copy as Mermaid</button></div>';
+  // Copy as Mermaid: copies the focus neighborhood (or current match set) as mermaid.
+  // It lives in the card so it is immediately reachable when a node is selected. It is
+  // a link-styled action (not a chunky button) so it sits quietly in the dense card and
+  // doesn't compete with the canvas toolbar's Copy as Mermaid; still a <button> because
+  // it acts (copies to clipboard) rather than navigates.
+  html += '<div class="card-actions"><button type="button" class="card-mermaid-link" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="copy-glyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button></div>';
   cardEl.innerHTML = html;
   cardEl.hidden = false;
   cardEl.querySelectorAll(".node-ref").forEach((b) =>
     b.addEventListener("click", () => selectNode(b.dataset.id, true)));
-  const mermaidCardBtn = cardEl.querySelector(".card-mermaid-btn");
+  const mermaidCardBtn = cardEl.querySelector(".card-mermaid-link");
   if (mermaidCardBtn) mermaidCardBtn.addEventListener("click", copyAsMermaid);
 }
 
@@ -1386,6 +1420,9 @@ function syncLayoutToggle() {
 
 async function readGraphFile(file) {
   if (!file) return;
+  // A user graph supersedes the demo: lift the demo gate if it's still up.
+  const gate = el("demo-gate");
+  if (gate) gate.hidden = true;
   try {
     replaceGraph(JSON.parse(await file.text()), "Loaded " + file.name + " (local file; it stays on your machine).");
   } catch (e) {
@@ -2701,7 +2738,12 @@ async function fetchLiveStatus() {
 // buildProjectionSet is willing to collapse. Shared by boot() and bootLive()
 // so the two boot paths cannot drift on this decision.
 function computeDefaultProjection(hasFragmentDirective) {
-  if (!hasFragmentDirective) {
+  // Default view is the FULL graph: the whole workspace at a glance is the wow moment
+  // on load. The projects-only projection is kept only as a scale guard for very large
+  // graphs, where a cold force layout of many thousands of nodes would jank the reveal;
+  // there it collapses to project nodes with the "Show full graph" unfold still offered.
+  const PROJECTION_GUARD = 2500; // node count above which we collapse on load for perf
+  if (!hasFragmentDirective && graph && graph.nodes.length > PROJECTION_GUARD) {
     const ps = buildProjectionSet();
     if (ps) {
       projectionUnfolded = false;
@@ -2872,6 +2914,23 @@ async function boot() {
   parkHiddenNodes();
   finishInteractiveSetup();
 
+  // Wow reveal: once the cold force layout has spread out, frame the whole graph so it
+  // lands centered and fully in view instead of cropped to a corner. Only for the
+  // default full-graph view - a deep link (#node/#view/#q) or the perf-guard projection
+  // already frames its own subset, and layered layout is framed by applyLayeredMode.
+  if (projectionUnfolded && !hasFragmentDirective && layoutMode !== "layered") {
+    setTimeout(() => fitView(null), 700);
+  }
+
+  // Demo gate: on a fresh open of the built-in demo (no deep link, no user graph),
+  // veil the graph and invite the visitor to explore the demo or open their own file,
+  // so the explorer reads as a tool for any workspace, not a magus-only page. A deep
+  // link (#view/#q/#node) means the visitor came for a specific view - skip the gate.
+  if (loaded.source === "demo" && !hasFragmentDirective) {
+    const gate = el("demo-gate");
+    if (gate) gate.hidden = false;
+  }
+
   bootWireEvents();
 }
 
@@ -2953,6 +3012,19 @@ function bootWireEvents() {
   const fitBtn = el("fit-btn");
   if (fitBtn) fitBtn.addEventListener("click", () => fitView(matchSet && matchSet.size ? matchSet : null));
 
+  // Mobile-only legend toggle: on narrow screens the kind legend is collapsed off
+  // the canvas by default (CSS) so it doesn't cover the graph; this flips it open.
+  // Harmless on desktop, where the toggle is display:none and the legend is always
+  // shown.
+  const legendToggle = el("legend-toggle");
+  const legendEl = el("graph-legend");
+  if (legendToggle && legendEl) {
+    legendToggle.addEventListener("click", () => {
+      const open = legendEl.classList.toggle("legend-open");
+      legendToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
+
   // Lenses (magus graph stats parity): hubs / orphans set the match set.
   document.querySelectorAll(".lens-btn").forEach((b) =>
     b.addEventListener("click", () => applyLens(b.dataset.lens)));
@@ -3008,6 +3080,15 @@ function bootWireEvents() {
   if (openBtn && fileInput) openBtn.addEventListener("click", () => fileInput.click());
   if (fileInput) fileInput.addEventListener("change", () => readGraphFile(fileInput.files[0]));
 
+  // Demo gate: "Explore the demo" lifts the veil to reveal the (already-loaded) demo
+  // graph; "Open a graph.json" reuses the file picker. Loading a file dismisses the
+  // gate via readGraphFile itself, so opening from here or the toolbar behaves alike.
+  const demoGate = el("demo-gate");
+  const demoExplore = el("demo-explore-btn");
+  const demoOpen = el("demo-open-btn");
+  if (demoExplore && demoGate) demoExplore.addEventListener("click", () => { demoGate.hidden = true; });
+  if (demoOpen && fileInput) demoOpen.addEventListener("click", () => fileInput.click());
+
   // Fullscreen toggle: expand the whole explorer panel (like the playground).
   // Hidden if the browser lacks the Fullscreen API rather than showing a dead
   // button; label + aria-pressed follow fullscreenchange so Esc stays in sync.
@@ -3038,7 +3119,26 @@ function bootWireEvents() {
   new MutationObserver(rerender).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
 
-  window.addEventListener("resize", () => { resizeCanvas(); if (sim) { sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2)); sim.alpha(0.1).restart(); } draw(); });
+  // Keep the canvas bitmap in lockstep with its CSS box. A ResizeObserver (not just
+  // window "resize") is what makes this robust: the stage also changes size when the
+  // details card opens/closes (the grid goes to three columns), when a disclosure
+  // above the app expands, or on fullscreen - none of which fire a window resize.
+  // Without this the bitmap keeps its old dimensions and the browser stretches it,
+  // squishing the graph's aspect ratio. rAF coalesces the burst a drag produces into
+  // one resize per frame. Setting canvas.width/height doesn't change the CSS box
+  // (width/height are 100%), so this can't feedback-loop.
+  let resizePending = false;
+  const onStageResize = () => {
+    if (resizePending) return;
+    resizePending = true;
+    requestAnimationFrame(() => {
+      resizePending = false;
+      resizeCanvas();
+      if (sim) { sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2)); sim.alpha(0.1).restart(); }
+      draw();
+    });
+  };
+  new ResizeObserver(onStageResize).observe(canvas);
   window.addEventListener("hashchange", () => { suppressHash = true; applyDeepLinks(); suppressHash = false; });
 
   // Keep the gentle wobble from being a background CPU drain: stop the sim while

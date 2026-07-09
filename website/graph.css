@@ -102,16 +102,20 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
    so the canvas is the focus on first load). */
 .sidebar-count {
   width: 100%; margin: 0; text-align: left; cursor: pointer;
-  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-  padding: 0.35rem 0.6rem; font-size: 0.68rem; line-height: 1.3;
+  display: flex; align-items: center; justify-content: flex-start; gap: 0.35rem;
+  padding: 0.4rem 0.6rem; font-size: 0.72rem; line-height: 1.3;
   background: transparent;
   border: 0; border-bottom: 1px solid var(--pico-muted-border-color); border-radius: 0;
 }
-.sidebar-count:hover { text-decoration: underline; }
+.sidebar-count:hover { background: color-mix(in srgb, var(--pico-primary) 8%, transparent); }
 /* Links inside the app must not fall to Pico's low-contrast :visited color in dark
    mode (the explain-card source/reference links especially). */
 .graph-app a:visited, #explain-card a:visited { color: var(--pico-primary); }
-.list-chev { flex: 0 0 auto; transition: transform 0.12s ease; }
+/* The disclosure triangle hugs the count text (not flung to the far edge), is tinted,
+   and sized up so it clearly reads as an expand/collapse control (it was tiny before).
+   A rotating triangle is the conventional disclosure affordance, distinct on purpose
+   from the "run this" chevrons on the Ask chips. */
+.list-chev { flex: 0 0 auto; color: var(--pico-primary); font-size: 1.15em; line-height: 1; transition: transform 0.12s ease; }
 .list-chev::before { content: "\25B8"; }
 #list-toggle[aria-expanded="true"] .list-chev { transform: rotate(90deg); }
 
@@ -149,6 +153,17 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   background: color-mix(in srgb, var(--pico-card-background-color) 90%, transparent);
 }
 .stage-tools .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+/* Legend toggle: hidden on desktop (the legend is always open there). Shown only on
+   mobile via the media query below, where it collapses the legend off the canvas.
+   Positioned top-left where the legend would otherwise sit. */
+.legend-toggle {
+  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3;
+  width: auto; margin: 0; padding: 0.25rem 0.6rem;
+  font-size: 0.72rem; line-height: 1.3;
+  display: none; align-items: center; gap: 0.35rem;
+  background: color-mix(in srgb, var(--pico-card-background-color) 90%, transparent);
+}
+.legend-toggle .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
    the opaque background is required or the element shows through to black. */
 .graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pico-background-color); }
@@ -168,17 +183,44 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   cursor: pointer; font-size: inherit; line-height: 1.5; text-align: left;
 }
 .legend-row:hover { background: color-mix(in srgb, var(--pico-primary) 14%, transparent); }
+/* Status/hint line: a quiet in-flow line BENEATH the graph app (it used to float
+   over the canvas, obscuring the graph). Empty by default -> hidden, so it never
+   sits as a persistent nag; it speaks up for loading, a view result, or an error. */
 #graph-status {
-  position: absolute; bottom: 0.6rem; left: 0.6rem; right: 0.6rem;
-  padding: 0.35rem 0.6rem; font-size: 0.72rem; color: var(--pico-muted-color);
-  background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
+  margin: 0.5rem 0 var(--pad); padding: 0.4rem 0.7rem;
+  font-size: 0.78rem; line-height: 1.45; color: var(--pico-muted-color);
+  background: var(--syntax-panel-bg);
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  pointer-events: none;
 }
-/* Status is for loading/errors only; empty by default so it doesn't sit as a
-   persistent nag over the graph. Hidden when it has no text. */
 #graph-status:empty { display: none; }
-#graph-status.err { color: var(--pico-del-color); }
+#graph-status.err { color: var(--pico-del-color); border-color: var(--pico-del-color); }
+
+/* Demo gate: a blurred veil + card shown over the demo graph on first open (see
+   graph.html). The veil blurs the live canvas behind it so the graph reads as an
+   enticing preview; the card is opaque so the buttons stay crisp and legible (which
+   is why we can blur without hiding the controls). Dismissed by JS. */
+.demo-gate {
+  position: absolute; inset: 0; z-index: 4;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+  background: color-mix(in srgb, var(--pico-background-color) 50%, transparent);
+  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+}
+.demo-gate[hidden] { display: none; }
+.demo-gate-card {
+  max-width: 30rem; text-align: center; padding: 1.4rem 1.6rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-card-border-color); border-radius: var(--pico-border-radius);
+  box-shadow: var(--pico-card-box-shadow);
+}
+.demo-gate-eyebrow {
+  margin: 0 0 0.35rem; color: var(--pico-primary);
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.demo-gate-title { margin: 0 0 0.5rem; font-size: 1.25rem; }
+.demo-gate-body { margin: 0 0 1.1rem; color: var(--pico-muted-color); font-size: 0.9rem; line-height: 1.5; }
+.demo-gate-body code { font-size: 0.85em; }
+.demo-gate-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; }
+.demo-gate-actions button { width: auto; margin: 0; }
 
 /* Kind dots: shape here, color from a .k-<kind> class (data-driven, no inline
    style). The same classes color the legend swatches and the explain-card head. */
@@ -226,6 +268,16 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
 }
 .node-ref:hover { border-color: var(--pico-primary); }
 .muted { color: var(--pico-muted-color); }
+/* Copy as Mermaid in the card: a quiet link-styled action, not a chunky button, so
+   it matches the card's density (the canvas toolbar keeps the prominent button). */
+.card-actions { margin-top: 0.7rem; }
+.card-mermaid-link {
+  width: auto; margin: 0; padding: 0; background: transparent; border: 0;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.76rem; line-height: 1.4; color: var(--pico-primary); cursor: pointer;
+}
+.card-mermaid-link:hover { text-decoration: underline; }
+.card-mermaid-link .copy-glyph { font-size: 0.95em; }
 
 /* Narrow screens: stack the columns; canvas gets a fixed height, the list and card
    flow beneath it. */
@@ -234,6 +286,15 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   .graph-stage { height: 60svh; min-height: 320px; }
   .graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pico-muted-border-color); }
   #explain-card { border-left: 0; border-top: 1px solid var(--pico-muted-border-color); max-height: 50svh; }
+  /* Mobile canvas chrome: collapse both floating overlays so the graph is the focus.
+     The toolbar shrinks to icons; the legend hides behind the "Legend" toggle and
+     only appears when tapped. */
+  .stage-tools { gap: 0.3rem; }
+  .stage-tools .btn-label { display: none; }
+  .stage-tools button { padding: 0.3rem 0.4rem; }
+  .legend-toggle { display: inline-flex; }
+  #graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
+  #graph-legend.legend-open { display: flex; }
 }
 
 /* Reference disclosures (Query syntax, Loading a graph by URL): the same
@@ -295,49 +356,89 @@ main .display-help > summary:not([role]), main .display-help[open] > summary:not
 .group-x { width: auto; margin: 0; padding: 0 0.25rem; background: transparent; border: 0; color: var(--pico-muted-color); cursor: pointer; font-size: 0.95rem; line-height: 1; }
 .group-x:hover { color: var(--pico-del-color); }
 
-/* ---- Phase 5: question-first views panel ---------------------------------- */
-/* Views are a curated, hard-capped set (max 7). Each button is named by the
-   question it answers; active state is set by JS (.view-active class). */
-.views-panel {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem;
-  margin-bottom: 0.5rem; padding: 0.4rem 0.5rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color);
-  font-size: 0.78rem;
+/* ---- Chrome-button text-color reset --------------------------------------- */
+/* Pico gives every <button> white text by locally shadowing --pico-color with
+   --pico-primary-inverse and painting color:var(--pico-color). Any chrome button
+   that swaps in a surface background (card/sectioning) must restore readable text
+   or it renders white-on-white in light mode. This is the recurring trap: a new
+   button class sets `background` and forgets `color`. Reset it once here for the
+   surface-styled graph buttons; their active/primary states re-override color
+   afterward and win on specificity. Use `inherit` (not var(--pico-color)) because
+   Pico shadows that variable ON the button element itself, so var() would still
+   resolve to the white inverse - inherit pulls the real text color from the
+   ancestor and stays correct in both light and dark mode. */
+.views-panel .view-btn,
+.views-table .view-btn,
+.preset-btn { color: inherit; }
+
+/* ---- Phase 5: question-first views panel ("Ask") -------------------------- */
+/* A curated, hard-capped set of questions (max 7), each a button named by the
+   question it answers; active state is set by JS (.view-active class). The panel
+   mirrors the reference disclosures below - an uppercase section label over a
+   tinted body panel (.disclosure-body) - but stays open, because these questions
+   are suggestions we want visible. The buttons are pill "suggestion chips" with a
+   leading chevron, so they read as tappable actions rather than inert labels. */
+.views-panel { margin: 0.3rem 0 var(--pad); }
+/* Shared uppercase section label (matches the disclosure summaries). */
+.section-heading {
+  width: fit-content; margin: 0 0 0.4rem;
+  color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
 }
-.views-label {
-  color: var(--pico-muted-color); font-size: 0.72rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; margin-right: 0.1rem;
-}
+/* Lead-in that frames the chips as suggestions ("questions you might ask"), not a
+   toolbar of commands - so a first-time visitor reads them as starting points. */
+.views-hint { margin: 0 0 0.55rem; color: var(--pico-muted-color); font-size: 0.8rem; line-height: 1.45; }
+.views-body { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .views-panel .view-btn {
-  width: auto; margin: 0; padding: 0.18rem 0.55rem;
-  font-size: 0.72rem; line-height: 1.3;
+  width: auto; margin: 0; padding: 0.33rem 0.75rem 0.33rem 0.6rem;
+  font-size: 0.78rem; line-height: 1.3;
+  display: inline-flex; align-items: center; gap: 0.3rem;
   background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  /* --pico-muted-border-color, not --pico-border-color: Pico shadows the latter to
+     the primary border ON the button element, which would paint every pill blue. */
+  border: 1px solid var(--pico-muted-border-color);
+  /* Match the site's one corner radius rather than a full pill: the chips read as
+     part of the same UI as the disclosures/cards, and the leading chevron already
+     carries the "clickable suggestion" signal. */
+  border-radius: var(--pico-border-radius);
   cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
-.views-panel .view-btn:hover { border-color: var(--pico-primary); }
+/* Leading chevron marks each chip as "click to run this view". */
+.views-panel .view-btn::before {
+  content: "\203A"; color: var(--pico-primary); font-weight: 700; opacity: 0.85;
+}
+.views-panel .view-btn:hover {
+  border-color: var(--pico-primary);
+  background: color-mix(in srgb, var(--pico-primary) 8%, var(--pico-card-background-color));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+}
 .views-panel .view-btn.view-active {
   background: var(--pico-primary); color: var(--pico-primary-inverse);
   border-color: var(--pico-primary);
 }
-/* Disabled = Phase 9 "affected" button. Not greyed - just visually demoted. */
+.views-panel .view-btn.view-active::before { color: var(--pico-primary-inverse); opacity: 1; }
+/* Disabled = Phase 9 "affected" button. Not greyed - just visually demoted, and
+   inert on hover. */
 .views-panel .view-btn[disabled], .views-panel .view-btn.view-disabled {
   opacity: 0.45; cursor: not-allowed;
 }
-.views-panel .view-btn.view-conditional { display: none; } /* hidden until DurationMs data present */
-.view-clear {
-  width: auto; margin: 0 0 0 auto; padding: 0.18rem 0.55rem;
-  font-size: 0.72rem; line-height: 1.3;
-  background: transparent; border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius); cursor: pointer; color: var(--pico-muted-color);
+.views-panel .view-btn[disabled]:hover, .views-panel .view-btn.view-disabled:hover {
+  border-color: var(--pico-muted-border-color); background: var(--pico-card-background-color); box-shadow: none;
 }
-.view-clear:hover { border-color: var(--pico-del-color); color: var(--pico-del-color); }
+.views-panel .view-btn.view-conditional { display: none; } /* hidden until DurationMs data present */
+/* Clear sits apart from the question chips: a quiet text button pushed to the end. */
+.view-clear {
+  width: auto; margin: 0 0 0 auto; padding: 0.33rem 0.6rem;
+  font-size: 0.76rem; line-height: 1.3;
+  background: transparent; border: 0; cursor: pointer; color: var(--pico-muted-color);
+}
+.view-clear:hover { color: var(--pico-del-color); text-decoration: underline; }
 
 /* Phase 5: term-prompt view command bar. Shares .term-prompt CSS from playground;
    the outer element here is a div, not an input wrapper. */
 .view-cmd-bar {
-  margin-bottom: 0.4rem; padding: 0.4rem 0.7rem;
+  margin: 0.5rem 0 0; padding: 0.4rem 0.7rem;
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
   background: var(--syntax-panel-bg, var(--pico-card-sectioning-background-color));
   font-family: var(--pico-font-family-monospace); font-size: 0.78rem;
