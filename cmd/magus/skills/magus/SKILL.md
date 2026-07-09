@@ -21,13 +21,14 @@ only when the tool surface does.
 2. Then reach for the verbs. Prefer the MCP tools; the CLI is the fallback when no
    magus daemon is running.
 
-   | question                                      | MCP tool        | CLI                     |
-   | --------------------------------------------- | --------------- | ----------------------- |
-   | find and relate entities                      | `magus_query`   | `magus query "<terms>"` |
-   | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>`  |
-   | how do two nodes relate                       | `magus_path`    | `magus path <a> <b>`    |
-   | where risk concentrates                       | `magus_stats`   | `magus graph stats`     |
-   | where a code symbol is defined and used       | `magus_refs`    | `magus refs <symbol>`   |
+   | question | MCP tool | CLI |
+   | --- | --- | --- |
+   | find and relate entities | `magus_query` | `magus query "<terms>"` |
+   | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>` |
+   | how do two nodes relate | `magus_path` | `magus path <a> <b>` |
+   | where risk concentrates | `magus_stats` | `magus graph stats` |
+   | where a code symbol is defined and used | `magus_refs` | `magus refs <symbol>` |
+   | what a branch changed in the graph | (export + diff) | `magus graph diff <baseline.json>` |
 
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
@@ -61,7 +62,9 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 - Node `attrs` surface metadata: a project's `engine` and `target_count`, a
   target's inherited `engine`, a doc's `title` and `tags`. The `duration_p75_ms`,
   `cache_hit_rate`, and `run_samples` attrs are OBSERVED from local run history, not
-  derived from sources - read them as history, not guarantees.
+  derived from sources - read them as history, not guarantees. When `knowledge.vcs` is
+  enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
+  `vcs_commits` extracted from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
 
 ## Ownership and blast radius
@@ -78,6 +81,9 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
 - `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
+- To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
+  comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
+  that revision's files, or pass a `graph export -o json` baseline file instead.
 
 ## Do not render the graph yourself
 
