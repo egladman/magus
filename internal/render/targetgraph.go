@@ -21,21 +21,52 @@ import (
 // of truth on the docs site.
 const glossaryDocURL = "https://eli.gladman.cc/magus/glossary/"
 
-// fragmentCap is a conservative per-project ceiling for deep-link fragments.
-// Safari caps URLs near 80 KB and older Firefox near 64 KB; targets graphs are
-// much smaller than a full knowledge graph, but we skip silently rather than
-// emitting a link that won't open in constrained browsers.
-const fragmentCap = 200 * 1024
+// fragmentCap is the per-project ceiling for deep-link fragments emitted in
+// MAGUS.md. Fragments above this are silently omitted rather than emitting a
+// link that will not open in constrained browsers.
+//
+// The limit is set to 64 KB, matching the older Firefox URL cap (the tightest
+// common floor). Safari caps near 80 KB; Chrome handles multi-megabyte URLs.
+// The knowledge-graph path (graph_open.go) warns at 48 KB and points the user
+// at --serve for large graphs; MAGUS.md deep links have no serve fallback, so
+// we hard-skip at the 64 KB floor rather than emitting a broken link.
+//
+// NOTE: the original value was 200 KB (from the initial plan document). That
+// value contradicts the comment below it which named the 64 KB Firefox floor
+// and the 80 KB Safari cap, and would have emitted per-project links that do
+// not open in either browser. The plan's intent was usable deep links; 64 KB
+// satisfies that intent.
+const fragmentCap = 64 * 1024
 
-// encodeDataFragment gzip-compresses then base64url-encodes (no padding) a value
-// for use in a #data= URL fragment. The browser reverses it with
-// DecompressionStream('gzip'). gzip header fields are left at their zero values
-// to guarantee byte-stable output across calls.
-func encodeDataFragment(v any) (string, error) {
+// EncodeFragment JSON-marshals v, gzip-compresses (BestCompression) the result,
+// and returns a base64url-encoded string (no padding) suitable for use as a
+// #data= URL fragment. The browser reverses it with DecompressionStream('gzip').
+// gzip header fields are left at their zero values to guarantee byte-stable
+// output across calls - a necessary property for the MAGUS.md drift gate.
+//
+// This is the single canonical encoder shared by the render package
+// (per-project deep links in MAGUS.md) and cmd/magus (graph open --targets
+// and the knowledge-graph #data= path). Both feed the same browser decode
+// contract, so byte-for-byte wire-format parity is required.
+func EncodeFragment(v any) (string, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
 		return "", err
 	}
+	return encodeFragmentRaw(raw)
+}
+
+// EncodeFragmentRaw gzip-compresses (BestCompression) raw and returns a
+// base64url-encoded string (no padding) suitable for use as a #data= URL
+// fragment. Use this when the caller has already JSON-marshalled its payload;
+// use EncodeFragment when marshalling is also needed.
+func EncodeFragmentRaw(raw []byte) (string, error) {
+	return encodeFragmentRaw(raw)
+}
+
+// encodeFragmentRaw is the inner encoder: gzip BestCompression + base64url (no
+// padding). Callers that have already marshalled their payload use this directly.
+func encodeFragmentRaw(raw []byte) (string, error) {
 	var buf bytes.Buffer
 	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
 	if err != nil {
@@ -50,21 +81,41 @@ func encodeDataFragment(v any) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf.Bytes()), nil
 }
 
-// queryLink returns a Markdown inline-code span for query when explorerURL is
+// encodeDataFragment gzip-compresses then base64url-encodes (no padding) a value
+// for use in a #data= URL fragment. The browser reverses it with
+// DecompressionStream('gzip'). gzip header fields are left at their zero values
+// to guarantee byte-stable output across calls.
+func encodeDataFragment(v any) (string, error) {
+	return EncodeFragment(v)
+}
+
+// stripFragment returns url with any existing fragment (the '#' and everything
+// after it) removed. Used to strip a #src= or #data= from explorerURL before
+// appending a new #q= or #data= fragment, ensuring the resulting URL has
+// exactly one fragment and is valid.
+func stripFragment(rawURL string) string {
+	if i := strings.IndexByte(rawURL, '#'); i >= 0 {
+		return rawURL[:i]
+	}
+	return rawURL
+}
+
+// queryCell returns a Markdown inline-code span for query when explorerURL is
 // empty, or a Markdown link whose text is the inline-code span and whose target
-// is the base explorer URL + "#q=" + url-encoded query, so clicking the cell
-// opens the Graph Explorer pre-seeded with that query. Any existing fragment on
-// explorerURL (e.g. a #src= passed from graphExplorerLink) is stripped so the
-// #q= is the only fragment and the URL is valid.
-func queryLink(query, explorerURL string) string {
+// is the base explorer URL + "#q=" + percent-encoded query, so clicking the
+// cell opens the Graph Explorer pre-seeded with that query. Any existing
+// fragment on explorerURL (e.g. a #src= passed from graphExplorerLink) is
+// stripped so the #q= is the only fragment and the URL is valid.
+//
+// Spaces are encoded as %20 (via url.PathEscape) rather than '+' (QueryEscape)
+// because the browser decodes the fragment with decodeURIComponent, which turns
+// %20 back into a space but leaves '+' as a literal plus character.
+func queryCell(query, explorerURL string) string {
 	if explorerURL == "" {
 		return md.Code(query)
 	}
-	base := explorerURL
-	if i := strings.IndexByte(explorerURL, '#'); i >= 0 {
-		base = explorerURL[:i]
-	}
-	return md.Link(md.Code(query), strings.TrimRight(base, "/")+"/#q="+url.QueryEscape(query))
+	base := stripFragment(explorerURL)
+	return md.Link(md.Code(query), strings.TrimRight(base, "/")+"/#q="+url.PathEscape(query))
 }
 
 // WriteTargetGraphMarkdown renders a workspace's target graph as a one-stop
@@ -135,10 +186,7 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 			if frag, err := encodeDataFragment(singleOut); err == nil && len(frag) <= fragmentCap {
 				// explorerURL may carry a #src= or other fragment (from graphExplorerLink);
 				// strip it so the per-project #data= link is valid and self-contained.
-				base := explorerURL
-				if i := strings.IndexByte(explorerURL, '#'); i >= 0 {
-					base = explorerURL[:i]
-				}
+				base := stripFragment(explorerURL)
 				link := md.Link("Explore this project's graph interactively", strings.TrimRight(base, "/")+"/#data="+frag)
 				b.Paragraph(link)
 			}
@@ -175,7 +223,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	kindRows := make([][]string, 0, len(r.Kinds))
 	for _, k := range r.Kinds {
 		kindRows = append(kindRows, []string{
-			k.Kind, strconv.Itoa(k.Count), queryLink("magus query kind:"+k.Kind, explorerURL), md.Codes(k.Anchors),
+			k.Kind, strconv.Itoa(k.Count), queryCell("magus query kind:"+k.Kind, explorerURL), md.Codes(k.Anchors),
 		})
 	}
 	b.Table([]string{"Kind", "Count", "List them", "Anchors (most connected)"},
@@ -184,7 +232,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	projectRows := make([][]string, 0, len(r.Projects))
 	for _, p := range r.Projects {
 		projectRows = append(projectRows, []string{
-			p.Path, strconv.Itoa(p.TargetCount), queryLink("magus query project:"+p.Path, explorerURL), md.Codes(p.KeyTargets),
+			p.Path, strconv.Itoa(p.TargetCount), queryCell("magus query project:"+p.Path, explorerURL), md.Codes(p.KeyTargets),
 		})
 	}
 	b.Table([]string{"Project", "Targets", "Scope a query", "Key targets"},

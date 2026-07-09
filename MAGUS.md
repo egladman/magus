@@ -30,26 +30,26 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Aproject) | `.`, `website`, `gopherbuzz` |
-| target | 54 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Atarget) | `generate`, `format`, `image-build` |
-| spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Aspell) | `go`, `buf`, `docker` |
-| op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Aop) | `go-build`, `go-test`, `go-fmt` |
-| charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Acharm) | `rw`, `static`, `cd` |
-| module | 22 | [`magus query kind:module`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Amodule) | `fs`, `charm`, `env` |
-| method | 148 | [`magus query kind:method`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Amethod) | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 23 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Adiagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
-| doc | 100 | [`magus query kind:doc`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Adoc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
-| file | 195 | [`magus query kind:file`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Afile) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 964 | [`magus query kind:function`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Afunction) | `sel`, `site_render`, `sendObject` |
-| import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Aimport) | `std`, `magus`, `fs` |
-| rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/graph/#q=magus+query+kind%3Arationale) | `NOTE`, `NOTE`, `NOTE` |
+| project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `.`, `website`, `gopherbuzz` |
+| target | 54 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `image-build` |
+| spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
+| op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
+| charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:charm) | `rw`, `static`, `cd` |
+| module | 22 | [`magus query kind:module`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `env` |
+| method | 148 | [`magus query kind:method`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 23 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
+| doc | 100 | [`magus query kind:doc`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
+| file | 195 | [`magus query kind:file`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:file) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 964 | [`magus query kind:function`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
+| import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
+| rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 24 | [`magus query project:.`](https://eli.gladman.cc/magus/graph/#q=magus+query+project%3A.) | `generate`, `format`, `image-build` |
-| cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/graph/#q=magus+query+project%3Acmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
-| gopherbuzz | 9 | [`magus query project:gopherbuzz`](https://eli.gladman.cc/magus/graph/#q=magus+query+project%3Agopherbuzz) | `build`, `format`, `generate` |
-| website | 14 | [`magus query project:website`](https://eli.gladman.cc/magus/graph/#q=magus+query+project%3Awebsite) | `generate`, `preflight`, `ci` |
+| . | 24 | [`magus query project:.`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:.) | `generate`, `format`, `image-build` |
+| cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
+| gopherbuzz | 9 | [`magus query project:gopherbuzz`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:gopherbuzz) | `build`, `format`, `generate` |
+| website | 14 | [`magus query project:website`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:website) | `generate`, `preflight`, `ci` |
 
 ## Reading the graphs
 

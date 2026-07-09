@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,11 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )
 
@@ -91,6 +89,16 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Target graphs are small; they always use the URL fragment.")
 			return errSilent{exitCode: 2}
 		}
+		if globalScope {
+			fmt.Fprintln(os.Stderr, "magus graph open: --targets and --global cannot be used together.")
+			fmt.Fprintln(os.Stderr, "--targets scopes to this workspace's target graph; use a positional argument to scope to one project.")
+			return errSilent{exitCode: 2}
+		}
+		if refresh {
+			fmt.Fprintln(os.Stderr, "magus graph open: --targets and --refresh cannot be used together.")
+			fmt.Fprintln(os.Stderr, "--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh.")
+			return errSilent{exitCode: 2}
+		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
 	}
 
@@ -112,7 +120,7 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		return graphOpenServe(ctx, base, raw, out.NodeCount, out.EdgeCount)
 	}
 
-	encoded, err := encodeFragment(raw)
+	encoded, err := render.EncodeFragmentRaw(raw)
 	if err != nil {
 		return err
 	}
@@ -164,7 +172,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 			for _, p := range out.Projects {
 				paths = append(paths, p.Path)
 			}
-			sort.Strings(paths)
+			slices.Sort(paths)
 			fmt.Fprintf(os.Stderr, "magus graph open --targets: unknown project %q\n", scope)
 			fmt.Fprintln(os.Stderr, "valid projects:")
 			for _, p := range paths {
@@ -179,7 +187,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	if err != nil {
 		return fmt.Errorf("encode target graph: %w", err)
 	}
-	encoded, err := encodeFragment(raw)
+	encoded, err := render.EncodeFragmentRaw(raw)
 	if err != nil {
 		return err
 	}
@@ -300,24 +308,6 @@ func siteOrigin(base string) (string, error) {
 		return "", fmt.Errorf("--url %q is not a valid absolute URL", base)
 	}
 	return u.Scheme + "://" + u.Host, nil
-}
-
-// encodeFragment gzips then base64url-encodes (no padding) a JSON payload for the
-// `#data=` fragment. The browser reverses it with DecompressionStream('gzip') and
-// a base64url decode (see website/js/graph-explorer.js decodeFragment).
-func encodeFragment(raw []byte) (string, error) {
-	var buf bytes.Buffer
-	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
-	if err != nil {
-		return "", err
-	}
-	if _, err := zw.Write(raw); err != nil {
-		return "", err
-	}
-	if err := zw.Close(); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buf.Bytes()), nil
 }
 
 // openBrowser launches the OS default handler for a URL. It hands the URL off to

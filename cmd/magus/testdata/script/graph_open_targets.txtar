@@ -23,6 +23,16 @@ stderr '\.'
 stderr 'cannot be used together'
 stderr 'fragment'
 
+# --targets and --global are incompatible.
+! exec magus graph open --targets --global
+stderr 'cannot be used together'
+stderr 'positional'
+
+# --targets and --refresh are incompatible.
+! exec magus graph open --targets --refresh
+stderr 'cannot be used together'
+stderr 'magusfile'
+
 # the URL is deterministic: two runs produce the same fragment.
 exec magus graph open --targets --print
 cp stdout url1.txt

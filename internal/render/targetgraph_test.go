@@ -2,6 +2,8 @@ package render
 
 import (
 	"bytes"
+	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -473,6 +475,65 @@ func TestWriteTargetGraphMarkdownPerProjectDeepLinks(t *testing.T) {
 		"expected one deep link per project")
 }
 
+// TestWriteTargetGraphMarkdownDeepLinkSkippedWhenFragmentTooLarge pins the
+// fragmentCap SKIP path: when a project's encoded fragment exceeds fragmentCap,
+// the "Explore this project's graph interactively" link is omitted but the
+// Mermaid run-order graph is still emitted. This guards the invariant that we
+// never emit a per-project deep link too large for constrained browsers (older
+// Firefox caps at ~64 KB).
+func TestWriteTargetGraphMarkdownDeepLinkSkippedWhenFragmentTooLarge(t *testing.T) {
+	const explorerURL = "https://example.com/graph/"
+
+	// Build a project whose encoded JSON exceeds fragmentCap (64 KB encoded after
+	// gzip+base64). We use a fixed raw JSON payload that we know exceeds the cap,
+	// injected as a single node's doc string. This avoids relying on compression
+	// ratios of generated data, which are hard to predict.
+	//
+	// We need the base64url(gzip(json)) output to exceed 64 KB. A simple way is
+	// to include enough bytes that gzip cannot compress below 64 KB. We use a long
+	// doc with mixed content: repeated patterns broken up by unique indices, making
+	// each 128-byte chunk distinct enough to resist heavy compression.
+	const nodeCount = 2200
+	nodes := make([]types.TargetGraphNode, nodeCount)
+	for i := range nodes {
+		// Each doc mixes a fixed preamble with a unique index in multiple positions
+		// so gzip can't reduce the overall size below fragmentCap across all nodes.
+		nodes[i] = types.TargetGraphNode{
+			Name:   fmt.Sprintf("t%06d", i),
+			Doc:    fmt.Sprintf("step=%06d hash=%016x path=bin/build/%06d/output_%06d.bin deps=all", i, uint64(i)*6364136223846793005+1442695040888963407, i, i),
+			Charms: []string{"rw"},
+		}
+		if i > 0 {
+			nodes[i].Dependencies = []string{fmt.Sprintf("t%06d", i-1)}
+		}
+	}
+
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+		Path:   "big",
+		Engine: "buzz",
+		Nodes:  nodes,
+	}}}
+
+	// Confirm the fragment actually exceeds the cap (so this test is meaningful).
+	frag, err := EncodeFragment(out)
+	require.NoError(t, err)
+	require.Greater(t, len(frag), fragmentCap,
+		"test setup error: encoded fragment (%d bytes) does not exceed fragmentCap (%d); inflate the payload", len(frag), fragmentCap)
+
+	var b bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, explorerURL))
+	got := b.String()
+
+	// The deep link must be absent because the fragment exceeds the cap.
+	assert.NotContains(t, got, "Explore this project's graph interactively",
+		"deep link should be absent when the encoded fragment exceeds fragmentCap")
+	assert.NotContains(t, got, "#data=", "no #data= link when fragment exceeds cap")
+
+	// The Mermaid run-order graph is still emitted (the skip is link-only).
+	assert.Contains(t, got, "**Run order**", "Mermaid run-order graph should still be emitted when the deep link is skipped")
+	assert.Contains(t, got, "```mermaid", "Mermaid block should still be emitted when the deep link is skipped")
+}
+
 // TestWriteTargetGraphMarkdownNoDeepLinksWithoutURL pins that deep links are
 // absent when explorerURL is empty.
 func TestWriteTargetGraphMarkdownNoDeepLinksWithoutURL(t *testing.T) {
@@ -506,14 +567,55 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 	assert.NotContains(t, plainStr, "#q=", "no #q= link without explorerURL")
 
 	// With explorerURL: query cells are links wrapping inline code.
+	// Spaces must be %20 (PathEscape), not '+' (QueryEscape): the browser fragment
+	// is decoded with decodeURIComponent, which turns %20 back to a space but
+	// leaves '+' as a literal plus character, which would corrupt multi-word queries.
 	const explorerURL = "https://example.com/graph/"
 	var withLink bytes.Buffer
 	require.NoError(t, WriteTargetGraphMarkdown(&withLink, out, nil, routing, explorerURL))
 	linkedStr := withLink.String()
-	assert.Contains(t, linkedStr, "#q=magus+query+kind%3Aspell", "kind query cell should have #q= link")
-	assert.Contains(t, linkedStr, "#q=magus+query+project%3Apkg%2Ffoo", "project query cell should have #q= link")
+	// url.PathEscape encodes spaces as %20 and slashes as %2F but leaves colons
+	// unescaped (colons are valid in a URI path component). decodeURIComponent in
+	// the browser handles all three correctly, so the query round-trips cleanly.
+	assert.Contains(t, linkedStr, "#q=magus%20query%20kind:spell", "kind query cell should have #q= link with %20 spaces")
+	assert.Contains(t, linkedStr, "#q=magus%20query%20project:pkg%2Ffoo", "project query cell should have #q= link with %20 spaces")
+	assert.NotContains(t, linkedStr, "#q=magus+query", "query link must not use + encoding (breaks decodeURIComponent in the browser)")
 	// The link text is still the inline-code form.
 	assert.Contains(t, linkedStr, "[`magus query kind:spell`]", "query link text should be inline code")
+}
+
+// TestQueryCellEncodingRoundTrip confirms that queryCell encodes spaces as %20
+// so that url.PathUnescape (equivalent to the browser's decodeURIComponent) recovers
+// the original query string exactly. The old url.QueryEscape encoded spaces as '+'
+// which decodeURIComponent would NOT decode back to a space, corrupting multi-word
+// queries like "magus query kind:spell" into "magus+query+kind:spell".
+func TestQueryCellEncodingRoundTrip(t *testing.T) {
+	queries := []string{
+		"magus query kind:spell",
+		"magus query project:pkg/foo",
+		"magus explain internal/cache",
+		"single",
+	}
+	const explorerURL = "https://example.com/graph/"
+	for _, q := range queries {
+		cell := queryCell(q, explorerURL)
+		// Extract the href from the Markdown link: [...](href)
+		start := strings.Index(cell, "](") + 2
+		end := strings.LastIndex(cell, ")")
+		require.Greater(t, end, start, "queryCell output is not a Markdown link: %s", cell)
+		href := cell[start:end]
+
+		// Find the #q= fragment and unescape it as the browser would.
+		qIdx := strings.Index(href, "#q=")
+		require.GreaterOrEqual(t, qIdx, 0, "no #q= in href: %s", href)
+		encoded := href[qIdx+3:]
+		decoded, err := url.PathUnescape(encoded)
+		require.NoError(t, err, "url.PathUnescape failed for %q", encoded)
+		assert.Equal(t, q, decoded, "round-trip failed: encoded %q -> decoded %q (want %q)", encoded, decoded, q)
+
+		// Spaces must be %20, never '+'.
+		assert.NotContains(t, encoded, "+", "encoded fragment must not contain '+' (would break decodeURIComponent): %s", encoded)
+	}
 }
 
 // TestWriteTargetGraphMarkdownRenderDeterministic confirms that two calls to
