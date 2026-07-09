@@ -69,9 +69,15 @@ func deriveSourceBase(ctx context.Context, root string) string {
 	if err != nil || remote == "" {
 		return ""
 	}
+	// Resolve the DEFAULT branch, not the checked-out one: these links land in the
+	// committed MAGUS.md, so they must point at the canonical published location and
+	// stay byte-identical no matter which feature branch or worktree generated them.
+	// When the backend can't report a default branch, forgeBlobBase defaults to "main".
 	branch := ""
-	if meta, err := res.VCS.Metadata(ctx, ws.Root()); err == nil {
-		branch = meta.Branch
+	if brancher, ok := res.VCS.(types.DefaultBranchReporter); ok {
+		if b, err := brancher.DefaultBranch(ctx, ws.Root()); err == nil {
+			branch = b
+		}
 	}
 	return forgeBlobBase(remote, branch)
 }

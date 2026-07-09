@@ -258,6 +258,19 @@ func (v gitVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 	return out, nil
 }
 
+// DefaultBranch resolves the repo's default branch from origin/HEAD, independent of
+// the checked-out branch (types.DefaultBranchReporter), so committed-doc links stay
+// stable across feature branches and worktrees. `git symbolic-ref refs/remotes/origin/HEAD`
+// yields "origin/main"; we strip the "origin/" prefix. Yields ErrVCSUnsupported when
+// origin/HEAD is unset (e.g. a repo cloned without it), so callers fall back.
+func (v gitVCS) DefaultBranch(ctx context.Context, dir string) (string, error) {
+	out, err := vcsOutput(ctx, dir, "git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+	if err != nil || out == "" {
+		return "", types.ErrVCSUnsupported
+	}
+	return strings.TrimPrefix(out, "origin/"), nil
+}
+
 // gitCommitFormat emits the NUL-delimited fields parseCommit expects: id, short,
 // author name/email, the commit (record) date as strict ISO 8601 / RFC 3339 (%cI),
 // parents, and the raw message (%B).

@@ -206,10 +206,19 @@ func assembleProject(p types.TargetGraphProject) Shard {
 	if p.Engine != "" {
 		projAttrs[AttrEngine] = p.Engine
 	}
+	// Display the resolved name, not the raw path: the workspace-root project's Path
+	// is ".", which reads as a bare dot in the graph. RelPath carries the normalized
+	// label (types.ProjectLabel collapses "." to the workspace name, e.g. "magus");
+	// fall back to Path when it is unset (outside a repo). The ID and Source stay keyed
+	// on Path so edges and source links are unaffected.
+	label := p.Path
+	if p.RelPath != "" {
+		label = p.RelPath
+	}
 	s.Nodes = append(s.Nodes, types.KnowledgeNode{
 		ID:     pID,
 		Kind:   types.KindProject,
-		Label:  p.Path,
+		Label:  label,
 		Source: p.Path,
 		Attrs:  projAttrs,
 	})

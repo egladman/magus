@@ -193,6 +193,18 @@ type RemoteReporter interface {
 	RemoteURL(ctx context.Context, dir string) (string, error)
 }
 
+// DefaultBranchReporter is an optional capability (sibling of RemoteReporter) for
+// VCSDriver implementations that can report the repository's default branch, e.g.
+// "main", independent of whatever branch is currently checked out. Committed
+// artifacts (MAGUS.md's forge links) use it so their URLs stay stable no matter which
+// feature branch or worktree generated them. Callers type-assert for it and degrade
+// gracefully when a backend lacks it.
+type DefaultBranchReporter interface {
+	// DefaultBranch returns the default branch of the repo containing dir, or ""
+	// with ErrVCSUnsupported when it cannot be determined.
+	DefaultBranch(ctx context.Context, dir string) (string, error)
+}
+
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
