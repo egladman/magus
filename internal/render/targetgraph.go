@@ -52,13 +52,19 @@ func encodeDataFragment(v any) (string, error) {
 
 // queryLink returns a Markdown inline-code span for query when explorerURL is
 // empty, or a Markdown link whose text is the inline-code span and whose target
-// is explorerURL + "#q=" + url-encoded query, so clicking the cell opens the
-// Graph Explorer pre-seeded with that query.
+// is the base explorer URL + "#q=" + url-encoded query, so clicking the cell
+// opens the Graph Explorer pre-seeded with that query. Any existing fragment on
+// explorerURL (e.g. a #src= passed from graphExplorerLink) is stripped so the
+// #q= is the only fragment and the URL is valid.
 func queryLink(query, explorerURL string) string {
 	if explorerURL == "" {
 		return md.Code(query)
 	}
-	return md.Link(md.Code(query), explorerURL+"#q="+url.QueryEscape(query))
+	base := explorerURL
+	if i := strings.IndexByte(explorerURL, '#'); i >= 0 {
+		base = explorerURL[:i]
+	}
+	return md.Link(md.Code(query), strings.TrimRight(base, "/")+"/#q="+url.QueryEscape(query))
 }
 
 // WriteTargetGraphMarkdown renders a workspace's target graph as a one-stop
@@ -127,7 +133,13 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 				Projects:   []types.TargetGraphProject{p},
 			}
 			if frag, err := encodeDataFragment(singleOut); err == nil && len(frag) <= fragmentCap {
-				link := md.Link("Explore this project's graph interactively", strings.TrimRight(explorerURL, "/")+"/#data="+frag)
+				// explorerURL may carry a #src= or other fragment (from graphExplorerLink);
+				// strip it so the per-project #data= link is valid and self-contained.
+				base := explorerURL
+				if i := strings.IndexByte(explorerURL, '#'); i >= 0 {
+					base = explorerURL[:i]
+				}
+				link := md.Link("Explore this project's graph interactively", strings.TrimRight(base, "/")+"/#data="+frag)
 				b.Paragraph(link)
 			}
 			// If encoding fails or the fragment exceeds the cap, skip silently.

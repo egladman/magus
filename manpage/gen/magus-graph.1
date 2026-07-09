@@ -3,7 +3,7 @@
 magus\-graph \- The workspace's graphs as objects: deps, export, stats
 .SH SYNOPSIS
 .B magus
-.RI "graph <deps|export|stats> [flags]"
+.RI "graph <deps|export|stats|open> [flags]"
 .SH DESCRIPTION
 The workspace's graphs as objects: emit, export, and measure them. The
 query, explain, and path verbs read the knowledge graph; magus graph is the
@@ -29,6 +29,11 @@ deps     The project dependency DAG. A trailing list of project paths roots
            document nothing, spells no target uses), and doc coverage (the
            share of diagnostics, spells, and modules with a doc). \-\-kind scopes
            every section to one node kind. insight report embeds this section.
+  open     Open the workspace's knowledge graph (or target dependency graph with
+           \-\-targets) in the hosted, interactive Graph Explorer. The graph is
+           delivered privately: by default it rides in the URL fragment
+           (#data=...), which browsers never send to a server; \-\-serve instead
+           hands it from an ephemeral 127.0.0.1 loopback server (no size limit).
 .SS graph deps options
 .RS
 .TP
@@ -71,6 +76,24 @@ Scope every section to one node kind (spell, target, doc, ...)
 \fB\-\-refresh\fR
 Force a full graph rebuild first
 .RE
+.SS graph open options
+.RS
+.TP
+\fB\-\-print\fR
+Print the explorer URL to stdout instead of opening a browser
+.TP
+\fB\-\-refresh\fR
+Force a full graph rebuild before opening (knowledge graph only)
+.TP
+\fB\-\-serve\fR
+Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with \-\-targets)
+.TP
+\fB\-\-targets\fR
+Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project
+.TP
+\fB\-\-url\fR \fIstring\fR (default: https://eli.gladman.cc/magus/graph/)
+Base URL of the Graph Explorer page (override for a self\-hosted mirror)
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -82,6 +105,9 @@ Export the merged knowledge graph (json node\-link or graphml)
 .TP
 \fBstats\fR
 Report the knowledge graph's shape: god nodes, orphans, doc coverage
+.TP
+\fBopen\fR
+Open the workspace graph in the hosted Graph Explorer (data never leaves your machine)
 .RE
 .SH EXAMPLES
 \fIProject DAG as Mermaid\fR
@@ -124,6 +150,30 @@ magus graph stats
 .PP
 .EX
 magus graph stats --kind spell
+.EE
+.PP
+\fIOpen knowledge graph in browser\fR
+.PP
+.EX
+magus graph open
+.EE
+.PP
+\fIOpen target dependency graph\fR
+.PP
+.EX
+magus graph open --targets
+.EE
+.PP
+\fIScope target graph to one project\fR
+.PP
+.EX
+magus graph open --targets website
+.EE
+.PP
+\fIPrint the URL instead of opening\fR
+.PP
+.EX
+magus graph open --targets --print
 .EE
 .PP
 .SH SEE ALSO

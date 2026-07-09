@@ -349,8 +349,13 @@ Subcommands (the first argument):
            targets - where structural risk concentrates), orphans (docs that
            document nothing, spells no target uses), and doc coverage (the
            share of diagnostics, spells, and modules with a doc). --kind scopes
-           every section to one node kind. insight report embeds this section.`,
-	Usage: "magus graph <deps|export|stats> [flags]",
+           every section to one node kind. insight report embeds this section.
+  open     Open the workspace's knowledge graph (or target dependency graph with
+           --targets) in the hosted, interactive Graph Explorer. The graph is
+           delivered privately: by default it rides in the URL fragment
+           (#data=...), which browsers never send to a server; --serve instead
+           hands it from an ephemeral 127.0.0.1 loopback server (no size limit).`,
+	Usage: "magus graph <deps|export|stats|open> [flags]",
 	Children: []Command{
 		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)", BuildFlags: func(fs *flag.FlagSet) {
 			fs.Bool("upstream", false, "Show dependents instead of dependencies")
@@ -369,6 +374,13 @@ Subcommands (the first argument):
 			fs.Bool("refresh", false, "Force a full graph rebuild first")
 			fs.Bool("global", false, "Union the workspaces registered in config (knowledge.workspaces) before computing stats")
 		}},
+		{Name: "open", Short: "Open the workspace graph in the hosted Graph Explorer (data never leaves your machine)", BuildFlags: func(fs *flag.FlagSet) {
+			fs.Bool("targets", false, "Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project")
+			fs.Bool("serve", false, "Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
+			fs.Bool("print", false, "Print the explorer URL to stdout instead of opening a browser")
+			fs.Bool("refresh", false, "Force a full graph rebuild before opening (knowledge graph only)")
+			fs.String("url", "https://eli.gladman.cc/magus/graph/", "Base URL of the Graph Explorer page (override for a self-hosted mirror)")
+		}},
 	},
 	Examples: []Example{
 		{"Project DAG as Mermaid", "magus graph deps -o mermaid"},
@@ -378,6 +390,10 @@ Subcommands (the first argument):
 		{"A query's neighborhood as Mermaid", "magus graph export --select 'kind:spell go' -o mermaid"},
 		{"Where structural risk concentrates", "magus graph stats"},
 		{"Doc coverage for spells only", "magus graph stats --kind spell"},
+		{"Open knowledge graph in browser", "magus graph open"},
+		{"Open target dependency graph", "magus graph open --targets"},
+		{"Scope target graph to one project", "magus graph open --targets website"},
+		{"Print the URL instead of opening", "magus graph open --targets --print"},
 	},
 }
 
