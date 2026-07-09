@@ -38,6 +38,14 @@ type Options struct {
 	// socket (Config.Daemon.Address) for /api/v1/status.
 	Config config.Config
 
+	// StatusBase carries the static portions of the status report (telemetry,
+	// cache, build) that the bridge cannot compute itself because they depend on
+	// build-tag constants and config that live in cmd/magus. The caller
+	// (mcp/server.go -> cmd/magus) populates this; the bridge merges it with the
+	// live pool query from the proc socket to produce the full types.StatusReport
+	// that matches the shape of `magus status -o json`.
+	StatusBase types.StatusBase
+
 	// Addr is the address the HTTP server is listening on. Used to derive the
 	// CORS loopback origin (http://127.0.0.1:<port> / http://localhost:<port>).
 	Addr netip.AddrPort
@@ -64,14 +72,15 @@ type Options struct {
 	// HeartbeatInterval overrides the default 25-second SSE heartbeat period.
 	// Zero uses the default. Exposed for testing; production code leaves it zero.
 	HeartbeatInterval time.Duration
-}
 
-// graphVariant is the cache key for ETag computation: the three query params
-// that produce different graph payloads.
-type graphVariant struct {
-	flavor string // "" | "targets"
-	level  string // "" | "projects"
-	sel    string // select terms
+	// KnowledgeGraphFn, when non-nil, is called instead of Magus.KnowledgeGraph.
+	// Intended for tests that want to drive graph-serving paths without a real
+	// workspace. Production code leaves this nil.
+	KnowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
+
+	// DescribeGraphFn, when non-nil, is called instead of Magus.DescribeGraph.
+	// Intended for tests; production code leaves this nil.
+	DescribeGraphFn func() types.TargetGraphOutput
 }
 
 // Mount registers /api/v1/graph, /api/v1/status, and /api/v1/events on mux.
@@ -175,6 +184,9 @@ func handleGraph(w http.ResponseWriter, r *http.Request, opts Options) {
 	etag := fmt.Sprintf(`"%x"`, sum)
 
 	if r.Header.Get("If-None-Match") == etag {
+		// RFC 7232 §4.1: a 304 response MUST include the ETag that would have
+		// been sent in the 200, so the client can update its cache entry.
+		w.Header().Set("ETag", etag)
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -185,6 +197,8 @@ func handleGraph(w http.ResponseWriter, r *http.Request, opts Options) {
 
 	if acceptsGzip(r) {
 		w.Header().Set("Content-Encoding", "gzip")
+		// Vary informs caches that the response differs by Accept-Encoding.
+		w.Header().Set("Vary", "Accept-Encoding")
 		gz := gzip.NewWriter(w)
 		_, _ = gz.Write(body)
 		_ = gz.Close()
@@ -194,7 +208,15 @@ func handleGraph(w http.ResponseWriter, r *http.Request, opts Options) {
 }
 
 func buildFullGraph(ctx context.Context, opts Options) ([]byte, error) {
-	g, err := opts.Magus.KnowledgeGraph(ctx, false)
+	var (
+		g   *knowledge.Graph
+		err error
+	)
+	if opts.KnowledgeGraphFn != nil {
+		g, err = opts.KnowledgeGraphFn(ctx, false)
+	} else {
+		g, err = opts.Magus.KnowledgeGraph(ctx, false)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +228,9 @@ func buildSelectGraph(ctx context.Context, opts Options, sel string) ([]byte, er
 	// Symbol shards are loaded only when the selection actually seeds symbols.
 	var g *knowledge.Graph
 	var err error
-	if knowledge.SeedsSymbols(sel) {
+	if opts.KnowledgeGraphFn != nil {
+		g, err = opts.KnowledgeGraphFn(ctx, knowledge.SeedsSymbols(sel))
+	} else if knowledge.SeedsSymbols(sel) {
 		g, err = opts.Magus.KnowledgeGraphWithSymbols(ctx)
 	} else {
 		g, err = opts.Magus.KnowledgeGraph(ctx, false)
@@ -222,13 +246,23 @@ func buildProjectSkeleton(ctx context.Context, opts Options) ([]byte, error) {
 	// The skeleton is derived from the target graph: take the TargetGraphOutput
 	// and reduce it to project nodes plus project->project depends_on edges.
 	// This keeps the payload at KBs at any scale.
-	tg := opts.Magus.DescribeGraph()
+	var tg types.TargetGraphOutput
+	if opts.DescribeGraphFn != nil {
+		tg = opts.DescribeGraphFn()
+	} else {
+		tg = opts.Magus.DescribeGraph()
+	}
 	skeleton := projectSkeleton(tg)
 	return json.Marshal(skeleton)
 }
 
-func buildTargetGraph(ctx context.Context, opts Options) ([]byte, error) {
-	out := opts.Magus.DescribeGraph()
+func buildTargetGraph(_ context.Context, opts Options) ([]byte, error) {
+	var out types.TargetGraphOutput
+	if opts.DescribeGraphFn != nil {
+		out = opts.DescribeGraphFn()
+	} else {
+		out = opts.Magus.DescribeGraph()
+	}
 	return json.Marshal(out)
 }
 
@@ -266,9 +300,10 @@ func projectSkeleton(tg types.TargetGraphOutput) types.KnowledgeGraphOutput {
 }
 
 // handleStatus serves GET /api/v1/status.
-// Returns the same JSON as `magus status -o json` (statusReport from
-// cmd/magus/status.go). The type is reconstructed here from its components
-// to avoid importing cmd/magus; the fields are identical.
+// Returns the same JSON as `magus status -o json` (types.StatusReport): the
+// telemetry, cache, and build fields come from opts.StatusBase (populated by
+// the caller at mount time); pool and pool_error are queried live from the
+// proc socket so the response always reflects the current daemon state.
 func handleStatus(w http.ResponseWriter, r *http.Request, opts Options) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -279,12 +314,12 @@ func handleStatus(w http.ResponseWriter, r *http.Request, opts Options) {
 		return
 	}
 
-	addr, err := resolveStatusAddr(r.Context(), opts)
-	type statusOut struct {
-		Pool      *proc.StatusReply `json:"pool,omitempty"`
-		PoolError string            `json:"pool_error,omitempty"`
+	out := types.StatusReport{
+		Telemetry: opts.StatusBase.Telemetry,
+		Cache:     opts.StatusBase.Cache,
+		Build:     opts.StatusBase.Build,
 	}
-	var out statusOut
+	addr, err := resolveStatusAddr(r.Context(), opts)
 	if err != nil {
 		out.PoolError = err.Error()
 	} else {
@@ -292,7 +327,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request, opts Options) {
 		if qerr != nil {
 			out.PoolError = qerr.Error()
 		} else {
-			out.Pool = reply
+			out.Pool = statusOutputFromReply(reply)
 		}
 	}
 
@@ -304,6 +339,39 @@ func handleStatus(w http.ResponseWriter, r *http.Request, opts Options) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(body)
+}
+
+// statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput,
+// mirroring the conversion in cmd/magus/status.go so both consumers produce
+// identical shapes.
+func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
+	if r == nil {
+		return nil
+	}
+	out := &types.StatusOutput{
+		ParentPID:     r.ParentPID,
+		DaemonVersion: r.DaemonVersion,
+		Mode:          r.Mode,
+		Capacity:      r.Capacity,
+		InUse:         r.InUse,
+		Waiting:       r.Waiting,
+	}
+	for _, c := range r.Calls {
+		out.Calls = append(out.Calls, types.StatusCall{
+			Args:      c.Args,
+			Workspace: c.Workspace,
+			StartedAt: c.StartedAt,
+			SubOp:     c.SubOp,
+		})
+	}
+	for _, ws := range r.Workspaces {
+		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
+			Root:       ws.Root,
+			LoadedAt:   ws.LoadedAt,
+			LastAccess: ws.LastAccess,
+		})
+	}
+	return out
 }
 
 func resolveStatusAddr(ctx context.Context, opts Options) (string, error) {
@@ -388,9 +456,9 @@ func handleEvents(w http.ResponseWriter, r *http.Request, opts Options) {
 //   - http://127.0.0.1:<port>
 func corsMiddleware(siteOrigin string, port uint16) func(http.Handler) http.Handler {
 	allowed := map[string]bool{
-		siteOrigin:                              siteOrigin != "",
-		fmt.Sprintf("http://localhost:%d", port):   true,
-		fmt.Sprintf("http://127.0.0.1:%d", port):   true,
+		siteOrigin:                               siteOrigin != "",
+		fmt.Sprintf("http://localhost:%d", port): true,
+		fmt.Sprintf("http://127.0.0.1:%d", port): true,
 	}
 	// Remove empty-string key if siteOrigin was empty.
 	delete(allowed, "")

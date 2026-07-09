@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types"
 )
 
 // ServerOptions configures a magus MCP server started via ServeHTTP or ServeStdio.
@@ -42,6 +43,14 @@ type ServerOptions struct {
 	// "/livez", "/readyz") and values are the handlers to invoke. When nil or
 	// empty no extra routes are registered.
 	HealthRoutes map[string]http.Handler
+
+	// StatusBase carries the static portions of a status report (telemetry,
+	// cache, build-tag flags) for the web bridge's /api/v1/status handler.
+	// Populated by the caller (cmd/magus) because it owns the build-tag
+	// constants (mcpIsCompiled, selfUpdateCompiled) and the config-to-status
+	// converters. When zero-valued the bridge returns an empty telemetry/cache
+	// block but still serves the live pool state.
+	StatusBase types.StatusBase
 }
 
 func (o ServerOptions) validate() error {

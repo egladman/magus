@@ -166,6 +166,11 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 	// Mounted only when:
 	//   1. bridge.enabled is unset or true (opt-out via bridge.enabled: false)
 	//   2. The bind address is loopback (non-loopback binding refuses the mount)
+	//
+	// addr is always a numeric IP:port here because the mcp_address config
+	// validator calls netip.ParseAddrPort, which rejects hostnames. IsLoopback
+	// therefore always compares against a resolved IP, never a hostname, so
+	// the loopback gate is sound: addr.Addr().IsLoopback() is exact.
 	if opts.Config.Bridge.Enabled == nil || *opts.Config.Bridge.Enabled {
 		if !addr.Addr().IsLoopback() {
 			log.Warn("[BRIDGE] refusing to mount web bridge on non-loopback address; set bridge.enabled: false to suppress this warning",
@@ -193,6 +198,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 			bridgeOpts := webbridge.Options{
 				Magus:           opts.Magus,
 				Config:          opts.Config,
+				StatusBase:      opts.StatusBase,
 				Addr:            addr,
 				SiteOrigin:      siteOrigin,
 				GraphInvalidate: inv,

@@ -110,36 +110,18 @@ func status(ctx context.Context, args []string) error {
 	}
 }
 
-// statusReport is returned by `magus status -o json|yaml`: telemetry config, cache config, live pool.
-type statusReport struct {
-	Telemetry telemetryStatus     `json:"telemetry" yaml:"telemetry"`
-	Cache     cacheStatus         `json:"cache" yaml:"cache"`
-	Build     buildStatus         `json:"build" yaml:"build"`
-	Pool      *types.StatusOutput `json:"pool,omitempty" yaml:"pool,omitempty"`
-	PoolError string              `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
-}
+// statusReport is the type alias for the shared StatusReport; kept as an alias
+// so internal callers in this package use the short name.
+type statusReport = types.StatusReport
 
-// buildStatus reports optional features compiled into this binary via build tags.
-type buildStatus struct {
-	SelfUpdate bool `json:"selfupdate" yaml:"selfupdate"`
-	MCP        bool `json:"mcp" yaml:"mcp"`
-}
+// buildStatus is the type alias for the shared BuildStatus.
+type buildStatus = types.BuildStatus
 
-type telemetryStatus struct {
-	Enabled     bool    `json:"enabled" yaml:"enabled"`
-	Endpoint    string  `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
-	Protocol    string  `json:"protocol,omitempty" yaml:"protocol,omitempty"`
-	Insecure    bool    `json:"insecure,omitempty" yaml:"insecure,omitempty"`
-	ServiceName string  `json:"service_name,omitempty" yaml:"service_name,omitempty"`
-	SampleRatio float64 `json:"sample_ratio,omitempty" yaml:"sample_ratio,omitempty"`
-	Note        string  `json:"note,omitempty" yaml:"note,omitempty"`
-}
+// telemetryStatus is the type alias for the shared TelemetryStatus.
+type telemetryStatus = types.TelemetryStatus
 
-type cacheStatus struct {
-	Immutable bool   `json:"immutable" yaml:"immutable"`
-	Dir       string `json:"dir,omitempty" yaml:"dir,omitempty"`
-	SizeMB    int    `json:"size_mb,omitempty" yaml:"size_mb,omitempty"`
-}
+// cacheStatus is the type alias for the shared CacheStatus.
+type cacheStatus = types.CacheStatus
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
 func printStatus(ctx context.Context, socket string, opts OutputOptions, animFrame int, compact bool) error {
@@ -161,6 +143,21 @@ func printStatus(ctx context.Context, socket string, opts OutputOptions, animFra
 // gridEnabled returns true when the pool graphic should be rendered.
 func gridEnabled(opts OutputOptions, isTTY bool) bool {
 	return opts.Format == outputText && isTTY && os.Getenv("NO_COLOR") == ""
+}
+
+// buildStatusBase constructs the static portions of a StatusReport that depend
+// on build-tag constants (selfUpdateCompiled, mcpIsCompiled) and the resolved
+// config. Called at MCP-server start to inject into webbridge.Options so the
+// bridge can serve the full types.StatusReport without importing cmd/magus.
+func buildStatusBase() types.StatusBase {
+	return types.StatusBase{
+		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
+		Cache:     buildCacheStatus(globalCfg.Cache),
+		Build: buildStatus{
+			SelfUpdate: selfUpdateCompiled,
+			MCP:        mcpIsCompiled,
+		},
+	}
 }
 
 func buildStatusReport(ctx context.Context, socket string) statusReport {

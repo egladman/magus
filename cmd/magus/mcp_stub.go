@@ -17,3 +17,7 @@ func mcpCmd(_ context.Context, _ []string) error {
 
 // startMCPWithDaemon is a no-op when MCP is not compiled in.
 func startMCPWithDaemon(_ context.Context, _ context.CancelFunc) {}
+
+// mcpAddrString returns "" on non-mcp builds: there is no MCP server so the
+// bridge doctor check skips cleanly via the MCPAddr=="" guard.
+func mcpAddrString() string { return "" }

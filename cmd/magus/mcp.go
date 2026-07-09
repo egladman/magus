@@ -27,6 +27,17 @@ func mcpAddrPort() (netip.AddrPort, error) {
 	return netip.ParseAddrPort(raw)
 }
 
+// mcpAddrString returns the configured MCP address as a host:port string,
+// falling back to the default. Used by buildDaemonInfo so the bridge doctor
+// check knows which address to probe.
+func mcpAddrString() string {
+	raw := globalCfg.MCP.Address
+	if raw == "" {
+		raw = internalmcp.DefaultAddress
+	}
+	return raw
+}
+
 // mcpCmd prints instructions for using the MCP server.
 // MCP is no longer a standalone command — it is served by `magus server start`.
 func mcpCmd(_ context.Context, _ []string) error {
@@ -77,11 +88,12 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
 	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
 	go func() {
 		err := internalmcp.ServeHTTP(ctx, internalmcp.ServerOptions{
-			Magus:    m,
-			Logger:   slog.Default(),
-			Version:  version,
-			Config:   globalCfg,
-			HTTPAddr: addr,
+			Magus:      m,
+			Logger:     slog.Default(),
+			Version:    version,
+			Config:     globalCfg,
+			HTTPAddr:   addr,
+			StatusBase: buildStatusBase(),
 			// Health endpoints share this HTTP server so k8s probes hit the
 			// same port as MCP. Set MAGUS_MCP_ADDRESS=0.0.0.0:7391 (or mcp.address)
 			// so the kubelet can reach them (default 127.0.0.1 is pod-local).
