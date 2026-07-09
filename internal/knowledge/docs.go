@@ -175,10 +175,18 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 }
 
 // findDocFiles returns every markdown doc path (rel to root), sorted: everything
-// under docs/, plus the top-level README.md and MAGUS.md, skipping ignore dirs.
+// under docs/, plus the top-level README.md, skipping ignore dirs.
+//
+// MAGUS.md is deliberately NOT ingested. It is a generated catalog (rendered by
+// `magus describe graph -o markdown`) whose body carries live node/edge counts, and
+// its doc node would emit body-derived edges (MGS codes, backticked spell names,
+// markdown links). Ingesting it makes it both an input and an output: regenerating
+// the counts changes the body, which changes the edge count, which changes the
+// counts - no single-pass fixpoint. Everything in MAGUS.md is already a first-class
+// node in the graph, so excluding it loses nothing.
 func findDocFiles(root string) []string {
 	var out []string
-	for _, top := range []string{"README.md", "MAGUS.md"} {
+	for _, top := range []string{"README.md"} {
 		if _, err := os.Stat(filepath.Join(root, top)); err == nil {
 			out = append(out, top)
 		}

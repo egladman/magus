@@ -61,6 +61,27 @@ func TestDocsFrontmatterCoexistsWithDiagnostic(t *testing.T) {
 	assert.Equal(t, string(types.DanglingDocReference), d.Attrs[AttrDiagnostic])
 }
 
+// TestMagusMdNotIngested guards the fixpoint fix: MAGUS.md is a generated catalog,
+// so it must NOT become a doc node even when present on disk. Ingesting it would make
+// it both an input and an output (its body carries live counts that feed edges that
+// change the counts), which is what produced the "settle gen fixpoint" churn.
+func TestMagusMdNotIngested(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "MAGUS.md", "# magus\nUses the `go` spell; see MGS2001.\n")
+	writeFile(t, root, "README.md", "The `go` spell.\n")
+
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{Spells: []types.SpellEntry{{Name: "go"}}})}).Output()
+
+	_, ok := nodeByID(out, "doc:MAGUS.md")
+	assert.False(t, ok, "generated MAGUS.md must not be ingested as a doc node")
+	for _, e := range out.Links {
+		assert.NotEqualf(t, "doc:MAGUS.md", e.Source, "no edges should originate from the excluded MAGUS.md (found -> %s)", e.Target)
+	}
+	// README.md is still ingested (control: the exclusion is MAGUS.md-specific).
+	_, ok = nodeByID(out, "doc:README.md")
+	assert.True(t, ok, "README.md is still ingested")
+}
+
 func TestAssembleDocs(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "docs/codes/sandbox/MGS2010.md", "# MGS2010\nRelated to MGS2001. See [go spell](../../spells/go.md).\n")

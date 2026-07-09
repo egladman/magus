@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary
 
 ## Query first
 
-This workspace has a knowledge graph of **936 nodes** and **1499 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **935 nodes** and **1492 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -28,7 +28,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 1 | `magus query kind:project` | `.` |
+| project | 1 | `magus query kind:project` | `gopherbuzz` |
 | target | 9 | `magus query kind:target` | `format`, `generate`, `build` |
 | spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
 | op | 43 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
@@ -36,7 +36,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
-| doc | 3 | `magus query kind:doc` | `MAGUS.md`, `README.md`, `docs/ffi.md` |
+| doc | 2 | `magus query kind:doc` | `README.md`, `docs/ffi.md` |
 | file | 59 | `magus query kind:file` | `examples/bubblegum/config.buzz`, `examples/bubblegum/platform/macos/cocoa.buzz`, `examples/bubblegum/core/command.buzz` |
 | function | 557 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 59 | `magus query kind:import` | `std`, `state`, `os` |
