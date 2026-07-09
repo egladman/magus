@@ -31,10 +31,20 @@ Every byte the bridge can emit, enumerated:
 No other routes exist. The bridge mounts at `/api/v1/` on the same port as the
 MCP server (`127.0.0.1:7391` by default).
 
+**Error bodies.** When a route fails (5xx), the response body contains
+`err.Error()` detail to help an authenticated loopback caller diagnose the
+problem. This detail is returned only to a caller that has already passed the
+bearer-token check.
+
 Symbol shards (`@symbols`) are NOT loaded for the default `/api/v1/graph` call.
 They are loaded only when `?select=<terms>` uses a symbol-seeding query (a
 `symbol:` prefix or `kind:symbol`). This preserves the lazy-load contract:
 symbol data stays opt-in.
+
+**Uncached variants.** The `?level=projects` and `?flavor=targets` query params
+reparse the workspace target graph on every request (they call `DescribeGraph`
+which reads the cached in-memory target graph but does not cache the variant
+serialization). This is a known limitation; memoization per variant is deferred.
 
 ## How it is secured
 
