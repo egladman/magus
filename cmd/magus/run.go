@@ -23,7 +23,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return targetUsage()
 	}
 
-	rawTarget, rest := args[0], args[1:]
+	// Find the target even if global flags precede it (`magus run --dry-run build`);
+	// stdlib flag would otherwise treat the flag as the target. rest carries the hoisted
+	// flags + any project args for cmdParse below.
+	rawTarget, rest, ok := splitTargetFromArgs(args)
+	if !ok {
+		return targetUsage()
+	}
 	spellFilter, targetStr := parseTarget(rawTarget)
 	parsedTarget, parseErr := types.ParseTarget(targetStr)
 	if parseErr != nil {

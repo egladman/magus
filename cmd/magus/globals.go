@@ -76,8 +76,17 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 // flag is detected from fs (a flag whose Value is not a bool flag consumes the next
 // token); an unknown or "=" flag is passed through untouched for flag.Parse to report.
 func reorderFlagsFirst(fs *flag.FlagSet, args []string) []string {
-	flags := make([]string, 0, len(args))
-	positionals := make([]string, 0, len(args))
+	flags, positionals := partitionFlags(fs, args)
+	return append(flags, positionals...)
+}
+
+// partitionFlags splits args into recognized flags (with their values) and positionals,
+// preserving order within each group. Shared by reorderFlagsFirst (which concatenates
+// them) and splitTargetFromArgs (which needs the first positional). See reorderFlagsFirst
+// for the "--"/value-flag/unknown-flag rules.
+func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []string) {
+	flags = make([]string, 0, len(args))
+	positionals = make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--" {
@@ -100,7 +109,26 @@ func reorderFlagsFirst(fs *flag.FlagSet, args []string) []string {
 		}
 		flags = append(flags, a) // bool flag, or unknown (flag.Parse reports it)
 	}
-	return append(flags, positionals...)
+	return flags, positionals
+}
+
+// splitTargetFromArgs finds the target - the first positional - even when recognized
+// global/display flags precede it, so `magus run --dry-run build` sees "build" as the
+// target instead of mistaking the flag for it. It hoists global/display flags out first,
+// then returns the first positional as the target and the remaining flags+positionals for
+// the subcommand's own cmdParse. Only global/display flags are recognized here; a target's
+// own local flags still belong after the target (they can't be resolved until the target
+// is known). ok is false when there is no positional target at all.
+func splitTargetFromArgs(args []string) (target string, rest []string, ok bool) {
+	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
+	gen.BindFlags(fs, &globalCfg)
+	bindDisplayFlags(fs)
+	flags, positionals := partitionFlags(fs, args)
+	if len(positionals) == 0 || positionals[0] == "--" {
+		return "", nil, false
+	}
+	rest = append(append(make([]string, 0, len(args)), flags...), positionals[1:]...)
+	return positionals[0], rest, true
 }
 
 // flagIsBool reports whether f is a boolean flag (usable without a value), which

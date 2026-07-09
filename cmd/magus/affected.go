@@ -42,7 +42,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return affectedBisect(ctx, root, args)
 	}
 
-	rawTarget, rest := args[0], args[1:]
+	// Find the target even if global flags precede it (`magus affected --dry-run ci`);
+	// mirrors `magus run`. rest carries the hoisted flags for cmdParse below.
+	rawTarget, rest, ok := splitTargetFromArgs(args)
+	if !ok {
+		affectedUsage()
+		return flag.ErrHelp
+	}
 	spellFilter, targetStr := parseTarget(rawTarget)
 	parsed, perr := types.ParseTarget(targetStr)
 	if perr != nil {
