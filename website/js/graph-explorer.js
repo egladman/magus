@@ -61,6 +61,12 @@ let matchSet = null;      // Set of node ids matching `query`/focus/lens, or nul
 let hoverId = null;
 let focusId = null;       // node the local/focus graph is centered on, or null
 let focusDepth = 2;       // hops included in the focus graph
+// Layout mode: "force" (d3 simulation) or "layered" (deterministic Sugiyama DAG layout).
+// Defaults are set per flavor after a graph loads; manual toggle is allowed and survives
+// the URL fragment (#layout=force or #layout=layered). The scale guard refuses layered
+// for more than 500 visible nodes.
+let layoutMode = "force"; // "force" | "layered"
+let graphFlavor = "knowledge"; // "knowledge" | "targets"; set in boot/replaceGraph
 
 // The graph stays gently "alive": the simulation never fully cools, so nodes
 // keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
@@ -231,6 +237,251 @@ function neighborhood(id, depth) {
   return set;
 }
 
+// ---- layered DAG layout (Sugiyama-style, no deps, fully deterministic) ----
+// layoutLayered assigns node.fx / node.fy for the visible subset.
+// Only `depends_on` edges are used for layering; `uses` and `contains` edges
+// render but do not influence placement. All tie-breaking is by node.id
+// (lexicographic) so the same input always produces identical coordinates.
+//
+// Algorithm:
+//   1. Cycle-break: iterative DFS on the depends_on subgraph; back-edges are
+//      reversed FOR LAYOUT ONLY (e.layoutReversed = true; rendered dashed).
+//   2. Longest-path layering: layer(n) = 1 + max(layer(deps)). Roots at 0.
+//   3. Barycenter ordering: 3 passes (down, up, down) within each layer.
+//      Ties broken by node.id (determinism).
+//   4. Coordinates: fixed column width; row height scales to the max layer
+//      occupancy. n.fx = col * COL_W; n.fy = order * ROW_H.
+//
+// The force simulation is NOT ticked in layered mode. d3-zoom, drag, hover,
+// and selection operate on the same draw() function unchanged. Drag updates
+// n.fx/n.fy directly.
+const LAYERED_COL_W = 180; // horizontal spacing between layers (columns)
+const LAYERED_ROW_H = 48;  // vertical spacing between nodes within a layer
+const LAYERED_MAX   = 500; // scale guard: refuse layered above this count
+
+function layoutLayered(nodes, links) {
+  // Work on the visible subset by id.
+  const ids = new Set(nodes.map((n) => n.id));
+
+  // Collect depends_on edges (only those within the visible subset).
+  // We work on index arrays to avoid mutating the real link objects (except
+  // the layoutReversed flag, which IS written back for the draw pass).
+  const depEdges = []; // { s: id, t: id, linkRef }
+  for (const e of links) {
+    if (e.relation !== "depends_on") continue;
+    const s = e.source.id || e.source;
+    const t = e.target.id || e.target;
+    if (!ids.has(s) || !ids.has(t)) continue;
+    depEdges.push({ s, t, linkRef: e });
+  }
+
+  // ---- Step 1: cycle-break via iterative DFS --------------------------------
+  // Find back-edges (edges that lead to an ancestor in DFS) and mark them
+  // reversed for layout. Two-phase: (a) identify back-edges via DFS on the
+  // original edges, (b) reverse those edges in depEdges and write the flag.
+  // Using a snapshot of outgoing edges per node means the DFS is stable even
+  // as we later reverse edges.
+
+  // Sort entry points for determinism: process nodes in id order.
+  const sortedIds = nodes.map((n) => n.id).sort();
+
+  // Build a stable DFS snapshot: for each node, a sorted list of [targetId, edgeRef]
+  // pairs. We snapshot the original target id separately from the edge object so
+  // that later reversals of e.s/e.t don't corrupt the DFS traversal.
+  // Sorting by original targetId gives deterministic traversal order.
+  const outSnap = new Map(); // nodeId -> [{ origTarget: id, edgeRef }]
+  for (const id of ids) outSnap.set(id, []);
+  for (const e of depEdges) outSnap.get(e.s).push({ origTarget: e.t, edgeRef: e });
+  for (const arr of outSnap.values()) arr.sort((a, b) => a.origTarget < b.origTarget ? -1 : a.origTarget > b.origTarget ? 1 : 0);
+
+  const visited = new Set();
+  const inStack = new Set();
+
+  for (const startId of sortedIds) {
+    if (visited.has(startId)) continue;
+    // Iterative DFS: stack entries are [nodeId, childIndex].
+    const dfsStack = [[startId, 0]];
+    while (dfsStack.length) {
+      const top = dfsStack[dfsStack.length - 1];
+      const [nid, idx] = top;
+      if (idx === 0) {
+        visited.add(nid);
+        inStack.add(nid);
+      }
+      const children = outSnap.get(nid) || [];
+      if (idx < children.length) {
+        top[1]++;
+        const { origTarget, edgeRef } = children[idx];
+        if (inStack.has(origTarget)) {
+          // Back-edge: reverse it for layout only. The snapshot key (origTarget)
+          // does not change; we only mutate the edge object so predMap is correct.
+          edgeRef.linkRef.layoutReversed = true;
+          [edgeRef.s, edgeRef.t] = [edgeRef.t, edgeRef.s];
+        } else if (!visited.has(origTarget)) {
+          dfsStack.push([origTarget, 0]);
+        }
+      } else {
+        // All children visited: pop.
+        inStack.delete(nid);
+        dfsStack.pop();
+      }
+    }
+  }
+
+  // ---- Step 2: longest-path layering ----------------------------------------
+  // layer(n) = 0 if no depends_on predecessors; else 1 + max(layer(pred)).
+  // We build a predecessor map from depEdges (which are now cycle-free for
+  // layout purposes - back-edges have been reversed).
+  const predMap = new Map(); // nodeId -> Set of predecessor ids
+  for (const id of ids) predMap.set(id, new Set());
+  for (const e of depEdges) {
+    predMap.get(e.t).add(e.s);
+  }
+
+  const layerOf = new Map(); // nodeId -> layer index
+  function getLayer(id) {
+    if (layerOf.has(id)) return layerOf.get(id);
+    const preds = predMap.get(id) || new Set();
+    // Guard against any residual cycle (reversed edges should have eliminated
+    // them, but be safe): if no preds, layer = 0.
+    let maxPred = -1;
+    for (const p of preds) {
+      // Simple recursion is safe because we broke all cycles above.
+      maxPred = Math.max(maxPred, getLayer(p));
+    }
+    const l = maxPred + 1;
+    layerOf.set(id, l);
+    return l;
+  }
+  for (const id of sortedIds) getLayer(id);
+
+  // Group nodes by layer and sort within each layer by id for initial order.
+  const layerGroups = new Map(); // layer -> [nodeId, ...]
+  for (const [id, l] of layerOf) {
+    if (!layerGroups.has(l)) layerGroups.set(l, []);
+    layerGroups.get(l).push(id);
+  }
+  for (const arr of layerGroups.values()) arr.sort();
+
+  // ---- Step 3: barycenter ordering (3 passes: down, up, down) ---------------
+  // Within each layer, order nodes by the mean positional index of their
+  // neighbors in adjacent layers. Ties broken by node.id (determinism).
+  const sortedLayers = [...layerGroups.keys()].sort((a, b) => a - b);
+
+  // pos[id] = current order index within its layer.
+  const pos = new Map();
+  for (const l of sortedLayers) {
+    layerGroups.get(l).forEach((id, i) => pos.set(id, i));
+  }
+
+  // Build directed edge sets for sweep (predecessor in layer l-1, successor in l+1).
+  const succMap = new Map(); // nodeId -> [nodeId]  (target of depends_on)
+  const prevMap = new Map(); // nodeId -> [nodeId]  (source of depends_on)
+  for (const id of ids) { succMap.set(id, []); prevMap.set(id, []); }
+  for (const e of depEdges) {
+    succMap.get(e.s).push(e.t);
+    prevMap.get(e.t).push(e.s);
+  }
+
+  function barycentricSort(arr, neighborFn) {
+    const scored = arr.map((id) => {
+      const nbs = neighborFn(id);
+      if (!nbs.length) return { id, score: Infinity }; // no neighbors: keep at end
+      const mean = nbs.reduce((s, nb) => s + (pos.get(nb) ?? 0), 0) / nbs.length;
+      return { id, score: mean };
+    });
+    // Stable sort by score then id (determinism for ties).
+    scored.sort((a, b) => a.score - b.score || a.id.localeCompare(b.id));
+    return scored.map((x) => x.id);
+  }
+
+  // Sweep order: down (left-to-right layers), up (right-to-left), down again.
+  const sweeps = [
+    { order: sortedLayers, neighborFn: (id) => prevMap.get(id) || [] },
+    { order: [...sortedLayers].reverse(), neighborFn: (id) => succMap.get(id) || [] },
+    { order: sortedLayers, neighborFn: (id) => prevMap.get(id) || [] },
+  ];
+
+  for (const { order, neighborFn } of sweeps) {
+    for (const l of order) {
+      const arr = layerGroups.get(l);
+      const sorted = barycentricSort(arr, neighborFn);
+      layerGroups.set(l, sorted);
+      sorted.forEach((id, i) => pos.set(id, i));
+    }
+  }
+
+  // ---- Step 4: assign coordinates -------------------------------------------
+  // x = layer index * COL_W (left = layer 0 = roots/sources)
+  // y = order index * ROW_H, centered vertically within the layer.
+  const maxOccupancy = Math.max(...[...layerGroups.values()].map((a) => a.length), 1);
+  const totalH = maxOccupancy * LAYERED_ROW_H;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  for (const l of sortedLayers) {
+    const arr = layerGroups.get(l);
+    const layerH = arr.length * LAYERED_ROW_H;
+    const yOffset = (totalH - layerH) / 2 + LAYERED_ROW_H / 2;
+    for (let i = 0; i < arr.length; i++) {
+      const n = byId.get(arr[i]);
+      if (!n) continue;
+      n.fx = l * LAYERED_COL_W + LAYERED_COL_W / 2;
+      n.fy = yOffset + i * LAYERED_ROW_H;
+      // Also set x/y so the initial draw is immediate (before any tick).
+      n.x = n.fx;
+      n.y = n.fy;
+    }
+  }
+}
+
+// applyLayoutedMode: switch to layered layout for the visible node/link set.
+// Returns false (with a status message) when the scale guard fires.
+// Stops the force simulation so no ticks disturb the fixed positions.
+function applyLayeredMode() {
+  const visNodes = matchSet
+    ? graph.nodes.filter((n) => matchSet.has(n.id))
+    : graph.nodes;
+  if (visNodes.length > LAYERED_MAX) {
+    setStatus(
+      "layered layout is capped at 500 nodes - narrow with a query or the local graph (the CLI applies the same rule to -o mermaid)",
+      true
+    );
+    return false;
+  }
+  if (sim) { sim.stop(); }
+  layoutLayered(visNodes, graph.links);
+  draw();
+  return true;
+}
+
+// switchLayout changes layoutMode and applies it, wiring the DOM toggle state.
+function switchLayout(mode) {
+  layoutMode = mode;
+  const btn = el("layout-toggle-btn");
+  if (btn) {
+    btn.textContent = mode === "layered" ? "Force" : "Layered";
+    btn.title = mode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
+  }
+  // Show/hide force sliders: hidden in layered mode.
+  const forceControls = document.querySelector(".force-controls");
+  if (forceControls) forceControls.hidden = (mode === "layered");
+
+  updateHash();
+
+  if (mode === "layered") {
+    applyLayeredMode();
+  } else {
+    // Force mode: clear fixed positions so the simulation takes over.
+    for (const n of graph.nodes) { n.fx = null; n.fy = null; }
+    if (sim) {
+      sim.alpha(0.5).restart();
+    } else {
+      startSimulation();
+    }
+    draw();
+  }
+}
+
 // ---- simulation + canvas ---------------------------------------------------
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -284,13 +535,50 @@ function draw() {
     ctx.strokeStyle = active ? theme.muted : theme.border;
     ctx.globalAlpha = active ? 0.55 : 0.1;
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
-    // stand out from normal dependency edges.
-    if (e.cycle) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
+    // stand out from normal dependency edges. Layout-reversed edges (cycle-break
+    // in layered mode) also render dashed.
+    const dashed = e.cycle || e.layoutReversed;
+    if (dashed) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
     ctx.beginPath();
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(t.x, t.y);
     ctx.stroke();
-    if (e.cycle) ctx.setLineDash([]);
+    if (dashed) ctx.setLineDash([]);
+
+    // Arrowheads: only in layered mode (they add clarity on the DAG's directed
+    // edges; in force mode at demo-graph density they would be visual noise).
+    // For depends_on edges the layered layout places the dependency (target) at
+    // a lower x than the dependent (source), matching the graphviz LR convention
+    // where data flows left-to-right. The arrowhead is drawn at the SOURCE end
+    // (the dependent node on the right) to show "this node needs what is to its
+    // left", which matches the mermaid output `dependency --> dependent`.
+    // For layout-reversed back-edges the arrow is drawn at the target end (the
+    // reversed direction is the layout-only fiction; the arrowhead marks it).
+    if (layoutMode === "layered" && active && e.relation === "depends_on") {
+      const isReversed = !!e.layoutReversed;
+      // Arrow tip: at source for normal edges, at target for reversed edges.
+      const tipNode = isReversed ? t : s;
+      // Direction vector from the other end toward the tip.
+      const fromNode = isReversed ? s : t;
+      const dx = tipNode.x - fromNode.x, dy = tipNode.y - fromNode.y;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      // Place the tip at the node's edge (radius + small gap).
+      const tipR = tipNode.r || 5;
+      const tipX = tipNode.x - ux * (tipR + 1 / transform.k);
+      const tipY = tipNode.y - uy * (tipR + 1 / transform.k);
+      const aLen = 8 / transform.k; // arrowhead length
+      const aWid = 4 / transform.k; // arrowhead half-width
+      // Perpendicular vector.
+      const px = -uy, py = ux;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - ux * aLen + px * aWid, tipY - uy * aLen + py * aWid);
+      ctx.lineTo(tipX - ux * aLen - px * aWid, tipY - uy * aLen - py * aWid);
+      ctx.closePath();
+      ctx.fillStyle = active ? theme.muted : theme.border;
+      ctx.fill();
+    }
   }
   ctx.globalAlpha = 1;
 
@@ -350,7 +638,17 @@ function nodeAtPointer(event) {
   const rect = canvas.getBoundingClientRect();
   const px = (event.clientX - rect.left - transform.x) / transform.k;
   const py = (event.clientY - rect.top - transform.y) / transform.k;
-  return sim.find(px, py, 30 / transform.k);
+  // In layered mode the simulation may be stopped, but sim.find still works on
+  // the node positions. Fall back to a manual scan when sim is null (shouldn't
+  // happen, but be safe).
+  if (sim) return sim.find(px, py, 30 / transform.k);
+  let best = null, bestDist = 30 / transform.k;
+  for (const n of graph.nodes) {
+    if (n.x == null) continue;
+    const d = Math.sqrt((n.x - px) ** 2 + (n.y - py) ** 2);
+    if (d < bestDist) { bestDist = d; best = n; }
+  }
+  return best;
 }
 
 function setupZoomDrag() {
@@ -364,7 +662,7 @@ function setupZoomDrag() {
     .subject((event) => nodeAtPointer(event.sourceEvent))
     .on("start", (event) => {
       if (!event.subject) return;
-      if (!event.active) sim.alphaTarget(0.2).restart();
+      if (layoutMode !== "layered" && !event.active) sim.alphaTarget(0.2).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
     })
@@ -372,9 +670,16 @@ function setupZoomDrag() {
       if (!event.subject) return;
       event.subject.fx = (event.x - transform.x) / transform.k;
       event.subject.fy = (event.y - transform.y) / transform.k;
+      // In layered mode the sim is stopped; draw manually on each drag event.
+      if (layoutMode === "layered") { event.subject.x = event.subject.fx; event.subject.y = event.subject.fy; draw(); }
     })
     .on("end", (event) => {
       if (!event.subject) return;
+      if (layoutMode === "layered") {
+        // Keep the manually dragged position (fx/fy stay set); just redraw.
+        draw();
+        return;
+      }
       if (!event.active) sim.alphaTarget(idleAlpha()); // back to the gentle floor, not a dead stop
       event.subject.fx = null;
       event.subject.fy = null;
@@ -554,7 +859,12 @@ function clearFocusOrQuery() {
   searchEl.value = "";
   setStatus("");
   renderList();
-  draw();
+  if (layoutMode === "layered") {
+    for (const e of graph.links) delete e.layoutReversed;
+    applyLayeredMode();
+  } else {
+    draw();
+  }
 }
 
 // Lenses mirror `magus graph stats`: hubs = the highest-degree "god" nodes,
@@ -693,6 +1003,18 @@ function applyQuery(q) {
   }
   renderList();
   updateHash();
+  // Re-run layered layout on the new visible subset.
+  if (layoutMode === "layered") {
+    // Clear prior layout-reversed flags so cycle-break reruns cleanly.
+    for (const e of graph.links) delete e.layoutReversed;
+    if (!applyLayeredMode()) {
+      // Scale guard: too many nodes; fall back to force.
+      layoutMode = "force";
+      syncLayoutToggle();
+      if (sim) sim.alpha(0.3).restart();
+    }
+    return;
+  }
   draw();
 }
 
@@ -762,8 +1084,8 @@ function renderLegend() {
     }));
 }
 
-// Reflect selection + query in the hash WITHOUT clobbering a #data= fragment
-// (that would round-trip the whole graph through history on every click).
+// Reflect selection, query, and layout mode in the hash WITHOUT clobbering a
+// #data= fragment (that would round-trip the whole graph through history on every click).
 let suppressHash = false;
 function updateHash() {
   if (suppressHash) return;
@@ -772,6 +1094,10 @@ function updateHash() {
   const parts = [];
   if (query) parts.push("q=" + encodeURIComponent(query));
   if (selected) parts.push("node=" + encodeURIComponent(selected));
+  // Only serialize the layout key when it differs from the flavor default, so
+  // clean URLs stay clean. (targets -> layered default; knowledge -> force default).
+  const defaultLayout = (graphFlavor === "targets") ? "layered" : "force";
+  if (layoutMode !== defaultLayout) parts.push("layout=" + layoutMode);
   const next = parts.length ? "#" + parts.join("&") : "#";
   if (location.hash !== next) history.replaceState(null, "", next);
 }
@@ -780,6 +1106,11 @@ function applyDeepLinks() {
   const params = hashParams();
   if (params.q) { searchEl.value = params.q; applyQuery(params.q); }
   if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
+  // Restore layout mode from the fragment (#layout=force or #layout=layered).
+  // Only switch when the value is valid and differs from the current mode.
+  if (params.layout === "force" || params.layout === "layered") {
+    if (params.layout !== layoutMode) switchLayout(params.layout);
+  }
 }
 
 // Swap in a graph loaded from a local file (the Open-file button and drag-drop
@@ -788,6 +1119,7 @@ function replaceGraph(data, statusMsg) {
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
   const flavor = detectFlavor(data);
+  graphFlavor = flavor;
   let raw = data;
   if (flavor === "targets") {
     const nl = targetGraphToNodeLink(data);
@@ -799,6 +1131,8 @@ function replaceGraph(data, statusMsg) {
       (nl.cycleWarnings.length ? "; " + nl.cycleWarnings.join("; ") : "");
   }
   graph = prepareGraph(raw);
+  // Clear any layout-reversed flags from a previous layered pass.
+  for (const e of graph.links) delete e.layoutReversed;
   selected = null;
   hoverId = null;
   focusId = null;
@@ -808,8 +1142,40 @@ function replaceGraph(data, statusMsg) {
   setStatus(statusMsg);
   renderLegend();
   renderList();
-  startSimulation();
+  // Default layout mode per flavor: targets -> layered, knowledge -> force.
+  // Check if the URL fragment requests a specific mode (user override persists).
+  const fragParams = hashParams();
+  const requestedLayout = (fragParams.layout === "force" || fragParams.layout === "layered")
+    ? fragParams.layout
+    : (flavor === "targets" ? "layered" : "force");
+  layoutMode = requestedLayout;
+  syncLayoutToggle();
+  if (layoutMode === "layered") {
+    startSimulation(); // initializes node positions even if we stop it
+    sim.stop();
+    if (!applyLayeredMode()) {
+      // Scale guard fired; fall back to force.
+      layoutMode = "force";
+      syncLayoutToggle();
+      startSimulation();
+    }
+  } else {
+    startSimulation();
+  }
   draw();
+}
+
+// syncLayoutToggle updates the toggle button label and slider visibility to
+// match the current layoutMode WITHOUT switching the mode (used after loading
+// a new graph where the mode is set directly).
+function syncLayoutToggle() {
+  const btn = el("layout-toggle-btn");
+  if (btn) {
+    btn.textContent = layoutMode === "layered" ? "Force" : "Layered";
+    btn.title = layoutMode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
+  }
+  const forceControls = document.querySelector(".force-controls");
+  if (forceControls) forceControls.hidden = (layoutMode === "layered");
 }
 
 async function readGraphFile(file) {
@@ -1002,6 +1368,7 @@ async function boot() {
   // converted client-side. See detectFlavor + targetGraphToNodeLink for the
   // wire-type details (types/describe.go vs types/knowledge.go).
   const flavor = detectFlavor(loaded.data);
+  graphFlavor = flavor;
   let rawForPrepare = loaded.data;
   let cycleWarnings = [];
 
@@ -1033,8 +1400,31 @@ async function boot() {
 
   renderLegend();
   renderList();
+
+  // Determine layout mode: fragment overrides flavor default.
+  // targets -> layered; knowledge -> force.
+  const initialParams = hashParams();
+  if (initialParams.layout === "force" || initialParams.layout === "layered") {
+    layoutMode = initialParams.layout;
+  } else {
+    layoutMode = (flavor === "targets") ? "layered" : "force";
+  }
+  syncLayoutToggle();
+
   startSimulation();
+  if (layoutMode === "layered") {
+    sim.stop();
+    if (!applyLayeredMode()) {
+      // Scale guard fired; fall back to force.
+      layoutMode = "force";
+      syncLayoutToggle();
+      startSimulation();
+    }
+  }
+
   setupZoomDrag();
+  // applyDeepLinks handles q= and node= (layout= is handled above in boot; the
+  // applyDeepLinks function skips switching when the mode already matches).
   applyDeepLinks();
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
@@ -1135,15 +1525,23 @@ async function boot() {
 
   // Keep the gentle wobble from being a background CPU drain: stop the sim while
   // the tab is hidden, resume when it returns. Also honor a live change to the
-  // reduced-motion preference.
+  // reduced-motion preference. In layered mode the sim stays stopped (no wobble).
   document.addEventListener("visibilitychange", () => {
     if (!sim) return;
     if (document.hidden) sim.stop();
-    else sim.alphaTarget(idleAlpha()).restart();
+    else if (layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
   });
   reducedMotion.addEventListener("change", () => {
-    if (sim) sim.alphaTarget(idleAlpha()).restart();
+    if (sim && layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
   });
+
+  // Wire the layout toggle button.
+  const layoutToggleBtn = el("layout-toggle-btn");
+  if (layoutToggleBtn) {
+    layoutToggleBtn.addEventListener("click", () => {
+      switchLayout(layoutMode === "layered" ? "force" : "layered");
+    });
+  }
 }
 
 boot();

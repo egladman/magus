@@ -76,6 +76,11 @@
     <details class="display-help">
       <summary>Display</summary>
       <div class="disclosure-body">
+        <p class="control-label">Layout</p>
+        <div class="layout-mode-row">
+          <button id="layout-toggle-btn" type="button" class="outline layout-toggle" title="Switch to layered DAG layout">Layered</button>
+          <span class="layout-hint">Force: physics simulation. Layered: deterministic DAG (Sugiyama-style, left-to-right). Target graphs default to layered; knowledge graphs default to force. Capped at 500 visible nodes.</span>
+        </div>
         <p class="control-label">Layout forces</p>
         <div class="force-controls" role="group" aria-label="Layout forces">
           <label>Repel <input type="range" id="force-charge" min="20" max="200" value="60" step="5"></label>
