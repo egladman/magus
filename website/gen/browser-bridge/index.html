@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://github.com https://pkg.go.dev; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>Browser bridge — magus</title>
   <meta name="description" content="Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/browser-bridge/">
@@ -66,12 +66,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#what-the-bridge-serves" title="What the bridge serves">What the bridge serves</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#live-mode-pairing" title="Live mode pairing">Live mode pairing</a><ul><li><a href="#how-to-pair" title="How to pair">How to pair</a></li><li><a href="#two-state-model" title="Two-state model">Two-state model</a></li><li><a href="#safari-limitation-1" title="Safari limitation">Safari limitation</a></li><li><a href="#target-graph-in-live-mode" title="Target graph in live mode">Target graph in live mode</a></li><li><a href="#affected-view" title="Affected view">Affected view</a></li></ul></li><li><a href="#verify-our-claims---dont-take-our-word-for-it" title="Verify our claims - don't take our word for it">Verify our claims - don't take our word for it</a><ul><li><a href="#claim-this-page-cannot-send-your-data-anywhere" title="Claim: this page cannot send your data anywhere">Claim: this page cannot send your data anywhere</a></li><li><a href="#claim-your-graph-never-appears-in-any-network-request" title="Claim: your graph never appears in any network request">Claim: your graph never appears in any network request</a></li><li><a href="#claim-everything-works-with-your-network-unplugged" title="Claim: everything works with your network unplugged">Claim: everything works with your network unplugged</a></li><li><a href="#claim-we-store-nothing-without-asking" title="Claim: we store nothing without asking">Claim: we store nothing without asking</a></li><li><a href="#the-deep-audit-record-every-byte-chrome-sends" title="The deep audit: record every byte Chrome sends">The deep audit: record every byte Chrome sends</a></li><li><a href="#claim-the-code-running-here-is-the-code-in-the-repo" title="Claim: the code running here is the code in the repo">Claim: the code running here is the code in the repo</a></li><li><a href="#the-one-nuance-the-service-worker-is-not-covered-by-this-policy" title="The one nuance: the service worker is not covered by this policy">The one nuance: the service worker is not covered by this policy</a></li><li><a href="#the-opt-out-remove-us-entirely" title="The opt-out: remove us entirely">The opt-out: remove us entirely</a></li></ul></li></ul>
+        <ul><li><a href="#what-the-bridge-serves" title="What the bridge serves">What the bridge serves</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#live-mode-pairing" title="Live mode pairing">Live mode pairing</a><ul><li><a href="#how-to-pair" title="How to pair">How to pair</a></li><li><a href="#two-state-model" title="Two-state model">Two-state model</a></li><li><a href="#safari-limitation-1" title="Safari limitation">Safari limitation</a></li><li><a href="#target-graph-in-live-mode" title="Target graph in live mode">Target graph in live mode</a></li><li><a href="#affected-view" title="Affected view">Affected view</a></li></ul></li><li><a href="#verify-our-claims---dont-take-our-word-for-it" title="Verify our claims - don't take our word for it">Verify our claims - don't take our word for it</a><ul><li><a href="#claim-this-page-cannot-send-your-graph-or-source-code-anywhere" title="Claim: this page cannot send your graph or source code anywhere">Claim: this page cannot send your graph or source code anywhere</a></li><li><a href="#claim-your-graph-never-appears-in-any-network-request" title="Claim: your graph never appears in any network request">Claim: your graph never appears in any network request</a></li><li><a href="#claim-everything-works-with-your-network-unplugged" title="Claim: everything works with your network unplugged">Claim: everything works with your network unplugged</a></li><li><a href="#claim-we-store-nothing-without-asking" title="Claim: we store nothing without asking">Claim: we store nothing without asking</a></li><li><a href="#the-deep-audit-record-every-byte-chrome-sends" title="The deep audit: record every byte Chrome sends">The deep audit: record every byte Chrome sends</a></li><li><a href="#claim-the-code-running-here-is-the-code-in-the-repo" title="Claim: the code running here is the code in the repo">Claim: the code running here is the code in the repo</a></li><li><a href="#the-one-nuance-the-service-worker-is-not-covered-by-this-policy" title="The one nuance: the service worker is not covered by this policy">The one nuance: the service worker is not covered by this policy</a></li><li><a href="#the-opt-out-remove-us-entirely" title="The opt-out: remove us entirely">The opt-out: remove us entirely</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">10 min read</small>
+    <small class="reading-time" title="Estimated reading time">11 min read</small>
     <article>
 <h1 id="browser-bridge">Browser bridge</h1>
 <p>The browser bridge is three frozen, read-only GET routes that the magus daemon
@@ -242,12 +242,13 @@ disabled.</p>
 <p>Your dependency graph may be confidential. Every claim below is either
 enforced by your browser or checkable by you. Nothing on this page asks for
 trust.</p>
-<h3 id="claim-this-page-cannot-send-your-data-anywhere">Claim: this page cannot send your data anywhere</h3>
+<h3 id="claim-this-page-cannot-send-your-graph-or-source-code-anywhere">Claim: this page cannot send your graph or source code anywhere</h3>
 <p>Every page on this site carries a Content-Security-Policy that your browser
 enforces - a <code>&lt;meta&gt;</code> tag near the top of the document that is the page's
 complete network permission, in one line.</p>
 <ol>
-<li>Press <code>Ctrl+U</code> (macOS: <code>Cmd+Option+U</code>) to view the page source. Find the
+<li>
+<p>Press <code>Ctrl+U</code> (macOS: <code>Cmd+Option+U</code>) to view the page source. Find the
 <code>&lt;meta http-equiv=&quot;Content-Security-Policy&quot; ...&gt;</code> tag (it sits right after
 <code>&lt;meta name=&quot;generator&quot; content=&quot;magus&quot;&gt;</code>). Its <code>connect-src</code> clause -
 the directive that governs <code>fetch</code>/<code>XMLHttpRequest</code>/SSE, the ways a page
@@ -255,29 +256,38 @@ could actually exfiltrate data - reads
 <code>connect-src 'self' http://127.0.0.1:* http://[::1]:*</code>: this page's own
 origin, plus your machine's loopback address, and nothing else.
 <code>default-src 'self'</code> closes the same same-origin-only gap for anything not
-named by a more specific directive. The only intentionally wider clause is
-<code>img-src</code>, which also allows <code>https://github.com</code> and <code>https://pkg.go.dev</code>
-<ul>
-<li>the two status badges (CI result, doc coverage) on the home page; images
-only, and read-only network access to two well-known public hosts, not a
-place data could go.</li>
-</ul>
+named by a more specific directive.</p>
+<p><code>img-src</code> is a narrower, deliberately scoped exception, and it is not the
+same on every page: an <code>img-src</code> GET can technically carry data baked
+into its URL (unlike <code>connect-src</code>, the browser does not refuse it), so
+the graph and playground pages - the only pages that ever hold your
+dependency graph or source code - carry <code>img-src 'self' data:</code> with no
+external host at all. There is no image-URL channel on those pages for
+your data to ride out on. Only the home page's <code>img-src</code> also allows
+<code>https://github.com</code> and <code>https://pkg.go.dev</code>, for two static status
+badges (CI result, doc coverage). Those badge URLs are fixed strings
+compiled into the page; nothing on the home page builds an image URL
+from anything you typed or loaded there.</p>
 </li>
-<li>Watch Chrome enforce it. Press <code>F12</code> to open DevTools, pick the
+<li>
+<p>Watch Chrome enforce it. Press <code>F12</code> to open DevTools, pick the
 <strong>Console</strong> tab, and paste:
 <code>fetch(&quot;https://example.com&quot;)</code>
 Chrome refuses, and the error message quotes the policy back to you:
 <em>&quot;Refused to connect ... because it violates the following Content
 Security Policy directive: connect-src ...&quot;</em>. That refusal is your
-browser, not our code.</li>
-<li>One deliberate narrowing this policy causes: the graph page's <code>#src=&lt;url&gt;</code>
+browser, not our code.</p>
+</li>
+<li>
+<p>One deliberate narrowing this policy causes: the graph page's <code>#src=&lt;url&gt;</code>
 loader and the playground's <code>#src=&lt;url&gt;</code> loader can both point at an
 arbitrary CORS-enabled address (e.g. a colleague's raw GitHub link) - that
 fetch is refused by the same <code>connect-src</code> for any host that is not this
 site or your loopback. Both loaders already handle a fetch failure
 gracefully (a status message, not a crash); use <code>#data=</code> (a local file,
 drag-and-drop, or <code>magus graph open</code>'s default fragment) or a loopback
-source (<code>magus graph open --serve</code> / <code>--live</code>) instead.</li>
+source (<code>magus graph open --serve</code> / <code>--live</code>) instead.</p>
+</li>
 </ol>
 <h3 id="claim-your-graph-never-appears-in-any-network-request">Claim: your graph never appears in any network request</h3>
 <p>When you use <code>magus graph open</code>, your graph travels in the URL <strong>fragment</strong>
@@ -311,9 +321,13 @@ disconnected (<code>js/offline-badge.js</code>).</li>
 <h3 id="claim-we-store-nothing-without-asking">Claim: we store nothing without asking</h3>
 <p>DevTools -&gt; <strong>Application</strong> tab -&gt; <strong>Cookies</strong>: none. <strong>Local storage</strong> /
 <strong>Session storage</strong>: empty, unless you used live mode - the daemon token is
-kept in session storage for the tab's lifetime, or in local storage only
-after you tick &quot;Remember this workspace&quot; (see &quot;Live mode pairing&quot; above).
-Clear either with one click, right there.</p>
+kept in session storage under the <code>magus-live-token</code> key for the tab's
+lifetime, or promoted to local storage only after you tick &quot;Remember this
+workspace&quot; (see &quot;Live mode pairing&quot; above). Ticking it also sets a second
+local-storage key, <code>magus-live-remember</code>, so the explorer knows to keep
+reading from local storage on your next visit - two keys once you tick it,
+zero before that and zero if you never use live mode. Clear either with one
+click, right there.</p>
 <h3 id="the-deep-audit-record-every-byte-chrome-sends">The deep audit: record every byte Chrome sends</h3>
 <p>For a security review, don't sample - record. <code>chrome://net-export</code> captures
 a log of <em>all</em> network activity in the browser, below the page's ability to
@@ -336,8 +350,10 @@ any asset:</p>
 </code></pre>
 <p>and compare against the manifest and the repo's committed copy under
 <code>website/gen/</code>. The JavaScript is unminified enough to read; start at
-<code>graph/explorer.js</code> - the <code>loadGraph</code> function is the complete list of ways
-data enters the graph page, and there is no function that sends it out.</p>
+<code>graph/explorer.js</code> - <code>loadGraph</code> and <code>readGraphFile</code> are the functions that
+ingest a graph (the <code>#data=</code>/<code>#src=</code>/demo fallback chain, and drag-drop/
+file-input/<code>launchQueue</code> respectively), and there is no function that sends
+it out.</p>
 <h3 id="the-one-nuance-the-service-worker-is-not-covered-by-this-policy">The one nuance: the service worker is not covered by this policy</h3>
 <p>A <code>&lt;meta&gt;</code>-delivered Content-Security-Policy governs the <em>page's own</em>
 requests. It does not govern requests the service worker (<code>sw.js</code>) makes on
@@ -358,9 +374,10 @@ as a fallback for hosts that cannot set headers.</p>
 <h3 id="the-opt-out-remove-us-entirely">The opt-out: remove us entirely</h3>
 <p>If your threat model excludes our hosting altogether: clone the repo, run
 <code>magus run generate website</code>, and serve the <code>gen/</code> directory on your own
-network. Every page here is origin-agnostic and works identically. (The
-magus binary itself ships no web server - you host a folder of static
-files.)</p>
+network. Every page here is origin-agnostic and works identically. (magus
+ships no general-purpose static file server for hosting this site; the only
+servers it binds are the ephemeral loopback <code>--serve</code> graph server and the
+read-only loopback daemon bridge documented above.)</p>
     </article>
     </div>
     </div>

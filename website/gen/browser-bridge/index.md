@@ -177,7 +177,7 @@ Your dependency graph may be confidential. Every claim below is either
 enforced by your browser or checkable by you. Nothing on this page asks for
 trust.
 
-### Claim: this page cannot send your data anywhere
+### Claim: this page cannot send your graph or source code anywhere
 
 Every page on this site carries a Content-Security-Policy that your browser
 enforces - a `<meta>` tag near the top of the document that is the page's
@@ -191,11 +191,19 @@ complete network permission, in one line.
    `connect-src 'self' http://127.0.0.1:* http://[::1]:*`: this page's own
    origin, plus your machine's loopback address, and nothing else.
    `default-src 'self'` closes the same same-origin-only gap for anything not
-   named by a more specific directive. The only intentionally wider clause is
-   `img-src`, which also allows `https://github.com` and `https://pkg.go.dev`
-   - the two status badges (CI result, doc coverage) on the home page; images
-   only, and read-only network access to two well-known public hosts, not a
-   place data could go.
+   named by a more specific directive.
+
+   `img-src` is a narrower, deliberately scoped exception, and it is not the
+   same on every page: an `img-src` GET can technically carry data baked
+   into its URL (unlike `connect-src`, the browser does not refuse it), so
+   the graph and playground pages - the only pages that ever hold your
+   dependency graph or source code - carry `img-src 'self' data:` with no
+   external host at all. There is no image-URL channel on those pages for
+   your data to ride out on. Only the home page's `img-src` also allows
+   `https://github.com` and `https://pkg.go.dev`, for two static status
+   badges (CI result, doc coverage). Those badge URLs are fixed strings
+   compiled into the page; nothing on the home page builds an image URL
+   from anything you typed or loaded there.
 2. Watch Chrome enforce it. Press `F12` to open DevTools, pick the
    **Console** tab, and paste:
    `fetch("https://example.com")`
@@ -247,9 +255,13 @@ The strongest proof: data cannot leave a machine that has no connection.
 
 DevTools -> **Application** tab -> **Cookies**: none. **Local storage** /
 **Session storage**: empty, unless you used live mode - the daemon token is
-kept in session storage for the tab's lifetime, or in local storage only
-after you tick "Remember this workspace" (see "Live mode pairing" above).
-Clear either with one click, right there.
+kept in session storage under the `magus-live-token` key for the tab's
+lifetime, or promoted to local storage only after you tick "Remember this
+workspace" (see "Live mode pairing" above). Ticking it also sets a second
+local-storage key, `magus-live-remember`, so the explorer knows to keep
+reading from local storage on your next visit - two keys once you tick it,
+zero before that and zero if you never use live mode. Clear either with one
+click, right there.
 
 ### The deep audit: record every byte Chrome sends
 
@@ -278,8 +290,10 @@ curl -s <asset-url> | sha256sum
 
 and compare against the manifest and the repo's committed copy under
 `website/gen/`. The JavaScript is unminified enough to read; start at
-`graph/explorer.js` - the `loadGraph` function is the complete list of ways
-data enters the graph page, and there is no function that sends it out.
+`graph/explorer.js` - `loadGraph` and `readGraphFile` are the functions that
+ingest a graph (the `#data=`/`#src=`/demo fallback chain, and drag-drop/
+file-input/`launchQueue` respectively), and there is no function that sends
+it out.
 
 ### The one nuance: the service worker is not covered by this policy
 
@@ -307,6 +321,7 @@ as a fallback for hosts that cannot set headers.
 
 If your threat model excludes our hosting altogether: clone the repo, run
 `magus run generate website`, and serve the `gen/` directory on your own
-network. Every page here is origin-agnostic and works identically. (The
-magus binary itself ships no web server - you host a folder of static
-files.)
+network. Every page here is origin-agnostic and works identically. (magus
+ships no general-purpose static file server for hosting this site; the only
+servers it binds are the ephemeral loopback `--serve` graph server and the
+read-only loopback daemon bridge documented above.)

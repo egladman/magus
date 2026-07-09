@@ -163,14 +163,24 @@ async function loadGraph() {
   // --serve`, 127.0.0.1 - private) or any CORS-enabled URL (e.g. a committed
   // graph.json's raw link). The same #src= the playground uses.
   if (params.src) {
-    const loopback = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(params.src);
+    // Only 127.0.0.1/[::1] are "loopback" - that is what connect-src actually
+    // allows (see computeCSP in scribe.buzz). The `localhost` hostname is NOT
+    // in connect-src, so a `#src=http://localhost:...` fetch is refused by the
+    // browser's CSP before it ever reaches the network; flag it separately so
+    // the status message points at the fix (127.0.0.1) instead of implying a
+    // `--serve` problem.
+    const loopback = /^https?:\/\/(127\.0\.0\.1|\[::1\])(:|\/)/.test(params.src);
+    const localhostHost = /^https?:\/\/localhost(:|\/)/.test(params.src);
     try {
       setStatus("Fetching the graph...");
       const r = await fetch(params.src, { headers: { Accept: "application/json" } });
       if (!r.ok) throw new Error("HTTP " + r.status);
       return { data: await r.json(), source: loopback ? "loopback" : "remote" };
     } catch (e) {
-      setStatus("Could not fetch the graph from that URL (" + e.message + ")." + (loopback ? " Is `magus graph open --serve` still running?" : ""), true);
+      let hint = "";
+      if (loopback) hint = " Is `magus graph open --serve` still running?";
+      else if (localhostHost) hint = " The policy allows 127.0.0.1/[::1], not the `localhost` hostname - use `magus graph open --serve` or edit the URL to use 127.0.0.1.";
+      setStatus("Could not fetch the graph from that URL (" + e.message + ")." + hint, true);
     }
   }
   // No (usable) fragment: fall back to the committed demo graph beside this page.

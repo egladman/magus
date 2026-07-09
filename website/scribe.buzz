@@ -176,12 +176,22 @@ object Site {
     // which matches semver descending for vX.Y.Z names).
     releases: [Release] = mut [<Release>],
 
-    // The site-wide Content-Security-Policy meta content, computed once by
+    // The default Content-Security-Policy meta content, computed once by
     // computeCSP() at the top of site_render() and threaded verbatim into every
-    // page's head (renderPage's pageTmpl, render404, writeOffline, and the
-    // hand-authored playground.html/graph.html). Identical on every page, so it
-    // is a build-once value rather than a per-page recomputation.
+    // page's head EXCEPT the home page (renderPage's pageTmpl for every non-home
+    // page, render404, writeOffline, and the hand-authored playground.html/
+    // graph.html - none of them embed the README's status badges, so none of them
+    // need img-src widened past same-origin). A build-once value rather than a
+    // per-page recomputation.
     csp: str = "",
+
+    // The home-page-only Content-Security-Policy: identical to csp except its
+    // img-src also allows the two hosts the README's status badges load from (see
+    // computeCSP's doc comment). Only renderPage() reaches for this, and only when
+    // rendering README.md - every other page keeps the tighter default so an
+    // img-src GET (a channel connect-src cannot restrict) is not left open on
+    // pages that hold the reader's own dependency graph or source code.
+    cspHome: str = "",
 
     // --- Methods that manage this state (pure helpers stay free functions below) ---
 
@@ -1426,14 +1436,34 @@ fun extractInlineScripts(html: str) > [str] {
 // intended failure mode, not a bug to route around.
 final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
 
-// computeCSP builds the Content-Security-Policy meta content emitted
-// identically on every page (see the doc comment on Site.csp). Deny-by-default
-// (default-src 'self' - not 'none': manifest-src and the same-origin-only
-// <link rel=prefetch> hover-warm in js/prefetch.js both fall back to
-// default-src per the CSP3 fetch-directive spec, and 'self' is the minimal
-// fallback that keeps both working without opening a single directive wider
-// than same-origin), then every directive the site actually needs is named
-// explicitly and nothing else is permitted:
+// CSP_IMG_SRC_DEFAULT is the img-src every page gets except the home page:
+// same-origin images plus data: URIs (inline SVG/icon data), nothing else.
+// img-src is a GET-only channel that connect-src cannot restrict (an
+// `<img src="https://host/?leaked=...">` still fires even though
+// connect-src's loopback lock would refuse the same host as a fetch target),
+// so the graph and playground pages - which hold the reader's own dependency
+// graph or source code - carry no external image allowance at all.
+final CSP_IMG_SRC_DEFAULT = "'self' data:";
+
+// CSP_IMG_SRC_HOME extends CSP_IMG_SRC_DEFAULT with the two hosts the
+// README's status badges load from (github.com's Actions badge, pkg.go.dev's
+// reference badge) - see computeCSP's doc comment. Only the home page embeds
+// those badges, so only the home page's CSP (Site.cspHome) passes this value;
+// every other page passes CSP_IMG_SRC_DEFAULT.
+final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.go.dev";
+
+// computeCSP builds one page's Content-Security-Policy meta content (see the
+// doc comment on Site.csp/Site.cspHome for which pages get which img-src).
+// Deny-by-default (default-src 'self' - not 'none': manifest-src and the
+// same-origin-only <link rel=prefetch> hover-warm in js/prefetch.js both fall
+// back to default-src per the CSP3 fetch-directive spec, and the service
+// worker registration (`navigator.serviceWorker.register('sw.js')`, main.js)
+// falls back through worker-src -> child-src -> default-src since neither is
+// named explicitly here - 'self' is the minimal fallback that keeps all three
+// working without opening a single directive wider than same-origin; 'none'
+// would break the service worker registration outright), then every
+// directive the site actually needs is named explicitly and nothing else is
+// permitted:
 //   - script-src: 'self' for the external bundles, 'wasm-unsafe-eval' because
 //     the Go/TinyGo WebAssembly runtime (the playground, and run-example.js's
 //     lazy "Run" buttons on docs pages) requires it to instantiate a wasm
@@ -1448,12 +1478,13 @@ final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
 //     hash-source for style ATTRIBUTES (only style-src-attr's newer
 //     'unsafe-hashes', not yet universal), so a per-block hash scheme would
 //     leave the attribute case uncovered anyway.
-//   - img-src: 'self' data: plus the two hosts the README's status badges
-//     load from (github.com's Actions badge, pkg.go.dev's reference badge) -
-//     the one deliberate, minimal exception to same-origin-only assets:
-//     these badges are live status indicators (CI result, doc coverage) that
-//     vendoring would make permanently stale, unlike Pico/mermaid/hljs (pure
-//     libraries, vendored in Phase 0 with zero loss of freshness).
+//   - img-src: imgSrc, verbatim (CSP_IMG_SRC_DEFAULT everywhere except the
+//     home page, which passes CSP_IMG_SRC_HOME for its two status badges -
+//     live status indicators, CI result and doc coverage, that vendoring
+//     would make permanently stale, unlike Pico/mermaid/hljs (pure
+//     libraries, vendored in Phase 0 with zero loss of freshness)). Scoping
+//     the widened allowance to the one page that actually embeds the badges
+//     keeps every other page - notably graph/playground - at same-origin-only.
 //   - connect-src: 'self' plus the loopback wildcards - the browser-enforced
 //     form of the loopback-only rule (plan 0.3), kept in sync with the
 //     literal 127.0.0.1/[::1] host check graph-explorer.js's live mode makes
@@ -1466,7 +1497,7 @@ final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
 //   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, or
 //     <iframe> anywhere on the site.
 //   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
-fun computeCSP() > str {
+fun computeCSP(imgSrc: str) > str {
     var scriptSrc = "'self' 'wasm-unsafe-eval'";
     foreach (path in CSP_INLINE_SCRIPT_SOURCES) {
         final f = io.File.open(path, io.FileMode.read);
@@ -1478,7 +1509,7 @@ fun computeCSP() > str {
     }
     return "default-src 'self'; script-src " + scriptSrc
         + "; style-src 'self' 'unsafe-inline'"
-        + "; img-src 'self' data: https://github.com https://pkg.go.dev"
+        + "; img-src " + imgSrc
         + "; connect-src 'self' http://127.0.0.1:* http://[::1]:*"
         + "; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'";
 }
@@ -1957,9 +1988,12 @@ fun renderPlayground(site: Site) > void {
     // its injected nav climbs one level to reach the site root.
     html = html.replace("<!-- site-nav -->", renderSiteNav("../", "playground"));
     html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
-    // Same CSP meta every page carries (site.csp/computeCSP); playground.html's own
-    // <!-- csp --> placeholder is what CSP_INLINE_SCRIPT_SOURCES reads to compute it
-    // in the first place, so this file is both the hash's source and its sink.
+    // The default (non-home) CSP meta - site.csp, not site.cspHome - since the
+    // playground has no reason to load an external image and holds the reader's
+    // own source, so it gets the tighter img-src, not the badge hosts. Also:
+    // playground.html's own <!-- csp --> placeholder is what
+    // CSP_INLINE_SCRIPT_SOURCES reads to compute it in the first place, so this
+    // file is both the hash's source and its sink.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/playground");
     fs.writeFile(site.outDir + "/playground/index.html", html);
@@ -1978,6 +2012,10 @@ fun renderGraph(site: Site) > void {
     f.close();
     html = html.replace("<!-- site-nav -->", renderSiteNav("../", "graph"));
     html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
+    // The default (non-home) CSP meta - site.csp, not site.cspHome. The graph
+    // page holds the reader's own dependency graph, so it gets the tighter
+    // img-src (no external hosts), same as playground; see renderPlayground's
+    // comment above.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/graph");
     fs.writeFile(site.outDir + "/graph/index.html", html);
@@ -2094,6 +2132,11 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
     // Preload the LCP hero image on the home page only (README's gopher), so the
     // browser fetches it in parallel with the CSS.
     final isHome = srcRel == "README.md";
+    // The home page is the only one whose CSP img-src needs to reach past
+    // same-origin (its two status badges); every other page keeps site.csp's
+    // tighter default. See Site.csp/Site.cspHome's doc comments.
+    var pageCsp = site.csp;
+    if (isHome) { pageCsp = site.cspHome; }
     // Reading-time chip (module var, set by the renderX() caller). Rendered as
     // a sibling ABOVE the <article> card but INSIDE its column - a chip that
     // hovers above the card, aligned with the card's left edge, not floating
@@ -2244,7 +2287,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
 `;
     return template.render(pageTmpl, {
         "fullTitle": fullTitle,
-        "csp": site.csp,
+        "csp": pageCsp,
         "description": description,
         "hasDescription": hasDescription,
         "hasSiteUrl": hasSiteUrl,
@@ -2987,9 +3030,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
         }
     }
     // Computed once, before any page renders, so every page (renderPage()'s shared
-    // head AND the hand-authored playground.html/graph.html) threads the identical
-    // string. See Site.csp and computeCSP's doc comments.
-    site.csp = computeCSP();
+    // head AND the hand-authored playground.html/graph.html) threads a stable
+    // string instead of recomputing per page. See Site.csp/Site.cspHome and
+    // computeCSP's doc comments for which pages get which of the two.
+    site.csp = computeCSP(CSP_IMG_SRC_DEFAULT);
+    site.cspHome = computeCSP(CSP_IMG_SRC_HOME);
     // gen/ is NOT wiped and rebuilt from scratch: outDir is created if missing, then
     // every render below writes/overwrites its current output in place, and
     // pruneStaleOutputs() (called near the end of this function, once every write is
@@ -3450,7 +3495,7 @@ test "scriptHash matches a known sha256-then-base64 digest" {
 }
 
 test "computeCSP names every directive exactly once and includes the loopback hosts" {
-    final got = computeCSP();
+    final got = computeCSP(CSP_IMG_SRC_DEFAULT);
     assert.equal(got.indexOf("default-src 'self'") != null, true, "default-src present");
     assert.equal(got.indexOf("'wasm-unsafe-eval'") != null, true, "wasm-unsafe-eval present for the playground's wasm runtime");
     assert.equal(got.indexOf("connect-src 'self' http://127.0.0.1:* http://[::1]:*") != null, true, "connect-src carries exactly the loopback wildcards");
@@ -3468,6 +3513,16 @@ test "computeCSP names every directive exactly once and includes the loopback ho
         hashCount = hashCount + 1;
     }
     assert.equal(hashCount, n, "one script-src hash per playground.html inline script");
+}
+
+test "computeCSP's img-src is exactly the caller's imgSrc argument - the per-page hook" {
+    final withDefault = computeCSP(CSP_IMG_SRC_DEFAULT);
+    assert.equal(withDefault.indexOf("img-src 'self' data:;") != null, true, "default img-src has no external host");
+    assert.equal(withDefault.indexOf("github.com") != null, false, "default img-src never carries the badge hosts");
+    assert.equal(withDefault.indexOf("pkg.go.dev") != null, false, "default img-src never carries the badge hosts");
+
+    final withHome = computeCSP(CSP_IMG_SRC_HOME);
+    assert.equal(withHome.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "home img-src carries both badge hosts, verbatim");
 }
 
 test "cspForRedirectStub is scoped tighter than computeCSP and hashes exactly the given script" {
