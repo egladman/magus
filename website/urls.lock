@@ -124,6 +124,7 @@ modules/strings/
 modules/time/
 modules/vcs/
 modules/yaml/
+offline/
 operations/
 public/
 public/atom/

@@ -893,6 +893,23 @@ async function boot() {
   canvas.addEventListener("dragover", (e) => e.preventDefault());
   canvas.addEventListener("drop", (e) => { e.preventDefault(); readGraphFile(e.dataTransfer.files[0]); });
 
+  // File handler: when the installed PWA is launched with "Open with" on a .json file,
+  // the browser delivers it here via launchQueue. Uses the same readGraphFile path as
+  // drag-drop so behavior is identical. Feature-detected; no effect in browsers that
+  // lack the File Handling API (all non-Chromium, and Chromium without the PWA installed).
+  if ("launchQueue" in window) {
+    window.launchQueue.setConsumer(async (launchParams) => {
+      if (!launchParams.files || launchParams.files.length === 0) return;
+      try {
+        const fileHandle = launchParams.files[0];
+        const f = await fileHandle.getFile();
+        readGraphFile(f);
+      } catch (e) {
+        setStatus("Could not open the launched file: " + e.message, true);
+      }
+    });
+  }
+
   // Re-read Pico variables and repaint on a theme toggle (mirrors mermaid.js).
   let t = 0;
   const rerender = () => { clearTimeout(t); t = setTimeout(() => { readTheme(); renderLegend(); renderList(); draw(); }, 0); };

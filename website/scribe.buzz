@@ -1065,6 +1065,69 @@ fun render404(site: Site) > void {
     fs.writeFile(site.outDir + "/404.html", doc);
 }
 
+// writeOffline writes gen/offline/index.html - the themed page shown by the service
+// worker when a navigation request fails (network unreachable and no cached copy).
+// Like render404, it must use root-absolute asset paths because its URL depth differs
+// from the rest of the site; basePath is derived the same way render404 derives it.
+// Graph and playground are called out explicitly because they are precached and fully
+// functional offline - they are the honest answer to "what CAN I do right now?".
+fun writeOffline(site: Site) > void {
+    var basePath = "/";
+    if (SITE_URL != "") {
+        final noScheme = SITE_URL.split("://");
+        if (noScheme.len() > 1) {
+            final rest = noScheme[1];
+            final firstSlash = rest.indexOf("/");
+            if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+        }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final title = "You are offline - magus";
+    final desc = "No network connection. The graph explorer and playground are fully functional offline.";
+    final tmpl = `<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>{{title}}</title>
+  <meta name="description" content="{{desc}}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{basePath}}assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
+  <link rel="stylesheet" href="{{basePath}}theme.css">
+  <link rel="stylesheet" href="{{basePath}}site.css">
+  <script src="{{basePath}}theme.js"></script>
+</head>
+<body>
+{{{nav}}}  <main class="container">
+    <article>
+      <h1>You are offline.</h1>
+      <p>This page requires a network connection and is not available offline.</p>
+      <p>These work fully offline (they are cached on your device):</p>
+      <ul>
+        <li><a href="{{basePath}}graph/">Graph explorer</a> - explore and query your dependency graph</li>
+        <li><a href="{{basePath}}playground/">Playground</a> - run Buzz code in the browser</li>
+      </ul>
+    </article>
+  </main>
+{{{footer}}}  <script type="module" src="{{basePath}}main.js"></script>
+</body>
+</html>
+`;
+    final doc = template.render(tmpl, {
+        "title": title, "desc": desc, "basePath": basePath,
+        "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath, site),
+    });
+    fs.makeDirectory(site.outDir + "/offline");
+    fs.writeFile(site.outDir + "/offline/index.html", doc);
+    // Register so pruneStaleOutputs does not treat it as a stale leftover; it
+    // is always produced (the SW precaches it) so it never becomes stale.
+    site.writtenPaths["offline/index.html"] = true;
+    site.pageUrls["offline/"] = true;
+}
+
 // llmsIndexBody builds the gen/llms.txt document (the llms.txt convention): an H1,
 // a one-line summary, then every docs page as "- [title](base+url): description",
 // sorted by URL for a byte-stable artifact like search-index.json. base is the link
@@ -1144,7 +1207,10 @@ fun writeManifest(site: Site) > void {
         + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
         + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
         + "  ],\n"
-        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
+        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \},\n"
+        + "  \"file_handlers\": [\n"
+        + "    \{ \"action\": \"" + basePath + "graph/\", \"accept\": \{ \"application/json\": [\".json\"] \} \}\n"
+        + "  ]\n"
         + "\}\n";
     fs.writeFile(site.outDir + "/manifest.webmanifest", body);
 }
@@ -1177,7 +1243,7 @@ fun writeServiceWorker(site: Site) > void {
     // never contain its own commit's hash, and so perpetually drifted the gen gate.
     final precached = ["search-index.json", "playground/wasm_exec.js",
         "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css", "main.js", "theme.js", "site.css", "theme.css",
-        "assets/pico.min.css"];
+        "assets/pico.min.css", "offline/index.html"];
     var manifest = "";
     foreach (rel in precached) {
         final p = site.outDir + "/" + rel;
@@ -2663,6 +2729,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     renderReleasesAtom(site);
     renderPublic(site);
     render404(site);
+    writeOffline(site);
     renderSearchPage(site);
     renderTourPage(site);
     writeManifest(site);

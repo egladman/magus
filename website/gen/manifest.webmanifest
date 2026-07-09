@@ -19,5 +19,8 @@
     { "name": "Playground", "url": "/magus/playground/" },
     { "name": "Getting started", "url": "/magus/getting-started/" }
   ],
-  "launch_handler": { "client_mode": "focus-existing" }
+  "launch_handler": { "client_mode": "focus-existing" },
+  "file_handlers": [
+    { "action": "/magus/graph/", "accept": { "application/json": [".json"] } }
+  ]
 }
