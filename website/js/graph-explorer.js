@@ -68,6 +68,19 @@ let focusDepth = 2;       // hops included in the focus graph
 let layoutMode = "force"; // "force" | "layered"
 let graphFlavor = "knowledge"; // "knowledge" | "targets"; set in boot/replaceGraph
 
+// ---- Phase 5: question-first views -----------------------------------------
+// Views answer developer questions with graph interactions. The active view is
+// one of: null (default projection), "blast", "trace", "critical", "hubs",
+// "orphans". "affected" is Phase 9 (disabled). Max 7 total.
+let activeView = null; // null | "blast" | "trace" | "hubs" | "orphans" | "critical"
+let viewNode = null;   // primary node id for blast/trace
+let viewNodeTo = null; // secondary node id for trace
+// The default projection shows project-level nodes only on first load.
+// "unfolded" = true after user expands (or activates a view/query).
+let projectionUnfolded = false;
+// Set of node ids visible in the current projection (null = all).
+let projectionSet = null;
+
 // The graph stays gently "alive": the simulation never fully cools, so nodes
 // keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
 // and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
@@ -789,6 +802,54 @@ function renderCard(id) {
 
 // ---- selection, search, list, deep links -----------------------------------
 function selectNode(id, center) {
+  // Phase 5: default projection - clicking a project node in projection mode unfolds it.
+  if (!projectionUnfolded && id && projectionSet && projectionSet.has(id)) {
+    const n = graph.byId ? graph.byId.get(id) : null;
+    if (n && n.kind === "project") {
+      // Unfold this project: show its contains neighborhood.
+      projectionUnfolded = true;
+      projectionSet = null;
+      const projectNeighborhood = new Set([id]);
+      for (const e of graph.links) {
+        const s = e.source.id || e.source, t = e.target.id || e.target;
+        if ((s === id && e.relation === "contains") || (t === id && e.relation === "depends_on" && s === id)) {
+          projectNeighborhood.add(t);
+        }
+        if (t === id && e.relation === "contains") projectNeighborhood.add(s);
+      }
+      matchSet = projectNeighborhood;
+      const btn = el("projection-unfold-btn");
+      if (btn) btn.hidden = true;
+      setStatus("Showing " + id + " neighborhood. Press Esc or Show full graph to see everything.");
+      renderList();
+      if (matchSet.size) fitView(matchSet);
+      updateHash();
+      draw();
+      return;
+    }
+  }
+
+  // Phase 5: blast view picking mode - clicking a node activates blast on it.
+  if (activeView === "blast" && id && !viewNode) {
+    activateView("blast", id);
+    return;
+  }
+
+  // Phase 5: trace view picking mode - two-click flow.
+  if (activeView === "trace" && id) {
+    if (!viewNode) {
+      viewNode = id;
+      const n = graph.byId ? graph.byId.get(id) : null;
+      setStatus("First node: " + (n ? n.label : id) + ". Now click the second node.");
+      renderViewCommand("trace", id, null);
+      updateHash();
+      return;
+    } else if (!viewNodeTo && id !== viewNode) {
+      activateView("trace", viewNode, id);
+      return;
+    }
+  }
+
   selected = id;
   renderCard(id);
   updateHash();
@@ -856,9 +917,16 @@ function clearFocusOrQuery() {
   focusId = null;
   matchSet = null;
   query = "";
-  searchEl.value = "";
+  if (searchEl) searchEl.value = "";
   setStatus("");
+  // Clear any active view.
+  if (activeView) {
+    activeView = null; viewNode = null; viewNodeTo = null;
+    document.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("view-active"));
+    renderViewCommand(null, null, null);
+  }
   renderList();
+  updateHash();
   if (layoutMode === "layered") {
     for (const e of graph.links) delete e.layoutReversed;
     applyLayeredMode();
@@ -867,25 +935,10 @@ function clearFocusOrQuery() {
   }
 }
 
-// Lenses mirror `magus graph stats`: hubs = the highest-degree "god" nodes,
-// orphans = nodes with no edges. Each just sets the match set, reusing the filter
-// rendering + list.
+// applyLens is the legacy entry point for .lens-btn clicks; now delegates to
+// activateView so the view system handles state/hash/CLI idiom uniformly.
 function applyLens(name) {
-  focusId = null;
-  query = "";
-  searchEl.value = "";
-  if (name === "hubs") {
-    const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree).slice(0, 12);
-    matchSet = new Set(top.map((n) => n.id));
-    setStatus("Hubs: the " + matchSet.size + " highest-degree nodes (the `magus graph stats` god nodes).");
-  } else {
-    matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
-    setStatus(matchSet.size + " orphan node" + (matchSet.size === 1 ? "" : "s") + " with no edges (the `magus graph stats` orphans).");
-  }
-  setListExpanded(true);
-  renderList();
-  if (matchSet.size) fitView(matchSet);
-  draw();
+  activateView(name === "hubs" ? "hubs" : "orphans");
 }
 
 // ---- color groups ----------------------------------------------------------
@@ -922,10 +975,15 @@ function renderGroups() {
 
 // ---- query grammar (the browser twin of `magus query`) ---------------------
 // The SAME fielded grammar the CLI speaks: space-separated terms are ANDed;
-// field filters kind:/project:/relation:/id:; free text matches id/label/doc;
-// "quoted" spans stay one term; a leading - negates. So a query typed here (or
-// arriving in #q=) selects the same nodes `magus query` would seed.
-const QUERY_FIELDS = ["kind", "project", "relation", "id"];
+// field filters kind:/project:/relation:/id:/symbol:; free text matches
+// id/label/doc; "quoted" spans stay one term; a leading - negates. So a query
+// typed here (or arriving in #q=) selects the same nodes `magus query` would.
+//
+// Fidelity contract (Phase 5): every field accepted here is also accepted by the
+// real `magus query` CLI. The data-q example buttons in graph.html double as a
+// drift fixture (cmd/magus/testdata/script/query_syntax.txtar). Verified fields:
+// kind, project, relation, id, symbol (KindSymbol prefix for SCIP symbol nodes).
+const QUERY_FIELDS = ["kind", "project", "relation", "id", "symbol"];
 
 function parseQuery(str) {
   const terms = [];
@@ -981,6 +1039,9 @@ function termMatches(node, term) {
       break;
     case "relation": hit = graph.relIndex.has(node.id) && graph.relIndex.get(node.id).has(v); break;
     case "id": hit = node.id.toLowerCase().includes(v); break;
+    // symbol: prefix targets SCIP code-symbol nodes by their symbol: id prefix.
+    // Mirrors the CLI's `internal/knowledge/query.go:SeedsSymbols` logic.
+    case "symbol": hit = node.kind === "symbol" && node.id.toLowerCase().includes("symbol:" + v); break;
     default:
       hit = node.id.toLowerCase().includes(v) || node.label.toLowerCase().includes(v) ||
         (node.doc && node.doc.toLowerCase().includes(v));
@@ -989,7 +1050,20 @@ function termMatches(node, term) {
 }
 
 function applyQuery(q) {
-  focusId = null; // typing a query exits focus/lens mode
+  focusId = null; // typing a query exits focus/lens/view mode
+  // Typing a query unfolds the projection (user is exploring details).
+  if (!projectionUnfolded && q.trim()) {
+    projectionUnfolded = true;
+    projectionSet = null;
+    const btn = el("projection-unfold-btn");
+    if (btn) btn.hidden = true;
+  }
+  // Clear active view when query is typed.
+  if (activeView) {
+    activeView = null; viewNode = null; viewNodeTo = null;
+    document.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("view-active"));
+    renderViewCommand(null, null, null);
+  }
   query = q.trim();
   const terms = query ? parseQuery(query) : [];
   if (!terms.length) { matchSet = null; }
@@ -1084,32 +1158,52 @@ function renderLegend() {
     }));
 }
 
-// Reflect selection, query, and layout mode in the hash WITHOUT clobbering a
-// #data= fragment (that would round-trip the whole graph through history on every click).
+// Reflect selection, query, layout mode, active view, and color preset in the
+// hash WITHOUT clobbering a #data= fragment (round-tripping the whole graph
+// through history on every click would break the private-data contract).
 let suppressHash = false;
 function updateHash() {
   if (suppressHash) return;
   const params = hashParams();
   if (params.data || params.src) return; // keep the private data/loopback link intact; don't rewrite it
   const parts = [];
-  if (query) parts.push("q=" + encodeURIComponent(query));
-  if (selected) parts.push("node=" + encodeURIComponent(selected));
+  if (activeView) {
+    parts.push("view=" + encodeURIComponent(activeView));
+    if (viewNode) parts.push("node=" + encodeURIComponent(viewNode));
+    if (viewNodeTo) parts.push("to=" + encodeURIComponent(viewNodeTo));
+  } else {
+    if (query) parts.push("q=" + encodeURIComponent(query));
+    if (selected) parts.push("node=" + encodeURIComponent(selected));
+  }
   // Only serialize the layout key when it differs from the flavor default, so
   // clean URLs stay clean. (targets -> layered default; knowledge -> force default).
   const defaultLayout = (graphFlavor === "targets") ? "layered" : "force";
   if (layoutMode !== defaultLayout) parts.push("layout=" + layoutMode);
+  if (activePreset) parts.push("preset=" + encodeURIComponent(activePreset));
   const next = parts.length ? "#" + parts.join("&") : "#";
   if (location.hash !== next) history.replaceState(null, "", next);
 }
 
 function applyDeepLinks() {
   const params = hashParams();
+  // Restore view state: #view=<id>&node=<id>[&to=<id>]
+  const validViews = ["blast", "trace", "critical", "hubs", "orphans"];
+  if (params.view && validViews.includes(params.view)) {
+    projectionUnfolded = true; // views show the full graph
+    activateView(params.view, params.node || null, params.to || null);
+    return; // view takes precedence over q/node
+  }
   if (params.q) { searchEl.value = params.q; applyQuery(params.q); }
   if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
   // Restore layout mode from the fragment (#layout=force or #layout=layered).
   // Only switch when the value is valid and differs from the current mode.
   if (params.layout === "force" || params.layout === "layered") {
     if (params.layout !== layoutMode) switchLayout(params.layout);
+  }
+  // Restore color preset from #preset=<id>.
+  if (params.preset) {
+    const preset = COLOR_PRESETS.find((p) => p.id === params.preset);
+    if (preset) applyPreset(params.preset);
   }
 }
 
@@ -1137,11 +1231,28 @@ function replaceGraph(data, statusMsg) {
   hoverId = null;
   focusId = null;
   matchSet = null;
-  searchEl.value = "";
+  if (searchEl) searchEl.value = "";
+  // Reset Phase 5 view/projection state.
+  activeView = null; viewNode = null; viewNodeTo = null;
+  activePreset = null;
+  groups.splice(0, groups.length);
+  projectionUnfolded = false;
+  projectionSet = null;
+  document.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("view-active"));
+  document.querySelectorAll(".preset-btn").forEach((b) => b.classList.remove("preset-active"));
+  renderViewCommand(null, null, null);
+  // Apply projection: show only projects by default if the count is small.
+  const ps = buildProjectionSet();
+  if (ps) { projectionUnfolded = false; projectionSet = ps; matchSet = new Set(ps); }
+  else projectionUnfolded = true;
+  const ub = el("projection-unfold-btn");
+  if (ub) ub.hidden = projectionUnfolded;
   renderCard(null);
-  setStatus(statusMsg);
+  setStatus(projectionUnfolded ? statusMsg : "");
+  if (!projectionUnfolded) updateProjectionStatus();
   renderLegend();
   renderList();
+  renderSuggestions();
   // Default layout mode per flavor: targets -> layered, knowledge -> force.
   // Check if the URL fragment requests a specific mode (user override persists).
   const fragParams = hashParams();
@@ -1330,6 +1441,514 @@ function targetGraphToNodeLink(tg) {
   return { nodes, links, cycleWarnings };
 }
 
+// ---- Phase 5: default projection -------------------------------------------
+// On first load with no fragment directives, show only project nodes + project
+// -> project depends_on edges. Clicking a project unfolds it (targets flavor:
+// its target children; knowledge flavor: its `contains` neighborhood).
+//
+// "Show everything" = one click on the "Show full graph" button (or any query).
+
+function buildProjectionSet() {
+  if (!graph || projectionUnfolded) return null;
+  // Build the set of project ids + any node clicked open.
+  const projectIds = new Set(graph.nodes.filter((n) => n.kind === "project").map((n) => n.id));
+  if (projectIds.size === 0) return null; // no project nodes; show everything
+  if (projectIds.size > 50) return null;  // already small; show everything
+  return projectIds;
+}
+
+// Apply (or clear) the default projection. Called at boot and when user unfolds.
+function applyProjection() {
+  if (projectionUnfolded) {
+    projectionSet = null;
+    const btn = el("projection-unfold-btn");
+    if (btn) btn.hidden = true;
+    matchSet = null;
+    renderList();
+    updateHash();
+    if (layoutMode === "layered") applyLayeredMode(); else draw();
+    return;
+  }
+  const ps = buildProjectionSet();
+  projectionSet = ps;
+  // If no projection applies, nothing to do.
+  if (!ps) return;
+  // Keep matchSet null so the full canvas is available; the draw() function
+  // respects projectionSet for dimming. Actually we set matchSet = projectionSet
+  // so the existing filter rendering works.
+  matchSet = new Set(ps);
+  renderList();
+  updateProjectionStatus();
+}
+
+function updateProjectionStatus() {
+  if (!projectionSet || projectionUnfolded) return;
+  const n = projectionSet.size;
+  setStatus("Showing " + n + " project" + (n === 1 ? "" : "s") + ". Click a project node to expand, or Show full graph.");
+}
+
+function unfoldProjection() {
+  projectionUnfolded = true;
+  projectionSet = null;
+  matchSet = null;
+  if (searchEl) searchEl.value = "";
+  query = "";
+  renderList();
+  const btn = el("projection-unfold-btn");
+  if (btn) btn.hidden = true;
+  setStatus("");
+  updateHash();
+  if (layoutMode === "layered") { for (const e of graph.links) delete e.layoutReversed; applyLayeredMode(); } else draw();
+}
+
+// ---- Phase 5: views ---------------------------------------------------------
+// Each view answers a named question; max 7 total. View state serializes into
+// the URL fragment as #view=<id>&node=<id>[&to=<id>].
+
+// Reverse BFS over depends_on edges to collect transitive dependents of a node.
+function transitiveDependents(nodeId) {
+  // Build reverse adjacency for depends_on edges only.
+  const revAdj = new Map();
+  for (const e of graph.links) {
+    const s = e.source.id || e.source;
+    const t = e.target.id || e.target;
+    if (e.relation !== "depends_on") continue;
+    // In depends_on: source depends on target. Reverse: target -> source (dependents).
+    let set = revAdj.get(t); if (!set) { set = new Set(); revAdj.set(t, set); }
+    set.add(s);
+  }
+  const visited = new Set([nodeId]);
+  let frontier = [nodeId];
+  while (frontier.length) {
+    const next = [];
+    for (const id of frontier) {
+      for (const dep of revAdj.get(id) || []) {
+        if (!visited.has(dep)) { visited.add(dep); next.push(dep); }
+      }
+    }
+    frontier = next;
+  }
+  return visited;
+}
+
+// Shortest path between two nodes over depends_on edges (bidirectional BFS).
+function shortestDependsOnPath(fromId, toId) {
+  if (fromId === toId) return [fromId];
+  // Build adjacency for depends_on (directed).
+  const fwdAdj = new Map(), bwdAdj = new Map();
+  for (const e of graph.links) {
+    const s = e.source.id || e.source, t = e.target.id || e.target;
+    if (e.relation !== "depends_on") continue;
+    let sf = fwdAdj.get(s); if (!sf) { sf = new Set(); fwdAdj.set(s, sf); } sf.add(t);
+    let sb = bwdAdj.get(t); if (!sb) { sb = new Set(); bwdAdj.set(t, sb); } sb.add(s);
+  }
+  // BFS from fromId (forward), also from toId (backward). Meet in middle.
+  const fwd = new Map([[fromId, [fromId]]]);
+  const bwd = new Map([[toId, [toId]]]);
+  let fQueue = [fromId], bQueue = [toId];
+  for (let step = 0; step < graph.nodes.length; step++) {
+    // Advance the smaller frontier first.
+    if (!fQueue.length && !bQueue.length) break;
+    if (fQueue.length) {
+      const next = [];
+      for (const n of fQueue) {
+        for (const nb of fwdAdj.get(n) || []) {
+          if (!fwd.has(nb)) { fwd.set(nb, [...fwd.get(n), nb]); next.push(nb); }
+          if (bwd.has(nb)) return [...fwd.get(nb).slice(0, -1), ...bwd.get(nb).slice().reverse()];
+        }
+      }
+      fQueue = next;
+    }
+    if (bQueue.length) {
+      const next = [];
+      for (const n of bQueue) {
+        for (const nb of bwdAdj.get(n) || []) {
+          if (!bwd.has(nb)) { bwd.set(nb, [...bwd.get(n), nb]); next.push(nb); }
+          if (fwd.has(nb)) return [...fwd.get(nb), ...bwd.get(nb).slice().reverse()];
+        }
+      }
+      bQueue = next;
+    }
+  }
+  return null; // no path
+}
+
+// Longest duration-weighted chain (critical path) using node.DurationMs.
+// Returns an array of node ids, or null if no duration data is present.
+function criticalPath() {
+  const hasDuration = graph.nodes.some((n) => n.DurationMs > 0 || (n.attrs && n.attrs.DurationMs > 0));
+  if (!hasDuration) return null;
+  const dur = (n) => +(n.DurationMs || (n.attrs && n.attrs.DurationMs) || 0);
+  // Longest path in DAG (depends_on subgraph), weighted by node duration.
+  const fwdAdj = new Map();
+  for (const e of graph.links) {
+    const s = e.source.id || e.source, t = e.target.id || e.target;
+    if (e.relation !== "depends_on") continue;
+    let sf = fwdAdj.get(s); if (!sf) { sf = new Set(); fwdAdj.set(s, sf); } sf.add(t);
+  }
+  const memo = new Map(); // id -> { cost, next }
+  function dp(id) {
+    if (memo.has(id)) return memo.get(id);
+    let best = { cost: dur(graph.byId.get(id) || {}), next: null };
+    for (const nb of fwdAdj.get(id) || []) {
+      const child = dp(nb);
+      const c = dur(graph.byId.get(id) || {}) + child.cost;
+      if (c > best.cost) best = { cost: c, next: nb };
+    }
+    memo.set(id, best);
+    return best;
+  }
+  // Find roots (no incoming depends_on).
+  const hasIncoming = new Set();
+  for (const e of graph.links) { if (e.relation === "depends_on") hasIncoming.add(e.target.id || e.target); }
+  const roots = graph.nodes.filter((n) => !hasIncoming.has(n.id));
+  let bestRoot = null, bestCost = -Infinity;
+  for (const r of roots) {
+    const { cost } = dp(r.id);
+    if (cost > bestCost) { bestCost = cost; bestRoot = r.id; }
+  }
+  if (!bestRoot) return null;
+  // Reconstruct path.
+  const path = [];
+  let cur = bestRoot;
+  while (cur) { path.push(cur); cur = dp(cur).next; }
+  return path.length > 1 ? path : null;
+}
+
+// Apply a named view. Updates activeView, viewNode, viewNodeTo, matchSet,
+// and the CLI idiom display. Serializes into the fragment via updateHash().
+function activateView(name, nodeId, nodeTo) {
+  activeView = name;
+  viewNode = nodeId || null;
+  viewNodeTo = nodeTo || null;
+  focusId = null;
+  projectionUnfolded = true; // a view always shows the full graph context
+  projectionSet = null;
+  matchSet = null;
+  if (searchEl) { searchEl.value = ""; }
+  query = "";
+
+  // Sync button active state.
+  document.querySelectorAll(".view-btn").forEach((b) => {
+    b.classList.toggle("view-active", b.dataset.view === name);
+  });
+
+  // Render the CLI idiom command for this view.
+  renderViewCommand(name, nodeId, nodeTo);
+
+  switch (name) {
+    case "blast": {
+      if (!nodeId) {
+        setStatus("Click a node to see what depends on it (blast view). CLI: magus explain <node-id>");
+        renderList(); draw(); updateHash();
+        return;
+      }
+      const deps = transitiveDependents(nodeId);
+      matchSet = deps;
+      const n = graph.byId ? graph.byId.get(nodeId) : null;
+      setStatus("What breaks if you change " + (n ? n.label : nodeId) + "? " + (deps.size - 1) + " dependent" + (deps.size - 1 === 1 ? "" : "s") + ".");
+      break;
+    }
+    case "trace": {
+      if (!nodeId || !nodeTo) {
+        setStatus("Click two nodes to find the path between them (trace view). CLI: magus path <a> <b>");
+        renderList(); draw(); updateHash();
+        return;
+      }
+      const path = shortestDependsOnPath(nodeId, nodeTo);
+      if (!path) {
+        const na = graph.byId ? graph.byId.get(nodeId) : null;
+        const nb = graph.byId ? graph.byId.get(nodeTo) : null;
+        setStatus("No depends_on path from " + (na ? na.label : nodeId) + " to " + (nb ? nb.label : nodeTo) + ".");
+        matchSet = new Set([nodeId, nodeTo]);
+      } else {
+        matchSet = new Set(path);
+        setStatus("Path: " + path.map((id) => { const n = graph.byId.get(id); return n ? n.label : id; }).join(" -> "));
+      }
+      break;
+    }
+    case "critical": {
+      const path = criticalPath();
+      if (!path) {
+        setStatus("No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.");
+        matchSet = null;
+      } else {
+        matchSet = new Set(path);
+        setStatus("Critical path: " + path.length + " node" + (path.length === 1 ? "" : "s") + " (longest duration-weighted chain).");
+      }
+      break;
+    }
+    case "hubs": {
+      const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree).slice(0, 12);
+      matchSet = new Set(top.map((n) => n.id));
+      setStatus("What's a hub? The " + matchSet.size + " highest-degree nodes.");
+      break;
+    }
+    case "orphans": {
+      matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
+      setStatus("What's dead? " + matchSet.size + " orphan node" + (matchSet.size === 1 ? "" : "s") + " with no edges.");
+      break;
+    }
+  }
+  setListExpanded(true);
+  renderList();
+  if (matchSet && matchSet.size) fitView(matchSet);
+  updateHash();
+  draw();
+}
+
+function clearView() {
+  activeView = null;
+  viewNode = null;
+  viewNodeTo = null;
+  document.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("view-active"));
+  renderViewCommand(null, null, null);
+  matchSet = null;
+  if (searchEl) searchEl.value = "";
+  query = "";
+  renderList();
+  updateHash();
+  draw();
+}
+
+// ---- Phase 5: CLI idiom rendering -------------------------------------------
+// The search box and view-command bar both use the .term-prompt styling from
+// playground.html. The prefix swaps verb based on context:
+//   search: "magus query"
+//   blast:  "magus explain"
+//   trace:  "magus path"
+//   others: no command (no CLI equivalent maps cleanly)
+//
+// "Earn the prompt" rule (section 0.5): a surface shows the prompt ONLY when its
+// behavior corresponds to a real CLI behavior backed by the drift fixture.
+
+function shellQuote(s) {
+  // Single-quote wrap if the value contains spaces, quotes, or other special chars.
+  if (/[\s'"\\$`!;|&<>(){}*?[\]#~%]/.test(s)) return "'" + s.replace(/'/g, "'\\''") + "'";
+  return s;
+}
+
+// Build the full shell command for "magus query <terms>".
+// Uses `--` before the terms when any term starts with `-` (negation), so the
+// flag parser doesn't treat it as a flag. This matches what the CLI needs and
+// what the drift fixture (query_syntax.txtar) verifies.
+function buildQueryCmd(queryStr) {
+  if (!queryStr) return "magus query";
+  const needsDDash = queryStr.trimStart().startsWith("-");
+  return "magus query " + (needsDDash ? "-- " : "") + shellQuote(queryStr);
+}
+
+// Build the full CLI command string for copy-to-clipboard.
+function viewCommandStr(name, nodeId, nodeTo) {
+  switch (name) {
+    case "blast":
+      if (!nodeId) return "magus explain <node-id>";
+      return "magus explain " + shellQuote(nodeId);
+    case "trace":
+      if (!nodeId || !nodeTo) return "magus path <a> <b>";
+      return "magus path " + shellQuote(nodeId) + " " + shellQuote(nodeTo);
+    default:
+      return null; // no valid CLI equivalent
+  }
+}
+
+// Render the view command into the #view-cmd element (the term-prompt variant).
+function renderViewCommand(name, nodeId, nodeTo) {
+  const wrap = el("view-cmd");
+  if (!wrap) return;
+  const cmd = viewCommandStr(name, nodeId, nodeTo);
+  if (!cmd) { wrap.hidden = true; return; }
+  const verb = name === "blast" ? "magus explain" : name === "trace" ? "magus path" : null;
+  if (!verb) { wrap.hidden = true; return; }
+  const args = cmd.slice(verb.length).trim();
+  wrap.hidden = false;
+  wrap.innerHTML =
+    '<span class="ps1" aria-hidden="true">' + escapeHtml(verb) + ' <span class="chevron">&#10095;</span></span>' +
+    '<span class="view-cmd-args">' + escapeHtml(args) + '</span>' +
+    '<button type="button" class="cmd-copy" title="Copy this command to the clipboard" aria-label="Copy command">&#10697;</button>';
+  wrap.querySelector(".cmd-copy").addEventListener("click", () => {
+    navigator.clipboard.writeText(cmd).then(() => {
+      setStatus("Copied: " + cmd);
+    });
+  });
+}
+
+// Update the search-box copy button with the full command to copy.
+function updateSearchCopyBtn() {
+  const btn = el("search-copy-btn");
+  if (!btn) return;
+  const val = searchEl ? searchEl.value.trim() : "";
+  const cmd = buildQueryCmd(val);
+  btn.title = "Copy: " + cmd;
+  btn.dataset.cmd = cmd;
+}
+
+// ---- Phase 5: empty-state suggestions (chips) -------------------------------
+// After a graph loads, compute 3 quick facts and show clickable suggestion chips.
+function renderSuggestions() {
+  const wrap = el("suggestions");
+  if (!wrap || !graph) { if (wrap) wrap.hidden = true; return; }
+  const chips = [];
+
+  // 1. Highest-degree node ("biggest hub").
+  if (graph.nodes.length > 1) {
+    const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree)[0];
+    if (top && top.degree > 0) {
+      chips.push({
+        text: top.label + " is the biggest hub - what depends on it?",
+        action: () => activateView("blast", top.id),
+      });
+    }
+  }
+
+  // 2. Cycle present?
+  const hasCycle = graph.links.some((e) => e.cycle);
+  if (hasCycle) {
+    // Find the first cycle edge source as the starting point for a trace.
+    const cycleEdge = graph.links.find((e) => e.cycle);
+    const src = cycleEdge ? (cycleEdge.source.id || cycleEdge.source) : null;
+    chips.push({
+      text: "A dependency cycle was detected - trace its path?",
+      action: src ? () => activateView("trace", src) : () => activateView("hubs"),
+    });
+  }
+
+  // 3. Orphan count.
+  const orphans = graph.nodes.filter((n) => n.degree === 0);
+  if (orphans.length > 0 && chips.length < 3) {
+    chips.push({
+      text: orphans.length + " node" + (orphans.length === 1 ? "" : "s") + " with no edges - what's dead?",
+      action: () => activateView("orphans"),
+    });
+  }
+
+  if (!chips.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  wrap.innerHTML = chips.map((c, i) =>
+    '<button type="button" class="suggestion-chip" data-i="' + i + '">' + escapeHtml(c.text) + '</button>'
+  ).join("");
+  wrap.querySelectorAll(".suggestion-chip").forEach((b) => {
+    b.addEventListener("click", () => {
+      chips[+b.dataset.i].action();
+      wrap.hidden = true; // hide after first use
+    });
+  });
+}
+
+// ---- Phase 5: color preset lenses -------------------------------------------
+// Three one-click presets over the existing color-group machinery. Each preset
+// emits the same group entries the user could type by hand. The active preset
+// serializes into the fragment as #preset=<id>.
+
+const COLOR_PRESETS = [
+  {
+    id: "spell",
+    label: "Color by spell",
+    groups: () => {
+      // One color per distinct spell in the graph.
+      const spellIds = graph.nodes.filter((n) => n.kind === "spell").map((n) => n.id);
+      const palette = ["#8b5cf6", "#a855f7", "#6366f1", "#0891b2", "#059669", "#d97706", "#dc2626", "#ec4899"];
+      return spellIds.map((id, i) => ({
+        query: "id:" + id,
+        color: palette[i % palette.length],
+      }));
+    },
+  },
+  {
+    id: "project",
+    label: "Color by project",
+    groups: () => {
+      const projects = graph.nodes.filter((n) => n.kind === "project").map((n) => n.id);
+      const palette = ["#2563eb", "#0a7ea4", "#059669", "#d97706", "#dc2626", "#8b5cf6", "#0891b2", "#ca8a04"];
+      return projects.map((id, i) => ({
+        query: "project:" + id,
+        color: palette[i % palette.length],
+      }));
+    },
+  },
+  {
+    id: "depth",
+    label: "Color by DAG depth",
+    groups: () => {
+      // Use the layered layout's longest-path layer index.
+      // Assign colors from deep (source) to shallow (sink).
+      const palette = ["#0a7ea4", "#2563eb", "#059669", "#d97706", "#dc2626"];
+      // Compute layer assignments (same as layoutLayered step 2, but read-only).
+      const ids = new Set(graph.nodes.map((n) => n.id));
+      const fwdAdj = new Map();
+      for (const e of graph.links) {
+        const s = e.source.id || e.source, t = e.target.id || e.target;
+        if (e.relation !== "depends_on" || !ids.has(s) || !ids.has(t)) continue;
+        let sf = fwdAdj.get(s); if (!sf) { sf = new Set(); fwdAdj.set(s, sf); } sf.add(t);
+      }
+      const layers = new Map();
+      function layer(id) {
+        if (layers.has(id)) return layers.get(id);
+        layers.set(id, 0); // mark for cycle guard
+        let max = -1;
+        for (const nb of fwdAdj.get(id) || []) {
+          if (layers.get(nb) === 0 && !layers.has(nb + "_done")) continue; // skip back-edges
+          max = Math.max(max, layer(nb));
+        }
+        const l = max + 1;
+        layers.set(id, l);
+        layers.set(id + "_done", true);
+        return l;
+      }
+      for (const n of graph.nodes) layer(n.id);
+      // Group by layer.
+      const byLayer = new Map();
+      for (const [id, l] of layers) {
+        if (typeof l !== "number" || id.endsWith("_done")) continue;
+        let s = byLayer.get(l); if (!s) { s = []; byLayer.set(l, s); } s.push(id);
+      }
+      const maxLayer = Math.max(...byLayer.keys(), 0);
+      const result = [];
+      for (const [l, ids_] of [...byLayer.entries()].sort((a, b) => a[0] - b[0])) {
+        const idx = Math.round((l / Math.max(maxLayer, 1)) * (palette.length - 1));
+        // Build a query that matches exactly these node ids.
+        // Use the first id as a representative query (id: is a substring match,
+        // so we emit one group per node to be precise - but cap at palette count).
+        if (ids_.length <= 5) {
+          for (const id of ids_) {
+            result.push({ query: "id:" + id, color: palette[idx] });
+          }
+        } else {
+          result.push({ query: "layer:" + l, color: palette[idx] });
+        }
+      }
+      return result;
+    },
+  },
+];
+
+let activePreset = null; // preset id string or null
+
+function applyPreset(presetId) {
+  const preset = COLOR_PRESETS.find((p) => p.id === presetId);
+  if (!preset) return;
+  // Clear previous groups.
+  groups.splice(0, groups.length);
+  if (activePreset === presetId) {
+    // Toggle off.
+    activePreset = null;
+    document.querySelectorAll(".preset-btn").forEach((b) => b.classList.remove("preset-active"));
+    renderGroups(); draw(); updateHash();
+    return;
+  }
+  activePreset = presetId;
+  document.querySelectorAll(".preset-btn").forEach((b) =>
+    b.classList.toggle("preset-active", b.dataset.preset === presetId));
+  if (!graph.relIndex) graph.relIndex = relationIndex();
+  const newGroups = preset.groups();
+  for (const g of newGroups) {
+    groups.push({ query: g.query, color: g.color, terms: parseQuery(g.query) });
+  }
+  renderGroups();
+  draw();
+  updateHash();
+}
+
 // ---- boot ------------------------------------------------------------------
 async function boot() {
   readTheme();
@@ -1380,6 +1999,29 @@ async function boot() {
 
   graph = prepareGraph(rawForPrepare);
 
+  // Phase 5: determine whether the default projection applies.
+  // A projection is shown when no fragment directives are present (no view/q/node)
+  // and the graph has project nodes whose count is <= 50.
+  const bootParams = hashParams();
+  const hasFragmentDirective = !!(bootParams.view || bootParams.q || bootParams.node);
+  if (!hasFragmentDirective) {
+    // Try to build a projection; if it applies, set projectionUnfolded = false.
+    const ps = buildProjectionSet();
+    if (ps) {
+      projectionUnfolded = false;
+      projectionSet = ps;
+      matchSet = new Set(ps);
+    } else {
+      projectionUnfolded = true;
+    }
+  } else {
+    projectionUnfolded = true;
+  }
+
+  // Show the unfold button when the projection is active.
+  const unfoldBtn = el("projection-unfold-btn");
+  if (unfoldBtn) unfoldBtn.hidden = projectionUnfolded;
+
   // Status line: targets flavor shows a summary; knowledge/demo shows the
   // existing brief confirmation or nothing (demo remains statusless).
   if (flavor === "targets") {
@@ -1387,15 +2029,23 @@ async function boot() {
     const nTargets = rawForPrepare.nodes.filter((n) => n.kind === "target").length;
     const base = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
       " - " + nTargets + " target" + (nTargets === 1 ? "" : "s");
-    setStatus(cycleWarnings.length ? base + "; " + cycleWarnings.join("; ") : base);
+    if (!projectionUnfolded) {
+      updateProjectionStatus(); // shows projection message instead
+    } else {
+      setStatus(cycleWarnings.length ? base + "; " + cycleWarnings.join("; ") : base);
+    }
   } else {
     // Only the private modes get a brief confirmation; the demo shows nothing (the
     // status box hides when empty) rather than a persistent overlay on the graph.
-    setStatus(loaded.source === "local"
-      ? "Your workspace graph - it never left your machine."
-      : loaded.source === "loopback"
-      ? "Your workspace graph, served over loopback - it never left your network."
-      : "");
+    if (!projectionUnfolded) {
+      updateProjectionStatus();
+    } else {
+      setStatus(loaded.source === "local"
+        ? "Your workspace graph - it never left your machine."
+        : loaded.source === "loopback"
+        ? "Your workspace graph, served over loopback - it never left your network."
+        : "");
+    }
   }
 
   renderLegend();
@@ -1427,14 +2077,64 @@ async function boot() {
   // applyDeepLinks function skips switching when the mode already matches).
   applyDeepLinks();
 
+  // Phase 5: emit empty-state suggestion chips.
+  renderSuggestions();
+
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
   let queryTimer = 0;
   searchEl.addEventListener("input", () => {
     clearTimeout(queryTimer);
-    queryTimer = setTimeout(() => applyQuery(searchEl.value), 120);
+    queryTimer = setTimeout(() => {
+      applyQuery(searchEl.value);
+      updateSearchCopyBtn();
+    }, 120);
   });
   searchEl.disabled = false;
+  updateSearchCopyBtn();
+
+  // Wire the copy button beside the search box.
+  const searchCopyBtn = el("search-copy-btn");
+  if (searchCopyBtn) {
+    searchCopyBtn.addEventListener("click", () => {
+      const cmd = searchCopyBtn.dataset.cmd || "magus query";
+      navigator.clipboard.writeText(cmd).then(() => setStatus("Copied: " + cmd));
+    });
+  }
+
+  // Wire the projection unfold button ("Show full graph").
+  if (unfoldBtn) {
+    unfoldBtn.addEventListener("click", () => {
+      unfoldProjection();
+      renderSuggestions(); // re-render suggestions after full graph is visible
+    });
+  }
+
+  // Wire view buttons (.view-btn). Blast and trace need node-picking mode.
+  document.querySelectorAll(".view-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      const v = b.dataset.view;
+      if (b.disabled || b.classList.contains("view-disabled")) return;
+      if (activeView === v) { clearView(); return; }
+      if (v === "blast" || v === "trace") {
+        // Enter picking mode: status tells user to click a node.
+        activeView = v;
+        viewNode = null;
+        viewNodeTo = null;
+        document.querySelectorAll(".view-btn").forEach((x) => x.classList.toggle("view-active", x.dataset.view === v));
+        renderViewCommand(v, null, null);
+        if (v === "blast") setStatus("Click a node to see what breaks if you change it.");
+        else setStatus("Click the first node for the path (trace view).");
+        updateHash();
+      } else {
+        activateView(v);
+      }
+    });
+  });
+
+  // Wire the clear-view button.
+  const clearViewBtn = el("clear-view-btn");
+  if (clearViewBtn) clearViewBtn.addEventListener("click", clearView);
 
   // The count row toggles the (default-collapsed) node cloud.
   const listToggle = el("list-toggle");
@@ -1447,6 +2147,11 @@ async function boot() {
   // Lenses (magus graph stats parity): hubs / orphans set the match set.
   document.querySelectorAll(".lens-btn").forEach((b) =>
     b.addEventListener("click", () => applyLens(b.dataset.lens)));
+
+  // Phase 5: color preset buttons.
+  document.querySelectorAll(".preset-btn").forEach((b) => {
+    b.addEventListener("click", () => applyPreset(b.dataset.preset));
+  });
 
   // Color groups: add a query -> color painting.
   const groupAdd = el("group-add");

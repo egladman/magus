@@ -44,10 +44,40 @@
     <p class="lede">See how everything in a magus workspace connects: projects, targets, spells, and the rest.</p>
     <p class="pg-note">Runs in your browser; nothing leaves your machine. <code>magus graph open</code> loads your own workspace here. <a href="../download/">Install magus</a>.</p>
 
+    <!-- Phase 5: Views panel - question-first navigation (max 7 modes). -->
+    <div class="views-panel" role="group" aria-label="Graph views">
+      <span class="views-label">Ask:</span>
+      <button type="button" class="view-btn" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
+      <button type="button" class="view-btn" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
+      <button type="button" class="view-btn view-conditional" data-view="critical" title="Longest duration-weighted chain. Hidden when no DurationMs data is present. CLI: magus graph deps -o json">What's slow?</button>
+      <button type="button" class="view-btn lens-btn" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
+      <button type="button" class="view-btn lens-btn" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
+      <button type="button" class="view-btn view-disabled" data-view="affected" disabled title="Requires live mode (Phase 9). CLI: magus affected">What does my diff touch?</button>
+      <button type="button" id="clear-view-btn" class="view-clear" hidden>Clear</button>
+    </div>
+
+    <!-- Phase 5: term-prompt view command bar (same idiom as playground.html). -->
+    <!-- Shows the CLI-equivalent command for the active view; hidden when no view is active -->
+    <!-- or the view has no exact CLI equivalent (earn the prompt rule, section 0.5). -->
+    <div id="view-cmd" class="term-prompt view-cmd-bar" hidden aria-live="polite" aria-label="CLI command for active view">
+      <!-- populated by renderViewCommand() -->
+    </div>
+
     <details class="query-help">
-      <summary>Query syntax</summary>
+      <summary>Query syntax and views</summary>
       <div class="disclosure-body">
-      <p>The filter box speaks the same grammar as <code>magus query</code>. Terms are combined with AND and matched case-insensitively; click an example to run it.</p>
+      <p>Each view answers a developer question. The search box speaks the same grammar as <code>magus query</code>. Click an example to run it.</p>
+      <table class="views-table">
+        <thead><tr><th>Question</th><th>View</th><th>CLI equivalent</th></tr></thead>
+        <tbody>
+          <tr><td>What breaks if I change this?</td><td><button type="button" class="view-btn q-example" data-view="blast">blast</button></td><td><code>magus explain &lt;node-id-or-name&gt;</code></td></tr>
+          <tr><td>Why does A depend on B?</td><td><button type="button" class="view-btn q-example" data-view="trace">trace</button></td><td><code>magus path &lt;a&gt; &lt;b&gt;</code></td></tr>
+          <tr><td>What's slow?</td><td><button type="button" class="view-btn q-example view-conditional" data-view="critical">critical</button></td><td><code>magus graph deps -o json</code></td></tr>
+          <tr><td>What's a hub?</td><td><button type="button" class="view-btn q-example lens-btn" data-view="hubs" data-lens="hubs">hubs</button></td><td><code>magus query kind:target</code></td></tr>
+          <tr><td>What's dead?</td><td><button type="button" class="view-btn q-example lens-btn" data-view="orphans" data-lens="orphans">orphans</button></td><td><code>magus query -kind:project</code></td></tr>
+        </tbody>
+      </table>
+      <p>The filter box speaks the same grammar as <code>magus query</code>. Terms are combined with AND and matched case-insensitively.</p>
       <dl>
         <dt><button type="button" class="q-example" data-q="render"><code>render</code></button></dt>
         <dd>Free text: match a node's id, label, or doc.</dd>
@@ -67,9 +97,11 @@
         <dd>Quote a value that contains spaces to keep it one term.</dd>
         <dt><button type="button" class="q-example" data-q="kind:target -id:generate"><code>kind:target -id:generate</code></button></dt>
         <dd>Combine terms; all must match. This lists targets whose id doesn't contain <code>generate</code>.</dd>
+        <dt><button type="button" class="q-example" data-q="kind:symbol"><code>kind:symbol</code></button></dt>
+        <dd>SCIP code-symbol nodes (from <code>magus refs</code>), when present in the loaded graph.</dd>
       </dl>
       <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
-      <p><b>Lenses</b> (mirroring <code>magus graph stats</code>): <button type="button" class="lens-btn q-example" data-lens="hubs"><code>hubs</code></button> the highest-degree "god" nodes, <button type="button" class="lens-btn q-example" data-lens="orphans"><code>orphans</code></button> nodes with no edges. <b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
+      <p><b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
       </div>
     </details>
 
@@ -87,6 +119,13 @@
           <label>Link length <input type="range" id="force-link" min="10" max="140" value="40" step="5"></label>
           <label>Gravity <input type="range" id="force-gravity" min="0" max="10" value="2" step="1"></label>
         </div>
+        <p class="control-label">Color presets</p>
+        <p class="control-hint">One-click color coding over the kind palette. Active preset serializes to the URL.</p>
+        <div class="preset-row">
+          <button type="button" class="preset-btn" data-preset="spell" title="Color each spell a distinct hue - shows toolchain as architectural layer">Color by spell</button>
+          <button type="button" class="preset-btn" data-preset="project" title="Color each project a distinct hue - shows project boundaries">Color by project</button>
+          <button type="button" class="preset-btn" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout) - shows architectural layers">Color by DAG depth</button>
+        </div>
         <p class="control-label">Color groups</p>
         <p>Paint every node matching a query one color, on top of the kind palette - keep several at once to compare slices of the graph.</p>
         <div class="group-add-row">
@@ -100,9 +139,17 @@
 
     <section class="graph-app">
       <aside class="graph-sidebar">
-        <div class="sidebar-search">
-          <input id="node-search" type="text" placeholder="Query: kind:spell, project:web, text..." aria-label="Query the graph" spellcheck="false" autocomplete="off" disabled>
+        <!-- Phase 5: search box styled as a magus query prompt (term-prompt idiom from playground.html). -->
+        <!-- The ps1 prefix is aria-hidden decoration; the input keeps its own label. -->
+        <div class="sidebar-search term-prompt search-prompt">
+          <span class="ps1" aria-hidden="true">magus query <span class="chevron">&#10095;</span></span>
+          <input id="node-search" type="text" placeholder="kind:spell project:web" aria-label="Query the graph" spellcheck="false" autocomplete="off" disabled>
+          <button id="search-copy-btn" type="button" class="search-copy" title="Copy this query as a shell command" aria-label="Copy magus query command">&#10697;</button>
         </div>
+        <!-- Phase 5: projection unfold button - shown when default projection is active. -->
+        <button id="projection-unfold-btn" type="button" class="projection-unfold" hidden>Show full graph</button>
+        <!-- Phase 5: empty-state suggestion chips - populated after graph loads. -->
+        <div id="suggestions" class="suggestions" hidden aria-label="Suggestions"></div>
         <button id="list-toggle" class="sidebar-count" type="button" aria-expanded="false" aria-controls="node-list">
           <span id="graph-count">loading...</span>
           <span class="list-chev" aria-hidden="true"></span>
@@ -139,6 +186,10 @@
         <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
         <dt><code>#q=&lt;query&gt;</code></dt>
         <dd>Apply a query on load (same grammar as <code>magus query</code>), e.g. <code>#q=kind:spell</code>.</dd>
+        <dt><code>#view=&lt;id&gt;&amp;node=&lt;id&gt;[&amp;to=&lt;id&gt;]</code></dt>
+        <dd>Restore a view on load: <code>#view=blast&amp;node=spell:go</code> highlights blast dependents; <code>#view=trace&amp;node=a&amp;to=b</code> draws the path.</dd>
+        <dt><code>#preset=&lt;id&gt;</code></dt>
+        <dd>Apply a color preset on load: <code>spell</code>, <code>project</code>, or <code>depth</code>.</dd>
       </dl>
       <p>Combine them with <code>&amp;</code>: <code>#data=...&amp;node=target:.:build</code>. A raw <code>graph.json</code> (from <code>magus graph export -o json</code>) also loads via the <b>Open file</b> button or drag-and-drop.</p>
       </div>

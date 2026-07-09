@@ -1,0 +1,69 @@
+# query_syntax.txtar - drift fixture for the graph explorer's help-panel examples.
+# Every data-q example button in website/graph.html must be accepted by the real
+# magus query CLI. This test asserts each one runs (exit 0) so the page can't
+# drift into teaching syntax the CLI rejects.
+#
+# The example queries (from graph.html data-q attributes):
+#   render
+#   kind:spell
+#   kind:target
+#   project:website
+#   relation:uses
+#   id:build
+#   -kind:function
+#   "spell op"          (quoted phrase)
+#   kind:target -id:generate
+#   kind:symbol
+
+exec magus query render
+# free text: always accepted, zero matches is fine
+stdout '(matches:|0 match)'
+
+exec magus query kind:spell
+stdout '(matches:|0 match)'
+
+exec magus query kind:target
+stdout '(matches:|0 match)'
+
+exec magus query project:website
+stdout '(matches:|0 match)'
+
+exec magus query relation:uses
+stdout '(matches:|0 match)'
+
+exec magus query id:build
+stdout '(matches:|0 match)'
+
+# Negation: pass as a single quoted argument so the flag parser doesn't treat
+# the leading - as a flag. The CLI re-joins its <terms> args with a space.
+exec magus query -- -kind:function
+stdout '(matches:|0 match)'
+
+# Quoted phrase: single argument containing a space.
+exec magus query 'spell op'
+stdout '(matches:|0 match)'
+
+# Combined terms: pass as one argument so the - in -id:generate isn't a flag.
+exec magus query 'kind:target -id:generate'
+stdout '(matches:|0 match)'
+
+exec magus query kind:symbol
+stdout '(matches:|0 match)'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(args: [str]) > void { acme.lint(); }
+export fun build(args: [str]) > void {
+    magus.needs(magus.target.literal("lint"));
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

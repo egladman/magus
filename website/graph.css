@@ -295,4 +295,135 @@ main .display-help > summary:not([role]), main .display-help[open] > summary:not
 .group-x { width: auto; margin: 0; padding: 0 0.25rem; background: transparent; border: 0; color: var(--pico-muted-color); cursor: pointer; font-size: 0.95rem; line-height: 1; }
 .group-x:hover { color: var(--pico-del-color); }
 
+/* ---- Phase 5: question-first views panel ---------------------------------- */
+/* Views are a curated, hard-capped set (max 7). Each button is named by the
+   question it answers; active state is set by JS (.view-active class). */
+.views-panel {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem;
+  margin-bottom: 0.5rem; padding: 0.4rem 0.5rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color);
+  font-size: 0.78rem;
+}
+.views-label {
+  color: var(--pico-muted-color); font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; margin-right: 0.1rem;
+}
+.views-panel .view-btn {
+  width: auto; margin: 0; padding: 0.18rem 0.55rem;
+  font-size: 0.72rem; line-height: 1.3;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  cursor: pointer;
+}
+.views-panel .view-btn:hover { border-color: var(--pico-primary); }
+.views-panel .view-btn.view-active {
+  background: var(--pico-primary); color: var(--pico-primary-inverse);
+  border-color: var(--pico-primary);
+}
+/* Disabled = Phase 9 "affected" button. Not greyed - just visually demoted. */
+.views-panel .view-btn[disabled], .views-panel .view-btn.view-disabled {
+  opacity: 0.45; cursor: not-allowed;
+}
+.views-panel .view-btn.view-conditional { display: none; } /* hidden until DurationMs data present */
+.view-clear {
+  width: auto; margin: 0 0 0 auto; padding: 0.18rem 0.55rem;
+  font-size: 0.72rem; line-height: 1.3;
+  background: transparent; border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius); cursor: pointer; color: var(--pico-muted-color);
+}
+.view-clear:hover { border-color: var(--pico-del-color); color: var(--pico-del-color); }
+
+/* Phase 5: term-prompt view command bar. Shares .term-prompt CSS from playground;
+   the outer element here is a div, not an input wrapper. */
+.view-cmd-bar {
+  margin-bottom: 0.4rem; padding: 0.4rem 0.7rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--syntax-panel-bg, var(--pico-card-sectioning-background-color));
+  font-family: var(--pico-font-family-monospace); font-size: 0.78rem;
+  display: flex; align-items: baseline; gap: 0.5rem;
+}
+.view-cmd-bar .ps1 { color: var(--pico-muted-color); font-weight: 500; white-space: nowrap; }
+.view-cmd-bar .ps1 .chevron { color: var(--pico-primary); }
+.view-cmd-args { color: var(--pico-color); flex: 1; }
+.cmd-copy {
+  width: auto; margin: 0; padding: 0 0.35rem; background: transparent; border: 0;
+  color: var(--pico-muted-color); cursor: pointer; font-size: 1rem; line-height: 1;
+  flex: 0 0 auto;
+}
+.cmd-copy:hover { color: var(--pico-primary); }
+
+/* Phase 5: search prompt styled as magus query term-prompt. */
+/* Overrides the plain .sidebar-search/node-search rules above with the terminal idiom. */
+.search-prompt {
+  font-family: var(--pico-font-family-monospace); font-size: 0.78rem;
+  display: flex; align-items: baseline; gap: 0.4rem;
+  padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.search-prompt .ps1 { color: var(--pico-muted-color); font-weight: 500; white-space: nowrap; }
+.search-prompt .ps1 .chevron { color: var(--pico-primary); }
+.search-prompt #node-search {
+  /* Reset the magnifier-icon background from the plain search style. */
+  background-image: none; padding: 0; border: 0; margin: 0;
+  flex: 1; background: transparent; font-family: inherit; font-size: inherit;
+  color: var(--pico-color); height: auto; width: auto; line-height: 1.3;
+  border-radius: 0;
+}
+.search-prompt #node-search::placeholder { color: var(--pico-muted-color); }
+.search-prompt #node-search:focus { box-shadow: none; outline: none; }
+.search-copy {
+  width: auto; margin: 0; padding: 0 0.3rem; background: transparent; border: 0;
+  color: var(--pico-muted-color); cursor: pointer; font-size: 1rem; line-height: 1;
+  flex: 0 0 auto;
+}
+.search-copy:hover { color: var(--pico-primary); }
+
+/* Phase 5: projection unfold button. Shown when default projection is active. */
+.projection-unfold {
+  width: 100%; margin: 0; padding: 0.28rem 0.6rem;
+  font-size: 0.72rem; line-height: 1.3; text-align: center;
+  background: var(--pico-card-background-color);
+  border: 0; border-bottom: 1px solid var(--pico-muted-border-color); border-radius: 0;
+  cursor: pointer; color: var(--pico-primary);
+}
+.projection-unfold:hover { text-decoration: underline; }
+
+/* Phase 5: empty-state suggestion chips. */
+.suggestions {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.suggestion-chip {
+  width: 100%; margin: 0; padding: 0.22rem 0.5rem; text-align: left;
+  font-size: 0.7rem; line-height: 1.35; white-space: normal;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  cursor: pointer; color: var(--pico-muted-color);
+}
+.suggestion-chip:hover { border-color: var(--pico-primary); color: var(--pico-color); }
+
+/* Phase 5: color preset buttons. */
+.preset-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; }
+.preset-btn {
+  width: auto; margin: 0; padding: 0.18rem 0.6rem;
+  font-size: 0.72rem; line-height: 1.3;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  cursor: pointer;
+}
+.preset-btn:hover { border-color: var(--pico-primary); }
+.preset-btn.preset-active { background: var(--pico-primary); color: var(--pico-primary-inverse); border-color: var(--pico-primary); }
+.control-hint { margin: -0.15rem 0 0.3rem; font-size: 0.72rem; color: var(--pico-muted-color); }
+
+/* Phase 5: views-table in help panel. */
+.views-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.7rem; }
+.views-table th, .views-table td { padding: 0.25rem 0.5rem; text-align: left; border-bottom: 1px solid var(--pico-muted-border-color); }
+.views-table th { color: var(--pico-muted-color); font-weight: 600; font-size: 0.72rem; }
+.views-table .view-btn {
+  width: auto; margin: 0; padding: 0.1rem 0.4rem; font-size: 0.72rem; line-height: 1.2;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
+}
+.views-table .view-btn:hover { border-color: var(--pico-primary); }
+
 .site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
