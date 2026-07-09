@@ -64,7 +64,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-mermaid" title="build-mermaid">build-mermaid</a></li><li><a href="#build-hljs" title="build-hljs">build-hljs</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#changelog-generate" title="changelog-generate">changelog-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li><li><a href="#glossary" title="Glossary">Glossary</a></li></ul>
+        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-mermaid" title="build-mermaid">build-mermaid</a></li><li><a href="#build-hljs" title="build-hljs">build-hljs</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#changelog-generate" title="changelog-generate">changelog-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -78,7 +78,7 @@
 magus run &lt;target&gt; &lt;path&gt;   # from anywhere in the workspace
 magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
-<p>Unfamiliar with a term? See the <a href="#glossary">Glossary</a>.</p>
+<p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
 <p>This workspace has a knowledge graph of <strong>505 nodes</strong> and <strong>619 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -378,17 +378,6 @@ graph LR
 <p><strong>Defaults</strong></p>
 <pre><code class="language-sh">magus run buzz-test  # from the workspace root
 </code></pre>
-<h2 id="glossary">Glossary</h2>
-<ul>
-<li><strong>Workspace</strong>: the magus root directory that owns a set of projects and shared config; the unit magus operates over.</li>
-<li><strong>Project</strong>: a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.</li>
-<li><strong>Magusfile</strong>: the <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and binds its spells.</li>
-<li><strong>Target</strong>: a named operation (<code>build</code>, <code>test</code>, …) you invoke with <code>magus run &lt;target&gt;</code>; it may compose a spell's tool-native operations and depend on other targets.</li>
-<li><strong>Spell</strong>: a language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a toolchain's real commands.</li>
-<li><strong>Charm</strong>: an execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in place, and <code>ci</code> always strips it.</li>
-<li><strong>Module</strong>: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.</li>
-<li><strong>Buzz</strong>: the language magusfiles are written in (the <code>.buzz</code> engine).</li>
-</ul>
     </article>
     </div>
     </div>

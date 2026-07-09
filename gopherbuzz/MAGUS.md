@@ -12,16 +12,17 @@ magus run <target> <path>   # from anywhere in the workspace
 magus run <target>:<charm>  # change HOW it runs (e.g. lint:rw)
 ```
 
-Unfamiliar with a term? See the [Glossary](#glossary).
+Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary/).
 
 ## Query first
 
-This workspace has a knowledge graph of **934 nodes** and **1499 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **936 nodes** and **1499 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # how two nodes connect
+magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
 magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 ```
 
@@ -34,7 +35,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 21 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
+| diagnostic | 23 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
 | doc | 3 | `magus query kind:doc` | `MAGUS.md`, `README.md`, `docs/ffi.md` |
 | file | 59 | `magus query kind:file` | `examples/bubblegum/config.buzz`, `examples/bubblegum/platform/macos/cocoa.buzz`, `examples/bubblegum/core/command.buzz` |
 | function | 557 | `magus query kind:function` | `sel`, `sendObject`, `send` |
@@ -255,14 +256,3 @@ Renders MAGUS.md (target catalog plus graph) from this magusfile.
 ```sh
 magus run md-generate  # from the workspace root
 ```
-
-## Glossary
-
-- **Workspace**: the magus root directory that owns a set of projects and shared config; the unit magus operates over.
-- **Project**: a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.
-- **Magusfile**: the `magusfile.buzz` that declares a project's targets (as `export fun`s) and binds its spells.
-- **Target**: a named operation (`build`, `test`, …) you invoke with `magus run <target>`; it may compose a spell's tool-native operations and depend on other targets.
-- **Spell**: a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands.
-- **Charm**: an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it.
-- **Module**: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.
-- **Buzz**: the language magusfiles are written in (the `.buzz` engine).

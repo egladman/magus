@@ -12,9 +12,9 @@ magus run <target> <path>   # from anywhere in the workspace
 magus run <target>:<charm>  # change HOW it runs (e.g. lint:rw)
 ```
 
-Unfamiliar with a term? See the [Glossary](#glossary).
+Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary/).
 
-Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fpwa-p45%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
+Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
 
 ## Query first
 
@@ -77,10 +77,10 @@ graph LR
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 
-## Project: magus-p45
+## Project: magus
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus-p45</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
@@ -1102,14 +1102,3 @@ buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in 
 ```sh
 magus run buzz-test website  # from the workspace root
 ```
-
-## Glossary
-
-- **Workspace**: the magus root directory that owns a set of projects and shared config; the unit magus operates over.
-- **Project**: a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.
-- **Magusfile**: the `magusfile.buzz` that declares a project's targets (as `export fun`s) and binds its spells.
-- **Target**: a named operation (`build`, `test`, …) you invoke with `magus run <target>`; it may compose a spell's tool-native operations and depend on other targets.
-- **Spell**: a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands.
-- **Charm**: an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it.
-- **Module**: a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.
-- **Buzz**: the language magusfiles are written in (the `.buzz` engine).
