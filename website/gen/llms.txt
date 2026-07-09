@@ -6,6 +6,7 @@
 
 - [Affected](https://eli.gladman.cc/magus/affected/index.md): How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.
 - [Breaking changes](https://eli.gladman.cc/magus/breaking-changes/index.md): How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's public surface.
+- [Browser bridge](https://eli.gladman.cc/magus/browser-bridge/index.md): Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.
 - [magus stdlib](https://eli.gladman.cc/magus/buzz/modules/index.md): Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.
 - [archive module](https://eli.gladman.cc/magus/buzz/modules/archive/index.md): Archive creation and extraction with automatic format detection.
 - [charm module](https://eli.gladman.cc/magus/buzz/modules/charm/index.md): Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).

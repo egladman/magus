@@ -2,6 +2,7 @@ affected/
 blog/
 blog/2026/07/01/hello-blog/
 breaking-changes/
+browser-bridge/
 buzz/modules/
 buzz/modules/archive/
 buzz/modules/charm/

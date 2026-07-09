@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Browser bridge — magus</title>
+  <meta name="description" content="Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/browser-bridge/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Browser bridge — magus">
+  <meta property="og:description" content="Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/browser-bridge/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../assets/pico.min.css">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../graph/">Graph</a></li>
+        <li><a href="../development/">Development</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Browser bridge</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/browser-bridge.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#what-the-bridge-serves" title="What the bridge serves">What the bridge serves</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#phase-9-upcoming-live-mode-pairing" title="Phase 9 (upcoming): Live mode pairing">Phase 9 (upcoming): Live mode pairing</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <article>
+<h1 id="browser-bridge">Browser bridge</h1>
+<p>The browser bridge is three frozen, read-only GET routes that the magus daemon
+exposes over loopback so the hosted <a href="https://eli.gladman.cc/magus/graph/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a>
+can display your current workspace.</p>
+<p><strong>Nothing in the browser can make the daemon do anything.</strong> The bridge has no
+write surface, no POST routes, and no way to trigger a build, run a target, or
+change configuration. This is a design decision, not just a security posture
+(see section 0.3 of the PWA plan).</p>
+<h2 id="what-the-bridge-serves">What the bridge serves</h2>
+<p>Every byte the bridge can emit, enumerated:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/v1/graph</code></td>
+<td>Merged knowledge graph (same bytes as <code>magus graph export -o json</code>)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/graph?flavor=targets</code></td>
+<td>Target dependency graph (same as <code>magus describe graph -o json</code>)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/graph?level=projects</code></td>
+<td>Project skeleton only: project nodes + project edges</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/graph?select=&lt;terms&gt;</code></td>
+<td>Scoped neighborhood (same query engine as <code>magus query</code>)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/status</code></td>
+<td>Daemon pool state (same as <code>magus status -o json</code>)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/events</code></td>
+<td>SSE stream: <code>event: graph</code> when the workspace graph changes</td>
+</tr>
+</tbody>
+</table></figure>
+<p>No other routes exist. The bridge mounts at <code>/api/v1/</code> on the same port as the
+MCP server (<code>127.0.0.1:7391</code> by default).</p>
+<p><strong>Error bodies.</strong> When a route fails (5xx), the response body contains
+<code>err.Error()</code> detail to help an authenticated loopback caller diagnose the
+problem. This detail is returned only to a caller that has already passed the
+bearer-token check.</p>
+<p>Symbol shards (<code>@symbols</code>) are NOT loaded for the default <code>/api/v1/graph</code> call.
+They are loaded only when <code>?select=&lt;terms&gt;</code> uses a symbol-seeding query (a
+<code>symbol:</code> prefix or <code>kind:symbol</code>). This preserves the lazy-load contract:
+symbol data stays opt-in.</p>
+<p><strong>Uncached variants.</strong> The <code>?level=projects</code> and <code>?flavor=targets</code> query params
+reparse the workspace target graph on every request (they call <code>DescribeGraph</code>
+which reads the cached in-memory target graph but does not cache the variant
+serialization). This is a known limitation; memoization per variant is deferred.</p>
+<h2 id="how-it-is-secured">How it is secured</h2>
+<p><strong>Loopback only.</strong> The bridge refuses to mount on any non-loopback bind
+address. If you set <code>mcp.address</code> to a non-loopback IP (for k8s or LAN use),
+the bridge logs a warning and does not register its routes.</p>
+<p><strong>Bearer token.</strong> Every request must carry <code>Authorization: Bearer &lt;token&gt;</code>.
+The token is the same one the MCP server uses. Retrieve it with:</p>
+<pre><code>magus config mcp token print
+</code></pre>
+<p>The token is stored on disk (<code>~/.config/magus/mcp-token</code>) and never logged.</p>
+<p><strong>DNS-rebind guard.</strong> The bridge shares the MCP server's host-header check.
+A request whose <code>Host</code> header does not resolve to the loopback range is
+rejected with 403 before the bearer token is examined.</p>
+<p><strong>CORS.</strong> <code>Access-Control-Allow-Origin</code> is set only for:</p>
+<ul>
+<li>The hosted Graph Explorer origin (<code>https://eli.gladman.cc</code>)</li>
+<li><code>http://localhost:&lt;port&gt;</code> (local site development)</li>
+<li><code>http://127.0.0.1:&lt;port&gt;</code> (local site development)</li>
+</ul>
+<p>Any other origin gets no CORS headers. The browser will block its own
+cross-origin request before any data is read.</p>
+<p><strong>Chrome Private Network Access.</strong> When Chrome sends the
+<code>Access-Control-Request-Private-Network: true</code> preflight header (Private
+Network Access spec), the bridge replies with
+<code>Access-Control-Allow-Private-Network: true</code>. Without this, Chrome 94+ blocks
+requests from an HTTPS page to a loopback address. Expect a one-time
+permission prompt in Chrome when you first connect the explorer.</p>
+<h2 id="safari-limitation">Safari limitation</h2>
+<p>Safari blocks fetch requests from an HTTPS page to <code>http://127.0.0.1</code> (mixed
+content). The bridge will not work in Safari's live mode. Use
+<code>magus graph open --serve</code> instead, which runs an ephemeral loopback server
+with a matching same-origin response and opens the graph via a <code>#src=</code> fragment
+that is served directly.</p>
+<h2 id="kill-switch">Kill switch</h2>
+<p>Disable the bridge in <code>magus.yaml</code>:</p>
+<pre><code class="language-yaml">bridge:
+  enabled: false
+</code></pre>
+<p>Or via environment variable: <code>MAGUS_BRIDGE_ENABLED=false</code>.</p>
+<p>The bridge only exists when the daemon binary is compiled with <code>-tags mcp</code>.
+A binary built without that tag has no bridge and no <code>/api/v1/</code> routes.</p>
+<h2 id="privacy-statement">Privacy statement</h2>
+<p>The bridge serves your workspace graph over loopback. It does not:</p>
+<ul>
+<li>Send data to any external service</li>
+<li>Log request payloads</li>
+<li>Store anything beyond what the daemon already caches on disk</li>
+<li>Accept any write request</li>
+<li>Expose any path outside the routes listed above</li>
+</ul>
+<p>The hosted explorer page loads your graph via the bearer-authenticated fetch.
+The graph data never appears in a URL (fragments are used for the fragment
+delivery mode; the live mode uses an Authorization header that browsers do not
+log in the address bar).</p>
+<h2 id="magus-doctor-check"><code>magus doctor</code> check</h2>
+<p><code>magus doctor</code> reports bridge reachability when the daemon is running:</p>
+<pre><code>[pass] web bridge: reachable at http://127.0.0.1:7391/api/v1/graph
+    bearer token: magus config mcp token print
+</code></pre>
+<p>When the daemon is not running, the check is skipped (not a failure).
+When <code>bridge.enabled: false</code> is set, the check reports that the bridge is
+disabled.</p>
+<h2 id="phase-9-upcoming-live-mode-pairing">Phase 9 (upcoming): Live mode pairing</h2>
+<p>A future release (<code>magus graph open --live</code>) will probe the daemon and open the
+explorer with a <code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;</code> fragment, enabling
+always-live workspace viewing. The bridge is the prerequisite. The token is
+consumed by the page on load and replaced with session storage so it does not
+persist in the URL.</p>
+<p>The explorer enforces that the host in <code>#live=</code> is literally <code>127.0.0.1</code> or
+<code>[::1]</code>. <code>localhost</code> and all other hostnames are rejected. This 5-line
+client-side check is what makes the &quot;data cannot leave your machine&quot; claim
+verifiable by reading the source.</p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../breaking-changes/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Breaking changes</span></a>
+      <a class="page-nav-next" href="../cache/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Cache model</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
+        <a class="related-card" href="../codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22bridge%22">bridge</a><a class="tag" href="../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../search/?q=tag%3A%22privacy%22">privacy</a></div>
+    <small>Last updated <time datetime="2026-07-09T04:04:05Z">July 9, 2026, 4:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/1c82d1bb40039b925876859a42b27c8fa1c520eb" data-tooltip="1c82d1bb40039b925876859a42b27c8fa1c520eb" title="1c82d1bb40039b925876859a42b27c8fa1c520eb">1c82d1b</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f25f5f37ac18cd9704442afcb8fd8a1feb1e0ef"><code>3f25f5f</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/browser-bridge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/browser-bridge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="../graph/">Graph</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>

@@ -8,6 +8,12 @@ tags: [config, magus.yaml, configuration, environment variables, flags, referenc
 
 magus resolves configuration from three layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, then the `magus.yaml` file at the workspace root. This page is the complete inventory of config keys, each with its `magus.yaml` path, environment variable, CLI flag, and value type.
 
+## bridge
+
+| Config key | Environment variable | Flag | Type |
+|------------|----------------------|------|------|
+| `bridge.enabled` | `MAGUS_BRIDGE_ENABLED` | _(env only)_ | bool _(env only)_ |
+
 ## cache
 
 | Config key | Environment variable | Flag | Type |
