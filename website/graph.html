@@ -138,7 +138,9 @@
       </aside>
 
       <div class="graph-stage">
+        <div id="live-disconnect-banner" class="live-disconnect-banner" hidden role="alert"></div>
         <div class="stage-tools">
+          <span id="live-badge" class="live-badge" hidden aria-live="polite"></span>
           <button id="fit-btn" class="outline" type="button" title="Zoom to fit the whole graph (or the current matches)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span class="btn-label">Fit</span></button>
           <button id="open-file-btn" class="outline" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span class="btn-label">Open file</span></button>
           <button id="copy-mermaid-btn" class="outline" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first.">&#10697;<span class="btn-label">Copy as Mermaid</span></button>
@@ -147,6 +149,7 @@
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <ul id="graph-legend" aria-label="Node kinds"></ul>
         <p id="graph-status" role="status">Loading graph...</p>
+        <p id="live-status-strip" class="live-status-strip" hidden aria-live="polite"></p>
       </div>
 
       <div id="explain-card" aria-live="polite" hidden></div>
@@ -163,6 +166,8 @@
         <dd>An inline graph: the node-link JSON, gzipped then base64url-encoded. Decoded in the browser. Bounded by the browser's URL length.</dd>
         <dt><code>#src=&lt;url&gt;</code></dt>
         <dd>A URL-encoded address the page fetches the JSON from - a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
+        <dt><code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;</code></dt>
+        <dd>Connect to a running daemon for a live workspace view. The host must be literally <code>127.0.0.1</code> or <code>[::1]</code> (not <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph open --live</code> to build this link. Not available in Safari (see browser bridge docs).</dd>
         <dt><code>#node=&lt;id&gt;</code></dt>
         <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
         <dt><code>#q=&lt;query&gt;</code></dt>
@@ -173,6 +178,9 @@
         <dd>Apply a color preset on load: <code>spell</code>, <code>project</code>, or <code>depth</code>.</dd>
       </dl>
       <p>Combine them with <code>&amp;</code>: <code>#data=...&amp;node=target:.:build</code>. A raw <code>graph.json</code> (from <code>magus graph export -o json</code>) also loads via the <b>Open file</b> button or drag-and-drop.</p>
+      <div id="live-remember-row" class="live-remember-row" hidden>
+        <label><input type="checkbox" id="live-remember-cb"> Remember this workspace (store token in localStorage)</label>
+      </div>
       </div>
     </details>
 

@@ -427,3 +427,33 @@ main .display-help > summary:not([role]), main .display-help[open] > summary:not
 .views-table .view-btn:hover { border-color: var(--pico-primary); }
 
 .site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
+
+
+/* Phase 9: live mode badge and status strip */
+.live-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--pico-primary-background, #0172ad);
+  color: var(--pico-primary-inverse, #fff);
+  line-height: 1.5;
+  align-self: center;
+}
+.live-status-strip {
+  font-size: 0.7rem;
+  color: var(--pico-muted-color);
+  margin: 0.15rem 0;
+}
+.live-disconnect-banner {
+  background: var(--pico-del-color, #c0392b);
+  color: #fff;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+.live-remember-row {
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}

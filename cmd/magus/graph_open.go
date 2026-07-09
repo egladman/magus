@@ -50,6 +50,7 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		printOnly   bool
 		serve       bool
 		useTargets  bool
+		useLive     bool
 	)
 	pos, err := cmdParse("graph open", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before opening")
@@ -58,6 +59,7 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&printOnly, "print", false, "print the explorer URL to stdout instead of opening a browser (fragment mode only)")
 		fs.BoolVar(&serve, "serve", false, "hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; the server serves once and stops)")
 		fs.BoolVar(&useTargets, "targets", false, "open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project")
+		fs.BoolVar(&useLive, "live", false, "connect the explorer to the running daemon for a live workspace view (requires 'magus server start')")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph open [flags] [project-path]")
 			fmt.Fprintln(os.Stderr, "")
@@ -72,6 +74,11 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "graph. An optional project-path positional argument scopes the view to one")
 			fmt.Fprintln(os.Stderr, "project. Target graphs are always delivered via the URL fragment (--serve")
 			fmt.Fprintln(os.Stderr, "is incompatible with --targets).")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "With --live, the explorer connects to the running daemon (magus server start)")
+			fmt.Fprintln(os.Stderr, "and updates automatically as files change. The host must be loopback.")
+			fmt.Fprintln(os.Stderr, "Zero-arg default: if the daemon is reachable and no mode flag is given,")
+			fmt.Fprintln(os.Stderr, "--live is chosen automatically.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "For a graph to hand to another tool, use `magus graph export -o json`.")
 			fmt.Fprintln(os.Stderr, "")
@@ -100,6 +107,17 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 			return errSilent{exitCode: 2}
 		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
+	}
+
+	// Zero-arg default: when no explicit delivery mode is chosen and no --targets,
+	// probe the daemon first. If it is reachable, use --live for an always-fresh view.
+	if !useLive && !serve {
+		if status, _ := daemonStatus("")(ctx); status != nil {
+			useLive = true
+		}
+	}
+	if useLive {
+		return graphOpenLive(ctx, root, base, printOnly, useTargets)
 	}
 
 	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.

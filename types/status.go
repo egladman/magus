@@ -61,6 +61,7 @@ type StatusOutput struct {
 	Waiting       int               `json:"waiting" yaml:"waiting"`
 	Calls         []StatusCall      `json:"calls,omitempty" yaml:"calls,omitempty"`
 	Workspaces    []StatusWorkspace `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
+	Affected      []string          `json:"affected,omitempty" yaml:"affected,omitempty"`
 }
 
 // StatusCall describes one in-flight call in the pool.

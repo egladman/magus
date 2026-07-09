@@ -81,6 +81,18 @@ let projectionUnfolded = false;
 // Set of node ids visible in the current projection (null = all).
 let projectionSet = null;
 
+// ---- Phase 9: live mode state ----------------------------------------------
+let liveHost = null;     // host:port string when in live mode, else null
+let liveToken = null;    // bearer token for live mode
+let liveETag = null;     // last ETag from /api/v1/graph for If-None-Match
+let liveSseAbort = null; // AbortController for the SSE fetch
+let liveReconnectTimer = null;
+let liveReconnectDelay = 1000; // ms; doubles on each failure up to 30000
+let liveWorkspaceName = null;  // workspace name from /api/v1/status, for badge
+let liveConnected = false;
+let liveFlavor = null;   // null (knowledge) or "targets"
+let liveSkeletonLoaded = false; // true after the skeleton first load succeeds
+
 // The graph stays gently "alive": the simulation never fully cools, so nodes
 // keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
 // and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
@@ -1776,6 +1788,18 @@ function activateView(name, nodeId, nodeTo) {
       setStatus("What's dead? " + matchSet.size + " orphan node" + (matchSet.size === 1 ? "" : "s") + " with no edges.");
       break;
     }
+    case "affected": {
+      // Live mode: affected set is provided by caller or stored in window._liveAffectedIds.
+      const aff = (typeof nodeId === "object" && nodeId) ? nodeId : window._liveAffectedIds;
+      if (!aff || !aff.size) {
+        setStatus("no affected nodes in current diff", true);
+        matchSet = null;
+      } else {
+        matchSet = aff;
+        setStatus("What does my diff touch? " + aff.size + " affected node" + (aff.size === 1 ? "" : "s") + " (live workspace).");
+      }
+      break;
+    }
   }
   setListExpanded(true);
   renderList();
@@ -2272,6 +2296,228 @@ function applyPreset(presetId) {
   updateHash();
 }
 
+// ---- Phase 9: live mode ----------------------------------------------------
+
+// validateLiveHost: the host in #live= MUST be literally 127.0.0.1 or [::1].
+// localhost, hostnames, and other IPs are rejected before any network request.
+// This 5-line check is what makes the docs claim "data cannot leave your machine" verifiable.
+function validateLiveHost(host) {
+  if (host === "127.0.0.1") return true;
+  if (host === "[::1]") return true;
+  return false;
+}
+
+function consumeLiveToken(params) {
+  // Called once at boot. Strip the fragment so the token never persists in location.
+  // Store in sessionStorage by default; localStorage if checkbox is checked.
+  if (!params.token) return;
+  const remember = localStorage.getItem("magus-live-remember") === "1";
+  if (remember) {
+    localStorage.setItem("magus-live-token", params.token);
+  } else {
+    sessionStorage.setItem("magus-live-token", params.token);
+  }
+  // Strip the entire fragment via replaceState so token is gone from the URL.
+  history.replaceState(null, "", location.pathname + location.search);
+}
+
+function getLiveToken() {
+  return sessionStorage.getItem("magus-live-token") || localStorage.getItem("magus-live-token") || null;
+}
+
+// fetchSSE: fetch-based Server-Sent Events reader. Does NOT use EventSource
+// because EventSource cannot send an Authorization header.
+// Reads response.body via TextDecoderStream, splits on \n\n, parses event:/data: lines.
+// On stream end or error, calls onError(err) for the caller to schedule reconnect.
+async function fetchSSE(url, headers, onEvent, onError, signal) {
+  let response;
+  try {
+    response = await fetch(url, { headers, signal });
+  } catch (e) {
+    onError(e);
+    return;
+  }
+  if (!response.ok) {
+    onError(new Error("HTTP " + response.status));
+    return;
+  }
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) { onError(new Error("stream ended")); return; }
+      buf += value;
+      let boundary;
+      while ((boundary = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, boundary);
+        buf = buf.slice(boundary + 2);
+        if (!chunk.trim()) continue;
+        let eventType = "message", data = "";
+        for (const line of chunk.split("\n")) {
+          if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+          else if (line.startsWith("data: ")) data = line.slice(6).trim();
+        }
+        onEvent(eventType, data);
+      }
+    }
+  } catch (e) {
+    if (e.name !== "AbortError") onError(e);
+  }
+}
+
+// capturePositions: before replacing the graph on a live refresh, record existing
+// node positions keyed by id so they can be applied to the new graph.
+function capturePositions() {
+  const pos = new Map();
+  if (graph) {
+    for (const n of graph.nodes) {
+      if (n.x != null) pos.set(n.id, { x: n.x, y: n.y, fx: n.fx, fy: n.fy });
+    }
+  }
+  return pos;
+}
+
+function applyPositions(newNodes, prevPos) {
+  if (!prevPos || !prevPos.size) return;
+  for (const n of newNodes) {
+    const p = prevPos.get(n.id);
+    if (p) {
+      n.x = p.x; n.y = p.y;
+      if (p.fx != null && p.fx !== -1e6) { n.fx = p.fx; n.fy = p.fy; }
+    }
+    // New nodes: the simulation will place them; no hint needed.
+  }
+}
+
+async function liveRefetchGraph() {
+  if (!liveHost || !liveToken) return;
+  const base = "http://" + liveHost;
+  const url = base + "/api/v1/graph" + (liveFlavor === "targets" ? "?flavor=targets" : "?level=projects");
+  const headers = { Authorization: "Bearer " + liveToken };
+  if (liveETag) headers["If-None-Match"] = liveETag;
+  let resp;
+  try {
+    resp = await fetch(url, { headers });
+  } catch (e) {
+    return; // network error on refetch; SSE reconnect will handle it
+  }
+  if (resp.status === 304) return; // graph unchanged; ETag matched
+  if (!resp.ok) return;
+  liveETag = resp.headers.get("ETag") || null;
+  let data;
+  try { data = await resp.json(); } catch { return; }
+  // Capture positions before replacing so the refresh does not feel like a slot machine.
+  const prevPos = capturePositions();
+  replaceGraph(data, "live workspace (refreshed)");
+  // Apply prior positions to preserve layout stability.
+  applyPositions(graph.nodes, prevPos);
+  // Reheat gently (not full restart): in force mode, alpha 0.3 not 1.0.
+  if (layoutMode === "force" && sim) {
+    sim.alpha(0.3).restart();
+  } else if (layoutMode === "layered") {
+    // Re-run deterministic layout; it is already position-stable.
+    for (const e of graph.links) delete e.layoutReversed;
+    applyLayeredMode();
+  }
+  draw();
+  updateLiveBadge();
+}
+
+function liveConnect() {
+  if (!liveHost || !liveToken) return;
+  if (liveSseAbort) liveSseAbort.abort();
+  liveSseAbort = new AbortController();
+  const url = "http://" + liveHost + "/api/v1/events";
+  const headers = { Authorization: "Bearer " + liveToken };
+
+  fetchSSE(url, headers, (eventType) => {
+    if (eventType === "graph") {
+      liveReconnectDelay = 1000; // reset backoff on success
+      liveRefetchGraph();
+    }
+  }, (err) => {
+    // Stream ended or errored: flip to disconnected, schedule reconnect.
+    liveConnected = false;
+    showDisconnectBanner();
+    liveReconnectTimer = setTimeout(() => {
+      liveConnect();
+    }, Math.min(liveReconnectDelay, 30000));
+    liveReconnectDelay = Math.min(liveReconnectDelay * 2, 30000);
+  }, liveSseAbort.signal);
+
+  liveConnected = true;
+  clearDisconnectBanner();
+}
+
+function showDisconnectBanner() {
+  const banner = el("live-disconnect-banner");
+  if (!banner) return;
+  const now = new Date();
+  const hhmm = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
+  banner.textContent = "disconnected - showing workspace as of " + hhmm + ", reconnecting...";
+  banner.hidden = false;
+}
+
+function clearDisconnectBanner() {
+  const banner = el("live-disconnect-banner");
+  if (banner) { banner.textContent = ""; banner.hidden = true; }
+}
+
+function updateLiveBadge() {
+  const badge = el("live-badge");
+  if (!badge) return;
+  if (liveHost) {
+    const ws = liveWorkspaceName || liveHost;
+    badge.textContent = "live: " + ws;
+    badge.hidden = false;
+    badge.className = "live-badge live-badge-connected";
+  } else {
+    badge.hidden = true;
+  }
+}
+
+async function fetchLiveStatus() {
+  if (!liveHost || !liveToken) return;
+  try {
+    const resp = await fetch("http://" + liveHost + "/api/v1/status", {
+      headers: { Authorization: "Bearer " + liveToken }
+    });
+    if (!resp.ok) return;
+    const status = await resp.json();
+    // Extract workspace name from the first loaded workspace.
+    if (status.pool && status.pool.workspaces && status.pool.workspaces.length > 0) {
+      liveWorkspaceName = status.pool.workspaces[0].root;
+    }
+    // Render status strip.
+    const strip = el("live-status-strip");
+    if (strip && status.pool) {
+      const p = status.pool;
+      strip.textContent = "pool: " + p.in_use + "/" + p.capacity + " in use";
+      if (p.waiting > 0) strip.textContent += ", " + p.waiting + " waiting";
+      strip.hidden = false;
+    }
+    // Affected view: paint affected nodes if present.
+    if (status.pool && status.pool.affected && status.pool.affected.length > 0) {
+      paintAffectedNodes(new Set(status.pool.affected));
+    }
+    updateLiveBadge();
+  } catch { /* network error; badge stays */ }
+}
+
+function paintAffectedNodes(affectedIds) {
+  // Enable the affected view button when in live mode and affected data is present.
+  document.querySelectorAll("[data-view='affected']").forEach((btn) => {
+    btn.disabled = !affectedIds.size;
+    btn.classList.toggle("view-disabled", !affectedIds.size);
+    btn.title = affectedIds.size
+      ? "Nodes touched by the current diff (live mode). CLI: magus affected"
+      : "Requires live mode with affected data. CLI: magus affected";
+  });
+  // Store the affected set for use when the view is activated.
+  window._liveAffectedIds = affectedIds;
+}
+
 // ---- boot ------------------------------------------------------------------
 async function boot() {
   readTheme();
@@ -2301,6 +2547,10 @@ async function boot() {
       }
     });
   }
+
+  // Phase 9: check for #live= fragment and attempt live-mode connection.
+  // Returns true if handled (either connected or errored); false falls through.
+  if (await bootLive()) return;
 
   const loaded = await loadGraph();
   if (!loaded) { document.body.classList.add("graph-empty"); return; }
@@ -2414,6 +2664,13 @@ async function boot() {
   // Reveal the "What's slow?" (critical) view only when the graph has DurationMs data.
   syncConditionalViews();
 
+  bootWireEvents();
+}
+
+// bootWireEvents wires all the event listeners that are the same for both the
+// normal load path and the live-mode load path. Called at the end of boot() and
+// from the live-mode path before it returns.
+function bootWireEvents() {
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
   let queryTimer = 0;
@@ -2437,8 +2694,9 @@ async function boot() {
   }
 
   // Wire the projection unfold button ("Show full graph").
-  if (unfoldBtn) {
-    unfoldBtn.addEventListener("click", () => {
+  const unfoldBtnWire = el("projection-unfold-btn");
+  if (unfoldBtnWire) {
+    unfoldBtnWire.addEventListener("click", () => {
       unfoldProjection();
       renderSuggestions(); // re-render suggestions after full graph is visible
     });
@@ -2460,6 +2718,15 @@ async function boot() {
         if (v === "blast") setStatus("Click a node to see what breaks if you change it.");
         else setStatus("Click the first node for the path (trace view).");
         updateHash();
+      } else if (v === "affected") {
+        // Affected view is wired separately in live mode; clicking here
+        // when not in live mode shows a hint.
+        const aff = window._liveAffectedIds;
+        if (!aff || !aff.size) {
+          setStatus("affected view: requires live mode (magus graph open --live) with a computed diff.", true);
+          return;
+        }
+        activateView("affected", aff);
       } else {
         activateView(v);
       }
@@ -2584,6 +2851,159 @@ async function boot() {
     layoutToggleBtn.addEventListener("click", () => {
       switchLayout(layoutMode === "layered" ? "force" : "layered");
     });
+  }
+
+  // Phase 9: wire the live-mode "Remember this workspace" checkbox.
+  const rememberCb = el("live-remember-cb");
+  if (rememberCb) {
+    rememberCb.checked = localStorage.getItem("magus-live-remember") === "1";
+    rememberCb.addEventListener("change", () => {
+      if (rememberCb.checked) {
+        localStorage.setItem("magus-live-remember", "1");
+        if (liveToken) localStorage.setItem("magus-live-token", liveToken);
+      } else {
+        localStorage.removeItem("magus-live-remember");
+        localStorage.removeItem("magus-live-token");
+      }
+    });
+  }
+  // Show the remember row when in live mode.
+  if (liveHost) {
+    const rememberRow = el("live-remember-row");
+    if (rememberRow) rememberRow.hidden = false;
+  }
+}
+
+// bootLive: live-mode boot path. Fetches skeleton, wires SSE, then returns.
+// Returns true if live mode connected, false to fall through to normal load.
+async function bootLive() {
+  const params = hashParams();
+  if (!params.live) return false;
+
+  const hostPort = params.live;
+  // Extract just the host part for validation.
+  const colonIdx = hostPort.lastIndexOf(":");
+  const host = colonIdx >= 0 ? hostPort.slice(0, colonIdx) : hostPort;
+  if (!validateLiveHost(host)) {
+    setStatus("live mode refused: host must be literally 127.0.0.1 or [::1] - got: " + host + ". No network request was made.", true);
+    document.body.classList.add("graph-empty");
+    return true; // handled (with error); don't fall through
+  }
+
+  liveHost = hostPort;
+  liveFlavor = params.flavor || null;
+
+  // Consume and store the token (strips it from the URL fragment).
+  if (params.token) {
+    consumeLiveToken(params);
+  }
+  liveToken = getLiveToken();
+  if (!liveToken) {
+    setStatus("live mode: no token found. Re-run magus graph open --live to get a fresh link.", true);
+    document.body.classList.add("graph-empty");
+    return true;
+  }
+
+  // Skeleton-first: fetch ?level=projects first (KBs at any scale).
+  setStatus("Connecting to live workspace...");
+  try {
+    const skeletonUrl = "http://" + liveHost + "/api/v1/graph?level=projects";
+    const skeletonResp = await fetch(skeletonUrl, {
+      headers: { Authorization: "Bearer " + liveToken }
+    });
+    if (!skeletonResp.ok) throw new Error("HTTP " + skeletonResp.status);
+    liveETag = skeletonResp.headers.get("ETag") || null;
+    const skeletonData = await skeletonResp.json();
+    liveSkeletonLoaded = true;
+
+    // Fetch /api/v1/status for workspace name and pool info.
+    await fetchLiveStatus();
+    updateLiveBadge();
+
+    // Render the skeleton immediately.
+    const flavor = detectFlavor(skeletonData);
+    graphFlavor = flavor;
+    let rawForPrepare = skeletonData;
+    if (flavor === "targets") {
+      const nl = targetGraphToNodeLink(skeletonData);
+      rawForPrepare = { nodes: nl.nodes, links: nl.links };
+    }
+    graph = prepareGraph(rawForPrepare);
+
+    // Check node_count: full-fetch when skeleton is small enough to be manageable.
+    const nodeCount = skeletonData.node_count || graph.nodes.length;
+    if (nodeCount < 20000) {
+      const fullUrl = "http://" + liveHost + "/api/v1/graph" + (liveFlavor === "targets" ? "?flavor=targets" : "");
+      const fullResp = await fetch(fullUrl, { headers: { Authorization: "Bearer " + liveToken } });
+      if (fullResp.ok) {
+        liveETag = fullResp.headers.get("ETag") || null;
+        const fullData = await fullResp.json();
+        const ff = detectFlavor(fullData);
+        graphFlavor = ff;
+        let rr = fullData;
+        if (ff === "targets") { const nl = targetGraphToNodeLink(fullData); rr = { nodes: nl.nodes, links: nl.links }; }
+        graph = prepareGraph(rr);
+      }
+    }
+
+    // Determine projection.
+    const hasFragmentDirective = !!(params.view || params.q || params.node);
+    if (!hasFragmentDirective) {
+      const ps = buildProjectionSet();
+      if (ps) {
+        projectionUnfolded = false;
+        projectionSet = ps;
+        matchSet = new Set(ps);
+      } else {
+        projectionUnfolded = true;
+      }
+    } else {
+      projectionUnfolded = true;
+    }
+
+    const unfoldBtnLive = el("projection-unfold-btn");
+    if (unfoldBtnLive) unfoldBtnLive.hidden = projectionUnfolded;
+    if (!projectionUnfolded) updateProjectionStatus();
+    else setStatus("live workspace connected");
+
+    renderLegend(); renderList();
+
+    // Determine layout mode.
+    if (params.layout === "force" || params.layout === "layered") {
+      layoutMode = params.layout;
+    } else {
+      layoutMode = (graphFlavor === "targets") ? "layered" : "force";
+    }
+    syncLayoutToggle();
+    startSimulation();
+    if (layoutMode === "layered") {
+      sim.stop();
+      if (!applyLayeredMode()) { layoutMode = "force"; syncLayoutToggle(); startSimulation(); }
+    }
+
+    // Park hidden nodes so the force sim does not waste cycles on the full soup
+    // while the default projection is active.
+    if (!projectionUnfolded && projectionSet) {
+      for (const n of graph.nodes) {
+        if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
+      }
+    }
+
+    setupZoomDrag();
+    applyDeepLinks();
+    renderSuggestions();
+    syncConditionalViews();
+
+    // Connect SSE for live updates.
+    liveConnect();
+
+    // Wire all common event listeners.
+    bootWireEvents();
+    return true;
+  } catch (e) {
+    setStatus("live mode: could not connect to daemon at " + liveHost + ": " + e.message + ". Start it with: magus server start", true);
+    liveHost = null; liveToken = null;
+    return false; // fall through to normal load
   }
 }
 

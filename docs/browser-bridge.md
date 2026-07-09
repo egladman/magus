@@ -130,15 +130,43 @@ When the daemon is not running, the check is skipped (not a failure).
 When `bridge.enabled: false` is set, the check reports that the bridge is
 disabled.
 
-## Phase 9 (upcoming): Live mode pairing
+## Live mode pairing
 
-A future release (`magus graph open --live`) will probe the daemon and open the
-explorer with a `#live=127.0.0.1:7391&token=<bearer>` fragment, enabling
-always-live workspace viewing. The bridge is the prerequisite. The token is
-consumed by the page on load and replaced with session storage so it does not
-persist in the URL.
+`magus graph open --live` opens the explorer connected to the running daemon.
 
-The explorer enforces that the host in `#live=` is literally `127.0.0.1` or
-`[::1]`. `localhost` and all other hostnames are rejected. This 5-line
-client-side check is what makes the "data cannot leave your machine" claim
-verifiable by reading the source.
+### How to pair
+
+1. Start the daemon: `magus server start`
+2. Run `magus graph open --live` (or `--live --print` to copy the URL)
+3. The explorer shows a `live: <workspace>` badge and updates within seconds of file changes
+
+The link contains `#live=127.0.0.1:7391&token=<bearer>`. The page:
+- Validates the host is literally `127.0.0.1` or `[::1]` before making any fetch
+- Consumes the token and strips it from the URL via `history.replaceState`
+- Stores the token in sessionStorage (tab lifetime) unless you tick "Remember this workspace", which moves it to localStorage
+
+Zero-arg default: a plain `magus graph open` with no flags checks if the daemon is running. If it is, it automatically picks `--live`. Otherwise it falls back to the `#data=` fragment.
+
+### Two-state model
+
+The explorer has exactly two source states:
+
+| State | Badge | What it means |
+|---|---|---|
+| snapshot | `snapshot: <provenance>` | Data from fragment/file/demo/--serve; frozen at load time |
+| live | `live: <workspace>` | Data from the daemon; refreshes on file changes |
+
+"Connected but stale" is impossible: when the SSE stream disconnects, a banner appears ("disconnected - showing workspace as of HH:MM, reconnecting...") and auto-reconnect runs with exponential backoff (1s to 30s). The data stays visible while reconnecting.
+
+### Safari limitation
+
+Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed content). Live mode cannot connect in Safari. Use `magus graph open --serve` instead: it runs an ephemeral loopback server and opens the graph via a `#src=` fragment that is compatible with Safari's same-origin restriction.
+
+### Target graph in live mode
+
+`magus graph open --live --targets` opens the live target dependency graph:
+`#live=127.0.0.1:7391&token=<bearer>&flavor=targets`
+
+### Affected view
+
+When the daemon has computed an affected set (from `magus affected` in a CI context), the `/api/v1/status` response includes an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
