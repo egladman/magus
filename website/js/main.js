@@ -17,4 +17,5 @@ import "./run-example.js";
 import "./keyboard-help.js";
 import "./announcement.js";
 import "./relative-time.js";
+import "./offline-badge.js";
 import "./service-worker-register.js";

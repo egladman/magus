@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://github.com https://pkg.go.dev; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'"><!-- injected at build time by renderPlayground() in scribe.buzz; the meta tag's
+       content is computeCSP()'s output, computed from THIS file's own inline script
+       blocks (see CSP_INLINE_SCRIPT_SOURCES) - edit computeCSP there, not here. WARNING:
+       extractInlineScripts() matches the literal text "<scr" + "ipt>" anywhere in this
+       file, comments included - never write that literal substring in prose above this
+       point (as this sentence deliberately does not). -->
   <title>Playground — magus</title>
   <meta name="description" content="Try magus live in the browser. Edit a magusfile, run it against the embedded Buzz interpreter, and share the result — no install needed.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/playground/">
@@ -274,6 +280,7 @@
       <header class="file-bar">
         <span id="file-name" class="name">magusfile.buzz</span>
         <span id="parse-status" class="badge"></span>
+        <span id="offline-badge" class="offline-badge" hidden aria-live="polite">offline - everything on this page is local</span>
         <button id="download-btn" class="outline" type="button" title="Save this magusfile to your machine"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="btn-label">Download</span></button>
         <button id="share-btn" class="outline" type="button" title="Copy a link that reopens this code"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="btn-label">Share</span></button>
         <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the editor to fill the screen"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg><span class="btn-label">Fullscreen</span></button>

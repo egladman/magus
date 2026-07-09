@@ -170,3 +170,143 @@ Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed con
 ### Affected view
 
 When the daemon has computed an affected set (from `magus affected` in a CI context), the `/api/v1/status` response includes an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
+
+## Verify our claims - don't take our word for it
+
+Your dependency graph may be confidential. Every claim below is either
+enforced by your browser or checkable by you. Nothing on this page asks for
+trust.
+
+### Claim: this page cannot send your data anywhere
+
+Every page on this site carries a Content-Security-Policy that your browser
+enforces - a `<meta>` tag near the top of the document that is the page's
+complete network permission, in one line.
+
+1. Press `Ctrl+U` (macOS: `Cmd+Option+U`) to view the page source. Find the
+   `<meta http-equiv="Content-Security-Policy" ...>` tag (it sits right after
+   `<meta name="generator" content="magus">`). Its `connect-src` clause -
+   the directive that governs `fetch`/`XMLHttpRequest`/SSE, the ways a page
+   could actually exfiltrate data - reads
+   `connect-src 'self' http://127.0.0.1:* http://[::1]:*`: this page's own
+   origin, plus your machine's loopback address, and nothing else.
+   `default-src 'self'` closes the same same-origin-only gap for anything not
+   named by a more specific directive. The only intentionally wider clause is
+   `img-src`, which also allows `https://github.com` and `https://pkg.go.dev`
+   - the two status badges (CI result, doc coverage) on the home page; images
+   only, and read-only network access to two well-known public hosts, not a
+   place data could go.
+2. Watch Chrome enforce it. Press `F12` to open DevTools, pick the
+   **Console** tab, and paste:
+   `fetch("https://example.com")`
+   Chrome refuses, and the error message quotes the policy back to you:
+   *"Refused to connect ... because it violates the following Content
+   Security Policy directive: connect-src ..."*. That refusal is your
+   browser, not our code.
+3. One deliberate narrowing this policy causes: the graph page's `#src=<url>`
+   loader and the playground's `#src=<url>` loader can both point at an
+   arbitrary CORS-enabled address (e.g. a colleague's raw GitHub link) - that
+   fetch is refused by the same `connect-src` for any host that is not this
+   site or your loopback. Both loaders already handle a fetch failure
+   gracefully (a status message, not a crash); use `#data=` (a local file,
+   drag-and-drop, or `magus graph open`'s default fragment) or a loopback
+   source (`magus graph open --serve` / `--live`) instead.
+
+### Claim: your graph never appears in any network request
+
+When you use `magus graph open`, your graph travels in the URL **fragment**
+(the part after `#`). Browsers never include fragments in HTTP requests -
+that's the HTTP standard, not our promise.
+
+1. Open DevTools (`F12`) -> **Network** tab. Tick **Preserve log**.
+2. Load your graph: run `magus graph open` in your workspace, or drag a
+   `graph.json` onto the [Graph Explorer](https://eli.gladman.cc/magus/graph/).
+3. Read the request list. Every row is a `GET` for a static file from this
+   site's own origin (or, in live mode, your own loopback address). Click any
+   row - the **Payload** tab is absent (no request carries a body). Compare
+   any request's URL against your address bar: the `#data=...` portion
+   appears in none of them.
+4. Type `method:POST` into the Network filter box: zero results. This page
+   never POSTs anything, anywhere.
+
+### Claim: everything works with your network unplugged
+
+The strongest proof: data cannot leave a machine that has no connection.
+
+1. Visit the graph or playground page once while online (the service worker
+   caches it - see DevTools -> **Application** -> **Service workers** and
+   **Cache storage**).
+2. Go offline for real (Wi-Fi off / cable out), or in DevTools -> **Network**
+   tab set the throttling dropdown from **No throttling** to **Offline**.
+3. Reload. The page comes back - served from your disk. Now load your
+   confidential graph (drag the file in) and explore it fully. The page
+   shows an "offline - everything on this page is local" badge while
+   disconnected (`js/offline-badge.js`).
+
+### Claim: we store nothing without asking
+
+DevTools -> **Application** tab -> **Cookies**: none. **Local storage** /
+**Session storage**: empty, unless you used live mode - the daemon token is
+kept in session storage for the tab's lifetime, or in local storage only
+after you tick "Remember this workspace" (see "Live mode pairing" above).
+Clear either with one click, right there.
+
+### The deep audit: record every byte Chrome sends
+
+For a security review, don't sample - record. `chrome://net-export` captures
+a log of *all* network activity in the browser, below the page's ability to
+hide anything.
+
+1. Open `chrome://net-export`, choose a log file, press **Start Logging to
+   Disk**.
+2. In another tab, load this page and your graph; explore for a minute.
+3. Stop logging. The log is a local JSON file on your disk - search it for
+   any project or target name from your graph. For sensitive graphs, grep the
+   file locally rather than uploading it to a log viewer.
+
+### Claim: the code running here is the code in the repo
+
+This site is generated from the open [magus repository](https://github.com/egladman/magus),
+and the built assets are committed and CI-checked. `site-manifest.sha256`
+(at the site root, e.g. `https://eli.gladman.cc/magus/site-manifest.sha256`)
+lists every served file with its SHA-256, in `sha256sum(1)` format. To verify
+any asset:
+
+```
+curl -s <asset-url> | sha256sum
+```
+
+and compare against the manifest and the repo's committed copy under
+`website/gen/`. The JavaScript is unminified enough to read; start at
+`graph/explorer.js` - the `loadGraph` function is the complete list of ways
+data enters the graph page, and there is no function that sends it out.
+
+### The one nuance: the service worker is not covered by this policy
+
+A `<meta>`-delivered Content-Security-Policy governs the *page's own*
+requests. It does not govern requests the service worker (`sw.js`) makes on
+the page's behalf while intercepting `fetch` events - that is a documented
+gap in the CSP spec, not a bug in this implementation. The mitigation is that
+the service worker's source, `website/sw.js.tmpl`, is about 60 lines total,
+committed, and its `fetch` handler returns early on any cross-origin request
+before it ever considers serving or caching one:
+
+```js
+if (url.origin !== self.location.origin) return;
+```
+
+(`sw.js.tmpl` line 42.) Read the whole file - it precaches a fixed list of
+same-origin assets, serves HTML network-first, and serves everything else
+cache-first. There is nothing else in it. If this site ever moves to a host
+that supports real HTTP response headers, the CSP (and a policy that also
+covers the service worker, via `Service-Worker-Allowed` scoping and a
+worker-side CSP) will be promoted to headers and the `<meta>` tag kept only
+as a fallback for hosts that cannot set headers.
+
+### The opt-out: remove us entirely
+
+If your threat model excludes our hosting altogether: clone the repo, run
+`magus run generate website`, and serve the `gen/` directory on your own
+network. Every page here is origin-agnostic and works identically. (The
+magus binary itself ships no web server - you host a folder of static
+files.)

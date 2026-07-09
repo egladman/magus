@@ -96,6 +96,10 @@ export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("changelog-generate"));
     final site = scribe.site_render(ROOT, DOCS, BLOG, OUT);
     generateJsBundles();
+    // Written here, not inside site_render(): generateJsBundles() (just above)
+    // writes gen/assets/mermaid.js and gen/assets/hljs.js, so the manifest can
+    // only cover every served asset once both have landed.
+    scribe.writeSiteManifest(site);
     if (magus.has_charm("rw")) {
         // Record this build's URLs in the append-only ledger the abandoned-link gate
         // checks against - only under rw, so a checking render never mutates.

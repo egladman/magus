@@ -240,15 +240,29 @@ export fun cleanBody(md: str) > str {
     return words.join(" ");
 }
 
+// redirectScript is the exact inline-script body aliasStub emits below.
+// Exposed so scribe.buzz's writeAliases can compute the stub's CSP sha256-
+// hash from the SAME literal text this function returns - hashing a
+// hand-copied duplicate of it would silently drift the moment either side
+// changes the redirect script's wording.
+export fun redirectScript(rel: str) > str {
+    return "location.replace(\"" + rel + "\");";
+}
+
 // aliasStub is the redirect page written at each alias: meta-refresh + canonical +
-// scripted replace + a plain <a>, so it works with or without JavaScript.
-export fun aliasStub(rel: str) > str {
+// scripted replace + a plain <a>, so it works with or without JavaScript. csp is
+// the Content-Security-Policy meta content the caller computed (scribe.buzz's
+// cspForRedirectStub, hashing redirectScript(rel) - this page's only script, and
+// its only content of any kind: no stylesheet, no image, so default-src 'none'
+// plus that one script hash is everything it needs).
+export fun aliasStub(rel: str, csp: str) > str {
     return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
         + voidEl("meta", attr("charset", "utf-8")) + "\n"
+        + voidEl("meta", attr("http-equiv", "Content-Security-Policy") + attr("content", csp)) + "\n"
         + voidEl("meta", attr("http-equiv", "refresh") + attr("content", "0; url=" + rel)) + "\n"
         + voidEl("link", attr("rel", "canonical") + attr("href", rel)) + "\n"
         + el("title", "", "Redirecting") + "\n"
-        + el("script", "", "location.replace(\"" + rel + "\");") + "\n"
+        + el("script", "", redirectScript(rel)) + "\n"
         + "</head>\n<body>\n"
         + el("p", "", "This page moved. " + el("a", attr("href", rel), "Continue to its new location") + ".") + "\n"
         + "</body>\n</html>\n";
@@ -372,8 +386,17 @@ test "cleanBody strips fences and markers for the search index" {
     assert.equal(cleanBody("a ```fenced``` c"), "a c", "drops fenced content");
 }
 
-test "aliasStub is a redirect page to rel" {
-    assert.equal(aliasStub("/new/").sub(0, 15), "<!DOCTYPE html>", "html stub");
+test "aliasStub is a redirect page to rel, carrying the caller's CSP" {
+    final stub = aliasStub("/new/", "default-src 'none'; script-src 'sha256-x'");
+    assert.equal(stub.sub(0, 15), "<!DOCTYPE html>", "html stub");
+    assert.equal(stub.indexOf("Content-Security-Policy") != null, true, "csp meta present");
+    assert.equal(stub.indexOf("script-src &#39;sha256-x&#39;") != null, false, "csp attribute is not double-escaped");
+    assert.equal(stub.indexOf("script-src 'sha256-x'") != null, true, "csp content passed through verbatim (single quotes unescaped)");
+}
+
+test "redirectScript matches the literal text aliasStub embeds" {
+    assert.equal(redirectScript("../x/"), "location.replace(\"../x/\");", "exact redirect script body");
+    assert.equal(aliasStub("../x/", "").indexOf(redirectScript("../x/")) != null, true, "aliasStub embeds redirectScript's exact text");
 }
 
 test "tagAdmonition builds a callout div" {

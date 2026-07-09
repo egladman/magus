@@ -176,6 +176,13 @@ object Site {
     // which matches semver descending for vX.Y.Z names).
     releases: [Release] = mut [<Release>],
 
+    // The site-wide Content-Security-Policy meta content, computed once by
+    // computeCSP() at the top of site_render() and threaded verbatim into every
+    // page's head (renderPage's pageTmpl, render404, writeOffline, and the
+    // hand-authored playground.html/graph.html). Identical on every page, so it
+    // is a build-once value rather than a per-page recomputation.
+    csp: str = "",
+
     // --- Methods that manage this state (pure helpers stay free functions below) ---
 
     // addRecord appends one page's search-index record and marks its URL as written
@@ -221,7 +228,9 @@ object Site {
                 throw "alias \"" + a + "\" collides with a real page at the same path";
             }
             fs.makeDirectory(this.outDir + "/" + a);
-            fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(relativePath(a, this.aliasTarget[a])));
+            final rel = relativePath(a, this.aliasTarget[a]);
+            final csp = cspForRedirectStub(redirectScript(rel));
+            fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
             this.writtenPaths[a + "/index.html"] = true;
         }
     }
@@ -1232,6 +1241,7 @@ fun render404(site: Site) > void {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
   <title>{{title}}</title>
   <meta name="description" content="{{desc}}">
   <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
@@ -1260,7 +1270,7 @@ fun render404(site: Site) > void {
 </html>
 `;
     final doc = template.render(tmpl, {
-        "title": title, "desc": desc, "basePath": basePath,
+        "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
         "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath, site),
     });
     fs.writeFile(site.outDir + "/404.html", doc);
@@ -1292,6 +1302,7 @@ fun writeOffline(site: Site) > void {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
   <title>{{title}}</title>
   <meta name="description" content="{{desc}}">
   <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
@@ -1318,7 +1329,7 @@ fun writeOffline(site: Site) > void {
 </html>
 `;
     final doc = template.render(tmpl, {
-        "title": title, "desc": desc, "basePath": basePath,
+        "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
         "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath, site),
     });
     fs.makeDirectory(site.outDir + "/offline");
@@ -1363,6 +1374,125 @@ fun writeLLMsIndex(site: Site) > void {
         if (base.endsWith("/") == false) { base = base + "/"; }
     }
     fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base));
+}
+
+// fileSha256 reads path and returns its lowercase-hex SHA-256 digest. The one
+// place file bytes get hashed for both writeServiceWorker's cache-version
+// stamp and writeSiteManifest's per-asset integrity list, so the two never
+// drift into computing "the same hash" two different ways.
+fun fileSha256(path: str) > str {
+    return crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(path));
+}
+
+// scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the
+// same bytes a browser hashes when it evaluates a `<script>` element's
+// content against a hash-source script-src). crypto.hash returns lowercase
+// hex; CSP hash-sources are base64, so hex_decode back to raw digest bytes
+// before base64-encoding - encoding.base64Encode/hexDecode exist for exactly
+// this "reformat a digest" case, not just URL-safe payload transport.
+fun scriptHash(js: str) > str {
+    return "sha256-" + encoding.base64Encode(encoding.hexDecode(crypto.hash(crypto.HashAlgorithm.Sha256, js)));
+}
+
+// extractInlineScripts pulls the exact text content of every attribute-less
+// `<script>...</script>` block out of html, in order. Deliberately matches
+// only the literal "<script>" open tag (no attributes) - a `<script src=...>`
+// or `<script type="module" src=...>` is an external load already covered by
+// script-src 'self', not a hash-source candidate.
+fun extractInlineScripts(html: str) > [str] {
+    var scripts: [str] = mut [<str>];
+    var rest = html;
+    while (true) {
+        final start = rest.indexOf("<script>");
+        if (start == null) { return scripts; }
+        rest = rest.sub(start + 8);   // len("<script>") == 8
+        final end = rest.indexOf("</script>");
+        if (end == null) { return scripts; }
+        scripts.append(rest.sub(0, end));
+        rest = rest.sub(end + 9);   // len("</script>") == 9
+    }
+    return scripts;
+}
+
+// CSP_INLINE_SCRIPT_SOURCES lists the source HTML files scanned for inline
+// <script> blocks whose hashes the site-wide CSP must allow. Every
+// renderPage()-based page (docs, home, search, tour, blog, /public/) carries
+// no inline script at all; only the hand-authored playground.html does today
+// (its WASM bootstrap, the syntax-overlay resize sync, draft persistence, and
+// the fullscreen toggle - 4 blocks). Adding an inline <script> to a listed
+// file, or to a new file not listed here, is a build-time correctness bug
+// that surfaces immediately as a browser CSP violation on that page instead
+// of silently working - see computeCSP's doc comment for why that is the
+// intended failure mode, not a bug to route around.
+final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
+
+// computeCSP builds the Content-Security-Policy meta content emitted
+// identically on every page (see the doc comment on Site.csp). Deny-by-default
+// (default-src 'self' - not 'none': manifest-src and the same-origin-only
+// <link rel=prefetch> hover-warm in js/prefetch.js both fall back to
+// default-src per the CSP3 fetch-directive spec, and 'self' is the minimal
+// fallback that keeps both working without opening a single directive wider
+// than same-origin), then every directive the site actually needs is named
+// explicitly and nothing else is permitted:
+//   - script-src: 'self' for the external bundles, 'wasm-unsafe-eval' because
+//     the Go/TinyGo WebAssembly runtime (the playground, and run-example.js's
+//     lazy "Run" buttons on docs pages) requires it to instantiate a wasm
+//     module - there is no narrower CSP source for that capability - plus one
+//     sha256- hash per inline script found in CSP_INLINE_SCRIPT_SOURCES.
+//     Hashing the ACTUAL script bytes (not a hand-copied constant) is what
+//     makes "add a script, forget to regenerate" fail loudly in the browser
+//     instead of silently shipping a hole.
+//   - style-src: 'unsafe-inline' because a few pages carry a <style> block or
+//     a style="" attribute (playground.html's layout CSS, a couple of
+//     noscript fallbacks) rather than an external sheet; CSP has no
+//     hash-source for style ATTRIBUTES (only style-src-attr's newer
+//     'unsafe-hashes', not yet universal), so a per-block hash scheme would
+//     leave the attribute case uncovered anyway.
+//   - img-src: 'self' data: plus the two hosts the README's status badges
+//     load from (github.com's Actions badge, pkg.go.dev's reference badge) -
+//     the one deliberate, minimal exception to same-origin-only assets:
+//     these badges are live status indicators (CI result, doc coverage) that
+//     vendoring would make permanently stale, unlike Pico/mermaid/hljs (pure
+//     libraries, vendored in Phase 0 with zero loss of freshness).
+//   - connect-src: 'self' plus the loopback wildcards - the browser-enforced
+//     form of the loopback-only rule (plan 0.3), kept in sync with the
+//     literal 127.0.0.1/[::1] host check graph-explorer.js's live mode makes
+//     client-side. This is intentionally NOT loosened for graph.html's/
+//     playground.html's `#src=<url>` loader, which can point at an arbitrary
+//     CORS-enabled address (e.g. a raw GitHub link): a third-party #src= now
+//     fails at the browser CSP layer rather than being fetched. Both loaders
+//     already handle a fetch failure gracefully (a status message, not a
+//     crash) - see docs/browser-bridge.md's "Verify it yourself" section.
+//   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, or
+//     <iframe> anywhere on the site.
+//   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
+fun computeCSP() > str {
+    var scriptSrc = "'self' 'wasm-unsafe-eval'";
+    foreach (path in CSP_INLINE_SCRIPT_SOURCES) {
+        final f = io.File.open(path, io.FileMode.read);
+        final html = f.readAll();
+        f.close();
+        foreach (js in extractInlineScripts(html)) {
+            scriptSrc = scriptSrc + " '" + scriptHash(js) + "'";
+        }
+    }
+    return "default-src 'self'; script-src " + scriptSrc
+        + "; style-src 'self' 'unsafe-inline'"
+        + "; img-src 'self' data: https://github.com https://pkg.go.dev"
+        + "; connect-src 'self' http://127.0.0.1:* http://[::1]:*"
+        + "; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'";
+}
+
+// cspForRedirectStub builds the CSP a plain alias redirect page needs -
+// distinct from computeCSP's site-wide policy because a redirect stub
+// (aliasStub) loads no stylesheet, image, or external script; its only
+// content is one inline <script> whose text embeds the redirect target, so
+// it differs per stub and cannot share the single site-wide hash list. script
+// is the exact text redirectScript(rel) (scribe_html.buzz) produces - the
+// same string aliasStub embeds, so the hash always matches what ships.
+fun cspForRedirectStub(script: str) > str {
+    return "default-src 'none'; script-src '" + scriptHash(script) + "'"
+        + "; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'";
 }
 
 // writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
@@ -1448,7 +1578,7 @@ fun writeServiceWorker(site: Site) > void {
     foreach (rel in precached) {
         final p = site.outDir + "/" + rel;
         if (os.execute(["test", "-f", p]) == 0) {
-            manifest = manifest + rel + ":" + crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(p)) + "\n";
+            manifest = manifest + rel + ":" + fileSha256(p) + "\n";
         }
     }
     final version = "magus-" + crypto.hash(crypto.HashAlgorithm.Sha256, manifest).sub(0, 12);
@@ -1827,6 +1957,10 @@ fun renderPlayground(site: Site) > void {
     // its injected nav climbs one level to reach the site root.
     html = html.replace("<!-- site-nav -->", renderSiteNav("../", "playground"));
     html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
+    // Same CSP meta every page carries (site.csp/computeCSP); playground.html's own
+    // <!-- csp --> placeholder is what CSP_INLINE_SCRIPT_SOURCES reads to compute it
+    // in the first place, so this file is both the hash's source and its sink.
+    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/playground");
     fs.writeFile(site.outDir + "/playground/index.html", html);
 }
@@ -1844,6 +1978,7 @@ fun renderGraph(site: Site) > void {
     f.close();
     html = html.replace("<!-- site-nav -->", renderSiteNav("../", "graph"));
     html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
+    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/graph");
     fs.writeFile(site.outDir + "/graph/index.html", html);
 }
@@ -2061,6 +2196,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
   <title>{{fullTitle}}</title>
 {{#hasDescription}}
   <meta name="description" content="{{description}}">
@@ -2108,6 +2244,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
 `;
     return template.render(pageTmpl, {
         "fullTitle": fullTitle,
+        "csp": site.csp,
         "description": description,
         "hasDescription": hasDescription,
         "hasSiteUrl": hasSiteUrl,
@@ -2849,6 +2986,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
             }
         }
     }
+    // Computed once, before any page renders, so every page (renderPage()'s shared
+    // head AND the hand-authored playground.html/graph.html) threads the identical
+    // string. See Site.csp and computeCSP's doc comments.
+    site.csp = computeCSP();
     // gen/ is NOT wiped and rebuilt from scratch: outDir is created if missing, then
     // every render below writes/overwrites its current output in place, and
     // pruneStaleOutputs() (called near the end of this function, once every write is
@@ -2954,6 +3095,13 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // neither can trip on a stale page's dangling reference to content removed
     // along with it.
     pruneStaleOutputs(site);
+
+    // writeSiteManifest is NOT called here: generateJsBundles() (magusfile.buzz's
+    // generate(), which calls this function) still has to run and writes
+    // gen/assets/mermaid.js and gen/assets/hljs.js - both served assets - AFTER
+    // site_render returns. Computing the manifest here would silently miss them.
+    // See generate()'s call to scribe.writeSiteManifest(site) for the real call
+    // site, which runs once every write to gen/ - by any step - is done.
 
     // Reproducibility guard: throw on any dangling href/src reference. Runs after
     // every asset + page has been written, so a missing file (renamed bundle,
@@ -3085,7 +3233,7 @@ fun pruneStaleOutputs(site: Site) > void {
     final alwaysKeep: {str: bool} = mut {
         "index.html": true, "index.md": true, "404.html": true,
         "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
-        "sw.js": true, "search-index.json": true,
+        "sw.js": true, "search-index.json": true, "site-manifest.sha256": true,
         "site.css": true, "theme.css": true, "theme.js": true, "main.js": true,
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,
@@ -3109,6 +3257,30 @@ fun pruneStaleOutputs(site: Site) > void {
     }
 }
 
+// writeSiteManifest emits gen/site-manifest.sha256: one "<sha256>  <path>\n"
+// line (standard sha256sum(1) format, so `sha256sum -c` or a spot-check
+// `curl -s <asset-url> | sha256sum` verifies it directly - see
+// docs/browser-bridge.md's "Verify it yourself" section) per file actually
+// shipped under gen/, repo-relative, sorted. Reuses fileSha256 - the same
+// per-file digest writeServiceWorker already computes for its cache-version
+// stamp, just surfaced for every asset instead of folded into one internal
+// checksum. Exported and called from magusfile.buzz's generate(), AFTER
+// generateJsBundles() - not from inside site_render() - because
+// generateJsBundles() writes gen/assets/mermaid.js and gen/assets/hljs.js
+// (both served assets) only after site_render() has already returned;
+// computing the manifest inside site_render would silently omit them. The
+// manifest excludes its own output path (a file cannot hash itself).
+export fun writeSiteManifest(site: Site) > void {
+    final acc: [str] = mut [<str>];
+    walkGen("", acc, site);
+    final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    var body = "";
+    foreach (rel in sorted) {
+        if (rel == "site-manifest.sha256") { continue; }
+        body = body + fileSha256(site.outDir + "/" + rel) + "  " + rel + "\n";
+    }
+    fs.writeFile(site.outDir + "/site-manifest.sha256", body);
+}
 
 // pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no
 // trailing slash - "spells/go", "index.html", "assets/x.png") to a page key: "" for
@@ -3262,4 +3434,47 @@ test "releaseIndexJSON emits schema_version=1 and frozen v1 fields for a known r
     // yanked must be absent when false (omitempty)
     assert.equal(got.indexOf("yanked") != null, false, "yanked absent when false");
     assert.equal(got.endsWith("]\}\n"), true, "ends with closing brace and newline");
+}
+
+test "extractInlineScripts finds only attribute-less <script> blocks, in order" {
+    final html = "<script src=\"a.js\"></script><p>x</p><script>one();</script>"
+        + "<script type=\"module\" src=\"b.js\"></script><script>two();</script>";
+    final got = extractInlineScripts(html);
+    assert.equal(got, ["one();", "two();"], "external scripts skipped; inline ones returned in order");
+    assert.equal(extractInlineScripts("no scripts here"), [], "no match -> empty list");
+}
+
+test "scriptHash matches a known sha256-then-base64 digest" {
+    // echo -n "" | openssl dgst -sha256 -binary | openssl base64
+    assert.equal(scriptHash(""), "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", "empty string's well-known SHA-256, base64-encoded");
+}
+
+test "computeCSP names every directive exactly once and includes the loopback hosts" {
+    final got = computeCSP();
+    assert.equal(got.indexOf("default-src 'self'") != null, true, "default-src present");
+    assert.equal(got.indexOf("'wasm-unsafe-eval'") != null, true, "wasm-unsafe-eval present for the playground's wasm runtime");
+    assert.equal(got.indexOf("connect-src 'self' http://127.0.0.1:* http://[::1]:*") != null, true, "connect-src carries exactly the loopback wildcards");
+    assert.equal(got.indexOf("object-src 'none'") != null, true, "object-src 'none'");
+    assert.equal(got.indexOf("frame-src 'none'") != null, true, "frame-src 'none'");
+    // Every playground.html inline <script> contributes exactly one sha256- source.
+    final f = io.File.open("playground.html", io.FileMode.read);
+    final n = extractInlineScripts(f.readAll()).len();
+    f.close();
+    var hashCount = 0;
+    var rest = got;
+    while (rest.indexOf("'sha256-") != null) {
+        final i = rest.indexOf("'sha256-");
+        rest = rest.sub(i + 1);
+        hashCount = hashCount + 1;
+    }
+    assert.equal(hashCount, n, "one script-src hash per playground.html inline script");
+}
+
+test "cspForRedirectStub is scoped tighter than computeCSP and hashes exactly the given script" {
+    final got = cspForRedirectStub("location.replace(\"../x/\");");
+    assert.equal(got, "default-src 'none'; script-src '" + scriptHash("location.replace(\"../x/\");") + "'"
+        + "; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'", "exact policy string");
+    assert.equal(got.indexOf("style-src") != null, false, "no style-src - a redirect stub has no stylesheet or style attribute");
+    assert.equal(got.indexOf("img-src") != null, false, "no img-src - a redirect stub has no image");
+    assert.equal(got.indexOf("connect-src") != null, false, "no connect-src - a redirect stub makes no fetch");
 }

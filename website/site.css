@@ -2136,3 +2136,21 @@ a code {
   }
 }
 
+/* Phase 10: offline badge (js/offline-badge.js). Shared here (not graph.css,
+   which only the graph page loads) because both the graph and playground pages
+   show it, and playground.html never links graph.css. Self-contained styling
+   (not reusing graph.css's .live-badge) for the same cross-file reason - a
+   muted, non-alarming chip, distinct from the live/snapshot badges' filled
+   look since "offline" here is a normal, expected state, not a warning. */
+.offline-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 0.25rem;
+  color: var(--pico-muted-color);
+  line-height: 1.5;
+  align-self: center;
+  white-space: nowrap;
+}
+

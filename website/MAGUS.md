@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary
 
 ## Query first
 
-This workspace has a knowledge graph of **505 nodes** and **618 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **512 nodes** and **634 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -38,7 +38,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
 | doc | 1 | `magus query kind:doc` | `MAGUS.md` |
 | file | 23 | `magus query kind:file` | `scribe.buzz`, `magusfile.buzz`, `scribe_html.buzz` |
-| function | 194 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
+| function | 201 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
 | import | 24 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
 
 | Project | Targets | Scope a query | Key targets |

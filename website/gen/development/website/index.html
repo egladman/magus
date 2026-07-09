@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://github.com https://pkg.go.dev; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>website targets — magus</title>
   <meta name="description" content="Target catalog and run-order graph for the website project, generated from its magusfile.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/development/website/">
@@ -80,7 +81,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>505 nodes</strong> and <strong>618 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>512 nodes</strong> and <strong>634 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -159,7 +160,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">194</td>
+<td style="text-align:right">201</td>
 <td><code>magus query kind:function</code></td>
 <td><code>site_render</code>, <code>renderPage</code>, <code>strLess</code></td>
 </tr>
