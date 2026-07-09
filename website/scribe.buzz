@@ -43,7 +43,7 @@ import "scribe_html" as _;
 // generator does not hardcode where the workspace, docs, or output live, so it stays
 // a config-agnostic library rather than owning project layout the caller reaches into.
 // Pico CSS is vendored at assets/pico.min.css (copied to gen/assets/ on each generate).
-// Same-origin; no CDN. Version: @picocss/pico@2.1.1.
+// Same-origin; served from this site, never fetched remotely. Version: @picocss/pico@2.1.1.
 // SRI provenance (for reference, not used with same-origin link):
 //   sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU
 // To upgrade: download the new pico.min.css into assets/ (not gen/assets/), update the
@@ -1787,7 +1787,6 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
     // breadcrumb, contentBlock, related, provenance, footer) are whole rendered
     // fragments, injected raw via {{{...}}}. Inline notes that used to live here:
     //   - favicon set reuses the optimized hat mark; PNG + apple-touch cover clients.
-    //   - the preconnect warms the jsdelivr TLS handshake before the Pico <link>.
     //   - the <noscript> explains the missing search box (no JS, no injected input).
     //   - one deferred main.js bundle; head-critical theme.js stays separate above.
     final pageTmpl = `<!DOCTYPE html>
@@ -2599,10 +2598,14 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
 
     // Copy static assets referenced by the root README (images, badges). Scoped
     // delete-then-recopy (not a tracked/pruned path like everything else): cp -r
-    // alone wouldn't remove a since-deleted source image, so the destination is
-    // cleared first to keep this one directory-copy free of leftovers too.
-    fs.delete(site.outDir + "/assets");
-    os.execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets " + site.outDir + "/ || true"]);
+    // alone wouldn't remove a since-deleted source image, so source-copied files
+    // are cleared first to keep this one directory-copy free of leftovers too.
+    // Preserve the committed esbuild build outputs (mermaid.js, hljs.js from
+    // build-mermaid / build-hljs) - they live in gen/assets, not site.root/assets,
+    // so a blind wipe would delete them on `serve` (which re-renders without
+    // rebuilding bundles); generate rebuilds them afterward regardless.
+    os.execute(["sh", "-c", "mkdir -p " + site.outDir + "/assets && find " + site.outDir + "/assets -mindepth 1 -maxdepth 1 ! -name mermaid.js ! -name hljs.js -exec rm -rf \{\} +"]);
+    os.execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets/. " + site.outDir + "/assets/ || true"]);
 
     // Bundle + minify the client-side assets with esbuild (pinned in mise.toml).
     // The nine flat scripts became a js/ ES-module tree (feature modules + lib/);
