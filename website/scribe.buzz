@@ -19,6 +19,7 @@ import "time";
 import "template";
 import "crypto";
 import "assert";
+import "yaml";
 // Pure text, path, and URL helpers, split into their own unit-tested module. Flat
 // import (`as _`) merges its exported functions into this scope, so callers here
 // name them directly (escapeAttr, relativePath, ...) as before the extraction.
@@ -90,12 +91,16 @@ object DocPage {
     srcRel: str = "",
 }
 
-// Release is one parsed CHANGELOG entry: version + date (from the "## [x] - date"
-// heading) + its body (the section up to the next release).
+// Release is one release entry read from releases/v<semver>.yaml. The body field
+// holds the trimmed markdown for the Atom feed; artifacts is the list of release
+// assets with their integrity data (name, platform, size, sha256).
 object Release {
     version: str = "",
     date: str = "",
     body: str = "",
+    // artifacts holds the release assets. Each entry has: name, platform, size, sha256.
+    // size and sha256 may be "" for historical releases migrated without artifact data.
+    artifacts: [{str: str}] = mut [<{str: str}>],
 }
 
 // Site holds ALL the generator's state on one object instead of a scatter of module
@@ -157,7 +162,9 @@ object Site {
     // pick its Related neighbors.
     docPages: [DocPage] = mut [<DocPage>],
 
-    // Parsed CHANGELOG releases, for the releases Atom feed and the announcement bar.
+    // Releases loaded from releases/*.yaml, for the Atom feed, announcement bar,
+    // and /public/release/ artifact listing. Ordered newest-first (by file sort,
+    // which matches semver descending for vX.Y.Z names).
     releases: [Release] = mut [<Release>],
 
     // --- Methods that manage this state (pure helpers stay free functions below) ---
@@ -742,55 +749,61 @@ fun renderBlogAtom(site: Site) > void {
 }
 
 
-// parseChangelog reads CHANGELOG.md (Keep-a-Changelog form) and extracts every
-// "## [<version>] - <date>" heading and its body. "[Unreleased]" is skipped: the
-// feed is for released versions only. Deterministic: reads a committed file, no
-// network. Ordering follows the file, which authors keep newest-first.
-fun parseChangelog(site: Site) > void {
+// loadReleases reads releases/v*.yaml (newest-first by sort order, which matches
+// semver descending for vX.Y.Z filenames) and populates site.releases. Each yaml
+// file is authoritative for one version: version, date, body (trimmed markdown for
+// the Atom feed), and artifacts (list of {name, platform, size, sha256}).
+// This replaces parseChangelog: changelog-parsing now runs ONLY at cut time, never
+// at site-build time.
+fun loadReleases(site: Site) > void {
     site.releases = mut [<Release>];
-    if (os.execute(["test", "-f", site.root + "/CHANGELOG.md"]) != 0) { return; }
-    final f = io.File.open(site.root + "/CHANGELOG.md", io.FileMode.read);
-    final md = f.readAll();
-    f.close();
-
-    var curVer = "";
-    var curDate = "";
-    var have = false;
-    var body = "";
-    foreach (line in md.split("\n")) {
-        if (line.startsWith("## ")) {
-            // Flush the previous release before starting a new one.
-            if (have) {
-                site.releases.append(Release{ version = curVer, date = curDate, body = body });
-            }
-            curVer = "";
-            curDate = "";
-            have = false;
-            body = "";
-            // "## [1.2.3] - 2026-07-01"  or  "## [Unreleased]"
-            var rest = line.sub(3);
-            if (rest.startsWith("[")) {
-                final close = rest.indexOf("]");
-                if (close != null) {
-                    final ver = rest.sub(1, close - 1);
-                    if (ver != "Unreleased" and ver != "unreleased") {
-                        curVer = ver;
-                        // After the "]": " - <date>" (may be missing on WIP entries).
-                        final rem = rest.sub(close + 1);
-                        var date = "";
-                        final dash = rem.indexOf("-");
-                        if (dash != null) { date = rem.sub(dash + 1).trim(); }
-                        curDate = date;
-                        have = true;
-                    }
-                }
-            }
-        } else if (have) {
-            body = body + line + "\n";
-        }
+    final relDir = site.root + "/releases";
+    if (os.execute(["test", "-d", relDir]) != 0) { return; }
+    // fs.list returns sorted names; for vX.Y.Z filenames this gives ascending order,
+    // so we collect into a temp list and reverse for newest-first.
+    var names: [str] = mut [<str>];
+    foreach (name in fs.list(relDir)) {
+        if (name.endsWith(".yaml")) { names.append(name); }
     }
-    if (have) {
-        site.releases.append(Release{ version = curVer, date = curDate, body = body });
+    // Reverse: ascending alpha -> descending (newest-first) for vX.Y.Z names.
+    final n = names.len();
+    var reversed: [str] = mut [<str>];
+    var i = n - 1;
+    while (i >= 0) {
+        reversed.append(names[i]);
+        i = i - 1;
+    }
+    foreach (name in reversed) {
+        final path = relDir + "/" + name;
+        final f = io.File.open(path, io.FileMode.read);
+        final src = f.readAll();
+        f.close();
+        final doc = serialize.Boxed.init(yaml.parse(src));
+        final ver = doc.q("version").stringValue();
+        final date = doc.q("date").stringValue();
+        final body = doc.q("body").stringValue();
+        if (ver == "") { continue; } // skip malformed files
+        // Load artifacts: each entry has name/platform/size/sha256.
+        var arts: [{str: str}] = mut [<{str: str}>];
+        final artList = doc.q("artifacts").list();
+        foreach (a in artList) {
+            final artName = a.q("name").stringValue();
+            final artPlatform = a.q("platform").stringValue();
+            final artSize = a.q("size").stringValue();
+            final artSHA256 = a.q("sha256").stringValue();
+                arts.append(mut {
+                "name": artName,
+                "platform": artPlatform,
+                "size": artSize,
+                "sha256": artSHA256,
+            });
+        }
+        site.releases.append(Release{
+            version = ver,
+            date = date,
+            body = body,
+            artifacts = arts,
+        });
     }
 }
 
@@ -824,6 +837,21 @@ fun renderReleasesAtom(site: Site) > void {
     body = body + "</feed>\n";
     fs.makeDirectory(site.outDir + "/public/atom");
     fs.writeFile(site.outDir + "/public/atom/releases.atom.xml", body);
+}
+
+// artifactDesc returns a human-readable description for a release artifact given
+// its filename and platform string. Covers the standard release asset set.
+fun artifactDesc(name: str, platform: str) > str {
+    if (name == "SHA256SUMS")        { return "SHA-256 manifest"; }
+    if (name == "SHA256SUMS.sig")    { return "Ed25519 signature of SHA256SUMS"; }
+    if (name == "magus-release.pem") { return "Release signing key (SPKI PEM)"; }
+    // Tarballs: derive from platform string (e.g. "linux/amd64", "darwin/arm64").
+    if (platform == "linux/amd64")   { return "Linux amd64 binary"; }
+    if (platform == "linux/arm64")   { return "Linux arm64 binary"; }
+    if (platform == "darwin/amd64")  { return "macOS Intel binary"; }
+    if (platform == "darwin/arm64")  { return "macOS Apple Silicon binary"; }
+    if (platform == "windows/amd64") { return "Windows amd64 binary"; }
+    return name;
 }
 
 // autoindex renders one Apache-`mod_autoindex`-styled listing at path (a gen-
@@ -924,11 +952,49 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Sit
     site.writtenPaths[path + "/index.html"] = true;
 }
 
+// jsonStr encodes a string value as a JSON string literal, escaping only the
+// characters JSON requires: backslash, double-quote, and ASCII control characters
+// 0x00-0x1F. Unicode pass-through is fine for JSON (and for this use case: release
+// notes may contain em-dashes or other non-ASCII). Tabs/newlines are escaped
+// explicitly since they appear in release note bodies.
+fun jsonStr(s: str) > str {
+    // str.replace is first-match only; split+join replaces every occurrence without
+    // regex escaping concerns. Order matters: escape backslashes first so new ones
+    // added for later escapes are not re-escaped.
+    var escaped = s.split("\\").join("\\\\");
+    escaped = escaped.split("\"").join("\\\"");
+    escaped = escaped.split("\n").join("\\n");
+    escaped = escaped.split("\r").join("\\r");
+    escaped = escaped.split("\t").join("\\t");
+    return "\"" + escaped + "\"";
+}
+
+// releaseIndexJSON builds the JSON body for gen/public/release/index.json.
+// Schema version 1: schema_version (int) + releases array (newest-first).
+// The URL and schema are frozen at birth; additive changes only.
+// Emits compact but readable JSON; one release per line. git-stable across runs.
+fun releaseIndexJSON(site: Site) > str {
+    // \{ and \} are the Buzz escape sequences for literal braces in a double-quoted
+    // string (the unescaped { would start a string-interpolation expression).
+    var relJson: [str] = mut [<str>];
+    foreach (rel in site.releases) {
+        var artJson: [str] = mut [<str>];
+        foreach (a in rel.artifacts) {
+            artJson.append("\{\"name\":" + jsonStr(a["name"]) + ",\"platform\":" + jsonStr(a["platform"]) + ",\"size\":" + jsonStr(a["size"]) + ",\"sha256\":" + jsonStr(a["sha256"]) + "\}");
+        }
+        relJson.append("\{\"version\":" + jsonStr(rel.version)
+            + ",\"date\":" + jsonStr(rel.date)
+            + ",\"body\":" + jsonStr(rel.body)
+            + ",\"artifacts\":[" + artJson.join(",") + "]\}");
+    }
+    return "\{\"schema_version\":1,\"releases\":[" + relJson.join(",") + "]\}\n";
+}
+
 // renderPublic writes the nested /public/ autoindex tree: the root at /public/
 // lists atom/ + release/ subdirs plus the machine files that live at their
 // canonical spec locations (/sitemap.xml, /robots.txt); /public/atom/ lists the
-// two Atom feeds; /public/release/ is a placeholder browsing entry (populated in
-// WS U with the release-artifacts matrix). Deterministic (no network at build).
+// two Atom feeds; /public/release/ is a data-driven listing of release artifacts.
+// Deterministic (no network at build).
 fun renderPublic(site: Site) > void {
     if (SITE_URL == "") { return; }
 
@@ -950,28 +1016,31 @@ fun renderPublic(site: Site) > void {
     }
     if (atomEntries.len() > 0) { renderAutoindex("public/atom", atomEntries, "../", site); }
 
-    // /public/release/  - per-version tree. Each released version (parsed from
-    // CHANGELOG.md by parseChangelog) gets its own subdirectory listing the 8
-    // artifacts that ship with every release. Deep-links to individual assets
-    // are safe here: the version is known at build time, so hrefs resolve to
-    // GH/releases/download/<ver>/<file> directly. The signing-key PEM links to
-    // the local /assets/ copy (three levels up from /public/release/<ver>/).
-    // Size stays "-" (GitHub-hosted byte counts would require a network fetch,
-    // which would break the drift gate); modified is the release date from
-    // the CHANGELOG entry.
+    // /public/release/  - per-version tree. Each released version (loaded from
+    // releases/v*.yaml by loadReleases) gets its own subdirectory listing its
+    // artifacts. Deep-links to individual assets use GH/releases/download/<ver>/<name>
+    // directly; magus-release.pem links to the local /assets/ copy (three levels up).
+    // size comes from the manifest (populated by the release-cut tool); "-" for
+    // historical releases migrated without artifact data.
     foreach (rel in site.releases) {
         final ver = rel.version;
         final date = rel.date;
         final assetBase = GH + "/releases/download/" + ver;
         var verEntries: [{str: str}] = mut [<{str: str}>];
-        verEntries.append(mut {"name": "magus_" + ver + "_linux_amd64.tar.gz",   "href": assetBase + "/magus_" + ver + "_linux_amd64.tar.gz",   "size": "-", "modified": date, "desc": "Linux amd64 binary"});
-        verEntries.append(mut {"name": "magus_" + ver + "_linux_arm64.tar.gz",   "href": assetBase + "/magus_" + ver + "_linux_arm64.tar.gz",   "size": "-", "modified": date, "desc": "Linux arm64 binary"});
-        verEntries.append(mut {"name": "magus_" + ver + "_darwin_amd64.tar.gz",  "href": assetBase + "/magus_" + ver + "_darwin_amd64.tar.gz",  "size": "-", "modified": date, "desc": "macOS Intel binary"});
-        verEntries.append(mut {"name": "magus_" + ver + "_darwin_arm64.tar.gz",  "href": assetBase + "/magus_" + ver + "_darwin_arm64.tar.gz",  "size": "-", "modified": date, "desc": "macOS Apple Silicon binary"});
-        verEntries.append(mut {"name": "magus_" + ver + "_windows_amd64.tar.gz", "href": assetBase + "/magus_" + ver + "_windows_amd64.tar.gz", "size": "-", "modified": date, "desc": "Windows amd64 binary"});
-        verEntries.append(mut {"name": "SHA256SUMS",         "href": assetBase + "/SHA256SUMS",     "size": "-", "modified": date, "desc": "SHA-256 manifest"});
-        verEntries.append(mut {"name": "SHA256SUMS.sig",     "href": assetBase + "/SHA256SUMS.sig", "size": "-", "modified": date, "desc": "Ed25519 signature of SHA256SUMS"});
-        verEntries.append(mut {"name": "magus-release.pem",  "href": "../../../assets/magus-release.pem", "size": "-", "modified": "-", "desc": "Release signing key (SPKI PEM)"});
+        foreach (art in rel.artifacts) {
+            final artName = art["name"];
+            var artSize = art["size"];
+            if (artSize == "") { artSize = "-"; }
+            var artDate = date;
+            if (artName == "magus-release.pem") { artDate = "-"; }
+            var artHref = assetBase + "/" + artName;
+            if (artName == "magus-release.pem") { artHref = "../../../assets/magus-release.pem"; }
+            final artDesc = artifactDesc(artName, art["platform"]);
+            verEntries.append(mut {
+                "name": artName, "href": artHref,
+                "size": artSize, "modified": artDate, "desc": artDesc,
+            });
+        }
         renderAutoindex("public/release/" + ver, verEntries, "../", site);
     }
 
@@ -983,6 +1052,17 @@ fun renderPublic(site: Site) > void {
         releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel.date, "desc": "Release " + ver});
     }
     renderAutoindex("public/release", releaseParent, "../", site);
+
+    // gen/public/release/index.json - machine-readable release index, newest-first.
+    // Schema: schema_version (1) + releases array. URL and schema are frozen at birth;
+    // additive changes only. index.json.sig (Ed25519) is written by magus-utils
+    // release-index at release time (not here; signing key is not available at
+    // site-build time). Track in writtenPaths so pruneStaleOutputs knows it is current.
+    if (site.releases.len() > 0) {
+        final idxJson = releaseIndexJSON(site);
+        fs.writeFile(site.outDir + "/public/release/index.json", idxJson);
+        site.writtenPaths["public/release/index.json"] = true;
+    }
 
     // /public/ root.
     var rootEntries: [{str: str}] = mut [<{str: str}>];
@@ -1598,7 +1678,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
 
 // renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
 // release, or "" when none has shipped yet (so it stays dormant until then). The
-// version comes from parseChangelog (the committed CHANGELOG), so it is drift-stable;
+// version comes from loadReleases (releases/*.yaml), so it is drift-stable;
 // announcement.js hides it once the reader dismisses that version and re-shows it on
 // the next release. The GitHub tag link mirrors the releases Atom feed's convention.
 fun renderAnnouncementBar(site: Site) > str {
@@ -2700,10 +2780,12 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     renderPlayground(site);
     renderGraph(site);
 
-    // Parse the changelog BEFORE the walk so renderPage() knows whether the releases
-    // Atom feed will be written and can gate its <link rel=alternate> discovery
-    // tag accordingly (advertising a missing file would trip WS L's asset check).
-    parseChangelog(site);
+    // Load release manifests from releases/*.yaml BEFORE the walk so renderPage()
+    // knows whether the releases Atom feed will be written and can gate its
+    // <link rel=alternate> discovery tag accordingly (advertising a missing feed
+    // file would trip the asset check). Changelog-parsing no longer runs at site-build
+    // time; it runs only at release-cut time (cmd/magus-utils cut).
+    loadReleases(site);
 
     // Pre-pass: gather every docs page's relatedness metadata before rendering, so
     // each page's "Related" cards can rank against the full corpus (the render walk

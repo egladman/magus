@@ -57,19 +57,27 @@ export fun md_generate(args: [str]) > void {
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
+// changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the
+// [Unreleased] section verbatim. Released sections are generated (like MAGUS.md) and
+// must not be edited by hand. generate calls this; the drift gate catches any manual
+// edit to a released section on the next render.
+export fun changelog_generate(args: [str]) > void {
+    os.exec("go", ["run", "../cmd/magus-utils", "generate-changelog",
+        "-releases", ROOT + "/releases", "-changelog", ROOT + "/CHANGELOG.md"], ".", {});
+}
+
 // generateJsBundles builds the committed browser bundles that import npm
 // packages - the d3-force graph explorer, the CodeMirror playground editor, and
 // the vendored mermaid/highlight.js libraries. These are pnpm-managed packages
 // (package.json + pnpm-lock.yaml), so they follow the JS convention: `pnpm install
-// --frozen-lockfile` restores the pinned deps (honoring pnpm-workspace.yaml's
-// minimumReleaseAge gate), `pnpm run build` runs the esbuild invocations, which
-// live in package.json "scripts" as their single source of truth. pnpm, not npm:
-// the release-age gate is the reason. (The render's own theme/main/css are minified
-// inline in scribe instead: they have no npm deps and are driven by the render loop,
-// so they aren't a package build.) The install is guarded on node_modules so a warm
-// local tree skips it while a cold CI checkout installs. Running here - inside
-// generate - is what lets both the gen/** drift gate and the merge driver
-// regenerate the bundles.
+// --frozen-lockfile` restores the pinned deps (honoring .npmrc's minimum-release-age
+// gate), `pnpm run build` runs the esbuild invocations, which live in package.json
+// "scripts" as their single source of truth. pnpm, not npm: the release-age gate is
+// the reason. (The render's own theme/main/css are minified inline in scribe instead:
+// they have no npm deps and are driven by the render loop, so they aren't a package
+// build.) The install is guarded on node_modules so a warm local tree skips it while
+// a cold CI checkout installs. Running here - inside generate - is what lets both the
+// gen/** drift gate and the merge driver regenerate the bundles.
 fun generateJsBundles() > void {
     if (!fs.isDir("node_modules")) {
         os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
@@ -77,14 +85,15 @@ fun generateJsBundles() > void {
     os.exec("pnpm", ["run", "build"], ".", {});
 }
 
-// generate renders the site, refreshes MAGUS.md, and rebuilds the client bundles,
-// then gates on drift: a clean checkout only goes dirty when a source edit wasn't
-// re-rendered/rebuilt and committed. The `rw` charm (`generate:rw`) keeps the
-// result instead of gating.
+// generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the
+// released sections), and rebuilds the client bundles, then gates on drift: a clean
+// checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and
+// committed. The `rw` charm (`generate:rw`) keeps the result instead of gating.
 export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
-    final clean_before = vcs.isDirty([OUT, "MAGUS.md"]) == false;
+    final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md"]) == false;
     magus.needs(magus.target.literal("md-generate"));
+    magus.needs(magus.target.literal("changelog-generate"));
     final site = scribe.site_render(ROOT, DOCS, BLOG, OUT);
     generateJsBundles();
     if (magus.has_charm("rw")) {
@@ -93,8 +102,8 @@ export fun generate(args: [str]) > void {
         scribe.updateUrlLock(site);
         return;
     }
-    if (clean_before and vcs.isDirty([OUT, "MAGUS.md"])) {
-        throw "generate: " + OUT + " or MAGUS.md drifted; re-run `magus run generate:rw website` and commit";
+    if (clean_before and vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md"])) {
+        throw "generate: " + OUT + " or MAGUS.md or CHANGELOG.md drifted; re-run `magus run generate:rw website` and commit";
     }
 }
 
