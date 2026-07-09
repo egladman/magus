@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <title>Glossary — magus</title>
+  <meta name="description" content="The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, and engine - each defined in one line with a pointer to the page that covers it in full.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/glossary/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Glossary — magus">
+  <meta property="og:description" content="The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, and engine - each defined in one line with a pointer to the page that covers it in full.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/glossary/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../assets/pico.min.css">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../index.html" class="contrast"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../blog/">Blog</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../tour/">Tour</a></li>
+        <li><a href="../playground/">Playground</a></li>
+        <li><a href="../graph/">Graph</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../index.html">Home</a></li><li><a href="../documentation/">Documentation</a></li><li aria-current="page">Glossary</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/glossary.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#core-model" title="Core model">Core model</a></li><li><a href="#execution-and-caching" title="Execution and caching">Execution and caching</a></li><li><a href="#insight-and-knowledge" title="Insight and knowledge">Insight and knowledge</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <article>
+<h1 id="glossary">Glossary</h1>
+<p>The vocabulary that runs through the rest of the docs. Each entry is a one-line
+definition; follow the link for the page that covers the term in depth.</p>
+<h2 id="core-model">Core model</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Workspace</strong></td>
+<td>The magus root directory that owns a set of projects and shared config; the unit magus operates over. See <a href="../workspace/">workspace.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Project</strong></td>
+<td>A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking. See <a href="../workspace/">workspace.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Magusfile</strong></td>
+<td>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and binds its spells. See <a href="../targets/">targets.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Target</strong></td>
+<td>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it may compose a spell's tool-native operations and depend on other targets. See <a href="../targets/">targets.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Operation</strong></td>
+<td>A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target). See <a href="../operations/">operations.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Spell</strong></td>
+<td>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a toolchain's real commands. See <a href="../spells/">spells.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Charm</strong></td>
+<td>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in place, and <code>ci</code> always strips it. See <a href="../charms/">charms.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Ward</strong></td>
+<td>A coded diagnostic that inspects a resolved op and nudges or blocks an anti-pattern before it runs. See <a href="../wards/">wards.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Module</strong></td>
+<td>A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more. See <a href="../buzz/modules/">the module reference</a>.</td>
+</tr>
+<tr>
+<td><strong>Buzz</strong></td>
+<td>The language magusfiles are written in (the <code>.buzz</code> engine). See <a href="../engines/">engines.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Engine</strong></td>
+<td>The interpreter a magusfile runs on; magus embeds the Buzz engine. See <a href="../engines/">engines.md</a>.</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="execution-and-caching">Execution and caching</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cache</strong></td>
+<td>The content-addressed store magus consults before running a target, so unchanged work is skipped. See <a href="../cache/">cache.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Affected</strong></td>
+<td>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target only over them. See <a href="../affected/">affected.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Sandbox</strong></td>
+<td>The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free. See <a href="../sandbox/">sandbox.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Service</strong></td>
+<td>A long-running or shared process magus manages across runs, distinct from a one-shot target. See <a href="../services/">services.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Daemon</strong></td>
+<td>The background magus host that owns shared state such as services and the warm knowledge graph. See <a href="../daemon/">daemon.md</a>.</td>
+</tr>
+<tr>
+<td><strong>CI</strong></td>
+<td>The composite pipeline (lint, build, test, coverage); run with <code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="insight-and-knowledge">Insight and knowledge</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Knowledge graph</strong></td>
+<td>The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See <a href="../knowledge/">knowledge.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Insight</strong></td>
+<td>The reports magus derives over the graph and history (hotspots, affinity, ownership, trend). See <a href="../insight/">insight.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Diagnostic code</strong></td>
+<td>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be referenced and looked up; some are guardrails (see <a href="../wards/">wards</a>), others hard errors.</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../conventions/">Documentation conventions</a> - how to read the placeholders, shell commands, and admonitions used across these pages.</li>
+<li><a href="../targets/">Targets</a> - the fuller Target-struct glossary (Path, Name, Files) for magusfile authors.</li>
+</ul>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../getting-started/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Getting started</span></a>
+      <a class="page-nav-next" href="../insight/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Insight</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
+        <a class="related-card" href="../codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22glossary%22">glossary</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a><a class="tag" href="../search/?q=tag%3A%22terminology%22">terminology</a><a class="tag" href="../search/?q=tag%3A%22concepts%22">concepts</a></div>
+    <small>Last updated <time datetime="2026-07-09T04:54:16Z">July 9, 2026, 4:54 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/eeaf7cf358f7c4822aa141ca7f352ec6d203b19e" data-tooltip="eeaf7cf358f7c4822aa141ca7f352ec6d203b19e" title="eeaf7cf358f7c4822aa141ca7f352ec6d203b19e">eeaf7cf</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
+    <small class="footer-group"><a href="../graph/">Graph</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../main.js"></script>
+</body>
+</html>
