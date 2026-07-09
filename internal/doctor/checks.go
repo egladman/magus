@@ -27,48 +27,12 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// checkBridgeReachability probes the web bridge endpoint (/api/v1/graph). It is a
-// net-new check: doctor does not currently test MCP reachability. The check is
-// informational (StatusOK) on success; it fails only when bridge is explicitly
-// enabled and the endpoint is unreachable. When the daemon is not running the
-// check skips gracefully.
+// checkBridgeReachability probes the web bridge endpoint (/api/v1/graph).
+// The concrete implementation is build-tag-dispatched: on mcp builds it
+// issues a real HTTP GET (a 401 proves the guarded route exists); on non-mcp
+// builds it is a no-op (no bridge is compiled in).
 func (r *runner) checkBridgeReachability() Check {
-	const name = "web bridge"
-	d := r.opts.daemonInfo
-	if d == nil || !d.Reachable {
-		return Check{Name: name, Status: StatusOK, Message: "daemon not running; bridge check skipped"}
-	}
-	if !d.BridgeEnabled {
-		return Check{Name: name, Status: StatusOK, Message: "bridge disabled via bridge.enabled: false"}
-	}
-	if d.MCPAddr == "" {
-		return Check{Name: name, Status: StatusOK, Message: "MCP address unknown; bridge check skipped"}
-	}
-
-	// Dial a quick TCP connection to see whether the HTTP server is up.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	var dialer net.Dialer
-	conn, err := dialer.DialContext(ctx, "tcp", d.MCPAddr)
-	if err != nil {
-		return Check{
-			Name:    name,
-			Status:  StatusFail,
-			Message: fmt.Sprintf("bridge endpoint not reachable at http://%s/api/v1/graph", d.MCPAddr),
-			Details: []string{
-				err.Error(),
-				"start the daemon: magus server start",
-				fmt.Sprintf("retrieve the bearer token: magus config mcp token print"),
-			},
-		}
-	}
-	_ = conn.Close()
-	return Check{
-		Name:    name,
-		Status:  StatusOK,
-		Message: fmt.Sprintf("reachable at http://%s/api/v1/graph", d.MCPAddr),
-		Details: []string{"bearer token: magus config mcp token print"},
-	}
+	return probeBridgeReachability(r.opts.daemonInfo)
 }
 
 // checkNearDuplicateServices is the static, whole-workspace half of MGS5001: it
