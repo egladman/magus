@@ -319,6 +319,11 @@ func writeDispatchDefaults(b *md.Builder, path, label string, eval map[string]ty
 // targetRoleClasses style target nodes by role; externalClass styles a
 // cross-project dependency node. Shared by the per-project graphs and the legend
 // so the key always matches what it documents.
+//
+// ANTI-DRIFT: the classDef names below ("anchor", "target") and externalClass
+// ("external") and spellClass ("spell") are mirrored verbatim in
+// website/js/graph-explorer.js (toMermaid / targets flavor). A rename here must
+// be matched there. internal/render/mermaid_drift_test.go asserts this in CI.
 var targetRoleClasses = []renderClass{
 	{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},
 	{Name: "target", Style: "fill:#e2e8f0,color:#0f172a,stroke:#94a3b8"},
