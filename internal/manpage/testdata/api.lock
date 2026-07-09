@@ -1,4 +1,5 @@
 config assume_interactive
+config bridge.enabled
 config cache.dir
 config cache.immutable
 config cache.remote.insecure
