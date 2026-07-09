@@ -11,12 +11,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// glossaryDocURL is the canonical, hosted magus glossary. MAGUS.md links out to it
+// instead of embedding its own copy, so the term definitions have a single source
+// of truth on the docs site.
+const glossaryDocURL = "https://eli.gladman.cc/magus/glossary/"
+
 // WriteTargetGraphMarkdown renders a workspace's target graph as a one-stop
 // MAGUS.md cheat sheet: a quick-start, then a per-project section where every
 // project section opens with that project's own Mermaid dependency graph, then
 // every target carries its doc, both invocation forms, the charm example commands,
-// its dependencies, and any rendered command or non-default policy — followed by a
-// glossary. eval supplies the fully-evaluated
+// its dependencies, and any rendered command or non-default policy. Term
+// definitions live on the hosted docs (glossaryDocURL), not in this output.
+// eval supplies the fully-evaluated
 // dispatch plan keyed by EvalKey(path, target); when it is nil (e.g. a unit test
 // that has only the static graph) the dispatch-derived bits are simply omitted.
 // It is engine- and repo-agnostic — `magus describe graph -o markdown` produces
@@ -39,7 +45,7 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 		{Code: "magus run <target> <path>", Note: "from anywhere in the workspace"},
 		{Code: "magus run <target>:<charm>", Note: "change HOW it runs (e.g. lint:rw)"},
 	})
-	b.Paragraph("Unfamiliar with a term? See the " + md.Link("Glossary", "#glossary") + ".")
+	b.Paragraph("Unfamiliar with a term? See the " + md.Link("Glossary", glossaryDocURL) + ".")
 
 	// Prefer a picture: a link to the hosted Graph Explorer preloaded with this
 	// repo's committed graph.json (emitted only when that link resolves).
@@ -74,8 +80,6 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 			writeTargetSection(&b, p.Path, n, eval)
 		}
 	}
-
-	writeGlossary(&b)
 
 	_, err := b.WriteTo(w)
 	return err
@@ -435,28 +439,6 @@ func writeTargetSection(b *md.Builder, path string, n types.TargetGraphNode, eva
 	if notes := policyNotes(e.Policy); len(notes) > 0 {
 		b.Paragraph(md.Bold("Details:") + " " + strings.Join(notes, " · "))
 	}
-}
-
-// writeGlossary emits the static glossary of magus terms. It is hand-authored
-// (not derived from the in-code definitions) so it stays short enough for a cheat
-// sheet; keep it in sync with the longer `magus describe <noun>` definitions.
-func writeGlossary(b *md.Builder) {
-	b.Heading(2, "Glossary")
-	entries := []struct{ term, def string }{
-		{"Workspace", "the magus root directory that owns a set of projects and shared config; the unit magus operates over."},
-		{"Project", "a directory magus recognized as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking."},
-		{"Magusfile", "the `magusfile.buzz` that declares a project's targets (as `export fun`s) and binds its spells."},
-		{"Target", "a named operation (`build`, `test`, …) you invoke with `magus run <target>`; it may compose a spell's tool-native operations and depend on other targets."},
-		{"Spell", "a language/runtime adapter (e.g. `go`, `md`) that maps generic targets onto a toolchain's real commands."},
-		{"Charm", "an execution modifier attached with `:` (`lint:rw`) that changes _how_ a target runs, not _which_ one; the built-in `rw` flips a check-only target to mutate in place, and `ci` always strips it."},
-		{"Module", "a magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more."},
-		{"Buzz", "the language magusfiles are written in (the `.buzz` engine)."},
-	}
-	items := make([]string, 0, len(entries))
-	for _, g := range entries {
-		items = append(items, md.Bold(g.term)+": "+g.def)
-	}
-	b.List(items...)
 }
 
 // projectDefaults returns the evaluated target that stands in for path's shared

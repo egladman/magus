@@ -36,7 +36,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		"**Depends on:**",                     // dependency list header
 		"- [`fmt`](#fmt)",                     // each dep links to its own section
 		"### `fmt`",
-		"## Glossary",
+		"[Glossary](https://eli.gladman.cc/magus/glossary/)", // terms link out to the hosted docs, not an embedded section
 		"**Run order**", // each project's graph renders inline in its section
 		"```mermaid",
 		"fmt --> build", // run order: the dependency points at the target that needs it
