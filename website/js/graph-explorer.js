@@ -1235,7 +1235,7 @@ let suppressHash = false;
 function updateHash() {
   if (suppressHash) return;
   const params = hashParams();
-  if (params.data || params.src) return; // keep the private data/loopback link intact; don't rewrite it
+  if (params.data || params.src || params.live) return; // keep fragment data/loopback/live links intact
   const parts = [];
   if (activeView) {
     parts.push("view=" + encodeURIComponent(activeView));

@@ -65,12 +65,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#what-the-bridge-serves" title="What the bridge serves">What the bridge serves</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#phase-9-upcoming-live-mode-pairing" title="Phase 9 (upcoming): Live mode pairing">Phase 9 (upcoming): Live mode pairing</a></li></ul>
+        <ul><li><a href="#what-the-bridge-serves" title="What the bridge serves">What the bridge serves</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#live-mode-pairing" title="Live mode pairing">Live mode pairing</a><ul><li><a href="#how-to-pair" title="How to pair">How to pair</a></li><li><a href="#two-state-model" title="Two-state model">Two-state model</a></li><li><a href="#safari-limitation-1" title="Safari limitation">Safari limitation</a></li><li><a href="#target-graph-in-live-mode" title="Target graph in live mode">Target graph in live mode</a></li><li><a href="#affected-view" title="Affected view">Affected view</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">5 min read</small>
     <article>
 <h1 id="browser-bridge">Browser bridge</h1>
 <p>The browser bridge is three frozen, read-only GET routes that the magus daemon
@@ -191,16 +191,52 @@ log in the address bar).</p>
 <p>When the daemon is not running, the check is skipped (not a failure).
 When <code>bridge.enabled: false</code> is set, the check reports that the bridge is
 disabled.</p>
-<h2 id="phase-9-upcoming-live-mode-pairing">Phase 9 (upcoming): Live mode pairing</h2>
-<p>A future release (<code>magus graph open --live</code>) will probe the daemon and open the
-explorer with a <code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;</code> fragment, enabling
-always-live workspace viewing. The bridge is the prerequisite. The token is
-consumed by the page on load and replaced with session storage so it does not
-persist in the URL.</p>
-<p>The explorer enforces that the host in <code>#live=</code> is literally <code>127.0.0.1</code> or
-<code>[::1]</code>. <code>localhost</code> and all other hostnames are rejected. This 5-line
-client-side check is what makes the &quot;data cannot leave your machine&quot; claim
-verifiable by reading the source.</p>
+<h2 id="live-mode-pairing">Live mode pairing</h2>
+<p><code>magus graph open --live</code> opens the explorer connected to the running daemon.</p>
+<h3 id="how-to-pair">How to pair</h3>
+<ol>
+<li>Start the daemon: <code>magus server start</code></li>
+<li>Run <code>magus graph open --live</code> (or <code>--live --print</code> to copy the URL)</li>
+<li>The explorer shows a <code>live: &lt;workspace&gt;</code> badge and updates within seconds of file changes</li>
+</ol>
+<p>The link contains <code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;</code>. The page:</p>
+<ul>
+<li>Validates the host is literally <code>127.0.0.1</code> or <code>[::1]</code> before making any fetch</li>
+<li>Consumes the token and strips it from the URL via <code>history.replaceState</code></li>
+<li>Stores the token in sessionStorage (tab lifetime) unless you tick &quot;Remember this workspace&quot;, which moves it to localStorage</li>
+</ul>
+<p>Zero-arg default: a plain <code>magus graph open</code> with no flags checks if the daemon is running. If it is, it automatically picks <code>--live</code>. Otherwise it falls back to the <code>#data=</code> fragment.</p>
+<h3 id="two-state-model">Two-state model</h3>
+<p>The explorer has exactly two source states:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>State</th>
+<th>Badge</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>snapshot</td>
+<td><code>snapshot: &lt;provenance&gt;</code></td>
+<td>Data from fragment/file/demo/--serve; frozen at load time</td>
+</tr>
+<tr>
+<td>live</td>
+<td><code>live: &lt;workspace&gt;</code></td>
+<td>Data from the daemon; refreshes on file changes</td>
+</tr>
+</tbody>
+</table></figure>
+<p>&quot;Connected but stale&quot; is impossible: when the SSE stream disconnects, a banner appears (&quot;disconnected - showing workspace as of HH:MM, reconnecting...&quot;) and auto-reconnect runs with exponential backoff (1s to 30s). The data stays visible while reconnecting.</p>
+<h3 id="safari-limitation-1">Safari limitation</h3>
+<p>Safari blocks fetch requests from an HTTPS page to <code>http://127.0.0.1</code> (mixed content). Live mode cannot connect in Safari. Use <code>magus graph open --serve</code> instead: it runs an ephemeral loopback server and opens the graph via a <code>#src=</code> fragment that is compatible with Safari's same-origin restriction.</p>
+<h3 id="target-graph-in-live-mode">Target graph in live mode</h3>
+<p><code>magus graph open --live --targets</code> opens the live target dependency graph:
+<code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;&amp;flavor=targets</code></p>
+<h3 id="affected-view">Affected view</h3>
+<p>When the daemon has computed an affected set (from <code>magus affected</code> in a CI context), the <code>/api/v1/status</code> response includes an <code>affected</code> array of node ids. The &quot;What does my diff touch?&quot; view is enabled automatically and paints those nodes.</p>
     </article>
     </div>
     </div>
@@ -220,7 +256,7 @@ verifiable by reading the source.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22bridge%22">bridge</a><a class="tag" href="../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../search/?q=tag%3A%22privacy%22">privacy</a></div>
-    <small>Last updated <time datetime="2026-07-09T04:04:05Z">July 9, 2026, 4:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/1d9610ed597d5d99a52dd2deb03a04d39336a60e" data-tooltip="1d9610ed597d5d99a52dd2deb03a04d39336a60e" title="1d9610ed597d5d99a52dd2deb03a04d39336a60e">1d9610e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401f</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/browser-bridge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/browser-bridge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-09T07:33:30Z">July 9, 2026, 7:33 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/c1b8e8dce6bb0f01fb9c831196250150275e563e" data-tooltip="c1b8e8dce6bb0f01fb9c831196250150275e563e" title="c1b8e8dce6bb0f01fb9c831196250150275e563e">c1b8e8d</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/1d9610ed597d5d99a52dd2deb03a04d39336a60e"><code>1d9610e</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - document that bridge error bodies include err.Error() for authenticated callers and that level/flavor graph params are uncached per-request</li><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401f</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/browser-bridge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/browser-bridge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
