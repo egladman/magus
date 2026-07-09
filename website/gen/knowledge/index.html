@@ -257,7 +257,7 @@ declared target output; point config at it (explicit, opt-in, never auto-detecte
 knowledge:
   symbols:
     - project: pkg/foo
-      index: pkg/foo/index.scip   # produced by a `pkg/foo:scip` target
+      index: pkg/foo/index.scip # produced by a `pkg/foo:scip` target
 </code></pre>
 <p>Each declared index becomes a per-project <code>&lt;project&gt;@symbols</code> shard: <code>symbol</code> nodes
 (keyed by their version-stripped SCIP moniker), <code>defines</code> edges from the defining
@@ -278,7 +278,7 @@ rather than all of them; a missing routing file just falls back to loading all.<
 knowledge:
   vcs:
     enabled: true
-    max_commits: 1000   # optional: bound the history walk (default 1000)
+    max_commits: 1000 # optional: bound the history walk (default 1000)
 </code></pre>
 <p>When enabled and the workspace is a git repo, a <code>@vcs</code> shard adds three attrs to every
 file node: <code>vcs_last_commit</code> (short SHA of the most recent commit touching the file),

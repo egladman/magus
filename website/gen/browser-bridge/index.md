@@ -19,14 +19,14 @@ change configuration. This is a design decision, not just a security posture
 
 Every byte the bridge can emit, enumerated:
 
-| Route | Content |
-|---|---|
-| `GET /api/v1/graph` | Merged knowledge graph (same bytes as `magus graph export -o json`) |
-| `GET /api/v1/graph?flavor=targets` | Target dependency graph (same as `magus describe graph -o json`) |
-| `GET /api/v1/graph?level=projects` | Project skeleton only: project nodes + project edges |
-| `GET /api/v1/graph?select=<terms>` | Scoped neighborhood (same query engine as `magus query`) |
-| `GET /api/v1/status` | Daemon pool state (same as `magus status -o json`) |
-| `GET /api/v1/events` | SSE stream: `event: graph` when the workspace graph changes |
+| Route                              | Content                                                             |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| `GET /api/v1/graph`                | Merged knowledge graph (same bytes as `magus graph export -o json`) |
+| `GET /api/v1/graph?flavor=targets` | Target dependency graph (same as `magus describe graph -o json`)    |
+| `GET /api/v1/graph?level=projects` | Project skeleton only: project nodes + project edges                |
+| `GET /api/v1/graph?select=<terms>` | Scoped neighborhood (same query engine as `magus query`)            |
+| `GET /api/v1/status`               | Daemon pool state (same as `magus status -o json`)                  |
+| `GET /api/v1/events`               | SSE stream: `event: graph` when the workspace graph changes         |
 
 No other routes exist. The bridge mounts at `/api/v1/` on the same port as the
 MCP server (`127.0.0.1:7391` by default).
@@ -66,6 +66,7 @@ A request whose `Host` header does not resolve to the loopback range is
 rejected with 403 before the bearer token is examined.
 
 **CORS.** `Access-Control-Allow-Origin` is set only for:
+
 - The hosted Graph Explorer origin (`https://eli.gladman.cc`)
 - `http://localhost:<port>` (local site development)
 - `http://127.0.0.1:<port>` (local site development)
@@ -141,6 +142,7 @@ disabled.
 3. The explorer shows a `live: <workspace>` badge and updates within seconds of file changes
 
 The link contains `#live=127.0.0.1:7391&token=<bearer>`. The page:
+
 - Validates the host is literally `127.0.0.1` or `[::1]` before making any fetch
 - Consumes the token and strips it from the URL via `history.replaceState`
 - Stores the token in sessionStorage (tab lifetime) unless you tick "Remember this workspace", which moves it to localStorage
@@ -151,10 +153,10 @@ Zero-arg default: a plain `magus graph open` with no flags checks if the daemon 
 
 The explorer has exactly two source states:
 
-| State | Badge | What it means |
-|---|---|---|
+| State    | Badge                    | What it means                                             |
+| -------- | ------------------------ | --------------------------------------------------------- |
 | snapshot | `snapshot: <provenance>` | Data from fragment/file/demo/--serve; frozen at load time |
-| live | `live: <workspace>` | Data from the daemon; refreshes on file changes |
+| live     | `live: <workspace>`      | Data from the daemon; refreshes on file changes           |
 
 "Connected but stale" is impossible: when the SSE stream disconnects, a banner appears ("disconnected - showing workspace as of HH:MM, reconnecting...") and auto-reconnect runs with exponential backoff (1s to 30s). The data stays visible while reconnecting.
 
@@ -204,12 +206,13 @@ complete network permission, in one line.
    badges (CI result, doc coverage). Those badge URLs are fixed strings
    compiled into the page; nothing on the home page builds an image URL
    from anything you typed or loaded there.
+
 2. Watch Chrome enforce it. Press `F12` to open DevTools, pick the
    **Console** tab, and paste:
    `fetch("https://example.com")`
    Chrome refuses, and the error message quotes the policy back to you:
-   *"Refused to connect ... because it violates the following Content
-   Security Policy directive: connect-src ..."*. That refusal is your
+   _"Refused to connect ... because it violates the following Content
+   Security Policy directive: connect-src ..."_. That refusal is your
    browser, not our code.
 3. One deliberate narrowing this policy causes: the graph page's `#src=<url>`
    loader and the playground's `#src=<url>` loader can both point at an
@@ -266,7 +269,7 @@ click, right there.
 ### The deep audit: record every byte Chrome sends
 
 For a security review, don't sample - record. `chrome://net-export` captures
-a log of *all* network activity in the browser, below the page's ability to
+a log of _all_ network activity in the browser, below the page's ability to
 hide anything.
 
 1. Open `chrome://net-export`, choose a log file, press **Start Logging to
@@ -297,7 +300,7 @@ it out.
 
 ### The one nuance: the service worker is not covered by this policy
 
-A `<meta>`-delivered Content-Security-Policy governs the *page's own*
+A `<meta>`-delivered Content-Security-Policy governs the _page's own_
 requests. It does not govern requests the service worker (`sw.js`) makes on
 the page's behalf while intercepting `fetch` events - that is a documented
 gap in the CSP spec, not a bug in this implementation. The mitigation is that

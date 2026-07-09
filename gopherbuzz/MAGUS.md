@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary
 
 ## Query first
 
-This workspace has a knowledge graph of **936 nodes** and **1498 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **936 nodes** and **1499 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation

@@ -60,16 +60,16 @@ nodes, so an agent knows what exists before running anything.
 `magus query` takes free-text terms (AND) plus field filters and negation. Terms
 are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 
-| Form                | Meaning                                             |
-| ------------------- | --------------------------------------------------- |
-| `build`             | free text: match node IDs, labels, and docs         |
-| `kind:spell`        | only nodes of that kind                             |
-| `project:pkg/foo`   | the project node and its targets                    |
-| `relation:uses`     | seed from nodes touching a `uses` edge              |
-| `id:build`          | substring match on the node ID                      |
-| `id:target:*build`  | `*` wildcard: matches any run (in a value or term)  |
-| `-kind:op`          | negation: exclude these                             |
-| `"exact phrase"`    | a quoted span stays one term                        |
+| Form               | Meaning                                            |
+| ------------------ | -------------------------------------------------- |
+| `build`            | free text: match node IDs, labels, and docs        |
+| `kind:spell`       | only nodes of that kind                            |
+| `project:pkg/foo`  | the project node and its targets                   |
+| `relation:uses`    | seed from nodes touching a `uses` edge             |
+| `id:build`         | substring match on the node ID                     |
+| `id:target:*build` | `*` wildcard: matches any run (in a value or term) |
+| `-kind:op`         | negation: exclude these                            |
+| `"exact phrase"`   | a quoted span stays one term                       |
 
 A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node
@@ -207,7 +207,7 @@ declared target output; point config at it (explicit, opt-in, never auto-detecte
 knowledge:
   symbols:
     - project: pkg/foo
-      index: pkg/foo/index.scip   # produced by a `pkg/foo:scip` target
+      index: pkg/foo/index.scip # produced by a `pkg/foo:scip` target
 ```
 
 Each declared index becomes a per-project `<project>@symbols` shard: `symbol` nodes
@@ -234,7 +234,7 @@ Opt-in, off by default: enable it to fold each file's git history onto its file 
 knowledge:
   vcs:
     enabled: true
-    max_commits: 1000   # optional: bound the history walk (default 1000)
+    max_commits: 1000 # optional: bound the history walk (default 1000)
 ```
 
 When enabled and the workspace is a git repo, a `@vcs` shard adds three attrs to every
