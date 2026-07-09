@@ -50,6 +50,14 @@ stdout '(matches:|0 match)'
 exec magus query kind:symbol
 stdout '(matches:|0 match)'
 
+# Views table: CLI-equivalents shown in the views help panel. These must stay
+# accepted by the real CLI so the table doesn't teach dead syntax.
+exec magus query kind:target
+stdout '(matches:|0 match)'
+
+exec magus query -- -kind:project
+stdout '(matches:|0 match)'
+
 -- magus.yaml --
 concurrency: 4
 -- magusfile.buzz --

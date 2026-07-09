@@ -285,6 +285,7 @@ function layoutLayered(nodes, links) {
     const s = e.source.id || e.source;
     const t = e.target.id || e.target;
     if (!ids.has(s) || !ids.has(t)) continue;
+    if (s === t) continue; // self-loop: skip to prevent infinite recursion in getLayer
     depEdges.push({ s, t, linkRef: e });
   }
 
@@ -348,7 +349,12 @@ function layoutLayered(nodes, links) {
   const predMap = new Map(); // nodeId -> Set of predecessor ids
   for (const id of ids) predMap.set(id, new Set());
   for (const e of depEdges) {
-    predMap.get(e.t).add(e.s);
+    // e.s = source = dependent (who has the dependency)
+    // e.t = target = dependency (what is depended on)
+    // A dependent's predecessor is its dependency: layer(dependent) = 1 + layer(dependency).
+    // This puts dependencies at lower x (left) and dependents at higher x (right),
+    // matching the Go emitter (dependency --> dependent, LR direction).
+    predMap.get(e.s).add(e.t);
   }
 
   const layerOf = new Map(); // nodeId -> layer index
@@ -403,8 +409,8 @@ function layoutLayered(nodes, links) {
       const mean = nbs.reduce((s, nb) => s + (pos.get(nb) ?? 0), 0) / nbs.length;
       return { id, score: mean };
     });
-    // Stable sort by score then id (determinism for ties).
-    scored.sort((a, b) => a.score - b.score || a.id.localeCompare(b.id));
+    // Stable sort by score then id (determinism for ties; codepoint < for locale-independence).
+    scored.sort((a, b) => a.score - b.score || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     return scored.map((x) => x.id);
   }
 
@@ -482,7 +488,17 @@ function switchLayout(mode) {
   updateHash();
 
   if (mode === "layered") {
-    applyLayeredMode();
+    if (!applyLayeredMode()) {
+      // Scale guard fired: revert to force mode.
+      layoutMode = "force";
+      syncLayoutToggle();
+      // Clear fixed positions so the sim can move nodes.
+      for (const n of graph.nodes) { n.fx = null; n.fy = null; }
+      if (sim) { sim.alpha(0.5).restart(); } else { startSimulation(); }
+      // Don't write layout=layered to the hash.
+      updateHash();
+      draw();
+    }
   } else {
     // Force mode: clear fixed positions so the simulation takes over.
     for (const n of graph.nodes) { n.fx = null; n.fy = null; }
@@ -533,13 +549,18 @@ function draw() {
   // Edges first, under the nodes. Dim edges not touching the highlighted node;
   // under a query filter (no selection), dim edges not between two matches, so the
   // matching subgraph stands out instead of a full bright web.
+  // projectionActive: hide all non-projection nodes/edges from the draw.
+  // (Same flag computed below for nodes; computed here first for edges.)
+  const projectionActive = !projectionUnfolded && projectionSet && !query && !focusId && !activeView;
   ctx.lineWidth = 0.6 / transform.k;
   for (const e of graph.links) {
     const s = e.source, t = e.target;
     if (s.x == null || t.x == null) continue; // not "!s.x": a node validly at x=0 must still draw
+    // Default projection: only draw edges where both endpoints are in the projection.
+    if (projectionActive && !(projectionSet.has(s.id) && projectionSet.has(t.id))) continue;
     let active;
     if (highlight) active = s.id === highlight || t.id === highlight;
-    else if (matchSet) {
+    else if (matchSet && !projectionActive) {
       // Under a query filter, draw ONLY edges between two matches - skipping the
       // rest keeps the matching subgraph clean instead of a faint full-web haze.
       if (!(matchSet.has(s.id) && matchSet.has(t.id))) continue;
@@ -560,16 +581,16 @@ function draw() {
 
     // Arrowheads: only in layered mode (they add clarity on the DAG's directed
     // edges; in force mode at demo-graph density they would be visual noise).
-    // For depends_on edges the layered layout places the dependency (target) at
-    // a lower x than the dependent (source), matching the graphviz LR convention
-    // where data flows left-to-right. The arrowhead is drawn at the SOURCE end
-    // (the dependent node on the right) to show "this node needs what is to its
-    // left", which matches the mermaid output `dependency --> dependent`.
-    // For layout-reversed back-edges the arrow is drawn at the target end (the
-    // reversed direction is the layout-only fiction; the arrowhead marks it).
+    // Convention matches the Go mermaid emitter (LR direction): the dependency
+    // is placed at a lower x (left) and the dependent at a higher x (right).
+    // In link terms: e.source = dependent (right), e.target = dependency (left).
+    // The arrowhead is drawn at the SOURCE end (the dependent node on the right),
+    // matching mermaid `dependency --> dependent` reading left-to-right.
+    // For layout-reversed back-edges the arrow tip moves to the target end
+    // (the reversed direction is layout-only fiction; the mark calls it out).
     if (layoutMode === "layered" && active && e.relation === "depends_on") {
       const isReversed = !!e.layoutReversed;
-      // Arrow tip: at source for normal edges, at target for reversed edges.
+      // Arrow tip: at source (dependent, right) for normal edges; at target for reversed.
       const tipNode = isReversed ? t : s;
       // Direction vector from the other end toward the tip.
       const fromNode = isReversed ? s : t;
@@ -596,12 +617,15 @@ function draw() {
   ctx.globalAlpha = 1;
 
   // Nodes. When something is highlighted, fade non-neighbors; when a search is
-  // active, fade non-matches.
+  // active, fade non-matches; when the default projection is active (no query),
+  // fully hide nodes outside the projection set (projects only).
   for (const n of graph.nodes) {
     if (n.x == null) continue;
+    // Default projection: hide non-project nodes entirely (not dimmed; truly absent).
+    if (projectionActive && !projectionSet.has(n.id)) continue;
     let alpha = 1;
     if (highlight) alpha = n.id === highlight || (near && near.has(n.id)) ? 1 : 0.15;
-    else if (matchSet) alpha = matchSet.has(n.id) ? 1 : 0.12;
+    else if (matchSet && !projectionActive) alpha = matchSet.has(n.id) ? 1 : 0.12;
     ctx.globalAlpha = alpha;
     const nodeColor = groupColorFor(n) || theme.kindColor[n.kind] || "#888";
     ctx.beginPath();
@@ -638,9 +662,10 @@ function draw() {
   ctx.textBaseline = "middle";
   for (const n of graph.nodes) {
     if (n.x == null) continue;
+    if (projectionActive && !projectionSet.has(n.id)) continue;
     const show = n.id === highlight || n.degree > 24 || transform.k > 2.2;
     if (!show) continue;
-    if (matchSet && !matchSet.has(n.id) && n.id !== highlight) continue;
+    if (matchSet && !projectionActive && !matchSet.has(n.id) && n.id !== highlight) continue;
     ctx.fillText(n.label, n.x + n.r + 2 / transform.k, n.y);
   }
   ctx.restore();
@@ -809,6 +834,8 @@ function selectNode(id, center) {
       // Unfold this project: show its contains neighborhood.
       projectionUnfolded = true;
       projectionSet = null;
+      // Release any nodes that were parked off-screen by the projection.
+      for (const nd of graph.nodes) { if (nd.fx === -1e6) { nd.fx = null; nd.fy = null; } }
       const projectNeighborhood = new Set([id]);
       for (const e of graph.links) {
         const s = e.source.id || e.source, t = e.target.id || e.target;
@@ -905,6 +932,11 @@ function focusNode(id, depth) {
   syncListSelection();
   const n = graph.byId.get(id);
   setStatus("Local graph around " + n.label + " - " + matchSet.size + " nodes within " + depth + " hop" + (depth === 1 ? "" : "s") + ". Press Esc to clear, [ / ] to change depth.");
+  // Re-run layered layout on the new (local) subset when in layered mode.
+  if (layoutMode === "layered") {
+    for (const e of graph.links) delete e.layoutReversed;
+    applyLayeredMode();
+  }
   fitView(matchSet);
 }
 
@@ -941,6 +973,18 @@ function applyLens(name) {
   activateView(name === "hubs" ? "hubs" : "orphans");
 }
 
+// syncConditionalViews shows or hides the "What's slow?" (critical) view button
+// based on whether the current graph has DurationMs timing data. Called after
+// each graph load (boot and replaceGraph) so the button tracks the data.
+function syncConditionalViews() {
+  const hasDuration = graph && graph.nodes.some((n) =>
+    (n.DurationMs || 0) > 0 || (n.duration_ms || 0) > 0 || ((n.attrs && n.attrs.DurationMs) || 0) > 0
+  );
+  document.querySelectorAll("[data-view='critical']").forEach((btn) => {
+    btn.classList.toggle("view-conditional", !hasDuration);
+  });
+}
+
 // ---- color groups ----------------------------------------------------------
 // Each group paints every node matching a query one chosen color, ON TOP of the
 // kind palette - so several groups can coexist (unlike the single match set). The
@@ -949,7 +993,13 @@ const groups = []; // { query, color, terms }
 
 function groupColorFor(node) {
   for (const g of groups) {
-    if (g.terms.length && g.terms.every((t) => termMatches(node, t))) return g.color;
+    // Groups with a nodeSet (e.g. depth preset) match directly by id, bypassing
+    // the query grammar so a fake `layer:N` string doesn't silently match nothing.
+    if (g.nodeSet) {
+      if (g.nodeSet.has(node.id)) return g.color;
+    } else if (g.terms.length && g.terms.every((t) => termMatches(node, t))) {
+      return g.color;
+    }
   }
   return null;
 }
@@ -1040,7 +1090,8 @@ function termMatches(node, term) {
     case "relation": hit = graph.relIndex.has(node.id) && graph.relIndex.get(node.id).has(v); break;
     case "id": hit = node.id.toLowerCase().includes(v); break;
     // symbol: prefix targets SCIP code-symbol nodes by their symbol: id prefix.
-    // Mirrors the CLI's `internal/knowledge/query.go:SeedsSymbols` logic.
+    // The CLI treats `symbol:` as free text (no typed field); the box accepts a superset
+    // syntactically (restricts to kind=symbol + id substring), but the CLI accepts the query.
     case "symbol": hit = node.kind === "symbol" && node.id.toLowerCase().includes("symbol:" + v); break;
     default:
       hit = node.id.toLowerCase().includes(v) || node.label.toLowerCase().includes(v) ||
@@ -1085,6 +1136,8 @@ function applyQuery(q) {
       // Scale guard: too many nodes; fall back to force.
       layoutMode = "force";
       syncLayoutToggle();
+      // Clear pinned positions so the force sim can move all nodes.
+      for (const n of graph.nodes) { n.fx = null; n.fy = null; }
       if (sim) sim.alpha(0.3).restart();
     }
     return;
@@ -1253,6 +1306,7 @@ function replaceGraph(data, statusMsg) {
   renderLegend();
   renderList();
   renderSuggestions();
+  syncConditionalViews();
   // Default layout mode per flavor: targets -> layered, knowledge -> force.
   // Check if the URL fragment requests a specific mode (user override persists).
   const fragParams = hashParams();
@@ -1272,6 +1326,12 @@ function replaceGraph(data, statusMsg) {
     }
   } else {
     startSimulation();
+  }
+  // Park hidden nodes after the sim is built (projection reduces the visible set).
+  if (!projectionUnfolded && projectionSet) {
+    for (const n of graph.nodes) {
+      if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
+    }
   }
   draw();
 }
@@ -1466,17 +1526,29 @@ function applyProjection() {
     matchSet = null;
     renderList();
     updateHash();
-    if (layoutMode === "layered") applyLayeredMode(); else draw();
+    if (layoutMode === "layered") {
+      for (const e of graph.links) delete e.layoutReversed;
+      applyLayeredMode();
+    } else {
+      draw();
+    }
     return;
   }
   const ps = buildProjectionSet();
   projectionSet = ps;
   // If no projection applies, nothing to do.
   if (!ps) return;
-  // Keep matchSet null so the full canvas is available; the draw() function
-  // respects projectionSet for dimming. Actually we set matchSet = projectionSet
-  // so the existing filter rendering works.
+  // Set matchSet = projectionSet so the node list and count reflect the projection.
   matchSet = new Set(ps);
+  // Park non-projection nodes out of the force simulation by pinning them at a
+  // far-off location. They are not drawn (draw() skips them when projectionActive),
+  // and pinning removes them from the effective sim space so visible nodes settle
+  // without interference from the hidden 1600-node soup.
+  if (graph) {
+    for (const n of graph.nodes) {
+      if (!ps.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
+    }
+  }
   renderList();
   updateProjectionStatus();
 }
@@ -1493,6 +1565,12 @@ function unfoldProjection() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
+  // Release all parked nodes so the force sim (or layered layout) can place them.
+  if (graph) {
+    for (const n of graph.nodes) {
+      if (n.fx === -1e6) { n.fx = null; n.fy = null; }
+    }
+  }
   renderList();
   const btn = el("projection-unfold-btn");
   if (btn) btn.hidden = true;
@@ -1564,7 +1642,9 @@ function shortestDependsOnPath(fromId, toId) {
       for (const n of bQueue) {
         for (const nb of bwdAdj.get(n) || []) {
           if (!bwd.has(nb)) { bwd.set(nb, [...bwd.get(n), nb]); next.push(nb); }
-          if (fwd.has(nb)) return [...fwd.get(nb), ...bwd.get(nb).slice().reverse()];
+          // Drop the meet node (nb) from the forward path to avoid duplication:
+          // fwd.get(nb) ends at nb, bwd.get(nb) also starts at nb after reverse.
+          if (fwd.has(nb)) return [...fwd.get(nb).slice(0, -1), ...bwd.get(nb).slice().reverse()];
         }
       }
       bQueue = next;
@@ -1864,10 +1944,13 @@ const COLOR_PRESETS = [
     groups: () => {
       const projects = graph.nodes.filter((n) => n.kind === "project").map((n) => n.id);
       const palette = ["#2563eb", "#0a7ea4", "#059669", "#d97706", "#dc2626", "#8b5cf6", "#0891b2", "#ca8a04"];
-      return projects.map((id, i) => ({
-        query: "project:" + id,
-        color: palette[i % palette.length],
-      }));
+      return projects.map((id, i) => {
+        // Knowledge-graph project ids are "project:<name>"; the project: field
+        // matcher prepends "project:" again, producing "project:project:web" which
+        // matches nothing. Strip the leading "project:" so the query is "project:web".
+        const bare = id.startsWith("project:") ? id.slice("project:".length) : id;
+        return { query: "project:" + bare, color: palette[i % palette.length] };
+      });
     },
   },
   {
@@ -1907,21 +1990,13 @@ const COLOR_PRESETS = [
         let s = byLayer.get(l); if (!s) { s = []; byLayer.set(l, s); } s.push(id);
       }
       const maxLayer = Math.max(...byLayer.keys(), 0);
-      const result = [];
-      for (const [l, ids_] of [...byLayer.entries()].sort((a, b) => a[0] - b[0])) {
+      // Return one entry per layer; each entry carries a nodeSet so groupColorFor
+      // can match directly without going through parseQuery/termMatches (which
+      // would require a real `layer:` query field that doesn't exist in the CLI).
+      return [...byLayer.entries()].sort((a, b) => a[0] - b[0]).map(([l, ids_]) => {
         const idx = Math.round((l / Math.max(maxLayer, 1)) * (palette.length - 1));
-        // Build a query that matches exactly these node ids.
-        // Use the first id as a representative query (id: is a substring match,
-        // so we emit one group per node to be precise - but cap at palette count).
-        if (ids_.length <= 5) {
-          for (const id of ids_) {
-            result.push({ query: "id:" + id, color: palette[idx] });
-          }
-        } else {
-          result.push({ query: "layer:" + l, color: palette[idx] });
-        }
-      }
-      return result;
+        return { query: "layer:" + l, color: palette[idx], nodeSet: new Set(ids_) };
+      });
     },
   },
 ];
@@ -1946,7 +2021,11 @@ function applyPreset(presetId) {
   if (!graph.relIndex) graph.relIndex = relationIndex();
   const newGroups = preset.groups();
   for (const g of newGroups) {
-    groups.push({ query: g.query, color: g.color, terms: parseQuery(g.query) });
+    // Preserve a nodeSet when the preset provides one (e.g. depth: direct id set,
+    // bypasses query grammar so the coloring works even for large layers).
+    const entry = { query: g.query, color: g.color, terms: parseQuery(g.query) };
+    if (g.nodeSet) entry.nodeSet = g.nodeSet;
+    groups.push(entry);
   }
   renderGroups();
   draw();
@@ -2007,7 +2086,9 @@ async function boot() {
   // A projection is shown when no fragment directives are present (no view/q/node)
   // and the graph has project nodes whose count is <= 50.
   const bootParams = hashParams();
-  const hasFragmentDirective = !!(bootParams.view || bootParams.q || bootParams.node);
+  // #data= and #src= mean the user (or `magus graph open`) loaded a specific graph:
+  // show its full detail, not the collapsed projects-only projection.
+  const hasFragmentDirective = !!(bootParams.view || bootParams.q || bootParams.node || bootParams.data || bootParams.src);
   if (!hasFragmentDirective) {
     // Try to build a projection; if it applies, set projectionUnfolded = false.
     const ps = buildProjectionSet();
@@ -2075,6 +2156,13 @@ async function boot() {
       startSimulation();
     }
   }
+  // Park hidden nodes so the force sim does not waste cycles on the full soup
+  // while the default projection is active (only project nodes are visible).
+  if (!projectionUnfolded && projectionSet) {
+    for (const n of graph.nodes) {
+      if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
+    }
+  }
 
   setupZoomDrag();
   // applyDeepLinks handles q= and node= (layout= is handled above in boot; the
@@ -2083,6 +2171,8 @@ async function boot() {
 
   // Phase 5: emit empty-state suggestion chips.
   renderSuggestions();
+  // Reveal the "What's slow?" (critical) view only when the graph has DurationMs data.
+  syncConditionalViews();
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
