@@ -28,7 +28,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 1 | `magus query kind:project` | `.` |
+| project | 1 | `magus query kind:project` | `website` |
 | target | 14 | `magus query kind:target` | `generate`, `preflight`, `ci` |
 | spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
 | op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |

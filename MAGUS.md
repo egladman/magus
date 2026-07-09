@@ -30,7 +30,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `.`, `website`, `gopherbuzz` |
+| project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `magus`, `website`, `gopherbuzz` |
 | target | 54 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `image-build` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
 | op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
@@ -926,7 +926,7 @@ graph LR
   style entry_cluster fill:transparent,stroke:transparent
 ```
 
-[Explore this project's graph interactively](https://eli.gladman.cc/magus/graph/#data=H4sIAAAAAAAC_5RWzY7jNgx-FcKXmbSOs4ve0ksHbTFboH9AZ9HDbrAjS7StGVkySDlZ7yBAH6JP2CcpKMeJZ5K221tCUdTHj-RHP2UGK-tttMFn6-yuQYiKaoxgsENv0OsBalJdA5YhNgitqnsuPKJh-O7mFkIFCjoKD6jjFY_HlXW4BlS6AR8MylU1xb1WHvBjFyiigar3Wp5e5KM3mhpBzd-2EXRou8DIBfwQJRR-jKS0XOeootXKuQEqCu0JnwAADj1pzIGDROEm7BhwizSMz_z1x59gvXa9sb6GMsQGFLU8JkS9j7ZFKEl53SRf5Q1UTtUMyg9ziHrQDuF611jdJAjUe-hUbIBQWGEwPckbxnKnom4WRZZnB8o4W797ysQ7W2c7LNlGzPIMfW09Zuus7D99yvJMaBxdvWrF3hFWztZNzPb50diaZY0eSaUYJujnNiCsCLlBhp9ubt_-VrQGruOp5FpF5UINX54VfzHxa2cVPjIb1cBgPbigHzliBzsbRybGwFzMQepG-RpdqM-xnh8B4fST4ds3Nz_ffv_jL7cCPAEidKgYefVFMajW5dARMtJW2Jb33731BxezAcbUa7BFKlW07TNUZ1hmCLxBGptfqpNfoDH_Z5yJ4AnEhIEXeeonwrK3zozBtbPoI5S9Nw45F5uHOkUMHgzZKq5BgXaoPOgG9WPoIwTvBqgDMhhLcYCd3FKH5gc0NsJOsb-KQLgcc0GzGh-OCYQObWtjRCNteay8Tf0267P8RXtdqOMmWalNN2mXbWYEV4FaFS-8cLo983bWX_I9BJl7JgI_N6xM0zIix2OZjxaZWgbWZEu8knZeJhG5T2fvs6Io3mfwtL-HMrU5xIZCXzdwn-YBJM59LlOwXGJbojFooBXx43CK2ip6NGHnV-h1SLpjW5FCBkIObovPenICepmEfJbNPEdtj8ldaXs16bboWKAJrqoqTBKq7T084iCyV30t01wpzyCNJSVYJXZX8sZBoUMFo9CR_MUx9thWIu0GrOid9Gpq3QVsrYKpFpca7FDpqYxn6aSDZefUUFPovZlV7vnB82H6HcsbZmxLN4D1EakjjEjpbHbHBWV4DXfWD7chbRrrkKEoVro1q0TwzJsjKZkFiRgkq9XpMDkXO8XtONrjLoq6kSqL-QN-RF08MNSuTytRh86igRLZyo6M_z5-MlsUmD-8cHmaNoloVugapMPKGLX3OCH7c1JbpFbZl4werJMOpUS26E0g6ejDobMlKRrg-oFXB9tydJIMl-_7V6--wsn7m9evFyNlSeYmuUkEKmaMxxjFA_8HC2dJNO6BX2QgpsvwG1s3KZCgnOcgVy4kMPf_jCwkyv9KQXbVaeWkf8d9E3z6eBEbp0cgbJHgzd3dr9PyWJ585aspaF6VssBHaYYlNMqbAapAspuVSy6wC_RYZPvNBJI_yLffu3n3bPab_d8BAAD__5JbSSAbCgAA)
+[Explore this project's graph interactively](https://eli.gladman.cc/magus/graph/#data=H4sIAAAAAAAC_4xW227jRg9-FUI3if9flnfRO_emQVtkC_QENIte7Bqb0QwlTTKaEciRvdrAQB-iT9gnKTiybCV229zZJIf8-PGkp8xgZb2NNvhsnd01CFFRjREMdugNej1ATaprwDLEBqFVdc-FRzQM393cQqhAQUfhAXW84lFdWYdrQKUb8MGgPFWT32vlAT93gSIaqHqvJfQiH63R1AhqHttG0KHtAiMX8EMUV_g5ktLynKOKVivnBqgotCd8AgA49KQxBw7ihZuwY8At0jCG-euPP8F67XpjfQ1liA0oanlMiHofbYtQkvK6SbbKG6icqhmUH-YQ9aAdwvWusbpJEKj30KnYAKGwwmB6khjGcqeibhZFlmcHyjhbf3jKxDpbZzss2UbM8gx9bT1m66zsv3zJ8kxoHE29akXeEVbO1k3M9vlR2JpljR5JJR8m6OcyIKwIuUGGn25u3_9WtAau46nkWkXlQg3_Pyv-YuLXzip8ZDaqgcF6cEE_csQOdjaOTIyOuZiD1I3yNbpQn2M9VwHh9JPh23c3P99-_-MvtwI8ASJ0qBh59b9iUK3LoSNkpK2wLfE_vPcHE7MBxtRrsEUqVbTtM1RnWGYIvEEam1-qk1-gMf9nnIngCcSEgRd56ifCsrfOjM61s-gjlL03DjkXmYc6eQweDNkqrkGBdqg86Ab1Y-gjBO8GqAMyGEtxgJ28UofmBzQ2wk6xv4pAuBxzQbMaA8cEQoe2tTGikbY8Vt6mfpv1Wf6ivS7UcZOk1KaXtMs2M4KrQK2KFyKcXs-snfWXbA9O5paJwNe6lWlaRuR4LPNRIlPLwJpsiVfSzsu0RO6T7mNWFMXHDJ7291CmNofYUOjrBu7TPID4uc9lCpZLbEs0Bg20svw4nLy2ih5N2PkVeh3S3rGtrEIGQg5ui896cgJ6mYR8ls08R22PyV1pezXtbdljgSa4qqowrVBt7-ERB1l71dcyzZXyDNJYUoJVYnclMQ4bOlQwLjqSvzj6HttKVrsBK_tOejW17gK2VsFUi0sNdqj0VMazdJJi2Tk11BR6b2aVe654Pky_Y3nDjG3pBrA-InWEESnpZm9cUIbXcGf9cBvSpbEOGYpipVuzSgTPrDmSklkQj0GyWp2UybjYKW7H0R5vUdSNVFnEn_Az6uKBoXZ9Ook6dBYNlMhWbmT89_GT2aLA_OmFydN0SWRnha5BOpyMcfceJ2R_TmqL1Cr7ktGDdNpDKZEtehNIOvqgdLYkRQNcP_BqVK4OKslw-bF_8-YrnKy_eft2MVKW1ty0bhKBihkjzx7_BwtnSTTugV9kIKLL8BtbN8mRoLyQg7ycJzC3f0UWh-evT0Fu1enkpH_HexN8-ngRGacgELZI8O7u7tfpeCxPtvLVFDSvSjng42qGJTTKmwGqQHKblUsmsAv0WGT7zQSSP8m334d592z2m_3fAQAA__8FpMFLGwoAAA)
 
 ### `generate`
 
@@ -1035,7 +1035,7 @@ magus run build-playground website  # from the workspace root
 
 ### `build-mermaid`
 
-build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -> mermaid@11) into the committed gen/assets/mermaid.js.
+build-mermaid bundles the vendored mermaid library (js/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.
 
 **Defaults**
 
@@ -1049,7 +1049,7 @@ magus run build-mermaid website  # from the workspace root
 
 ### `build-hljs`
 
-build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11) into the committed gen/assets/hljs.js.
+build-hljs bundles the vendored highlight.js library (js/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.
 
 **Defaults**
 
