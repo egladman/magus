@@ -63,6 +63,7 @@ func TestKnownKeys(t *testing.T) {
 		"knowledge.workspaces": true, "knowledge.max_size_mb": true, "knowledge.vcs.enabled": true, "knowledge.vcs.max_commits": true,
 		"log.format": true, "log.level": true, "log.silent": true, "concurrency": true, "history_path": true, "dry_run": true,
 		"mcp.address":       true,
+		"bridge.enabled":    true,
 		"telemetry.enabled": true, "telemetry.endpoint": true,
 		"telemetry.protocol": true, "telemetry.insecure": true,
 		"telemetry.service_name": true,

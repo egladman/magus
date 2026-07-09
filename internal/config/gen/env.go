@@ -142,6 +142,10 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_MCP_ADDRESS"); v != "" {
 		cfg.MCP.Address = v
 	}
+	if v := getenv("MAGUS_BRIDGE_ENABLED"); v != "" {
+		b := parseBoolEnv(v, cfg.Bridge.Enabled != nil && *cfg.Bridge.Enabled)
+		cfg.Bridge.Enabled = &b
+	}
 	if v := getenv("MAGUS_REPORT_FILTER"); v != "" {
 		parts := strings.Split(v, ",")
 		out := parts[:0]

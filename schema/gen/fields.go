@@ -252,6 +252,14 @@ func init() {
 			Usage:    "MAGUS_MCP_ADDRESS",
 		},
 		{
+			GoPath:   "Bridge.Enabled",
+			YamlPath: "bridge.enabled",
+			EnvVar:   "MAGUS_BRIDGE_ENABLED",
+			Flag:     FlagNames{Long: ""},
+			Kind:     KindBoolPtr,
+			Usage:    "MAGUS_BRIDGE_ENABLED",
+		},
+		{
 			GoPath:   "Report.Filter",
 			YamlPath: "report.filter",
 			EnvVar:   "MAGUS_REPORT_FILTER",

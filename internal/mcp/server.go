@@ -25,7 +25,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/mcp/auth"
+	"github.com/egladman/magus/internal/webbridge"
 )
 
 // DefaultAddress is the default host:port for the MCP Streamable HTTP server.
@@ -159,6 +161,51 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 	for path, h := range opts.HealthRoutes {
 		mux.Handle(path, h)
 	}
+
+	// Web bridge: three frozen GET routes for the browser Graph Explorer.
+	// Mounted only when:
+	//   1. bridge.enabled is unset or true (opt-out via bridge.enabled: false)
+	//   2. The bind address is loopback (non-loopback binding refuses the mount)
+	if opts.Config.Bridge.Enabled == nil || *opts.Config.Bridge.Enabled {
+		if !addr.Addr().IsLoopback() {
+			log.Warn("[BRIDGE] refusing to mount web bridge on non-loopback address; set bridge.enabled: false to suppress this warning",
+				slog.String("addr", addr.String()))
+		} else {
+			// Start a file watcher for SSE graph-invalidation events. Non-fatal:
+			// if the watcher cannot start, the SSE stream emits only heartbeats.
+			var inv <-chan struct{}
+			bWatcher, werr := watch.New(ctx,
+				watch.WithRoot(opts.Magus.Root()),
+				watch.WithIgnore(watch.BuiltinIgnore),
+			)
+			if werr != nil {
+				log.Warn("[BRIDGE] file watcher unavailable; /api/v1/events will emit heartbeats only",
+					slog.String("error", werr.Error()))
+			} else {
+				inv = webbridge.WatchInvalidate(ctx, bWatcher)
+				go func() {
+					<-ctx.Done()
+					_ = bWatcher.Close()
+				}()
+			}
+
+			siteOrigin, _ := opts.siteOrigin()
+			bridgeOpts := webbridge.Options{
+				Magus:           opts.Magus,
+				Config:          opts.Config,
+				Addr:            addr,
+				SiteOrigin:      siteOrigin,
+				GraphInvalidate: inv,
+			}
+			// The bridge routes share the same auth and DNS-rebind middleware as /mcp.
+			bridgeMux := http.NewServeMux()
+			webbridge.Mount(bridgeMux, bridgeOpts)
+			// Wrap every /api/ route with rebind + auth.
+			mux.Handle("/api/", dnsRebindGuard(allowed, auth.Guard(auth.Load, bridgeMux)))
+			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
+		}
+	}
+
 	httpServer := &http.Server{Addr: addr.String(), Handler: mux}
 
 	errCh := make(chan error, 1)

@@ -116,6 +116,12 @@ func buildDaemonInfo(ctx context.Context, _ types.WorkspaceRepository) doctor.Da
 	sockDir := proc.SockDir()
 	di := doctor.DaemonInfo{SockDir: sockDir}
 
+	// Populate bridge fields from resolved config. BridgeEnabled is true unless
+	// explicitly set to false (mirrors how MCP.Enabled works).
+	mcpAddr, _ := mcpAddrPortString()
+	di.MCPAddr = mcpAddr
+	di.BridgeEnabled = globalCfg.Bridge.Enabled == nil || *globalCfg.Bridge.Enabled
+
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil {
 		return di
@@ -140,4 +146,14 @@ func buildDaemonInfo(ctx context.Context, _ types.WorkspaceRepository) doctor.Da
 		})
 	}
 	return di
+}
+
+// mcpAddrPortString returns the configured MCP address as a string.
+// Falls back gracefully to the empty string when no binary is built with mcp.
+func mcpAddrPortString() (string, error) {
+	raw := globalCfg.MCP.Address
+	if raw == "" {
+		raw = "127.0.0.1:7391"
+	}
+	return raw, nil
 }

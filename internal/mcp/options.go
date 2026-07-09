@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"net/url"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
@@ -62,4 +63,18 @@ func (o ServerOptions) httpAddr() netip.AddrPort {
 		return o.HTTPAddr
 	}
 	return defaultAddrPort
+}
+
+// defaultExploreURL mirrors cmd/magus/graph_open.go:defaultExploreURL.
+// Duplicated here to avoid importing cmd/magus; keep in sync.
+const defaultExploreURL = "https://eli.gladman.cc/magus/graph/"
+
+// siteOrigin returns the scheme://host origin of the hosted Graph Explorer.
+// Used to set the bridge's CORS allowed origin.
+func (o ServerOptions) siteOrigin() (string, error) {
+	u, err := url.Parse(defaultExploreURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", nil
+	}
+	return u.Scheme + "://" + u.Host, nil
 }

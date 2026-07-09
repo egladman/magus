@@ -60,6 +60,10 @@ type DaemonInfo struct {
 	Workspaces []LoadedWorkspace
 	// SockDir is the directory scanned for socket files.
 	SockDir string
+	// MCPAddr is the host:port the MCP server listens on, for bridge reachability checks.
+	MCPAddr string
+	// BridgeEnabled is true when the bridge is not explicitly disabled in config.
+	BridgeEnabled bool
 }
 
 // LoadedWorkspace describes one workspace slot in the daemon.
@@ -161,6 +165,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkStaleShadowAcks(),
 		r.checkVCSBaseRef(),
 		r.checkWorkspaceRegistration(),
+		r.checkBridgeReachability(),
 	)
 
 	for _, c := range out.Checks {

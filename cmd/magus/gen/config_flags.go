@@ -49,6 +49,7 @@ var ConfigFlags = []ConfigFlag{
 	{"vcs-base-ref", "MAGUS_VCS_BASE_REF", "string"},
 	{"", "MAGUS_MCP_ENABLED", "boolptr"},
 	{"mcp-address", "MAGUS_MCP_ADDRESS", "string"},
+	{"", "MAGUS_BRIDGE_ENABLED", "boolptr"},
 	{"", "MAGUS_REPORT_FILTER", "stringslice"},
 	{"log-format", "MAGUS_LOG_FORMAT", "string"},
 	{"log-level", "MAGUS_LOG_LEVEL", "string"},

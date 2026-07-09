@@ -22,6 +22,7 @@ type Config struct {
 	Daemon    Daemon    `yaml:"daemon"`
 	VCS       VCS       `yaml:"vcs"`
 	MCP       MCP       `yaml:"mcp"`
+	Bridge    Bridge    `yaml:"bridge"`
 	Report    Report    `yaml:"report"`
 	Log       Log       `yaml:"log"`
 	Hints     Hints     `yaml:"hints"`
@@ -180,6 +181,15 @@ type Watch struct {
 type MCP struct {
 	Enabled *bool  `yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
 	Address string `yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
+}
+
+// Bridge controls the read-only browser web bridge (requires -tags mcp).
+// The bridge mounts three GET-only endpoints on the MCP HTTP server
+// (/api/v1/graph, /api/v1/status, /api/v1/events) so a browser running the
+// hosted Graph Explorer can read the current workspace. Loopback only; bearer
+// auth; no mutation ever.
+type Bridge struct {
+	Enabled *bool `yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
 }
 
 // Daemon controls the proc server's listen address and multi-workspace behaviour.
