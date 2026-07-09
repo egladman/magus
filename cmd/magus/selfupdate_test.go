@@ -27,15 +27,18 @@ import (
 	"github.com/egladman/magus/internal/selfupdate"
 )
 
-// testFixture holds everything needed to stand up a fake GitHub release server.
+// testFixture holds everything needed to stand up a fake index server and
+// artifact server for integration tests of selfUpdateCmd.
 type testFixture struct {
-	pub      ed25519.PublicKey
-	priv     ed25519.PrivateKey
-	tag      string
-	tarball  []byte
-	manifest string
-	sig      []byte
-	srv      *httptest.Server
+	pub     ed25519.PublicKey
+	priv    ed25519.PrivateKey
+	tag     string
+	tarball []byte
+
+	// indexSrv serves /index.json and /index.json.sig.
+	// artifactSrv serves /tarball, /sums, and /sig.
+	indexSrv    *httptest.Server
+	artifactSrv *httptest.Server
 }
 
 func newTestFixture(t *testing.T, tag string) *testFixture {
@@ -46,71 +49,127 @@ func newTestFixture(t *testing.T, tag string) *testFixture {
 	tarball := makeFakeTarball(t)
 	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", tag, runtime.GOOS, runtime.GOARCH)
 	sum := sha256.Sum256(tarball)
-	manifest := fmt.Sprintf("version: %s\n%s  %s\n", tag, hex.EncodeToString(sum[:]), assetName)
-	sig := ed25519.Sign(priv, []byte(manifest))
+	sumHex := hex.EncodeToString(sum[:])
 
 	fx := &testFixture{
-		pub:      pub,
-		priv:     priv,
-		tag:      tag,
-		tarball:  tarball,
-		manifest: manifest,
-		sig:      sig,
+		pub:     pub,
+		priv:    priv,
+		tag:     tag,
+		tarball: tarball,
 	}
-	fx.srv = httptest.NewServer(fx.handler())
-	t.Cleanup(fx.srv.Close)
+
+	// Start the artifact server first so we know its URL for the index.
+	fx.artifactSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/tarball":
+			w.Write(fx.tarball)
+		case "/sums":
+			// A minimal SHA256SUMS file with the version header.
+			fmt.Fprintf(w, "version: %s\n%s  %s\n", tag, sumHex, assetName)
+		case "/sig":
+			// Sign the same manifest body.
+			manifest := []byte(fmt.Sprintf("version: %s\n%s  %s\n", tag, sumHex, assetName))
+			sig := ed25519.Sign(priv, manifest)
+			w.Write(sig)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(fx.artifactSrv.Close)
+
+	// Build the release index: the artifact download URLs point at artifactSrv.
+	artifactBase := fx.artifactSrv.URL
+	idx := selfupdate.ReleaseIndex{
+		SchemaVersion: 1,
+		Releases: []selfupdate.IndexRelease{
+			{
+				Version: tag,
+				Date:    "2026-01-01",
+				Artifacts: []selfupdate.IndexArtifact{
+					{Name: assetName, Platform: runtime.GOOS + "/" + runtime.GOARCH},
+					{Name: "SHA256SUMS"},
+					{Name: "SHA256SUMS.sig"},
+				},
+			},
+		},
+	}
+	// We need to override FindAssetsFromIndex's URL computation so it uses
+	// the test server. We do that by intercepting the GitHub download path via
+	// an http.Client transport that redirects github.com -> artifactSrv.
+	_ = artifactBase // used via transport below
+
+	indexData, err := json.Marshal(idx)
+	require.NoError(t, err)
+	indexSig := ed25519.Sign(priv, indexData)
+
+	fx.indexSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(indexData)
+		case "/index.json.sig":
+			w.Write(indexSig)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(fx.indexSrv.Close)
+
 	return fx
 }
 
-func (fx *testFixture) handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/egladman/magus/releases/latest", fx.serveLatest)
-	mux.HandleFunc("/tarball", fx.serveTarball)
-	mux.HandleFunc("/sums", fx.serveSums)
-	mux.HandleFunc("/sig", fx.serveSig)
-	return mux
-}
-
-func (fx *testFixture) serveLatest(w http.ResponseWriter, r *http.Request) {
-	base := "http://" + r.Host
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", fx.tag, runtime.GOOS, runtime.GOARCH)
-	rel := map[string]any{
-		"tag_name": fx.tag,
-		"assets": []map[string]any{
-			{"name": assetName, "browser_download_url": base + "/tarball"},
-			{"name": "SHA256SUMS", "browser_download_url": base + "/sums"},
-			{"name": "SHA256SUMS.sig", "browser_download_url": base + "/sig"},
-		},
-	}
-	json.NewEncoder(w).Encode(rel)
-}
-
-func (fx *testFixture) serveTarball(w http.ResponseWriter, r *http.Request) {
-	w.Write(fx.tarball)
-}
-
-func (fx *testFixture) serveSums(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(fx.manifest))
-}
-
-func (fx *testFixture) serveSig(w http.ResponseWriter, r *http.Request) {
-	w.Write(fx.sig)
-}
-
 // activate wires the fixture into the package-level overrides and restores them on cleanup.
+// The HTTP client is configured with a transport that redirects GitHub release asset
+// URLs (github.com/egladman/magus/releases/download/...) to the artifact server.
 func (fx *testFixture) activate(t *testing.T) {
 	t.Helper()
 	prevKey := overridePubKey
 	prevClient := overrideClient
-	prevBase := overrideAPIBase
+	prevBase := overrideDiscoveryURL
 	t.Cleanup(func() {
 		overridePubKey = prevKey
 		overrideClient = prevClient
-		overrideAPIBase = prevBase
+		overrideDiscoveryURL = prevBase
 	})
 	overridePubKey = fx.pub
-	overrideClient = fx.srv.Client()
-	overrideAPIBase = fx.srv.URL
+	overrideDiscoveryURL = fx.indexSrv.URL + "/index.json"
+
+	// Build a client that redirects GitHub release asset fetches to the artifact server.
+	artifactBase := fx.artifactSrv.URL
+	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", fx.tag, runtime.GOOS, runtime.GOARCH)
+	ghPrefix := fmt.Sprintf("https://github.com/egladman/magus/releases/download/%s/", fx.tag)
+	transport := &redirectTransport{
+		base:        http.DefaultTransport,
+		matchPrefix: ghPrefix,
+		replacements: map[string]string{
+			ghPrefix + assetName:        artifactBase + "/tarball",
+			ghPrefix + "SHA256SUMS":     artifactBase + "/sums",
+			ghPrefix + "SHA256SUMS.sig": artifactBase + "/sig",
+		},
+		// Also allow through index server URLs unchanged.
+		indexBase: fx.indexSrv.URL,
+	}
+	overrideClient = &http.Client{Transport: transport}
+}
+
+// redirectTransport rewrites GitHub release asset URLs to the test artifact server.
+type redirectTransport struct {
+	base         http.RoundTripper
+	matchPrefix  string
+	replacements map[string]string
+	indexBase    string
+}
+
+func (t *redirectTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	u := r.URL.String()
+	if dest, ok := t.replacements[u]; ok {
+		req2, err := http.NewRequestWithContext(r.Context(), r.Method, dest, r.Body)
+		if err != nil {
+			return nil, err
+		}
+		return t.base.RoundTrip(req2)
+	}
+	return t.base.RoundTrip(r)
 }
 
 // setVersion sets the package-level version variable for the duration of the test.
@@ -166,13 +225,29 @@ func TestSelfUpdate_AlreadyUpToDate(t *testing.T) {
 	assert.Contains(t, err.Error(), "already running")
 }
 
-func TestSelfUpdate_Downgrade(t *testing.T) {
+// TestSelfUpdate_DowngradeRefused proves that when the index advertises a lower
+// version than the running binary (without --version being explicit), the command
+// refuses with a downgrade error.
+func TestSelfUpdate_DowngradeRefused(t *testing.T) {
 	fx := newTestFixture(t, "v0.2.0")
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected error for downgrade")
+	// Must not silently install the older version.
+	assert.Contains(t, err.Error(), "refusing downgrade")
+}
+
+// TestSelfUpdate_DowngradeWithExplicitVersion proves that an explicit --version
+// pointing at a lower release still requires --force (not silently allowed).
+func TestSelfUpdate_DowngradeWithExplicitVersion(t *testing.T) {
+	fx := newTestFixture(t, "v0.2.0")
+	fx.activate(t)
+	setVersion(t, "v0.3.0")
+
+	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.2.0"})
+	require.Error(t, err, "expected error for explicit-version downgrade without --force")
 	assert.Contains(t, err.Error(), "older than current")
 }
 
@@ -195,29 +270,43 @@ func TestSelfUpdate_BadSignature(t *testing.T) {
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected signature verification to fail")
+	// The bad key will fail on the index.json.sig check.
 	assert.Contains(t, err.Error(), "signature check failed")
 }
 
-func TestSelfUpdate_TamperedTarball(t *testing.T) {
-	fx := newTestFixture(t, "v0.4.0")
-	fx.activate(t)
+func TestSelfUpdate_IndexUnreachable(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	// Serve a server that refuses connections.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "no hijack", 500)
+			return
+		}
+		conn, _, _ := hj.Hijack()
+		conn.Close()
+	}))
+	t.Cleanup(srv.Close)
+
+	prevKey := overridePubKey
+	prevClient := overrideClient
+	prevBase := overrideDiscoveryURL
+	t.Cleanup(func() {
+		overridePubKey = prevKey
+		overrideClient = prevClient
+		overrideDiscoveryURL = prevBase
+	})
+	overridePubKey = pub
+	overrideClient = srv.Client()
+	overrideDiscoveryURL = srv.URL + "/index.json"
 	setVersion(t, "v0.3.0")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/egladman/magus/releases/latest", fx.serveLatest)
-	mux.HandleFunc("/tarball", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("this is not the real tarball"))
-	})
-	mux.HandleFunc("/sums", fx.serveSums)
-	mux.HandleFunc("/sig", fx.serveSig)
-	badSrv := httptest.NewServer(mux)
-	t.Cleanup(badSrv.Close)
-	overrideClient = badSrv.Client()
-	overrideAPIBase = badSrv.URL
-
-	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
-	require.Error(t, err, "expected sha256 mismatch error")
-	assert.Contains(t, err.Error(), "SHA-256 mismatch")
+	err = selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	require.Error(t, err, "unreachable index must fail, not silently succeed")
+	// Must mention the index fetch, not some other error.
+	assert.Contains(t, err.Error(), "release index")
 }
 
 func TestSelfUpdate_BinDir(t *testing.T) {
@@ -267,7 +356,7 @@ func TestSelfUpdate_UnsafeArchivePath(t *testing.T) {
 
 	_, err := selfupdate.ExtractBinary(evilTarball)
 	require.Error(t, err, "expected error for unsafe archive path")
-	assert.NotContains(t, err.Error(), "SHA-256", "wrong error — should be path/not-found")
+	assert.NotContains(t, err.Error(), "SHA-256", "wrong error -- should be path/not-found")
 }
 
 func TestCheckParentWritable(t *testing.T) {

@@ -1,6 +1,20 @@
 //go:build !noselfupdate
 
 // Package selfupdate downloads, verifies, and installs magus release binaries.
+//
+// Discovery reads ONLY the site's index.json (gen/public/release/index.json),
+// whose Ed25519 signature (index.json.sig) is verified against the pinned
+// release key before any data is trusted. The GitHub API is not used. This
+// eliminates the unauthenticated 60 req/hr rate limit that blocked CI.
+//
+// The discovery URL is overridable via Options.DiscoveryURL or the
+// MAGUS_UPDATE_URL environment variable. An organisation that self-hosts the
+// site (see magus.yaml selfupdate.discovery_url) gets a private update channel
+// for free: point that URL at the hosted copy of index.json and index.json.sig.
+//
+// Artifact download URLs come from the manifest inside the index; they may
+// point at GitHub release assets. That is artifact hosting, not discovery, and
+// is unaffected by this change.
 package selfupdate
 
 import (
@@ -12,6 +26,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +37,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/retry"
 	"golang.org/x/mod/semver"
 )
@@ -34,13 +48,18 @@ const (
 	MaxManifest  = 64 << 10  // 64 KB
 	MaxSig       = 1 << 10   // 1 KB
 	MaxTarball   = 200 << 20 // 200 MB
+	MaxIndex     = 1 << 20   // 1 MB
+
+	// DefaultDiscoveryURL is the canonical URL for the machine-readable release
+	// index. Override via Options.DiscoveryURL or MAGUS_UPDATE_URL.
+	DefaultDiscoveryURL = "https://eli.gladman.cc/magus/public/release/index.json"
 )
 
 // Options configures an update operation. PubKey is required; manifest verification fails closed when nil.
 type Options struct {
-	PubKey     ed25519.PublicKey
-	HTTPClient *http.Client
-	APIBase    string
+	PubKey       ed25519.PublicKey
+	HTTPClient   *http.Client
+	DiscoveryURL string // overrides DefaultDiscoveryURL; also MAGUS_UPDATE_URL env var
 }
 
 func (o Options) httpClient() *http.Client {
@@ -50,60 +69,108 @@ func (o Options) httpClient() *http.Client {
 	return &http.Client{Timeout: 60 * time.Second}
 }
 
-func (o Options) apiBase() string {
-	if o.APIBase != "" {
-		return o.APIBase
+func (o Options) discoveryURL() string {
+	if o.DiscoveryURL != "" {
+		return o.DiscoveryURL
 	}
-	return "https://api.github.com"
+	if env := os.Getenv("MAGUS_UPDATE_URL"); env != "" {
+		return env
+	}
+	return DefaultDiscoveryURL
 }
 
-// GitHubRelease is the shape of a GitHub release API response.
-type GitHubRelease struct {
-	TagName string `json:"tag_name"`
-	Assets  []struct {
-		Name               string `json:"name"`
-		BrowserDownloadURL string `json:"browser_download_url"`
-	} `json:"assets"`
+// ReleaseIndex is the JSON shape of gen/public/release/index.json (schema_version 1).
+// Schema is frozen at birth; additive changes only.
+type ReleaseIndex struct {
+	SchemaVersion int            `json:"schema_version"`
+	Releases      []IndexRelease `json:"releases"`
+}
+
+// IndexRelease represents one entry inside ReleaseIndex.Releases.
+type IndexRelease struct {
+	Version   string          `json:"version"`
+	Date      string          `json:"date"`
+	Yanked    bool            `json:"yanked,omitempty"`
+	Artifacts []IndexArtifact `json:"artifacts"`
+	// Notes and Body are present but not consumed by selfupdate.
+}
+
+// IndexArtifact is one artifact line inside IndexRelease.Artifacts.
+type IndexArtifact struct {
+	Name     string `json:"name"`
+	Platform string `json:"platform,omitempty"`
+	Size     string `json:"size,omitempty"`
+	SHA256   string `json:"sha256,omitempty"`
+	// DownloadURL is not in the JSON schema; it is synthesised from the
+	// release page URL (artifact hosting on GitHub releases).
+	DownloadURL string `json:"-"`
+}
+
+// FetchAndVerifyIndex fetches index.json, verifies its Ed25519 signature
+// against opts.PubKey, and returns the parsed index. The signature file is
+// fetched from the same base URL with ".sig" appended.
+//
+// If the index is unreachable, FetchAndVerifyIndex returns an error and stops.
+// There is no silent fallback.
+func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, error) {
+	if opts.PubKey == nil {
+		return nil, errors.New("no public key: set Options.PubKey or embed a release key")
+	}
+	indexURL := opts.discoveryURL()
+	sigURL := indexURL + ".sig"
+
+	indexBytes, err := FetchLimited(ctx, indexURL, MaxIndex, opts)
+	if err != nil {
+		return nil, fmt.Errorf("release index unreachable (%s): %w", indexURL, err)
+	}
+	sigBytes, err := FetchLimited(ctx, sigURL, MaxSig, opts)
+	if err != nil {
+		return nil, fmt.Errorf("release index signature unreachable (%s): %w", sigURL, err)
+	}
+	if !ed25519.Verify(opts.PubKey, indexBytes, sigBytes) {
+		return nil, errors.New("index signature check failed: index.json.sig does not match index.json")
+	}
+
+	var idx ReleaseIndex
+	if err := json.Unmarshal(indexBytes, &idx); err != nil {
+		return nil, fmt.Errorf("parse release index: %w", err)
+	}
+	if idx.SchemaVersion != 1 {
+		return nil, fmt.Errorf("unsupported release index schema_version %d (want 1)", idx.SchemaVersion)
+	}
+	if len(idx.Releases) == 0 {
+		return nil, errors.New("release index contains no releases")
+	}
+	return &idx, nil
+}
+
+// SelectRelease returns the IndexRelease for the requested tag from idx.
+// When tag is empty, the newest non-yanked release is returned.
+func SelectRelease(idx *ReleaseIndex, tag string) (*IndexRelease, error) {
+	if tag == "" {
+		// Releases are newest-first per the index schema.
+		for i := range idx.Releases {
+			if !idx.Releases[i].Yanked {
+				return &idx.Releases[i], nil
+			}
+		}
+		return nil, errors.New("no non-yanked release found in index")
+	}
+	for i := range idx.Releases {
+		if idx.Releases[i].Version == tag {
+			if idx.Releases[i].Yanked {
+				return nil, fmt.Errorf("release %s has been yanked", tag)
+			}
+			return &idx.Releases[i], nil
+		}
+	}
+	return nil, fmt.Errorf("release %s not found in index", tag)
 }
 
 // Manifest holds the verified release version and asset hashes.
 type Manifest struct {
 	Version string
-	Hashes  map[string]string // asset filename → lowercase hex sha256
-}
-
-// FetchRelease fetches the release metadata for a tag (or the latest release
-// when tag is empty).
-func FetchRelease(ctx context.Context, tag string, opts Options) (*GitHubRelease, error) {
-	var u string
-	if tag == "" {
-		u = fmt.Sprintf("%s/repos/%s/%s/releases/latest",
-			opts.apiBase(), ReleaseOwner, ReleaseRepo)
-	} else {
-		u = fmt.Sprintf("%s/repos/%s/%s/releases/tags/%s",
-			opts.apiBase(), ReleaseOwner, ReleaseRepo, tag)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := opts.httpClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned %s", resp.Status)
-	}
-	var rel GitHubRelease
-	if err := codec.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rel); err != nil {
-		return nil, fmt.Errorf("decode release JSON: %w", err)
-	}
-	if rel.TagName == "" {
-		return nil, errors.New("release has no tag_name")
-	}
-	return &rel, nil
+	Hashes  map[string]string // asset filename -> lowercase hex sha256
 }
 
 // Assets holds the download URLs for a release's tarball, SHA256SUMS manifest, and Ed25519 signature.
@@ -113,20 +180,37 @@ type Assets struct {
 	Sig     string
 }
 
-// FindAssets locates the tarball, checksum file, and signature file in a
-// release by their expected names.
-func FindAssets(rel *GitHubRelease, assetName string) (Assets, error) {
-	var a Assets
-	for _, ra := range rel.Assets {
-		switch ra.Name {
-		case assetName:
-			a.Tarball = ra.BrowserDownloadURL
-		case "SHA256SUMS":
-			a.Sums = ra.BrowserDownloadURL
-		case "SHA256SUMS.sig":
-			a.Sig = ra.BrowserDownloadURL
-		}
+// FindAssetsFromIndex locates the tarball, checksum file, and signature file
+// within an IndexRelease. Download URLs are derived from the release page URL
+// pattern (GitHub release assets).
+func FindAssetsFromIndex(rel *IndexRelease, assetName string) (Assets, error) {
+	// Build a name->artifact map for O(n) lookup.
+	byName := make(map[string]IndexArtifact, len(rel.Artifacts))
+	for _, a := range rel.Artifacts {
+		byName[a.Name] = a
 	}
+
+	// Derive download URLs: GitHub release assets for this version.
+	// Artifact hosting may be GitHub regardless of where the index is served.
+	ghBase := fmt.Sprintf(
+		"https://github.com/%s/%s/releases/download/%s",
+		ReleaseOwner, ReleaseRepo, rel.Version,
+	)
+	urlFor := func(name string) string {
+		return ghBase + "/" + name
+	}
+
+	var a Assets
+	if _, ok := byName[assetName]; ok {
+		a.Tarball = urlFor(assetName)
+	}
+	if _, ok := byName["SHA256SUMS"]; ok {
+		a.Sums = urlFor("SHA256SUMS")
+	}
+	if _, ok := byName["SHA256SUMS.sig"]; ok {
+		a.Sig = urlFor("SHA256SUMS.sig")
+	}
+
 	var missing []string
 	if a.Tarball == "" {
 		missing = append(missing, assetName)
@@ -139,7 +223,7 @@ func FindAssets(rel *GitHubRelease, assetName string) (Assets, error) {
 	}
 	if len(missing) > 0 {
 		return a, fmt.Errorf("release %s is missing required assets: %s",
-			rel.TagName, strings.Join(missing, ", "))
+			rel.Version, strings.Join(missing, ", "))
 	}
 	return a, nil
 }
@@ -311,7 +395,7 @@ func Compare(a, b string) int {
 func PrintUpdateStatus(tagName, currentVersion string) {
 	switch Compare(tagName, currentVersion) {
 	case 1:
-		fmt.Printf("update available: %s → %s\n", currentVersion, tagName)
+		fmt.Printf("update available: %s -> %s\n", currentVersion, tagName)
 	case 0:
 		fmt.Printf("already up to date (%s)\n", currentVersion)
 	case -1:

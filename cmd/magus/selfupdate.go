@@ -20,13 +20,13 @@ import (
 
 // Overridable for tests (unexported; test files set them directly).
 var (
-	overridePubKey  []byte
-	overrideClient  *http.Client
-	overrideAPIBase string
+	overridePubKey       []byte
+	overrideClient       *http.Client
+	overrideDiscoveryURL string
 )
 
 func activeOpts() selfupdate.Options {
-	opts := selfupdate.Options{APIBase: overrideAPIBase, HTTPClient: overrideClient}
+	opts := selfupdate.Options{DiscoveryURL: overrideDiscoveryURL, HTTPClient: overrideClient}
 	if overridePubKey != nil {
 		opts.PubKey = ed25519.PublicKey(overridePubKey)
 	} else {
@@ -68,14 +68,27 @@ func selfCmdUsage() {
 
 // selfUpdateCmd implements `magus self update`: atomically replaces the running
 // binary with the latest (or a specified) release.
+//
+// Discovery reads ONLY the site's index.json. The GitHub API is not used.
+// MAGUS_UPDATE_URL overrides the discovery URL (e.g. for organisations that
+// self-host the site as a private update channel). If the index is unreachable,
+// the command fails with a clear error - there is no silent fallback.
+//
+// Downgrade/freeze protection: moving to a lower semver than the running binary
+// is refused unless --version is given explicitly (explicit opt-in) or --force
+// is set. When --version is omitted, the newest non-yanked release from the
+// index is used.
 func selfUpdateCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("self update", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus self update [flags]")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Download the latest magus release from GitHub, verify its Ed25519")
-		fmt.Fprintln(os.Stderr, "signature and SHA-256 hash, then atomically replace the running binary.")
+		fmt.Fprintln(os.Stderr, "Download the latest magus release, verify its Ed25519 signature and")
+		fmt.Fprintln(os.Stderr, "SHA-256 hash, then atomically replace the running binary.")
 		fmt.Fprintln(os.Stderr, "Without --bin-dir the running binary is replaced in place.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Discovery reads the release index at the site's public/release/index.json.")
+		fmt.Fprintln(os.Stderr, "Override with MAGUS_UPDATE_URL to use a private update channel.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
@@ -105,18 +118,48 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 
 	opts := activeOpts()
 
-	rel, err := selfupdate.FetchRelease(ctx, targetVer, opts)
+	// Fetch and verify the release index. Fails closed on unreachable or bad sig.
+	idx, err := selfupdate.FetchAndVerifyIndex(ctx, opts)
 	if err != nil {
-		return fmt.Errorf("fetch release: %w", err)
+		return fmt.Errorf("fetch release index: %w", err)
+	}
+
+	rel, err := selfupdate.SelectRelease(idx, targetVer)
+	if err != nil {
+		return err
 	}
 
 	if checkOnly {
-		selfupdate.PrintUpdateStatus(rel.TagName, version)
+		selfupdate.PrintUpdateStatus(rel.Version, version)
 		return nil
 	}
 
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", rel.TagName, runtime.GOOS, runtime.GOARCH)
-	assets, err := selfupdate.FindAssets(rel, assetName)
+	// Downgrade/freeze protection.
+	// --version is an explicit request; allow downgrade only with --version or --force.
+	// Without --version (auto-latest), never silently downgrade.
+	if !force && version != "unknown" {
+		switch selfupdate.Compare(rel.Version, version) {
+		case 0:
+			return fmt.Errorf("already running %s (use --force to reinstall)", version)
+		case -1:
+			if targetVer == "" {
+				// Auto-latest is below running: refuse unconditionally unless forced.
+				return fmt.Errorf(
+					"index advertises %s but you are running %s - refusing downgrade\n"+
+						"  use --version %s to install a specific older release, or --force to override",
+					rel.Version, version, rel.Version,
+				)
+			}
+			// Explicit --version downgrade: still require --force.
+			return fmt.Errorf(
+				"target %s is older than current %s (use --force to allow downgrade)",
+				rel.Version, version,
+			)
+		}
+	}
+
+	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", rel.Version, runtime.GOOS, runtime.GOARCH)
+	assets, err := selfupdate.FindAssetsFromIndex(rel, assetName)
 	if err != nil {
 		return err
 	}
@@ -124,16 +167,6 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	manifest, err := selfupdate.FetchAndVerifyManifest(ctx, assets.Sums, assets.Sig, opts)
 	if err != nil {
 		return fmt.Errorf("manifest verification failed: %w", err)
-	}
-
-	if !force && version != "unknown" {
-		switch selfupdate.Compare(manifest.Version, version) {
-		case 0:
-			return fmt.Errorf("already running %s (use --force to reinstall)", version)
-		case -1:
-			return fmt.Errorf("target %s is older than current %s (use --force to allow downgrade)",
-				manifest.Version, version)
-		}
 	}
 
 	binary, err := selfupdate.FetchAndVerifyTarball(ctx, assets.Tarball, assetName, manifest, opts)
@@ -147,7 +180,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	}
 
 	if dryRun {
-		fmt.Printf("dry-run: would install magus %s → %s\n", manifest.Version, targetPath)
+		fmt.Printf("dry-run: would install magus %s -> %s\n", manifest.Version, targetPath)
 		return nil
 	}
 
@@ -155,7 +188,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return errors.New("non-interactive terminal: use --yes / -y to confirm the update")
 		}
-		fmt.Printf("Install magus %s → %s? [y/N] ", manifest.Version, targetPath)
+		fmt.Printf("Install magus %s -> %s? [y/N] ", manifest.Version, targetPath)
 		var answer string
 		if _, err := fmt.Scanln(&answer); err != nil || strings.ToLower(strings.TrimSpace(answer)) != "y" {
 			fmt.Fprintln(os.Stderr, "aborted")
