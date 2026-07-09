@@ -15,9 +15,12 @@ import "scribe";
 
 magus.project({
     // Affected/drift tracks this sources glob, not the import graph, so scribe.buzz
-    // (and every other input) must be named to be watched.
+    // (and every other input) must be named to be watched. package.json +
+    // package-lock.json are named so a bundled-dep version bump (mermaid, hljs, d3,
+    // codemirror) invalidates the cacheable build-* targets and marks this project
+    // affected - the esbuild inputs live in those manifests, not in the js/ entries.
     "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html", "graph.html",
-                "tour/*.buzz",
+                "tour/*.buzz", "package.json", "package-lock.json",
                 "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
     "outputs": ["gen/**", "MAGUS.md"],
     "targets": {
@@ -28,14 +31,12 @@ magus.project({
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
         // wasm binary; skipCache so a hit never replays a stale one. Run by hand.
         "build-playground": {"skipCache": true},
-        // build-mermaid bundles js/mermaid-vendor.js (mermaid@11) into the committed
-        // gen/assets/mermaid.js - same npm + esbuild pattern as the graph explorer.
-        // Run by hand when the mermaid version is bumped; commit the new artifact.
-        "build-mermaid": {"skipCache": true},
-        // build-hljs bundles js/hljs-vendor.js (highlight.js@11) into the committed
-        // gen/assets/hljs.js - same pattern as build-mermaid.
-        // Run by hand when the hljs version is bumped; commit the new artifact.
-        "build-hljs": {"skipCache": true},
+        // build-mermaid / build-hljs / build-editor / build-graph-explorer bundle a
+        // js/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
+        // committed gen/ artifact. esbuild + pinned npm deps are deterministic, so these
+        // stay cacheable (no skipCache): a cache hit replays identical bytes, and a
+        // version bump invalidates it via package.json/package-lock.json in sources.
+        // Run by hand when a version is bumped; commit the new artifact.
     },
 });
 

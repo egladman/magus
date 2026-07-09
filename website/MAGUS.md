@@ -247,8 +247,6 @@ magus run build-mermaid  # from the workspace root
 
 - [`preflight`](#preflight)
 
-**Details:** uncached (always runs)
-
 ### `build-hljs`
 
 build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11) into the committed gen/assets/hljs.js.
@@ -262,8 +260,6 @@ magus run build-hljs  # from the workspace root
 **Depends on:**
 
 - [`preflight`](#preflight)
-
-**Details:** uncached (always runs)
 
 ### `serve`
 
