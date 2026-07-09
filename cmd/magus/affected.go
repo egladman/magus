@@ -54,16 +54,17 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
 	var (
-		baseStr    string
-		base       *string
-		stdin      *bool
-		null       *bool
-		timeout    *time.Duration
-		graphView  *bool
-		upstream   *bool
-		graphDepth *int
-		step       *bool
-		raceFlag   *string
+		baseStr         string
+		base            *string
+		stdin           *bool
+		null            *bool
+		timeout         *time.Duration
+		graphView       *bool
+		upstream        *bool
+		graphDepth      *int
+		step            *bool
+		raceFlag        *string
+		noDefaultCharms *bool
 	)
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		// affected-only: VCS diff base ref; `magus run` has no diff. See run_affected_parity_test.go.
@@ -80,6 +81,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1; not compatible with --stdin)")
 		raceFlag = fs.String("race", "", raceFormatHelp)
+		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -191,6 +193,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
 	m.LogScope(scopeLabel, source)
+	// Merge magus.yaml default_charms with any explicit charm on the target - the same
+	// as `magus run` does. Previously `affected` used only the explicit charms, so
+	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
+	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
+	m.LogCharms(strings.Join(charms, ","))
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil
@@ -240,8 +247,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}
-	if len(parsed.Charms) > 0 {
-		runOpts = append(runOpts, magus.WithCharms(parsed.Charms...))
+	if len(charms) > 0 {
+		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
 	if spellFilter != "" {
 		if target == "ci" {

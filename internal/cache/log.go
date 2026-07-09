@@ -125,9 +125,15 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		label := recordStr(r, "label")
 		source := recordStr(r, "source")
 		if source != "" {
-			_, _ = fmt.Fprintf(h.w, "[scope] %s (%s)\n", label, source)
+			_, _ = fmt.Fprintf(h.w, "projects: %s (%s)\n", label, source)
 		} else {
-			_, _ = fmt.Fprintf(h.w, "[scope] %s\n", label)
+			_, _ = fmt.Fprintf(h.w, "projects: %s\n", label)
+		}
+	case "cache.charms":
+		if charms := recordStr(r, "charms"); charms != "" {
+			_, _ = fmt.Fprintf(h.w, "charms: %s\n", charms)
+		} else {
+			_, _ = fmt.Fprintf(h.w, "charms: (none)\n")
 		}
 	case "run.exec":
 		// Every subprocess magus spawns (os.exec, fork spells) logs through this event

@@ -17,6 +17,15 @@ func (m *Magus) LogScope(label, source string) {
 	m.cache.LogScope(label, source)
 }
 
+// LogCharms emits the active-charm header through the cache logger. No-op on Inspect
+// workspaces.
+func (m *Magus) LogCharms(charms string) {
+	if m.cache == nil {
+		return
+	}
+	m.cache.LogCharms(charms)
+}
+
 // PruneCache removes entries older than cutoff and GC-collects orphaned blobs.
 func (m *Magus) PruneCache(ctx context.Context, cutoff time.Time, dryRun bool) (removed int, freed int64, err error) {
 	if m.cache == nil {

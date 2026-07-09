@@ -144,6 +144,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
 	m.LogScope(scopeLabel, source)
+	// Surface the active charms up front, next to the projects header, so the run's
+	// state ("here's what's in effect") is visible before any work - and so a missing
+	// default charm (e.g. rw not applied) is obvious rather than silent.
+	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
+	m.LogCharms(strings.Join(charms, ","))
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "run: no projects selected", slog.String("target", targetName))
 		return nil
@@ -174,7 +179,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if globalCfg.DryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}
-	if charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms); len(charms) > 0 {
+	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
 	if *noFlakeRetry {

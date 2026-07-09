@@ -86,7 +86,15 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			"cache.scope",
 			slog.String("label", "api"),
 			slog.String("source", "cwd"),
-		), "[scope] api (cwd)")
+		), "projects: api (cwd)")
+	})
+
+	t.Run("cache.charms", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"cache.charms",
+			slog.String("charms", "rw"),
+		), "charms: rw")
 	})
 
 	t.Run("cache.stage ok", func(t *testing.T) {

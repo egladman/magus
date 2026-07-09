@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// LogScope emits a [scope] header through the cache logger so all
+// LogScope emits the projects header through the cache logger so all
 // output formats (pretty/text/JSON) receive the same event.
 func (c *Cache) LogScope(label, source string) {
 	c.log.Info(
@@ -13,6 +13,14 @@ func (c *Cache) LogScope(label, source string) {
 		slog.String("label", label),
 		slog.String("source", source),
 	)
+}
+
+// LogCharms emits the active-charm header (the charms mixed into this run, e.g. the
+// magus.yaml default_charms like `rw`) so the reader sees up front what state the run
+// executes under - and can tell at a glance whether a default charm actually took
+// effect. Routed through the cache logger like LogScope so every format receives it.
+func (c *Cache) LogCharms(charms string) {
+	c.log.Info("cache.charms", slog.String("charms", charms))
 }
 
 // LogStage emits a per-stage progress event for one magus.needs sub-target that ran
