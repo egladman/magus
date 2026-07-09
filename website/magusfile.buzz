@@ -126,10 +126,11 @@ export fun test(args: [str]) > void {
     magus.needs(magus.target.literal("format"), magus.target.literal("buzz-test"));
 }
 
-// 'ci' is the anchor `magus affected ci` keys off; it fans out lint/build/test,
-// each of which reaches the render (and its drift gate) via generate.
+// 'ci' is the anchor `magus affected ci` keys off. generate is a DIRECT dep so the
+// site render, the JS bundles it builds, and the drift gate are first-class ci steps
+// (not just reached transitively through the mutating lint/build chain).
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(magus.target.literal("generate"), magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo

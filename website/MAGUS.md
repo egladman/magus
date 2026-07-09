@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary
 
 ## Query first
 
-This workspace has a knowledge graph of **511 nodes** and **628 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **511 nodes** and **629 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -29,7 +29,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `website` |
-| target | 14 | `magus query kind:target` | `generate`, `preflight`, `ci` |
+| target | 14 | `magus query kind:target` | `generate`, `ci`, `preflight` |
 | spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
 | op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | charm | 1 | `magus query kind:charm` | `rw` |
@@ -42,7 +42,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 14 | `magus query project:.` | `generate`, `preflight`, `ci` |
+| . | 14 | `magus query project:.` | `generate`, `ci`, `preflight` |
 
 ## Reading the graphs
 
@@ -118,6 +118,7 @@ graph LR
   generate --> build
   format --> test
   buzz_test --> test
+  generate --> ci
   lint --> ci
   build --> ci
   test --> ci
@@ -206,7 +207,7 @@ magus run test  # from the workspace root
 
 ### `ci`
 
-'ci' is the anchor `magus affected ci` keys off; it fans out lint/build/test, each of which reaches the render (and its drift gate) via generate.
+'ci' is the anchor `magus affected ci` keys off.
 
 **Defaults**
 
@@ -216,6 +217,7 @@ magus run ci  # from the workspace root
 
 **Depends on:**
 
+- [`generate`](#generate)
 - [`lint`](#lint)
 - [`build`](#build)
 - [`test`](#test)

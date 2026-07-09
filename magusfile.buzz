@@ -395,11 +395,13 @@ export fun lint(args: [str])   > void { magus.needs(magus.target.literal("format
 // Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs.
 export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
 
-// Runs lint, build, test, and the coverage-badge freshness gate read-only; the
-// affected/pipeline anchor. coverage drift-gates assets/coverage.svg, so a stale
-// badge fails ci instead of rotting silently.
+// Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate;
+// the affected/pipeline anchor - one command that also catches unregenerated output.
+// generate is a DIRECT dep (not just transitively via format) so the drift gate is a
+// first-class part of ci, independent of the mutating format/build chain. coverage
+// drift-gates assets/coverage.svg, so a stale badge fails ci instead of rotting silently.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"), magus.target.literal("coverage"));
+    magus.needs(magus.target.literal("generate"), magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"), magus.target.literal("coverage"));
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix

@@ -18,7 +18,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1671 nodes** and **2916 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1671 nodes** and **2918 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -31,7 +31,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `magus`, `website`, `gopherbuzz` |
-| target | 54 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `image-build` |
+| target | 54 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `generate` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
 | op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
 | charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:charm) | `rw`, `static`, `cd` |
@@ -49,7 +49,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | . | 24 | [`magus query project:.`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:.) | `generate`, `format`, `image-build` |
 | cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
 | gopherbuzz | 9 | [`magus query project:gopherbuzz`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:gopherbuzz) | `build`, `format`, `generate` |
-| website | 14 | [`magus query project:website`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:website) | `generate`, `preflight`, `ci` |
+| website | 14 | [`magus query project:website`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:website) | `generate`, `ci`, `preflight` |
 
 ## Reading the graphs
 
@@ -139,6 +139,7 @@ graph LR
   format --> test
   format --> lint
   generate --> format
+  generate --> ci
   lint --> ci
   build --> ci
   test --> ci
@@ -192,7 +193,7 @@ graph TB
   class sp_buzz,sp_cosign,sp_docker,sp_go,sp_md spell
 ```
 
-[Explore this project's graph interactively](https://eli.gladman.cc/magus/graph/#data=H4sIAAAAAAAC_8RX4W7cyA1-FUI4IOtGWl-vSIH6fjnu3ca45FLE9o-iNeLRDCXNWZoRyNGuN4cAfYg-YZ-k4IxWu_KtnbT90V_2jijy4_D7SOrXzGBlnQ3Wu-wsu24QgqIaAxjs0Rl0egs1qb4ByxAahE7VAy8domH48_kKfAUKevK_oA4vOD2ubItngEo34LxBeVXt_C6UA3zoPQU0UA1OS-iTPFmjqRHUYWwbQPuu94y8hMsgrvAhkNLyOgcVrFZtu4WKfLfHJwCA_UAac2AvXrjxGwZcI21TmH_9459gnW4HY10NpQ8NKOo4JUSDC7ZDKEk53URb5QxUraoZlNseQtRb3SIsNo3VTYRAg4NehQYI5VYYzEASw1juVdDNyTLLs_HKODv726-ZWGdnmZyjq63D7Cwrh0-fsjyTC0xGTnVyXvuiHGxrsjwzXmdn2YXvettiKs8aia13BQfV9WjSdUBpnaKtuOce2zb5i_9Gh1me-V4O985vP9_mmSbP_HFK1Y5ARujx1b5BGpGmAkfk4uHz7ed8Am07VeMj3DfOIEXQ2oBuFHU5RIuX_cDNS7a1S2VJZY4FuFi9h-iLYXDaOxOZKwyQ5KKTmIeWMOm97PZo1sbre6R95ul3gviQRew7U-0Fy940_S7i4e2RNFkrN2V5pZVLpYkPYWNDA4Hsevt9Issm5Q4bsgEZrs4_XP4Yc62V_PYO3lyu3pxefLi8vrw4fyt5PqrI7HZvD6-BNtkhvE65okaHpAJOAD-IK9qJW5grt7sgX1UnYF3wciqHpzW6ZXbgrrROtMPHfO6Okt-Vh8ZzgN0bsOBgoPj78O23f8D4SJyfJBVzMMt33gwtgkHdKlJSY56FTgX9cmCdtGEisUJhHcQ3odwG1NKaFtYFJKfa0_ggwphF0t5Vtv5ypIu3lzDaSpeAvh26UlS_0J05jTI8yHGKml4Z_yxrP4ttvP66HDsbpB-KPbxTdG_8xsGiS5dIWCGh0wgv9wWeJ9mZp3nx7nx1c7XsDKytgrvUTwyyJltiGg13M1-951C1tm7CUYpZx_IMCGUGwKLxgXsfOAdVxUm0zcFvHBI3ts8hEDpzAsELLfwQRBk5WAcrG94MJZzH-SFv96IJllYffIz0iy-BA_bAQ9fF9neA8tlbTVPid9OdANuyta7Oxa_bC9OQrQIs8EG3A9u1zBrtpesGD3pjTo5ptSecbueRHo_p6bdEP0rImcVhNZ9rB4QtKn7cll_LL0lPmBMNxvEBlad43LcqVJ66ect9tts-NWOOoBl77dg9be1YBmc4vXpz_t2rP17dvLsae2iD8IP57tWr3_8J7nErnJCjSNePV5erny9_Xn386Ye_AqMmWTwYESYtFkOwLZ9KsGXtT8bKMrZVsUaylR3FJQYqDISgamUdh3iKXYnGoJluqB9KwbDvJuODe9yeQImVJ0zdfrSvvTBoCGmzAN2g6oGwJmQZ31APikwOrCoUMslG0SAhLAbX2nsExjD0Rcwkh7R5aOVe7NY2Iee0DI2LkEhJ8pFGYGVVIxxYOuMWFJU2kJQYHxL-KM9HTWIju8uBXsodUUa9GCz94DTGYe5qBNmh2tTqaOgDmu-h4mV0A6_fvr_46Ur0vT3V8eQesY_yVa1d4_9xV9F-jaTqfWvYHUgZRlYMNoyjvEcqeqXv5flkKOObcJzo8oJixsCnO4Mlr2solalxriER6NfkHZDDI_lIYoVuUN9PuK-3PaajEXVQzqhWJPx6-PRpL6Oh50CoOrgTL3cQvG91o6yDRZEcnDxRj_E6R2QHGI6Ao8H9Z9Aie1-wjIO94tJ-DItvotBBPH8duCT7eDYHd9iRE7rVNFsjPYTiG0_33CuN0KBqQyOyocE5mfC7oeh18DQfhk9s6pKnomArpcNZDLRbjxTJ_BvXYu-Csg5pXB2HaWG-mx7dpe3x2KSRFq0kqfnyvZfNbGHeOZxNiMizHfofoz-GyhKHsWFOilh5EOOkjGfQ_Lf0bq17HkntW-VqbQuxzKH2sMb4dz20LjIth25cjcTkf8W4xjD_SujMIdf2gR4lMlXlN2vHmEg1JrfyOQRrZBDd1X7ZeXOXx8bSE4awn1Ay_Y8lc7gCfDmdqguJG503RbBm-3RyKX5kyqxt2n1SwopUh0i1PHIjoU_ETm2wiC0QKkJuHDLHzQoIlSm8a8cPJFVVKF_7p73tsRXtyye5p2M5jyzZUX2k79TQ53ALbhTtxXlNynEblT_tubvYUBR9q9wdLASc9AMOxrrx-2i-ikJ0W3QqkH2QGd8PgVMqdaPmH3vfrC6v39y8_vj-5vovN9c5-NAgbSzjOL2jCyv9ot1K3dcWN2jmM6NuVJqA6TL4o3epptO4kzr9OwAA___R8-C26REAAA)
+[Explore this project's graph interactively](https://eli.gladman.cc/magus/graph/#data=H4sIAAAAAAAC_8RX4W7juBF-lYFwwNpdyblesQWa-5VN75zgdm-LTfKjaIOEJkcSLxIpzFB2vIcF-hB9wj5JMaQsWzknu21_9Fdicjj8hvN9M6NfM4OldTZY77LT7LpGCIoqDGCwQ2fQ6S1UpLoaLEOoEVpV9bxwiIbhz2dL8CUo6Mj_gjq84rRd2gZPAZWuwXmDclTt_M6UA3zsPAU0UPZOy9XzPFmjqRDU4d02gPZt5xl5AZdBXOFjIKXlOAcVrFZNs4WSfLvHJwCAfU8ac2AvXrj2GwZcI23TNf_6xz_BOt30xroKVj7UoKjlFBD1LtgWYUXK6TraKmegbFTFoNz2EKLe6gZhtqmtriME6h10KtRAKK_CYHqSO4zlTgVdzxdZng1Pxtnp337NxDo7zWQdXWUdZqfZqv_0KcszecBk5FQr65UvVr1tTJZnxuvsNDv3bWcbTOlZI7H1ruCg2g5Neg5YWadoK-65w6ZJ_uK_0WGWZ76Txb3z28-3eabJM9-NodoByAA9Hu1qpAFpSnBELh4-337OR9C2VRU-wX3jDFIErQ3oWlGbQ7R43fVcv2ZbuZSWlOaYgPPlB4i-GHqnvTORucIACS46iXFouSady26PRm28fkDaR55-J4iPWcS-M9VesOxN0-8iLt4eCZO1cmOUV1q5lJq4CRsbaghk19vvE1k2KXbYkA3IcHX28fLHGGul5Ld3cHG5vDg5_3h5fXl-9k7ifJKRyeveHj4DbbJDeK1yRYUOSQUcAX4UV7QTtzBXXndGviznYF3wsiqLJxW6RXbgbmWdaIeP-dwtJb9LD7XnALsTMONgoPh7_-23f8C4Jc7nScUczOK9N32DYFA3ipTkmCdXp4R--WKdtGEisUJhHcSTsNoG1FKaZtYFJKeak7gRYUxu0t6VtvryTefvLmGwlSoBXdO3K1H9TLfmJMrwIMbx1nRk-LOo_ORu4_XXxdjaIPVQ7OG9ogfjNw5mbXpEwhIJnUZ4vU_wNMjWPM-L92fLm6tFa2BtFdynemKQNdkVptZwP_HVeQ5lY6s6HKWYdSx7QCg9AGa1D9z5wDmoMnaibQ5-45C4tl0OgdCZOQQvtPB9EGXkYB0sbbjoV3AW-4ec7kQTLKU--HjTL34FHLAD7ts2lr8DlC--auoSvxvfBNiuGuuqXPy6vTAN2TLADB9107NdS6_RXqpu8KA3Zn5Mqx3h-DpP9HhMT78l-lFCTiwOs_lSOSBsUPHTsvxWfkl4wpxoMLQPKD3F5a5RofTUTkvui9X2uR5zBM1Qa4fqaSvH0jjDydXF2Xdv_nh18_5qqKE1wg_muzdvfv8neMCtcEKWIl3vri6XP1_-vLz76Ye_AqMmGTwYEUYtFn2wDZ_IZYvKz4fMMjZlsUaypR3EJQYq9ISgKmUdh7iK7QqNQTO-UNevBMO-mgwbD7idwwpLT5iq_WBfeWFQH9JkAbpG1QFhRcjSvqHqFZkcWJUoZJKJokZCmPWusQ8IjKHvihhJDmny0Mq92o1tQs5xGBoGIZGSxCOFwMqoRtizVMYtKFrZQJJifEz4ozyfFImNzC4HelntiDLoxeDK905jbOauQpAZqkmljvouoPkeSl5EN_D23Yfzn65E39sTHVceELsoX9XYNf4fZxXt10iq2peG3YKkYWBFb8PQyjukolP6QfZHQ2nfhENHlwOKGQOf7AwWvK5gpUyFUw2JQL8m7oAcnshHAit0jfphxH297TAtDaiDckY1IuG3_adPexn1HQdC1cK9eLmH4H2ja2UdzIrkYP5MPobnHJAdYDgCjnr3n0GL7H3F0g72ikvzMcy-iUIH8fx14JLs49oU3GFFTuiWY2-N9BCKbzw9cKc0Qo2qCbXIhnrnpMPvmqLXwdO0GT4zqUucioItlQ6n8aLdeKRI-t8wFnsXlHVIw-jYjwPz_bh1n6bHY51GSrSSoKbD9142k4F553DSISLPduh_jP4YSkschoI5KmLpQYyTMl5A89_Su7HuZSSVb5SrtC3EMofKwxrj33XfuMi0HNphNBKT_xXjGsP0K6E1h1zbX_QkkDErvxk7hkDKIbilzyFYI43ovvKL1pv7PBaWjjCEfYeS7n8smMMR4MvhlG1I3Gi9KYI12-eDS_dHpkzKpt0HJawYh6dZGpNkaprnkNITGZhHyqSgEt9TdSxiZYSSkGuHzPFo-lpSZYny6X_S2Q4bKQTyfe4JiqgpGYWTNyV9hD3E3hK_Fml8aSOdt-vDi6-W7yi3082ghbE7TGMvuFa0V_o1KcdNLCPj0LzDDkXRNcrdw4xQxeLCwVg3fGxN51qIbotWBbKPA2xOT1HVavrl-M3y8vri5u3dh5vrv9xc5-BDjbSxjMMoEF1YKT7NVki0trhBM21AVa1SO03vwnfeJYKMvVOS_u8AAAD__xi4a7M2EgAA)
 
 ### `image-scan`
 
@@ -388,7 +389,7 @@ magus run format  # from the workspace root
 
 ### `ci`
 
-Runs lint, build, test, and the coverage-badge freshness gate read-only; the affected/pipeline anchor.
+Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.
 
 **Defaults**
 
@@ -398,6 +399,7 @@ magus run ci  # from the workspace root
 
 **Depends on:**
 
+- [`generate`](#generate)
 - [`lint`](#lint)
 - [`build`](#build)
 - [`test`](#test)
@@ -910,6 +912,7 @@ graph LR
   generate --> build
   format --> test
   buzz_test --> test
+  generate --> ci
   lint --> ci
   build --> ci
   test --> ci
@@ -926,7 +929,7 @@ graph LR
   style entry_cluster fill:transparent,stroke:transparent
 ```
 
-[Explore this project's graph interactively](https://eli.gladman.cc/magus/graph/#data=H4sIAAAAAAAC_4xW227jRg9-FUI3if9flnfRO_emQVtkC_QENIte7Bqb0QwlTTKaEciRvdrAQB-iT9gnKTiybCV229zZJIf8-PGkp8xgZb2NNvhsnd01CFFRjREMdugNej1ATaprwDLEBqFVdc-FRzQM393cQqhAQUfhAXW84lFdWYdrQKUb8MGgPFWT32vlAT93gSIaqHqvJfQiH63R1AhqHttG0KHtAiMX8EMUV_g5ktLynKOKVivnBqgotCd8AgA49KQxBw7ihZuwY8At0jCG-euPP8F67XpjfQ1liA0oanlMiHofbYtQkvK6SbbKG6icqhmUH-YQ9aAdwvWusbpJEKj30KnYAKGwwmB6khjGcqeibhZFlmcHyjhbf3jKxDpbZzss2UbM8gx9bT1m66zsv3zJ8kxoHE29akXeEVbO1k3M9vlR2JpljR5JJR8m6OcyIKwIuUGGn25u3_9WtAau46nkWkXlQg3_Pyv-YuLXzip8ZDaqgcF6cEE_csQOdjaOTIyOuZiD1I3yNbpQn2M9VwHh9JPh23c3P99-_-MvtwI8ASJ0qBh59b9iUK3LoSNkpK2wLfE_vPcHE7MBxtRrsEUqVbTtM1RnWGYIvEEam1-qk1-gMf9nnIngCcSEgRd56ifCsrfOjM61s-gjlL03DjkXmYc6eQweDNkqrkGBdqg86Ab1Y-gjBO8GqAMyGEtxgJ28UofmBzQ2wk6xv4pAuBxzQbMaA8cEQoe2tTGikbY8Vt6mfpv1Wf6ivS7UcZOk1KaXtMs2M4KrQK2KFyKcXs-snfWXbA9O5paJwNe6lWlaRuR4LPNRIlPLwJpsiVfSzsu0RO6T7mNWFMXHDJ7291CmNofYUOjrBu7TPID4uc9lCpZLbEs0Bg20svw4nLy2ih5N2PkVeh3S3rGtrEIGQg5ui896cgJ6mYR8ls08R22PyV1pezXtbdljgSa4qqowrVBt7-ERB1l71dcyzZXyDNJYUoJVYnclMQ4bOlQwLjqSvzj6HttKVrsBK_tOejW17gK2VsFUi0sNdqj0VMazdJJi2Tk11BR6b2aVe654Pky_Y3nDjG3pBrA-InWEESnpZm9cUIbXcGf9cBvSpbEOGYpipVuzSgTPrDmSklkQj0GyWp2UybjYKW7H0R5vUdSNVFnEn_Az6uKBoXZ9Ook6dBYNlMhWbmT89_GT2aLA_OmFydN0SWRnha5BOpyMcfceJ2R_TmqL1Cr7ktGDdNpDKZEtehNIOvqgdLYkRQNcP_BqVK4OKslw-bF_8-YrnKy_eft2MVKW1ty0bhKBihkjzx7_BwtnSTTugV9kIKLL8BtbN8mRoLyQg7ycJzC3f0UWh-evT0Fu1enkpH_HexN8-ngRGacgELZI8O7u7tfpeCxPtvLVFDSvSjng42qGJTTKmwGqQHKblUsmsAv0WGT7zQSSP8m334d592z2m_3fAQAA__8FpMFLGwoAAA)
+[Explore this project's graph interactively](https://eli.gladman.cc/magus/graph/#data=H4sIAAAAAAAC_4xW227jNhN-lYFukvy_LO-id75q0BbZAj0BzaIXu0ZCkSORCQ_CDGVHGxjoQ_QJ-yQFKctWYnebO3uO33wznNFzobAx3kQTfLEqbjVCFNRiBIUdeoVeDtCS6DQYhqgRnGh7rjyiYvj--gZCAwI6Cg8o4wWP6sZYXAEKqcEHhclVTHEvhQd86gJFVND0XqbUV-VojapFEPPcJoIMrguMXMGPMYXCp0hCJneOIhoprB2goeCO-BIA4NCTxBI4pCisw5YBN0jDmObvP_8C46XtlfEt1CFqEOR4LIh6H41DqEl4qbOt8AoaK1oG4Yc5RDlIi3C51UbqDIF6D52IGggTKwyqp5RDGe5ElPqqKspiTxkXq0_PRbIuVsUWazYRi7JA3xqPxaqo-y9firJINI6mXrgk7wgba1odi115EDq1aNEjiRxDBflSBoQNIWtk-Pn65uPvlVNwGY8tlyIKG1r4_0nzryZ-zazDB2ajGBiMBxvkI0fsYGviyMQYmKs5SKmFb9GG9hTrqQoIp58M3324_uXmh59-vUnAMyBCi4KRl_-rBuFsCR0hI20S2yn_p49-b6LWwJhnDTZItYjGvUB1gmWGwCukcfhTd8ozNJb_jjMTPIGYMPBVmeeJsO6NVWNwaQ36CHXvlUUuk8xDmyMGD4pME1cgQFoUHqRG-Rj6CMHbAdqADMpQHGCbvMR--AGVibAV7C8iEC7GWlAtx8Qxg5DBORMjqjSWh86bPG-zOStfjdeZPq6zlFz2pG2xnhHcBHIinslw9J5ZW-PP2e6DzC0zgW8Nm17TIiLHQ5sPkvRqGViSqfEijfMiL5H7rPtcVFX1uYDn3T3Uecwhagp9q-E-vwdIce7L9AoWC3Q1KoUKXFp-HI5RnaBHFbZ-iV6GvHeMS6uQgZCD3eCLmZyAniehnFUzr1GaQ3EX0lxMezvtsUATXNE0mFeoNPfwiENae031NRrLqScT4SeJs2LRWTG0FHqvZhy_VLwc-z-wvmZGV9sBjI9IHWFEyrqZjw1C8QpujR9uQr4JxiJDVS2lU8tMxcyaI4k0tSligBb98qjMxtVWsBsf4Xg1otSpH0l8h08oqweG1vb5eMnQGVRQI5t0zeLXH0p6BRSY716ZPE87P22X0Gmk_XIft-RhlnenpDokJ8xrRvfSaWPkQjboVaA0e3ulNTUJGuDygZejcrlXpQoXn_t3777Byfrb9--vRsryQpoWQyZQMGPkmfN_sHBShLYP_KqCJDoPX5tW50AJ5Zkakue8gLn9G6rYu7-9hHRVjsch_ztchuDzZ0aScU4CYYMEH25vf5vW_OJom75vguRlnU7tuERhAVp4NUATKF1RYbMJbAM9VsVuPYHku_SV9mk-PevdevdPAAAA__-mqaTNxQkAAA)
 
 ### `generate`
 
@@ -1003,7 +1006,7 @@ magus run test website  # from the workspace root
 
 ### `ci`
 
-'ci' is the anchor `magus affected ci` keys off; it fans out lint/build/test, each of which reaches the render (and its drift gate) via generate.
+'ci' is the anchor `magus affected ci` keys off.
 
 **Defaults**
 
@@ -1013,6 +1016,7 @@ magus run ci website  # from the workspace root
 
 **Depends on:**
 
+- [`generate`](#generate)
 - [`lint`](#lint)
 - [`build`](#build)
 - [`test`](#test)

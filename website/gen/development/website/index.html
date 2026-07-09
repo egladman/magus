@@ -81,7 +81,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>511 nodes</strong> and <strong>628 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>511 nodes</strong> and <strong>629 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -108,7 +108,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>target</td>
 <td style="text-align:right">14</td>
 <td><code>magus query kind:target</code></td>
-<td><code>generate</code>, <code>preflight</code>, <code>ci</code></td>
+<td><code>generate</code>, <code>ci</code>, <code>preflight</code></td>
 </tr>
 <tr>
 <td>spell</td>
@@ -180,7 +180,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>.</td>
 <td style="text-align:right">14</td>
 <td><code>magus query project:.</code></td>
-<td><code>generate</code>, <code>preflight</code>, <code>ci</code></td>
+<td><code>generate</code>, <code>ci</code>, <code>preflight</code></td>
 </tr>
 </tbody>
 </table></figure>
@@ -249,6 +249,7 @@ graph LR
   generate --&gt; build
   format --&gt; test
   buzz_test --&gt; test
+  generate --&gt; ci
   lint --&gt; ci
   build --&gt; ci
   test --&gt; ci
@@ -310,12 +311,13 @@ graph LR
 <li><a href="#buzz-test"><code>buzz-test</code></a></li>
 </ul>
 <h3 id="ci"><code>ci</code></h3>
-<p>'ci' is the anchor <code>magus affected ci</code> keys off; it fans out lint/build/test, each of which reaches the render (and its drift gate) via generate.</p>
+<p>'ci' is the anchor <code>magus affected ci</code> keys off.</p>
 <p><strong>Defaults</strong></p>
 <pre><code class="language-sh">magus run ci  # from the workspace root
 </code></pre>
 <p><strong>Depends on:</strong></p>
 <ul>
+<li><a href="#generate"><code>generate</code></a></li>
 <li><a href="#lint"><code>lint</code></a></li>
 <li><a href="#build"><code>build</code></a></li>
 <li><a href="#test"><code>test</code></a></li>
