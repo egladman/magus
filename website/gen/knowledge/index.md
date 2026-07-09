@@ -41,6 +41,7 @@ magus path <a> <b>          # the shortest chain of edges between two nodes
 magus refs <symbol>         # where an ingested code symbol is defined and referenced
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
+magus graph diff base.json  # what this branch changed vs an exported baseline
 magus graph open            # explore it visually in your browser (data stays local)
 ```
 
@@ -59,16 +60,16 @@ nodes, so an agent knows what exists before running anything.
 `magus query` takes free-text terms (AND) plus field filters and negation. Terms
 are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 
-| Form               | Meaning                                            |
-| ------------------ | -------------------------------------------------- |
-| `build`            | free text: match node IDs, labels, and docs        |
-| `kind:spell`       | only nodes of that kind                            |
-| `project:pkg/foo`  | the project node and its targets                   |
-| `relation:uses`    | seed from nodes touching a `uses` edge             |
-| `id:build`         | substring match on the node ID                     |
-| `id:target:*build` | `*` wildcard: matches any run (in a value or term) |
-| `-kind:op`         | negation: exclude these                            |
-| `"exact phrase"`   | a quoted span stays one term                       |
+| Form                | Meaning                                             |
+| ------------------- | --------------------------------------------------- |
+| `build`             | free text: match node IDs, labels, and docs         |
+| `kind:spell`        | only nodes of that kind                             |
+| `project:pkg/foo`   | the project node and its targets                    |
+| `relation:uses`     | seed from nodes touching a `uses` edge              |
+| `id:build`          | substring match on the node ID                      |
+| `id:target:*build`  | `*` wildcard: matches any run (in a value or term)  |
+| `-kind:op`          | negation: exclude these                             |
+| `"exact phrase"`    | a quoted span stays one term                        |
 
 A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node
@@ -190,7 +191,7 @@ declared target output; point config at it (explicit, opt-in, never auto-detecte
 knowledge:
   symbols:
     - project: pkg/foo
-      index: pkg/foo/index.scip # produced by a `pkg/foo:scip` target
+      index: pkg/foo/index.scip   # produced by a `pkg/foo:scip` target
 ```
 
 Each declared index becomes a per-project `<project>@symbols` shard: `symbol` nodes
@@ -207,6 +208,30 @@ referencing file (`magus_refs` over MCP, paginated). At very large scale a deriv
 `shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
 the shards) lets an exact-ID lookup load only the shards that mention the symbol
 rather than all of them; a missing routing file just falls back to loading all.
+
+## Git history (@vcs)
+
+Opt-in, off by default: enable it to fold each file's git history onto its file node.
+
+```yaml
+# magus.yaml
+knowledge:
+  vcs:
+    enabled: true
+    max_commits: 1000   # optional: bound the history walk (default 1000)
+```
+
+When enabled and the workspace is a git repo, a `@vcs` shard adds three attrs to every
+file node: `vcs_last_commit` (short SHA of the most recent commit touching the file),
+`vcs_last_modified` (its date), and `vcs_commits` (commits touching the file within the
+window). The values are EXTRACTED from git and deterministic per commit, so the shard is
+remote-shareable like the other extracted shards (blame-derived ownership and author
+churn stay out - that is analytics, not a graph fact). The `git log` walk is bounded by
+`max_commits` and cached against the current revision (`<cache>/knowledge/vcs-inputs.json`),
+so it runs only when the commit changes, never on the query path. A non-git workspace or a
+git error simply yields no shard. Because these attrs vary by commit, `graph diff` strips
+them from both sides, so a file node is not reported as changed just because its last
+commit moved - the diff stays structural.
 
 ## Exporting to external tools
 
@@ -226,6 +251,30 @@ full graph, so they require a scope):
 magus graph export --select "kind:spell go" -o mermaid
 magus graph export --select "project:pkg/foo" --budget 80 -o dot
 ```
+
+## Diffing against a baseline
+
+`magus graph diff` reports what a branch did to the domain's shape: the nodes and
+edges added or removed, and (for nodes) which fields changed. Export a baseline on
+the base branch, then diff the working tree against it - the PR blast-radius artifact.
+
+```sh
+magus graph diff --rev HEAD~1                    # against a git revision, no export needed
+magus graph diff --rev main -o markdown          # a CI comment vs the base branch
+
+git stash && magus graph export -o json > /tmp/base.json && git stash pop
+magus graph diff /tmp/base.json                  # against an export file
+magus graph diff /tmp/base.json -o json          # machine-readable, with before/after
+```
+
+`--rev` builds the base graph from that revision's tracked files (domain-only, using
+the current config) in an isolated throwaway tree that never touches your real cache;
+it and the positional baseline are mutually exclusive, and it cannot be combined with
+`--global` (the base is a single-workspace build). A baseline file must be a whole-graph
+`graph export -o json` (symbol shards in it are matched automatically; pass `--global`
+if the baseline was global). Edge diffs are structural -
+an edge is identified by (source, target, relation), so a re-scored or re-provenanced
+edge that keeps those three is not reported as a change.
 
 ## Global graph (across workspaces)
 

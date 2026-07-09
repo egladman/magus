@@ -74,6 +74,8 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | Config key | Environment variable | Flag | Type |
 |------------|----------------------|------|------|
 | `knowledge.max_size_mb` | `MAGUS_KNOWLEDGE_MAX_SIZE_MB` | `--knowledge-max-size-mb` | int |
+| `knowledge.vcs.enabled` | `MAGUS_KNOWLEDGE_VCS_ENABLED` | `--knowledge-vcs-enabled` | bool |
+| `knowledge.vcs.max_commits` | `MAGUS_KNOWLEDGE_VCS_MAX_COMMITS` | `--knowledge-vcs-max-commits` | int |
 | `knowledge.workspaces` | `MAGUS_KNOWLEDGE_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
 
 ## log
