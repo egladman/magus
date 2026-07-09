@@ -1,0 +1,97 @@
+name: Setup magus
+description: >
+  Install the magus binary into the runner tool cache ($RUNNER_TOOL_CACHE) and
+  restore Go module, Go build, and mise tool caches. Until magus ships a packaged
+  release, the binary is compiled from the checked-out source (a prebuilt release
+  is installed instead when `version` is set) — either way it lands in the tool
+  cache and on PATH, so every job step that follows can run `magus`.
+
+inputs:
+  version:
+    description: >
+      Release tag to install (e.g. v0.5.0). Empty string always builds from
+      source using the checked-out code.
+    required: false
+    default: '0.1.0'
+
+runs:
+  using: composite
+  steps:
+    # internal/codec's cgo xz/zstd fast path needs liblzma/libzstd (findable via
+    # pkg-config); without them any cgo `go build`/`go test` on the runner fails.
+    # Installed as system deps so the cgo path stays built and tested everywhere
+    # cd.yaml's release-<platform> jobs run.
+    - name: Install codec build dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+
+    - name: Install codec build dependencies (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install zstd xz
+
+    - name: Install magus from release
+      id: prebuilt
+      if: steps.magus-cache.outputs.cache-hit != 'true' && inputs.version != ''
+      shell: bash
+      continue-on-error: true
+      env:
+        # Release-signing Ed25519 public key, mirrored from
+        # internal/selfupdate/magus-release.pub. This action is consumed by
+        # arbitrary repos via `uses: egladman/magus/.github/actions/setup-magus@...`,
+        # so it can't assume the magus source tree (or a Go toolchain build of
+        # magus-utils) is checked out — the key has to be self-contained here.
+        MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
+      run: |
+        set -euo pipefail
+        VERSION="${{ inputs.version }}"
+        OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+        BASE="https://github.com/egladman/magus/releases/download/${VERSION}"
+        ASSET="magus_${VERSION}_${OS}_${ARCH}.tar.gz"
+        TMP="$(mktemp -d)"
+        trap 'rm -rf "${TMP}"' EXIT
+        cd "${TMP}"
+
+        curl -fsSL "${BASE}/${ASSET}"       -o "${ASSET}"
+        curl -fsSL "${BASE}/SHA256SUMS"     -o SHA256SUMS
+        curl -fsSL "${BASE}/SHA256SUMS.sig" -o SHA256SUMS.sig
+
+        # Verify SHA256SUMS was signed by the magus release key before trusting
+        # any hash in it. DER-wrap the raw 32-byte Ed25519 key as a SubjectPublicKeyInfo
+        # (fixed 12-byte prefix for the Ed25519 OID) so plain openssl can load it.
+        printf '302a300506032b6570032100%s' "${MAGUS_RELEASE_PUBKEY_HEX}" | xxd -r -p > pub.der
+        { echo "-----BEGIN PUBLIC KEY-----"; openssl base64 -in pub.der -A | fold -w 64; echo; echo "-----END PUBLIC KEY-----"; } > pub.pem
+        openssl pkeyutl -verify -pubin -inkey pub.pem -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
+
+        grep "${ASSET}" SHA256SUMS | sha256sum --check --status
+
+        mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
+        tar -xzf "${ASSET}" -C "$RUNNER_TOOL_CACHE/magus/bin" magus
+        echo "magus: installed prebuilt ${VERSION} for ${OS}/${ARCH} (signature verified)" >&2
+
+    - name: Setup Go
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      with:
+        go-version-file: go.mod
+        cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
+
+
+    - name: Build magus from source
+      if: >
+        steps.magus-cache.outputs.cache-hit != 'true' &&
+        (inputs.version == '' || steps.prebuilt.outcome == 'failure')
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
+        go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
+        echo "magus: built from source" >&2
+
+    - name: Add magus to PATH
+      shell: bash
+      run: echo "$RUNNER_TOOL_CACHE/magus/bin" >> "$GITHUB_PATH"
+
+    - name: Verify magus
+      shell: bash
+      run: magus version

@@ -18,7 +18,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1653 nodes** and **2869 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1664 nodes** and **2888 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -31,17 +31,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 4 | `magus query kind:project` | `.`, `website`, `gopherbuzz` |
-| target | 53 | `magus query kind:target` | `generate`, `format`, `image-build` |
+| target | 54 | `magus query kind:target` | `generate`, `format`, `image-build` |
 | spell | 12 | `magus query kind:spell` | `go`, `buf`, `buzz` |
 | op | 43 | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | charm | 5 | `magus query kind:charm` | `rw`, `static`, `cd` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS5002`, `MGS4001`, `MGS2001` |
-| doc | 98 | `magus query kind:doc` | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
+| doc | 99 | `magus query kind:doc` | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
 | file | 195 | `magus query kind:file` | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 956 | `magus query kind:function` | `sel`, `site_render`, `sendObject` |
-| import | 90 | `magus query kind:import` | `std`, `magus`, `fs` |
+| function | 964 | `magus query kind:function` | `sel`, `site_render`, `sendObject` |
+| import | 91 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
@@ -49,7 +49,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | . | 24 | `magus query project:.` | `generate`, `format`, `image-build` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | gopherbuzz | 9 | `magus query project:gopherbuzz` | `build`, `format`, `generate` |
-| website | 13 | `magus query project:website` | `generate`, `preflight`, `ci` |
+| website | 14 | `magus query project:website` | `generate`, `preflight`, `ci` |
 
 ## Reading the graphs
 
@@ -878,6 +878,10 @@ config:
     rankSpacing: 80
 ---
 graph LR
+  subgraph stage_generate["generate"]
+    md_generate("md-generate")
+    changelog_generate("changelog-generate")
+  end
   subgraph entry_cluster[" "]
     ci("ci")
     build_playground("build-playground")
@@ -886,7 +890,6 @@ graph LR
     serve("serve")
   end
   preflight("preflight")
-  md_generate("md-generate")
   generate("generate")
   format("format")
   lint("lint")
@@ -895,7 +898,7 @@ graph LR
   test("test")
   xt_gopherbuzz_build[["gopherbuzz:build"]]
   preflight --> generate
-  md_generate --> generate
+  stage_generate --> generate
   generate --> format
   format --> lint
   generate --> build
@@ -912,14 +915,14 @@ graph LR
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
   classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
   class build_hljs,build_mermaid,build_playground,ci,serve anchor
-  class build,buzz_test,format,generate,lint,md_generate,preflight,test target
+  class build,buzz_test,changelog_generate,format,generate,lint,md_generate,preflight,test target
   class xt_gopherbuzz_build external
   style entry_cluster fill:transparent,stroke:transparent
 ```
 
 ### `generate`
 
-generate renders the site, refreshes MAGUS.md, and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.
+generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.
 
 **Defaults**
 
@@ -937,6 +940,7 @@ magus run generate:rw  # mutate in place instead of checking
 
 - [`preflight`](#preflight)
 - [`md-generate`](#md-generate)
+- [`changelog-generate`](#changelog-generate)
 
 **Details:** uncached (always runs) · exclusive (runs alone, no concurrent targets)
 
@@ -1077,6 +1081,16 @@ md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 
 ```sh
 magus run md-generate website  # from the workspace root
+```
+
+### `changelog-generate`
+
+changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.
+
+**Defaults**
+
+```sh
+magus run changelog-generate website  # from the workspace root
 ```
 
 ### `buzz-test`
