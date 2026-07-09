@@ -1772,7 +1772,6 @@ fun renderSiteNav(root: str, active: str) > str {
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
     links.append({"href": root + "graph/", "label": "Graph", "current": active == "graph"});
-    links.append({"href": root + "development/", "label": "Development", "current": active == "development"});
     return template.render(tmpl, {"root": root, "links": links});
 }
 
