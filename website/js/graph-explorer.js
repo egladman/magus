@@ -1628,10 +1628,12 @@ function activateView(name, nodeId, nodeTo) {
   if (searchEl) { searchEl.value = ""; }
   query = "";
 
-  // Sync button active state.
+  // Sync button active state and show the clear button.
   document.querySelectorAll(".view-btn").forEach((b) => {
     b.classList.toggle("view-active", b.dataset.view === name);
   });
+  const cvb = el("clear-view-btn");
+  if (cvb) cvb.hidden = false;
 
   // Render the CLI idiom command for this view.
   renderViewCommand(name, nodeId, nodeTo);
@@ -1702,6 +1704,8 @@ function clearView() {
   viewNode = null;
   viewNodeTo = null;
   document.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("view-active"));
+  const cvb = el("clear-view-btn");
+  if (cvb) cvb.hidden = true;
   renderViewCommand(null, null, null);
   matchSet = null;
   if (searchEl) searchEl.value = "";
