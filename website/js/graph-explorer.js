@@ -792,7 +792,6 @@ function replaceGraph(data, statusMsg) {
   if (flavor === "targets") {
     const nl = targetGraphToNodeLink(data);
     raw = { nodes: nl.nodes, links: nl.links };
-    if (nl.cycleWarnings.length) statusMsg = statusMsg + "; " + nl.cycleWarnings.join("; ");
     const nProjects = (data.projects || []).length;
     const nTargets = nl.nodes.filter((n) => n.kind === "target").length;
     statusMsg = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
@@ -911,8 +910,6 @@ function targetGraphToNodeLink(tg) {
       for (let ci = 0; ci < p.cycle.length - 1; ci++) {
         cycleEdgePairs.add(p.path + "#" + p.cycle[ci] + "->" + p.path + "#" + p.cycle[ci + 1]);
       }
-      // Close the cycle (last -> first).
-      cycleEdgePairs.add(p.path + "#" + p.cycle[p.cycle.length - 1] + "->" + p.path + "#" + p.cycle[0]);
     }
 
     // Same-project depends_on edges.
@@ -970,6 +967,33 @@ function targetGraphToNodeLink(tg) {
 // ---- boot ------------------------------------------------------------------
 async function boot() {
   readTheme();
+
+  // Register file-open listeners before any early return so the installed PWA
+  // can open a .json file even when the demo graph fails to load (no #data/#src
+  // and the fetch of ./graph.json fails). readGraphFile/replaceGraph rebuild
+  // from scratch so they tolerate an empty initial graph state.
+
+  // Drag-drop a graph.json onto the canvas.
+  canvas.addEventListener("dragover", (e) => e.preventDefault());
+  canvas.addEventListener("drop", (e) => { e.preventDefault(); readGraphFile(e.dataTransfer.files[0]); });
+
+  // File handler: when the installed PWA is launched with "Open with" on a .json file,
+  // the browser delivers it here via launchQueue. Uses the same readGraphFile path as
+  // drag-drop so behavior is identical. Feature-detected; no effect in browsers that
+  // lack the File Handling API (all non-Chromium, and Chromium without the PWA installed).
+  if ("launchQueue" in window) {
+    window.launchQueue.setConsumer(async (launchParams) => {
+      if (!launchParams.files || launchParams.files.length === 0) return;
+      try {
+        const fileHandle = launchParams.files[0];
+        const f = await fileHandle.getFile();
+        readGraphFile(f);
+      } catch (e) {
+        setStatus("Could not open the launched file: " + e.message, true);
+      }
+    });
+  }
+
   const loaded = await loadGraph();
   if (!loaded) { document.body.classList.add("graph-empty"); return; }
 
@@ -1098,27 +1122,6 @@ async function boot() {
     });
   } else if (fsBtn) {
     fsBtn.hidden = true;
-  }
-
-  // Drag-drop a graph.json onto the canvas.
-  canvas.addEventListener("dragover", (e) => e.preventDefault());
-  canvas.addEventListener("drop", (e) => { e.preventDefault(); readGraphFile(e.dataTransfer.files[0]); });
-
-  // File handler: when the installed PWA is launched with "Open with" on a .json file,
-  // the browser delivers it here via launchQueue. Uses the same readGraphFile path as
-  // drag-drop so behavior is identical. Feature-detected; no effect in browsers that
-  // lack the File Handling API (all non-Chromium, and Chromium without the PWA installed).
-  if ("launchQueue" in window) {
-    window.launchQueue.setConsumer(async (launchParams) => {
-      if (!launchParams.files || launchParams.files.length === 0) return;
-      try {
-        const fileHandle = launchParams.files[0];
-        const f = await fileHandle.getFile();
-        readGraphFile(f);
-      } catch (e) {
-        setStatus("Could not open the launched file: " + e.message, true);
-      }
-    });
   }
 
   // Re-read Pico variables and repaint on a theme toggle (mirrors mermaid.js).

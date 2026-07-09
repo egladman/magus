@@ -34,11 +34,9 @@ main.container-fluid {
    own variables), so a theme toggle re-tints the graph; the sidebar/legend dots use
    the .k-<kind> classes below, so no element carries an inline style. */
 /* `symbol` is the SCIP code-symbol kind from `magus refs` (knowledge.go:42).
-   Color: amber-600 (light) / amber-400 (dark) - distinct from all existing kinds
-   (project=blue, spell=violet, op=purple, charm=pink, target=blue-700,
-   module=emerald, method=emerald-400, import=amber-600... wait, import already
-   uses amber-600 in light. Use orange-600 / orange-400 for symbol instead,
-   between import's amber and charm's pink, distinct from all others. */
+   Color: orange-600 (light) / orange-400 (dark). Chosen distinct from import
+   (amber-600/amber-400) and charm (pink); orange sits between them on the
+   spectrum and is visually unambiguous against all other palette entries. */
 :root {
   --gk-project: #0a7ea4; --gk-spell: #8b5cf6; --gk-op: #a855f7; --gk-charm: #ec4899;
   --gk-target: #2563eb; --gk-module: #059669; --gk-method: #10b981; --gk-import: #d97706;

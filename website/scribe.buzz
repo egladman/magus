@@ -1125,7 +1125,6 @@ fun writeOffline(site: Site) > void {
     // Register so pruneStaleOutputs does not treat it as a stale leftover; it
     // is always produced (the SW precaches it) so it never becomes stale.
     site.writtenPaths["offline/index.html"] = true;
-    site.pageUrls["offline/"] = true;
 }
 
 // llmsIndexBody builds the gen/llms.txt document (the llms.txt convention): an H1,
