@@ -53,7 +53,9 @@
         <dt><button type="button" class="q-example" data-q="render"><code>render</code></button></dt>
         <dd>Free text: match a node's id, label, or doc.</dd>
         <dt><button type="button" class="q-example" data-q="kind:spell"><code>kind:spell</code></button></dt>
-        <dd>Only nodes of one kind: <code>project</code>, <code>target</code>, <code>spell</code>, <code>op</code>, <code>charm</code>, <code>module</code>, <code>method</code>, <code>import</code>, <code>function</code>, <code>file</code>, <code>doc</code>, <code>rationale</code>, <code>diagnostic</code>. (Or click a legend color.)</dd>
+        <dd>Only nodes of one kind: <code>project</code>, <code>target</code>, <code>spell</code>, <code>op</code>, <code>charm</code>, <code>module</code>, <code>method</code>, <code>import</code>, <code>function</code>, <code>file</code>, <code>doc</code>, <code>rationale</code>, <code>diagnostic</code>, <code>symbol</code>. (Or click a legend color.)</dd>
+        <dt><button type="button" class="q-example" data-q="kind:target"><code>kind:target</code></button></dt>
+        <dd>All targets in the graph. In a target graph (<code>magus describe graph -o json</code>), anchor targets - those nothing depends on within their project - are shown with a ring outline.</dd>
         <dt><button type="button" class="q-example" data-q="project:website"><code>project:website</code></button></dt>
         <dd>A project node and its targets.</dd>
         <dt><button type="button" class="q-example" data-q="relation:uses"><code>relation:uses</code></button></dt>

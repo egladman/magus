@@ -22,14 +22,16 @@ import { zoom as d3zoom, zoomIdentity } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
 import { select } from "d3-selection";
 
-// The 13 node kinds the knowledge graph emits. Each gets a stable legend color
-// via a CSS custom property (--gk-<kind>) defined for both themes in graph.html,
-// so the palette is themeable and read at render time. KINDS also fixes legend
-// order (roughly: structure -> code -> docs -> diagnostics).
+// The node kinds the graph can emit. Each gets a stable legend color via a CSS
+// custom property (--gk-<kind>) defined for both themes in graph.css, so the
+// palette is themeable and read at render time. KINDS also fixes legend order
+// (roughly: structure -> code -> docs -> diagnostics). `symbol` is the SCIP
+// code-symbol kind introduced by `magus refs`; it lives in lazy @symbols shards
+// and may appear in graphs exported with those shards loaded.
 const KINDS = [
   "project", "spell", "op", "charm", "target",
   "module", "method", "import", "function",
-  "file", "doc", "rationale", "diagnostic",
+  "file", "doc", "rationale", "diagnostic", "symbol",
 ];
 
 // Relations, for grouping edges in the explain card. Order = display order.
@@ -281,10 +283,14 @@ function draw() {
     } else active = true;
     ctx.strokeStyle = active ? theme.muted : theme.border;
     ctx.globalAlpha = active ? 0.55 : 0.1;
+    // Cycle edges (from the target-graph adapter) get a dashed stroke so they
+    // stand out from normal dependency edges.
+    if (e.cycle) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
     ctx.beginPath();
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(t.x, t.y);
     ctx.stroke();
+    if (e.cycle) ctx.setLineDash([]);
   }
   ctx.globalAlpha = 1;
 
@@ -296,13 +302,28 @@ function draw() {
     if (highlight) alpha = n.id === highlight || (near && near.has(n.id)) ? 1 : 0.15;
     else if (matchSet) alpha = matchSet.has(n.id) ? 1 : 0.12;
     ctx.globalAlpha = alpha;
+    const nodeColor = groupColorFor(n) || theme.kindColor[n.kind] || "#888";
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
-    ctx.fillStyle = groupColorFor(n) || theme.kindColor[n.kind] || "#888";
+    ctx.fillStyle = nodeColor;
     ctx.fill();
+    // Anchor ring: target-graph anchor targets (top-level, nothing depends on
+    // them within their project) get an outer ring in the same kind color so
+    // they stand out without adding a new palette entry.
+    if (n.kind === "target" && n.attrs && n.attrs.anchor === "true") {
+      ctx.lineWidth = 1.5 / transform.k;
+      ctx.strokeStyle = nodeColor;
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r + 3 / transform.k, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    }
     if (n.id === selected) {
       ctx.lineWidth = 2 / transform.k;
       ctx.strokeStyle = theme.accent;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
       ctx.stroke();
     }
   }
@@ -640,8 +661,13 @@ function termMatches(node, term) {
   switch (term.field) {
     case "kind": hit = node.kind === v; break;
     case "project":
+      // Knowledge-graph ids: project nodes are "project:<name>", target nodes
+      // are "target:<project>:<name>". Target-graph ids: project nodes are the
+      // raw path (e.g. "."), target/spell nodes carry attrs.project = path.
       hit = node.id === "project:" + v ||
-        (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":"));
+        (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
+        (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
+        node.id.toLowerCase() === v;
       break;
     case "relation": hit = graph.relIndex.has(node.id) && graph.relIndex.get(node.id).has(v); break;
     case "id": hit = node.id.toLowerCase().includes(v); break;
@@ -759,7 +785,21 @@ function applyDeepLinks() {
 // Swap in a graph loaded from a local file (the Open-file button and drag-drop
 // share this). Resets view state and restarts the layout.
 function replaceGraph(data, statusMsg) {
-  graph = prepareGraph(data);
+  // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
+  // path is unchanged; the targets path is converted client-side.
+  const flavor = detectFlavor(data);
+  let raw = data;
+  if (flavor === "targets") {
+    const nl = targetGraphToNodeLink(data);
+    raw = { nodes: nl.nodes, links: nl.links };
+    if (nl.cycleWarnings.length) statusMsg = statusMsg + "; " + nl.cycleWarnings.join("; ");
+    const nProjects = (data.projects || []).length;
+    const nTargets = nl.nodes.filter((n) => n.kind === "target").length;
+    statusMsg = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
+      " - " + nTargets + " target" + (nTargets === 1 ? "" : "s") +
+      (nl.cycleWarnings.length ? "; " + nl.cycleWarnings.join("; ") : "");
+  }
+  graph = prepareGraph(raw);
   selected = null;
   hoverId = null;
   focusId = null;
@@ -782,19 +822,190 @@ async function readGraphFile(file) {
   }
 }
 
+// ---- target-graph adapter --------------------------------------------------
+// The CLI emits two graph shapes:
+//   knowledge: KnowledgeGraphOutput  { definition, nodes, links, ... }
+//   targets:   TargetGraphOutput     { definition, projects[] }
+//
+// detectFlavor tells them apart so the existing knowledge-graph path stays
+// byte-identical in behavior; the target path is converted client-side via
+// targetGraphToNodeLink before entering prepareGraph.
+function detectFlavor(raw) {
+  return Array.isArray(raw.projects) && typeof raw.definition === "string"
+    ? "targets"
+    : "knowledge";
+}
+
+// targetGraphToNodeLink converts a TargetGraphOutput to the { nodes, links }
+// shape prepareGraph accepts (raw.nodes + raw.links). Wire types (verified
+// against types/describe.go):
+//   TargetGraphProject { path, engine?, nodes?, cycle?, depends_on? }
+//   TargetGraphNode    { name, doc?, dependencies?, charms?, spells?, cross_dependencies? }
+//   TargetSpellUse     { spell, ops }      <- read s.spell, not s itself
+//   CrossTargetRef     { project, target } <- read c.project / c.target
+//
+// All edges carry confidence "high" + score 1 so existing code paths that
+// inspect those fields keep working.
+function targetGraphToNodeLink(tg) {
+  const nodes = [];
+  const links = [];
+  const nodeIds = new Set(); // for skipping dangling edges
+
+  // Pass 1: build all nodes so edge validation can reference them.
+  const projectPaths = [];
+  for (const p of tg.projects || []) {
+    // Project node.
+    nodes.push({ id: p.path, kind: "project", label: p.path, attrs: { project: p.path } });
+    nodeIds.add(p.path);
+    projectPaths.push(p.path);
+
+    // Target nodes.
+    for (const n of p.nodes || []) {
+      const id = p.path + "#" + n.name;
+      nodes.push({
+        id,
+        kind: "target",
+        label: n.name,
+        doc: n.doc || undefined,
+        attrs: { project: p.path },
+      });
+      nodeIds.add(id);
+    }
+
+    // Spell nodes (distinct by name across all targets in all projects).
+    for (const n of p.nodes || []) {
+      for (const s of n.spells || []) {
+        const spellId = "spell:" + s.spell;
+        if (!nodeIds.has(spellId)) {
+          nodes.push({ id: spellId, kind: "spell", label: s.spell, attrs: {} });
+          nodeIds.add(spellId);
+        }
+      }
+    }
+  }
+
+  // Pass 2: collect same-project depends_on targets so anchor detection is correct.
+  // A target is an anchor when no same-project depends_on edge points at it.
+  const referencedByIntraProject = new Set(); // ids that appear as dep within same project
+  for (const p of tg.projects || []) {
+    for (const n of p.nodes || []) {
+      for (const d of n.dependencies || []) {
+        referencedByIntraProject.add(p.path + "#" + d);
+      }
+    }
+  }
+
+  // Pass 3: build edges.
+  const cycleProjects = []; // projects with a non-empty cycle field
+  for (const p of tg.projects || []) {
+    // Containment: project -> each of its targets.
+    for (const n of p.nodes || []) {
+      const targetId = p.path + "#" + n.name;
+      links.push({ source: p.path, target: targetId, relation: "contains", confidence: "high", score: 1 });
+    }
+
+    // Build a set of cycle-edge pairs for this project (consecutive pairs in
+    // the cycle array form the cycle edges).
+    const cycleEdgePairs = new Set();
+    if (p.cycle && p.cycle.length >= 2) {
+      for (let ci = 0; ci < p.cycle.length - 1; ci++) {
+        cycleEdgePairs.add(p.path + "#" + p.cycle[ci] + "->" + p.path + "#" + p.cycle[ci + 1]);
+      }
+      // Close the cycle (last -> first).
+      cycleEdgePairs.add(p.path + "#" + p.cycle[p.cycle.length - 1] + "->" + p.path + "#" + p.cycle[0]);
+    }
+
+    // Same-project depends_on edges.
+    for (const n of p.nodes || []) {
+      const srcId = p.path + "#" + n.name;
+      for (const d of n.dependencies || []) {
+        const dstId = p.path + "#" + d;
+        if (!nodeIds.has(dstId)) continue; // skip dangling (prepareGraph also filters)
+        const isCycle = cycleEdgePairs.has(srcId + "->" + dstId);
+        links.push({ source: srcId, target: dstId, relation: "depends_on", confidence: "high", score: 1, ...(isCycle ? { cycle: true } : {}) });
+      }
+
+      // Cross-project depends_on edges.
+      for (const c of n.cross_dependencies || []) {
+        const dstId = c.project + "#" + c.target;
+        // The cross-project target node may or may not be in this graph; only
+        // emit the edge if the destination node exists (avoid phantom nodes).
+        if (!nodeIds.has(dstId)) continue;
+        links.push({ source: srcId, target: dstId, relation: "depends_on", confidence: "high", score: 1 });
+      }
+
+      // Spell edges: target -> spell node.
+      for (const s of n.spells || []) {
+        const spellId = "spell:" + s.spell;
+        links.push({ source: srcId, target: spellId, relation: "uses", confidence: "high", score: 1 });
+      }
+    }
+
+    // Project-level depends_on edges (project -> project).
+    for (const q of p.depends_on || []) {
+      if (!nodeIds.has(q)) continue;
+      links.push({ source: p.path, target: q, relation: "depends_on", confidence: "high", score: 1 });
+    }
+
+    // Track projects with cycles for the status warning.
+    if (p.cycle && p.cycle.length) cycleProjects.push(p);
+  }
+
+  // Mark anchors: targets with no incoming same-project depends_on edge.
+  for (const n of nodes) {
+    if (n.kind !== "target") continue;
+    if (!referencedByIntraProject.has(n.id)) {
+      n.attrs = n.attrs || {};
+      n.attrs.anchor = "true";
+    }
+  }
+
+  // Emit cycle warnings on the status line (deferred; boot reads this).
+  const cycleWarnings = cycleProjects.map((p) =>
+    "cycle detected in " + p.path + ": " + (p.cycle || []).join(" -> "));
+
+  return { nodes, links, cycleWarnings };
+}
+
 // ---- boot ------------------------------------------------------------------
 async function boot() {
   readTheme();
   const loaded = await loadGraph();
   if (!loaded) { document.body.classList.add("graph-empty"); return; }
-  graph = prepareGraph(loaded.data);
-  // Only the private modes get a brief confirmation; the demo shows nothing (the
-  // status box hides when empty) rather than a persistent overlay on the graph.
-  setStatus(loaded.source === "local"
-    ? "Your workspace graph - it never left your machine."
-    : loaded.source === "loopback"
-    ? "Your workspace graph, served over loopback - it never left your network."
-    : "");
+
+  // Detect graph flavor at the top of the pipeline, before prepareGraph.
+  // The knowledge path is byte-identical to before; the targets path is
+  // converted client-side. See detectFlavor + targetGraphToNodeLink for the
+  // wire-type details (types/describe.go vs types/knowledge.go).
+  const flavor = detectFlavor(loaded.data);
+  let rawForPrepare = loaded.data;
+  let cycleWarnings = [];
+
+  if (flavor === "targets") {
+    const nl = targetGraphToNodeLink(loaded.data);
+    rawForPrepare = { nodes: nl.nodes, links: nl.links };
+    cycleWarnings = nl.cycleWarnings;
+  }
+
+  graph = prepareGraph(rawForPrepare);
+
+  // Status line: targets flavor shows a summary; knowledge/demo shows the
+  // existing brief confirmation or nothing (demo remains statusless).
+  if (flavor === "targets") {
+    const nProjects = (loaded.data.projects || []).length;
+    const nTargets = rawForPrepare.nodes.filter((n) => n.kind === "target").length;
+    const base = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
+      " - " + nTargets + " target" + (nTargets === 1 ? "" : "s");
+    setStatus(cycleWarnings.length ? base + "; " + cycleWarnings.join("; ") : base);
+  } else {
+    // Only the private modes get a brief confirmation; the demo shows nothing (the
+    // status box hides when empty) rather than a persistent overlay on the graph.
+    setStatus(loaded.source === "local"
+      ? "Your workspace graph - it never left your machine."
+      : loaded.source === "loopback"
+      ? "Your workspace graph, served over loopback - it never left your network."
+      : "");
+  }
 
   renderLegend();
   renderList();

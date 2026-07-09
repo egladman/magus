@@ -14,11 +14,11 @@ magus run <target>:<charm>  # change HOW it runs (e.g. lint:rw)
 
 Unfamiliar with a term? See the [Glossary](#glossary).
 
-Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
+Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fpwa-graph-explorer%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
 
 ## Query first
 
-This workspace has a knowledge graph of **1651 nodes** and **2863 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1653 nodes** and **2869 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -40,7 +40,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS5002`, `MGS4001`, `MGS2001` |
 | doc | 98 | `magus query kind:doc` | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
 | file | 195 | `magus query kind:file` | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 954 | `magus query kind:function` | `sel`, `sendObject`, `site_render` |
+| function | 956 | `magus query kind:function` | `sel`, `site_render`, `sendObject` |
 | import | 90 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 
@@ -77,10 +77,10 @@ graph LR
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 
-## Project: magus
+## Project: magus-pwa-explorer
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus-pwa-explorer</code></summary>
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
@@ -881,8 +881,8 @@ graph LR
   subgraph entry_cluster[" "]
     ci("ci")
     build_playground("build-playground")
-    build_playground_editor("build-playground-editor")
-    build_graph_explorer("build-graph-explorer")
+    build_mermaid("build-mermaid")
+    build_hljs("build-hljs")
     serve("serve")
   end
   preflight("preflight")
@@ -905,13 +905,13 @@ graph LR
   build --> ci
   test --> ci
   preflight --> build_playground
-  preflight --> build_playground_editor
-  preflight --> build_graph_explorer
+  preflight --> build_mermaid
+  preflight --> build_hljs
   xt_gopherbuzz_build -.-> build_playground
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
   classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
-  class build_graph_explorer,build_playground,build_playground_editor,ci,serve anchor
+  class build_hljs,build_mermaid,build_playground,ci,serve anchor
   class build,buzz_test,format,generate,lint,md_generate,preflight,test target
   class xt_gopherbuzz_build external
   style entry_cluster fill:transparent,stroke:transparent
@@ -919,7 +919,7 @@ graph LR
 
 ### `generate`
 
-generate renders the site and refreshes MAGUS.md, then gates on drift: a clean checkout only goes dirty when gen/ or MAGUS.md actually changed (i.e.
+generate renders the site, refreshes MAGUS.md, and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.
 
 **Defaults**
 
@@ -991,7 +991,7 @@ magus run test website  # from the workspace root
 
 ### `ci`
 
-'ci' is the conventional anchor `magus affected ci` keys off; it fans out lint/build/test, each of which waits for the render via generate.
+'ci' is the anchor `magus affected ci` keys off; it fans out lint/build/test, each of which reaches the render (and its drift gate) via generate.
 
 **Defaults**
 
@@ -1007,7 +1007,7 @@ magus run ci website  # from the workspace root
 
 ### `build-playground`
 
-build-playground rebuilds the WebAssembly interpreter the playground page loads: TinyGo compiles ../cmd/buzz-playground straight to website/gen/playground/buzz.wasm and the matching wasm_exec.js glue is copied beside it.
+build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.
 
 **Defaults**
 
@@ -1021,41 +1021,37 @@ magus run build-playground website  # from the workspace root
 
 **Details:** uncached (always runs)
 
-### `build-playground-editor`
+### `build-mermaid`
 
-build_playground_editor bundles the vendored CodeMirror editor into the committed website/gen/playground/editor.js — the editor analog of build_playground's committed buzz.wasm.
+build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -> mermaid@11) into the committed gen/assets/mermaid.js.
 
 **Defaults**
 
 ```sh
-magus run build-playground-editor website  # from the workspace root
+magus run build-mermaid website  # from the workspace root
 ```
 
 **Depends on:**
 
 - [`preflight`](#preflight)
 
-**Details:** uncached (always runs)
+### `build-hljs`
 
-### `build-graph-explorer`
-
-build_graph_explorer bundles js/graph-explorer.js (d3-force + d3-zoom) into the committed website/gen/graph/explorer.js - the graph analog of build_playground_editor.
+build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11) into the committed gen/assets/hljs.js.
 
 **Defaults**
 
 ```sh
-magus run build-graph-explorer website  # from the workspace root
+magus run build-hljs website  # from the workspace root
 ```
 
 **Depends on:**
 
 - [`preflight`](#preflight)
-
-**Details:** uncached (always runs)
 
 ### `serve`
 
-serve watches ../docs and re-renders gen/ on change — handy for local docs work.
+serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change - handy for local docs work.
 
 **Defaults**
 
@@ -1075,7 +1071,7 @@ magus run preflight website  # from the workspace root
 
 ### `md-generate`
 
-md-generate renders MAGUS.md (the target catalog + dependency graph) via `magus describe graph`, parsed statically from this magusfile so it stays in lockstep with the project's targets.
+md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.
 
 **Defaults**
 
@@ -1085,7 +1081,7 @@ magus run md-generate website  # from the workspace root
 
 ### `buzz-test`
 
-buzz-test runs scribe's unit tests (the `test "..." {}` blocks in scribe.buzz) through `magus buzz`, in --embedded mode with the pure magus modules registered so scribe's markdown/encoding imports resolve.
+buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so scribe's markdown/encoding imports resolve.
 
 **Defaults**
 

@@ -21,13 +21,13 @@ only when the tool surface does.
 2. Then reach for the verbs. Prefer the MCP tools; the CLI is the fallback when no
    magus daemon is running.
 
-   | question | MCP tool | CLI |
-   | --- | --- | --- |
-   | find and relate entities | `magus_query` | `magus query "<terms>"` |
-   | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>` |
-   | how do two nodes relate | `magus_path` | `magus path <a> <b>` |
-   | where risk concentrates | `magus_stats` | `magus graph stats` |
-   | where a code symbol is defined and used | `magus_refs` | `magus refs <symbol>` |
+   | question                                      | MCP tool        | CLI                     |
+   | --------------------------------------------- | --------------- | ----------------------- |
+   | find and relate entities                      | `magus_query`   | `magus query "<terms>"` |
+   | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>`  |
+   | how do two nodes relate                       | `magus_path`    | `magus path <a> <b>`    |
+   | where risk concentrates                       | `magus_stats`   | `magus graph stats`     |
+   | where a code symbol is defined and used       | `magus_refs`    | `magus refs <symbol>`   |
 
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it

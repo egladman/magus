@@ -245,7 +245,7 @@ declared target output; point config at it (explicit, opt-in, never auto-detecte
 knowledge:
   symbols:
     - project: pkg/foo
-      index: pkg/foo/index.scip   # produced by a `pkg/foo:scip` target
+      index: pkg/foo/index.scip # produced by a `pkg/foo:scip` target
 </code></pre>
 <p>Each declared index becomes a per-project <code>&lt;project&gt;@symbols</code> shard: <code>symbol</code> nodes
 (keyed by their version-stripped SCIP moniker), <code>defines</code> edges from the defining

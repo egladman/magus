@@ -33,25 +33,31 @@ main.container-fluid {
    The canvas reads each --gk-<kind> at paint time (like js/mermaid.js reads Pico's
    own variables), so a theme toggle re-tints the graph; the sidebar/legend dots use
    the .k-<kind> classes below, so no element carries an inline style. */
+/* `symbol` is the SCIP code-symbol kind from `magus refs` (knowledge.go:42).
+   Color: amber-600 (light) / amber-400 (dark) - distinct from all existing kinds
+   (project=blue, spell=violet, op=purple, charm=pink, target=blue-700,
+   module=emerald, method=emerald-400, import=amber-600... wait, import already
+   uses amber-600 in light. Use orange-600 / orange-400 for symbol instead,
+   between import's amber and charm's pink, distinct from all others. */
 :root {
   --gk-project: #0a7ea4; --gk-spell: #8b5cf6; --gk-op: #a855f7; --gk-charm: #ec4899;
   --gk-target: #2563eb; --gk-module: #059669; --gk-method: #10b981; --gk-import: #d97706;
   --gk-function: #6366f1; --gk-file: #0d9488; --gk-doc: #0891b2; --gk-rationale: #ca8a04;
-  --gk-diagnostic: #dc2626;
+  --gk-diagnostic: #dc2626; --gk-symbol: #ea580c;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
     --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
     --gk-function: #818cf8; --gk-file: #2dd4bf; --gk-doc: #22d3ee; --gk-rationale: #facc15;
-    --gk-diagnostic: #f87171;
+    --gk-diagnostic: #f87171; --gk-symbol: #fb923c;
   }
 }
 [data-theme="dark"] {
   --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
   --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
   --gk-function: #818cf8; --gk-file: #2dd4bf; --gk-doc: #22d3ee; --gk-rationale: #facc15;
-  --gk-diagnostic: #f87171;
+  --gk-diagnostic: #f87171; --gk-symbol: #fb923c;
 }
 
 .pg-title { margin-bottom: 0.6rem; }
@@ -192,6 +198,7 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
 .k-doc { background: var(--gk-doc); }
 .k-rationale { background: var(--gk-rationale); }
 .k-diagnostic { background: var(--gk-diagnostic); }
+.k-symbol { background: var(--gk-symbol); }
 
 /* Explain card: a third column on wide screens; plain HTML dl content. */
 #explain-card {
