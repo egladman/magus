@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -146,7 +145,7 @@ func parseSemver(v string) [3]int {
 //
 // The MAGUS_SIGNING_KEY env var is NOT required here; signing SHA256SUMS is a
 // separate step (magus-utils sign). The manifest itself is not signed; only
-// index.json is signed (by emitReleaseIndex).
+// index.json is signed (by runReleaseIndex).
 func runCut(args []string) error {
 	// Simple flag parsing without flag package to avoid import bloat.
 	var version, artifactsDir, changelogPath, outDir string
@@ -205,6 +204,12 @@ func runCut(args []string) error {
 			Size:     fmt.Sprintf("%d", size),
 			SHA256:   digest,
 		})
+	}
+	// Guard: require at least one binary or checksum artifact before appending the .pem.
+	// An empty artifacts list means the directory contained no release assets, which is
+	// almost certainly a path mistake rather than a valid hollow release.
+	if len(artifacts) == 0 {
+		return fmt.Errorf("no release artifacts found in %s (expected *.tar.gz or SHA256SUMS)", artifactsDir)
 	}
 	// Add the release signing key (not a binary artifact; no size/sha256 needed here).
 	artifacts = append(artifacts, ReleaseArtifact{
@@ -293,21 +298,32 @@ func runMigrate(args []string) error {
 	return nil
 }
 
-// runReleaseIndex reads releases/*.yaml and emits gen/public/release/index.json +
-// index.json.sig. Signing requires MAGUS_SIGNING_KEY to be set.
+// runReleaseIndex reads the scribe-emitted website/gen/public/release/index.json and
+// signs those exact bytes into index.json.sig. Scribe is the single source of truth
+// for the served file; this tool only adds the signature so the sig covers the bytes
+// the client actually downloads. Signing requires MAGUS_SIGNING_KEY to be set.
 //
-// Usage: magus-utils release-index -releases ./releases -out ./website/gen/public/release
+// Usage: magus-utils release-index -served ./website/gen/public/release [-no-sign]
+//
+// The -releases and -out flags are accepted but ignored (kept for backward compat with
+// any existing CI invocations; a future cleanup may remove them).
 func runReleaseIndex(args []string) error {
-	var releasesDir, outDir string
+	var servedDir string
 	var skipSign bool
 	for i := 0; i < len(args)-1; i++ {
 		switch args[i] {
-		case "-releases":
-			releasesDir = args[i+1]
+		case "-served":
+			servedDir = args[i+1]
 			i++
+		// Accept -out as an alias for -served (backward compat).
 		case "-out":
-			outDir = args[i+1]
+			if servedDir == "" {
+				servedDir = args[i+1]
+			}
 			i++
+		// Accept -releases (no longer used; kept for backward compat).
+		case "-releases":
+			i++ // consume the value and ignore
 		}
 	}
 	for _, a := range args {
@@ -315,34 +331,18 @@ func runReleaseIndex(args []string) error {
 			skipSign = true
 		}
 	}
-	if releasesDir == "" || outDir == "" {
-		return fmt.Errorf("usage: magus-utils release-index -releases ./releases -out ./website/gen/public/release [-no-sign]")
+	if servedDir == "" {
+		return fmt.Errorf("usage: magus-utils release-index -served ./website/gen/public/release [-no-sign]")
 	}
 
-	manifests, err := loadManifests(releasesDir)
+	idxPath := filepath.Join(servedDir, "index.json")
+	// Read the scribe-emitted file. This is the exact JSON the client downloads, so the
+	// signature covers what is actually served - not a re-rendered Go-side copy.
+	data, err := os.ReadFile(idxPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w (run `magus run generate website` first)", idxPath, err)
 	}
-
-	idx := ReleaseIndex{
-		SchemaVersion: 1,
-		Releases:      manifests,
-	}
-
-	data, err := json.MarshalIndent(idx, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal index: %w", err)
-	}
-	data = append(data, '\n')
-
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", outDir, err)
-	}
-	idxPath := filepath.Join(outDir, "index.json")
-	if err := os.WriteFile(idxPath, data, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", idxPath, err)
-	}
-	fmt.Printf("wrote %s\n", idxPath)
+	fmt.Printf("signing %s (%d bytes)\n", idxPath, len(data))
 
 	if skipSign {
 		return nil
@@ -477,7 +477,7 @@ func parseReleasedVersions(path string) ([]changelogEntry, error) {
 			if strings.HasPrefix(rest, "[") {
 				close := strings.Index(rest, "]")
 				if close >= 0 {
-					ver := rest[1 : close]
+					ver := rest[1:close]
 					if !strings.EqualFold(ver, "unreleased") {
 						cur.version = ver
 						rem := rest[close+1:]
@@ -723,4 +723,3 @@ func verifyIndexSigFile(outDir string, pubKey ed25519.PublicKey) error {
 	}
 	return nil
 }
-

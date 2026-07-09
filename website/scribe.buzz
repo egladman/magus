@@ -94,10 +94,19 @@ object DocPage {
 // Release is one release entry read from releases/v<semver>.yaml. The body field
 // holds the trimmed markdown for the Atom feed; artifacts is the list of release
 // assets with their integrity data (name, platform, size, sha256).
+// notes* fields carry the Keep-a-Changelog sections as structured string lists;
+// yanked marks a release that should not be used (security issue, etc.).
+// These fields mirror the Go ReleaseManifest struct (cmd/magus-utils/release.go)
+// so the index.json schema is a proper frozen v1.
 object Release {
     version: str = "",
     date: str = "",
     body: str = "",
+    notesAdded: [str] = mut [<str>],
+    notesChanged: [str] = mut [<str>],
+    notesFixed: [str] = mut [<str>],
+    notesRemoved: [str] = mut [<str>],
+    yanked: bool = false,
     // artifacts holds the release assets. Each entry has: name, platform, size, sha256.
     // size and sha256 may be "" for historical releases migrated without artifact data.
     artifacts: [{str: str}] = mut [<{str: str}>],
@@ -749,31 +758,86 @@ fun renderBlogAtom(site: Site) > void {
 }
 
 
-// loadReleases reads releases/v*.yaml (newest-first by sort order, which matches
-// semver descending for vX.Y.Z filenames) and populates site.releases. Each yaml
-// file is authoritative for one version: version, date, body (trimmed markdown for
-// the Atom feed), and artifacts (list of {name, platform, size, sha256}).
+// strToNat converts a decimal digit string to a non-negative int.
+// Non-digit characters are ignored. Used for numeric semver segment parsing.
+fun strToNat(s: str) > int {
+    var n = 0;
+    var i = 0;
+    while (i < s.len()) {
+        final b = s.byte(i);
+        if (b >= 48 and b <= 57) { // '0'..'9' are codepoints 48-57
+            n = n * 10 + (b - 48);
+        }
+        i = i + 1;
+    }
+    return n;
+}
+
+// semverSortKey returns a zero-padded sort key for a release filename.
+// "v0.10.0.yaml" -> "0000.0010.0000", so lexicographic order matches numeric semver.
+// Unknown filename formats fall through to the original name (safe: only used for sort).
+fun semverSortKey(name: str) > str {
+    var v = name;
+    if (v.startsWith("v")) { v = v.sub(1); }
+    if (v.endsWith(".yaml")) { v = v.sub(0, v.len() - 5); }
+    final parts = v.split(".");
+    var key = "";
+    foreach (p in parts) {
+        if (key.len() > 0) { key = key + "."; }
+        key = key + pad4(strToNat(p));
+    }
+    return key;
+}
+
+// sortNamesSemverDesc sorts a list of release filenames descending by semver
+// (newest-first). Uses selection sort; O(n^2) fine for the expected ~10-20 releases.
+// Mirrors Go's compareSemver in cmd/magus-utils/release.go.
+fun sortNamesSemverDesc(names: [str]) > [str] {
+    var remaining: [str] = mut [<str>];
+    foreach (n in names) { remaining.append(n); }
+    var sorted: [str] = mut [<str>];
+    while (remaining.len() > 0) {
+        var maxIdx = 0;
+        var maxKey = semverSortKey(remaining[0]);
+        var k = 1;
+        while (k < remaining.len()) {
+            final key = semverSortKey(remaining[k]);
+            if (key > maxKey) {
+                maxKey = key;
+                maxIdx = k;
+            }
+            k = k + 1;
+        }
+        sorted.append(remaining[maxIdx]);
+        var next: [str] = mut [<str>];
+        var m = 0;
+        while (m < remaining.len()) {
+            if (m != maxIdx) { next.append(remaining[m]); }
+            m = m + 1;
+        }
+        remaining = next;
+    }
+    return sorted;
+}
+
+// loadReleases reads releases/v*.yaml (newest-first by numeric semver) and populates
+// site.releases. Each yaml file is authoritative for one version: version, date, body
+// (trimmed markdown for the Atom feed), notes sections (added/changed/fixed/removed),
+// yanked flag, and artifacts (list of {name, platform, size, sha256}).
 // This replaces parseChangelog: changelog-parsing now runs ONLY at cut time, never
 // at site-build time.
 fun loadReleases(site: Site) > void {
     site.releases = mut [<Release>];
     final relDir = site.root + "/releases";
     if (os.execute(["test", "-d", relDir]) != 0) { return; }
-    // fs.list returns sorted names; for vX.Y.Z filenames this gives ascending order,
-    // so we collect into a temp list and reverse for newest-first.
+    // Collect yaml filenames, then sort newest-first by numeric semver so
+    // v0.10.0 correctly precedes v0.2.0 (lexicographic reversal fails there).
     var names: [str] = mut [<str>];
     foreach (name in fs.list(relDir)) {
         if (name.endsWith(".yaml")) { names.append(name); }
     }
-    // Reverse: ascending alpha -> descending (newest-first) for vX.Y.Z names.
-    final n = names.len();
-    var reversed: [str] = mut [<str>];
-    var i = n - 1;
-    while (i >= 0) {
-        reversed.append(names[i]);
-        i = i - 1;
-    }
-    foreach (name in reversed) {
+    final sorted = sortNamesSemverDesc(names);
+    foreach (name in sorted) {
         final path = relDir + "/" + name;
         final f = io.File.open(path, io.FileMode.read);
         final src = f.readAll();
@@ -783,7 +847,31 @@ fun loadReleases(site: Site) > void {
         final date = doc.q("date").stringValue();
         final body = doc.q("body").stringValue();
         if (ver == "") { continue; } // skip malformed files
+        // Load structured notes sections (added/changed/fixed/removed).
+        // .list() returns null when the YAML field is absent; guard before iterating.
+        var notesAdded: [str] = mut [<str>];
+        var notesChanged: [str] = mut [<str>];
+        var notesFixed: [str] = mut [<str>];
+        var notesRemoved: [str] = mut [<str>];
+        final _addedList = doc.q("notes").q("added").list();
+        if (_addedList != null) {
+            foreach (item in _addedList) { notesAdded.append(item.stringValue()); }
+        }
+        final _changedList = doc.q("notes").q("changed").list();
+        if (_changedList != null) {
+            foreach (item in _changedList) { notesChanged.append(item.stringValue()); }
+        }
+        final _fixedList = doc.q("notes").q("fixed").list();
+        if (_fixedList != null) {
+            foreach (item in _fixedList) { notesFixed.append(item.stringValue()); }
+        }
+        final _removedList = doc.q("notes").q("removed").list();
+        if (_removedList != null) {
+            foreach (item in _removedList) { notesRemoved.append(item.stringValue()); }
+        }
+        final yanked = doc.q("yanked").booleanValue();
         // Load artifacts: each entry has name/platform/size/sha256.
+        // .list() returns null when artifacts is absent; guard before iterating.
         var arts: [{str: str}] = mut [<{str: str}>];
         final artList = doc.q("artifacts").list();
         foreach (a in artList) {
@@ -791,7 +879,7 @@ fun loadReleases(site: Site) > void {
             final artPlatform = a.q("platform").stringValue();
             final artSize = a.q("size").stringValue();
             final artSHA256 = a.q("sha256").stringValue();
-                arts.append(mut {
+            arts.append(mut {
                 "name": artName,
                 "platform": artPlatform,
                 "size": artSize,
@@ -802,6 +890,11 @@ fun loadReleases(site: Site) > void {
             version = ver,
             date = date,
             body = body,
+            notesAdded = notesAdded,
+            notesChanged = notesChanged,
+            notesFixed = notesFixed,
+            notesRemoved = notesRemoved,
+            yanked = yanked,
             artifacts = arts,
         });
     }
@@ -969,23 +1062,51 @@ fun jsonStr(s: str) > str {
     return "\"" + escaped + "\"";
 }
 
+// jsonStrList encodes a [str] as a JSON array of string literals.
+fun jsonStrList(items: [str]) > str {
+    var parts: [str] = mut [<str>];
+    foreach (s in items) { parts.append(jsonStr(s)); }
+    return "[" + parts.join(",") + "]";
+}
+
 // releaseIndexJSON builds the JSON body for gen/public/release/index.json.
-// Schema version 1: schema_version (int) + releases array (newest-first).
-// The URL and schema are frozen at birth; additive changes only.
-// Emits compact but readable JSON; one release per line. git-stable across runs.
+// Schema version 1 (frozen): schema_version, releases[]{version, date, notes{added?,
+// changed?, fixed?, removed?}, body, artifacts[]{name, platform, size, sha256}, yanked?}.
+// Field order and names match the Go ReleaseManifest struct in cmd/magus-utils/release.go
+// so the schema is one canonical frozen v1 regardless of emitter.
+// Emits compact JSON; git-stable across runs; one release per line.
 fun releaseIndexJSON(site: Site) > str {
     // \{ and \} are the Buzz escape sequences for literal braces in a double-quoted
     // string (the unescaped { would start a string-interpolation expression).
     var relJson: [str] = mut [<str>];
     foreach (rel in site.releases) {
+        // Build the notes sub-object, omitting empty sections (matching Go omitempty).
+        var notesParts: [str] = mut [<str>];
+        if (rel.notesAdded.len() > 0) {
+            notesParts.append("\"added\":" + jsonStrList(rel.notesAdded));
+        }
+        if (rel.notesChanged.len() > 0) {
+            notesParts.append("\"changed\":" + jsonStrList(rel.notesChanged));
+        }
+        if (rel.notesFixed.len() > 0) {
+            notesParts.append("\"fixed\":" + jsonStrList(rel.notesFixed));
+        }
+        if (rel.notesRemoved.len() > 0) {
+            notesParts.append("\"removed\":" + jsonStrList(rel.notesRemoved));
+        }
+        final notesJson = "\{" + notesParts.join(",") + "\}";
         var artJson: [str] = mut [<str>];
         foreach (a in rel.artifacts) {
             artJson.append("\{\"name\":" + jsonStr(a["name"]) + ",\"platform\":" + jsonStr(a["platform"]) + ",\"size\":" + jsonStr(a["size"]) + ",\"sha256\":" + jsonStr(a["sha256"]) + "\}");
         }
-        relJson.append("\{\"version\":" + jsonStr(rel.version)
+        var entry = "\{\"version\":" + jsonStr(rel.version)
             + ",\"date\":" + jsonStr(rel.date)
+            + ",\"notes\":" + notesJson
             + ",\"body\":" + jsonStr(rel.body)
-            + ",\"artifacts\":[" + artJson.join(",") + "]\}");
+            + ",\"artifacts\":[" + artJson.join(",") + "]";
+        if (rel.yanked) { entry = entry + ",\"yanked\":true"; }
+        entry = entry + "\}";
+        relJson.append(entry);
     }
     return "\{\"schema_version\":1,\"releases\":[" + relJson.join(",") + "]\}\n";
 }
@@ -3093,4 +3214,53 @@ test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descript
         + "- [FAQ](/faq/index.md)\n"
         + "- [Targets](/targets/index.md): What a target is\n";
     assert.equal(llmsIndexBody(pages, "/"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
+}
+
+test "jsonStr escapes backslash, double-quote, newline, tab, and carriage-return" {
+    assert.equal(jsonStr(""), "\"\"", "empty string");
+    assert.equal(jsonStr("hello"), "\"hello\"", "plain string passthrough");
+    assert.equal(jsonStr("a\\b"), "\"a\\\\b\"", "backslash escaped first");
+    assert.equal(jsonStr("say \"hi\""), "\"say \\\"hi\\\"\"", "double-quote escaped");
+    assert.equal(jsonStr("line1\nline2"), "\"line1\\nline2\"", "newline escaped");
+    assert.equal(jsonStr("col1\tcol2"), "\"col1\\tcol2\"", "tab escaped");
+    assert.equal(jsonStr("cr\r"), "\"cr\\r\"", "carriage-return escaped");
+    // Backslash must be escaped before quotes so new backslashes are not re-escaped.
+    assert.equal(jsonStr("a\\\"b"), "\"a\\\\\\\"b\"", "backslash then quote: backslash first");
+}
+
+test "semverSortKey produces zero-padded keys for numeric semver comparison" {
+    assert.equal(semverSortKey("v0.2.0.yaml"),  "0000.0002.0000", "v0.2.0");
+    assert.equal(semverSortKey("v0.10.0.yaml"), "0000.0010.0000", "v0.10.0");
+    assert.equal(semverSortKey("v1.0.0.yaml"),  "0001.0000.0000", "v1.0.0");
+    // v0.10.0 key > v0.2.0 key: newest-first sort is correct
+    final key10 = semverSortKey("v0.10.0.yaml");
+    final key2  = semverSortKey("v0.2.0.yaml");
+    assert.equal(key10 > key2, true, "v0.10.0 sorts after v0.2.0 in descending pass");
+}
+
+test "releaseIndexJSON emits schema_version=1 and frozen v1 fields for a known release" {
+    final s = mut Site{};
+    var added: [str] = mut [<str>];
+    added.append("first feature");
+    var artifacts: [{str: str}] = mut [<{str: str}>];
+    artifacts.append(mut {"name": "magus_v0.2.0_linux_amd64.tar.gz", "platform": "linux/amd64", "size": "12345", "sha256": "abc123"});
+    s.releases.append(Release{
+        version = "v0.2.0",
+        date = "2026-08-01",
+        notesAdded = added,
+        body = "### Added\n\n- first feature",
+        artifacts = artifacts,
+    });
+    final got = releaseIndexJSON(s);
+    // Check JSON structure via indexOf so literal braces in assertions don't need escaping.
+    assert.equal(got.indexOf("\"schema_version\":1") != null, true, "schema_version:1 present");
+    assert.equal(got.indexOf("\"releases\":[") != null, true, "releases array present");
+    assert.equal(got.indexOf("\"version\":\"v0.2.0\"") != null, true, "version present");
+    assert.equal(got.indexOf("\"notes\":") != null, true, "notes field present");
+    assert.equal(got.indexOf("\"added\":[\"first feature\"]") != null, true, "notes.added present");
+    assert.equal(got.indexOf("\"body\":\"### Added\\n\\n- first feature\"") != null, true, "body present with escaped newlines");
+    assert.equal(got.indexOf("\"platform\":\"linux/amd64\"") != null, true, "artifact platform present");
+    // yanked must be absent when false (omitempty)
+    assert.equal(got.indexOf("yanked") != null, false, "yanked absent when false");
+    assert.equal(got.endsWith("]\}\n"), true, "ends with closing brace and newline");
 }

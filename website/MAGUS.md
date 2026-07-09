@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](#glossary).
 
 ## Query first
 
-This workspace has a knowledge graph of **495 nodes** and **600 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **500 nodes** and **609 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -29,7 +29,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `.` |
-| target | 13 | `magus query kind:target` | `generate`, `preflight`, `ci` |
+| target | 12 | `magus query kind:target` | `generate`, `ci`, `format` |
 | spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
 | op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | charm | 1 | `magus query kind:charm` | `rw` |
@@ -38,12 +38,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 23 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
 | doc | 1 | `magus query kind:doc` | `MAGUS.md` |
 | file | 23 | `magus query kind:file` | `scribe.buzz`, `magusfile.buzz`, `scribe_html.buzz` |
-| function | 186 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
-| import | 23 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
+| function | 191 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
+| import | 24 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 13 | `magus query project:.` | `generate`, `preflight`, `ci` |
+| . | 12 | `magus query project:.` | `generate`, `ci`, `format` |
 
 ## Reading the graphs
 
@@ -94,15 +94,16 @@ config:
     rankSpacing: 80
 ---
 graph LR
+  subgraph stage_generate["generate"]
+    md_generate("md-generate")
+    changelog_generate("changelog-generate")
+  end
   subgraph entry_cluster[" "]
     ci("ci")
     build_playground("build-playground")
-    build_mermaid("build-mermaid")
-    build_hljs("build-hljs")
     serve("serve")
   end
   preflight("preflight")
-  md_generate("md-generate")
   generate("generate")
   format("format")
   lint("lint")
@@ -110,7 +111,7 @@ graph LR
   buzz_test("buzz-test")
   test("test")
   preflight --> generate
-  md_generate --> generate
+  stage_generate --> generate
   generate --> format
   format --> lint
   generate --> build
@@ -120,18 +121,16 @@ graph LR
   build --> ci
   test --> ci
   preflight --> build_playground
-  preflight --> build_mermaid
-  preflight --> build_hljs
   classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
   classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_hljs,build_mermaid,build_playground,ci,serve anchor
-  class build,buzz_test,format,generate,lint,md_generate,preflight,test target
+  class build_playground,ci,serve anchor
+  class build,buzz_test,changelog_generate,format,generate,lint,md_generate,preflight,test target
   style entry_cluster fill:transparent,stroke:transparent
 ```
 
 ### `generate`
 
-generate renders the site, refreshes MAGUS.md, and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.
+generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.
 
 **Defaults**
 
@@ -149,6 +148,7 @@ magus run generate:rw  # mutate in place instead of checking
 
 - [`preflight`](#preflight)
 - [`md-generate`](#md-generate)
+- [`changelog-generate`](#changelog-generate)
 
 **Details:** uncached (always runs) · exclusive (runs alone, no concurrent targets)
 
@@ -233,34 +233,6 @@ magus run build-playground  # from the workspace root
 
 **Details:** uncached (always runs)
 
-### `build-mermaid`
-
-build-mermaid bundles the vendored mermaid library (js/mermaid-vendor.js -> mermaid@11) into the committed gen/assets/mermaid.js.
-
-**Defaults**
-
-```sh
-magus run build-mermaid  # from the workspace root
-```
-
-**Depends on:**
-
-- [`preflight`](#preflight)
-
-### `build-hljs`
-
-build-hljs bundles the vendored highlight.js library (js/hljs-vendor.js -> highlight.js@11) into the committed gen/assets/hljs.js.
-
-**Defaults**
-
-```sh
-magus run build-hljs  # from the workspace root
-```
-
-**Depends on:**
-
-- [`preflight`](#preflight)
-
 ### `serve`
 
 serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change - handy for local docs work.
@@ -289,6 +261,16 @@ md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 
 ```sh
 magus run md-generate  # from the workspace root
+```
+
+### `changelog-generate`
+
+changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.
+
+**Defaults**
+
+```sh
+magus run changelog-generate  # from the workspace root
 ```
 
 ### `buzz-test`

@@ -1,6 +1,6 @@
 // Auto-generated at build time (gen/sw.js). Template lives at website/sw.js.tmpl;
-// the render substitutes magus-152133aeae51 and /magus/ before copying into gen/.
-const VERSION = "magus-152133aeae51";
+// the render substitutes magus-3ba36ef78475 and /magus/ before copying into gen/.
+const VERSION = "magus-3ba36ef78475";
 const BASE = "/magus/";
 
 const PRECACHE = [
@@ -13,13 +13,6 @@ const PRECACHE = [
   BASE + "theme.js",
   BASE + "site.css",
   BASE + "theme.css",
-  // pico.min.css is same-origin (no CDN); precache so every page is styled on a
-  // cold offline load. The large mermaid bundle (gen/assets/mermaid.js) is NOT
-  // precached - it caches on first use via the cache-first same-origin asset path.
-  BASE + "assets/pico.min.css",
-  // offline/ is the SW fallback for failed navigations - it must be in the cache
-  // before any navigation fails, so it is precached unconditionally here.
-  BASE + "offline/",
 ];
 
 self.addEventListener("install", (e) => {
@@ -51,7 +44,7 @@ self.addEventListener("fetch", (e) => {
         const copy = r.clone();
         caches.open(VERSION).then((c) => c.put(req, copy));
         return r;
-      }).catch(() => caches.match(req).then((c) => c || caches.match(BASE + "offline/")))
+      }).catch(() => caches.match(req))
     );
     return;
   }
