@@ -5,12 +5,54 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/mcp/auth"
 )
+
+// probeLiveBridgeTimeout bounds the real HTTP probe of the web bridge below.
+const probeLiveBridgeTimeout = 2 * time.Second
+
+// probeLiveBridge issues a real HTTP GET to the web bridge's guarded
+// /api/v1/graph route to confirm it is actually up, mirroring the doctor
+// bridge check (internal/doctor/checks_mcp.go probeBridgeReachability). A
+// daemon-status probe alone is not enough: daemonStatus("") accepts ANY
+// reachable proc socket (Mode=="proc"), which is a different transport than
+// the web bridge this URL targets - a proc-mode daemon with no bridge running
+// would otherwise let a token be printed for an address nothing is listening
+// on. A 401/403 response proves the guarded route exists (auth runs before
+// the handler); connection refused/timeout means the bridge is down.
+func probeLiveBridge(ctx context.Context, addr string) error {
+	target := "http://" + addr + "/api/v1/graph"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("bridge not reachable at %s: %w", target, err)
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil
+	default:
+		return fmt.Errorf("bridge at %s responded with unexpected status %d", target, resp.StatusCode)
+	}
+}
+
+// liveBridgeReachable reports whether the web bridge is actually up, for the
+// zero-arg auto-switch in graphOpen. It never emits a token; it only decides
+// whether to attempt live mode at all.
+func liveBridgeReachable(ctx context.Context) bool {
+	pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
+	defer cancel()
+	return probeLiveBridge(pctx, mcpAddrString()) == nil
+}
 
 // graphOpenLive opens the Graph Explorer connected to the running daemon via a
 // #live= fragment. The host in the fragment is the daemon's loopback address;
@@ -20,11 +62,17 @@ import (
 // The token is loaded from the on-disk token file written by auth.Save/SaveNew.
 // It is embedded in the URL fragment (which browsers do not transmit in HTTP
 // requests) and is stripped from the fragment by the page on first load.
-func graphOpenLive(ctx context.Context, root, base string, printOnly, useTargets bool) error {
-	// Probe daemon so we can give a clear error when it is not running.
-	if _, err := daemonStatus("")(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "magus graph open --live: daemon is not running.")
-		fmt.Fprintln(os.Stderr, "Start it with: magus server start")
+func graphOpenLive(ctx context.Context, base string, printOnly, useTargets bool) error {
+	hostPort := mcpAddrString()
+
+	// Probe the ACTUAL web bridge (not just the proc socket) so we never emit a
+	// URL and token for a transport nothing is listening on. Explicit --live
+	// with no reachable bridge is an error; magus never auto-starts a daemon.
+	pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
+	defer cancel()
+	if err := probeLiveBridge(pctx, hostPort); err != nil {
+		fmt.Fprintln(os.Stderr, "magus graph open --live: the web bridge is not reachable.")
+		fmt.Fprintln(os.Stderr, "start it: magus server start")
 		return errSilent{exitCode: 1}
 	}
 
@@ -35,9 +83,7 @@ func graphOpenLive(ctx context.Context, root, base string, printOnly, useTargets
 		return errSilent{exitCode: 1}
 	}
 
-	hostPort := mcpAddrString()
-
-	openURL := strings.TrimRight(base, "/") + "/#live=" + hostPort + "&token=" + url.QueryEscape(token)
+	openURL := strings.TrimRight(base, "/") + "/#live=" + hostPort + "&token=" + url.PathEscape(token)
 	if useTargets {
 		openURL += "&flavor=targets"
 	}

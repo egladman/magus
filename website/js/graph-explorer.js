@@ -84,14 +84,19 @@ let projectionSet = null;
 // ---- Phase 9: live mode state ----------------------------------------------
 let liveHost = null;     // host:port string when in live mode, else null
 let liveToken = null;    // bearer token for live mode
-let liveETag = null;     // last ETag from /api/v1/graph for If-None-Match
+let liveETag = null;     // last ETag from the currently loaded graph variant, for If-None-Match
+// liveGraphQuery is the exact /api/v1/graph query string ("", "?level=projects",
+// or "?flavor=targets") of whichever variant is currently loaded. liveRefetchGraph
+// MUST reuse this (with liveETag) rather than hardcoding a variant: sending one
+// variant's ETag while requesting a different one makes the server 200 with the
+// other variant's body, silently downgrading (or upgrading) what is on screen.
+let liveGraphQuery = "";
 let liveSseAbort = null; // AbortController for the SSE fetch
 let liveReconnectTimer = null;
 let liveReconnectDelay = 1000; // ms; doubles on each failure up to 30000
 let liveWorkspaceName = null;  // workspace name from /api/v1/status, for badge
-let liveConnected = false;
+let liveConnected = false; // true while the SSE stream is open; drives the badge style
 let liveFlavor = null;   // null (knowledge) or "targets"
-let liveSkeletonLoaded = false; // true after the skeleton first load succeeds
 
 // The graph stays gently "alive": the simulation never fully cools, so nodes
 // keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
@@ -1280,6 +1285,9 @@ function applyDeepLinks() {
 // Swap in a graph loaded from a local file (the Open-file button and drag-drop
 // share this). Resets view state and restarts the layout.
 function replaceGraph(data, statusMsg) {
+  // A locally opened/dropped file supersedes whatever provenance badge was
+  // showing for the graph that loaded at boot.
+  updateSnapshotBadge(null);
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
   const flavor = detectFlavor(data);
@@ -2300,15 +2308,33 @@ function applyPreset(presetId) {
 
 // validateLiveHost: the host in #live= MUST be literally 127.0.0.1 or [::1].
 // localhost, hostnames, and other IPs are rejected before any network request.
-// This 5-line check is what makes the docs claim "data cannot leave your machine" verifiable.
-function validateLiveHost(host) {
-  if (host === "127.0.0.1") return true;
-  if (host === "[::1]") return true;
-  return false;
+// Parses hostPort as a REAL URL rather than splitting on the last ":" - a naive
+// split lets a URL-userinfo "@" smuggle an attacker host past the check (e.g.
+// "127.0.0.1:7391@evil.com" splits to host "127.0.0.1", but a browser fetching
+// "http://127.0.0.1:7391@evil.com" actually connects to evil.com and would send
+// it the bearer token). Returns the normalized "host:port" (brackets kept for
+// IPv6) on success, or null on any rejection. Every subsequent live-mode fetch
+// is built from this normalized value, never from the raw fragment string, so
+// this check is what makes the docs claim "data cannot leave your machine" verifiable.
+function validateLiveHost(hostPort) {
+  let u;
+  try {
+    u = new URL("http://" + hostPort);
+  } catch {
+    return null;
+  }
+  if (u.username || u.password) return null; // userinfo is never legitimate here
+  if (u.pathname !== "/" || u.search || u.hash) return null; // no extra segments
+  // Per the WHATWG URL spec, an IPv6 hostname serializes WITH brackets ("[::1]"),
+  // not without - accept both spellings in case that ever changes.
+  if (u.hostname !== "127.0.0.1" && u.hostname !== "::1" && u.hostname !== "[::1]") return null;
+  return u.host;
 }
 
 function consumeLiveToken(params) {
-  // Called once at boot. Strip the fragment so the token never persists in location.
+  // Called once at boot. Strip ONLY the token from the fragment so it never
+  // persists in location, while keeping #live=host:port (and any other params,
+  // e.g. &flavor=targets) intact - a reload must stay in live mode.
   // Store in sessionStorage by default; localStorage if checkbox is checked.
   if (!params.token) return;
   const remember = localStorage.getItem("magus-live-remember") === "1";
@@ -2317,8 +2343,13 @@ function consumeLiveToken(params) {
   } else {
     sessionStorage.setItem("magus-live-token", params.token);
   }
-  // Strip the entire fragment via replaceState so token is gone from the URL.
-  history.replaceState(null, "", location.pathname + location.search);
+  const kept = [];
+  for (const k of Object.keys(params)) {
+    if (k === "token") continue;
+    kept.push(k + "=" + encodeURIComponent(params[k]));
+  }
+  const next = kept.length ? "#" + kept.join("&") : "#";
+  history.replaceState(null, "", location.pathname + location.search + next);
 }
 
 function getLiveToken() {
@@ -2328,12 +2359,18 @@ function getLiveToken() {
 // fetchSSE: fetch-based Server-Sent Events reader. Does NOT use EventSource
 // because EventSource cannot send an Authorization header.
 // Reads response.body via TextDecoderStream, splits on \n\n, parses event:/data: lines.
-// On stream end or error, calls onError(err) for the caller to schedule reconnect.
-async function fetchSSE(url, headers, onEvent, onError, signal) {
+// Calls onOpen() once the stream is confirmed open (200 response, before the first
+// event), so the caller can reset reconnect backoff and refresh stale data. On
+// stream end or error, calls onError(err) for the caller to schedule reconnect.
+// An AbortError (liveConnect superseding this call, or teardown) is deliberately
+// silent in both the initial fetch and the read loop - it is not a connection
+// failure, and treating it as one would stack up redundant reconnect attempts.
+async function fetchSSE(url, headers, onEvent, onError, signal, onOpen) {
   let response;
   try {
     response = await fetch(url, { headers, signal });
   } catch (e) {
+    if (e.name === "AbortError") return;
     onError(e);
     return;
   }
@@ -2341,6 +2378,7 @@ async function fetchSSE(url, headers, onEvent, onError, signal) {
     onError(new Error("HTTP " + response.status));
     return;
   }
+  if (onOpen) onOpen();
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
   try {
@@ -2355,8 +2393,12 @@ async function fetchSSE(url, headers, onEvent, onError, signal) {
         if (!chunk.trim()) continue;
         let eventType = "message", data = "";
         for (const line of chunk.split("\n")) {
-          if (line.startsWith("event: ")) eventType = line.slice(7).trim();
-          else if (line.startsWith("data: ")) data = line.slice(6).trim();
+          // Tolerate both "event: graph" (SSE convention, space after colon) and
+          // "event:graph" (no space) - the field-name parse per the SSE spec only
+          // requires the colon; a single optional leading space in the value is
+          // stripped, and servers vary on whether they emit it.
+          if (line.startsWith("event:")) eventType = line.slice(6).replace(/^ /, "").trim();
+          else if (line.startsWith("data:")) data = line.slice(5).replace(/^ /, "").trim();
         }
         onEvent(eventType, data);
       }
@@ -2390,10 +2432,128 @@ function applyPositions(newNodes, prevPos) {
   }
 }
 
+// recomputeLiveMatchSet recomputes matchSet (and, for the default projection,
+// projectionSet) against the CURRENT graph for whatever activeView/query/
+// projection state is already in effect. It mirrors the per-view logic in
+// activateView and the filter logic in applyQuery, but - unlike calling those
+// functions directly - does not touch activeView/query/projectionUnfolded/
+// layoutMode/search or refit the camera. Used by liveApplyGraphUpdate so a
+// live refresh reseeds data without resetting the user's current exploration.
+function recomputeLiveMatchSet() {
+  if (activeView) {
+    switch (activeView) {
+      case "blast":
+        matchSet = viewNode ? transitiveDependents(viewNode) : null;
+        break;
+      case "trace":
+        if (viewNode && viewNodeTo) {
+          const path = shortestDependsOnPath(viewNode, viewNodeTo);
+          matchSet = path ? new Set(path) : new Set([viewNode, viewNodeTo]);
+        } else {
+          matchSet = null;
+        }
+        break;
+      case "critical": {
+        const path = criticalPath();
+        matchSet = path ? new Set(path) : null;
+        break;
+      }
+      case "hubs": {
+        const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree).slice(0, 12);
+        matchSet = new Set(top.map((n) => n.id));
+        break;
+      }
+      case "orphans":
+        matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
+        break;
+      case "affected": {
+        const aff = window._liveAffectedIds;
+        matchSet = (aff && aff.size) ? aff : null;
+        break;
+      }
+      default:
+        matchSet = null;
+    }
+    return;
+  }
+  if (query) {
+    const terms = parseQuery(query);
+    if (!terms.length) { matchSet = null; return; }
+    if (!graph.relIndex) graph.relIndex = relationIndex();
+    matchSet = new Set();
+    for (const n of graph.nodes) {
+      if (terms.every((t) => termMatches(n, t))) matchSet.add(n.id);
+    }
+    return;
+  }
+  if (!projectionUnfolded) {
+    const ps = buildProjectionSet();
+    if (ps) { projectionSet = ps; matchSet = new Set(ps); }
+    else { projectionUnfolded = true; projectionSet = null; matchSet = null; }
+    return;
+  }
+  matchSet = null;
+}
+
+// liveApplyGraphUpdate: state-preserving live refresh. Reseeds graph data and
+// node positions from a fresh /api/v1/graph response and recomputes the active
+// view/query/projection against the new data, but - unlike replaceGraph, which
+// is a full reset for the "open a different file" case - does NOT reset
+// activeView/query/activePreset/projectionUnfolded/layoutMode/search. Positions
+// carry over by node id via capturePositions/applyPositions (unchanged).
+function liveApplyGraphUpdate(data) {
+  const flavor = detectFlavor(data);
+  graphFlavor = flavor;
+  let raw = data;
+  if (flavor === "targets") {
+    const nl = targetGraphToNodeLink(data);
+    raw = { nodes: nl.nodes, links: nl.links };
+  }
+  const prevPos = capturePositions();
+  graph = prepareGraph(raw);
+
+  // Drop references to nodes the refresh removed rather than carry dangling ids.
+  if (selected && !graph.byId.has(selected)) selected = null;
+  if (hoverId && !graph.byId.has(hoverId)) hoverId = null;
+  if (focusId && !graph.byId.has(focusId)) focusId = null;
+
+  recomputeLiveMatchSet();
+  parkHiddenNodes(); // re-park if the default projection is still active
+
+  renderLegend();
+  renderList();
+  syncConditionalViews();
+
+  // Rebuild the simulation against the new node/link arrays (same pattern as
+  // boot/replaceGraph), then reapply captured positions and reheat gently
+  // rather than a full alpha=1 restart.
+  startSimulation();
+  applyPositions(graph.nodes, prevPos);
+  if (layoutMode === "layered") {
+    sim.stop();
+    for (const e of graph.links) delete e.layoutReversed;
+    if (!applyLayeredMode()) {
+      layoutMode = "force";
+      syncLayoutToggle();
+      startSimulation();
+      applyPositions(graph.nodes, prevPos);
+      sim.alpha(0.3).restart();
+    }
+  } else {
+    sim.alpha(0.3).restart();
+  }
+  draw();
+  updateLiveBadge();
+}
+
+// liveRefetchGraph re-fetches whichever graph variant is currently loaded
+// (liveGraphQuery) using its OWN ETag (liveETag). Sending one variant's ETag
+// while requesting another variant's URL would make the server 200 with that
+// other variant's body (e.g. downgrading a full knowledge graph to the
+// projects-only skeleton), so the query string and ETag always travel together.
 async function liveRefetchGraph() {
   if (!liveHost || !liveToken) return;
-  const base = "http://" + liveHost;
-  const url = base + "/api/v1/graph" + (liveFlavor === "targets" ? "?flavor=targets" : "?level=projects");
+  const url = "http://" + liveHost + "/api/v1/graph" + liveGraphQuery;
   const headers = { Authorization: "Bearer " + liveToken };
   if (liveETag) headers["If-None-Match"] = liveETag;
   let resp;
@@ -2407,47 +2567,46 @@ async function liveRefetchGraph() {
   liveETag = resp.headers.get("ETag") || null;
   let data;
   try { data = await resp.json(); } catch { return; }
-  // Capture positions before replacing so the refresh does not feel like a slot machine.
-  const prevPos = capturePositions();
-  replaceGraph(data, "live workspace (refreshed)");
-  // Apply prior positions to preserve layout stability.
-  applyPositions(graph.nodes, prevPos);
-  // Reheat gently (not full restart): in force mode, alpha 0.3 not 1.0.
-  if (layoutMode === "force" && sim) {
-    sim.alpha(0.3).restart();
-  } else if (layoutMode === "layered") {
-    // Re-run deterministic layout; it is already position-stable.
-    for (const e of graph.links) delete e.layoutReversed;
-    applyLayeredMode();
-  }
-  draw();
-  updateLiveBadge();
+  liveApplyGraphUpdate(data);
 }
 
 function liveConnect() {
   if (!liveHost || !liveToken) return;
   if (liveSseAbort) liveSseAbort.abort();
   liveSseAbort = new AbortController();
+  clearTimeout(liveReconnectTimer); // a fresh connect attempt supersedes any pending reconnect
+  liveReconnectTimer = null;
   const url = "http://" + liveHost + "/api/v1/events";
   const headers = { Authorization: "Bearer " + liveToken };
 
   fetchSSE(url, headers, (eventType) => {
     if (eventType === "graph") {
-      liveReconnectDelay = 1000; // reset backoff on success
       liveRefetchGraph();
+    } else if (eventType === "status") {
+      fetchLiveStatus();
     }
   }, (err) => {
     // Stream ended or errored: flip to disconnected, schedule reconnect.
     liveConnected = false;
+    updateLiveBadge();
     showDisconnectBanner();
+    clearTimeout(liveReconnectTimer);
     liveReconnectTimer = setTimeout(() => {
       liveConnect();
     }, Math.min(liveReconnectDelay, 30000));
     liveReconnectDelay = Math.min(liveReconnectDelay * 2, 30000);
-  }, liveSseAbort.signal);
-
-  liveConnected = true;
-  clearDisconnectBanner();
+  }, liveSseAbort.signal, () => {
+    // Stream opened successfully: reset backoff, clear the disconnect banner,
+    // and refresh once. Without this, a reconnect after a gap (or the very
+    // first connect racing the skeleton render) leaves the view stale until
+    // the NEXT graph event, which may be minutes away.
+    liveConnected = true;
+    liveReconnectDelay = 1000;
+    clearDisconnectBanner();
+    updateLiveBadge();
+    liveRefetchGraph();
+    fetchLiveStatus();
+  });
 }
 
 function showDisconnectBanner() {
@@ -2469,9 +2628,25 @@ function updateLiveBadge() {
   if (!badge) return;
   if (liveHost) {
     const ws = liveWorkspaceName || liveHost;
-    badge.textContent = "live: " + ws;
+    badge.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
     badge.hidden = false;
-    badge.className = "live-badge live-badge-connected";
+    badge.className = liveConnected ? "live-badge live-badge-connected" : "live-badge live-badge-disconnected";
+  } else {
+    badge.hidden = true;
+  }
+}
+
+// updateSnapshotBadge shows "snapshot: <provenance>" for the private,
+// non-live sources (a #data= fragment or a --serve loopback fetch) - the
+// counterpart to the live badge for the common case of a one-shot `magus
+// graph open` without a running daemon. Hidden for "demo" and "remote", and
+// always hidden once live mode is active (bootLive never calls this).
+function updateSnapshotBadge(source) {
+  const badge = el("snapshot-badge");
+  if (!badge) return;
+  if (source === "local" || source === "loopback") {
+    badge.textContent = "snapshot: " + source;
+    badge.hidden = false;
   } else {
     badge.hidden = true;
   }
@@ -2497,28 +2672,88 @@ async function fetchLiveStatus() {
       if (p.waiting > 0) strip.textContent += ", " + p.waiting + " waiting";
       strip.hidden = false;
     }
-    // Affected view: paint affected nodes if present.
-    if (status.pool && status.pool.affected && status.pool.affected.length > 0) {
-      paintAffectedNodes(new Set(status.pool.affected));
-    }
+    // Affected view (deferred): types.StatusOutput.Affected exists on the wire
+    // type but neither status producer (cmd/magus/status.go - no workspace/VCS
+    // context at that call site - or internal/webbridge/bridge.go) populates it
+    // yet, so status.pool.affected never arrives. Rather than ship client code
+    // that pretends to enable a view that can never actually receive data, the
+    // "affected" view button stays disabled (see the `disabled` attribute in
+    // graph.html) until a real Affected computation is wired server-side.
     updateLiveBadge();
   } catch { /* network error; badge stays */ }
 }
 
-function paintAffectedNodes(affectedIds) {
-  // Enable the affected view button when in live mode and affected data is present.
-  document.querySelectorAll("[data-view='affected']").forEach((btn) => {
-    btn.disabled = !affectedIds.size;
-    btn.classList.toggle("view-disabled", !affectedIds.size);
-    btn.title = affectedIds.size
-      ? "Nodes touched by the current diff (live mode). CLI: magus affected"
-      : "Requires live mode with affected data. CLI: magus affected";
-  });
-  // Store the affected set for use when the view is activated.
-  window._liveAffectedIds = affectedIds;
+// ---- boot ------------------------------------------------------------------
+// computeDefaultProjection sets projectionUnfolded/projectionSet/matchSet for
+// the initial default-projection decision at boot: a projection is shown when
+// no fragment directive is present (no view/q/node[/data/src], per the
+// caller's own hasFragmentDirective) and the graph has a project-node count
+// buildProjectionSet is willing to collapse. Shared by boot() and bootLive()
+// so the two boot paths cannot drift on this decision.
+function computeDefaultProjection(hasFragmentDirective) {
+  if (!hasFragmentDirective) {
+    const ps = buildProjectionSet();
+    if (ps) {
+      projectionUnfolded = false;
+      projectionSet = ps;
+      matchSet = new Set(ps);
+      return;
+    }
+  }
+  projectionUnfolded = true;
 }
 
-// ---- boot ------------------------------------------------------------------
+// applyLayoutAndSimulation picks the layout mode (fragment override, else the
+// per-flavor default), starts the force simulation, and runs the layered
+// layout with its scale-guard fallback. Shared by boot() and bootLive().
+function applyLayoutAndSimulation(requestedLayout, flavor) {
+  if (requestedLayout === "force" || requestedLayout === "layered") {
+    layoutMode = requestedLayout;
+  } else {
+    layoutMode = (flavor === "targets") ? "layered" : "force";
+  }
+  syncLayoutToggle();
+  startSimulation();
+  if (layoutMode === "layered") {
+    sim.stop();
+    if (!applyLayeredMode()) {
+      // Scale guard fired; fall back to force.
+      layoutMode = "force";
+      syncLayoutToggle();
+      startSimulation();
+    }
+  }
+}
+
+// parkHiddenNodes moves every node outside the active default projection far
+// off-canvas so the force sim does not waste cycles on the full soup while
+// only project nodes are visible. Shared by boot(), bootLive(), and
+// liveApplyGraphUpdate (a live refresh that lands while the projection is
+// still active must re-park the same way a fresh load does).
+function parkHiddenNodes() {
+  if (!projectionUnfolded && projectionSet) {
+    for (const n of graph.nodes) {
+      if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
+    }
+  }
+}
+
+// finishInteractiveSetup wires zoom/drag, restores any view/query/layout/preset
+// deep link, and renders the empty-state suggestions and conditional views.
+// One-time boot wiring - shared by boot() and bootLive(), NOT called on a live
+// refresh (liveApplyGraphUpdate), which reseeds data without re-wiring input.
+function finishInteractiveSetup() {
+  setupZoomDrag();
+  // applyDeepLinks handles q= and node= (layout= is handled by
+  // applyLayoutAndSimulation above; applyDeepLinks skips switching when the
+  // mode already matches).
+  applyDeepLinks();
+  // Phase 5: emit empty-state suggestion chips.
+  renderSuggestions();
+  // Reveal the "What's slow?" (critical) view only when the graph has DurationMs data.
+  syncConditionalViews();
+}
+
 async function boot() {
   readTheme();
 
@@ -2579,23 +2814,17 @@ async function boot() {
   // #data= and #src= mean the user (or `magus graph open`) loaded a specific graph:
   // show its full detail, not the collapsed projects-only projection.
   const hasFragmentDirective = !!(bootParams.view || bootParams.q || bootParams.node || bootParams.data || bootParams.src);
-  if (!hasFragmentDirective) {
-    // Try to build a projection; if it applies, set projectionUnfolded = false.
-    const ps = buildProjectionSet();
-    if (ps) {
-      projectionUnfolded = false;
-      projectionSet = ps;
-      matchSet = new Set(ps);
-    } else {
-      projectionUnfolded = true;
-    }
-  } else {
-    projectionUnfolded = true;
-  }
+  computeDefaultProjection(hasFragmentDirective);
 
   // Show the unfold button when the projection is active.
   const unfoldBtn = el("projection-unfold-btn");
   if (unfoldBtn) unfoldBtn.hidden = projectionUnfolded;
+
+  // Snapshot-mode badge: shown whenever the graph came privately from this
+  // machine (a #data= fragment or a --serve loopback fetch) but is NOT live -
+  // the counterpart to the live-badge, so it is always clear whether the view
+  // updates automatically or is a point-in-time snapshot.
+  updateSnapshotBadge(loaded.source);
 
   // Status line: targets flavor shows a summary; knowledge/demo shows the
   // existing brief confirmation or nothing (demo remains statusless).
@@ -2629,40 +2858,9 @@ async function boot() {
   // Determine layout mode: fragment overrides flavor default.
   // targets -> layered; knowledge -> force.
   const initialParams = hashParams();
-  if (initialParams.layout === "force" || initialParams.layout === "layered") {
-    layoutMode = initialParams.layout;
-  } else {
-    layoutMode = (flavor === "targets") ? "layered" : "force";
-  }
-  syncLayoutToggle();
-
-  startSimulation();
-  if (layoutMode === "layered") {
-    sim.stop();
-    if (!applyLayeredMode()) {
-      // Scale guard fired; fall back to force.
-      layoutMode = "force";
-      syncLayoutToggle();
-      startSimulation();
-    }
-  }
-  // Park hidden nodes so the force sim does not waste cycles on the full soup
-  // while the default projection is active (only project nodes are visible).
-  if (!projectionUnfolded && projectionSet) {
-    for (const n of graph.nodes) {
-      if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
-    }
-  }
-
-  setupZoomDrag();
-  // applyDeepLinks handles q= and node= (layout= is handled above in boot; the
-  // applyDeepLinks function skips switching when the mode already matches).
-  applyDeepLinks();
-
-  // Phase 5: emit empty-state suggestion chips.
-  renderSuggestions();
-  // Reveal the "What's slow?" (critical) view only when the graph has DurationMs data.
-  syncConditionalViews();
+  applyLayoutAndSimulation(initialParams.layout, flavor);
+  parkHiddenNodes();
+  finishInteractiveSetup();
 
   bootWireEvents();
 }
@@ -2881,16 +3079,14 @@ async function bootLive() {
   if (!params.live) return false;
 
   const hostPort = params.live;
-  // Extract just the host part for validation.
-  const colonIdx = hostPort.lastIndexOf(":");
-  const host = colonIdx >= 0 ? hostPort.slice(0, colonIdx) : hostPort;
-  if (!validateLiveHost(host)) {
-    setStatus("live mode refused: host must be literally 127.0.0.1 or [::1] - got: " + host + ". No network request was made.", true);
+  const normalizedHost = validateLiveHost(hostPort);
+  if (!normalizedHost) {
+    setStatus("live mode refused: host must be literally 127.0.0.1 or [::1] - got: " + hostPort + ". No network request was made.", true);
     document.body.classList.add("graph-empty");
     return true; // handled (with error); don't fall through
   }
 
-  liveHost = hostPort;
+  liveHost = normalizedHost;
   liveFlavor = params.flavor || null;
 
   // Consume and store the token (strips it from the URL fragment).
@@ -2913,8 +3109,8 @@ async function bootLive() {
     });
     if (!skeletonResp.ok) throw new Error("HTTP " + skeletonResp.status);
     liveETag = skeletonResp.headers.get("ETag") || null;
+    liveGraphQuery = "?level=projects";
     const skeletonData = await skeletonResp.json();
-    liveSkeletonLoaded = true;
 
     // Fetch /api/v1/status for workspace name and pool info.
     await fetchLiveStatus();
@@ -2933,10 +3129,12 @@ async function bootLive() {
     // Check node_count: full-fetch when skeleton is small enough to be manageable.
     const nodeCount = skeletonData.node_count || graph.nodes.length;
     if (nodeCount < 20000) {
-      const fullUrl = "http://" + liveHost + "/api/v1/graph" + (liveFlavor === "targets" ? "?flavor=targets" : "");
+      const fullQuery = liveFlavor === "targets" ? "?flavor=targets" : "";
+      const fullUrl = "http://" + liveHost + "/api/v1/graph" + fullQuery;
       const fullResp = await fetch(fullUrl, { headers: { Authorization: "Bearer " + liveToken } });
       if (fullResp.ok) {
         liveETag = fullResp.headers.get("ETag") || null;
+        liveGraphQuery = fullQuery;
         const fullData = await fullResp.json();
         const ff = detectFlavor(fullData);
         graphFlavor = ff;
@@ -2948,18 +3146,7 @@ async function bootLive() {
 
     // Determine projection.
     const hasFragmentDirective = !!(params.view || params.q || params.node);
-    if (!hasFragmentDirective) {
-      const ps = buildProjectionSet();
-      if (ps) {
-        projectionUnfolded = false;
-        projectionSet = ps;
-        matchSet = new Set(ps);
-      } else {
-        projectionUnfolded = true;
-      }
-    } else {
-      projectionUnfolded = true;
-    }
+    computeDefaultProjection(hasFragmentDirective);
 
     const unfoldBtnLive = el("projection-unfold-btn");
     if (unfoldBtnLive) unfoldBtnLive.hidden = projectionUnfolded;
@@ -2968,31 +3155,9 @@ async function bootLive() {
 
     renderLegend(); renderList();
 
-    // Determine layout mode.
-    if (params.layout === "force" || params.layout === "layered") {
-      layoutMode = params.layout;
-    } else {
-      layoutMode = (graphFlavor === "targets") ? "layered" : "force";
-    }
-    syncLayoutToggle();
-    startSimulation();
-    if (layoutMode === "layered") {
-      sim.stop();
-      if (!applyLayeredMode()) { layoutMode = "force"; syncLayoutToggle(); startSimulation(); }
-    }
-
-    // Park hidden nodes so the force sim does not waste cycles on the full soup
-    // while the default projection is active.
-    if (!projectionUnfolded && projectionSet) {
-      for (const n of graph.nodes) {
-        if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
-      }
-    }
-
-    setupZoomDrag();
-    applyDeepLinks();
-    renderSuggestions();
-    syncConditionalViews();
+    applyLayoutAndSimulation(params.layout, graphFlavor);
+    parkHiddenNodes();
+    finishInteractiveSetup();
 
     // Connect SSE for live updates.
     liveConnect();

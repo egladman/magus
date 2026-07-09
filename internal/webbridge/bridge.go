@@ -344,6 +344,14 @@ func handleStatus(w http.ResponseWriter, r *http.Request, opts Options) {
 // statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput,
 // mirroring the conversion in cmd/magus/status.go so both consumers produce
 // identical shapes.
+//
+// It deliberately leaves StatusOutput.Affected unset (deferred, not an
+// oversight): computing it needs a workspace-scoped VCS diff (magus.Magus.
+// Affected), which is a meaningfully heavier per-request operation than the
+// rest of this handler and was judged not worth adding under this change.
+// The Graph Explorer's live "affected" view is correspondingly kept disabled
+// client-side (see website/js/graph-explorer.js fetchLiveStatus) rather than
+// wired to a field this handler never populates.
 func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 	if r == nil {
 		return nil

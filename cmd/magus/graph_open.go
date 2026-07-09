@@ -110,14 +110,18 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 	}
 
 	// Zero-arg default: when no explicit delivery mode is chosen and no --targets,
-	// probe the daemon first. If it is reachable, use --live for an always-fresh view.
+	// probe the ACTUAL web bridge first (not just the proc socket - a proc daemon
+	// can be up with no bridge running). If it is reachable, use --live for an
+	// always-fresh view. On a non-mcp binary liveBridgeReachable always reports
+	// false, so this default always falls through to fragment mode there; only an
+	// explicit --live flag reaches graphOpenLive's stub error on that binary.
 	if !useLive && !serve {
-		if status, _ := daemonStatus("")(ctx); status != nil {
+		if liveBridgeReachable(ctx) {
 			useLive = true
 		}
 	}
 	if useLive {
-		return graphOpenLive(ctx, root, base, printOnly, useTargets)
+		return graphOpenLive(ctx, base, printOnly, useTargets)
 	}
 
 	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.
