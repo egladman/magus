@@ -77,7 +77,9 @@ func selfCmdUsage() {
 // Downgrade/freeze protection: moving to a lower semver than the running binary
 // is refused unless --version is given explicitly (explicit opt-in) or --force
 // is set. When --version is omitted, the newest non-yanked release from the
-// index is used.
+// index is used. A dev build (version == "unknown") has no baseline to compare
+// against, so it also requires --version or --force before auto-selecting a
+// release.
 func selfUpdateCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("self update", flag.ContinueOnError)
 	fs.Usage = func() {
@@ -137,7 +139,18 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	// Downgrade/freeze protection.
 	// --version is an explicit request; allow downgrade only with --version or --force.
 	// Without --version (auto-latest), never silently downgrade.
-	if !force && version != "unknown" {
+	if version == "unknown" {
+		// Dev build: there is no running version to compare against, so
+		// auto-latest could silently install anything, including an older
+		// release mislabeled by a compromised or stale index. Require an
+		// explicit choice instead of guessing.
+		if !force && targetVer == "" {
+			return errors.New(
+				"running build is unversioned (dev build): refusing to auto-select a release\n" +
+					"  use --version to install a specific release, or --force to proceed anyway",
+			)
+		}
+	} else if !force {
 		switch selfupdate.Compare(rel.Version, version) {
 		case 0:
 			return fmt.Errorf("already running %s (use --force to reinstall)", version)
@@ -159,7 +172,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	}
 
 	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", rel.Version, runtime.GOOS, runtime.GOARCH)
-	assets, err := selfupdate.FindAssetsFromIndex(rel, assetName)
+	assets, err := selfupdate.FindAssets(rel, assetName)
 	if err != nil {
 		return err
 	}
@@ -167,6 +180,15 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	manifest, err := selfupdate.FetchAndVerifyManifest(ctx, assets.Sums, assets.Sig, opts)
 	if err != nil {
 		return fmt.Errorf("manifest verification failed: %w", err)
+	}
+	if manifest.Version != rel.Version {
+		// assetName was built from rel.Version; the tarball's hash is only
+		// trustworthy under the SHA256SUMS that was signed for that same
+		// version. A mismatch means a stale or tampered index/manifest pair.
+		return fmt.Errorf(
+			"release index advertises %s but the signed SHA256SUMS manifest is for %s - refusing to install",
+			rel.Version, manifest.Version,
+		)
 	}
 
 	binary, err := selfupdate.FetchAndVerifyTarball(ctx, assets.Tarball, assetName, manifest, opts)

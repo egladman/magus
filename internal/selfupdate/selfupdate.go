@@ -8,9 +8,10 @@
 // eliminates the unauthenticated 60 req/hr rate limit that blocked CI.
 //
 // The discovery URL is overridable via Options.DiscoveryURL or the
-// MAGUS_UPDATE_URL environment variable. An organisation that self-hosts the
-// site (see magus.yaml selfupdate.discovery_url) gets a private update channel
-// for free: point that URL at the hosted copy of index.json and index.json.sig.
+// MAGUS_UPDATE_URL environment variable (env-only; there is no magus.yaml
+// key). An organisation that self-hosts the site gets a private update
+// channel for free: point that URL at the hosted copy of index.json and
+// index.json.sig.
 //
 // Artifact download URLs come from the manifest inside the index; they may
 // point at GitHub release assets. That is artifact hosting, not discovery, and
@@ -62,6 +63,19 @@ type Options struct {
 	DiscoveryURL string // overrides DefaultDiscoveryURL; also MAGUS_UPDATE_URL env var
 }
 
+// checkPubKey fails closed unless pk is present and exactly ed25519.PublicKeySize
+// bytes. ed25519.Verify panics on any other non-nil length, so every call site
+// that verifies a signature must check this first.
+func checkPubKey(pk ed25519.PublicKey) error {
+	if pk == nil {
+		return errors.New("no public key: set Options.PubKey or embed a release key")
+	}
+	if len(pk) != ed25519.PublicKeySize {
+		return fmt.Errorf("invalid public key length: got %d bytes, want %d", len(pk), ed25519.PublicKeySize)
+	}
+	return nil
+}
+
 func (o Options) httpClient() *http.Client {
 	if o.HTTPClient != nil {
 		return o.HTTPClient
@@ -86,24 +100,20 @@ type ReleaseIndex struct {
 	Releases      []IndexRelease `json:"releases"`
 }
 
-// IndexRelease represents one entry inside ReleaseIndex.Releases.
+// IndexRelease represents one entry inside ReleaseIndex.Releases. The index
+// JSON carries additional fields (date, notes, body, per-artifact platform/
+// size/sha256) that selfupdate does not read: json.Unmarshal drops unknown
+// keys silently, and integrity comes from the separately verified SHA256SUMS
+// file, not from unauthenticated index metadata.
 type IndexRelease struct {
 	Version   string          `json:"version"`
-	Date      string          `json:"date"`
 	Yanked    bool            `json:"yanked,omitempty"`
 	Artifacts []IndexArtifact `json:"artifacts"`
-	// Notes and Body are present but not consumed by selfupdate.
 }
 
 // IndexArtifact is one artifact line inside IndexRelease.Artifacts.
 type IndexArtifact struct {
-	Name     string `json:"name"`
-	Platform string `json:"platform,omitempty"`
-	Size     string `json:"size,omitempty"`
-	SHA256   string `json:"sha256,omitempty"`
-	// DownloadURL is not in the JSON schema; it is synthesised from the
-	// release page URL (artifact hosting on GitHub releases).
-	DownloadURL string `json:"-"`
+	Name string `json:"name"`
 }
 
 // FetchAndVerifyIndex fetches index.json, verifies its Ed25519 signature
@@ -113,8 +123,8 @@ type IndexArtifact struct {
 // If the index is unreachable, FetchAndVerifyIndex returns an error and stops.
 // There is no silent fallback.
 func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, error) {
-	if opts.PubKey == nil {
-		return nil, errors.New("no public key: set Options.PubKey or embed a release key")
+	if err := checkPubKey(opts.PubKey); err != nil {
+		return nil, err
 	}
 	indexURL := opts.discoveryURL()
 	sigURL := indexURL + ".sig"
@@ -145,16 +155,27 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 }
 
 // SelectRelease returns the IndexRelease for the requested tag from idx.
-// When tag is empty, the newest non-yanked release is returned.
+// When tag is empty, the release with the highest valid semver Version among
+// non-yanked entries is returned; positional order in the index is not
+// trusted (an index that is not newest-first, whether by bug or tampering,
+// must not select a stale release). Entries whose Version is not valid
+// semver are rejected rather than considered.
 func SelectRelease(idx *ReleaseIndex, tag string) (*IndexRelease, error) {
 	if tag == "" {
-		// Releases are newest-first per the index schema.
+		var best *IndexRelease
 		for i := range idx.Releases {
-			if !idx.Releases[i].Yanked {
-				return &idx.Releases[i], nil
+			rel := &idx.Releases[i]
+			if rel.Yanked || !semver.IsValid(rel.Version) {
+				continue
+			}
+			if best == nil || semver.Compare(rel.Version, best.Version) > 0 {
+				best = rel
 			}
 		}
-		return nil, errors.New("no non-yanked release found in index")
+		if best == nil {
+			return nil, errors.New("no non-yanked release with a valid semver version found in index")
+		}
+		return best, nil
 	}
 	for i := range idx.Releases {
 		if idx.Releases[i].Version == tag {
@@ -180,14 +201,17 @@ type Assets struct {
 	Sig     string
 }
 
-// FindAssetsFromIndex locates the tarball, checksum file, and signature file
-// within an IndexRelease. Download URLs are derived from the release page URL
-// pattern (GitHub release assets).
-func FindAssetsFromIndex(rel *IndexRelease, assetName string) (Assets, error) {
-	// Build a name->artifact map for O(n) lookup.
-	byName := make(map[string]IndexArtifact, len(rel.Artifacts))
-	for _, a := range rel.Artifacts {
-		byName[a.Name] = a
+// FindAssets locates the tarball, checksum file, and signature file within an
+// IndexRelease. Download URLs are derived from the release page URL pattern
+// (GitHub release assets).
+func FindAssets(rel *IndexRelease, assetName string) (Assets, error) {
+	has := func(name string) bool {
+		for _, a := range rel.Artifacts {
+			if a.Name == name {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Derive download URLs: GitHub release assets for this version.
@@ -201,13 +225,13 @@ func FindAssetsFromIndex(rel *IndexRelease, assetName string) (Assets, error) {
 	}
 
 	var a Assets
-	if _, ok := byName[assetName]; ok {
+	if has(assetName) {
 		a.Tarball = urlFor(assetName)
 	}
-	if _, ok := byName["SHA256SUMS"]; ok {
+	if has("SHA256SUMS") {
 		a.Sums = urlFor("SHA256SUMS")
 	}
-	if _, ok := byName["SHA256SUMS.sig"]; ok {
+	if has("SHA256SUMS.sig") {
 		a.Sig = urlFor("SHA256SUMS.sig")
 	}
 
@@ -230,8 +254,8 @@ func FindAssetsFromIndex(rel *IndexRelease, assetName string) (Assets, error) {
 
 // FetchAndVerifyManifest downloads and Ed25519-verifies the SHA256SUMS file.
 func FetchAndVerifyManifest(ctx context.Context, sumsURL, sigURL string, opts Options) (*Manifest, error) {
-	if opts.PubKey == nil {
-		return nil, errors.New("no public key: set Options.PubKey or embed a release key")
+	if err := checkPubKey(opts.PubKey); err != nil {
+		return nil, err
 	}
 	sumsBytes, err := FetchLimited(ctx, sumsURL, MaxManifest, opts)
 	if err != nil {

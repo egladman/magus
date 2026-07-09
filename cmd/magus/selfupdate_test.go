@@ -41,10 +41,19 @@ type testFixture struct {
 	artifactSrv *httptest.Server
 }
 
-func newTestFixture(t *testing.T, tag string) *testFixture {
+// newTestFixture stands up a fake index+artifact pair advertising tag. The
+// optional manifestVersion argument lets a test make the signed SHA256SUMS
+// "version:" header diverge from the index's Version, to exercise the
+// mismatch guard in selfUpdateCmd; when omitted it defaults to tag.
+func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFixture {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+
+	sumsVersion := tag
+	if len(manifestVersion) > 0 {
+		sumsVersion = manifestVersion[0]
+	}
 
 	tarball := makeFakeTarball(t)
 	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", tag, runtime.GOOS, runtime.GOARCH)
@@ -65,10 +74,10 @@ func newTestFixture(t *testing.T, tag string) *testFixture {
 			w.Write(fx.tarball)
 		case "/sums":
 			// A minimal SHA256SUMS file with the version header.
-			fmt.Fprintf(w, "version: %s\n%s  %s\n", tag, sumHex, assetName)
+			fmt.Fprintf(w, "version: %s\n%s  %s\n", sumsVersion, sumHex, assetName)
 		case "/sig":
 			// Sign the same manifest body.
-			manifest := []byte(fmt.Sprintf("version: %s\n%s  %s\n", tag, sumHex, assetName))
+			manifest := []byte(fmt.Sprintf("version: %s\n%s  %s\n", sumsVersion, sumHex, assetName))
 			sig := ed25519.Sign(priv, manifest)
 			w.Write(sig)
 		default:
@@ -84,18 +93,17 @@ func newTestFixture(t *testing.T, tag string) *testFixture {
 		Releases: []selfupdate.IndexRelease{
 			{
 				Version: tag,
-				Date:    "2026-01-01",
 				Artifacts: []selfupdate.IndexArtifact{
-					{Name: assetName, Platform: runtime.GOOS + "/" + runtime.GOARCH},
+					{Name: assetName},
 					{Name: "SHA256SUMS"},
 					{Name: "SHA256SUMS.sig"},
 				},
 			},
 		},
 	}
-	// We need to override FindAssetsFromIndex's URL computation so it uses
-	// the test server. We do that by intercepting the GitHub download path via
-	// an http.Client transport that redirects github.com -> artifactSrv.
+	// We need to override FindAssets's URL computation so it uses the test
+	// server. We do that by intercepting the GitHub download path via an
+	// http.Client transport that redirects github.com -> artifactSrv.
 	_ = artifactBase // used via transport below
 
 	indexData, err := json.Marshal(idx)
@@ -258,6 +266,57 @@ func TestSelfUpdate_DowngradeForce(t *testing.T) {
 
 	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
 		"expected forced downgrade to succeed in dry-run")
+}
+
+// TestSelfUpdate_UnknownVersionRefusesAutoSelect proves that a dev build
+// (version == "unknown") does not silently auto-install the newest advertised
+// release: with no --version and no --force it must refuse, since there is no
+// running-version baseline to compare against for a downgrade check.
+func TestSelfUpdate_UnknownVersionRefusesAutoSelect(t *testing.T) {
+	fx := newTestFixture(t, "v0.4.0")
+	fx.activate(t)
+	setVersion(t, "unknown")
+
+	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	require.Error(t, err, "expected refusal for unversioned dev build without --version or --force")
+	assert.Contains(t, err.Error(), "unversioned")
+}
+
+// TestSelfUpdate_UnknownVersionWithExplicitVersionSucceeds proves that passing
+// --version opts a dev build in to an explicit install.
+func TestSelfUpdate_UnknownVersionWithExplicitVersionSucceeds(t *testing.T) {
+	fx := newTestFixture(t, "v0.4.0")
+	fx.activate(t)
+	setVersion(t, "unknown")
+
+	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.4.0"}),
+		"expected explicit --version to bypass the unversioned-build guard")
+}
+
+// TestSelfUpdate_UnknownVersionWithForceSucceeds proves that --force opts a
+// dev build in to an install without requiring --version.
+func TestSelfUpdate_UnknownVersionWithForceSucceeds(t *testing.T) {
+	fx := newTestFixture(t, "v0.4.0")
+	fx.activate(t)
+	setVersion(t, "unknown")
+
+	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
+		"expected --force to bypass the unversioned-build guard")
+}
+
+// TestSelfUpdate_ManifestVersionMismatch proves that a signed SHA256SUMS whose
+// "version:" header disagrees with the index's advertised Version is refused,
+// rather than trusted just because the tarball hash matches. assetName is
+// built from the index Version, so a stale or tampered manifest for a
+// different version must not be silently accepted.
+func TestSelfUpdate_ManifestVersionMismatch(t *testing.T) {
+	fx := newTestFixture(t, "v0.4.0", "v0.9.9")
+	fx.activate(t)
+	setVersion(t, "v0.3.0")
+
+	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
+	require.Error(t, err, "expected refusal on index/manifest version mismatch")
+	assert.Contains(t, err.Error(), "advertises")
 }
 
 func TestSelfUpdate_BadSignature(t *testing.T) {

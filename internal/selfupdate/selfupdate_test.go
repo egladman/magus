@@ -71,13 +71,11 @@ func TestFetchAndVerifyIndex_Valid(t *testing.T) {
 	releases := []IndexRelease{
 		{
 			Version:   "v2.0.0",
-			Date:      "2026-01-01",
-			Artifacts: []IndexArtifact{{Name: "magus_v2.0.0_linux_amd64.tar.gz", Platform: "linux/amd64"}},
+			Artifacts: []IndexArtifact{{Name: "magus_v2.0.0_linux_amd64.tar.gz"}},
 		},
 		{
 			Version:   "v1.0.0",
-			Date:      "2025-01-01",
-			Artifacts: []IndexArtifact{{Name: "magus_v1.0.0_linux_amd64.tar.gz", Platform: "linux/amd64"}},
+			Artifacts: []IndexArtifact{{Name: "magus_v1.0.0_linux_amd64.tar.gz"}},
 		},
 	}
 	indexData, sigData := buildIndex(t, priv, releases)
@@ -139,6 +137,19 @@ func TestFetchAndVerifyIndex_NilPubKey(t *testing.T) {
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no public key")
+}
+
+// TestFetchAndVerifyIndex_WrongLengthPubKey proves that a non-nil PubKey of
+// the wrong length fails closed with an error instead of reaching
+// ed25519.Verify, which panics on any non-nil, non-32-byte key.
+func TestFetchAndVerifyIndex_WrongLengthPubKey(t *testing.T) {
+	t.Parallel()
+	opts := Options{PubKey: make([]byte, 16), DiscoveryURL: "http://127.0.0.1:0/index.json"}
+	require.NotPanics(t, func() {
+		_, err := FetchAndVerifyIndex(context.Background(), opts)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid public key length")
+	})
 }
 
 func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
@@ -229,7 +240,59 @@ func TestSelectRelease_AllYanked(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestFindAssetsFromIndex_AllPresent(t *testing.T) {
+// TestSelectRelease_OutOfOrderPicksTrueLatest proves that SelectRelease finds
+// the highest semver release by comparison, not by trusting index position
+// (an index that is not newest-first, whether by bug or tampering, must not
+// cause an older release to be selected).
+func TestSelectRelease_OutOfOrderPicksTrueLatest(t *testing.T) {
+	t.Parallel()
+	idx := &ReleaseIndex{
+		SchemaVersion: 1,
+		Releases: []IndexRelease{
+			{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "a.tar.gz"}}},
+			{Version: "v3.0.0", Artifacts: []IndexArtifact{{Name: "c.tar.gz"}}},
+			{Version: "v2.0.0", Artifacts: []IndexArtifact{{Name: "b.tar.gz"}}},
+		},
+	}
+	rel, err := SelectRelease(idx, "")
+	require.NoError(t, err)
+	require.Equal(t, IndexRelease{Version: "v3.0.0", Artifacts: []IndexArtifact{{Name: "c.tar.gz"}}}, *rel)
+}
+
+// TestSelectRelease_RejectsMalformedVersion proves that an entry whose
+// Version is not valid semver is skipped rather than trusted, even when it
+// sorts first in the index.
+func TestSelectRelease_RejectsMalformedVersion(t *testing.T) {
+	t.Parallel()
+	idx := &ReleaseIndex{
+		SchemaVersion: 1,
+		Releases: []IndexRelease{
+			{Version: "not-a-version", Artifacts: []IndexArtifact{{Name: "evil.tar.gz"}}},
+			{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "a.tar.gz"}}},
+		},
+	}
+	rel, err := SelectRelease(idx, "")
+	require.NoError(t, err)
+	require.Equal(t, IndexRelease{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "a.tar.gz"}}}, *rel)
+}
+
+// TestSelectRelease_AllMalformedVersions proves that an index containing only
+// non-semver Version entries yields an error rather than selecting one anyway.
+func TestSelectRelease_AllMalformedVersions(t *testing.T) {
+	t.Parallel()
+	idx := &ReleaseIndex{
+		SchemaVersion: 1,
+		Releases: []IndexRelease{
+			{Version: "not-a-version", Artifacts: []IndexArtifact{{Name: "a.tar.gz"}}},
+			{Version: "also-bad", Artifacts: []IndexArtifact{{Name: "b.tar.gz"}}},
+		},
+	}
+	_, err := SelectRelease(idx, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "semver")
+}
+
+func TestFindAssets_AllPresent(t *testing.T) {
 	t.Parallel()
 	assetName := fmt.Sprintf("magus_v1.0.0_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 	rel := &IndexRelease{
@@ -240,7 +303,7 @@ func TestFindAssetsFromIndex_AllPresent(t *testing.T) {
 			{Name: "SHA256SUMS.sig"},
 		},
 	}
-	assets, err := FindAssetsFromIndex(rel, assetName)
+	assets, err := FindAssets(rel, assetName)
 	require.NoError(t, err)
 	require.Equal(t, Assets{
 		Tarball: "https://github.com/egladman/magus/releases/download/v1.0.0/" + assetName,
@@ -249,7 +312,7 @@ func TestFindAssetsFromIndex_AllPresent(t *testing.T) {
 	}, assets)
 }
 
-func TestFindAssetsFromIndex_MissingTarball(t *testing.T) {
+func TestFindAssets_MissingTarball(t *testing.T) {
 	t.Parallel()
 	rel := &IndexRelease{
 		Version: "v1.0.0",
@@ -258,7 +321,7 @@ func TestFindAssetsFromIndex_MissingTarball(t *testing.T) {
 			{Name: "SHA256SUMS.sig"},
 		},
 	}
-	_, err := FindAssetsFromIndex(rel, "missing.tar.gz")
+	_, err := FindAssets(rel, "missing.tar.gz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing.tar.gz")
 }
@@ -514,6 +577,35 @@ func TestDownloadVerifyNilPubKeyFallsBack(t *testing.T) {
 	assert.Error(t, err, "expected error with nil PubKey")
 }
 
+// TestFetchAndVerifyManifestWrongLengthPubKey proves that a non-nil PubKey of
+// the wrong length fails closed with an error instead of reaching
+// ed25519.Verify, which panics on any non-nil, non-32-byte key.
+func TestFetchAndVerifyManifestWrongLengthPubKey(t *testing.T) {
+	t.Parallel()
+	hash := strings.Repeat("a", 64)
+	manifest := []byte(fmt.Sprintf("version: v1.0.0\n%s  file.tar.gz\n", hash))
+	sig := make([]byte, 64)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sums":
+			w.Write(manifest)
+		case "/sig":
+			w.Write(sig)
+		}
+	}))
+	defer srv.Close()
+
+	require.NotPanics(t, func() {
+		_, err := FetchAndVerifyManifest(
+			context.Background(), srv.URL+"/sums", srv.URL+"/sig",
+			Options{PubKey: make(ed25519.PublicKey, 8)},
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid public key length")
+	})
+}
+
 // TestDiscoveryURLOverride proves that Options.DiscoveryURL (and by extension
 // MAGUS_UPDATE_URL env var) routes discovery to an alternate server.
 // This covers the private update channel use case.
@@ -524,8 +616,7 @@ func TestDiscoveryURLOverride(t *testing.T) {
 	releases := []IndexRelease{
 		{
 			Version:   "v9.9.9",
-			Date:      "2099-01-01",
-			Artifacts: []IndexArtifact{{Name: "magus_v9.9.9_linux_amd64.tar.gz", Platform: "linux/amd64"}},
+			Artifacts: []IndexArtifact{{Name: "magus_v9.9.9_linux_amd64.tar.gz"}},
 		},
 	}
 	indexData, sigData := buildIndex(t, priv, releases)
@@ -549,7 +640,6 @@ func TestDiscoveryURLFromEnv(t *testing.T) {
 	releases := []IndexRelease{
 		{
 			Version:   "v7.0.0",
-			Date:      "2099-01-01",
 			Artifacts: []IndexArtifact{{Name: "magus_v7.0.0_linux_amd64.tar.gz"}},
 		},
 	}
@@ -564,11 +654,12 @@ func TestDiscoveryURLFromEnv(t *testing.T) {
 	assert.Equal(t, "v7.0.0", idx.Releases[0].Version)
 }
 
-// TestDowngradeRefused proves that FetchAndVerifyIndex + SelectRelease alone
-// does not enforce the version constraint (that is the cmd layer's job), but
-// that the downgrade detection logic in Compare works correctly as the building
-// block.
-func TestDowngradeRefused_IndexAdvertisesLowerVersion(t *testing.T) {
+// TestCompare_DetectsIndexDowngradeAgainstRunning proves that FetchAndVerifyIndex
+// + SelectRelease alone does not enforce the version constraint (that is the cmd
+// layer's job; see TestSelfUpdate_DowngradeRefused in cmd/magus), but that the
+// downgrade detection logic in Compare works correctly as the building block,
+// against a realistic fetched-and-selected release.
+func TestCompare_DetectsIndexDowngradeAgainstRunning(t *testing.T) {
 	t.Parallel()
 	pub, priv := makeTestKey(t)
 
@@ -576,7 +667,6 @@ func TestDowngradeRefused_IndexAdvertisesLowerVersion(t *testing.T) {
 	releases := []IndexRelease{
 		{
 			Version:   "v0.1.0",
-			Date:      "2025-01-01",
 			Artifacts: []IndexArtifact{{Name: "magus_v0.1.0_linux_amd64.tar.gz"}},
 		},
 	}
