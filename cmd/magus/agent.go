@@ -36,7 +36,9 @@ var skillFS embed.FS
 //	v2: teach CODEOWNERS ownership and the owns relation
 //	v3: teach the refs verb / magus_refs (SCIP symbol def+references)
 //	v4: teach the * wildcard in the query grammar
-const agentSkillVersion = 4
+//	v5: teach the graph diff verb (PR blast-radius against a baseline export)
+//	v6: teach the opt-in @vcs git-history attrs on file nodes
+const agentSkillVersion = 6
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
 // Today the one verb is `install <platform>`, which writes the embedded skill into

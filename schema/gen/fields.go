@@ -308,6 +308,22 @@ func init() {
 			Usage:    "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When",
 		},
 		{
+			GoPath:   "Knowledge.VCS.Enabled",
+			YamlPath: "knowledge.vcs.enabled",
+			EnvVar:   "MAGUS_KNOWLEDGE_VCS_ENABLED",
+			Flag:     FlagNames{Long: "knowledge-vcs-enabled"},
+			Kind:     KindBool,
+			Usage:    "MAGUS_KNOWLEDGE_VCS_ENABLED",
+		},
+		{
+			GoPath:   "Knowledge.VCS.MaxCommits",
+			YamlPath: "knowledge.vcs.max_commits",
+			EnvVar:   "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS",
+			Flag:     FlagNames{Long: "knowledge-vcs-max-commits"},
+			Kind:     KindInt,
+			Usage:    "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits. 0 uses a",
+		},
+		{
 			GoPath:   "Concurrency",
 			YamlPath: "concurrency",
 			EnvVar:   "MAGUS_CONCURRENCY",

@@ -213,3 +213,16 @@ type ChurnReporter interface {
 	// (a git approxidate / RFC3339); commits still caps the result.
 	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
 }
+
+// RevisionExporter is an optional capability for VCSDriver implementations that can
+// materialize a revision's tracked files into a directory (a "checkout to a throwaway
+// tree" without touching the working copy). Callers type-assert for it and degrade
+// gracefully when a backend lacks it - either wrapping ErrVCSUnsupported (like the other
+// capabilities) or, for a user-facing command, surfacing a plain message. It powers
+// `magus graph diff --rev`, which builds a base knowledge graph from the exported tree.
+type RevisionExporter interface {
+	// ExportRevision writes the tree of rev (a backend-native revision expression)
+	// into dstDir, re-rooted at dir: only dir's own subtree is exported, with paths
+	// relative to it, so dstDir mirrors the workspace as of rev.
+	ExportRevision(ctx context.Context, dir, rev, dstDir string) error
+}

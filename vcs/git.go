@@ -1,10 +1,12 @@
 package vcs
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -305,7 +307,9 @@ func (gitVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sinc
 	if commits <= 0 {
 		commits = 1
 	}
-	args := []string{"log", fmt.Sprintf("-%d", commits), "--no-merges", "--name-only", "--format=" + gitChurnFormat}
+	// core.quotePath=false keeps non-ASCII paths raw (git otherwise emits them
+	// double-quoted with octal escapes, which then match no file/project path).
+	args := []string{"-c", "core.quotePath=false", "log", fmt.Sprintf("-%d", commits), "--no-merges", "--name-only", "--format=" + gitChurnFormat}
 	if since != "" {
 		args = append(args, "--since="+since) // single token: a value can't be read as a flag
 	}
@@ -414,4 +418,96 @@ func splitLines(out []byte) []string {
 		}
 	}
 	return lines
+}
+
+// ExportRevision implements types.RevisionExporter. `git -C dir archive <rev> -- .`
+// limits the archive to dir's own subtree and emits paths relative to it, so dstDir
+// mirrors the workspace as of rev whether dir is the git top-level or a nested subdir.
+// It streams through the stdlib tar reader (no `tar` binary needed) and rejects any
+// entry whose path would escape dstDir.
+func (gitVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
+	if rev == "" {
+		rev = "HEAD"
+	}
+	if err := checkRef(rev); err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "archive", "--format=tar", rev, "--", ".")
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("git archive pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start git archive: %w", err)
+	}
+
+	extractErr := extractTar(stdout, dstDir)
+	// Drain any unread archive bytes unconditionally (even after an extract error) so git
+	// never blocks writing to a full pipe; only then is it safe to Wait (Wait closes the
+	// pipe). This ordering is load-bearing.
+	_, _ = io.Copy(io.Discard, stdout)
+	if waitErr := cmd.Wait(); waitErr != nil {
+		msg := strings.TrimSpace(errBuf.String())
+		if msg == "" {
+			msg = waitErr.Error()
+		}
+		return fmt.Errorf("git archive %q: %s", rev, msg)
+	}
+	if extractErr != nil {
+		return fmt.Errorf("extract revision %q: %w", rev, extractErr)
+	}
+	return nil
+}
+
+// extractTar writes a tar stream into dstDir, creating parent directories as needed and
+// refusing any entry whose path would escape dstDir (git archive never emits such an
+// entry; the guard is defense in depth against a crafted path). Symlinks, hardlinks, and
+// other special entries are skipped: the extraction feeds a read-only consumer, so an
+// escaping or dangling link has no value there.
+func extractTar(r io.Reader, dstDir string) error {
+	tr := tar.NewReader(r)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !filepath.IsLocal(hdr.Name) {
+			return fmt.Errorf("archive entry %q escapes the destination", hdr.Name)
+		}
+		target := filepath.Join(dstDir, filepath.FromSlash(hdr.Name))
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			if err := writeTarEntry(tr, target, hdr); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// writeTarEntry writes one regular-file entry to target.
+func writeTarEntry(tr *tar.Reader, target string, hdr *tar.Header) error {
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode)&0o777)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(f, tr); err != nil {
+		f.Close()
+		return fmt.Errorf("write %q: %w", hdr.Name, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("write %q: %w", hdr.Name, err)
+	}
+	return nil
 }

@@ -232,6 +232,21 @@ type Knowledge struct {
 	// declared index that does not exist yet (its target has not run) is simply
 	// skipped, so the shard appears once the index is built.
 	Symbols []SymbolIndex `yaml:"symbols"`
+	// VCS enables folding git history metadata (last-commit SHA and time, commit
+	// count) onto file nodes as a @vcs shard. Opt-in and best-effort: disabled by
+	// default, and a non-git workspace simply yields no shard. The history scan is
+	// bounded and cached against HEAD, so it runs at build time on a commit change,
+	// never per query.
+	VCS VCSConfig `yaml:"vcs"`
+}
+
+// VCSConfig configures git-history ingestion into the @vcs shard (see Knowledge.VCS).
+type VCSConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// MaxCommits bounds the history walk to the most recent N commits. 0 uses a
+	// built-in default; a small value keeps the scan fast on a large repo at the cost
+	// of undercounting commits for long-lived files.
+	MaxCommits int `yaml:"max_commits" validate:"gte=0"`
 }
 
 // SymbolIndex declares one project's SCIP index for symbol ingestion.

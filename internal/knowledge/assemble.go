@@ -47,6 +47,10 @@ type Inputs struct {
 	// @symbols shard - deterministic, so remote-shareable like the other extracted
 	// shards, and destined for lazy loading (it can dwarf the domain graph).
 	Symbols map[string][]types.KnowledgeSymbol
+	// VCS carries per-file git history metadata (empty unless knowledge.vcs.enabled and
+	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
+	// as attrs - deterministic per commit, so remote-shareable.
+	VCS []types.KnowledgeVCS
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -80,16 +84,23 @@ func AssembleShards(in Inputs) []Shard {
 		if d := assembleDocs(in.Root, in.Spells); len(d.Nodes) > 0 {
 			shards = append(shards, d)
 		}
+		fileNodePaths := map[string]bool{}
 		if b := assembleBuzz(in.Root); len(b.Nodes) > 0 {
 			shards = append(shards, b)
 			for _, n := range b.Nodes {
 				if n.Kind == types.KindFile {
 					owned = append(owned, ownedNode{ID: n.ID, Path: n.Source})
+					fileNodePaths[n.Source] = true
 				}
 			}
 		}
 		if o := assembleOwners(in.Root, owned); len(o.Edges) > 0 {
 			shards = append(shards, o)
+		}
+		// Git history folds onto the file nodes just built; a path with no file node
+		// (VCS metadata for a file the graph does not model) is dropped, no phantom.
+		if v := assembleVCS(in.VCS, fileNodePaths); len(v.Nodes) > 0 {
+			shards = append(shards, v)
 		}
 	}
 	// The runtime shard carries both non-deterministic inputs: emits edges from

@@ -14,8 +14,10 @@ permissions:
   contents: read
 
 env:
-  # Release tag to install; empty builds from source.
-  MAGUS_VERSION: 'v0.1.0'
+  # Release tag to install; empty builds from source. Deliberately NOT named
+  # MAGUS_VERSION: magus claims the MAGUS_ env prefix for config, and its doctor
+  # env check (run by preflight) fails CI on any unknown MAGUS_* variable.
+  SETUP_MAGUS_VERSION: 'v0.1.0'
   # Exercise the encoding/json/v2 codec across all jobs (shim falls back to v1).
   GOEXPERIMENT: jsonv2
   # PRs open the cache read-only (no local writes, no remote push) so a PR can't
@@ -58,7 +60,7 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.MAGUS_VERSION }}
+          version: ${{ env.SETUP_MAGUS_VERSION }}
 
       - name: Preflight
         run: magus doctor
@@ -114,7 +116,7 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.MAGUS_VERSION }}
+          version: ${{ env.SETUP_MAGUS_VERSION }}
 
       # Expose ACTIONS_RESULTS_URL + ACTIONS_RUNTIME_TOKEN to the magus process so
       # the remote-cache backend (magusfiles/cache.buzz) can reach the GitHub
@@ -170,7 +172,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.MAGUS_VERSION }}
+          version: ${{ env.SETUP_MAGUS_VERSION }}
 
       # Restore the prior history, fold in this run's shard histories, and persist.
       - uses: ./.github/actions/magus
@@ -192,7 +194,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.MAGUS_VERSION }}
+          version: ${{ env.SETUP_MAGUS_VERSION }}
       - name: Confirm the arm64 binary actually installed and runs
         run: |
           set -euo pipefail
@@ -220,7 +222,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.MAGUS_VERSION }}
+          version: ${{ env.SETUP_MAGUS_VERSION }}
       - name: Postflight (insight report → step summary)
         # Scope to the root project so this emits exactly one whole-workspace report
         # (a bare `magus run postflight` would fan out across every project).
