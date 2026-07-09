@@ -57,21 +57,24 @@ export fun md_generate(args: [str]) > void {
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
-// generateJsBundles builds the two committed browser bundles that import npm
-// packages - the d3-force graph explorer and the CodeMirror playground editor.
-// These are npm packages (package.json + lockfile), so they follow the JS
-// convention: `npm ci` restores the pinned deps, `npm run build` runs the esbuild
-// invocations, which live in package.json "scripts" as their single source of
-// truth. (The render's own theme/main/css are minified inline in scribe instead:
-// they have no npm deps and are driven by the render loop, so they aren't an npm
-// package build.) npm ci is guarded on node_modules so a warm local tree skips it
-// while a cold CI checkout installs. Running here - inside generate - is what lets
-// both the gen/** drift gate and the merge driver regenerate the bundles.
+// generateJsBundles builds the committed browser bundles that import npm
+// packages - the d3-force graph explorer, the CodeMirror playground editor, and
+// the vendored mermaid/highlight.js libraries. These are pnpm-managed packages
+// (package.json + pnpm-lock.yaml), so they follow the JS convention: `pnpm install
+// --frozen-lockfile` restores the pinned deps (honoring pnpm-workspace.yaml's
+// minimumReleaseAge gate), `pnpm run build` runs the esbuild invocations, which
+// live in package.json "scripts" as their single source of truth. pnpm, not npm:
+// the release-age gate is the reason. (The render's own theme/main/css are minified
+// inline in scribe instead: they have no npm deps and are driven by the render loop,
+// so they aren't a package build.) The install is guarded on node_modules so a warm
+// local tree skips it while a cold CI checkout installs. Running here - inside
+// generate - is what lets both the gen/** drift gate and the merge driver
+// regenerate the bundles.
 fun generateJsBundles() > void {
     if (!fs.isDir("node_modules")) {
-        os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+        os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
-    os.exec("npm", ["run", "build"], ".", {});
+    os.exec("pnpm", ["run", "build"], ".", {});
 }
 
 // generate renders the site, refreshes MAGUS.md, and rebuilds the client bundles,
@@ -146,9 +149,9 @@ export fun build_playground(args: [str]) > void {
 export fun build_mermaid(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
     if (!fs.isDir("node_modules")) {
-        os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+        os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
-    os.exec("npm", ["run", "build-mermaid"], ".", {});
+    os.exec("pnpm", ["run", "build-mermaid"], ".", {});
     magus.info("rebuilt gen/assets/mermaid.js - commit the result");
 }
 
@@ -159,9 +162,9 @@ export fun build_mermaid(args: [str]) > void {
 export fun build_hljs(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
     if (!fs.isDir("node_modules")) {
-        os.exec("npm", ["ci", "--no-audit", "--no-fund"], ".", {});
+        os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
-    os.exec("npm", ["run", "build-hljs"], ".", {});
+    os.exec("pnpm", ["run", "build-hljs"], ".", {});
     magus.info("rebuilt gen/assets/hljs.js - commit the result");
 }
 

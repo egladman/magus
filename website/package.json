@@ -2,10 +2,10 @@
   "name": "magus-website-editor",
   "version": "0.0.0",
   "private": true,
-  "description": "Build-only dependencies for the committed browser bundles: the playground's CodeMirror editor (js/editor.js -> gen/playground/editor.js) and the graph explorer's d3-force view (js/graph-explorer.js -> gen/graph/explorer.js). esbuild (pinned in mise.toml) bundles each into a committed artifact, like gen/playground/buzz.wasm. `npm run build` is the entry point; magusfile.buzz (generate) runs `npm ci && npm run build`. Not part of the site's runtime dependency graph.",
+  "description": "Build-only dependencies for the committed browser bundles: the playground's CodeMirror editor (js/editor.js -> gen/playground/editor.js) and the graph explorer's d3-force view (js/graph-explorer.js -> gen/graph/explorer.js). esbuild (pinned in mise.toml) bundles each into a committed artifact, like gen/playground/buzz.wasm. Managed with pnpm (pinned in mise.toml), NOT npm: pnpm-workspace.yaml sets minimumReleaseAge so a just-published version is never installed. `pnpm run build` is the entry point; magusfile.buzz (generate) runs `pnpm install --frozen-lockfile && pnpm run build`. Not part of the site's runtime dependency graph.",
   "type": "module",
   "scripts": {
-    "build": "npm run build-editor && npm run build-graph-explorer && npm run build-mermaid && npm run build-hljs",
+    "build": "pnpm run build-editor && pnpm run build-graph-explorer && pnpm run build-mermaid && pnpm run build-hljs",
     "build-editor": "esbuild js/editor.js --bundle --minify --format=esm --outfile=gen/playground/editor.js",
     "build-graph-explorer": "esbuild js/graph-explorer.js --bundle --minify --format=esm --outfile=gen/graph/explorer.js",
     "build-mermaid": "esbuild js/mermaid-vendor.js --bundle --minify --format=esm --outfile=gen/assets/mermaid.js",

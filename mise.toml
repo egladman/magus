@@ -8,6 +8,10 @@ go = "1.26.4"
 # node + prettier + markdownlint-cli back the markdown spell (md.prettier /
 # md.markdownlint), so the format/lint gates resolve them from mise, not a stray global.
 node = "24"
+# pnpm (not npm) is the website's package manager: it enforces a minimum release
+# age on installs (see website/pnpm-workspace.yaml minimumReleaseAge) so a freshly
+# published - possibly compromised - version is never pulled into a build.
+pnpm = "10.33.0"
 "npm:markdownlint-cli" = "0.49.0"
 "npm:prettier" = "3.9.4"
 # esbuild bundles + minifies the website's client JS (js/theme.js -> gen/theme.js,
