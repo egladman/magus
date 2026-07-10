@@ -67,7 +67,7 @@ func StartBlob(origin, path, contentType string, raw []byte) (*BlobServer, error
 		once.Do(func() { close(b.served) }) // the page has the blob; begin teardown
 	})
 	tokenFn := func() (string, error) { return b.token, nil }
-	s.Handle(path, RequireLoopbackPeer(CORS(origin)(BearerGuard(SingleTokenVerifier(tokenFn), route))))
+	s.Handle(path, RequireLoopbackPeer(CORS(origin)(BearerGuardWithQueryToken(SingleTokenVerifier(tokenFn), route))))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	b.cancel = cancel

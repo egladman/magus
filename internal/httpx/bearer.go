@@ -13,19 +13,38 @@ import (
 // and blob servers pass SingleTokenVerifier over their per-run token.
 type Verifier func(presented string) bool
 
-// BearerGuard rejects any request whose presented token fails verify. The token
-// is accepted from EITHER an `Authorization: Bearer <token>` header (what a
-// fetch() client sends) OR a `?token=<token>` query parameter (the fallback for
-// a browser EventSource, which cannot set headers). Every loopback HTTP endpoint
-// shares this one guard; only the [Verifier] differs.
+// BearerGuard rejects any request whose token fails verify. The token is read
+// ONLY from the `Authorization: Bearer <token>` header. This is the default and
+// the right choice for every endpoint a non-browser client reaches (the MCP
+// endpoint, plain fetch() clients): a bearer token must not travel in the URL,
+// where it leaks into access logs, proxy logs, and browser history (RFC 6750
+// section 2.3). For the browser-EventSource endpoints that genuinely cannot set
+// a header, use [BearerGuardWithQueryToken] instead - an explicit opt-in, so a
+// new mount is header-only unless it deliberately widens the carrier.
 //
 // verify is called on every request, so a rotate, create, or revoke takes effect
 // without restarting the server; it must fail closed (return false) on any error.
 // Failures return 401 with a WWW-Authenticate challenge and a generic body that
 // does not distinguish a missing token from a wrong one.
 func BearerGuard(verify Verifier, next http.Handler) http.Handler {
+	return guard(verify, headerToken, next)
+}
+
+// BearerGuardWithQueryToken is [BearerGuard] that ALSO accepts the token from a
+// `?token=<token>` query parameter, preferring the header when both are present.
+// Use it ONLY for endpoints a browser EventSource connects to: EventSource cannot
+// set an Authorization header, so the query carrier is the sole option. It is a
+// deliberate, scoped exception to the header-only rule (RFC 6750 section 2.3) -
+// keep it off the MCP endpoint, which every supported client reaches with a header.
+func BearerGuardWithQueryToken(verify Verifier, next http.Handler) http.Handler {
+	return guard(verify, presentedToken, next)
+}
+
+// guard is the shared 401-or-pass core; extract names the token carriers a given
+// mount accepts (header-only, or header-plus-query).
+func guard(verify Verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		presented, ok := presentedToken(r)
+		presented, ok := extract(r)
 		if !ok {
 			unauthorized(w)
 			return
@@ -58,11 +77,16 @@ func SingleTokenVerifier(expected func() (string, error)) Verifier {
 	}
 }
 
+// headerToken extracts the token from the Authorization header only.
+func headerToken(r *http.Request) (string, bool) {
+	return bearerToken(r.Header.Get("Authorization"))
+}
+
 // presentedToken extracts the token a request carries, preferring the
 // `Authorization: Bearer` header and falling back to a `?token=` query
 // parameter. It reports false when neither carrier supplies a non-empty token.
 func presentedToken(r *http.Request) (string, bool) {
-	if tok, ok := bearerToken(r.Header.Get("Authorization")); ok {
+	if tok, ok := headerToken(r); ok {
 		return tok, true
 	}
 	if tok := r.URL.Query().Get("token"); tok != "" {

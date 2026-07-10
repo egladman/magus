@@ -63,6 +63,15 @@ func (s *Daemon) Serve(ctx context.Context) error {
 		return err
 	}
 
+	// A non-loopback bind (e.g. MAGUS_MCP_ADDRESS=0.0.0.0 for k8s health probes)
+	// serves /mcp over plaintext HTTP, so the bearer token crosses the network in
+	// the clear. The MCP transport spec says remote HTTP should use TLS; warn so an
+	// operator fronts it with TLS or a tunnel rather than exposing a cleartext token.
+	if !addr.Addr().IsLoopback() {
+		log.Warn("[AGENT] MCP is bound to a non-loopback address; the bearer token is sent in cleartext over HTTP - front it with TLS or a tunnel",
+			slog.String("addr", addr.String()))
+	}
+
 	// Build the MCP handler (validates opts and wires session tracking). No
 	// routes or listener are mounted here - that is this package's job.
 	mcpHandler, err := mcp.HTTPHandler(opts)
@@ -140,7 +149,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0, log)))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
 			// Wrap every /api/ route with rebind + auth.
-			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
+			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuardWithQueryToken(auth.VerifyBearer, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
 		}
 	}

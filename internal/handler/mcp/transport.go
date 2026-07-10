@@ -17,10 +17,18 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
+
+// sseHeartbeat is how often the Streamable-HTTP server pings an open GET (SSE)
+// stream. mark3labs disables heartbeats by default; enabling them keeps a
+// long-lived server-to-client stream from being closed by an idle timeout - a
+// no-op on a pure loopback client, but the correct default the moment the
+// endpoint is reached through any proxy or gateway (e.g. a non-loopback bind).
+const sseHeartbeat = 30 * time.Second
 
 // DefaultAddress is the default host:port for the MCP Streamable HTTP server.
 const DefaultAddress = "127.0.0.1:7391"
@@ -138,7 +146,7 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 	}
 
 	srv := buildServer(opts, log, hooks, agentFn)
-	return mcpserver.NewStreamableHTTPServer(srv), nil
+	return mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithHeartbeatInterval(sseHeartbeat)), nil
 }
 
 // ServeStdio runs the magus MCP server over standard I/O, blocking until
