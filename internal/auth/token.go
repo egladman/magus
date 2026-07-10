@@ -4,7 +4,7 @@
 // same token file and share one implementation.
 //
 // The token is a 256-bit random secret, base64url-encoded, stored 0600 in the
-// user config dir. It is a local shared secret — equivalent in sensitivity to
+// user state dir. It is a local shared secret — equivalent in sensitivity to
 // the workspace it grants access to — not an OAuth credential. See the MCP
 // authorization spec: stdio transports derive trust from the process, HTTP
 // transports must authenticate. magus's loopback HTTP server uses this token
@@ -26,18 +26,20 @@ import (
 )
 
 // ErrNoToken is returned by Load when no token file exists yet.
-var ErrNoToken = errors.New("mcpauth: no token configured")
+var ErrNoToken = errors.New("auth: no token configured")
 
 // tokenBytes is the size of the raw random secret before encoding.
 const tokenBytes = 32
 
 // Path returns the absolute path to the MCP token file:
-// <os.UserConfigDir>/magus/mcp_token. Both the CLI and the daemon resolve it
-// this way so they always agree on the location.
+// <UserStateDir>/magus/mcp_token. Both the CLI and the daemon resolve it this
+// way so they always agree on the location. The token lives in the state dir,
+// not the config dir, because config may be shared or committed and a secret
+// must not ride along.
 func Path() (string, error) {
-	dir, err := config.UserConfigDir()
+	dir, err := config.UserStateDir()
 	if err != nil {
-		return "", fmt.Errorf("mcpauth: locate config dir: %w", err)
+		return "", fmt.Errorf("auth: locate state dir: %w", err)
 	}
 	return filepath.Join(dir, "magus", "mcp_token"), nil
 }
@@ -47,7 +49,7 @@ func Path() (string, error) {
 func Generate() (string, error) {
 	b := make([]byte, tokenBytes)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("mcpauth: read random: %w", err)
+		return "", fmt.Errorf("auth: read random: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
@@ -61,14 +63,25 @@ func Save(token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := atomicWriteSecret(path, []byte(token+"\n")); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// atomicWriteSecret writes data to path at 0600 via a temp file + rename, so a
+// concurrent reader never observes a half-written secret and the file lands
+// with restrictive permissions from the first byte. It creates the parent dir
+// (0700) if needed. Shared by the CLI token file and the connector store.
+func atomicWriteSecret(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("mcpauth: create %s: %w", dir, err)
+		return fmt.Errorf("auth: create %s: %w", dir, err)
 	}
 
-	tmp, err := os.CreateTemp(dir, ".mcp_token-*")
+	tmp, err := os.CreateTemp(dir, ".secret-*")
 	if err != nil {
-		return "", fmt.Errorf("mcpauth: create temp: %w", err)
+		return fmt.Errorf("auth: create temp: %w", err)
 	}
 	tmpName := tmp.Name()
 	// Best-effort cleanup if we bail before the rename.
@@ -76,19 +89,19 @@ func Save(token string) (string, error) {
 
 	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
-		return "", fmt.Errorf("mcpauth: chmod temp: %w", err)
+		return fmt.Errorf("auth: chmod temp: %w", err)
 	}
-	if _, err := tmp.WriteString(token + "\n"); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		return "", fmt.Errorf("mcpauth: write temp: %w", err)
+		return fmt.Errorf("auth: write temp: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return "", fmt.Errorf("mcpauth: close temp: %w", err)
+		return fmt.Errorf("auth: close temp: %w", err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		return "", fmt.Errorf("mcpauth: install token: %w", err)
+		return fmt.Errorf("auth: install secret: %w", err)
 	}
-	return path, nil
+	return nil
 }
 
 // SaveNew writes token only if no token file exists yet, using O_EXCL so the
@@ -103,7 +116,7 @@ func SaveNew(token string) (string, error) {
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("mcpauth: create %s: %w", dir, err)
+		return "", fmt.Errorf("auth: create %s: %w", dir, err)
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -113,10 +126,10 @@ func SaveNew(token string) (string, error) {
 	if _, err := f.WriteString(token + "\n"); err != nil {
 		_ = f.Close()
 		_ = os.Remove(path)
-		return "", fmt.Errorf("mcpauth: write token: %w", err)
+		return "", fmt.Errorf("auth: write token: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("mcpauth: close token: %w", err)
+		return "", fmt.Errorf("auth: close token: %w", err)
 	}
 	return path, nil
 }
@@ -134,18 +147,18 @@ func Load() (string, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", ErrNoToken
 		}
-		return "", fmt.Errorf("mcpauth: stat token: %w", err)
+		return "", fmt.Errorf("auth: stat token: %w", err)
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		return "", fmt.Errorf("mcpauth: token file %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
+		return "", fmt.Errorf("auth: token file %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("mcpauth: read token: %w", err)
+		return "", fmt.Errorf("auth: read token: %w", err)
 	}
 	tok := strings.TrimSpace(string(raw))
 	if tok == "" {
-		return "", fmt.Errorf("mcpauth: token file %s is empty", path)
+		return "", fmt.Errorf("auth: token file %s is empty", path)
 	}
 	return tok, nil
 }
@@ -160,7 +173,7 @@ func Exists() (bool, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
-		return false, fmt.Errorf("mcpauth: stat token: %w", err)
+		return false, fmt.Errorf("auth: stat token: %w", err)
 	}
 	return true, nil
 }
@@ -172,7 +185,7 @@ func Revoke() error {
 		return err
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("mcpauth: revoke token: %w", err)
+		return fmt.Errorf("auth: revoke token: %w", err)
 	}
 	return nil
 }

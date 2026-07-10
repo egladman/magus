@@ -22,17 +22,17 @@ var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 })
 
-// TokenSuite isolates os.UserConfigDir at a temp dir before each test so they
-// never touch the real user config. On Linux os.UserConfigDir honours
-// XDG_CONFIG_HOME.
+// TokenSuite isolates the state dir at a temp dir before each test so they
+// never touch the real user directory. The token lives under the state dir
+// (XDG_STATE_HOME).
 type TokenSuite struct {
 	suite.Suite
-	dir string
+	stateDir string
 }
 
 func (s *TokenSuite) SetupTest() {
-	s.dir = s.T().TempDir()
-	s.T().Setenv("XDG_CONFIG_HOME", s.dir)
+	s.stateDir = s.T().TempDir()
+	s.T().Setenv("XDG_STATE_HOME", s.stateDir)
 }
 
 func TestTokenSuite(t *testing.T) {
@@ -100,20 +100,20 @@ func (s *TokenSuite) TestPathLocation() {
 
 	path, err := Path()
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(s.dir, "magus", "mcp_token"), path)
+	assert.Equal(t, filepath.Join(s.stateDir, "magus", "mcp_token"), path)
 }
 
-// TestGuardHotReload proves httpx.BearerGuard(Load, ...) picks up a rotated or
-// revoked token without rebuilding the handler — the daemon's hot-reload contract.
-// It lives here (not in httpx) because it exercises the persistent token store's
-// Save/Revoke path feeding the shared guard.
+// TestGuardHotReload proves httpx.BearerGuard(VerifyBearer, ...) picks up a rotated or
+// revoked cli token without rebuilding the handler — the daemon's hot-reload
+// contract. It lives here (not in httpx) because it exercises the persistent
+// token store's Save/Revoke path feeding the shared guard.
 func (s *TokenSuite) TestGuardHotReload() {
 	t := s.T()
 
 	a, _ := Generate()
 	_, err := SaveNew(a)
 	require.NoError(t, err, "SaveNew")
-	h := httpx.BearerGuard(Load, okHandler)
+	h := httpx.BearerGuard(VerifyBearer, okHandler)
 
 	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+a), "token A")
 

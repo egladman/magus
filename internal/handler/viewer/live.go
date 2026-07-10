@@ -57,7 +57,7 @@ func StartLive(origin string, bc *journal.Broadcaster) (*LiveServer, error) {
 	// token as a header OR a `?token=` query param, since a browser EventSource cannot
 	// set headers).
 	tokenFn := func() (string, error) { return ls.token, nil }
-	s.Handle("/events", httpx.RequireLoopbackPeer(httpx.CORS(origin)(httpx.BearerGuard(tokenFn, http.HandlerFunc(ls.streamEvents)))))
+	s.Handle("/events", httpx.RequireLoopbackPeer(httpx.CORS(origin)(httpx.BearerGuard(httpx.SingleTokenVerifier(tokenFn), http.HandlerFunc(ls.streamEvents)))))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ls.cancel = cancel

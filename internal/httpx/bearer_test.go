@@ -27,7 +27,7 @@ func TestBearerGuard(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuard(load, okHandler).ServeHTTP(rr, req)
+		BearerGuard(SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 
@@ -63,15 +63,27 @@ func TestBearerGuard(t *testing.T) {
 	t.Run("empty query token", func(t *testing.T) { rejected(t, "", "token=") })
 }
 
-// TestBearerGuardLoadErrorFailsClosed confirms a token-load error denies access
-// even when the client presents a plausible token.
-func TestBearerGuardLoadErrorFailsClosed(t *testing.T) {
+// TestSingleTokenVerifierLoadErrorFailsClosed confirms a token-load error denies
+// access even when the client presents a plausible token.
+func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 	t.Parallel()
 	load := func() (string, error) { return "", errors.New("revoked") }
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(load, okHandler).ServeHTTP(rr, req)
+	BearerGuard(SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+// TestBearerGuardVerifierRejectionFailsClosed confirms that a verifier which
+// returns false denies access regardless of the presented token.
+func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
+	t.Parallel()
+	reject := func(string) bool { return false }
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer anything")
+	rr := httptest.NewRecorder()
+	BearerGuard(reject, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 

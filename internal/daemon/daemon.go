@@ -54,10 +54,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 		addr = netip.MustParseAddrPort(mcp.DefaultAddress)
 	}
 
-	// Provision the bearer token before serving. Fail closed: if it can't be
-	// loaded or generated, the MCP endpoint never comes up. Guard re-reads the
-	// token via auth.Load on each request, so token rotations take effect
-	// without a daemon restart.
+	// Provision the retrievable cli token before serving. Fail closed: if it
+	// can't be loaded or generated, the MCP endpoint never comes up. The guard
+	// re-evaluates auth.VerifyBearer on each request (which re-reads both the cli
+	// token and the named connector store from disk), so a rotate, create, or
+	// revoke takes effect without a daemon restart.
 	if _, err := auth.Resolve(log); err != nil {
 		return err
 	}
@@ -82,7 +83,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, mcpHandler)))
+	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, mcpHandler)))
 	for path, h := range opts.HealthRoutes {
 		httpServer.Handle(path, h)
 	}
@@ -139,7 +140,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0, log)))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
 			// Wrap every /api/ route with rebind + auth.
-			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, bridgeMux)))
+			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
 		}
 	}

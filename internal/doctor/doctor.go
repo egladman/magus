@@ -125,7 +125,7 @@ func (r *runner) run(wsErr error) Report {
 	var out Report
 	out.Checks = append(
 		out.Checks,
-		r.checkJSONCodec(), r.checkStaleSockets(),
+		r.checkJSONCodec(), r.checkStaleSockets(), r.checkMCPTokens(),
 	)
 
 	if wsErr != nil {

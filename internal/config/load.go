@@ -41,6 +41,28 @@ func UserConfigDir() (string, error) {
 	return os.UserConfigDir()
 }
 
+// UserStateDir returns the base directory for magus's user-global STATE:
+// runtime secrets (the MCP token store) and history. State is deliberately
+// separate from config - config may be shared, synced, or committed to a
+// dotfiles repo, and secrets must never ride along with it. It honors
+// XDG_STATE_HOME on every platform, falling back to %LocalAppData% on Windows
+// and ~/.local/state elsewhere (the XDG Base Directory default).
+func UserStateDir() (string, error) {
+	if x := os.Getenv("XDG_STATE_HOME"); x != "" && filepath.IsAbs(x) {
+		return x, nil
+	}
+	if runtime.GOOS == "windows" {
+		if lad := os.Getenv("LocalAppData"); lad != "" {
+			return lad, nil
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state"), nil
+}
+
 // EnvPrefix is the lowercase env-var prefix; Cache.Dir → MAGUS_CACHE_DIR.
 const EnvPrefix = "magus"
 

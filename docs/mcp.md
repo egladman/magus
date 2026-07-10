@@ -71,12 +71,22 @@ Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 > **Warning:** Reaching the MCP endpoint is equivalent to having shell access to your build workspace. Any authenticated caller can execute arbitrary build targets, which in turn invoke arbitrary toolchain commands defined in your magusfiles.
 
-The endpoint requires a **bearer token**. The daemon generates one on first start and stores it `0600` at `$XDG_CONFIG_HOME/magus/mcp_token`; the secret never reaches the daemon log, so retrieve it with `magus config mcp token print`. Every `/mcp` request must carry `Authorization: Bearer <token>`; requests without it get `401 Unauthorized`. Manage the token with:
+The endpoint requires a **bearer token**, and accepts two kinds:
+
+- **The cli token** - a single, retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token` (`~/.local/state/magus/mcp_token`). magus's own commands reuse it (for example `graph open --live`). The secret never reaches the daemon log, so retrieve it with `magus config mcp token print`.
+- **Connector tokens** - named, hashed-at-rest, expiring secrets you mint per external client (a Claude connector, an IDE). Only their SHA-256 is stored, so a connector token is shown once at creation and can never be re-displayed; rotate by minting a new one.
+
+Every `/mcp` request must carry `Authorization: Bearer <token>` with either kind; requests without a valid token get `401 Unauthorized`. Manage them with:
 
 ```text
-magus config mcp token print      # show the current token
-magus config mcp token generate   # mint a new one (--force to rotate)
-magus config mcp token revoke     # delete it (daemon mints a fresh one on next start)
+magus config mcp token print                     # show the cli token
+magus config mcp token generate                  # mint a new cli token (--force to rotate)
+magus config mcp token revoke                     # delete it (daemon mints a fresh one on next start)
+
+magus config mcp connector create --name claude   # mint a connector token (prints the secret once)
+magus config mcp connector create --expires 30d    # override the default 90-day expiry (or "never")
+magus config mcp connector list                    # names, fingerprints, and expiry
+magus config mcp connector revoke <name|fingerprint>
 ```
 
 Configure your client with the header, e.g.:
