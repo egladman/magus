@@ -66,7 +66,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-ref-line-is-always-there" title="The ref line is always there">The ref line is always there</a></li><li><a href="#retrieval-magus-query-refhex" title="Retrieval: magus query ref&lt;hex&gt;">Retrieval: magus query ref&lt;hex&gt;</a></li><li><a href="#tips-and-tricks" title="Tips and tricks">Tips and tricks</a></li><li><a href="#the-log-viewer" title="The log viewer">The log viewer</a></li><li><a href="#for-agents-and-mcp" title="For agents and MCP">For agents and MCP</a></li><li><a href="#how-refs-are-stored" title="How refs are stored">How refs are stored</a></li></ul>
+        <ul><li><a href="#the-ref-line-is-always-there" title="The ref line is always there">The ref line is always there</a></li><li><a href="#retrieval-magus-query-refhex" title="Retrieval: magus query ref&lt;hex&gt;">Retrieval: magus query ref&lt;hex&gt;</a></li><li><a href="#tips-and-tricks" title="Tips and tricks">Tips and tricks</a></li><li><a href="#the-log-viewer" title="The log viewer">The log viewer</a></li><li><a href="#for-agents-and-mcp" title="For agents and MCP">For agents and MCP</a></li><li><a href="#how-refs-are-stored" title="How refs are stored">How refs are stored</a></li><li><a href="#diagnostics" title="Diagnostics">Diagnostics</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -171,6 +171,17 @@ target's recent failures stay independently addressable, and is garbage-collecte
 along with the rest of the <a href="../cache/">cache</a>. Refs are run artifacts, not
 <a href="../knowledge/">knowledge-graph</a> nodes; the graph schema is untouched.</li>
 </ul>
+<h2 id="diagnostics">Diagnostics</h2>
+<p>When a ref cannot be resolved, <code>magus query</code> reports a coded
+<a href="../codes/outputref/">diagnostic</a> so the error points at the fix:</p>
+<ul>
+<li><a href="../codes/outputref/MGS8001/">MGS8001</a>: the ref is well-formed but no stored output
+exists - it aged out of the cache, or the ref is mistyped.</li>
+<li><a href="../codes/outputref/MGS8002/">MGS8002</a>: a shortened ref prefix matches more than one
+stored output, so the lookup is ambiguous.</li>
+<li><a href="../codes/outputref/MGS8003/">MGS8003</a>: a ref-only flag (<code>--open</code>, <code>--meta</code>,
+<code>--print</code>) was given without a valid <code>ref&lt;hex&gt;</code> argument.</li>
+</ul>
     </article>
     </div>
     </div>
@@ -182,15 +193,15 @@ along with the rest of the <a href="../cache/">cache</a>. Refs are run artifacts
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../codes/outputref/"><span class="related-card-title">output-reference diagnostics</span><span class="related-card-desc">Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.</span></a>
         <a class="related-card" href="../knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
         <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22output%22">output</a><a class="tag" href="../search/?q=tag%3A%22ref%22">ref</a><a class="tag" href="../search/?q=tag%3A%22logs%22">logs</a><a class="tag" href="../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../search/?q=tag%3A%22failure%22">failure</a><a class="tag" href="../search/?q=tag%3A%22debugging%22">debugging</a><a class="tag" href="../search/?q=tag%3A%22clipboard%22">clipboard</a><a class="tag" href="../search/?q=tag%3A%22mcp%22">mcp</a><a class="tag" href="../search/?q=tag%3A%22agent%22">agent</a></div>
-    <small>Last updated <time datetime="2026-07-09T16:56:29Z">July 9, 2026, 4:56 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/36abc78039d5b6c92bbb31c58c85585d5e72585c" data-tooltip="36abc78039d5b6c92bbb31c58c85585d5e72585c" title="36abc78039d5b6c92bbb31c58c85585d5e72585c">36abc780</a>)</small>
+    <small>Last updated <time datetime="2026-07-10T04:19:03Z">July 10, 2026, 4:19 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/ba50b51d7eeafebc3ae964262f6635c3ddd623eb" data-tooltip="ba50b51d7eeafebc3ae964262f6635c3ddd623eb" title="ba50b51d7eeafebc3ae964262f6635c3ddd623eb">ba50b51d</a>)</small>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

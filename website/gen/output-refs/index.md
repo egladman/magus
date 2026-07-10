@@ -131,3 +131,15 @@ or asking you to paste it.
   target's recent failures stay independently addressable, and is garbage-collected
   along with the rest of the [cache](cache.md). Refs are run artifacts, not
   [knowledge-graph](knowledge.md) nodes; the graph schema is untouched.
+
+## Diagnostics
+
+When a ref cannot be resolved, `magus query` reports a coded
+[diagnostic](codes/outputref/README.md) so the error points at the fix:
+
+- [MGS8001](codes/outputref/MGS8001.md): the ref is well-formed but no stored output
+  exists - it aged out of the cache, or the ref is mistyped.
+- [MGS8002](codes/outputref/MGS8002.md): a shortened ref prefix matches more than one
+  stored output, so the lookup is ambiguous.
+- [MGS8003](codes/outputref/MGS8003.md): a ref-only flag (`--open`, `--meta`,
+  `--print`) was given without a valid `ref<hex>` argument.

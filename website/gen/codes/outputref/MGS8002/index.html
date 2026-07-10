@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <title>MGS8002: ambiguous output ref prefix — magus</title>
+  <meta name="description" content="Fires when a shortened magus query &lt;ref&gt; prefix matches more than one stored output reference, so magus cannot tell which one you meant.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/outputref/MGS8002/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="MGS8002: ambiguous output ref prefix — magus">
+  <meta property="og:description" content="Fires when a shortened magus query &lt;ref&gt; prefix matches more than one stored output reference, so magus cannot tell which one you meant.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/codes/outputref/MGS8002/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../../../assets/pico.min.css">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../graph/">Graph</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/outputref/">output-reference diagnostics</a></li><li aria-current="page">MGS8002: ambiguous output ref prefix</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/outputref/MGS8002.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <article>
+<h1 id="mgs8002-ambiguous-output-ref-prefix">MGS8002: ambiguous output ref prefix</h1>
+<p><code>magus query &lt;ref&gt;</code> accepts a unique prefix of a reference id, the same way git
+accepts a short commit hash. This code fires when the prefix you gave matches
+more than one stored ref, so the lookup is ambiguous.</p>
+<h2 id="resolution">Resolution</h2>
+<p>Add more characters until the prefix is unique. The error lists the matching
+refs; copy one in full. Full reference ids are printed on each target's result
+line when it runs.</p>
+    </article>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../MGS8001/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS8001: output ref not found</span></a>
+      <a class="page-nav-next" href="../MGS8003/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS8003: malformed output ref</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../codes/outputref/"><span class="related-card-title">output-reference diagnostics</span><span class="related-card-desc">Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.</span></a>
+        <a class="related-card" href="../../../codes/outputref/MGS8001/"><span class="related-card-title">MGS8001: output ref not found</span><span class="related-card-desc">Fires when magus query &lt;ref&gt; names a well-formed reference id but no captured output is stored for it, because it aged out of the cache or the ref is mistyped.</span></a>
+        <a class="related-card" href="../../../codes/outputref/MGS8003/"><span class="related-card-title">MGS8003: malformed output ref</span><span class="related-card-desc">Fires when a ref-only flag (--open, --meta, --print) is given without a valid ref&lt;hex&gt; argument, so the value cannot name a stored output.</span></a>
+        <a class="related-card" href="../../../codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS8002%22">MGS8002</a><a class="tag" href="../../../search/?q=tag%3A%22output+refs%22">output refs</a><a class="tag" href="../../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../../search/?q=tag%3A%22prefix%22">prefix</a><a class="tag" href="../../../search/?q=tag%3A%22ambiguous%22">ambiguous</a></div>
+    <small>Last updated <time datetime="2026-07-10T04:19:03Z">July 10, 2026, 4:19 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/ba50b51d7eeafebc3ae964262f6635c3ddd623eb" data-tooltip="ba50b51d7eeafebc3ae964262f6635c3ddd623eb" title="ba50b51d7eeafebc3ae964262f6635c3ddd623eb">ba50b51d</a>)</small>
+  </div>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="../../../graph/">Graph</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>
