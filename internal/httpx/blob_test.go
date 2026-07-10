@@ -52,6 +52,22 @@ func TestStartBlobPreflight(t *testing.T) {
 	assert.Equal(t, "https://example.test", resp.Header.Get("Access-Control-Allow-Origin"))
 }
 
+// TestStartBlobRequiresToken confirms the blob route is gated by the per-run bearer token:
+// SourceURL carries it and fetches; a tokenless fetch is rejected with a 401 challenge.
+func TestStartBlobRequiresToken(t *testing.T) {
+	bs, err := StartBlob("https://example.test", "/graph.json", "application/json", []byte("{}"))
+	require.NoError(t, err)
+	defer bs.WaitServed(canceledCtx())
+
+	assert.Contains(t, bs.SourceURL(), "token="+bs.Token())
+
+	resp, err := http.Get("http://" + bs.Addr() + "/graph.json")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.NotEmpty(t, resp.Header.Get("WWW-Authenticate"))
+}
+
 // TestStartBlobEphemeralPort confirms StartBlob binds a real ephemeral port on loopback.
 func TestStartBlobEphemeralPort(t *testing.T) {
 	bs, err := StartBlob("https://example.test", "/b", "text/plain", []byte("x"))

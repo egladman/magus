@@ -17,12 +17,13 @@ import (
 
 	"github.com/egladman/magus/internal/handler/dashboard"
 	"github.com/egladman/magus/internal/handler/mcp/auth"
+	"github.com/egladman/magus/internal/httpx"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
 	"github.com/egladman/magus/types"
 	"google.golang.org/protobuf/proto"
 )
 
-// testHandler builds an HTTP mux with the bridge mounted, without auth.Guard
+// testHandler builds an HTTP mux with the bridge mounted, without httpx.BearerGuard
 // or dnsRebindGuard. Used for inner-route logic tests.
 func testHandler(opts dashboard.Options) http.Handler {
 	mux := http.NewServeMux()
@@ -30,7 +31,7 @@ func testHandler(opts dashboard.Options) http.Handler {
 	return mux
 }
 
-// testHandlerWithAuth wraps the bridge mux in auth.Guard with a throwaway token.
+// testHandlerWithAuth wraps the bridge mux in httpx.BearerGuard with a throwaway token.
 func testHandlerWithAuth(t *testing.T, opts dashboard.Options) (http.Handler, string) {
 	t.Helper()
 	tok, err := auth.Generate()
@@ -40,7 +41,7 @@ func testHandlerWithAuth(t *testing.T, opts dashboard.Options) (http.Handler, st
 	load := func() (string, error) { return tok, nil }
 	mux := http.NewServeMux()
 	dashboard.Mount(mux, opts)
-	return auth.Guard(load, mux), tok
+	return httpx.BearerGuard(load, mux), tok
 }
 
 // minimalOpts returns Options suitable for unit tests (no Magus instance).

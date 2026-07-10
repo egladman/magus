@@ -239,9 +239,12 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 	if err != nil {
 		return err
 	}
+	// SourceURL carries the per-run bearer token in a `?token=` query param; tucking the
+	// whole URL into the `#src=` fragment keeps the token out of any HTTP request the browser
+	// makes to the hosted page, and the explorer replays it when it fetches the blob.
 	openURL := strings.TrimRight(base, "/") + "/#src=" + url.QueryEscape(bs.SourceURL())
 
-	fmt.Fprintf(os.Stderr, "handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n", nodes, edges, bs.SourceURL())
+	fmt.Fprintf(os.Stderr, "handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n", nodes, edges, bs.Addr())
 	fmt.Fprintf(os.Stderr, "it is served once, CORS-locked to %s, and never leaves your machine; the server stops as soon as the page has it.\n", origin)
 	if err := openBrowser(openURL); err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph open: could not open a browser (%v). Open this yourself (the server is waiting):\n  %s\n", err, openURL)

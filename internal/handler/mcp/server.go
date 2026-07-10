@@ -165,7 +165,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 	if err != nil {
 		return err
 	}
-	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, auth.Guard(auth.Load, mcpHandler)))
+	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, mcpHandler)))
 	for path, h := range opts.HealthRoutes {
 		httpServer.Handle(path, h)
 	}
@@ -216,7 +216,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 			bridgeMux := http.NewServeMux()
 			dashboard.Mount(bridgeMux, bridgeOpts)
 			// Wrap every /api/ route with rebind + auth.
-			httpServer.Handle("/api/", httpx.GuardRebind(allowed, auth.Guard(auth.Load, bridgeMux)))
+			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
 		}
 	}

@@ -9,7 +9,6 @@ package viewer
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -52,7 +51,12 @@ func StartLive(origin string, bc *journal.Broadcaster) (*LiveServer, error) {
 		return nil, fmt.Errorf("mint stream token: %w", err)
 	}
 	ls := &LiveServer{srv: s, bc: bc, token: hex.EncodeToString(tokenBytes), done: make(chan struct{})}
-	s.Handle("/events", httpx.RequireLoopbackPeer(httpx.CORS(origin)(http.HandlerFunc(ls.streamEvents))))
+	// The shared loopback stack: peer must be loopback, CORS-locked to the page origin,
+	// and the per-run token enforced by the same guard the daemon uses (accepting the
+	// token as a header OR a `?token=` query param, since a browser EventSource cannot
+	// set headers).
+	tokenFn := func() (string, error) { return ls.token, nil }
+	s.Handle("/events", httpx.RequireLoopbackPeer(httpx.CORS(origin)(httpx.BearerGuard(tokenFn, http.HandlerFunc(ls.streamEvents)))))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ls.cancel = cancel
@@ -66,24 +70,6 @@ func (ls *LiveServer) Addr() string { return ls.srv.Addr().String() }
 
 // Token is the per-run bearer token the viewer must present.
 func (ls *LiveServer) Token() string { return ls.token }
-
-// tokenOK checks the per-run token, accepting it either as an `Authorization: Bearer` header
-// (the fetch-based SSE client the viewer reuses from graph-explorer.js, which CAN set
-// headers) or as a `?token=` query parameter (the fallback for a plain EventSource, which
-// cannot). Constant-time compare; on a loopback-only, CORS-locked server either carrier is
-// acceptable.
-func (ls *LiveServer) tokenOK(r *http.Request) bool {
-	tok := ""
-	if h := r.Header.Get("Authorization"); h != "" {
-		if after, ok := strings.CutPrefix(h, "Bearer "); ok {
-			tok = after
-		}
-	}
-	if tok == "" {
-		tok = r.URL.Query().Get("token")
-	}
-	return subtle.ConstantTimeCompare([]byte(tok), []byte(ls.token)) == 1
-}
 
 // ViewerURL builds the viewer link for this live run: <logsBase>/#live=<addr>&token=<token>,
 // where logsBase is the log viewer page URL (e.g. https://.../magus/logs/). BOTH the loopback
@@ -107,13 +93,10 @@ func (ls *LiveServer) Stop(ctx context.Context) {
 }
 
 // streamEvents streams the broadcaster's backlog then its live events as SSE, ending with a
-// terminal `done` event when the run finishes. CORS and the loopback guard are handled by
-// the Server; this checks the bearer token, then subscribes.
+// terminal `done` event when the run finishes. The loopback guard, CORS, and the per-run
+// bearer token are all enforced by the shared middleware stack wrapping this handler; by the
+// time it runs the request is already authenticated, so it just subscribes.
 func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
-	if !ls.tokenOK(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)

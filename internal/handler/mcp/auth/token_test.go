@@ -10,10 +10,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+// okHandler is the terminal handler the guard delegates to once a request is
+// authenticated.
+var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+})
 
 // TokenSuite isolates os.UserConfigDir at a temp dir before each test so they
 // never touch the real user config. On Linux os.UserConfigDir honours
@@ -96,15 +103,17 @@ func (s *TokenSuite) TestPathLocation() {
 	assert.Equal(t, filepath.Join(s.dir, "magus", "mcp_token"), path)
 }
 
-// TestGuardHotReload proves Guard(Load, ...) picks up a rotated or revoked
-// token without rebuilding the handler — the daemon's hot-reload contract.
+// TestGuardHotReload proves httpx.BearerGuard(Load, ...) picks up a rotated or
+// revoked token without rebuilding the handler — the daemon's hot-reload contract.
+// It lives here (not in httpx) because it exercises the persistent token store's
+// Save/Revoke path feeding the shared guard.
 func (s *TokenSuite) TestGuardHotReload() {
 	t := s.T()
 
 	a, _ := Generate()
 	_, err := SaveNew(a)
 	require.NoError(t, err, "SaveNew")
-	h := Guard(Load, okHandler)
+	h := httpx.BearerGuard(Load, okHandler)
 
 	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+a), "token A")
 

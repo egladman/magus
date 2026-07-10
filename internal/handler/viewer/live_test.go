@@ -75,7 +75,8 @@ func TestLiveServerStreamsBacklogAndLive(t *testing.T) {
 	assert.Equal(t, "__done__", recv(t, texts))
 }
 
-// TestLiveServerRejectsBadToken confirms a wrong/absent token is forbidden.
+// TestLiveServerRejectsBadToken confirms a wrong/absent token is rejected by the shared
+// bearer guard with a 401 challenge (the guard treats missing and wrong tokens alike).
 func TestLiveServerRejectsBadToken(t *testing.T) {
 	bc := journal.NewBroadcaster()
 	ls, err := StartLive("https://example.test", bc)
@@ -87,7 +88,8 @@ func TestLiveServerRejectsBadToken(t *testing.T) {
 	resp, err := http.Get("http://" + ls.Addr() + "/events?token=wrong")
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.NotEmpty(t, resp.Header.Get("WWW-Authenticate"))
 }
 
 // TestLiveServerURL confirms the viewer link carries the loopback addr and token in the
