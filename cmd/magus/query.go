@@ -85,13 +85,16 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	// execution's captured output. A free-text query like "refactor" (non-hex tail)
 	// is NOT a ref and falls through to the graph grammar below.
 	if len(pos) == 1 && kinds == "" && cache.LooksLikeRef(pos[0]) {
-		return queryOutputRef(ctx, root, pos[0], refOutputOpts{
-			meta: meta, open: open, printURL: printURL, base: viewerURL,
+		return queryOutputRef(ctx, root, pos[0], outputRefOpts{
+			meta: meta, open: open, printURL: printURL, viewerBase: viewerURL,
 		})
 	}
 	if open || meta || printURL {
-		fmt.Fprintln(os.Stderr, "magus query: --open/--meta/--print apply only to an output ref (magus query ref<hex>).")
-		fmt.Fprintln(os.Stderr, "To open the knowledge graph in a browser, use `magus graph open`.")
+		// A ref-only flag was set, so the visitor meant to name an output ref, but the
+		// positional is not a valid ref<hex> - a malformed ref, not a search. Code it so it
+		// stops here instead of silently falling through to the graph grammar below.
+		msg := "--open/--meta/--print apply only to an output ref (magus query ref<hex>). To open the knowledge graph in a browser, use `magus graph open`."
+		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error())
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
@@ -142,20 +145,20 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// refOutputOpts carries the flags that apply when `magus query` is retrieving a
+// outputRefOpts carries the flags that apply when `magus query` is retrieving a
 // target-output ref rather than searching the graph.
-type refOutputOpts struct {
-	meta     bool   // prepend a header before the bytes
-	open     bool   // open the browser log viewer instead of printing
-	printURL bool   // with open, print the URL instead of launching a browser
-	base     string // log viewer base URL
+type outputRefOpts struct {
+	meta       bool   // prepend a header before the bytes
+	open       bool   // open the browser log viewer instead of printing
+	printURL   bool   // with open, print the URL instead of launching a browser
+	viewerBase string // log viewer base URL
 }
 
 // queryOutputRef retrieves a target's captured output by reference id (or unique
 // prefix) and either prints it verbatim to stdout (pipe-friendly) or, with --open,
 // hands it to the browser log viewer. The bytes never leave the machine: --open
 // rides them in a URL fragment, exactly like `magus graph open`.
-func queryOutputRef(ctx context.Context, root, ref string, o refOutputOpts) error {
+func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
@@ -165,41 +168,51 @@ func queryOutputRef(ctx context.Context, root, ref string, o refOutputOpts) erro
 		// events (not the reconstructed text) - the browser renders pretty from structure.
 		events, meta, err := m.OutputEventsByRef(ref)
 		if err != nil {
-			return refLookupError(ref, err)
+			return reportRefLookupError(ref, err)
 		}
-		return openOutputInViewer(meta, events, o)
+		var inv journal.Invocation
+		if meta.Inv != "" {
+			inv, _ = m.InvocationByID(meta.Inv) // best-effort lineage; omitted if the run log aged out
+		}
+		return openOutputInViewer(meta, events, inv, o)
 	}
 	data, meta, err := m.OutputByRef(ref)
 	if err != nil {
-		return refLookupError(ref, err)
+		return reportRefLookupError(ref, err)
 	}
 	if o.meta {
-		writeOutputMetaHeader(os.Stdout, meta)
+		var inv journal.Invocation
+		if meta.Inv != "" {
+			inv, _ = m.InvocationByID(meta.Inv) // best-effort; lineage omitted if the run log aged out
+		}
+		writeOutputMetaHeader(os.Stdout, meta, inv)
 	}
 	_, err = os.Stdout.Write(data)
 	return err
 }
 
-// refLookupError renders the standard output-ref resolution failures (ambiguous prefix,
-// missing/aged-out, or an unexpected error) as a user-facing message + exit code.
-func refLookupError(ref string, err error) error {
+// reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,
+// missing/aged-out, or an unexpected error) as a coded diagnostic + exit code.
+func reportRefLookupError(ref string, err error) error {
 	var amb *cache.AmbiguousRefError
 	switch {
 	case errors.As(err, &amb):
-		fmt.Fprintf(os.Stderr, "magus query: %s\n", amb.Error())
+		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefAmbiguous, "%s", amb.Error()).Error())
 		return errSilent{exitCode: 2}
 	case errors.Is(err, fs.ErrNotExist):
-		fmt.Fprintf(os.Stderr, "magus query: no stored output for ref %q.\n", ref)
-		fmt.Fprintln(os.Stderr, "It may have aged out of the cache, or the ref is mistyped; re-run the target to regenerate it.")
+		msg := fmt.Sprintf("no stored output for ref %q. It may have aged out of the cache, or the ref is mistyped; re-run the target to regenerate it.", ref)
+		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
 		return errSilent{exitCode: 2}
 	default:
 		return fmt.Errorf("magus query: look up output ref %q: %w", ref, err)
 	}
 }
 
-// writeOutputMetaHeader prints the --meta header: the ref and its run's identity,
-// each on a plain line so the block stays greppable and pipe-safe, then a rule.
-func writeOutputMetaHeader(w io.Writer, meta cache.OutputMeta) {
+// writeOutputMetaHeader prints the --meta header: the ref, its run's identity, and the
+// lineage of the invocation that produced it (the command + trigger, from inv), each on a
+// plain line so the block stays greppable and pipe-safe, then a rule. inv may be zero (its
+// run log aged out), in which case the lineage lines are omitted.
+func writeOutputMetaHeader(w io.Writer, meta cache.OutputMeta, inv journal.Invocation) {
 	status := "ok"
 	if meta.Failed {
 		status = "failed"
@@ -215,6 +228,18 @@ func writeOutputMetaHeader(w io.Writer, meta cache.OutputMeta) {
 	if meta.DurationMs > 0 {
 		fmt.Fprintf(w, "duration: %dms\n", meta.DurationMs)
 	}
+	// Lineage: the command (and trigger) of the invocation that produced this output, so a
+	// ref traces back to the run - "which magus command made this, and what set it off".
+	if inv.ID != "" {
+		cmd := "magus " + inv.Command.Verb
+		if len(inv.Command.Args) > 0 {
+			cmd += " " + strings.Join(inv.Command.Args, " ")
+		}
+		fmt.Fprintf(w, "run:      %s\n", cmd)
+		if inv.Command.Trigger != "" {
+			fmt.Fprintf(w, "trigger:  %s\n", inv.Command.Trigger)
+		}
+	}
 	fmt.Fprintln(w, "----")
 }
 
@@ -223,23 +248,30 @@ func writeOutputMetaHeader(w io.Writer, meta cache.OutputMeta) {
 // nothing about the run, not even its ref id, ever leaves the machine. The payload is a
 // magus.viewer.v1 Journal (protobuf, gzip+base64url) of the ref's events; the browser decodes
 // it and renders pretty from structure (the generated JS client, bundled in).
-func buildLogViewerURL(base string, meta cache.OutputMeta, events []journal.Event) (string, error) {
-	inv := journal.InvocationFromEvents(meta.Ref, events)
-	encoded, err := handler.EncodeJournalFragment(inv, events)
-	if err != nil {
-		return "", err
+func buildLogViewerURL(base string, meta cache.OutputMeta, events []journal.Event, inv journal.Invocation) (link, encoded string, err error) {
+	j := journal.InvocationFromEvents(meta.Ref, events)
+	// A single ref's persisted events are output+result only (no `started`), so
+	// InvocationFromEvents yields no command lineage; graft the resolved run's Command so the
+	// viewer's lineage header shows which command (and trigger) produced this output.
+	if inv.ID != "" {
+		j.Command = inv.Command
 	}
-	return strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(meta.Ref) + "&data=" + encoded, nil
+	encoded, err = handler.EncodeJournalFragment(j, events)
+	if err != nil {
+		return "", "", err
+	}
+	// The encoded blob is returned too so the caller can size-check it without re-parsing the url.
+	return strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(meta.Ref) + "&data=" + encoded, encoded, nil
 }
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the encoded fragment nears browser URL-length limits.
-func openOutputInViewer(meta cache.OutputMeta, events []journal.Event, o refOutputOpts) error {
-	openURL, err := buildLogViewerURL(o.base, meta, events)
+func openOutputInViewer(meta cache.OutputMeta, events []journal.Event, inv journal.Invocation, o outputRefOpts) error {
+	openURL, encoded, err := buildLogViewerURL(o.viewerBase, meta, events, inv)
 	if err != nil {
 		return err
 	}
-	if encoded := openURL[strings.Index(openURL, "&data=")+len("&data="):]; len(encoded) > fragmentWarnBytes {
+	if len(encoded) > fragmentWarnBytes {
 		fmt.Fprintf(os.Stderr, "magus query: this output encodes to %d KB, near or past what Safari and older\n", len(encoded)/1024)
 		fmt.Fprintf(os.Stderr, "Firefox accept in a URL (Chrome is fine). If the page does not load, pipe it instead:\n")
 		fmt.Fprintf(os.Stderr, "  magus query %s | less. Continuing.\n", meta.Ref)

@@ -35,10 +35,10 @@ type BlobServer struct {
 	served chan struct{}
 }
 
-// ServeBlob starts a one-shot loopback server (per cfg) that serves raw (as contentType) at
+// StartBlob starts a one-shot loopback server (per cfg) that serves raw (as contentType) at
 // path, CORS-locked to cfg.Origin, in the background. The caller hands the browser the URL,
 // then calls [BlobServer.WaitServed]. path must begin with "/".
-func ServeBlob(cfg Config, path, contentType string, raw []byte) (*BlobServer, error) {
+func StartBlob(cfg Config, path, contentType string, raw []byte) (*BlobServer, error) {
 	s, err := newServer(cfg)
 	if err != nil {
 		return nil, err

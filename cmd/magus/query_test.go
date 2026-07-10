@@ -19,8 +19,12 @@ func TestWriteOutputMetaHeader(t *testing.T) {
 		Ref:        "refdeadbeef",
 		Project:    "svc/api",
 		Target:     "test",
+		Inv:        "inv123",
 		Failed:     true,
 		DurationMs: 1200,
+	}, journal.Invocation{
+		ID:      "inv123",
+		Command: journal.Command{Verb: "run", Args: []string{"test"}, Trigger: "agent"},
 	})
 	out := buf.String()
 	assert.Contains(t, out, "ref:      refdeadbeef")
@@ -28,6 +32,8 @@ func TestWriteOutputMetaHeader(t *testing.T) {
 	assert.Contains(t, out, "target:   test")
 	assert.Contains(t, out, "status:   failed")
 	assert.Contains(t, out, "duration: 1200ms")
+	assert.Contains(t, out, "run:      magus run test")
+	assert.Contains(t, out, "trigger:  agent")
 	assert.True(t, strings.HasSuffix(strings.TrimRight(out, "\n"), "----"), "header ends with a rule")
 }
 
@@ -39,8 +45,10 @@ func TestBuildLogViewerURL(t *testing.T) {
 		{Ts: 1, Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: "build failed: boom"},
 		{Ts: 2, Kind: journal.KindResult, Status: journal.StatusFail, Ref: "refdeadbeef"},
 	}
-	url, err := buildLogViewerURL(defaultLogViewerURL, cache.OutputMeta{Ref: "refdeadbeef", Failed: true}, events)
+	url, encoded, err := buildLogViewerURL(defaultLogViewerURL, cache.OutputMeta{Ref: "refdeadbeef", Failed: true}, events,
+		journal.Invocation{ID: "inv1", Command: journal.Command{Verb: "run", Args: []string{"build"}}})
 	require.NoError(t, err)
+	assert.Contains(t, url, encoded, "returned encoded blob should be the url's data payload")
 
 	assert.True(t, strings.HasPrefix(url, defaultLogViewerURL+"#ref=refdeadbeef&data="),
 		"url should carry the ref identity then the fragment data, got %q", url)

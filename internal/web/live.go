@@ -27,8 +27,8 @@ import (
 const liveGrace = 3 * time.Second
 
 // LiveServer streams one invocation's events to a browser over SSE, on the shared loopback
-// [server]. Start it with [StartLive] before the run, hand the browser [LiveServer.URL], let
-// the run emit into the broadcaster, then [LiveServer.Stop] when done.
+// [server]. Start it with [StartLive] before the run, hand the browser [LiveServer.ViewerURL],
+// let the run emit into the broadcaster, then [LiveServer.Stop] when done.
 type LiveServer struct {
 	srv   *server
 	bc    *journal.Broadcaster
@@ -80,13 +80,13 @@ func (ls *LiveServer) tokenOK(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(tok), []byte(ls.token)) == 1
 }
 
-// URL builds the viewer link for this live run: <logsBase>/#live=<addr>&token=<token>, where
-// logsBase is the log viewer page URL (e.g. https://.../magus/logs/). BOTH the loopback host
-// and the bearer token ride the URL fragment, which the browser never transmits to a server -
-// so the connection details are handed to the page locally and nothing leaves the machine; the
-// page reads the token and strips it from the URL.
-func (ls *LiveServer) URL(logsBase string) string {
-	return trimSlash(logsBase) + "/#live=" + url.QueryEscape(ls.Addr()) + "&token=" + url.QueryEscape(ls.token)
+// ViewerURL builds the viewer link for this live run: <logsBase>/#live=<addr>&token=<token>,
+// where logsBase is the log viewer page URL (e.g. https://.../magus/logs/). BOTH the loopback
+// host and the bearer token ride the URL fragment, which the browser never transmits to a
+// server - so the connection details are handed to the page locally and nothing leaves the
+// machine; the page reads the token and strips it from the URL.
+func (ls *LiveServer) ViewerURL(logsBase string) string {
+	return strings.TrimRight(logsBase, "/") + "/#live=" + url.QueryEscape(ls.Addr()) + "&token=" + url.QueryEscape(ls.token)
 }
 
 // Stop shuts the server down, allowing a brief grace window first so a late or reloading
@@ -121,7 +121,7 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	for _, ev := range backlog {
-		if !writeEvent(w, ev) {
+		if err := writeEvent(w, ev); err != nil {
 			return
 		}
 	}
@@ -133,7 +133,7 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				return
 			}
-			if !writeEvent(w, ev) {
+			if err := writeEvent(w, ev); err != nil {
 				return
 			}
 			flusher.Flush()
@@ -142,7 +142,7 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 			for {
 				select {
 				case ev := <-ch:
-					if !writeEvent(w, ev) {
+					if err := writeEvent(w, ev); err != nil {
 						return
 					}
 				default:
@@ -157,20 +157,15 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// writeEvent emits one event as an SSE data line (base64 protobuf). It returns false if the
-// event could not be encoded or written, so the caller ends the stream.
-func writeEvent(w http.ResponseWriter, ev journal.Event) bool {
+// writeEvent emits one event as an SSE data line (base64 protobuf). It returns a non-nil
+// error if the event could not be encoded or written, so the caller ends the stream.
+func writeEvent(w http.ResponseWriter, ev journal.Event) error {
 	payload, err := handler.EncodeEvent(ev)
 	if err != nil {
-		return false
+		return fmt.Errorf("encode event: %w", err)
 	}
-	_, err = fmt.Fprintf(w, "data: %s\n\n", payload)
-	return err == nil
-}
-
-func trimSlash(s string) string {
-	for len(s) > 0 && s[len(s)-1] == '/' {
-		s = s[:len(s)-1]
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+		return err
 	}
-	return s
+	return nil
 }

@@ -182,6 +182,13 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
   color: var(--pico-muted-color); user-select: none; -webkit-user-select: none;
 }
 .log-line .lc { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+/* Line numbers are clickable deep-link anchors (GitHub-style #L10-L20); hint it. */
+.ln { cursor: pointer; }
+
+/* Line-range highlight: rows named by an #L<n> / #L<a>-L<b> fragment. A translucent primary
+   tint so it reads over the log body in both light and dark without hiding the text. */
+.line-highlight { background: color-mix(in srgb, var(--pico-primary) 16%, transparent); }
+.log-section-head.line-highlight { background: color-mix(in srgb, var(--pico-primary) 22%, var(--pico-card-sectioning-background-color)); }
 
 /* ANSI SGR -> CSS. magus uses dim, bold, and the basic 8 foreground colors.
    Colors follow the page theme by using Pico's semantic variables where they

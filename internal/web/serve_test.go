@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestServeBlobServesOnceCORSLocked confirms the one-shot server serves the blob with the
+// TestStartBlobServesOnceCORSLocked confirms the one-shot server serves the blob with the
 // content type and CORS origin lock, and WaitServed reports ServeCompleted after the fetch.
-func TestServeBlobServesOnceCORSLocked(t *testing.T) {
+func TestStartBlobServesOnceCORSLocked(t *testing.T) {
 	raw := []byte(`{"nodes":1}`)
-	bs, err := ServeBlob(Config{Origin: "https://example.test"}, "/graph.json", "application/json", raw)
+	bs, err := StartBlob(Config{Origin: "https://example.test"}, "/graph.json", "application/json", raw)
 	require.NoError(t, err)
 
 	resp, err := http.Get(bs.SourceURL())
@@ -34,10 +34,10 @@ func TestServeBlobServesOnceCORSLocked(t *testing.T) {
 	assert.Equal(t, ServeCompleted, bs.WaitServed(ctx))
 }
 
-// TestServeBlobPreflight confirms an OPTIONS preflight is answered 204 with the allowed
+// TestStartBlobPreflight confirms an OPTIONS preflight is answered 204 with the allowed
 // methods, without consuming the one-shot fetch.
-func TestServeBlobPreflight(t *testing.T) {
-	bs, err := ServeBlob(Config{Origin: "https://example.test"}, "/graph.json", "application/json", []byte("{}"))
+func TestStartBlobPreflight(t *testing.T) {
+	bs, err := StartBlob(Config{Origin: "https://example.test"}, "/graph.json", "application/json", []byte("{}"))
 	require.NoError(t, err)
 	defer bs.WaitServed(canceledCtx())
 

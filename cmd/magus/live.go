@@ -35,7 +35,7 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	if v := strings.TrimSpace(os.Getenv("MAGUS_LOG_VIEWER_URL")); v != "" {
 		base = v
 	}
-	origin, err := web.Origin(base)
+	origin, err := web.ParseOrigin(base)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "magus: --live could not derive the viewer origin (%v); continuing without it.\n", err)
 		return nil, func() {}
@@ -46,7 +46,7 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 		fmt.Fprintf(os.Stderr, "magus: --live could not start the log stream server (%v); continuing without it.\n", err)
 		return nil, func() {}
 	}
-	fmt.Fprintf(os.Stderr, "watch this run live (loopback, stays on your machine):\n  %s\n", ls.URL(base))
+	fmt.Fprintf(os.Stderr, "watch this run live (loopback, stays on your machine):\n  %s\n", ls.ViewerURL(base))
 	return bc, func() {
 		bc.Close()
 		ls.Stop(ctx)

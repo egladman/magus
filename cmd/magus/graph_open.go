@@ -233,11 +233,11 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 // stream); this wraps them with the graph-specific URL (#src=) and the user-facing
 // messages. The graph is delivered browser <-> loopback and never leaves the machine.
 func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges int) error {
-	origin, err := web.Origin(base)
+	origin, err := web.ParseOrigin(base)
 	if err != nil {
 		return err
 	}
-	bs, err := web.ServeBlob(web.Config{Origin: origin}, "/graph.json", "application/json", raw)
+	bs, err := web.StartBlob(web.Config{Origin: origin}, "/graph.json", "application/json", raw)
 	if err != nil {
 		return err
 	}

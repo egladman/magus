@@ -8,7 +8,7 @@
 // Bundled (esbuild) because it imports the proto client; every handler guards on its DOM
 // target, so it is a no-op if the scaffold is absent (e.g. main.js loading on another page).
 
-import { fromBinary } from "@bufbuild/protobuf";
+import { fromBinary, toBinary, create } from "@bufbuild/protobuf";
 import { JournalSchema, EventSchema, Kind, Status } from "./gen/magus/viewer/v1/viewer_pb";
 
 const el = (id) => document.getElementById(id);
@@ -66,6 +66,18 @@ function gunzipFragment(b64url) {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"));
+}
+
+// --- Fragment encode (the inverse of decodeFragmentBytes) ---------------------
+// bytes -> gzip -> base64url. Mirrors internal/render EncodeFragmentRaw so a link built
+// here round-trips through the same decode path. Local only: the Share button never leaves
+// the page. base64url = RawURLEncoding (base64, then +/- and //_ swaps, no "=" padding).
+async function encodeFragmentBytes(bytes) {
+  const stream = new Response(bytes).body.pipeThrough(new CompressionStream("gzip"));
+  const gz = new Uint8Array(await new Response(stream).arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < gz.length; i++) bin += String.fromCharCode(gz[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 // viewerParams reads the deep-link parameters from the URL fragment (after #). EVERYTHING -
@@ -166,6 +178,10 @@ let rawText = "";
 // currentRef is the ref id from #ref=, if the log came from `magus query ... --open`.
 // It powers the "copy as command" buttons; a pasted/dropped log has none.
 let currentRef = "";
+// currentJournal holds the structured Journal when one is loaded (the #data protobuf path),
+// null in heuristic/text mode. It backs Share (re-encode the exact structure) and Open in
+// graph (read project/target off the result event).
+let currentJournal = null;
 // pretty toggles the stylized structural view (default) vs the raw captured text.
 let pretty = true;
 
@@ -176,6 +192,7 @@ let rawLines = null;
 
 function loadText(text, ref) {
   rawLines = null;
+  currentJournal = null;
   model = buildModel(text);
   rawText = text;
   finishLoad(ref, summarize(text));
@@ -185,6 +202,7 @@ function loadText(text, ref) {
 // SAME section model the heuristic produces - so render()/search/fold/copy work unchanged -
 // but from EVENTS, so grouping and status are exact, not regex-guessed.
 function loadJournal(journal, ref) {
+  currentJournal = journal;
   const built = buildModelFromEvents(journal.events || [], journal.invocation);
   model = { sections: built.sections, titled: built.titled };
   rawLines = built.rawLines;
@@ -204,6 +222,12 @@ function finishLoad(ref, statusMsg) {
   if (copyBtn) copyBtn.disabled = false;
   const cmdBtn = el("copy-cmd-btn");
   if (cmdBtn) cmdBtn.hidden = !currentRef;
+  const shareBtn = el("share-btn");
+  if (shareBtn) shareBtn.disabled = false;
+  // "Open in graph" only makes sense with a real ref AND a target the graph knows about
+  // (a project + target from the result event); hide it otherwise.
+  const graphBtn = el("graph-btn");
+  if (graphBtn) graphBtn.hidden = !graphTarget();
 }
 
 // buildModelFromEvents turns an event stream (a whole Journal's events, or the live events
@@ -348,6 +372,8 @@ function scheduleLiveRender() {
     if (foldBtn) foldBtn.hidden = model.titled === 0 || !pretty;
     const copyBtn = el("copy-all-btn");
     if (copyBtn) copyBtn.disabled = false;
+    const shareBtn = el("share-btn");
+    if (shareBtn) shareBtn.disabled = false;
     if (!livePaused && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
   });
 }
@@ -476,6 +502,7 @@ function render() {
     const flat = rawLines || model.sections.flatMap((s) => s.lines);
     let n = 0;
     for (const raw of flat) bodyEl.appendChild(renderLine(raw, ++n));
+    applyLineHighlight();
     return;
   }
 
@@ -566,6 +593,7 @@ function render() {
     secEl.append(head, linesWrap);
     bodyEl.appendChild(secEl);
   }
+  applyLineHighlight();
 }
 
 // STATUS_RE matches a leading magus status token like "[pass]" / "[fail]" - the
@@ -605,6 +633,8 @@ function renderLine(raw, lineNo) {
   const ln = document.createElement("span");
   ln.className = "ln";
   ln.textContent = String(lineNo);
+  // Clicking a line number deep-links it (GitHub-style #L<n>); shift-click extends a range.
+  ln.addEventListener("click", (ev) => onLineNumberClick(lineNo, ev));
   const lc = document.createElement("span");
   lc.className = "lc";
   renderContent(lc, raw);
@@ -774,6 +804,144 @@ function setActiveMark(i) {
   if (countEl) countEl.textContent = activeMark + 1 + "/" + searchMarks.length;
 }
 
+// --- Share: re-encode the loaded log into a #data= link -----------------------
+// The Share button rebuilds the exact fragment link the viewer decodes and copies it to the
+// clipboard, so a run's output can be handed off without re-running magus. The payload is the
+// SAME format loadFromURL reads: toBinary(JournalSchema, ...) of a Journal, gzip+base64url.
+// A structured log ships its real Journal; a heuristic/pasted log is wrapped into a minimal
+// Journal (one KindOutput event per line) so the link still round-trips the structured path.
+async function shareLink(btn) {
+  try {
+    const bytes = shareBytes();
+    const blob = await encodeFragmentBytes(bytes);
+    // Build the base from origin+pathname so any existing fragment/query is dropped; the
+    // whole link then rides the fragment, which the browser never transmits to a server.
+    const base = location.origin + location.pathname;
+    const frag = (currentRef ? "ref=" + currentRef + "&" : "") + "data=" + blob;
+    const url = base + "#" + frag;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+      flashBtnLabel(btn, "Copied");
+    } else {
+      flashBtnLabel(btn, "Failed");
+    }
+  } catch (_) {
+    flashBtnLabel(btn, "Failed");
+  }
+}
+
+// shareBytes serializes the loaded log to the Journal wire bytes the viewer decodes: the real
+// Journal when one is loaded, else a minimal Journal synthesized from the rendered lines (the
+// same flat lines the RAW view shows) so a text/pasted log still round-trips as structure.
+function shareBytes() {
+  if (currentJournal) return toBinary(JournalSchema, currentJournal);
+  const lines = rawLines || (model ? model.sections.flatMap((s) => s.lines) : []);
+  const events = lines.map((text) => create(EventSchema, { kind: Kind.OUTPUT, text }));
+  const journal = create(JournalSchema, { events });
+  return toBinary(JournalSchema, journal);
+}
+
+// flashBtnLabel swaps a toolbar button's label to a transient message (e.g. "Copied") and
+// reverts it after ~1.5s, without disturbing the icon (setBtnLabel touches only .btn-label).
+function flashBtnLabel(btn, text) {
+  if (!btn) return;
+  const label = btn.querySelector(".btn-label");
+  const prev = label ? label.textContent : btn.textContent;
+  setBtnLabel(btn, text);
+  setTimeout(() => setBtnLabel(btn, prev), 1500);
+}
+
+// --- Open in graph: jump to the target's knowledge-graph node -----------------
+// graphTarget reads the (project, target) off the loaded Journal's result event - the pair
+// that names a target node. Only meaningful with a real ref seed; returns null otherwise, so
+// the button stays hidden for pasted/live logs that do not identify a graph target.
+function graphTarget() {
+  if (!currentRef || !currentJournal) return null;
+  for (const ev of currentJournal.events || []) {
+    if (ev.kind === Kind.RESULT && ev.project && ev.target) return { project: ev.project, target: ev.target };
+  }
+  return null;
+}
+
+// openInGraph builds the knowledge-graph node id exactly as internal/knowledge/id.go targetID
+// spells it ("target:<project>:<target>") and opens the graph explorer on that node in a new
+// tab. The node id rides the graph page's own #node= fragment, so nothing leaves the machine.
+function openInGraph() {
+  const t = graphTarget();
+  if (!t) return;
+  const nodeId = "target:" + t.project + ":" + t.target;
+  window.open("../graph/#node=" + encodeURIComponent(nodeId), "_blank");
+}
+
+// --- Line-range highlight (#L10-L20, GitHub-style) ----------------------------
+// A fragment token like `L10-L20` (or a single `L10`) highlights those line rows and scrolls
+// the first into view. It coexists with data=/ref= (which viewerParams parses); this token
+// has no "=" so it is read separately here. highlightStart tracks the anchor for shift-click.
+let highlightStart = null;
+
+function lineRangeFromHash() {
+  for (const part of location.hash.replace(/^#/, "").split("&")) {
+    const m = /^L(\d+)(?:-L?(\d+))?$/.exec(part);
+    if (!m) continue;
+    const a = parseInt(m[1], 10);
+    const b = m[2] ? parseInt(m[2], 10) : a;
+    return { start: Math.min(a, b), end: Math.max(a, b) };
+  }
+  return null;
+}
+
+// applyLineHighlight (re)paints the .line-highlight rows from the current fragment. Called at
+// the end of every render() so it survives view toggles, folds, and live re-renders.
+function applyLineHighlight() {
+  for (const r of bodyEl.querySelectorAll(".line-highlight")) r.classList.remove("line-highlight");
+  const range = lineRangeFromHash();
+  if (!range) return;
+  let first = null;
+  for (const ln of bodyEl.querySelectorAll(".ln")) {
+    const n = parseInt(ln.textContent, 10);
+    if (!(n >= range.start && n <= range.end)) continue;
+    const row = ln.parentElement; // .log-line, or the .log-section-head button for a head row
+    row.classList.add("line-highlight");
+    // Expand a collapsed section so a highlighted body line is actually visible.
+    const sec = row.closest && row.closest(".log-section");
+    if (sec && sec.classList.contains("collapsed")) {
+      sec.classList.remove("collapsed");
+      const head = sec.querySelector(".log-section-head");
+      if (head) head.setAttribute("aria-expanded", "true");
+    }
+    if (first === null) first = row;
+  }
+  if (first) first.scrollIntoView({ block: "center" });
+}
+
+// onLineNumberClick sets the fragment to a GitHub-style L token and re-highlights: a plain
+// click anchors a single line (L<n>); shift-click extends from the anchor to a range (L<a>-L<b>).
+function onLineNumberClick(n, ev) {
+  ev.stopPropagation();
+  let start = n;
+  let end = n;
+  if (ev.shiftKey && highlightStart !== null) {
+    start = Math.min(highlightStart, n);
+    end = Math.max(highlightStart, n);
+  } else {
+    highlightStart = n;
+  }
+  setLineFragment(start, end);
+  applyLineHighlight();
+}
+
+// setLineFragment replaces the L token in the fragment (preserving ref=/data= and other keys)
+// via replaceState, so the highlight is shareable/bookmarkable without adding a history entry.
+function setLineFragment(start, end) {
+  const kept = [];
+  for (const part of location.hash.replace(/^#/, "").split("&")) {
+    if (!part || /^L\d+/.test(part)) continue;
+    kept.push(part);
+  }
+  kept.push(start === end ? "L" + start : "L" + start + "-L" + end);
+  history.replaceState(null, "", location.pathname + location.search + "#" + kept.join("&"));
+}
+
 // --- Controls -----------------------------------------------------------------
 function wireControls() {
   const copyBtn = el("copy-all-btn");
@@ -787,6 +955,17 @@ function wireControls() {
     cmdBtn.addEventListener("click", () => {
       if (currentRef) copyToClipboard("magus query " + currentRef, cmdBtn);
     });
+  }
+
+  const shareBtn = el("share-btn");
+  if (shareBtn) {
+    shareBtn.disabled = true;
+    shareBtn.addEventListener("click", () => shareLink(shareBtn));
+  }
+
+  const graphBtn = el("graph-btn");
+  if (graphBtn) {
+    graphBtn.addEventListener("click", openInGraph);
   }
 
   // Pretty <-> raw toggle. Raw shows the exact captured text (flat, no folds/badges);

@@ -18,12 +18,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOrigin(t *testing.T) {
-	got, err := Origin("https://eli.gladman.cc/magus/logs/")
+func TestParseOrigin(t *testing.T) {
+	got, err := ParseOrigin("https://eli.gladman.cc/magus/logs/")
 	require.NoError(t, err)
 	assert.Equal(t, "https://eli.gladman.cc", got)
 
-	_, err = Origin("not-a-url")
+	_, err = ParseOrigin("not-a-url")
 	assert.Error(t, err)
 }
 
@@ -101,7 +101,7 @@ func TestLiveServerRejectsBadToken(t *testing.T) {
 
 // TestLiveServerURL confirms the viewer link carries the loopback addr and token in the
 // fragment.
-func TestLiveServerURL(t *testing.T) {
+func TestLiveServerViewerURL(t *testing.T) {
 	bc := journal.NewBroadcaster()
 	ls, err := StartLive(Config{Origin: "https://example.test"}, bc)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestLiveServerURL(t *testing.T) {
 	cancel()
 	defer ls.Stop(ctx)
 
-	u := ls.URL("https://eli.gladman.cc/magus/logs/")
+	u := ls.ViewerURL("https://eli.gladman.cc/magus/logs/")
 	// Both the loopback host and the bearer token ride the fragment - nothing in the query.
 	assert.True(t, strings.HasPrefix(u, "https://eli.gladman.cc/magus/logs/#live="), u)
 	before, after, found := strings.Cut(u, "#")

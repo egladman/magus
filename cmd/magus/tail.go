@@ -68,9 +68,9 @@ func tailCmd(ctx context.Context, root string, args []string) error {
 	logPath, err := m.TailLog(projectPath, targetName)
 	if errors.Is(err, fs.ErrNotExist) {
 		if targetName != "" {
-			return fmt.Errorf("magus tail: no cache entries for %q with target %q — run a build first", projectPath, targetName)
+			return fmt.Errorf("magus tail: no cache entries for %q with target %q - run a build first", projectPath, targetName)
 		}
-		return fmt.Errorf("magus tail: no cache entries found for project %q — run a build first", projectPath)
+		return fmt.Errorf("magus tail: no cache entries found for project %q - run a build first", projectPath)
 	}
 	if err != nil {
 		return fmt.Errorf("magus tail: %w", err)
@@ -114,7 +114,7 @@ func resolveTailTarget(ws types.WorkspaceRepository, args []string) (projectPath
 	}
 
 	if t.Path == "" {
-		// Bare target or :target sugar — resolve path from cwd.
+		// Bare target or :target sugar - resolve path from cwd.
 		targets, found, err := ws.ExpandCwd(types.Target{})
 		if err != nil {
 			return "", "", err

@@ -12,7 +12,7 @@ import (
 // TestServerEphemeralPort confirms the zero-value Config.Port binds a real ephemeral port on
 // loopback.
 func TestServerEphemeralPort(t *testing.T) {
-	bs, err := ServeBlob(Config{Origin: "https://example.test"}, "/b", "text/plain", []byte("x"))
+	bs, err := StartBlob(Config{Origin: "https://example.test"}, "/b", "text/plain", []byte("x"))
 	require.NoError(t, err)
 	defer bs.WaitServed(canceledCtx())
 
@@ -31,7 +31,7 @@ func TestServerPinnedPort(t *testing.T) {
 	want := probe.Addr().(*net.TCPAddr).Port
 	require.NoError(t, probe.Close())
 
-	bs, err := ServeBlob(Config{Origin: "https://example.test", Port: want}, "/b", "text/plain", []byte("x"))
+	bs, err := StartBlob(Config{Origin: "https://example.test", Port: want}, "/b", "text/plain", []byte("x"))
 	if err != nil {
 		t.Skipf("pinned port %d was taken between probe and bind: %v", want, err)
 	}
