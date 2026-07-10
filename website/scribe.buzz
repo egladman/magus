@@ -1566,6 +1566,7 @@ fun writeManifest(site: Site) > void {
         + "  ],\n"
         + "  \"shortcuts\": [\n"
         + "    \{ \"name\": \"Graph\", \"url\": \"" + basePath + "graph/\" \},\n"
+        + "    \{ \"name\": \"Dashboard\", \"url\": \"" + basePath + "dashboard/\" \},\n"
         + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
         + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
         + "  ],\n"
@@ -1605,7 +1606,8 @@ fun writeServiceWorker(site: Site) > void {
     // never contain its own commit's hash, and so perpetually drifted the gen gate.
     final precached = ["search-index.json", "playground/wasm_exec.js",
         "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css",
-        "logs/log-viewer.js", "logs/logs.css", "main.js", "theme.js", "site.css", "theme.css",
+        "logs/log-viewer.js", "logs/logs.css", "dashboard/dashboard.js", "dashboard/dashboard.css",
+        "main.js", "theme.js", "site.css", "theme.css",
         "assets/pico.min.css", "offline/index.html"];
     var manifest = "";
     foreach (rel in precached) {
@@ -1935,6 +1937,8 @@ fun renderSiteNav(root: str, active: str) > str {
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
     links.append({"href": root + "graph/", "label": "Graph", "current": active == "graph"});
+    // /dashboard/ is deliberately NOT in the public nav: it is magus's control surface,
+    // reachable by direct URL or as an installed PWA app shortcut, not a public site page.
     return template.render(tmpl, {"root": root, "links": links});
 }
 
@@ -2038,6 +2042,23 @@ fun renderLogs(site: Site) > void {
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/logs");
     fs.writeFile(site.outDir + "/logs/index.html", html);
+}
+
+// renderDashboard writes gen/dashboard/index.html from the hand-authored dashboard.html -
+// magus's control surface. Unlike the other tool pages it is CHROMELESS: it authors its own
+// slim app bar (magus mark + theme toggle) rather than the shared site nav/footer, so it reads
+// like a native app, and it is deliberately absent from the public nav/footer (reachable by
+// direct URL or as an installed PWA shortcut). renderDashboard therefore injects only the
+// default CSP (no inline scripts; the default connect-src already allows loopback for the
+// daemon-bridge status stream). Its stylesheet (gen/dashboard/dashboard.css) and module
+// (gen/dashboard/dashboard.js) are built in site_render and preserved by pruneStaleOutputs.
+fun renderDashboard(site: Site) > void {
+    final f = io.File.open("dashboard.html", io.FileMode.read);
+    var html = f.readAll();
+    f.close();
+    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
+    fs.makeDirectory(site.outDir + "/dashboard");
+    fs.writeFile(site.outDir + "/dashboard/index.html", html);
 }
 
 // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
@@ -3097,6 +3118,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // not here.
     fs.makeDirectory(site.outDir + "/logs");
     os.execute(["sh", "-c", "esbuild logs.css --minify --outfile=" + site.outDir + "/logs/logs.css"]);
+    // dashboard.css: the /dashboard/ control surface's page-scoped stylesheet (no imports;
+    // single-file minify). Its module js/dashboard.js imports the @bufbuild/protobuf status
+    // client, so it is bundled by `pnpm run build-dashboard` (generateJsBundles), not here.
+    fs.makeDirectory(site.outDir + "/dashboard");
+    os.execute(["sh", "-c", "esbuild dashboard.css --minify --outfile=" + site.outDir + "/dashboard/dashboard.css"]);
     os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + site.outDir + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
@@ -3111,6 +3137,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     renderPlayground(site);
     renderGraph(site);
     renderLogs(site);
+    renderDashboard(site);
 
     // Load release manifests from releases/*.yaml BEFORE the walk so renderPage()
     // knows whether the releases Atom feed will be written and can gate its
@@ -3312,6 +3339,7 @@ fun pruneStaleOutputs(site: Site) > void {
         "graph/index.html": true, "graph/explorer.js": true, "graph/graph.json": true,
         "graph/graph.css": true,
         "logs/index.html": true, "logs/log-viewer.js": true, "logs/logs.css": true,
+        "dashboard/index.html": true, "dashboard/dashboard.js": true, "dashboard/dashboard.css": true,
     };
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);

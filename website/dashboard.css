@@ -1,0 +1,210 @@
+/* dashboard.css - page-scoped styles for the /dashboard/ control surface. Unlike the other
+   tool pages this is CHROMELESS and full-bleed: its own slim app bar, then edge-to-edge dense
+   tiles. Themed with Pico's variables so light/dark carries over, plus a small fixed accent
+   palette (hit/miss/error/health) that reads on both. */
+
+:root {
+  --dash-gap: 0.6rem;
+  --dash-pad: clamp(0.6rem, 1.6vw, 1rem);
+  --c-hit: #16a34a;
+  --c-miss: #d97706;
+  --c-err: #dc2626;
+  --c-ok: #16a34a;
+  --c-warn: #d97706;
+  --c-info: #3178c6;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --c-hit: #4ade80; --c-miss: #fbbf24; --c-err: #f87171; --c-ok: #4ade80; --c-warn: #fbbf24; --c-info: #6ea8fe; }
+}
+:root[data-theme="dark"] { --c-hit: #4ade80; --c-miss: #fbbf24; --c-err: #f87171; --c-ok: #4ade80; --c-warn: #fbbf24; --c-info: #6ea8fe; }
+:root[data-theme="light"] { --c-hit: #16a34a; --c-miss: #d97706; --c-err: #dc2626; --c-ok: #16a34a; --c-warn: #d97706; --c-info: #3178c6; }
+
+/* Full-bleed: drop the doc container, let the app own the whole viewport. */
+body.dash-native { margin: 0; }
+.dash-native main.dash-main { max-width: none; margin: 0; padding: var(--dash-pad); }
+
+/* App bar: reuse the site header's geometry (.site-header / .nav-right / .nav-toggle /
+   #theme-toggle from site.css) and only INVERT the palette - a sectioning-tinted bar that
+   reads as a distinct control surface while staying theme-aware. */
+.dash-bar.site-header {
+  background: var(--pico-card-sectioning-background-color);
+  /* Inverted (inset) shadow: the bar reads as recessed and the page content sits on top of it
+     - the subtle "dashboard vs. doc site" distinction, without a new design language. */
+  box-shadow: inset 0 3px 7px -5px rgba(0, 0, 0, 0.45);
+}
+.dash-bar nav { align-items: center; }
+.dash-bar .brand-mark { display: block; }
+/* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
+   show it at every width. */
+.dash-bar .nav-toggle { display: inline-flex; }
+.dash-bar .nav-right { gap: 0.55rem; }
+
+/* Tiny mode note ("daemon" / "proc") beside the health badge - present but low-key, since
+   it is almost always "daemon". */
+.dash-mode { font-size: 0.66rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Health + connection chips: ONE consistent style (labeled, the site's standard radius - not a
+   999px pill; nothing else on the site uses that curvature). Health = the daemon's own health
+   rollup; connection = the browser<->daemon link. Different information, styled identically. */
+.pill {
+  font-size: 0.68rem; padding: 0.12rem 0.5rem; border-radius: var(--pico-border-radius);
+  border: 1px solid var(--pico-muted-border-color); color: var(--pico-muted-color);
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+}
+.pill[data-health="ok"]   { color: var(--c-ok);   border-color: var(--c-ok); }
+.pill[data-health="warn"] { color: var(--c-warn); border-color: var(--c-warn); }
+.pill[data-health="fail"] { color: var(--c-err);  border-color: var(--c-err); }
+/* Connection chip: same shape, plus a leading liveness dot. */
+.pill.conn::before {
+  content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.35em;
+  border-radius: 50%; background: var(--pico-muted-color); vertical-align: middle;
+}
+.pill.conn[data-state="connected"] { color: var(--c-ok); border-color: var(--c-ok); }
+.pill.conn[data-state="connected"]::before { background: var(--c-ok); }
+.pill.conn[data-state="connecting"],
+.pill.conn[data-state="reconnecting"] { color: var(--c-warn); border-color: var(--c-warn); }
+.pill.conn[data-state="connecting"]::before,
+.pill.conn[data-state="reconnecting"]::before { background: var(--c-warn); }
+.pill.conn[data-state="disconnected"] { color: var(--c-err); border-color: var(--c-err); }
+.pill.conn[data-state="disconnected"]::before { background: var(--c-err); }
+
+.dash-panels { display: flex; flex-direction: column; gap: var(--dash-gap); }
+
+/* Stat strip: dense KPI tiles, auto-fitting the full width. */
+.stat-strip {
+  display: grid; gap: var(--dash-gap);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+.stat {
+  position: relative; display: flex; flex-direction: column; gap: 0.15rem;
+  padding: 0.55rem 0.7rem 0.6rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+  overflow: hidden;
+}
+/* Colored left rule per metric. */
+.stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--pico-muted-border-color); }
+.stat[data-accent="hit"]::before,
+.stat[data-accent="rate"]::before { background: var(--c-hit); }
+.stat[data-accent="miss"]::before { background: var(--c-miss); }
+.stat[data-accent="err"]::before { background: var(--c-err); }
+.stat[data-accent="size"]::before { background: var(--c-info); }
+.stat-k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
+.stat-v { font-size: 1.5rem; font-weight: 700; font-family: var(--pico-font-family-monospace); line-height: 1.1; }
+.stat[data-accent="hit"] .stat-v { color: var(--c-hit); }
+.stat[data-accent="miss"] .stat-v { color: var(--c-miss); }
+.stat[data-accent="err"] .stat-v { color: var(--c-err); }
+
+/* Pool occupancy grid: airplane-seating cubes. Busy = filled accent, free = outlined, waiting
+   = dashed. Wraps to fill the tile at any capacity. */
+.slot-grid { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.1rem 0 0.55rem; }
+.slot {
+  width: 15px; height: 15px; border-radius: 3px;
+  border: 1px solid var(--pico-muted-border-color); background: transparent;
+}
+.slot.busy { background: var(--c-info); border-color: var(--c-info); }
+.slot.waiting { border-style: dashed; border-color: var(--c-miss); }
+.pool-legend { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); }
+.pool-legend .lg::before {
+  content: ""; display: inline-block; width: 0.7em; height: 0.7em; border-radius: 2px;
+  margin-right: 0.3em; vertical-align: middle; border: 1px solid var(--pico-muted-border-color);
+}
+.pool-legend .lg-busy::before { background: var(--c-info); border-color: var(--c-info); }
+.pool-legend .lg-wait::before { border-style: dashed; border-color: var(--c-miss); }
+
+/* Tiles. */
+.tile {
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color); padding: 0.6rem 0.75rem;
+}
+.tile-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.tile-h { font-size: 0.9rem; margin: 0; }
+/* Collapse caret: a bare triangle button that folds the tile body away. */
+.tile-collapse {
+  width: 1.1rem; height: 1.1rem; margin: 0; padding: 0; border: 0; background: none;
+  color: var(--pico-muted-color); cursor: pointer; line-height: 1; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tile-collapse::before { content: "\25BE"; transition: transform 0.15s ease; font-size: 0.8rem; }
+.tile.collapsed .tile-collapse::before { transform: rotate(-90deg); }
+.tile.collapsed { padding-bottom: 0.55rem; }
+.tile.collapsed .tile-head { margin-bottom: 0; }
+.tile.collapsed > :not(.tile-head) { display: none; }
+.tile-note { font-size: 0.7rem; color: var(--pico-muted-color); margin-left: auto; }
+.tile-count {
+  font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.4rem; border-radius: 999px;
+  background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color);
+  color: var(--pico-muted-color);
+}
+
+/* Cache sparkline. */
+.spark-canvas { display: block; width: 100%; height: 72px; }
+.spark-legend { display: flex; gap: 1rem; font-size: 0.7rem; margin-top: 0.3rem; }
+.lg::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
+.lg-hit { color: var(--c-hit); } .lg-hit::before { background: var(--c-hit); }
+.lg-miss { color: var(--c-miss); } .lg-miss::before { background: var(--c-miss); }
+
+/* Two-up columns. */
+.dash-cols { display: grid; gap: var(--dash-gap); grid-template-columns: 1fr 1fr; }
+
+/* Dense rows. */
+.row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color);
+}
+.row-cmd { font-family: var(--pico-font-family-monospace); font-size: 0.8rem; color: var(--pico-color); overflow-wrap: anywhere; }
+.row-meta { font-size: 0.7rem; color: var(--pico-muted-color); white-space: nowrap; }
+/* A clickable running call: deep-links to its live log. */
+a.row { text-decoration: none; color: inherit; cursor: pointer; }
+a.row:hover { border-color: var(--c-info); background: var(--pico-card-background-color); }
+a.row .row-cmd::after { content: " \2197"; color: var(--c-info); font-size: 0.85em; }
+.row-ws-cache { display: flex; gap: 0.5rem; font-size: 0.68rem; }
+.row-ws-cache .h { color: var(--c-hit); } .row-ws-cache .m { color: var(--c-miss); } .row-ws-cache .e { color: var(--c-err); }
+.row-empty { font-size: 0.8rem; color: var(--pico-muted-color); margin: 0.2rem 0 0; }
+
+.dash-versions { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); padding: 0.2rem 0.1rem; }
+
+/* Connect state. */
+.dash-connect { text-align: center; padding: clamp(2rem, 8vh, 4rem) 1rem; }
+.dash-connect-icon { width: 3rem; height: 3rem; color: var(--pico-muted-color); opacity: 0.8; }
+.dash-connect-title { font-size: 1.15rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.dash-connect-sub { color: var(--pico-muted-color); max-width: 46ch; margin: 0 auto 1rem; }
+.dash-connect-cmd {
+  display: inline-block; margin: 0 auto 1.5rem; padding: 0.5rem 0.9rem;
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+}
+.dash-connect-cmd code { font-size: 0.85rem; }
+
+/* Resume form: reconnect to a remembered daemon host. */
+.dash-resume { max-width: 30rem; margin: 0 auto 1.25rem; }
+.dash-resume-row { display: flex; gap: 0.4rem; }
+.dash-resume-input {
+  flex: 1; margin: 0; font-family: var(--pico-font-family-monospace); font-size: 0.85rem;
+  padding: 0.4rem 0.6rem; border-radius: var(--pico-border-radius);
+  border: 1px solid var(--pico-muted-border-color); background: var(--pico-card-background-color);
+}
+.dash-resume-btn { margin: 0; width: auto; white-space: nowrap; padding: 0.4rem 0.9rem; }
+.dash-resume-forget {
+  margin: 0.4rem 0 0; padding: 0; width: auto; border: 0; background: none;
+  color: var(--pico-muted-color); font-size: 0.72rem; text-decoration: underline; cursor: pointer;
+}
+.dash-launchers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; max-width: 34rem; margin: 0 auto; text-align: left; }
+.dash-launch {
+  display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.9rem; text-decoration: none;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color); color: inherit;
+}
+.dash-launch:hover { border-color: var(--c-info); }
+.dash-launch-title { font-weight: 600; color: var(--c-info); }
+.dash-launch-sub { font-size: 0.78rem; color: var(--pico-muted-color); }
+.dash-noscript { padding: 1.5rem; }
+
+@media (max-width: 720px) {
+  .dash-cols { grid-template-columns: 1fr; }
+  .dash-launchers { grid-template-columns: 1fr; }
+  .dash-brand-page { display: none; }
+}

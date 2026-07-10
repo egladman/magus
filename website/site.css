@@ -87,7 +87,7 @@ html {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding-block: 0.65rem; /* compact but breathable; overrides Pico's tall <header> padding */
+  padding-block: 0.45rem; /* trimmed a few px site-wide so the bar reads leaner (and the dashboard more native); overrides Pico's tall <header> padding */
   background: var(--pico-card-background-color);
   border-bottom: 1px solid var(--pico-muted-border-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* subtle lift so it reads as a bar */
