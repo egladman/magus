@@ -23,10 +23,11 @@ import (
 
 // Load is the accumulated state of an Open or Inspect call.
 type Load struct {
-	ConfigPath string
-	Preloaded  *config.Config
-	Limiter    *cache.Limiter
-	Registry   *WorkspaceRegistry
+	ConfigPath     string
+	Preloaded      *config.Config
+	Limiter        *cache.Limiter
+	Registry       *WorkspaceRegistry
+	MetricsCollect bool // build an always-on local metrics collector (daemon dashboard feed)
 }
 
 // Option configures Open or Inspect.
@@ -40,6 +41,13 @@ func WithLoadedConfig(cfg config.Config) Option {
 // WithLimiter injects a pre-built concurrency limiter (e.g. shared across daemon workspaces).
 func WithLimiter(lim *cache.Limiter) Option {
 	return func(o *Load) { o.Limiter = lim }
+}
+
+// WithMetricsCollection builds an always-on in-process metrics collector for this workspace so
+// its OTel instruments record even when telemetry export is off, and the daemon can serve OTLP
+// snapshots to the /dashboard. The CLI leaves it unset to keep one-shot runs a true no-op.
+func WithMetricsCollection() Option {
+	return func(o *Load) { o.MetricsCollect = true }
 }
 
 // ProjectOption mutates a Project at registration time; a non-nil error aborts Open.

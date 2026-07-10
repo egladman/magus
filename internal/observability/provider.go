@@ -21,6 +21,10 @@ type Config struct {
 	ServiceVersion string            // resource attribute service.version
 	SampleRatio    float64           // head-based trace sampling ratio [0,1]
 	WorkspaceRoot  string            // stamped as magus.workspace.root when set
+	// LocalCollect builds an always-on in-process metrics collector even when Enabled is false
+	// (no external export), so the daemon can serve OTLP snapshots to the /dashboard. The CLI
+	// leaves this false to keep one-shot invocations a true no-op.
+	LocalCollect bool
 }
 
 // ConfigFromTelemetry converts a magus.yaml telemetry section into a Provider Config with defaults applied.
@@ -61,6 +65,9 @@ type Provider interface {
 	RecordTargetRun(ctx context.Context, secs float64, attrs ...Attr)                         // magus.target.runs + magus.target.duration
 	RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64)                         // magus.pool.wait.duration + inflight+n
 	RecordPoolRelease(ctx context.Context, n int64)                                           // inflight-n
+	// Snapshot returns the current metrics as standard OTLP protobuf, or (nil, nil) when this
+	// provider is not collecting locally. The daemon relays it to the /dashboard.
+	Snapshot(ctx context.Context) ([]byte, error)
 	Shutdown(ctx context.Context) error
 }
 

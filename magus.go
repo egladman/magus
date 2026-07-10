@@ -65,7 +65,8 @@ type Magus struct {
 
 	wsReg *WorkspaceRegistry
 
-	tel observability.Provider
+	tel            observability.Provider
+	metricsCollect bool // daemon: build an always-on local metrics collector for the dashboard
 }
 
 // rootMarkers lists workspace-root markers in priority order; magus markers precede go.mod.
@@ -191,6 +192,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if o.Limiter != nil {
 		m.limOnce.Do(func() { m.lim = o.Limiter })
 	}
+	m.metricsCollect = o.MetricsCollect
 	if o.Registry != nil {
 		m.wsReg = o.Registry
 	} else {
@@ -332,7 +334,9 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can
 	// be instrumented as it is attached. Init failure falls back to a no-op.
-	tel, err := observability.New(ctx, observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root))
+	telCfg := observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root)
+	telCfg.LocalCollect = m.metricsCollect // daemon: record metrics even when export is off
+	tel, err := observability.New(ctx, telCfg)
 	if err != nil {
 		slog.Warn("magus: telemetry init failed; falling back to no-op", "err", err)
 		tel, _ = observability.New(ctx, observability.Config{})

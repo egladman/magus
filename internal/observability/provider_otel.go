@@ -25,10 +25,13 @@ import (
 // New returns a Provider backed by the configured OTLP collector.
 // When cfg.Enabled is false it returns a no-op disabledProvider without opening any connection.
 func New(ctx context.Context, cfg Config) (Provider, error) {
-	if !cfg.Enabled {
+	// Disabled with no local collection requested: a true no-op (the common CLI path).
+	if !cfg.Enabled && !cfg.LocalCollect {
 		return disabledProvider{}, nil
 	}
-	if cfg.Endpoint == "" {
+	// External export requires an endpoint; local-only collection (the daemon's dashboard
+	// feed) does not.
+	if cfg.Enabled && cfg.Endpoint == "" {
 		return nil, errors.New("observability: telemetry.enabled is true but telemetry.endpoint is empty")
 	}
 
@@ -49,19 +52,28 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 		return nil, fmt.Errorf("observability: build resource: %w", err)
 	}
 
-	mp, mShutdown, err := newMeterProvider(ctx, cfg, res)
-	if err != nil {
-		return nil, err
-	}
-	tp, tShutdown, err := newTracerProvider(ctx, cfg, res)
+	// The meter provider always carries a capturing reader (for on-demand OTLP snapshots the
+	// dashboard reads) plus, when telemetry is enabled, the external OTLP push reader.
+	mp, mShutdown, capT, err := newMeterProvider(ctx, cfg, res)
 	if err != nil {
 		return nil, err
 	}
 
-	otel.SetMeterProvider(mp)
-	otel.SetTracerProvider(tp)
-
-	tracer := tp.Tracer("github.com/egladman/magus/internal/observability")
+	// Tracing (spans) is export-only: skip it entirely in local-collect-only mode, and only
+	// then install the global providers (the local capture provider must not clobber the
+	// global for other otel.Meter/Tracer users).
+	var tShutdown func(context.Context) error
+	var tracer trace.Tracer
+	if cfg.Enabled {
+		tp, ts, terr := newTracerProvider(ctx, cfg, res)
+		if terr != nil {
+			return nil, terr
+		}
+		tShutdown = ts
+		otel.SetMeterProvider(mp)
+		otel.SetTracerProvider(tp)
+		tracer = tp.Tracer("github.com/egladman/magus/internal/observability")
+	}
 
 	meter := mp.Meter("github.com/egladman/magus/internal/observability")
 
@@ -195,6 +207,8 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 	}
 
 	return &otelProvider{
+		mp:              mp,
+		capture:         capT,
 		mShutdown:       mShutdown,
 		tShutdown:       tShutdown,
 		tracer:          tracer,
@@ -218,6 +232,8 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 
 type otelProvider struct {
 	mu        sync.Mutex
+	mp        *sdkmetric.MeterProvider // for ForceFlush in Snapshot
+	capture   *captureTransport        // captures OTLP bytes; nil when not collecting locally
 	mShutdown func(context.Context) error
 	tShutdown func(context.Context) error
 	tracer    trace.Tracer
@@ -264,6 +280,9 @@ func (p *otelProvider) RecordGraphQuery(ctx context.Context, secs float64, attrs
 }
 
 func (p *otelProvider) StartSpan(ctx context.Context, name string, attrs ...Attr) (context.Context, func(error)) {
+	if p.tracer == nil { // local-collect-only mode records metrics but not spans
+		return ctx, func(error) {}
+	}
 	ctx, span := p.tracer.Start(
 		ctx, name,
 		trace.WithAttributes(toKV(attrs)...),
@@ -348,6 +367,7 @@ func (disabledProvider) StartSpan(ctx context.Context, _ string, _ ...Attr) (con
 func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...Attr) {}
 func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64) {}
 func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)            {}
+func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)              { return nil, nil }
 func (disabledProvider) Shutdown(_ context.Context) error                        { return nil }
 
 func toKV(attrs []Attr) []attribute.KeyValue {
@@ -394,40 +414,44 @@ func newTracerProvider(ctx context.Context, cfg Config, res *resource.Resource) 
 	return tp, tp.Shutdown, nil
 }
 
-func newMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (metric.MeterProvider, func(context.Context) error, error) {
-	var (
-		exp sdkmetric.Exporter
-		err error
-	)
-	switch cfg.Protocol {
-	case "http":
-		opts := []otlpmetrichttp.Option{otlpmetrichttp.WithEndpoint(cfg.Endpoint)}
-		if cfg.Insecure {
-			opts = append(opts, otlpmetrichttp.WithInsecure())
-		}
-		if len(cfg.Headers) > 0 {
-			opts = append(opts, otlpmetrichttp.WithHeaders(cfg.Headers))
-		}
-		exp, err = otlpmetrichttp.New(ctx, opts...)
-	default:
-		opts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(cfg.Endpoint)}
-		if cfg.Insecure {
-			opts = append(opts, otlpmetricgrpc.WithInsecure())
-		}
-		if len(cfg.Headers) > 0 {
-			opts = append(opts, otlpmetricgrpc.WithHeaders(cfg.Headers))
-		}
-		exp, err = otlpmetricgrpc.New(ctx, opts...)
-	}
+func newMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context) error, *captureTransport, error) {
+	// The capturing reader is always present: it yields on-demand OTLP snapshots for the
+	// dashboard without a network hop (see collector.go). ForceFlush drives it.
+	capReader, capT, err := newCaptureReader(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("observability: metric exporter: %w", err)
+		return nil, nil, nil, fmt.Errorf("observability: capture reader: %w", err)
 	}
-	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
-			exp,
-			sdkmetric.WithInterval(30*time.Second),
-		)),
-	)
-	return mp, mp.Shutdown, nil
+	opts := []sdkmetric.Option{sdkmetric.WithResource(res), sdkmetric.WithReader(capReader)}
+
+	// The external push exporter is added only when telemetry export is enabled.
+	if cfg.Enabled {
+		var exp sdkmetric.Exporter
+		switch cfg.Protocol {
+		case "http":
+			hopts := []otlpmetrichttp.Option{otlpmetrichttp.WithEndpoint(cfg.Endpoint)}
+			if cfg.Insecure {
+				hopts = append(hopts, otlpmetrichttp.WithInsecure())
+			}
+			if len(cfg.Headers) > 0 {
+				hopts = append(hopts, otlpmetrichttp.WithHeaders(cfg.Headers))
+			}
+			exp, err = otlpmetrichttp.New(ctx, hopts...)
+		default:
+			gopts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(cfg.Endpoint)}
+			if cfg.Insecure {
+				gopts = append(gopts, otlpmetricgrpc.WithInsecure())
+			}
+			if len(cfg.Headers) > 0 {
+				gopts = append(gopts, otlpmetricgrpc.WithHeaders(cfg.Headers))
+			}
+			exp, err = otlpmetricgrpc.New(ctx, gopts...)
+		}
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("observability: metric exporter: %w", err)
+		}
+		opts = append(opts, sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(30*time.Second))))
+	}
+
+	mp := sdkmetric.NewMeterProvider(opts...)
+	return mp, mp.Shutdown, capT, nil
 }

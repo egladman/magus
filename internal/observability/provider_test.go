@@ -112,6 +112,8 @@ func (r *recorder) RecordPoolAcquire(_ context.Context, _ float64, _ int64) {}
 
 func (r *recorder) RecordPoolRelease(_ context.Context, _ int64) {}
 
+func (r *recorder) Snapshot(_ context.Context) ([]byte, error) { return nil, nil }
+
 func (r *recorder) Shutdown(_ context.Context) error { r.stops++; return nil }
 
 // newCache opens a fresh write-mode cache rooted in t.TempDir.

@@ -25,6 +25,13 @@ func WithLoadedConfig(cfg config.Config) Option {
 	return workspace.WithLoadedConfig(cfg)
 }
 
+// WithMetricsCollection builds an always-on in-process metrics collector for this workspace
+// (OTel instruments record even with telemetry export off), so the daemon can serve OTLP
+// snapshots to the /dashboard via [Magus.MetricsSnapshot]. The CLI leaves it off.
+func WithMetricsCollection() Option {
+	return workspace.WithMetricsCollection()
+}
+
 // WorkspaceRegistry holds project-option overrides and target policies for a single Open.
 type WorkspaceRegistry = workspace.WorkspaceRegistry
 
