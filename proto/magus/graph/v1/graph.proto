@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+// Package magus.graph.v1 is the versioned wire contract for the knowledge-graph output the
+// daemon serves to the browser Graph Explorer (/api/v1/graph): an induced subgraph of nodes
+// and edges plus its shape metadata. It mirrors types.KnowledgeGraphOutput; field names match
+// that type's JSON so a protojson encoding is wire-compatible with the JSON the page already
+// consumes. A sibling of magus.viewer.v1 and magus.status.v1. buf-breaking gates this file.
+package magus.graph.v1;
+
+// Graph is a knowledge-graph projection: nodes, edges (links), and shape metadata.
+message Graph {
+  string definition = 1;
+  int32 schema_version = 2;
+  bool directed = 3;
+  bool multigraph = 4;
+  int32 node_count = 5;
+  int32 edge_count = 6;
+  // source_base is the workspace repo blob base URL (e.g.
+  // "https://github.com/owner/repo/blob/main"), so a viewer can turn a node's relative
+  // source path into a link. Empty when there is no remote / the forge is unrecognized.
+  // Additive; omitted when empty, so it never bumps the schema version.
+  string source_base = 7;
+  repeated Node nodes = 8;
+  repeated Edge links = 9;
+}
+
+// Node is one graph node.
+message Node {
+  string id = 1;
+  string kind = 2;
+  string label = 3;
+  string doc = 4;
+  string source = 5;              // path or path:line provenance
+  map<string, string> attrs = 6;  // kind-specific (charm pointer, MGS URL, ...)
+}
+
+// Edge is one directed graph edge (a "link").
+message Edge {
+  string source = 1;
+  string target = 2;
+  string relation = 3;
+  string confidence = 4;
+  double score = 5;
+  string provenance = 6;
+}
