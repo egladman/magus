@@ -96,6 +96,14 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
+		Name:        "magus_scratchpad",
+		Description: "A private, per-workspace scratch file for the agent to jot intermediate work into and read back later, instead of dumping it all into the conversation. Use it to park a plan, a running checklist, partial findings, or notes across several tool calls, then read them back on demand. It is NOT shown to the user unless they open the file themselves. One file per workspace; write and append overwrite/extend the same file.",
+		Params: []ParamDescriptor{
+			{Name: "op", Type: "string", Description: "One of: read (default; returns current contents, empty if never written), write (overwrite with content), append (add content on a new line), clear (empty the scratchpad)."},
+			{Name: "content", Type: "string", Description: "The text to write or append. Required for write and append; ignored for read and clear."},
+		},
+	},
+	{
 		Name:        "magus_query",
 		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind:symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (ref1a2b3c), use magus_output.",
 		Params: []ParamDescriptor{

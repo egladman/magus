@@ -41,6 +41,7 @@ http://127.0.0.1:7391/mcp
 | `magus_affected_plan`    | Emit a CI shard plan for the affected set                            |
 | `magus_config_get`       | Read the resolved workspace config (read-only)                       |
 | `magus_tail_log`         | Retrieve the captured build log for a project                        |
+| `magus_scratchpad`       | Private per-workspace scratch file for the agent's intermediate notes |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 

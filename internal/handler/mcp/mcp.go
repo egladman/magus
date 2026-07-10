@@ -150,6 +150,7 @@ func allMCPTools(opts Options) []types.SpellDriver {
 		&affectedPlanTool{opts: opts},
 		&configGetTool{cfg: opts.Config},
 		&tailLogTool{opts: opts},
+		&scratchpadTool{opts: opts},
 		&queryTool{graph: opts.Magus},
 		&outputTool{reader: opts.Magus},
 		&explainTool{graph: opts.Magus},
