@@ -143,13 +143,18 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				fmt.Sprintf("http://127.0.0.1:%d", port),
 			)
 
-			// The bridge routes share the same auth and DNS-rebind middleware as /mcp.
+			// The bridge routes share the same auth and DNS-rebind middleware as
+			// /mcp, header-only included: the explorer authenticates every /api
+			// call - fetches AND the SSE event stream (a fetch()-based reader, not
+			// an EventSource) - with an Authorization header, so the token never
+			// rides in the URL. CORS still advertises the Authorization header for
+			// the cross-origin preflight.
 			bridgeMux := http.NewServeMux()
 			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc, log)))
 			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0, log)))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
-			// Wrap every /api/ route with rebind + auth.
-			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuardWithQueryToken(auth.VerifyBearer, bridgeMux)))
+			// Wrap every /api/ route with rebind + header-only bearer auth.
+			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
 		}
 	}

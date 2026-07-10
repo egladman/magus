@@ -125,8 +125,9 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", cli), "cli token should pass the guard")
 	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", connectorTok), "connector token should pass the guard")
 
-	// /api bridge shares the guard but ALSO accepts a `?token=` query param
-	// (its browser EventSource cannot set a header).
+	// /api bridge uses the same header-only guard as /mcp: the explorer sends the
+	// token in an Authorization header (its SSE reader is fetch()-based, not an
+	// EventSource), so no query-param carrier is offered.
 	assert.Equal(t, http.StatusUnauthorized, status("/api/v1/graph", ""), "no token on bridge")
 	assert.NotEqual(t, http.StatusUnauthorized, status("/api/v1/graph", cli), "cli token on bridge")
 
@@ -142,10 +143,10 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	// The hardening invariant: /mcp is header-only, so a valid token in the URL is
-	// rejected; the bridge accepts the same token via the query param.
+	// The hardening invariant: both /mcp and the /api bridge are header-only, so a
+	// valid token in the URL is rejected on each - the token never rides in a URL.
 	assert.Equal(t, http.StatusUnauthorized, queryStatus("/mcp", cli), "/mcp must reject a query-param token")
-	assert.NotEqual(t, http.StatusUnauthorized, queryStatus("/api/v1/graph", cli), "bridge accepts a query-param token")
+	assert.Equal(t, http.StatusUnauthorized, queryStatus("/api/v1/graph", cli), "/api must reject a query-param token")
 
 	cancel()
 	select {
