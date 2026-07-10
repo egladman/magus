@@ -47,6 +47,7 @@ func pagedGraph(n int) *knowledge.Graph {
 // validation (which returns before any workspace access, so no Magus is needed).
 func TestKnowledgeToolNames(t *testing.T) {
 	assert.Equal(t, "magus_query", (&queryTool{}).Name())
+	assert.Equal(t, "magus_output", (&outputTool{}).Name())
 	assert.Equal(t, "magus_explain", (&explainTool{}).Name())
 	assert.Equal(t, "magus_path", (&pathTool{}).Name())
 	assert.Equal(t, "magus_stats", (&statsTool{}).Name())

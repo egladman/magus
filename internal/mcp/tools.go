@@ -35,6 +35,7 @@ func allMCPTools(opts ServerOptions) []types.SpellDriver {
 		&configGetTool{cfg: opts.Config},
 		&tailLogTool{opts: opts},
 		&queryTool{opts: opts},
+		&outputTool{opts: opts},
 		&explainTool{opts: opts},
 		&pathTool{opts: opts},
 		&statsTool{opts: opts},

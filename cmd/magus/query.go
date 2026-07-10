@@ -24,14 +24,16 @@ import (
 // substrate as `magus graph export`. query resolves terms to nodes and returns
 // the neighborhood; explain shows one node's context; path connects two nodes.
 //
-// query also doubles as the retrieval verb for target-output reference ids: a
-// positional shaped like a ref (strict ^ref[0-9a-f]+$, see cache.LooksLikeRef)
-// prints that execution's captured output instead of searching the graph. Reusing
-// query here - rather than a dedicated subcommand - keeps the CLI surface small.
+// query also doubles as the retrieval verb for target-output reference ids through
+// an EXPLICIT `output` subcommand: `magus query output ref1a2b3c` prints that
+// execution's captured output instead of searching the graph. It is a subcommand,
+// not a shape-routed positional, so a free-text search term can never collide with a
+// ref id (`magus query refactor` always searches the graph).
 
 // defaultLogViewerURL is the hosted, data-agnostic log viewer that `magus query
-// ref... --open` points a browser at, with the captured output delivered PRIVATELY
-// in a URL fragment (never uploaded). Override with --url for a self-hosted mirror.
+// output <ref> --open` points a browser at, with the captured output delivered
+// PRIVATELY in a URL fragment (never uploaded). Override with --url for a self-hosted
+// mirror.
 const defaultLogViewerURL = "https://eli.gladman.cc/magus/logs/"
 
 func queryCmd(ctx context.Context, root string, args []string) error {
