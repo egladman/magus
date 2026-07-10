@@ -109,9 +109,7 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 	// Zero-arg default: when no explicit delivery mode is chosen and no --targets,
 	// probe the ACTUAL web bridge first (not just the proc socket - a proc daemon
 	// can be up with no bridge running). If it is reachable, use --live for an
-	// always-fresh view. On a non-mcp binary liveBridgeReachable always reports
-	// false, so this default always falls through to fragment mode there; only an
-	// explicit --live flag reaches graphOpenLive's stub error on that binary.
+	// always-fresh view; otherwise fall through to fragment mode.
 	if !useLive && !serve {
 		if liveBridgeReachable(ctx) {
 			useLive = true

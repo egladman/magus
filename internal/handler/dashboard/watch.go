@@ -1,5 +1,3 @@
-//go:build mcp
-
 package dashboard
 
 import (

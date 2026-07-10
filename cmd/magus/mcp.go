@@ -1,5 +1,3 @@
-//go:build mcp
-
 package main
 
 import (
@@ -12,9 +10,6 @@ import (
 
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 )
-
-// mcpIsCompiled is true when the binary was built with -tags mcp.
-const mcpIsCompiled = true
 
 // mcpAddrPort parses the MCP address from config, falling back to
 // DefaultAddress. The config validator guarantees the string is a valid

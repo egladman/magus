@@ -1,5 +1,3 @@
-//go:build mcp
-
 package main
 
 import (
@@ -57,10 +55,9 @@ func TestProbeLiveBridge(t *testing.T) {
 	})
 }
 
-// TestLiveBridgeReachable exercises the build-tag-dispatched gate that decides
-// whether the zero-arg `magus graph open` default may switch to live mode.
-// On the mcp build it delegates to probeLiveBridge against the configured MCP
-// address; the non-mcp stub (graph_open_live_stub.go) always returns false.
+// TestLiveBridgeReachable exercises the gate that decides whether the zero-arg
+// `magus graph open` default may switch to live mode. It delegates to
+// probeLiveBridge against the configured MCP address.
 func TestLiveBridgeReachable(t *testing.T) {
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })

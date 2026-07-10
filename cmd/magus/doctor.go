@@ -118,8 +118,6 @@ func buildDaemonInfo(ctx context.Context, _ types.WorkspaceRepository) doctor.Da
 
 	// Populate bridge fields from resolved config. BridgeEnabled is true unless
 	// explicitly set to false (mirrors how MCP.Enabled works).
-	// mcpAddrString is build-tag-dispatched: returns "" on non-mcp builds so
-	// the bridge doctor check skips cleanly (no MCP server exists).
 	di.MCPAddr = mcpAddrString()
 	di.BridgeEnabled = globalCfg.Bridge.Enabled == nil || *globalCfg.Bridge.Enabled
 

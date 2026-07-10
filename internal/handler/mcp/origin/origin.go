@@ -1,6 +1,5 @@
 // Package origin carries agent origin metadata across goroutines via context.
-// Lives outside the parent's //go:build mcp scope so magus.go can read it
-// unconditionally without an import cycle.
+// Lives in its own leaf package so magus.go can read it without an import cycle.
 package origin
 
 import "context"

@@ -146,8 +146,9 @@ func gridEnabled(opts OutputOptions, isTTY bool) bool {
 }
 
 // buildStatusBase constructs the static portions of a StatusReport that depend
-// on build-tag constants (selfUpdateCompiled, mcpIsCompiled) and the resolved
-// config. Called at MCP-server start to inject into dashboard.Options so the
+// on the selfUpdateCompiled build-tag constant and the resolved config. MCP is
+// always compiled in, so its Build.MCP flag is always true. Called at MCP-server
+// start to inject into dashboard.Options so the
 // bridge can serve the full types.StatusReport without importing cmd/magus.
 func buildStatusBase() types.StatusBase {
 	return types.StatusBase{
@@ -155,7 +156,7 @@ func buildStatusBase() types.StatusBase {
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Build: buildStatus{
 			SelfUpdate: selfUpdateCompiled,
-			MCP:        mcpIsCompiled,
+			MCP:        true,
 		},
 	}
 }
@@ -166,7 +167,7 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Build: buildStatus{
 			SelfUpdate: selfUpdateCompiled,
-			MCP:        mcpIsCompiled,
+			MCP:        true,
 		},
 	}
 	addr, err := resolveStatusSocket(ctx, socket)

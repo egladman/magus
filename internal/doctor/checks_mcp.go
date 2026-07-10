@@ -1,5 +1,3 @@
-//go:build mcp
-
 package doctor
 
 import (
@@ -26,8 +24,8 @@ func probeBridgeReachability(d *DaemonInfo) Check {
 		return Check{Name: name, Status: StatusOK, Message: "bridge disabled via bridge.enabled: false"}
 	}
 	if d.MCPAddr == "" {
-		// MCPAddr is empty on non-mcp builds via the build-tagged mcpAddrPortString;
-		// this guard is kept here as a belt-and-suspenders check.
+		// Belt-and-suspenders: mcpAddrString normally falls back to the default
+		// address, so this only trips if daemonInfo was built without one.
 		return Check{Name: name, Status: StatusOK, Message: "MCP address unknown; bridge check skipped"}
 	}
 

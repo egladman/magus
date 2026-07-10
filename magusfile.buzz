@@ -91,7 +91,6 @@ export fun go_build(args: [str]) > void {
         "env": {"GOEXPERIMENT": "jsonv2"},
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
-            "-tags", "mcp",
             "-o", "magus",
             "./cmd/magus"],
     });

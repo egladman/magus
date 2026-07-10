@@ -177,13 +177,13 @@ type Watch struct {
 	Ignore []types.IgnorePattern `yaml:"ignore" validate:"dive"`
 }
 
-// MCP controls the Model Context Protocol server (requires -tags mcp).
+// MCP controls the Model Context Protocol server.
 type MCP struct {
 	Enabled *bool  `yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
 	Address string `yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 }
 
-// Bridge controls the read-only browser web bridge (requires -tags mcp).
+// Bridge controls the read-only browser web bridge.
 // The bridge mounts three GET-only endpoints on the MCP HTTP server
 // (/api/v1/graph, /api/v1/status, /api/v1/events) so a browser running the
 // hosted Graph Explorer can read the current workspace. Loopback only; bearer
@@ -329,7 +329,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DAEMON_IDLE_TTL", "daemon.idle_ttl", "6h", "Idle workspace eviction TTL for the multi-workspace daemon; e.g. \"6h\", \"30m\""},
 		{"MAGUS_DAEMON_WORKSPACES", "daemon.workspaces", "", "Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
 		{"MAGUS_ASSUME_INTERACTIVE", "assume_interactive", "false", "When 1 or true, assume an interactive terminal even if detection says otherwise"},
-		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server even when the binary was built with -tags mcp"},
+		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
 		{"MAGUS_FLAKE_ENABLED", "flake.enabled", "true", "Master switch for flakiness detection and auto-retry; false disables all retry logic"},

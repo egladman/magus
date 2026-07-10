@@ -1,5 +1,3 @@
-//go:build mcp
-
 // Package dashboard mounts three frozen, read-only GET routes on the MCP HTTP
 // server so a browser running the hosted Graph Explorer can view the current
 // workspace over loopback.

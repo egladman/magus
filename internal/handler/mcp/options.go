@@ -1,5 +1,3 @@
-//go:build mcp
-
 package mcp
 
 import (
@@ -46,8 +44,8 @@ type ServerOptions struct {
 
 	// StatusBase carries the static portions of a status report (telemetry,
 	// cache, build-tag flags) for the web bridge's /api/v1/status handler.
-	// Populated by the caller (cmd/magus) because it owns the build-tag
-	// constants (mcpIsCompiled, selfUpdateCompiled) and the config-to-status
+	// Populated by the caller (cmd/magus) because it owns the selfUpdateCompiled
+	// build-tag constant and the config-to-status
 	// converters. When zero-valued the bridge returns an empty telemetry/cache
 	// block but still serves the live pool state.
 	StatusBase types.StatusBase

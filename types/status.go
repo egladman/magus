@@ -4,7 +4,7 @@ import "time"
 
 // StatusBase holds the static portions of a StatusReport: telemetry, cache, and
 // build-flag fields. It is populated by cmd/magus (which has access to the
-// build-tag constants selfUpdateCompiled and mcpIsCompiled) and injected into
+// selfUpdateCompiled build-tag constant) and injected into
 // dashboard.Options so the bridge can assemble a full StatusReport without
 // importing cmd/magus.
 type StatusBase struct {

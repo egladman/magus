@@ -1,5 +1,3 @@
-//go:build mcp
-
 // Package mcp implements the MCP (Model Context Protocol) server for magus.
 // It is started alongside the daemon (`magus server start`) and serves over
 // Streamable HTTP so multiple MCP clients can connect concurrently.

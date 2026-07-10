@@ -65,8 +65,7 @@ func serverStart(ctx context.Context, args []string) error {
 	fmt.Fprintln(os.Stderr, "magus: send SIGINT / SIGTERM or run `magus server stop` to shut down")
 
 	// Start the MCP HTTP server alongside the daemon so MCP clients can
-	// connect without a separate process. No-op when not compiled with -tags mcp
-	// or when mcp.enabled=false.
+	// connect without a separate process. No-op when mcp.enabled=false.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	startMCPWithDaemon(ctx, cancel)

@@ -27,10 +27,8 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// checkBridgeReachability probes the web bridge endpoint (/api/v1/graph).
-// The concrete implementation is build-tag-dispatched: on mcp builds it
-// issues a real HTTP GET (a 401 proves the guarded route exists); on non-mcp
-// builds it is a no-op (no bridge is compiled in).
+// checkBridgeReachability probes the web bridge endpoint (/api/v1/graph) by
+// issuing a real HTTP GET (a 401 proves the guarded route exists).
 func (r *runner) checkBridgeReachability() Check {
 	return probeBridgeReachability(r.opts.daemonInfo)
 }

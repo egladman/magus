@@ -1,5 +1,3 @@
-//go:build mcp
-
 package mcp
 
 // mcp.go is the dispatch pipeline that joins the tool CATALOG (Registry, in
