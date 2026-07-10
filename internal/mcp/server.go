@@ -13,19 +13,18 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"os"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/mcp/auth"
 	"github.com/egladman/magus/internal/webbridge"
 )
@@ -157,17 +156,20 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 	// http.Server. StreamableHTTPServer is a path-agnostic http.Handler;
 	// mounting it at /mcp matches the path its own Start() would use.
 	//
-	// dnsRebindGuard and authGuard are applied only to /mcp. Health routes are
-	// left unguarded so container orchestrators can probe them freely. The
+	// httpx.GuardRebind and authGuard are applied only to /mcp. Health routes
+	// are left unguarded so container orchestrators can probe them freely. The
 	// rebind check runs outermost so a forged cross-origin browser request is
 	// rejected before the bearer token is even examined; authGuard then enforces
 	// the shared secret on everything that gets past it.
 	mcpHandler := mcpserver.NewStreamableHTTPServer(srv)
-	allowed := allowedHosts(addr)
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", dnsRebindGuard(allowed, auth.Guard(auth.Load, mcpHandler)))
+	allowed := httpx.AllowedHosts(addr)
+	httpServer, err := httpx.NewServer(addr)
+	if err != nil {
+		return err
+	}
+	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, auth.Guard(auth.Load, mcpHandler)))
 	for path, h := range opts.HealthRoutes {
-		mux.Handle(path, h)
+		httpServer.Handle(path, h)
 	}
 
 	// Web bridge: three frozen GET routes for the browser Graph Explorer.
@@ -216,33 +218,17 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 			bridgeMux := http.NewServeMux()
 			webbridge.Mount(bridgeMux, bridgeOpts)
 			// Wrap every /api/ route with rebind + auth.
-			mux.Handle("/api/", dnsRebindGuard(allowed, auth.Guard(auth.Load, bridgeMux)))
+			httpServer.Handle("/api/", httpx.GuardRebind(allowed, auth.Guard(auth.Load, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
 		}
 	}
 
-	httpServer := &http.Server{Addr: addr.String(), Handler: mux}
-
-	errCh := make(chan error, 1)
-	go func() {
-		log.Info("[AGENT] HTTP server starting", slog.String("addr", addr.String()))
-		errCh <- httpServer.ListenAndServe()
-	}()
-
-	select {
-	case <-ctx.Done():
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := httpServer.Shutdown(shutCtx); err != nil {
-			log.Warn("[AGENT] shutdown error", slog.String("error", err.Error()))
-		}
-		return nil
-	case err := <-errCh:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
+	log.Info("[AGENT] HTTP server starting", slog.String("addr", httpServer.Addr().String()))
+	if err := httpServer.Serve(ctx); err != nil {
+		log.Warn("[AGENT] shutdown error", slog.String("error", err.Error()))
 		return err
 	}
+	return nil
 }
 
 // ServeStdio runs the magus MCP server over standard I/O, blocking until

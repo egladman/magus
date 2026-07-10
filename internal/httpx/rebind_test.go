@@ -1,6 +1,4 @@
-//go:build mcp
-
-package mcp
+package httpx
 
 import (
 	"net/http"
@@ -18,7 +16,7 @@ var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 func TestDnsRebindGuard(t *testing.T) {
 	t.Parallel()
 
-	loopback := allowedHosts(netip.MustParseAddrPort("127.0.0.1:7391"))
+	loopback := AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391"))
 
 	// serve drives one request with the given Host and Origin (empty = none)
 	// through the guard and returns the status code.
@@ -29,7 +27,7 @@ func TestDnsRebindGuard(t *testing.T) {
 			req.Header.Set("Origin", origin)
 		}
 		rr := httptest.NewRecorder()
-		dnsRebindGuard(loopback, okHandler).ServeHTTP(rr, req)
+		GuardRebind(loopback, okHandler).ServeHTTP(rr, req)
 		return rr.Code
 	}
 
@@ -61,7 +59,7 @@ func TestAllowedHosts(t *testing.T) {
 
 	// allowed reports whether host passes the guard built for bind addr.
 	allowed := func(addr, host string) bool {
-		return isAllowedHost(host, allowedHosts(netip.MustParseAddrPort(addr)))
+		return isAllowedHost(host, AllowedHosts(netip.MustParseAddrPort(addr)))
 	}
 
 	t.Run("default loopback addr", func(t *testing.T) {
