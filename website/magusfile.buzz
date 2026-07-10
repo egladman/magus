@@ -19,10 +19,13 @@ magus.project({
     // package-lock.json are named so a bundled-dep version bump (mermaid, hljs, d3,
     // codemirror) invalidates the cacheable build-* targets and marks this project
     // affected - the esbuild inputs live in those manifests, not in the js/ entries.
-    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html", "graph.html",
-                "tour/*.buzz", "package.json", "package-lock.json",
+    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html", "graph.html", "logs.html",
+                "tour/*.buzz", "package.json", "package-lock.json", "buf.gen.yaml",
+                // The viewer/console bundles a JS client generated FROM these .proto sources
+                // (website/buf.gen.yaml -> js/gen/), so a schema change reruns codegen + rebuild.
+                "../proto/magus/**/*.proto", "../proto/buf.yaml", "../proto/buf.lock",
                 "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
-    "outputs": ["gen/**", "MAGUS.md"],
+    "outputs": ["gen/**", "MAGUS.md", "js/gen/**"],
     "targets": {
         // generate renders + gates on drift, so it must run every time (skipCache) and
         // alone (exclusive), so a peer mutating gen/ can't trip its git-status check.
@@ -78,6 +81,16 @@ export fun changelog_generate(args: [str]) > void {
 // build.) The install is guarded on node_modules so a warm local tree skips it while
 // a cold CI checkout installs. Running here - inside generate - is what lets both the
 // gen/** drift gate and the merge driver regenerate the bundles.
+// generateProtoClient generates the magus.viewer.v1 (etc.) JS client from the shared .proto
+// definitions in ../proto, using THIS project's buf.gen.yaml, into js/gen/ (committed). The
+// website owns its own JS codegen - the proto project owns the Go codegen - so each consumer
+// generates the client it needs from the one source of truth. Bundling from js/gen/ (inside
+// this project) lets @bufbuild/protobuf resolve from this project's node_modules. Deterministic
+// (pinned remote es plugin), so the committed output is drift-gated by generate.
+fun generateProtoClient() > void {
+    os.exec("buf", ["generate", "../proto"], ".", {});
+}
+
 fun generateJsBundles() > void {
     if (!fs.isDir("node_modules")) {
         os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
@@ -91,9 +104,11 @@ fun generateJsBundles() > void {
 // committed. The `rw` charm (`generate:rw`) keeps the result instead of gating.
 export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
-    final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md"]) == false;
+    final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "js/gen"]) == false;
     magus.needs(magus.target.literal("md-generate"));
     magus.needs(magus.target.literal("changelog-generate"));
+    // Regenerate the JS proto client from ../proto BEFORE the bundles that import it.
+    generateProtoClient();
     final site = scribe.site_render(ROOT, DOCS, BLOG, OUT);
     generateJsBundles();
     // Written here, not inside site_render(): generateJsBundles() (just above)

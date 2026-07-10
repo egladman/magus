@@ -1331,6 +1331,7 @@ fun writeOffline(site: Site) > void {
       <ul>
         <li><a href="{{basePath}}graph/">Graph explorer</a> - explore and query your dependency graph</li>
         <li><a href="{{basePath}}playground/">Playground</a> - run Buzz code in the browser</li>
+        <li><a href="{{basePath}}logs/">Log viewer</a> - read a target's captured output</li>
       </ul>
     </article>
   </main>
@@ -1603,7 +1604,8 @@ fun writeServiceWorker(site: Site) > void {
     // the old "magus-<HEAD short hash>" form, which changed on every commit, could
     // never contain its own commit's hash, and so perpetually drifted the gen gate.
     final precached = ["search-index.json", "playground/wasm_exec.js",
-        "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css", "main.js", "theme.js", "site.css", "theme.css",
+        "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css",
+        "logs/log-viewer.js", "logs/logs.css", "main.js", "theme.js", "site.css", "theme.css",
         "assets/pico.min.css", "offline/index.html"];
     var manifest = "";
     foreach (rel in precached) {
@@ -2019,6 +2021,23 @@ fun renderGraph(site: Site) > void {
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/graph");
     fs.writeFile(site.outDir + "/graph/index.html", html);
+}
+
+// renderLogs writes gen/logs/index.html from the hand-authored logs.html - the log
+// viewer, a standalone tool page like the graph explorer and playground. It injects
+// the shared nav/footer and the default CSP (the page holds the reader's own captured
+// output, so it gets the tighter img-src, and it has no inline scripts). The page's
+// stylesheet (gen/logs/logs.css) and viewer module (gen/logs/log-viewer.js) are built
+// alongside the other assets in site_render and preserved by pruneStaleOutputs.
+fun renderLogs(site: Site) > void {
+    final f = io.File.open("logs.html", io.FileMode.read);
+    var html = f.readAll();
+    f.close();
+    html = html.replace("<!-- site-nav -->", renderSiteNav("../", "logs"));
+    html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
+    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
+    fs.makeDirectory(site.outDir + "/logs");
+    fs.writeFile(site.outDir + "/logs/index.html", html);
 }
 
 // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
@@ -3072,6 +3091,12 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // page-scoped, so it loads only on /graph/, not every page like site.css).
     fs.makeDirectory(site.outDir + "/graph");
     os.execute(["sh", "-c", "esbuild graph.css --minify --outfile=" + site.outDir + "/graph/graph.css"]);
+    // logs.css: the /logs/ Log Viewer's page-scoped stylesheet (no imports; single-file
+    // minify). Its module js/log-viewer.js now imports the @bufbuild/protobuf client, so it
+    // is bundled by `pnpm run build-log-viewer` (generateJsBundles) like the graph explorer,
+    // not here.
+    fs.makeDirectory(site.outDir + "/logs");
+    os.execute(["sh", "-c", "esbuild logs.css --minify --outfile=" + site.outDir + "/logs/logs.css"]);
     os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + site.outDir + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild js/main.js --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
@@ -3085,6 +3110,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // to leave these three paths alone (see its alwaysKeep set).
     renderPlayground(site);
     renderGraph(site);
+    renderLogs(site);
 
     // Load release manifests from releases/*.yaml BEFORE the walk so renderPage()
     // knows whether the releases Atom feed will be written and can gate its
@@ -3285,6 +3311,7 @@ fun pruneStaleOutputs(site: Site) > void {
         "playground/wasm_exec.js": true, "playground/editor.js": true,
         "graph/index.html": true, "graph/explorer.js": true, "graph/graph.json": true,
         "graph/graph.css": true,
+        "logs/index.html": true, "logs/log-viewer.js": true, "logs/logs.css": true,
     };
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);
