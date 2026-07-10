@@ -9,8 +9,8 @@ import "context"
 // beside their domain types: each is referenced by a types-level declaration, so
 // hoisting it here would make types import its implementer and cycle.
 
-// GraphRepository is the interface that internal/depgraph implements.
-type GraphRepository interface {
+// DepGraphRepository is the interface that internal/depgraph implements.
+type DepGraphRepository interface {
 	TopoSort() []string
 	ReverseClosure(seeds []string) []string
 	NearCycles(ctx context.Context, maxDepth int) []NearCycle

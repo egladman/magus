@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// stubRepo satisfies types.GraphRepository with no-op implementations.
+// stubRepo satisfies types.DepGraphRepository with no-op implementations.
 type stubRepo struct{}
 
 func (stubRepo) TopoSort() []string                             { return nil }

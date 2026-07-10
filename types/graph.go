@@ -5,14 +5,14 @@ import (
 )
 
 // Graph is the project dependency DAG; cycles are caught at construction. The
-// GraphRepository it wraps (the query engine) lives in repository.go.
+// DepGraphRepository it wraps (the query engine) lives in repository.go.
 type Graph struct {
-	repo     GraphRepository
+	repo     DepGraphRepository
 	projects map[string]*Project // path → project; for spell-filter render
 }
 
 // NewGraph constructs a Graph from a repository and a project map.
-func NewGraph(repo GraphRepository, projects map[string]*Project) *Graph {
+func NewGraph(repo DepGraphRepository, projects map[string]*Project) *Graph {
 	return &Graph{repo: repo, projects: projects}
 }
 
@@ -65,7 +65,7 @@ func (g *Graph) BlastRadius() map[string]int {
 
 // NCCD returns the Normalized Cumulative Component Dependency: the graph's CCD
 // over that of a balanced binary tree of the same size (>1 means more coupling
-// than a balanced tree). Named to match GraphRepository.NCCD() and the internal
+// than a balanced tree). Named to match DepGraphRepository.NCCD() and the internal
 // engines rather than spelling the acronym out only on this wrapper.
 func (g *Graph) NCCD() float64 {
 	return g.repo.NCCD()

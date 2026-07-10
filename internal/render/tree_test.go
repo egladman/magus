@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeRepo is a minimal in-memory GraphRepository. WriteTree only reaches for
+// fakeRepo is a minimal in-memory DepGraphRepository. WriteTree only reaches for
 // Successors/Predecessors/Nodes (plus Graph.Project, which comes from the project
 // map handed to NewGraph), so the remaining interface methods are stubs that a
 // tree render never calls.
