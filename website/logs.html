@@ -9,7 +9,7 @@
        viewer has no inline scripts (log-viewer.js is an external module), so this is
        the default site.csp, same as the graph page. -->
   <title>Log Viewer — magus</title>
-  <meta name="description" content="Read a magus target's captured output in your browser: fold sections, search, and copy. Opened with `magus query <ref> --open`; the log rides in the link fragment and never leaves your machine.">
+  <meta name="description" content="Read a magus target's captured output in your browser: fold sections, search, and copy. Opened with `magus query output <ref> --open`; the log rides in the link fragment and never leaves your machine.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/logs/">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
@@ -81,7 +81,7 @@
           <div class="log-empty-ways">
             <div class="log-empty-way">
               <span class="log-empty-way-label">Open a finished run</span>
-              <pre class="log-empty-cmd"><code>magus query ref1a2b3c --open</code></pre>
+              <pre class="log-empty-cmd"><code>magus query output ref1a2b3c --open</code></pre>
               <span class="log-empty-hint">Every target prints its <code>ref</code> when it runs.</span>
             </div>
             <div class="log-empty-way">
@@ -95,7 +95,7 @@
 
       <noscript>
         <div class="log-noscript">
-          <p><strong>The log viewer needs JavaScript.</strong> It decodes the output from the link fragment in your browser. Enable JavaScript, or <a href="../download/">install magus</a> and run <code>magus query &lt;ref&gt;</code> to print the output in your terminal.</p>
+          <p><strong>The log viewer needs JavaScript.</strong> It decodes the output from the link fragment in your browser. Enable JavaScript, or <a href="../download/">install magus</a> and run <code>magus query output &lt;ref&gt;</code> to print the output in your terminal.</p>
         </div>
       </noscript>
     </section>
@@ -103,12 +103,12 @@
     <details class="url-help">
       <summary>Loading a log by URL</summary>
       <div class="disclosure-body">
-        <p><code>magus query &lt;ref&gt; --open</code> builds these links for you. Everything rides the fragment (after <code>#</code>), which the browser never sends to a server, so nothing about the run - not even its ref - ever leaves your machine.</p>
+        <p><code>magus query output &lt;ref&gt; --open</code> builds these links for you. Everything rides the fragment (after <code>#</code>), which the browser never sends to a server, so nothing about the run - not even its ref - ever leaves your machine.</p>
         <dl>
           <dt><code>#ref=&lt;id&gt;</code></dt>
           <dd>The target-output reference id shown for identity, e.g. <code>#ref=ref1a2b3c</code>.</dd>
           <dt><code>#data=&lt;blob&gt;</code></dt>
-          <dd>The captured output: the raw bytes, gzipped then base64url-encoded, decoded in the browser. Bounded by the browser's URL length; for a very large log, print it instead with <code>magus query &lt;ref&gt;</code>.</dd>
+          <dd>The captured output: the raw bytes, gzipped then base64url-encoded, decoded in the browser. Bounded by the browser's URL length; for a very large log, print it instead with <code>magus query output &lt;ref&gt;</code>.</dd>
           <dt><code>#src=&lt;url&gt;</code></dt>
           <dd>A URL-encoded address the page fetches the log text from (a loopback server or any CORS-enabled address).</dd>
           <dt><code>#live=&lt;host:port&gt;&amp;token=&lt;t&gt;</code></dt>

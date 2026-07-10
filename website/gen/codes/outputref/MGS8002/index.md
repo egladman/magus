@@ -1,12 +1,12 @@
 ---
 title: "MGS8002: ambiguous output ref prefix"
-description: Fires when a shortened magus query <ref> prefix matches more than one stored output reference, so magus cannot tell which one you meant.
+description: Fires when a shortened magus query output <ref> prefix matches more than one stored output reference, so magus cannot tell which one you meant.
 tags: [MGS8002, output refs, query, prefix, ambiguous]
 ---
 
 # MGS8002: ambiguous output ref prefix
 
-`magus query <ref>` accepts a unique prefix of a reference id, the same way git
+`magus query output <ref>` accepts a unique prefix of a reference id, the same way git
 accepts a short commit hash. This code fires when the prefix you gave matches
 more than one stored ref, so the lookup is ambiguous.
 

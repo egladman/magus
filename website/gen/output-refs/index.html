@@ -66,7 +66,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-ref-line-is-always-there" title="The ref line is always there">The ref line is always there</a></li><li><a href="#retrieval-magus-query-refhex" title="Retrieval: magus query ref&lt;hex&gt;">Retrieval: magus query ref&lt;hex&gt;</a></li><li><a href="#tips-and-tricks" title="Tips and tricks">Tips and tricks</a></li><li><a href="#the-log-viewer" title="The log viewer">The log viewer</a></li><li><a href="#for-agents-and-mcp" title="For agents and MCP">For agents and MCP</a></li><li><a href="#how-refs-are-stored" title="How refs are stored">How refs are stored</a></li><li><a href="#diagnostics" title="Diagnostics">Diagnostics</a></li></ul>
+        <ul><li><a href="#the-ref-line-is-always-there" title="The ref line is always there">The ref line is always there</a></li><li><a href="#retrieval-magus-query-output-ref" title="Retrieval: magus query output &lt;ref&gt;">Retrieval: magus query output &lt;ref&gt;</a></li><li><a href="#tips-and-tricks" title="Tips and tricks">Tips and tricks</a></li><li><a href="#the-log-viewer" title="The log viewer">The log viewer</a></li><li><a href="#for-agents-and-mcp" title="For agents and MCP">For agents and MCP</a></li><li><a href="#how-refs-are-stored" title="How refs are stored">How refs are stored</a></li><li><a href="#diagnostics" title="Diagnostics">Diagnostics</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -83,8 +83,8 @@ for its captured output, printed on its own line:</p>
 <pre><code>[pass] website test (1.2s)
 ref1a2b3c
 </code></pre>
-<p>Retrieve that exact output at any time with <code>magus query</code>:</p>
-<pre><code class="language-sh">magus query ref1a2b3c
+<p>Retrieve that exact output at any time with <code>magus query output</code>:</p>
+<pre><code class="language-sh">magus query output ref1a2b3c
 </code></pre>
 <p>It writes the raw bytes to stdout and nothing else, so it pipes cleanly anywhere.</p>
 <h2 id="the-ref-line-is-always-there">The ref line is always there</h2>
@@ -95,20 +95,19 @@ triple-click selects exactly the ref.</p>
 <p>A failing target adds two hints, the exact commands ready to copy:</p>
 <pre><code>[fail] website test (1.2s): tsc exit 2
 refcc49db1f
-  full output: magus query refcc49db1f
-  open in browser: magus query refcc49db1f --open
+  full output: magus query output refcc49db1f
+  open in browser: magus query output refcc49db1f --open
 </code></pre>
-<h2 id="retrieval-magus-query-refhex">Retrieval: <code>magus query ref&lt;hex&gt;</code></h2>
-<p><code>magus query</code> is also the retrieval verb. A single argument shaped like a ref -
-strictly <code>ref</code> followed by lowercase hex digits - prints that execution's captured
-output instead of searching the <a href="../knowledge/">knowledge graph</a>. A real free-text
-query like <code>magus query refactor</code> (a non-hex tail) is unaffected and searches the
-graph as before.</p>
+<h2 id="retrieval-magus-query-output-ref">Retrieval: <code>magus query output &lt;ref&gt;</code></h2>
+<p><code>magus query</code> doubles as the retrieval verb through an explicit <code>output</code> subcommand.
+<code>magus query output ref1a2b3c</code> prints that execution's captured output instead of
+searching the <a href="../knowledge/">knowledge graph</a>. It is a subcommand, not a shape-routed
+positional, so a free-text search term can never collide with a ref id - <code>magus query refactor</code> always searches the graph.</p>
 <ul>
-<li><code>magus query ref1a2b3c</code> - print the exact output to stdout.</li>
-<li><code>magus query ref1a2b3c --meta</code> - prepend a header (ref, project, target, status,
-duration) before the output.</li>
-<li><code>magus query ref1a2b3c --open</code> - open the output in the browser <a href="#the-log-viewer">log viewer</a>.</li>
+<li><code>magus query output ref1a2b3c</code> - print the exact output to stdout.</li>
+<li><code>magus query output ref1a2b3c -o json</code> - the descriptor (ref, project, target,
+status, duration) plus the output as one record; <code>-o yaml</code> too.</li>
+<li><code>magus query output ref1a2b3c --open</code> - open the output in the browser <a href="#the-log-viewer">log viewer</a>.</li>
 </ul>
 <p>Refs prefix-match like a git short hash: type as few characters as are unique, and
 an ambiguous prefix lists the candidates.</p>
@@ -117,55 +116,58 @@ an ambiguous prefix lists the candidates.</p>
 <h2 id="tips-and-tricks">Tips and tricks</h2>
 <p>Copy-paste-ready one-liners:</p>
 <pre><code class="language-sh"># To the clipboard (macOS)
-magus query ref1a2b3c | pbcopy
+magus query output ref1a2b3c | pbcopy
 # Linux
-magus query ref1a2b3c | wl-copy            # Wayland
-magus query ref1a2b3c | xclip -selection clipboard
+magus query output ref1a2b3c | wl-copy            # Wayland
+magus query output ref1a2b3c | xclip -selection clipboard
 
 # Just the failing lines
-magus query ref1a2b3c | grep -iE &quot;error|fail&quot;
+magus query output ref1a2b3c | grep -iE &quot;error|fail&quot;
 
 # Straight into Claude Code (reads piped stdin in print mode)
-magus query ref1a2b3c | claude -p &quot;why did this fail and how do I fix it?&quot;
+magus query output ref1a2b3c | claude -p &quot;why did this fail and how do I fix it?&quot;
 
 # Into a PR or issue comment
-magus query ref1a2b3c | gh pr comment 42 --body-file -
+magus query output ref1a2b3c | gh pr comment 42 --body-file -
 
-# With a context header
-magus query ref1a2b3c --meta
+# The descriptor and output together as one JSON record
+magus query output ref1a2b3c -o json
 </code></pre>
 <h2 id="the-log-viewer">The log viewer</h2>
-<p><code>magus query ref1a2b3c --open</code> opens the <a href="https://eli.gladman.cc/magus/logs/" rel="noopener noreferrer" target="_blank" data-external>log viewer</a> -
+<p><code>magus query output ref1a2b3c --open</code> opens the <a href="https://eli.gladman.cc/magus/logs/" rel="noopener noreferrer" target="_blank" data-external>log viewer</a> -
 a standalone browser page that renders the captured output with collapsible sections,
 status badges, in-page search, ANSI color, and copy. A &quot;Copy command&quot; button hands back
-a <code>magus query</code> one-liner (per section too), so you can pass an exact slice to an agent,
+a <code>magus query output</code> one-liner (per section too), so you can pass an exact slice to an agent,
 and a pretty/raw toggle shows the exact captured bytes. It is the log analog of
 <a href="../knowledge/"><code>magus graph open</code></a>: the ref and the output both ride the link fragment
 (<code>#ref=...&amp;data=...</code>, gzipped then base64url-encoded), decoded in your browser. The
 fragment is never sent to any server, so nothing about the run - not even its ref - ever
 leaves your machine.</p>
-<p>For a very large log, print it instead (<code>magus query ref1a2b3c</code>) and pipe it - a URL
+<p>For a very large log, print it instead (<code>magus query output ref1a2b3c</code>) and pipe it - a URL
 fragment is bounded by the browser's address-bar length.</p>
 <p><code>--open</code> follows the <code>BROWSER</code> environment variable (the freedesktop convention) to
 choose which browser to launch, so you can override your desktop default per command:</p>
-<pre><code class="language-sh">BROWSER=firefox magus query ref1a2b3c --open
+<pre><code class="language-sh">BROWSER=firefox magus query output ref1a2b3c --open
 </code></pre>
 <p><code>BROWSER</code> may be a colon-separated list of commands, each optionally containing <code>%s</code>
 where the URL is substituted (otherwise the URL is appended). With <code>BROWSER</code> unset,
 magus uses your desktop's default handler (<code>open</code>, <code>xdg-open</code>, or the Windows
 equivalent).</p>
 <h2 id="for-agents-and-mcp">For agents and MCP</h2>
-<p>The <a href="../mcp/">MCP</a> <code>magus_query</code> tool takes the same ref: pass <code>ref1a2b3c</code> as the
-query and it returns that execution's exact bytes and metadata. An agent that saw a
-ref in a run fetches the full output directly, instead of re-reading a wall of text
-or asking you to paste it.</p>
+<p>The <a href="../mcp/">MCP</a> <code>magus_output</code> tool is the agent analog of <code>magus query output</code>:
+pass a <code>ref</code> (<code>ref1a2b3c</code>, or a unique prefix) and it returns that execution's exact
+bytes plus its descriptor. An agent that saw a ref in a run fetches the full output
+directly, instead of re-reading a wall of text or asking you to paste it. It is a
+dedicated tool, not a mode of <code>magus_query</code>, so a free-text graph query never
+collides with a ref id.</p>
 <h2 id="how-refs-are-stored">How refs are stored</h2>
 <ul>
 <li>The ref is derived from the step's cache key plus a per-execution nonce, so it is
 cache-key-flavored but unique to each run.</li>
-<li>Output is persisted to a store under the cache directory (<code>outputs/</code>), alongside a
-small metadata sidecar (project, target, status, timestamp, duration, cache key),
-on success and on failure.</li>
+<li>Output is persisted verbatim as a per-ref blob under the cache directory
+(<code>outputs/</code>), alongside a small descriptor sidecar (project, target, status,
+timestamp, duration), on success and on failure. Retrieval is a straight byte read,
+so <code>magus query output</code> returns exactly the bytes the target wrote.</li>
 <li>Retention keeps the last few executions per cache key, so a nondeterministic
 target's recent failures stay independently addressable, and is garbage-collected
 along with the rest of the <a href="../cache/">cache</a>. Refs are run artifacts, not
@@ -179,8 +181,8 @@ along with the rest of the <a href="../cache/">cache</a>. Refs are run artifacts
 exists - it aged out of the cache, or the ref is mistyped.</li>
 <li><a href="../codes/outputref/MGS8002/">MGS8002</a>: a shortened ref prefix matches more than one
 stored output, so the lookup is ambiguous.</li>
-<li><a href="../codes/outputref/MGS8003/">MGS8003</a>: a ref-only flag (<code>--open</code>, <code>--meta</code>,
-<code>--print</code>) was given without a valid <code>ref&lt;hex&gt;</code> argument.</li>
+<li><a href="../codes/outputref/MGS8003/">MGS8003</a>: <code>magus query output</code> was given an argument
+that is not a well-formed <code>ref&lt;hex&gt;</code> id, so it cannot name a stored output.</li>
 </ul>
     </article>
     </div>

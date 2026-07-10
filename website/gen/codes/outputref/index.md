@@ -9,8 +9,8 @@ tags:
 # Output-reference diagnostics
 
 Codes in the `MGS8xxx` range flag problems resolving a target-output reference
-id (`ref1a2b3c`) with `magus query <ref>`. Every target that runs is given a
-short reference id for its captured output; these codes fire when that id cannot
+id (`ref1a2b3c`) with `magus query output <ref>`. Every target that runs is given
+a short reference id for its captured output; these codes fire when that id cannot
 be resolved to stored output.
 
 ## Codes
@@ -19,5 +19,5 @@ be resolved to stored output.
   it - it aged out of the cache, or the ref is mistyped.
 - [MGS8002](MGS8002.md): a shortened ref prefix matches more than one stored
   output, so the lookup is ambiguous.
-- [MGS8003](MGS8003.md): a ref-only flag (`--open`, `--meta`, `--print`) was
-  given without a valid `ref<hex>` argument.
+- [MGS8003](MGS8003.md): `magus query output` was given an argument that is not a
+  well-formed `ref<hex>` id, so it cannot name a stored output.

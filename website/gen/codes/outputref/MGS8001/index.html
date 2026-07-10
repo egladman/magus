@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>MGS8001: output ref not found — magus</title>
-  <meta name="description" content="Fires when magus query &lt;ref&gt; names a well-formed reference id but no captured output is stored for it, because it aged out of the cache or the ref is mistyped.">
+  <meta name="description" content="Fires when magus query output &lt;ref&gt; names a well-formed reference id but no captured output is stored for it, because it aged out of the cache or the ref is mistyped.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/codes/outputref/MGS8001/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="MGS8001: output ref not found — magus">
-  <meta property="og:description" content="Fires when magus query &lt;ref&gt; names a well-formed reference id but no captured output is stored for it, because it aged out of the cache or the ref is mistyped.">
+  <meta property="og:description" content="Fires when magus query output &lt;ref&gt; names a well-formed reference id but no captured output is stored for it, because it aged out of the cache or the ref is mistyped.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/codes/outputref/MGS8001/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -65,7 +65,7 @@
     <article>
 <h1 id="mgs8001-output-ref-not-found">MGS8001: output ref not found</h1>
 <p>Every target that runs is given a short reference id (<code>ref1a2b3c</code>) for its
-captured output, retrievable later with <code>magus query &lt;ref&gt;</code>. This code fires
+captured output, retrievable later with <code>magus query output &lt;ref&gt;</code>. This code fires
 when the ref is well-formed but the store holds no output for it.</p>
 <p>There are two ordinary causes: the entry aged out of the cache (the store keeps
 only the last few executions per target and prunes by age and size), or the ref
@@ -84,8 +84,8 @@ not since been cleared.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../codes/outputref/"><span class="related-card-title">output-reference diagnostics</span><span class="related-card-desc">Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.</span></a>
-        <a class="related-card" href="../../../codes/outputref/MGS8002/"><span class="related-card-title">MGS8002: ambiguous output ref prefix</span><span class="related-card-desc">Fires when a shortened magus query &lt;ref&gt; prefix matches more than one stored output reference, so magus cannot tell which one you meant.</span></a>
-        <a class="related-card" href="../../../codes/outputref/MGS8003/"><span class="related-card-title">MGS8003: malformed output ref</span><span class="related-card-desc">Fires when a ref-only flag (--open, --meta, --print) is given without a valid ref&lt;hex&gt; argument, so the value cannot name a stored output.</span></a>
+        <a class="related-card" href="../../../codes/outputref/MGS8002/"><span class="related-card-title">MGS8002: ambiguous output ref prefix</span><span class="related-card-desc">Fires when a shortened magus query output &lt;ref&gt; prefix matches more than one stored output reference, so magus cannot tell which one you meant.</span></a>
+        <a class="related-card" href="../../../codes/outputref/MGS8003/"><span class="related-card-title">MGS8003: malformed output ref</span><span class="related-card-desc">Fires when magus query output is given an argument that is not a valid ref&lt;hex&gt; id, so the value cannot name a stored output.</span></a>
         <a class="related-card" href="../../../codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
     </div>
   </section>

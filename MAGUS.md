@@ -18,7 +18,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1673 nodes** and **2927 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1688 nodes** and **2956 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -30,17 +30,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `awesome-easley-bc1342`, `website`, `gopherbuzz` |
-| target | 54 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `generate` |
+| project | 5 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `awesome-easley-bc1342`, `website`, `gopherbuzz` |
+| target | 56 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `generate` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
 | op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
 | charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:charm) | `rw`, `static`, `cd` |
 | module | 22 | [`magus query kind:module`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `env` |
 | method | 148 | [`magus query kind:method`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 23 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
-| doc | 100 | [`magus query kind:doc`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
-| file | 195 | [`magus query kind:file`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:file) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 972 | [`magus query kind:function`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
+| diagnostic | 26 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
+| doc | 104 | [`magus query kind:doc`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
+| file | 196 | [`magus query kind:file`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:file) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 976 | [`magus query kind:function`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
 | import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
 | rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
@@ -49,6 +49,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | . | 24 | [`magus query project:.`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:.) | `generate`, `format`, `image-build` |
 | cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
 | gopherbuzz | 9 | [`magus query project:gopherbuzz`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:gopherbuzz) | `build`, `format`, `generate` |
+| proto | 2 | [`magus query project:proto`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:proto) | `ci`, `lint` |
 | website | 14 | [`magus query project:website`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20project:website) | `generate`, `ci`, `preflight` |
 
 ## Reading the graphs
@@ -863,6 +864,77 @@ Renders MAGUS.md (target catalog plus graph) from this magusfile.
 magus run md-generate gopherbuzz  # from the workspace root
 ```
 
+## Project: proto
+
+<details>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>proto</code></summary>
+
+```text
+sources  magusfile.buzz, magusfiles/**/*.buzz, proto/**/*.proto, proto/buf.gen.yaml, proto/buf.lock, proto/buf.work.yaml, proto/buf.yaml, proto/magusfile.buzz, proto/magusfiles/**/*.buzz
+outputs  proto/gen/**, proto/gen/**
+spells   buf
+```
+
+</details>
+
+**Run order**
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 80
+---
+graph LR
+  lint("lint")
+  ci("ci")
+  buf_generate --> ci
+  lint --> ci
+  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
+  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
+  class ci anchor
+  class lint target
+```
+
+**Toolchain**
+
+Which spell each target drives; edge labels are the tool-native operations.
+
+```mermaid
+graph TB
+  t_lint("lint")
+  sp_buf{{"buf"}}
+  t_lint -->|"buf-lint"| sp_buf
+  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
+  class sp_buf spell
+```
+
+[Explore this project's graph interactively](https://eli.gladman.cc/magus/graph/#data=H4sIAAAAAAAC_0yRQW7cMAxFr0Jw0wTwzAG8K1Cg6LrdFQOEI31bKmzKkOhOnGCAHqIn7EkKyZlJdjb1Sf7_-MoeQ9RoMSn3_COATPIII48F6qFuozHLEigWsgCaZVzLUQFf6Mvnr5QGElpy-gVnn8r-PMQJPUFcIE0etVVucx9ECc9LygZPw6qurn7sdjX8CJKPu6ORS_OSCsqRvlkdhWfL4mp7MbHoZJo2GnKa3_1VA1TSmh06KqlOKSFdCuE38rav-ffnL0V10-qjjnROFkjyXPZAeVWLM-icRV1oWlFPwyRjIdHto0W3uQn0cAnRhWYhr0qLWKCMSqWQX3Pd4WNZxFx4PHLHb8gK9z9fuaq5rzVL3DF0jAru-by-vHDHFeIuVJlrfYpq3LFPjnv-jmk4uKQmUeFvt3jjXVr-p0aFZBjQwLn4RKMY9pPW3kqULgHaKs0IuSA6otCBNFGygHwfnuu5UChqzVIWTNNusH025wN3nJZarT-HZvl0PV27ewoXa4YbyIi7doQii4E7vredrv8DAAD__716IfKsAgAA)
+
+### `ci`
+
+**Defaults**
+
+```sh
+magus run ci proto  # from the workspace root
+```
+
+**Depends on:**
+
+- [`buf-generate`](#buf-generate)
+- [`lint`](#lint)
+
+### `lint`
+
+Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.
+
+**Defaults**
+
+```sh
+magus run lint proto  # from the workspace root
+```
+
 ## Project: website
 
 <details>
@@ -870,7 +942,7 @@ magus run md-generate gopherbuzz  # from the workspace root
 
 ```text
 sources  magusfile.buzz, magusfiles/**/*.buzz, website/magusfile.buzz, website/magusfiles/**/*.buzz
-outputs  website/gen/**, website/MAGUS.md
+outputs  website/gen/**, website/MAGUS.md, website/js/gen/**
 spells   magusfile
 ```
 

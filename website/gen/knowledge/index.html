@@ -350,7 +350,8 @@ the ambiguity stays queryable. The first two are
 and <a href="../codes/knowledge/MGS7002/">MGS7002</a> (a doc citing an unregistered code).</p>
 <h2 id="for-agents">For agents</h2>
 <p>The MCP daemon exposes the verbs as tools: <code>magus_query</code>, <code>magus_explain</code>,
-<code>magus_path</code>, <code>magus_stats</code>, and <code>magus_refs</code>. See <a href="../mcp/">MCP</a> for wiring. Prefer
+<code>magus_path</code>, <code>magus_stats</code>, and <code>magus_refs</code> (plus <code>magus_output</code>, which retrieves a
+target's captured output by ref). See <a href="../mcp/">MCP</a> for wiring. Prefer
 these over grep to find and relate magus-domain entities; start from the <code>MAGUS.md</code>
 routing table, which is already in context in a fresh clone.</p>
 <p>For a large result set, <code>magus_query</code> and <code>magus_refs</code> page: pass <code>limit</code> to cap the

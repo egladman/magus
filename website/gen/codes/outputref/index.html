@@ -65,8 +65,8 @@
     <article>
 <h1 id="output-reference-diagnostics">Output-reference diagnostics</h1>
 <p>Codes in the <code>MGS8xxx</code> range flag problems resolving a target-output reference
-id (<code>ref1a2b3c</code>) with <code>magus query &lt;ref&gt;</code>. Every target that runs is given a
-short reference id for its captured output; these codes fire when that id cannot
+id (<code>ref1a2b3c</code>) with <code>magus query output &lt;ref&gt;</code>. Every target that runs is given
+a short reference id for its captured output; these codes fire when that id cannot
 be resolved to stored output.</p>
 <h2 id="codes">Codes</h2>
 <ul>
@@ -74,8 +74,8 @@ be resolved to stored output.</p>
 it - it aged out of the cache, or the ref is mistyped.</li>
 <li><a href="MGS8002/">MGS8002</a>: a shortened ref prefix matches more than one stored
 output, so the lookup is ambiguous.</li>
-<li><a href="MGS8003/">MGS8003</a>: a ref-only flag (<code>--open</code>, <code>--meta</code>, <code>--print</code>) was
-given without a valid <code>ref&lt;hex&gt;</code> argument.</li>
+<li><a href="MGS8003/">MGS8003</a>: <code>magus query output</code> was given an argument that is not a
+well-formed <code>ref&lt;hex&gt;</code> id, so it cannot name a stored output.</li>
 </ul>
     </article>
   </main>

@@ -330,7 +330,8 @@ and [MGS7002](codes/knowledge/MGS7002.md) (a doc citing an unregistered code).
 ## For agents
 
 The MCP daemon exposes the verbs as tools: `magus_query`, `magus_explain`,
-`magus_path`, `magus_stats`, and `magus_refs`. See [MCP](mcp.md) for wiring. Prefer
+`magus_path`, `magus_stats`, and `magus_refs` (plus `magus_output`, which retrieves a
+target's captured output by ref). See [MCP](mcp.md) for wiring. Prefer
 these over grep to find and relate magus-domain entities; start from the `MAGUS.md`
 routing table, which is already in context in a fresh clone.
 
