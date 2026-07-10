@@ -1,6 +1,6 @@
 //go:build mcp
 
-package webbridge_test
+package dashboard_test
 
 import (
 	"compress/gzip"
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/handler/dashboard"
 	"github.com/egladman/magus/internal/knowledge"
-	"github.com/egladman/magus/internal/webbridge"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,7 +55,7 @@ func minimalTargetGraph() types.TargetGraphOutput {
 
 // graphOpts returns Options with fake graph providers injected so handleGraph
 // can be exercised without a real workspace.
-func graphOpts() webbridge.Options {
+func graphOpts() dashboard.Options {
 	g := minimalGraph()
 	tg := minimalTargetGraph()
 	opts := minimalOpts()

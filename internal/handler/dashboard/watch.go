@@ -1,6 +1,6 @@
 //go:build mcp
 
-package webbridge
+package dashboard
 
 import (
 	"context"

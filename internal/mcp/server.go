@@ -24,9 +24,9 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/handler/dashboard"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/mcp/auth"
-	"github.com/egladman/magus/internal/webbridge"
 )
 
 // DefaultAddress is the default host:port for the MCP Streamable HTTP server.
@@ -197,7 +197,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 				log.Warn("[BRIDGE] file watcher unavailable; /api/v1/events will emit heartbeats only",
 					slog.String("error", werr.Error()))
 			} else {
-				inv = webbridge.WatchInvalidate(ctx, bWatcher)
+				inv = dashboard.WatchInvalidate(ctx, bWatcher)
 				go func() {
 					<-ctx.Done()
 					_ = bWatcher.Close()
@@ -205,7 +205,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 			}
 
 			siteOrigin, _ := opts.siteOrigin()
-			bridgeOpts := webbridge.Options{
+			bridgeOpts := dashboard.Options{
 				Magus:           opts.Magus,
 				Config:          opts.Config,
 				StatusBase:      opts.StatusBase,
@@ -216,7 +216,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 			}
 			// The bridge routes share the same auth and DNS-rebind middleware as /mcp.
 			bridgeMux := http.NewServeMux()
-			webbridge.Mount(bridgeMux, bridgeOpts)
+			dashboard.Mount(bridgeMux, bridgeOpts)
 			// Wrap every /api/ route with rebind + auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, auth.Guard(auth.Load, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))

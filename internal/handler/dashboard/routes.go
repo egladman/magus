@@ -1,13 +1,13 @@
 //go:build mcp
 
-// Package webbridge mounts three frozen, read-only GET routes on the MCP HTTP
+// Package dashboard mounts three frozen, read-only GET routes on the MCP HTTP
 // server so a browser running the hosted Graph Explorer can view the current
 // workspace over loopback.
 //
 // The entire API surface is frozen at birth (v1). No mutations, ever (see
 // section 0.3 of the PWA plan). Every route is guarded by the same bearer
 // token as the MCP server and protected by the same DNS-rebind middleware.
-package webbridge
+package dashboard
 
 import (
 	"compress/gzip"
@@ -23,7 +23,6 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -439,7 +438,7 @@ func resolveStatusAddr(ctx context.Context, opts Options) (string, error) {
 // Events:
 //   - event: graph,  data: {"seq": N}       -- workspace graph changed (N is monotonic)
 //   - event: status, data: <base64 proto>   -- pool state changed; payload is a base64
-//     magus.status.v1.Status (see handler.EncodeStatusEvent), the same shape the /dashboard
+//     magus.status.v1.Status (see EncodeStatusEvent), the same shape the /dashboard
 //     page decodes. Pushed on connect and whenever the encoded snapshot changes.
 //   - event: metrics, data: <base64 proto>  -- current metrics as base64 OTLP
 //     (ExportMetricsServiceRequest); pushed on connect and on change when MetricsSnapshotFn
@@ -487,7 +486,7 @@ func handleEvents(w http.ResponseWriter, r *http.Request, opts Options) {
 	// heartbeat/graph-only.
 	var lastStatus string
 	pushStatus := func() {
-		enc, err := handler.EncodeStatusEvent(buildStatusReport(r.Context(), opts), opts.MagusVersion)
+		enc, err := EncodeStatusEvent(buildStatusReport(r.Context(), opts), opts.MagusVersion)
 		if err != nil || enc == lastStatus {
 			return
 		}

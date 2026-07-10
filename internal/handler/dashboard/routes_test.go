@@ -1,6 +1,6 @@
 //go:build mcp
 
-package webbridge_test
+package dashboard_test
 
 import (
 	"bytes"
@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/handler/dashboard"
 	"github.com/egladman/magus/internal/mcp/auth"
-	"github.com/egladman/magus/internal/webbridge"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
 	"github.com/egladman/magus/types"
 	"google.golang.org/protobuf/proto"
@@ -26,14 +26,14 @@ import (
 
 // testHandler builds an HTTP mux with the bridge mounted, without auth.Guard
 // or dnsRebindGuard. Used for inner-route logic tests.
-func testHandler(opts webbridge.Options) http.Handler {
+func testHandler(opts dashboard.Options) http.Handler {
 	mux := http.NewServeMux()
-	webbridge.Mount(mux, opts)
+	dashboard.Mount(mux, opts)
 	return mux
 }
 
 // testHandlerWithAuth wraps the bridge mux in auth.Guard with a throwaway token.
-func testHandlerWithAuth(t *testing.T, opts webbridge.Options) (http.Handler, string) {
+func testHandlerWithAuth(t *testing.T, opts dashboard.Options) (http.Handler, string) {
 	t.Helper()
 	tok, err := auth.Generate()
 	if err != nil {
@@ -41,14 +41,14 @@ func testHandlerWithAuth(t *testing.T, opts webbridge.Options) (http.Handler, st
 	}
 	load := func() (string, error) { return tok, nil }
 	mux := http.NewServeMux()
-	webbridge.Mount(mux, opts)
+	dashboard.Mount(mux, opts)
 	return auth.Guard(load, mux), tok
 }
 
 // minimalOpts returns Options suitable for unit tests (no Magus instance).
-func minimalOpts() webbridge.Options {
+func minimalOpts() dashboard.Options {
 	addr := netip.MustParseAddrPort("127.0.0.1:17391")
-	return webbridge.Options{
+	return dashboard.Options{
 		Addr:       addr,
 		SiteOrigin: "https://example.com",
 	}

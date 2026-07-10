@@ -1,4 +1,6 @@
-package handler
+//go:build mcp
+
+package dashboard
 
 import (
 	"time"

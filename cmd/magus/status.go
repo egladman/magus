@@ -147,7 +147,7 @@ func gridEnabled(opts OutputOptions, isTTY bool) bool {
 
 // buildStatusBase constructs the static portions of a StatusReport that depend
 // on build-tag constants (selfUpdateCompiled, mcpIsCompiled) and the resolved
-// config. Called at MCP-server start to inject into webbridge.Options so the
+// config. Called at MCP-server start to inject into dashboard.Options so the
 // bridge can serve the full types.StatusReport without importing cmd/magus.
 func buildStatusBase() types.StatusBase {
 	return types.StatusBase{
@@ -187,7 +187,7 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 // It deliberately leaves StatusOutput.Affected unset: `magus status` queries
 // the daemon over its proc socket only and never opens a workspace, so there
 // is no VCS context here to compute an affected set from. The web bridge's
-// live Graph Explorer "affected" view (internal/webbridge/bridge.go, which
+// live Graph Explorer "affected" view (internal/handler/dashboard/routes.go, which
 // has its own copy of this conversion) is correspondingly kept disabled
 // client-side rather than wired to a field that can never be populated from
 // this call site.
