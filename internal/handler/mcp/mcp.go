@@ -18,6 +18,7 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/types"
@@ -151,14 +152,21 @@ func allMCPTools(opts ServerOptions) []types.SpellDriver {
 		&affectedPlanTool{opts: opts},
 		&configGetTool{cfg: opts.Config},
 		&tailLogTool{opts: opts},
-		&queryTool{opts: opts},
-		&outputTool{opts: opts},
-		&explainTool{opts: opts},
-		&pathTool{opts: opts},
-		&statsTool{opts: opts},
-		&refsTool{opts: opts},
+		&queryTool{graph: opts.Magus},
+		&outputTool{reader: opts.Magus},
+		&explainTool{graph: opts.Magus},
+		&pathTool{graph: opts.Magus},
+		&statsTool{graph: opts.Magus},
+		&refsTool{graph: opts.Magus},
 	}
 }
+
+// *magus.Magus satisfies the narrow reader interfaces the read-tools depend on,
+// structurally and with no changes to the magus package.
+var (
+	_ outputReader  = (*magus.Magus)(nil)
+	_ graphResolver = (*magus.Magus)(nil)
+)
 
 func registerTools(srv *server.MCPServer, opts ServerOptions, log *slog.Logger, agentFn func(context.Context) string, audit *auditLog) {
 	byName := make(map[string]types.SpellDriver, len(Registry))

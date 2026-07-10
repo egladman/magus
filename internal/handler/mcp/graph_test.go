@@ -42,6 +42,37 @@ func pagedGraph(n int) *knowledge.Graph {
 	return g
 }
 
+// fakeGraphResolver is a hand-built graphResolver: it hands back one canned graph
+// (or an error) for every resolution path, so the graph tools are unit-testable
+// through the seam without a real workspace.
+type fakeGraphResolver struct {
+	g   *knowledge.Graph
+	err error
+}
+
+func (f fakeGraphResolver) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
+	return f.g, f.err
+}
+func (f fakeGraphResolver) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+	return f.g, f.err
+}
+func (f fakeGraphResolver) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
+	return f.g, f.err
+}
+
+// TestQueryToolInvokeThroughFake drives queryTool.Invoke through the graphResolver
+// seam: a non-symbol query resolves the warm graph via the fake and returns the
+// matching targets, demonstrating the tool is testable with a hand-built graph.
+func TestQueryToolInvokeThroughFake(t *testing.T) {
+	tool := &queryTool{graph: fakeGraphResolver{g: pagedGraph(3)}}
+	resp, err := tool.Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"query": "kind:target"}})
+	require.NoError(t, err)
+	got, ok := resp.Data.(paginatedQuery)
+	require.True(t, ok, "query result is a paginatedQuery")
+	assert.Equal(t, 3, got.MatchCount)
+	assert.Empty(t, got.NextCursor, "an unpaged query has no next cursor")
+}
+
 // The knowledge tools' graph traversal is covered by internal/knowledge and the
 // CLI txtars; here we pin the MCP surface: tool names and required-param
 // validation (which returns before any workspace access, so no Magus is needed).

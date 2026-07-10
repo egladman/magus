@@ -17,15 +17,23 @@ import (
 // answers from memory without re-parsing magusfiles; otherwise it rebuilds
 // cache-first. Either way it is fresh.
 
+// graphResolver is the slice of the workspace the knowledge-graph tools need.
+// *magus.Magus satisfies it.
+type graphResolver interface {
+	KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error)
+	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
+	KnowledgeGraphWithSymbolsForRef(ctx context.Context, symbol string) (*knowledge.Graph, error)
+}
+
 // knowledgeGraph resolves the DOMAIN knowledge graph for a tool invocation - the warm
 // graph, which excludes the lazily-loaded @symbols shards. explain/path/stats use it.
 // A symbol-seeded magus_query and magus_refs instead use KnowledgeGraphWithSymbols,
 // which merges symbols into a fresh graph so the shared warm graph is never polluted.
-func knowledgeGraph(ctx context.Context, opts ServerOptions) (*knowledge.Graph, error) {
-	return opts.Magus.KnowledgeGraph(ctx, false)
+func knowledgeGraph(ctx context.Context, g graphResolver) (*knowledge.Graph, error) {
+	return g.KnowledgeGraph(ctx, false)
 }
 
-type queryTool struct{ opts ServerOptions }
+type queryTool struct{ graph graphResolver }
 
 func (t *queryTool) Name() string { return "magus_query" }
 
@@ -50,9 +58,9 @@ func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.
 	var g *knowledge.Graph
 	var err error
 	if knowledge.SeedsSymbols(terms) {
-		g, err = t.opts.Magus.KnowledgeGraphWithSymbols(ctx)
+		g, err = t.graph.KnowledgeGraphWithSymbols(ctx)
 	} else {
-		g, err = knowledgeGraph(ctx, t.opts)
+		g, err = knowledgeGraph(ctx, t.graph)
 	}
 	if err != nil {
 		return types.InvokeResponse{}, err
@@ -64,7 +72,7 @@ func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.
 	return types.InvokeResponse{Data: resp}, nil
 }
 
-type refsTool struct{ opts ServerOptions }
+type refsTool struct{ graph graphResolver }
 
 func (t *refsTool) Name() string { return "magus_refs" }
 
@@ -81,7 +89,7 @@ func (t *refsTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.I
 	if symbol == "" {
 		return types.InvokeResponse{}, errors.New("mcp: symbol is required")
 	}
-	g, err := t.opts.Magus.KnowledgeGraphWithSymbolsForRef(ctx, symbol)
+	g, err := t.graph.KnowledgeGraphWithSymbolsForRef(ctx, symbol)
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}
@@ -174,7 +182,7 @@ func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor stri
 	return resp, nil
 }
 
-type explainTool struct{ opts ServerOptions }
+type explainTool struct{ graph graphResolver }
 
 func (t *explainTool) Name() string { return "magus_explain" }
 
@@ -183,7 +191,7 @@ func (t *explainTool) Invoke(ctx context.Context, req types.InvokeRequest) (type
 	if node == "" {
 		return types.InvokeResponse{}, errors.New("mcp: node is required")
 	}
-	g, err := knowledgeGraph(ctx, t.opts)
+	g, err := knowledgeGraph(ctx, t.graph)
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}
@@ -194,7 +202,7 @@ func (t *explainTool) Invoke(ctx context.Context, req types.InvokeRequest) (type
 	return types.InvokeResponse{Data: out}, nil
 }
 
-type pathTool struct{ opts ServerOptions }
+type pathTool struct{ graph graphResolver }
 
 func (t *pathTool) Name() string { return "magus_path" }
 
@@ -204,7 +212,7 @@ func (t *pathTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.I
 	if from == "" || to == "" {
 		return types.InvokeResponse{}, errors.New("mcp: from and to are required")
 	}
-	g, err := knowledgeGraph(ctx, t.opts)
+	g, err := knowledgeGraph(ctx, t.graph)
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}
@@ -215,12 +223,12 @@ func (t *pathTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.I
 	return types.InvokeResponse{Data: out}, nil
 }
 
-type statsTool struct{ opts ServerOptions }
+type statsTool struct{ graph graphResolver }
 
 func (t *statsTool) Name() string { return "magus_stats" }
 
 func (t *statsTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
-	g, err := knowledgeGraph(ctx, t.opts)
+	g, err := knowledgeGraph(ctx, t.graph)
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}

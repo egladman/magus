@@ -19,10 +19,16 @@ import (
 // past execution by its reference id (ref1a2b3c); magus_tail_log returns the LATEST log for a
 // project (no ref needed). Both read straight from the cache dir.
 
+// outputReader is the slice of the workspace magus_output needs: resolve a
+// target-output ref to its stored bytes and descriptor. *magus.Magus satisfies it.
+type outputReader interface {
+	OutputByRef(ref string) ([]byte, cache.OutputDescriptor, error)
+}
+
 // outputTool (magus_output) retrieves one target execution's captured output by its
 // reference id - the MCP analog of `magus query output <ref>`. It is a dedicated tool,
 // not a mode of magus_query, so a free-text graph query can never collide with a ref id.
-type outputTool struct{ opts ServerOptions }
+type outputTool struct{ reader outputReader }
 
 func (t *outputTool) Name() string { return "magus_output" }
 
@@ -48,7 +54,7 @@ func (t *outputTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 	if !cache.LooksLikeRef(ref) {
 		return types.InvokeResponse{}, fmt.Errorf("mcp: %q is not a target-output reference (expected ref<hex>, e.g. ref1a2b3c)", ref)
 	}
-	data, desc, err := t.opts.Magus.OutputByRef(ref)
+	data, desc, err := t.reader.OutputByRef(ref)
 	if err != nil {
 		var amb *cache.AmbiguousRefError
 		switch {
