@@ -46,7 +46,7 @@ func (fakeSource) TargetGraph(context.Context) (types.TargetGraphOutput, error) 
 	}, nil
 }
 
-func handler() http.Handler { return NewGraphHandler(fakeSource{}) }
+func newHandler() http.Handler { return NewGraphHandler(fakeSource{}, nil) }
 
 func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -59,7 +59,7 @@ func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder
 // --- 200 flavor paths ---
 
 func TestGraph_Flavors_Return200(t *testing.T) {
-	h := handler()
+	h := newHandler()
 	for _, target := range []string{"/api/v1/graph", "/api/v1/graph?level=projects", "/api/v1/graph?select=foo", "/api/v1/graph?flavor=targets"} {
 		w := get(t, h, target)
 		require.Equalf(t, http.StatusOK, w.Code, "target %s body %s", target, w.Body.String())
@@ -72,7 +72,7 @@ func TestGraph_Flavors_Return200(t *testing.T) {
 // snake_case field names the explorer parses (matching the domain json tags), not the proto
 // camelCase defaults.
 func TestGraph_SnakeCaseFieldNames(t *testing.T) {
-	w := get(t, handler(), "/api/v1/graph")
+	w := get(t, newHandler(), "/api/v1/graph")
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var out map[string]json.RawMessage
@@ -111,7 +111,7 @@ func keys(m map[string]json.RawMessage) []string {
 // TestGraph_TargetsFlavorShape confirms the targets flavor keeps its domain JSON (projects +
 // definition), which is what the explorer's detectFlavor keys on.
 func TestGraph_TargetsFlavorShape(t *testing.T) {
-	w := get(t, handler(), "/api/v1/graph?flavor=targets")
+	w := get(t, newHandler(), "/api/v1/graph?flavor=targets")
 	require.Equal(t, http.StatusOK, w.Code)
 	var out map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
@@ -122,7 +122,7 @@ func TestGraph_TargetsFlavorShape(t *testing.T) {
 // --- param validation ---
 
 func TestGraph_BadParams_Return400(t *testing.T) {
-	h := handler()
+	h := newHandler()
 	for _, target := range []string{"/api/v1/graph?flavor=bogus", "/api/v1/graph?level=all", "/api/v1/graph?flavor=targets&level=projects"} {
 		w := get(t, h, target)
 		assert.Equalf(t, http.StatusBadRequest, w.Code, "target %s", target)
@@ -132,14 +132,14 @@ func TestGraph_BadParams_Return400(t *testing.T) {
 func TestGraph_MethodNotAllowed(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/graph", nil)
 	w := httptest.NewRecorder()
-	handler().ServeHTTP(w, r)
+	newHandler().ServeHTTP(w, r)
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 }
 
 // --- ETag / 304 ---
 
 func TestGraph_ETagStableAnd304(t *testing.T) {
-	h := handler()
+	h := newHandler()
 	w1 := get(t, h, "/api/v1/graph")
 	etag := w1.Header().Get("ETag")
 	require.NotEmpty(t, etag)
@@ -155,7 +155,7 @@ func TestGraph_ETagStableAnd304(t *testing.T) {
 
 // TestGraph_DistinctVariantsDistinctETags checks the flavor branches produce distinct bodies.
 func TestGraph_DistinctVariantsDistinctETags(t *testing.T) {
-	h := handler()
+	h := newHandler()
 	seen := map[string]string{}
 	for _, target := range []string{"/api/v1/graph", "/api/v1/graph?level=projects", "/api/v1/graph?flavor=targets"} {
 		etag := get(t, h, target).Header().Get("ETag")
@@ -173,7 +173,7 @@ func TestGraph_Gzip(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/graph", nil)
 	r.Header.Set("Accept-Encoding", "gzip")
 	w := httptest.NewRecorder()
-	handler().ServeHTTP(w, r)
+	newHandler().ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "gzip", w.Header().Get("Content-Encoding"))
@@ -193,7 +193,7 @@ func TestGraph_Gzip(t *testing.T) {
 // select flavor (its body differs from full for a non-matching term is not asserted here; we
 // only confirm a 200 + JSON, since Select semantics are covered in the knowledge package).
 func TestGraph_SelectSmoke(t *testing.T) {
-	w := get(t, handler(), "/api/v1/graph?select=imports")
+	w := get(t, newHandler(), "/api/v1/graph?select=imports")
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, strings.HasPrefix(w.Header().Get("Content-Type"), "application/json"))
 }

@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/types"
 )
@@ -32,17 +34,20 @@ type graphSource interface {
 // flavors are written as magus.graph.v1 protojson (snake_case, wire-compatible). The targets
 // flavor has no proto twin and is written as its domain JSON. ETag is sha256 of the body;
 // If-None-Match yields a 304. Gzip is applied by the NewGraphHandler wrapper.
-type graphHandler struct {
+type GraphHandler struct {
+	handler.Base
 	src graphSource
 }
 
 // NewGraphHandler returns the GET /api/v1/graph handler reading from src, wrapped so its
 // body is gzip-compressed when the client accepts it.
-func NewGraphHandler(src graphSource) http.Handler {
-	return httpx.Gzip(&graphHandler{src: src})
+func NewGraphHandler(src graphSource, log *slog.Logger) *GraphHandler {
+	h := &GraphHandler{src: src}
+	h.Base = handler.New(httpx.Gzip(http.HandlerFunc(h.serve)).ServeHTTP, log)
+	return h
 }
 
-func (h *graphHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *GraphHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -107,7 +112,7 @@ var snakeJSON = protojson.MarshalOptions{UseProtoNames: true}
 
 // body serves the requested flavor as bytes. Knowledge-graph flavors ride the magus.graph.v1
 // proto through protojson; the targets flavor (no proto twin) is written as its domain JSON.
-func (h *graphHandler) body(ctx context.Context, flavor, level, sel string) ([]byte, error) {
+func (h *GraphHandler) body(ctx context.Context, flavor, level, sel string) ([]byte, error) {
 	if flavor == "targets" {
 		tg, err := h.src.TargetGraph(ctx)
 		if err != nil {

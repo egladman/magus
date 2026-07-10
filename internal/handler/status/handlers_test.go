@@ -27,7 +27,7 @@ func (f fakeSource) StatusReport(context.Context) types.StatusReport { return f.
 // --- statusHandler ---
 
 func TestStatusHandler_Returns200WithJSON(t *testing.T) {
-	h := NewStatusHandler(fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon"}}})
+	h := NewStatusHandler(fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon"}}}, nil)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -41,7 +41,7 @@ func TestStatusHandler_Returns200WithJSON(t *testing.T) {
 }
 
 func TestStatusHandler_MethodNotAllowed(t *testing.T) {
-	h := NewStatusHandler(fakeSource{})
+	h := NewStatusHandler(fakeSource{}, nil)
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/status", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -53,7 +53,7 @@ func TestStatusHandler_MethodNotAllowed(t *testing.T) {
 // --- eventsHandler ---
 
 func TestEventsHandler_HeartbeatOnly(t *testing.T) {
-	h := NewEventsHandler(fakeSource{}, "", nil, nil, 50*time.Millisecond, 0)
+	h := NewEventsHandler(fakeSource{}, "", nil, nil, 50*time.Millisecond, 0, nil)
 	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
 	if !strings.Contains(data, ": heartbeat") {
 		t.Errorf("want heartbeat, got %q", data)
@@ -62,7 +62,7 @@ func TestEventsHandler_HeartbeatOnly(t *testing.T) {
 
 func TestEventsHandler_GraphEvent(t *testing.T) {
 	inv := make(chan struct{}, 1)
-	h := NewEventsHandler(fakeSource{}, "", nil, inv, 0, 0)
+	h := NewEventsHandler(fakeSource{}, "", nil, inv, 0, 0, nil)
 	inv <- struct{}{}
 	data := drainSSE(t, h, "/api/v1/events", "event: graph")
 	if !strings.Contains(data, "event: graph") || !strings.Contains(data, `"seq":`) {
@@ -72,7 +72,7 @@ func TestEventsHandler_GraphEvent(t *testing.T) {
 
 func TestEventsHandler_StatusEvent(t *testing.T) {
 	src := fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, InUse: 1}}}
-	h := NewEventsHandler(src, "1.2.3", nil, nil, 0, 50*time.Millisecond)
+	h := NewEventsHandler(src, "1.2.3", nil, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: status")
 
 	raw, err := base64.StdEncoding.DecodeString(sseDataLine(t, data))
@@ -96,7 +96,7 @@ func TestEventsHandler_StatusEvent(t *testing.T) {
 
 func TestEventsHandler_MetricsEvent(t *testing.T) {
 	want := []byte{0x0a, 0x02, 0x08, 0x01}
-	h := NewEventsHandler(fakeSource{}, "", func(context.Context) ([]byte, error) { return want, nil }, nil, 0, 50*time.Millisecond)
+	h := NewEventsHandler(fakeSource{}, "", func(context.Context) ([]byte, error) { return want, nil }, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: metrics")
 
 	raw, err := base64.StdEncoding.DecodeString(sseDataLine(t, data))

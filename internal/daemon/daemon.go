@@ -135,9 +135,9 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			// The bridge routes share the same auth and DNS-rebind middleware as /mcp.
 			bridgeMux := http.NewServeMux()
-			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc)))
-			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0)))
-			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc)))
+			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc, log)))
+			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0, log)))
+			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
 			// Wrap every /api/ route with rebind + auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))

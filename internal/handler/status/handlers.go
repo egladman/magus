@@ -5,10 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,19 +21,22 @@ type statusSource interface {
 	StatusReport(context.Context) types.StatusReport
 }
 
-// statusHandler serves GET /api/v1/status: the same JSON as `magus status -o json`
+// StatusHandler serves GET /api/v1/status: the same JSON as `magus status -o json`
 // (types.StatusReport). The telemetry/cache/build fields come from the service's static
 // base; pool and pool_error are live so the response reflects current daemon state.
-type statusHandler struct {
+type StatusHandler struct {
+	handler.Base
 	src statusSource
 }
 
 // NewStatusHandler returns the GET /api/v1/status handler reading from src.
-func NewStatusHandler(src statusSource) http.Handler {
-	return &statusHandler{src: src}
+func NewStatusHandler(src statusSource, log *slog.Logger) *StatusHandler {
+	h := &StatusHandler{src: src}
+	h.Base = handler.New(h.serve, log)
+	return h
 }
 
-func (h *statusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *StatusHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -51,7 +56,7 @@ func (h *statusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-// eventsHandler serves GET /api/v1/events as a Server-Sent Events stream.
+// EventsHandler serves GET /api/v1/events as a Server-Sent Events stream.
 //
 // Events:
 //   - event: graph,  data: {"seq": N}       -- workspace graph changed (N is monotonic)
@@ -64,7 +69,8 @@ func (h *statusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Clients refetch /api/v1/graph on a graph event; no diff is embedded. The graph channel is
 // driven by invalidate; when it is nil only heartbeats (and status/metrics) are emitted.
 // Status streaming is active only when version is non-empty; metrics only when metrics != nil.
-type eventsHandler struct {
+type EventsHandler struct {
+	handler.Base
 	src            statusSource
 	version        string
 	metrics        func(ctx context.Context) ([]byte, error)
@@ -77,8 +83,8 @@ type eventsHandler struct {
 // the status frames; metrics, when non-nil, feeds the metrics channel; invalidate drives the
 // graph channel; heartbeat and statusInterval override the default 25s / 2s periods (zero
 // uses the defaults).
-func NewEventsHandler(src statusSource, version string, metrics func(ctx context.Context) ([]byte, error), invalidate <-chan struct{}, heartbeat, statusInterval time.Duration) http.Handler {
-	return &eventsHandler{
+func NewEventsHandler(src statusSource, version string, metrics func(ctx context.Context) ([]byte, error), invalidate <-chan struct{}, heartbeat, statusInterval time.Duration, log *slog.Logger) *EventsHandler {
+	h := &EventsHandler{
 		src:            src,
 		version:        version,
 		metrics:        metrics,
@@ -86,9 +92,11 @@ func NewEventsHandler(src statusSource, version string, metrics func(ctx context
 		heartbeat:      heartbeat,
 		statusInterval: statusInterval,
 	}
+	h.Base = handler.New(h.serve, log)
+	return h
 }
 
-func (h *eventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *EventsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
