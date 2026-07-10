@@ -31,42 +31,30 @@ func benchMeta() OutputDescriptor {
 func BenchmarkOutputStorePersist(b *testing.B) {
 	raw := benchRaw(benchLines)
 	meta := benchMeta()
-	s := newOutputStore(b.TempDir())
+	s := NewOutputStore(b.TempDir())
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := range b.N {
-		if _, err := s.persist(fmt.Sprintf("deadbeefcafef%03d", i%1000), raw, meta); err != nil {
+		if _, err := s.Persist(fmt.Sprintf("deadbeefcafef%03d", i%1000), raw, meta); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkOutputStoreLookupOutput measures the full `magus query ref` read.
+// BenchmarkOutputStoreLookupOutput measures the full `magus query output <ref>` read.
 func BenchmarkOutputStoreLookupOutput(b *testing.B) {
 	raw := benchRaw(benchLines)
 	dir := b.TempDir()
-	s := newOutputStore(dir)
-	ref, err := s.persist("deadbeefcafef00d", raw, benchMeta())
+	s := NewOutputStore(dir)
+	ref, err := s.Persist("deadbeefcafef00d", raw, benchMeta())
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, _, err := OutputByRef(dir, ref); err != nil {
+		if _, _, err := s.ByRef(ref); err != nil {
 			b.Fatal(err)
 		}
-	}
-}
-
-// BenchmarkOutputStoreSplitOutputLines measures the display projection (blob -> per-line events)
-// the viewer path (OutputEventsByRef) performs. Same name straddles the refactor (it benched
-// outputEventsFromRaw before) so benchstat still lines up.
-func BenchmarkOutputStoreSplitOutputLines(b *testing.B) {
-	raw := benchRaw(benchLines)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
-		_ = splitOutputLines(raw)
 	}
 }

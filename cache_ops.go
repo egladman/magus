@@ -106,25 +106,18 @@ func (m *Magus) CacheDir() string {
 // OutputByRef resolves a target-output reference id (or a unique prefix, git-style)
 // to its reconstructed raw text and metadata. It reads the output store directly from
 // the resolved cache dir, so it works on Inspect workspaces too (no live cache needed)
-// - the retrieval path for `magus query ref...` (print). Returns fs.ErrNotExist when no
+// - the retrieval path for `magus query output <ref>` (print). Returns fs.ErrNotExist when no
 // ref matches, or *cache.AmbiguousRefError when a prefix matches several.
 func (m *Magus) OutputByRef(ref string) ([]byte, cache.OutputDescriptor, error) {
-	return cache.OutputByRef(resolveCacheDir(m.ws.Root, m.cfg), ref)
-}
-
-// OutputEventsByRef resolves a ref (or unique prefix) to the execution's domain
-// events plus metadata - the structured form the handler layer maps onto the wire
-// proto for `magus query ref... --open`. Same resolution semantics as OutputByRef.
-func (m *Magus) OutputEventsByRef(ref string) ([]journal.Event, cache.OutputDescriptor, error) {
-	return cache.OutputEventsByRef(resolveCacheDir(m.ws.Root, m.cfg), ref)
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).ByRef(ref)
 }
 
 // InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command
 // lineage (verb/args/trigger), timing, and outcome - read from the union run log. It is the
-// lineage source for `magus query <ref> --meta` and the viewer. Returns fs.ErrNotExist when
+// lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when
 // the run log has aged out.
 func (m *Magus) InvocationByID(inv string) (journal.Invocation, error) {
-	return cache.InvocationByID(resolveCacheDir(m.ws.Root, m.cfg), inv)
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).InvocationByID(inv)
 }
 
 // TailLog returns the log-file path of the most recent cache entry for projectPath,

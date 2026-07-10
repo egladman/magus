@@ -45,7 +45,7 @@ type Cache struct {
 	diskBytes      int64         // last computed cache size in bytes
 	diskAt         time.Time     // when diskBytes was computed (zero = never)
 	mtimes         *mtimeStore   // mtime fast-path for source hashing
-	outputs        *outputStore  // per-execution captured-output store (target output refs)
+	outputs        *OutputStore  // per-execution captured-output store (target output refs)
 	exportMu       sync.RWMutex  // guards Export/Import against concurrent Run writes
 	evictMu        sync.Mutex    // serialises evictLRU so concurrent Runs don't over-evict each other's fresh manifests
 	remote         RemoteBackend // optional remote backend; nil = local-only
@@ -152,7 +152,7 @@ func Open(dir string, opts ...Option) (*Cache, error) {
 		log:      log,
 		logLevel: defaultLevel,
 		mtimes:   newMtimeStore(dir, log),
-		outputs:  newOutputStore(dir),
+		outputs:  NewOutputStore(dir),
 	}
 	for _, o := range opts {
 		o(c)
@@ -313,7 +313,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// event via recordOutput).
 				ref := ""
 				if c.outputs != nil {
-					ref = c.outputs.latestRef(hash)
+					ref = c.outputs.LatestRef(hash)
 				}
 				if ref == "" {
 					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil)
@@ -460,7 +460,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 
 	var ref string
 	if c.outputs != nil {
-		r, err := c.outputs.persist(hash, output, d)
+		r, err := c.outputs.Persist(hash, output, d)
 		if err != nil {
 			c.log.Warn("cache.warn", slog.String("msg",
 				fmt.Sprintf("persist output for %s (%s): %v", s.ProjectPath, shortHash(hash), err)))

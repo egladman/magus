@@ -183,10 +183,11 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	if o.open {
 		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
 		// the browser renders pretty from structure.
-		events, desc, err := m.OutputEventsByRef(ref)
+		data, desc, err := m.OutputByRef(ref)
 		if err != nil {
 			return reportRefLookupError(ref, err)
 		}
+		events := viewer.StitchDisplayEvents(data, desc)
 		var inv journal.Invocation
 		if desc.Inv != "" {
 			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out

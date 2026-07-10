@@ -21,15 +21,15 @@ import (
 // reconstructed text and derived metadata back by ref.
 func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	s := newOutputStore(dir)
+	s := NewOutputStore(dir)
 
 	desc0 := OutputDescriptor{Project: "svc/api", Target: "test", Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200}
-	ref, err := s.persist("deadbeefcafef00d", []byte("lint: undefined symbol foo\n"), desc0)
+	ref, err := s.Persist("deadbeefcafef00d", []byte("lint: undefined symbol foo\n"), desc0)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(ref, RefPrefix))
 	assert.Len(t, ref, len(RefPrefix)+refHexLen)
 
-	data, desc, err := OutputByRef(dir, ref)
+	data, desc, err := s.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "lint: undefined symbol foo\n", string(data), "output is returned verbatim from the blob")
 
@@ -37,17 +37,6 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 		Ref: ref, Project: "svc/api", Target: "test",
 		Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200,
 	}, desc)
-
-	// The structured form returns the DOMAIN records (output line + result), which the
-	// handler layer maps onto the wire proto - no intermediate byte representation.
-	recs, rdesc, err := OutputEventsByRef(dir, ref)
-	require.NoError(t, err)
-	require.Len(t, recs, 2, "one output record + one result record")
-	assert.Equal(t, journal.KindOutput, recs[0].Kind)
-	assert.Equal(t, "lint: undefined symbol foo", recs[0].Text)
-	assert.Equal(t, journal.KindResult, recs[1].Kind)
-	assert.Equal(t, ref, recs[1].Ref)
-	assert.Equal(t, desc, rdesc, "OutputEventsByRef returns the same descriptor as OutputByRef")
 }
 
 // TestOutputStoreVerbatimFidelity pins the reason for the blob store: `magus query ref` returns
@@ -55,16 +44,16 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 // trailing newline to output that had none (printf "done"); the verbatim blob does not.
 func TestOutputStoreVerbatimFidelity(t *testing.T) {
 	dir := t.TempDir()
-	s := newOutputStore(dir)
+	s := NewOutputStore(dir)
 	for _, raw := range []string{
 		"done",             // no trailing newline
 		"a\nb\nc\n",        // trailing newline preserved
 		"with\ttabs\r\nCR", // control chars + CRLF, no final newline
 		"",                 // empty output
 	} {
-		ref, err := s.persist("k", []byte(raw), OutputDescriptor{Project: "p", Target: "t"})
+		ref, err := s.Persist("k", []byte(raw), OutputDescriptor{Project: "p", Target: "t"})
 		require.NoError(t, err)
-		got, _, err := OutputByRef(dir, ref)
+		got, _, err := s.ByRef(ref)
 		require.NoError(t, err)
 		assert.Equal(t, raw, string(got), "output must round-trip byte-for-byte")
 	}
@@ -73,28 +62,28 @@ func TestOutputStoreVerbatimFidelity(t *testing.T) {
 // TestOutputStorePerExecutionRefsAreDistinct verifies repeated executions of ONE cache
 // key each get their own addressable ref (keep-last-K history).
 func TestOutputStorePerExecutionRefsAreDistinct(t *testing.T) {
-	s := newOutputStore(t.TempDir())
+	s := NewOutputStore(t.TempDir())
 	const key = "samekey00"
 
-	ref1, err := s.persist(key, []byte("run 1\n"), OutputDescriptor{Project: "p", Target: "build"})
+	ref1, err := s.Persist(key, []byte("run 1\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
-	ref2, err := s.persist(key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build"})
+	ref2, err := s.Persist(key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
 
 	assert.NotEqual(t, ref1, ref2, "two executions of one cache key must mint distinct refs")
-	assert.Equal(t, ref2, s.latestRef(key), "latestRef returns the newest execution's ref")
+	assert.Equal(t, ref2, s.LatestRef(key), "latestRef returns the newest execution's ref")
 }
 
 // TestOutputStoreKeepLastK bounds retention to defaultOutputKeepLast newest executions
 // per cache key; the newest survives.
 func TestOutputStoreKeepLastK(t *testing.T) {
 	dir := t.TempDir()
-	s := newOutputStore(dir)
+	s := NewOutputStore(dir)
 	const key = "boundedkey"
 
 	var last string
 	for i := 0; i < defaultOutputKeepLast+3; i++ {
-		ref, err := s.persist(key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build"})
+		ref, err := s.Persist(key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build"})
 		require.NoError(t, err)
 		last = ref
 	}
@@ -108,29 +97,29 @@ func TestOutputStoreKeepLastK(t *testing.T) {
 		}
 	}
 	assert.Equal(t, defaultOutputKeepLast, outs, "retention keeps exactly K executions (each a blob + descriptor)")
-	_, _, err = OutputByRef(dir, last)
+	_, _, err = s.ByRef(last)
 	assert.NoError(t, err, "the newest execution survives pruning")
 }
 
 // TestOutputStorePrefixAndAmbiguity covers git-style prefix resolution.
 func TestOutputStorePrefixAndAmbiguity(t *testing.T) {
 	dir := t.TempDir()
-	s := newOutputStore(dir)
+	s := NewOutputStore(dir)
 
-	ref, err := s.persist("k1", []byte("body\n"), OutputDescriptor{Project: "p", Target: "build"})
+	ref, err := s.Persist("k1", []byte("body\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
-	data, _, err := OutputByRef(dir, ref)
+	data, _, err := s.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "body\n", string(data))
 
-	_, err = s.persist("k2", []byte("other\n"), OutputDescriptor{Project: "p", Target: "build"})
+	_, err = s.Persist("k2", []byte("other\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
-	_, _, err = OutputByRef(dir, RefPrefix) // the bare prefix matches both
+	_, _, err = s.ByRef(RefPrefix) // the bare prefix matches both
 	var amb *AmbiguousRefError
 	require.True(t, errors.As(err, &amb), "a shared prefix should return *AmbiguousRefError, got %v", err)
 	assert.Len(t, amb.Candidates, 2)
 
-	_, _, err = OutputByRef(dir, "refffffffff")
+	_, _, err = s.ByRef("refffffffff")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
@@ -147,13 +136,13 @@ func TestInvocationByID(t *testing.T) {
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
 	require.NoError(t, f.Close())
 
-	inv, err := InvocationByID(dir, "inv123")
+	inv, err := NewOutputStore(dir).InvocationByID("inv123")
 	require.NoError(t, err)
 	assert.Equal(t, "inv123", inv.ID)
 	assert.Equal(t, "run", inv.Command.Verb)
 	assert.Equal(t, []string{"build"}, inv.Command.Args)
 
-	_, err = InvocationByID(dir, "missing")
+	_, err = NewOutputStore(dir).InvocationByID("missing")
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
 }
 
@@ -170,7 +159,7 @@ func TestAmbiguousRefErrorMessage(t *testing.T) {
 // TestRunOutputNoTrailingNewline drives a real Run whose output lacks a final newline, covering
 // lineTap.flush and confirming the blob store returns those bytes verbatim (no newline added).
 func TestRunOutputNoTrailingNewline(t *testing.T) {
-	root, cdir, c := newMutableCache(t)
+	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 
 	step := makeStep(root)
@@ -181,9 +170,9 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ref := c.outputs.latestRef(r.Hash)
+	ref := c.outputs.LatestRef(r.Hash)
 	require.NotEmpty(t, ref)
-	data, _, err := OutputByRef(cdir, ref)
+	data, _, err := c.outputs.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "no newline here", string(data), "verbatim - no newline invented")
 }
@@ -201,7 +190,7 @@ func TestLooksLikeRef(t *testing.T) {
 // TestRunPersistsOutputRef drives the real Run path and confirms captured output is
 // persisted as records - and reconstructed by ref - for a passing miss and a failure.
 func TestRunPersistsOutputRef(t *testing.T) {
-	root, cdir, c := newMutableCache(t)
+	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 
 	pass := makeStep(root)
@@ -213,9 +202,9 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, rPass.Hit)
 
-	passRef := c.outputs.latestRef(rPass.Hash)
+	passRef := c.outputs.LatestRef(rPass.Hash)
 	require.NotEmpty(t, passRef, "a passing miss should persist a ref")
-	data, meta, err := OutputByRef(cdir, passRef)
+	data, meta, err := c.outputs.ByRef(passRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "build ok: 3 files")
 	assert.False(t, meta.Failed)
@@ -233,9 +222,9 @@ func TestRunPersistsOutputRef(t *testing.T) {
 
 	failHash, herr := c.hashStep(context.Background(), &fail)
 	require.NoError(t, herr)
-	failRef := c.outputs.latestRef(failHash)
+	failRef := c.outputs.LatestRef(failHash)
 	require.NotEmpty(t, failRef, "a failing run should persist a ref")
-	fdata, fmeta, err := OutputByRef(cdir, failRef)
+	fdata, fmeta, err := c.outputs.ByRef(failRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(fdata), "FAIL: assertion failed")
 	assert.True(t, fmeta.Failed)
@@ -245,18 +234,18 @@ func TestRunPersistsOutputRef(t *testing.T) {
 // TestOutputStoreRemoveForProject wipes one project's executions while leaving others.
 func TestOutputStoreRemoveForProject(t *testing.T) {
 	dir := t.TempDir()
-	s := newOutputStore(dir)
+	s := NewOutputStore(dir)
 
-	keep, err := s.persist("ka", []byte("a\n"), OutputDescriptor{Project: "keep/me", Target: "build"})
+	keep, err := s.Persist("ka", []byte("a\n"), OutputDescriptor{Project: "keep/me", Target: "build"})
 	require.NoError(t, err)
-	gone, err := s.persist("kb", []byte("b\n"), OutputDescriptor{Project: "drop/me", Target: "build"})
+	gone, err := s.Persist("kb", []byte("b\n"), OutputDescriptor{Project: "drop/me", Target: "build"})
 	require.NoError(t, err)
 
 	s.removeForProject("drop/me")
 
-	_, _, err = OutputByRef(dir, gone)
+	_, _, err = s.ByRef(gone)
 	assert.ErrorIs(t, err, fs.ErrNotExist, "dropped project's execution should be gone")
-	_, _, err = OutputByRef(dir, keep)
+	_, _, err = s.ByRef(keep)
 	assert.NoError(t, err, "other project's execution should remain")
 
 	_, statErr := os.Stat(filepath.Join(dir, "outputs", "kb"))
