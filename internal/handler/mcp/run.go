@@ -22,7 +22,7 @@ type runResult struct {
 }
 
 type runTargetTool struct {
-	opts ServerOptions
+	opts Options
 }
 
 func (t *runTargetTool) Name() string { return "magus_run_target" }

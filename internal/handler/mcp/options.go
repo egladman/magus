@@ -12,9 +12,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ServerOptions configures a magus MCP server built via HTTPHandler
+// Options configures a magus MCP server built via HTTPHandler
 // (daemon mode, assembled by internal/daemon) or served via ServeStdio.
-type ServerOptions struct {
+type Options struct {
 	// Magus is the opened workspace handle. Required. Pass the result of
 	// magus.Open; the MCP server does not open its own instance so the
 	// workspace cache stays shared with the CLI.
@@ -52,21 +52,21 @@ type ServerOptions struct {
 	StatusBase types.StatusBase
 }
 
-func (o ServerOptions) validate() error {
+func (o Options) validate() error {
 	if o.Magus == nil {
-		return errors.New("mcp: ServerOptions.Magus is required")
+		return errors.New("mcp: Options.Magus is required")
 	}
 	return nil
 }
 
-func (o ServerOptions) logger() *slog.Logger {
+func (o Options) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
 	return slog.Default()
 }
 
-func (o ServerOptions) httpAddr() netip.AddrPort {
+func (o Options) httpAddr() netip.AddrPort {
 	if o.HTTPAddr.IsValid() {
 		return o.HTTPAddr
 	}
@@ -79,7 +79,7 @@ const defaultExploreURL = "https://eli.gladman.cc/magus/graph/"
 
 // SiteOrigin returns the scheme://host origin of the hosted Graph Explorer.
 // Used by internal/daemon to set the bridge's CORS allowed origin.
-func (o ServerOptions) SiteOrigin() (string, error) {
+func (o Options) SiteOrigin() (string, error) {
 	u, err := url.Parse(defaultExploreURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", nil

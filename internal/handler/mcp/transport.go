@@ -66,7 +66,7 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 // share this so the server name, instructions, capabilities, recovery, and tool
 // set can never drift between them; each caller supplies only the
 // transport-specific hooks (agent tracking) and the agentFn used at tool-call time.
-func buildServer(opts ServerOptions, log *slog.Logger, hooks *mcpserver.Hooks, agentFn func(context.Context) string) *mcpserver.MCPServer {
+func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, agentFn func(context.Context) string) *mcpserver.MCPServer {
 	srv := mcpserver.NewMCPServer(
 		"magus", opts.Version,
 		mcpserver.WithInstructions(serverInstructions),
@@ -89,7 +89,7 @@ func buildServer(opts ServerOptions, log *slog.Logger, hooks *mcpserver.Hooks, a
 // newServer constructs and registers tools on a new MCPServer. agentFn is called
 // with the current request ctx to resolve the agent client identity at tool-call
 // time so each handler's wrap closure captures the right per-session value.
-func newServer(opts ServerOptions, log *slog.Logger, agentFn func(context.Context) string) *mcpserver.MCPServer {
+func newServer(opts Options, log *slog.Logger, agentFn func(context.Context) string) *mcpserver.MCPServer {
 	hooks := &mcpserver.Hooks{}
 	hooks.AddBeforeInitialize(func(_ context.Context, _ any, req *mcp.InitializeRequest) {
 		agent := agentFromRequest(req)
@@ -105,7 +105,7 @@ func newServer(opts ServerOptions, log *slog.Logger, agentFn func(context.Contex
 // need not depend on the httpx server core, the dashboard bridge, or the file
 // watcher. The returned handler is a path-agnostic http.Handler; the daemon
 // mounts it at /mcp, matching the path StreamableHTTPServer's own Start() would use.
-func HTTPHandler(opts ServerOptions) (http.Handler, error) {
+func HTTPHandler(opts Options) (http.Handler, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func HTTPHandler(opts ServerOptions) (http.Handler, error) {
 // ServeStdio runs the magus MCP server over standard I/O, blocking until
 // stdin closes or the context is cancelled. Kept for testing and scripted
 // smoke-checks; daemon mode uses ServeHTTP instead.
-func ServeStdio(ctx context.Context, opts ServerOptions) error {
+func ServeStdio(ctx context.Context, opts Options) error {
 	if err := opts.validate(); err != nil {
 		return err
 	}

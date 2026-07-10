@@ -15,7 +15,7 @@ type statusResult struct {
 }
 
 type statusTool struct {
-	opts ServerOptions
+	opts Options
 }
 
 func (t *statusTool) Name() string { return "magus_status" }
@@ -38,7 +38,7 @@ func (t *statusTool) Invoke(ctx context.Context, req types.InvokeRequest) (types
 
 var _ types.SpellDriver = (*statusTool)(nil)
 
-func resolveStatusAddr(ctx context.Context, opts ServerOptions) (string, error) {
+func resolveStatusAddr(ctx context.Context, opts Options) (string, error) {
 	if v := opts.Config.Daemon.Address; v != "" {
 		return v, nil
 	}

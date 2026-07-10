@@ -12,7 +12,7 @@ import (
 )
 
 type runAffectedTool struct {
-	opts ServerOptions
+	opts Options
 }
 
 func (t *runAffectedTool) Name() string { return "magus_run_affected" }

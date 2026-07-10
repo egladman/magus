@@ -75,7 +75,7 @@ type Options struct {
 
 	// MagusVersion is the running magus version, stamped onto the status.v1 wire
 	// message pushed by the /api/v1/events `status` channel. The production mount
-	// (mcp/server.go) sets it from ServerOptions.Version. It also gates status
+	// (mcp/server.go) sets it from Options.Version. It also gates status
 	// streaming: when empty and StatusReportFn is nil, the events stream emits no
 	// status frames (so unit tests with a bare Options stay heartbeat/graph-only).
 	MagusVersion string

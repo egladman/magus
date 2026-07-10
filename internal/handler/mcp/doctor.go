@@ -8,7 +8,7 @@ import (
 )
 
 type doctorTool struct {
-	opts ServerOptions
+	opts Options
 }
 
 func (t *doctorTool) Name() string { return "magus_doctor" }

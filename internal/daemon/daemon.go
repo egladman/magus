@@ -26,12 +26,12 @@ import (
 // Daemon assembles and runs the daemon HTTP server from a set of MCP server
 // options. It satisfies magus.Daemon.
 type Daemon struct {
-	opts mcp.ServerOptions
+	opts mcp.Options
 }
 
 // New returns a Daemon that will serve the MCP endpoint (plus health routes and
 // the web bridge) described by opts.
-func New(opts mcp.ServerOptions) *Daemon {
+func New(opts mcp.Options) *Daemon {
 	return &Daemon{opts: opts}
 }
 

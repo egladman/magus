@@ -82,7 +82,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
 	// so the health handlers query this daemon, not whatever a per-request
 	// discovery scan happens to find.
 	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
-	m.SetDaemon(daemon.New(internalmcp.ServerOptions{
+	m.SetDaemon(daemon.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    version,

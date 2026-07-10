@@ -133,7 +133,7 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 
 // allMCPTools constructs every MCP tool the daemon exposes. Each tool is a
 // SpellDriver; the MCP server dispatches by Name and invokes it.
-func allMCPTools(opts ServerOptions) []types.SpellDriver {
+func allMCPTools(opts Options) []types.SpellDriver {
 	wsCfg := types.WorkspaceConfig{
 		CacheDir:    opts.Config.Cache.Dir,
 		Concurrency: opts.Config.Concurrency,
@@ -166,7 +166,7 @@ var (
 	_ graphResolver = (*magus.Magus)(nil)
 )
 
-func registerTools(srv *server.MCPServer, opts ServerOptions, log *slog.Logger, agentFn func(context.Context) string, audit *auditLog) {
+func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, audit *auditLog) {
 	byName := make(map[string]types.SpellDriver, len(Registry))
 	for _, t := range allMCPTools(opts) {
 		byName[t.Name()] = t

@@ -81,7 +81,7 @@ type tailResult struct {
 }
 
 type tailLogTool struct {
-	opts ServerOptions
+	opts Options
 }
 
 func (t *tailLogTool) Name() string { return "magus_tail_log" }

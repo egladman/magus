@@ -23,7 +23,7 @@ type affectedPlanResult struct {
 }
 
 type affectedPlanTool struct {
-	opts ServerOptions
+	opts Options
 }
 
 func (t *affectedPlanTool) Name() string { return "magus_affected_plan" }
