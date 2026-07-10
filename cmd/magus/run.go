@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -52,6 +53,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		upstream     *bool
 		graphDepth   *int
 		step         *bool
+		live         *bool
 
 		noDefaultCharms *bool
 	)
@@ -70,6 +72,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1)")
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
+		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -213,10 +216,24 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}
+	// Capture this run as an invocation: mint an id + open the union record log, and
+	// record the command's lineage (run vs ci) so the viewer can trace it back.
+	trigger := journal.TriggerRun
 	if targetName == "ci" {
-		err = m.RunCI(ctx, targets, runOpts...)
+		trigger = journal.TriggerCI
+	}
+	cwd, _ := os.Getwd()
+	liveBC, stopLive := beginLive(ctx, *live)
+	defer stopLive()
+	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
+		Verb: "run", Args: args, Cwd: cwd, Trigger: trigger,
+	}, version, liveHandlers(liveBC)...)
+	defer func() { endInvocation(err) }()
+
+	if targetName == "ci" {
+		err = m.RunCI(invCtx, targets, runOpts...)
 	} else {
-		err = m.Run(ctx, targets, runOpts...)
+		err = m.Run(invCtx, targets, runOpts...)
 	}
 	if *timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, *timeout)

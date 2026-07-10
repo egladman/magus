@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -71,6 +72,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		step            *bool
 		raceFlag        *string
 		noDefaultCharms *bool
+		live            *bool
 	)
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		// affected-only: VCS diff base ref; `magus run` has no diff. See run_affected_parity_test.go.
@@ -88,6 +90,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1; not compatible with --stdin)")
 		raceFlag = fs.String("race", "", raceFormatHelp)
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
+		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -262,10 +265,23 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		}
 		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
 	}
+	// Capture as an invocation (lineage: affected, or affected ci) with a union log.
+	trigger := journal.TriggerAffected
 	if target == "ci" {
-		err = m.RunCI(ctx, targets, runOpts...)
+		trigger = journal.TriggerCI
+	}
+	cwd, _ := os.Getwd()
+	liveBC, stopLive := beginLive(ctx, *live)
+	defer stopLive()
+	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
+		Verb: "affected", Args: args, Cwd: cwd, Trigger: trigger,
+	}, version, liveHandlers(liveBC)...)
+	defer func() { endInvocation(err) }()
+
+	if target == "ci" {
+		err = m.RunCI(invCtx, targets, runOpts...)
 	} else {
-		err = m.Run(ctx, targets, runOpts...)
+		err = m.Run(invCtx, targets, runOpts...)
 	}
 	if *timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, *timeout)

@@ -5,7 +5,10 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
 )
@@ -37,10 +40,28 @@ type paginatedQuery struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// outputRefResult is the wire shape for a ref-routed magus_query: the captured
+// output plus the run's identity, so an agent that saw a ref in a run fetches the
+// exact bytes without re-reading a wall of text.
+type outputRefResult struct {
+	Ref        string `json:"ref"`
+	Project    string `json:"project,omitempty"`
+	Target     string `json:"target,omitempty"`
+	Failed     bool   `json:"failed"`
+	DurationMs int64  `json:"duration_ms,omitempty"`
+	Output     string `json:"output"`
+}
+
 func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
 	terms := paramString(req.Params, "query", "")
 	if terms == "" {
 		return types.InvokeResponse{}, errors.New("mcp: query is required")
+	}
+	// Output-ref routing mirrors the CLI: a query shaped like a target-output ref
+	// (strict ^ref[0-9a-f]+$) returns that execution's captured output instead of
+	// searching the graph. A free-text query like "refactor" falls through.
+	if cache.LooksLikeRef(terms) {
+		return t.invokeOutputRef(terms)
 	}
 	budget := int(paramFloat(req.Params, "budget", 0))
 	limit := int(paramFloat(req.Params, "limit", 0))
@@ -62,6 +83,31 @@ func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.
 		return types.InvokeResponse{}, err
 	}
 	return types.InvokeResponse{Data: resp}, nil
+}
+
+// invokeOutputRef resolves a target-output ref (or unique prefix) to its stored
+// bytes and metadata - the MCP analog of `magus query ref...`.
+func (t *queryTool) invokeOutputRef(ref string) (types.InvokeResponse, error) {
+	data, meta, err := t.opts.Magus.OutputByRef(ref)
+	if err != nil {
+		var amb *cache.AmbiguousRefError
+		switch {
+		case errors.As(err, &amb):
+			return types.InvokeResponse{}, fmt.Errorf("mcp: %s", amb.Error())
+		case errors.Is(err, fs.ErrNotExist):
+			return types.InvokeResponse{}, fmt.Errorf("mcp: no stored output for ref %q", ref)
+		default:
+			return types.InvokeResponse{}, err
+		}
+	}
+	return types.InvokeResponse{Data: outputRefResult{
+		Ref:        meta.Ref,
+		Project:    meta.Project,
+		Target:     meta.Target,
+		Failed:     meta.Failed,
+		DurationMs: meta.DurationMs,
+		Output:     string(data),
+	}}, nil
 }
 
 type refsTool struct{ opts ServerOptions }

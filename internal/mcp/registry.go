@@ -97,9 +97,9 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        "magus_query",
-		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind:symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page.",
+		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind:symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. A query that is a target-output reference id (ref1a2b3c, shown on each target's line in a run) instead returns that execution's exact captured output - fetch a failing target's full log by ref instead of re-reading it.",
 		Params: []ParamDescriptor{
-			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field filters (kind:spell, project:pkg/foo, relation:uses, id:build) and negation (-kind:op)."},
+			{Name: "query", Type: "string", Required: true, Description: "Search terms (free text plus field filters like kind:spell, project:pkg/foo, relation:uses, id:build, and negation -kind:op), OR a target-output ref id (ref1a2b3c) to return that execution's captured output."},
 			{Name: "budget", Type: "number", Description: "Max nodes in the returned neighborhood (default 50)."},
 			{Name: "limit", Type: "number", Description: "Page size: max matches to return. Omit or 0 for all matches (no paging)."},
 			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor, to fetch the next page. Only valid for the same query and an unchanged graph."},
