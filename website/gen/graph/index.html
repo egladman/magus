@@ -179,18 +179,28 @@
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <ul id="graph-legend" aria-label="Node kinds"></ul>
         <p id="live-status-strip" class="live-status-strip" hidden aria-live="polite"></p>
-        <!-- Demo gate: shown over the (blurred) demo graph on first open, so it's clear
-             this is a preview of magus's OWN workspace and the explorer works for any
-             repo - not a magus-only toy. Dismissed by "Explore the demo" or by opening
-             a file. Never shown for a user's own graph (#data/#src/#live or a file). -->
-        <div id="demo-gate" class="demo-gate" hidden>
-          <div class="demo-gate-card">
-            <p class="demo-gate-eyebrow">Preview</p>
-            <h2 class="demo-gate-title">Explore any magus workspace</h2>
-            <p class="demo-gate-body">Behind this is the magus project's own graph, loaded as a demo. Run <code>magus graph open</code> in any repo to explore your own workspace here - it renders in your browser and nothing leaves your machine.</p>
-            <div class="demo-gate-actions">
-              <button id="demo-explore-btn" type="button">Explore the demo</button>
-              <button id="demo-open-btn" type="button" class="outline">Open a graph.json</button>
+        <!-- Empty state: shown when nothing is loaded (no #data/#src/#live and the demo has
+             not been launched). Mirrors the log viewer's empty state - an intuitive prompt
+             with the command to open your own graph plus a button to try the demo. We do NOT
+             auto-fetch the demo graph.json on a cold open; it loads only when asked, so a
+             first visit costs no graph download. Dismissed when any graph arrives. -->
+        <div id="graph-empty-state" class="graph-empty-state" hidden>
+          <svg class="graph-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/>
+            <line x1="6.6" y1="7.8" x2="10.4" y2="16.2"/><line x1="17.4" y1="7.8" x2="13.6" y2="16.2"/><line x1="7.4" y1="6" x2="16.6" y2="6"/>
+          </svg>
+          <p class="graph-empty-title">Nothing loaded yet</p>
+          <p class="graph-empty-sub">Explore a magus workspace's dependency graph here. It renders in your browser - nothing is ever uploaded.</p>
+          <div class="graph-empty-ways">
+            <div class="graph-empty-way">
+              <span class="graph-empty-way-label">Open your workspace</span>
+              <pre class="graph-empty-cmd"><code>magus graph open</code></pre>
+              <span class="graph-empty-hint">Renders your repo's graph right here.</span>
+            </div>
+            <div class="graph-empty-way">
+              <span class="graph-empty-way-label">Try the demo</span>
+              <button id="demo-explore-btn" type="button" class="graph-empty-demo">Explore the magus graph</button>
+              <span class="graph-empty-hint">Loads the magus project's own graph.</span>
             </div>
           </div>
         </div>
@@ -246,6 +256,8 @@
     <noscript>
       <p style="color:var(--pico-muted-color);">The graph explorer needs JavaScript to lay out and render the graph. You can still <a href="./graph.json">download the raw graph JSON</a>, or read the <a href="../documentation/">documentation</a>.</p>
     </noscript>
+
+    <p class="verify-note">Everything on this page runs locally in your browser and nothing is uploaded. <a href="../browser-bridge/#privacy-statement">See exactly what does and does not leave your machine</a>.</p>
   </main>
 
     <footer class="site-footer container">

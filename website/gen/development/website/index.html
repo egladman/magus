@@ -81,7 +81,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>511 nodes</strong> and <strong>629 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>513 nodes</strong> and <strong>635 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -154,7 +154,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">201</td>
+<td style="text-align:right">203</td>
 <td><code>magus query kind:function</code></td>
 <td><code>site_render</code>, <code>renderPage</code>, <code>strLess</code></td>
 </tr>
@@ -212,7 +212,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <details>
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
 <pre><code class="language-text">sources  magusfile.buzz, magusfiles/**/*.buzz
-outputs  gen/**, MAGUS.md
+outputs  gen/**, MAGUS.md, js/gen/**
 spells   magusfile
 </code></pre>
 </details>

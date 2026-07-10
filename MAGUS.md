@@ -18,7 +18,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1671 nodes** and **2918 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1673 nodes** and **2927 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -30,7 +30,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `magus`, `website`, `gopherbuzz` |
+| project | 4 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `awesome-easley-bc1342`, `website`, `gopherbuzz` |
 | target | 54 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `generate` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
 | op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
@@ -38,9 +38,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 22 | [`magus query kind:module`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `env` |
 | method | 148 | [`magus query kind:method`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 23 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
-| doc | 99 | [`magus query kind:doc`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
+| doc | 100 | [`magus query kind:doc`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
 | file | 195 | [`magus query kind:file`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:file) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 971 | [`magus query kind:function`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
+| function | 972 | [`magus query kind:function`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
 | import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
 | rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
@@ -77,10 +77,10 @@ graph LR
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 
-## Project: magus
+## Project: awesome-easley-bc1342
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>awesome-easley-bc1342</code></summary>
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz

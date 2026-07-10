@@ -25,7 +25,7 @@ Full docs live at **[eli.gladman.cc/magus](https://eli.gladman.cc/magus/)**.[^do
 
 - **Core concepts** - [Targets](docs/targets.md), [Spells](docs/spells.md), [Charms](docs/charms.md), [Operations](docs/operations.md), [Services](docs/services.md)
 - **Running at scale** - [CI](docs/ci.md), [Daemon](docs/daemon.md), [Remote caching](docs/remote-cache.md), [MCP](docs/mcp.md), [Telemetry](docs/telemetry.md)
-- **Reference** - [Man pages](docs/manpage/gen/magus.md), [Standard library modules](docs/buzz/modules/index.md), [Debugging](docs/debugging.md), [Tips and tricks](docs/tips.md)
+- **Reference** - [Man pages](docs/manpage/gen/magus.md), [Standard library modules](docs/buzz/modules/index.md), [Debugging](docs/debugging.md), [Output references](docs/output-refs.md), [Tips and tricks](docs/tips.md)
 
 ## Install
 

@@ -2154,3 +2154,12 @@ a code {
   white-space: nowrap;
 }
 
+
+/* Transparency line on the tool pages (playground, graph, logs): an explicit,
+   muted pointer to the privacy statement so the "nothing leaves your machine"
+   claim is verifiable, not just asserted. */
+.verify-note {
+  margin-top: 1.5rem;
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}

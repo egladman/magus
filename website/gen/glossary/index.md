@@ -27,14 +27,15 @@ definition; follow the link for the page that covers the term in depth.
 
 ## Execution and caching
 
-| Term         | Definition                                                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cache**    | The content-addressed store magus consults before running a target, so unchanged work is skipped. See [cache.md](cache.md).                 |
-| **Affected** | The set of projects touched by a change; `magus affected <target>` runs a target only over them. See [affected.md](affected.md).            |
-| **Sandbox**  | The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free. See [sandbox.md](sandbox.md). |
-| **Service**  | A long-running or shared process magus manages across runs, distinct from a one-shot target. See [services.md](services.md).                |
-| **Daemon**   | The background magus host that owns shared state such as services and the warm knowledge graph. See [daemon.md](daemon.md).                 |
-| **CI**       | The composite pipeline (lint, build, test, coverage); run with `magus affected ci`, handled internally by `Magus.RunCI`.                    |
+| Term         | Definition                                                                                                                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cache**    | The content-addressed store magus consults before running a target, so unchanged work is skipped. See [cache.md](cache.md).                                                             |
+| **Affected** | The set of projects touched by a change; `magus affected <target>` runs a target only over them. See [affected.md](affected.md).                                                        |
+| **Sandbox**  | The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free. See [sandbox.md](sandbox.md).                                             |
+| **Service**  | A long-running or shared process magus manages across runs, distinct from a one-shot target. See [services.md](services.md).                                                            |
+| **Daemon**   | The background magus host that owns shared state such as services and the warm knowledge graph. See [daemon.md](daemon.md).                                                             |
+| **CI**       | The composite pipeline (lint, build, test, coverage); run with `magus affected ci`, handled internally by `Magus.RunCI`.                                                                |
+| **Ref**      | A short reference id (`ref1a2b3c`) for a target's captured output, shown on each target's line; `magus query ref1a2b3c` prints that exact output. See [output-refs.md](output-refs.md). |
 
 ## Insight and knowledge
 

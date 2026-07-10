@@ -100,6 +100,7 @@
 - [magus command](https://eli.gladman.cc/magus/manpage/magus/index.md): Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.
 - [MCP](https://eli.gladman.cc/magus/mcp/index.md): The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.
 - [Operations](https://eli.gladman.cc/magus/operations/index.md): Defines an Operation, its place in the Spell to Target to Process hierarchy, and how ops compose into runnable targets.
+- [Target output references](https://eli.gladman.cc/magus/output-refs/index.md): Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
 - [Remote caching](https://eli.gladman.cc/magus/remote-cache/index.md): Wire an S3 or GitHub Actions remote cache backend as a spell so CI runners replay signed build artifacts across machines with a strict trust model.
 - [Sandbox model](https://eli.gladman.cc/magus/sandbox/index.md): The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.
 - [Services](https://eli.gladman.cc/magus/services/index.md): How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.
