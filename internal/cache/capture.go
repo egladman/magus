@@ -33,9 +33,23 @@ func newOutputCollector(ctx context.Context, project, target string) *outputColl
 	return &outputCollector{ctx: ctx, project: project, target: target}
 }
 
-// writer wraps dest with a line tap tagged as the given stream ("stdout"/"stderr").
-func (c *outputCollector) writer(dest io.Writer, stream string) *lineTap {
+// newLineTap wraps dest with a line tap tagged as the given stream ("stdout"/"stderr").
+func (c *outputCollector) newLineTap(dest io.Writer, stream string) *lineTap {
 	return &lineTap{c: c, dest: dest, stream: stream}
+}
+
+// syncWriter serializes concurrent writes to an underlying writer with a mutex. captureRun
+// shares one across the stdout and stderr taps, which os/exec drives from separate goroutines,
+// so lines in the durable log never interleave mid-write.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
 }
 
 // emit builds one output event: appended to the collected slice (for the store) and

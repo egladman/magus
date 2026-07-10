@@ -93,9 +93,9 @@ func (t *queryTool) invokeOutputRef(ref string) (types.InvokeResponse, error) {
 		var amb *cache.AmbiguousRefError
 		switch {
 		case errors.As(err, &amb):
-			return types.InvokeResponse{}, fmt.Errorf("mcp: %s", amb.Error())
+			return types.InvokeResponse{}, fmt.Errorf("mcp: %w", amb)
 		case errors.Is(err, fs.ErrNotExist):
-			return types.InvokeResponse{}, fmt.Errorf("mcp: no stored output for ref %q", ref)
+			return types.InvokeResponse{}, fmt.Errorf("mcp: no stored output for ref %q: %w", ref, err)
 		default:
 			return types.InvokeResponse{}, err
 		}

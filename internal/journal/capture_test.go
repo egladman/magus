@@ -36,7 +36,7 @@ func TestFileHandlerAppendsJSONL(t *testing.T) {
 // ctx when they are unset.
 func TestEmitStampsFromContext(t *testing.T) {
 	bc := NewBroadcaster()
-	ctx := WithInvocation(WithLogger(context.Background(), NewLogger(bc)), "inv9")
+	ctx := WithInvocationID(WithLogger(context.Background(), NewLogger(bc)), "inv9")
 	Emit(ctx, Event{Kind: KindOutput, Text: "hi"})
 
 	got, _, cancel := bc.Subscribe()

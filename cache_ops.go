@@ -80,6 +80,14 @@ func (m *Magus) OutputEventsByRef(ref string) ([]journal.Event, cache.OutputMeta
 	return cache.LookupEvents(resolveCacheDir(m.ws.Root, m.cfg), ref)
 }
 
+// InvocationByID resolves an invocation id (OutputMeta.Inv) to its run header - the command
+// lineage (verb/args/trigger), timing, and outcome - read from the union run log. It is the
+// lineage source for `magus query <ref> --meta` and the viewer. Returns fs.ErrNotExist when
+// the run log has aged out.
+func (m *Magus) InvocationByID(inv string) (journal.Invocation, error) {
+	return cache.LookupInvocation(resolveCacheDir(m.ws.Root, m.cfg), inv)
+}
+
 // TailLog returns the log-file path of the most recent cache entry for projectPath,
 // optionally restricted to target. Wraps fs.ErrNotExist when not found; [types.ErrNoCache] on Inspect.
 func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) {

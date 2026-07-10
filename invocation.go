@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
 )
 
@@ -28,7 +29,7 @@ import (
 // command/lineage is what the viewer surfaces; see magus.viewer.v1.Invocation.
 func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusVersion string, extra ...slog.Handler) (context.Context, func(error)) {
 	id := journal.NewInvocationID()
-	ctx = journal.WithInvocation(ctx, id)
+	ctx = journal.WithInvocationID(ctx, id)
 
 	started := journal.Event{Kind: journal.KindStarted, Command: &cmd, MagusVersion: magusVersion}
 	finish := func(ctx context.Context, runErr error) {
@@ -39,7 +40,7 @@ func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusV
 		journal.Emit(ctx, journal.Event{Kind: journal.KindFinished, Status: status})
 	}
 
-	dir := filepath.Join(resolveCacheDir(m.ws.Root, m.cfg), "runs")
+	dir := filepath.Join(resolveCacheDir(m.ws.Root, m.cfg), cache.RunsDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		ctx = withCaptureLogger(ctx, extra)
 		journal.Emit(ctx, started)

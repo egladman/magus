@@ -305,13 +305,30 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// A hit regenerated nothing, so reuse the existing ref for this cache
 				// key rather than minting a duplicate; persist fresh only if the store
 				// has no record yet (e.g. cache imported without its output store), in
-				// which case reconstruct output events from the raw cached log.
+				// which case reconstruct output events from the raw cached log (which also
+				// emits a result event via recordOutput).
 				ref := ""
 				if c.outputs != nil {
 					ref = c.outputs.latestRef(hash)
 				}
 				if ref == "" {
 					ref = c.recordOutput(ctx, s, hash, outputEventsFromRaw(logData), result.Duration, nil)
+				} else {
+					// The ref already exists, so recordOutput is skipped and nothing reaches the
+					// journal. A cache hit is still a target OUTCOME, so emit a cached result event
+					// here; otherwise a fully-cached run's log (and the live viewer) shows the run
+					// with no per-target results.
+					journal.Emit(ctx, journal.Event{
+						Ts:      time.Now().UnixMilli(),
+						Inv:     journal.InvocationIDFromContext(ctx),
+						Project: s.ProjectPath,
+						Target:  reproTarget(s),
+						Kind:    journal.KindResult,
+						Level:   "info",
+						Status:  journal.StatusCached,
+						Ref:     ref,
+						DurMs:   result.Duration.Milliseconds(),
+					})
 				}
 				event := "cache.hit"
 				if fromRemote {
@@ -431,6 +448,15 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		result.Status = journal.StatusFail
 		result.Level = "error"
 		result.Text = runErr.Error()
+	}
+
+	// Stamp the invocation id onto the PERSISTED copy so `magus query <ref> --meta` (and the
+	// viewer) can trace this output back to the run that produced it. journal.Emit stamps the
+	// streamed copy from ctx, but persist writes these events directly, so stamp them here.
+	inv := journal.InvocationIDFromContext(ctx)
+	result.Inv = inv
+	for i := range output {
+		output[i].Inv = inv
 	}
 
 	if c.outputs == nil {
@@ -937,13 +963,16 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	}
 
 	col := newOutputCollector(ctx, projectPath, target)
+	// os/exec drives stdout and stderr from separate goroutines, so both taps write to the log
+	// file concurrently; guard it so lines never interleave mid-write in the durable log.
+	safeLogF := &syncWriter{w: logF}
 	var stdoutTap, stderrTap *lineTap
 	if withhold {
-		stdoutTap = col.writer(logF, journal.StreamStdout)
-		stderrTap = col.writer(logF, journal.StreamStderr)
+		stdoutTap = col.newLineTap(safeLogF, journal.StreamStdout)
+		stderrTap = col.newLineTap(safeLogF, journal.StreamStderr)
 	} else {
-		stdoutTap = col.writer(io.MultiWriter(os.Stdout, logF), journal.StreamStdout)
-		stderrTap = col.writer(io.MultiWriter(os.Stderr, logF), journal.StreamStderr)
+		stdoutTap = col.newLineTap(io.MultiWriter(os.Stdout, safeLogF), journal.StreamStdout)
+		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStderr)
 	}
 	captureCtx := runPkg.WithOutputWriters(ctx, stdoutTap, stderrTap)
 	// Tag the step so subprocesses run under fn emit exec events labeled with this

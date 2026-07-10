@@ -39,13 +39,13 @@ func LoggerFromContext(ctx context.Context) *slog.Logger {
 	return discardLogger
 }
 
-// WithInvocation threads the invocation id stamped onto events emitted under ctx.
-func WithInvocation(ctx context.Context, id string) context.Context {
+// WithInvocationID threads the invocation id stamped onto events emitted under ctx.
+func WithInvocationID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, invKey{}, id)
 }
 
-// InvocationFromContext returns the invocation id attached with [WithInvocation], or "".
-func InvocationFromContext(ctx context.Context) string {
+// InvocationIDFromContext returns the invocation id attached with [WithInvocationID], or "".
+func InvocationIDFromContext(ctx context.Context) string {
 	if id, ok := ctx.Value(invKey{}).(string); ok {
 		return id
 	}
@@ -77,7 +77,7 @@ func Emit(ctx context.Context, e Event) {
 		e.Ts = nowMillis()
 	}
 	if e.Inv == "" {
-		e.Inv = InvocationFromContext(ctx)
+		e.Inv = InvocationIDFromContext(ctx)
 	}
 	LoggerFromContext(ctx).LogAttrs(ctx, slog.LevelInfo, e.Text, slog.Any(eventAttr, e))
 }
