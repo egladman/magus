@@ -42,7 +42,7 @@ func allMCPTools(opts ServerOptions) []types.SpellDriver {
 	}
 }
 
-func registerTools(srv *server.MCPServer, opts ServerOptions, log *slog.Logger, agentFn func(context.Context) string) {
+func registerTools(srv *server.MCPServer, opts ServerOptions, log *slog.Logger, agentFn func(context.Context) string, audit *auditLog) {
 	byName := make(map[string]types.SpellDriver, len(Registry))
 	for _, t := range allMCPTools(opts) {
 		byName[t.Name()] = t
@@ -52,7 +52,7 @@ func registerTools(srv *server.MCPServer, opts ServerOptions, log *slog.Logger, 
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, audit, adapt(t)))
 	}
 }
 
@@ -61,8 +61,10 @@ type handlerFn func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.Ca
 
 // wrap injects origin markers and emits banner log lines around every tool
 // call so the human watching magus's stderr can immediately see when an agent
-// triggered an operation.
-func wrap(log *slog.Logger, agentFn func(context.Context) string, fn handlerFn) server.ToolHandlerFunc {
+// triggered an operation. It also persists one auditEvent per call to the audit
+// log (best-effort; a nil audit log is a no-op) - the durable form of the banner
+// that a later /dashboard activity view reads.
+func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLog, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		agentID := agentFn(ctx)
 		toolName := req.Params.Name
@@ -76,12 +78,23 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, fn handlerFn) 
 		ctx = withLogger(ctx, reqLog)
 
 		reqLog.Info("[AGENT] tool called")
+		startMs := nowMillis()
 		start := time.Now()
 
 		result, err := fn(ctx, req)
 
 		dur := time.Since(start)
+		ev := auditEvent{
+			Ts:      startMs,
+			Agent:   agentID,
+			Tool:    toolName,
+			Args:    auditArgs(req.GetArguments()),
+			DurMs:   dur.Milliseconds(),
+			Outcome: "ok",
+		}
 		if err != nil {
+			ev.Outcome = "error"
+			ev.Error = err.Error()
 			reqLog.Error(
 				"[AGENT] tool error",
 				slog.Duration("duration", dur),
@@ -90,6 +103,7 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, fn handlerFn) 
 		} else {
 			reqLog.Info("[AGENT] tool done", slog.Duration("duration", dur))
 		}
+		audit.record(ev)
 		return result, err
 	}
 }

@@ -82,7 +82,15 @@ func buildServer(opts ServerOptions, log *slog.Logger, hooks *mcpserver.Hooks, a
 		mcpserver.WithHooks(hooks),
 		mcpserver.WithRecovery(),
 	)
-	registerTools(srv, opts, log, agentFn)
+	// The audit log is a process-lifetime append-only JSONL sidecar under the cache
+	// dir (next to the journal run logs). Opening is best-effort - a nil log is a no-op
+	// - so a read-only or dirless workspace never blocks tool serving.
+	var cacheDir string
+	if opts.Magus != nil {
+		cacheDir = opts.Magus.CacheDir()
+	}
+	audit := openAuditLog(cacheDir)
+	registerTools(srv, opts, log, agentFn, audit)
 	return srv
 }
 
@@ -199,6 +207,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 				Magus:           opts.Magus,
 				Config:          opts.Config,
 				StatusBase:      opts.StatusBase,
+				MagusVersion:    opts.Version,
 				Addr:            addr,
 				SiteOrigin:      siteOrigin,
 				GraphInvalidate: inv,
