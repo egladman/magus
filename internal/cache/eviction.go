@@ -89,6 +89,40 @@ func (c *Cache) evictLRU(ctx context.Context, limit int64) {
 	_ = c.gcBlobs(ctx)
 }
 
+// diskSizeTTL bounds how often DiskBytes re-walks the cache tree, so a status stream
+// polling every few seconds does not stat the whole cache each frame.
+const diskSizeTTL = 15 * time.Second
+
+// DiskBytes returns the approximate on-disk size of the cache: the summed file sizes of
+// cas/ (the blob store) and manifests/ (the index), stat-only (no file reads, unlike
+// scanManifests). The result is memoized for diskSizeTTL so it is cheap to poll for a
+// live dashboard. Returns 0 for a dirless cache.
+func (c *Cache) DiskBytes() int64 {
+	if c == nil || c.dir == "" {
+		return 0
+	}
+	c.diskMu.Lock()
+	defer c.diskMu.Unlock()
+	if !c.diskAt.IsZero() && time.Since(c.diskAt) < diskSizeTTL {
+		return c.diskBytes
+	}
+	var total int64
+	for _, sub := range []string{"cas", "manifests"} {
+		_ = filepath.WalkDir(filepath.Join(c.dir, sub), func(_ string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			if info, e := d.Info(); e == nil {
+				total += info.Size()
+			}
+			return nil
+		})
+	}
+	c.diskBytes = total
+	c.diskAt = time.Now()
+	return total
+}
+
 // scanManifests returns the total byte count of cas/ + manifests/ and all parsed manifest entries.
 func (c *Cache) scanManifests() (int64, []manifestEntry) {
 	var total int64

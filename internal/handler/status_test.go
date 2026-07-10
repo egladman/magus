@@ -39,6 +39,45 @@ func TestStatusProtoMapsPool(t *testing.T) {
 	assert.Equal(t, int64(1700), p.GetCalls()[0].GetStartTime().AsTime().UnixMilli())
 }
 
+// TestStatusProtoMapsCacheAndInv maps per-workspace cache activity onto each Workspace,
+// the invocation id onto each Call, and the pool-wide aggregate (summed counters + the
+// configured cap) onto Pool.cache - the data the dashboard's cache tiles and per-target
+// live-log deep-links read.
+func TestStatusProtoMapsCacheAndInv(t *testing.T) {
+	r := types.StatusReport{
+		Cache: types.CacheStatus{SizeMB: 2048},
+		Pool: &types.StatusOutput{
+			Mode: "daemon", Capacity: 4, InUse: 2,
+			Calls: []types.StatusCall{{Args: []string{"run", "build"}, Inv: "inv7c3a9f2"}},
+			Workspaces: []types.StatusWorkspace{
+				{Root: "/repo", CacheHit: 1284, CacheMiss: 217, CacheError: 3, CacheBytes: 734003200},
+				{Root: "/svc", CacheHit: 512, CacheMiss: 98, CacheBytes: 120586240},
+			},
+		},
+	}
+	p := statusReportToProto(r, "v1").GetPool()
+	require.NotNil(t, p)
+
+	// Per-call invocation id.
+	require.Len(t, p.GetCalls(), 1)
+	assert.Equal(t, "inv7c3a9f2", p.GetCalls()[0].GetInvocation())
+
+	// Per-workspace cache.
+	require.Len(t, p.GetWorkspaces(), 2)
+	require.NotNil(t, p.GetWorkspaces()[0].GetCache())
+	assert.Equal(t, int64(1284), p.GetWorkspaces()[0].GetCache().GetHits())
+	assert.Equal(t, int64(734003200), p.GetWorkspaces()[0].GetCache().GetSizeBytes())
+
+	// Pool-wide aggregate: summed counters + the configured cap.
+	agg := p.GetCache()
+	require.NotNil(t, agg)
+	assert.Equal(t, int64(1796), agg.GetHits())
+	assert.Equal(t, int64(315), agg.GetMisses())
+	assert.Equal(t, int64(3), agg.GetErrors())
+	assert.Equal(t, int64(854589440), agg.GetSizeBytes())
+	assert.Equal(t, int32(2048), agg.GetSizeCapMb())
+}
+
 // TestStatusProtoHealth derives DOWN when no pool is present and DEGRADED on a pool error.
 func TestStatusProtoHealth(t *testing.T) {
 	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusReportToProto(types.StatusReport{}, "v1").GetHealth())

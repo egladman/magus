@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -369,9 +370,15 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 	}
 	defer s.inflight.Delete(key)
 
+	// Mint the invocation id here, before dispatch, and thread it onto ctx so the adopted
+	// run's BeginInvocation reuses it (rather than minting its own). That lets this pool
+	// entry carry its inv - the key a dashboard uses to deep-link into the run's live log.
+	inv := journal.NewInvocationID()
+	ctx = journal.WithInvocationID(ctx, inv)
+
 	id := s.nextID.Add(1)
 	call := &activeCall{
-		Call:  Call{Args: req.Args, Workspace: req.Root, StartedAt: time.Now()},
+		Call:  Call{Args: req.Args, Workspace: req.Root, StartedAt: time.Now(), Inv: inv},
 		SubOp: &SubOp{},
 	}
 	s.calls.Store(id, call)

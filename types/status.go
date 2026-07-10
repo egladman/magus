@@ -70,6 +70,7 @@ type StatusCall struct {
 	Workspace string    `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 	StartedAt time.Time `json:"started_at,omitempty" yaml:"started_at,omitempty"`
 	SubOp     string    `json:"sub_op,omitempty" yaml:"sub_op,omitempty"`
+	Inv       string    `json:"inv,omitempty" yaml:"inv,omitempty"` // invocation id; deep-links to this call's live log
 }
 
 // StatusWorkspace describes one workspace currently loaded by the daemon.
@@ -77,4 +78,9 @@ type StatusWorkspace struct {
 	Root       string    `json:"root" yaml:"root"`
 	LoadedAt   time.Time `json:"loaded_at" yaml:"loaded_at"`
 	LastAccess time.Time `json:"last_access" yaml:"last_access"`
+	// Live cache activity for this workspace (daemon mode; zero otherwise).
+	CacheHit   int   `json:"cache_hit,omitempty" yaml:"cache_hit,omitempty"`
+	CacheMiss  int   `json:"cache_miss,omitempty" yaml:"cache_miss,omitempty"`
+	CacheError int   `json:"cache_error,omitempty" yaml:"cache_error,omitempty"`
+	CacheBytes int64 `json:"cache_bytes,omitempty" yaml:"cache_bytes,omitempty"`
 }

@@ -20,6 +20,19 @@ func statusReportToProto(r types.StatusReport, magusVersion string) *statusv1.St
 	}
 	if r.Pool != nil {
 		s.Pool = poolToProto(r.Pool)
+		// Pool-wide cache activity is the sum of the warm workspaces' counters, with the
+		// configured cap from the static report - the headline hit/miss tiles plus the
+		// client-side trend.
+		if len(r.Pool.Workspaces) > 0 || r.Cache.SizeMB > 0 {
+			agg := &statusv1.Cache{SizeCapMb: int32(r.Cache.SizeMB)}
+			for _, w := range r.Pool.Workspaces {
+				agg.Hits += int64(w.CacheHit)
+				agg.Misses += int64(w.CacheMiss)
+				agg.Errors += int64(w.CacheError)
+				agg.SizeBytes += w.CacheBytes
+			}
+			s.Pool.Cache = agg
+		}
 	}
 	return s
 }
@@ -59,12 +72,20 @@ func poolToProto(p *types.StatusOutput) *statusv1.Pool {
 	for _, c := range p.Calls {
 		out.Calls = append(out.Calls, &statusv1.Call{
 			Args: c.Args, Workspace: c.Workspace, StartTime: tsFromTime(c.StartedAt), SubOp: c.SubOp,
+			Invocation: c.Inv,
 		})
 	}
 	for _, w := range p.Workspaces {
-		out.Workspaces = append(out.Workspaces, &statusv1.Workspace{
+		ws := &statusv1.Workspace{
 			Root: w.Root, LoadTime: tsFromTime(w.LoadedAt), LastAccessTime: tsFromTime(w.LastAccess),
-		})
+		}
+		if w.CacheHit != 0 || w.CacheMiss != 0 || w.CacheError != 0 || w.CacheBytes != 0 {
+			ws.Cache = &statusv1.Cache{
+				Hits: int64(w.CacheHit), Misses: int64(w.CacheMiss),
+				Errors: int64(w.CacheError), SizeBytes: w.CacheBytes,
+			}
+		}
+		out.Workspaces = append(out.Workspaces, ws)
 	}
 	return out
 }

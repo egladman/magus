@@ -46,6 +46,9 @@ func (e *wsEntry) load(_ context.Context, lim *cache.Limiter) {
 			context.Background(), e.root,
 			magus.WithLoadedConfig(cfg),
 			workspace.WithLimiter(lim),
+			// Warm daemon workspaces record OTel metrics so the /dashboard can read live
+			// cache/pool/target numbers as OTLP; one-shot CLI runs leave this off.
+			magus.WithMetricsCollection(),
 		)
 		if err != nil {
 			e.loadErr = fmt.Errorf("daemon: open workspace %s: %w", e.root, err)
@@ -250,10 +253,17 @@ func (r *wsRegistry) status() []proc.Workspace {
 		if e.m == nil {
 			continue // still loading or failed
 		}
+		// This workspace's cache is long-lived in the daemon, so its counters accumulate
+		// across every adopted run - the live cache activity the /dashboard shows.
+		st := e.m.CacheStats()
 		out = append(out, proc.Workspace{
 			Root:       e.root,
 			LoadedAt:   e.loadedAt,
 			LastAccess: time.Unix(0, e.lastAccess.Load()),
+			CacheHit:   st.Hit,
+			CacheMiss:  st.Miss,
+			CacheError: st.Error,
+			CacheBytes: e.m.CacheDiskBytes(),
 		})
 	}
 	return out

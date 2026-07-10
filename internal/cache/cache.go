@@ -40,6 +40,9 @@ type Cache struct {
 	hits           atomic.Int64
 	misses         atomic.Int64
 	errs           atomic.Int64
+	diskMu         sync.Mutex // guards the memoized on-disk size below
+	diskBytes      int64      // last computed cache size in bytes
+	diskAt         time.Time  // when diskBytes was computed (zero = never)
 	mtimes         *mtimeStore   // mtime fast-path for source hashing
 	outputs        *outputStore  // per-execution captured-output store (target output refs)
 	exportMu       sync.RWMutex  // guards Export/Import against concurrent Run writes

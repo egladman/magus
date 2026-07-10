@@ -64,6 +64,45 @@ func (m *Magus) ImportCache(ctx context.Context, r io.Reader) error {
 	return m.cache.Import(ctx, r)
 }
 
+// CacheStats returns this workspace's live cache counters (hits/misses/errors) accumulated
+// since the cache was opened. In daemon mode the cache is long-lived, so these grow across
+// adopted runs - the source for the /dashboard cache-activity panel. Zero value when no cache
+// is attached (an Inspect workspace).
+func (m *Magus) CacheStats() cache.Stats {
+	if m.cache == nil {
+		return cache.Stats{}
+	}
+	return m.cache.Stats()
+}
+
+// CacheDiskBytes returns the approximate on-disk size of this workspace's cache in bytes
+// (memoized; cheap to poll). Zero when no cache is attached.
+func (m *Magus) CacheDiskBytes() int64 {
+	if m.cache == nil {
+		return 0
+	}
+	return m.cache.DiskBytes()
+}
+
+// MetricsSnapshot returns this workspace's current metrics as standard OTLP protobuf (an
+// ExportMetricsServiceRequest), or (nil, nil) when metrics collection was not enabled at Open
+// (the CLI default). The daemon opens workspaces with [WithMetricsCollection] and relays this
+// to the /dashboard. Reuses magus's existing OTel instruments; no bespoke metrics contract.
+func (m *Magus) MetricsSnapshot(ctx context.Context) ([]byte, error) {
+	if m.tel == nil {
+		return nil, nil
+	}
+	return m.tel.Snapshot(ctx)
+}
+
+// CacheDir returns the resolved workspace cache directory - the same location the
+// journal run logs and per-ref output store live under. Callers that persist their own
+// sidecar stores (e.g. the MCP audit log) hang them off this so everything shares one
+// cache root and one retention regime.
+func (m *Magus) CacheDir() string {
+	return resolveCacheDir(m.ws.Root, m.cfg)
+}
+
 // OutputByRef resolves a target-output reference id (or a unique prefix, git-style)
 // to its reconstructed raw text and metadata. It reads the output store directly from
 // the resolved cache dir, so it works on Inspect workspaces too (no live cache needed)

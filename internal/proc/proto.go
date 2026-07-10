@@ -60,6 +60,12 @@ type Workspace struct {
 	Root       string    `json:"root"`
 	LoadedAt   time.Time `json:"loaded_at"`
 	LastAccess time.Time `json:"last_access"`
+	// Live cache activity for this workspace's long-lived cache. Zero for pre-cache-aware
+	// daemons or an Inspect workspace with no cache.
+	CacheHit   int   `json:"cache_hit,omitempty"`
+	CacheMiss  int   `json:"cache_miss,omitempty"`
+	CacheError int   `json:"cache_error,omitempty"`
+	CacheBytes int64 `json:"cache_bytes,omitempty"`
 }
 
 // StatusReply carries a point-in-time view of the parent's pool.
@@ -80,6 +86,7 @@ type Call struct {
 	Workspace string    `json:"workspace,omitempty"`  // empty for pre-workspace-aware servers
 	StartedAt time.Time `json:"started_at,omitempty"` // zero for pre-timing-aware servers
 	SubOp     string    `json:"sub_op,omitempty"`     // short label of what the call is doing now
+	Inv       string    `json:"inv,omitempty"`        // the invocation id this call runs under; deep-links to its live log
 }
 
 // StatusMagic is the expected value of StatusRequest.Magic.
