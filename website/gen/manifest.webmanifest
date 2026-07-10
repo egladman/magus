@@ -16,6 +16,7 @@
   ],
   "shortcuts": [
     { "name": "Graph", "url": "/magus/graph/" },
+    { "name": "Dashboard", "url": "/magus/dashboard/" },
     { "name": "Playground", "url": "/magus/playground/" },
     { "name": "Getting started", "url": "/magus/getting-started/" }
   ],

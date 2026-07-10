@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'"><!-- injected at build time by renderDashboard() in scribe.buzz; no inline
+       scripts (dashboard.js is an external module), and the default connect-src already
+       allows loopback for the daemon-bridge status stream. -->
+  <title>Dashboard — magus</title>
+  <meta name="description" content="magus's live control surface: daemon health, the concurrency pool, in-flight calls, loaded workspaces, and live cache activity, streamed over loopback.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/dashboard/">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="../assets/pico.min.css">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="../site.css">
+  <script src="../theme.js"></script>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body class="dash-native">
+  <!-- App bar: the site header's exact structure and dropdown (reused via nav.js), with the
+       dashboard's inverted/inset palette. The hat links back to the site; the menu holds the
+       sibling tool pages + a return-to-site item; health/connection sit inline as chips. -->
+  <header class="site-header dash-bar">
+    <nav class="container-fluid">
+      <ul><li><a href="../" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li></ul>
+      <div class="nav-right">
+        <span id="dash-health" class="pill" hidden></span>
+        <span id="dash-mode" class="dash-mode" hidden></span>
+        <span id="dash-conn" class="pill conn" aria-live="polite">not connected</span>
+        <span id="offline-badge" class="pill" hidden aria-live="polite">offline</span>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="dash-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="dash-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+          <li><a href="../logs/" id="menu-logs">Log viewer</a></li>
+          <li><a href="../graph/" id="menu-graph">Graph explorer</a></li>
+          <li><a href="../">Return to website</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+      </div>
+    </nav>
+  </header>
+
+  <main class="dash-main">
+    <!-- Live panels (hidden until the first status frame arrives). -->
+    <div class="dash-panels" id="dash-panels" hidden>
+      <!-- Concurrency pool as an occupancy grid: one cube per slot, filled when in use,
+           dashed when a task is queued for it - an airplane-seating read of the pool. -->
+      <section class="tile pool-tile" data-card="pool">
+        <div class="tile-head"><button class="tile-collapse" type="button" data-card="pool" aria-label="Collapse card"></button><h2 class="tile-h">Pool</h2><span class="tile-note" id="pool-summary">0 / 0 slots</span></div>
+        <div class="slot-grid" id="slot-grid" aria-label="Concurrency slots"></div>
+        <div class="pool-legend">
+          <span class="lg lg-busy">in use</span>
+          <span class="lg lg-free">free</span>
+          <span class="lg lg-wait" id="wait-legend" hidden>waiting <span id="wait-count">0</span></span>
+        </div>
+      </section>
+
+      <!-- Stat strip: dense KPI tiles spanning the full width. -->
+      <section class="stat-strip">
+        <div class="stat" data-accent="hit"><span class="stat-k">Cache hits</span><span class="stat-v" id="stat-hits">0</span></div>
+        <div class="stat" data-accent="miss"><span class="stat-k">Cache misses</span><span class="stat-v" id="stat-misses">0</span></div>
+        <div class="stat" data-accent="rate"><span class="stat-k">Hit rate</span><span class="stat-v" id="stat-hitrate">-</span></div>
+        <div class="stat" data-accent="size"><span class="stat-k">Cache size</span><span class="stat-v" id="stat-size">-</span></div>
+        <div class="stat" data-accent="err"><span class="stat-k">Errors</span><span class="stat-v" id="stat-errors">0</span></div>
+      </section>
+
+      <!-- Cache hit/miss trend, plotted client-side from the live stream. -->
+      <section class="tile spark-tile" data-card="cache">
+        <div class="tile-head"><button class="tile-collapse" type="button" data-card="cache" aria-label="Collapse card"></button><h2 class="tile-h">Cache activity</h2><span class="tile-note" id="spark-note">hits vs misses over this session</span></div>
+        <canvas id="spark" class="spark-canvas" height="72"></canvas>
+        <div class="spark-legend"><span class="lg lg-hit">hits</span><span class="lg lg-miss">misses</span></div>
+      </section>
+
+      <!-- Two-up: in-flight calls and loaded workspaces. -->
+      <div class="dash-cols">
+        <section class="tile calls-tile" data-card="calls">
+          <div class="tile-head"><button class="tile-collapse" type="button" data-card="calls" aria-label="Collapse card"></button><h2 class="tile-h">In-flight</h2><span class="tile-count" id="calls-count">0</span></div>
+          <ul class="row-list" id="calls-list"></ul>
+          <p class="row-empty" id="calls-empty">Pool is idle.</p>
+        </section>
+
+        <section class="tile ws-tile" data-card="workspaces">
+          <div class="tile-head"><button class="tile-collapse" type="button" data-card="workspaces" aria-label="Collapse card"></button><h2 class="tile-h">Workspaces</h2><span class="tile-count" id="ws-count">0</span></div>
+          <ul class="row-list" id="ws-list"></ul>
+          <p class="row-empty" id="ws-empty">No workspaces loaded.</p>
+        </section>
+      </div>
+
+      <footer class="dash-versions">
+        <span id="dash-magus-version"></span>
+        <span id="dash-daemon-version"></span>
+      </footer>
+    </div>
+
+    <!-- Connect state: shown until a live status frame arrives. -->
+    <div class="dash-connect" id="dash-connect">
+      <svg class="dash-connect-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+      <p class="dash-connect-title" id="dash-connect-title">No daemon connected</p>
+      <p class="dash-connect-sub" id="dash-connect-sub">The dashboard streams a running magus daemon's pool, cache, and health. Start the daemon, then open the live link it prints.</p>
+
+      <!-- Resume: shown when a previously-connected daemon host is remembered. -->
+      <form class="dash-resume" id="dash-resume" hidden>
+        <div class="dash-resume-row">
+          <input type="text" id="dash-resume-host" class="dash-resume-input" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off" aria-label="Daemon host and port">
+          <button type="submit" class="dash-resume-btn">Reconnect</button>
+        </div>
+        <button type="button" class="dash-resume-forget" id="dash-resume-forget">Forget this daemon</button>
+      </form>
+
+      <pre class="dash-connect-cmd"><code>magus server start</code></pre>
+      <div class="dash-launchers">
+        <a class="dash-launch" id="launch-logs" href="../logs/">
+          <span class="dash-launch-title">Log viewer</span>
+          <span class="dash-launch-sub">Read or stream a target's captured output</span>
+        </a>
+        <a class="dash-launch" id="launch-graph" href="../graph/">
+          <span class="dash-launch-title">Graph explorer</span>
+          <span class="dash-launch-sub">Explore targets, spells, and dependencies</span>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <noscript>
+    <div class="dash-noscript">
+      <p><strong>The dashboard needs JavaScript.</strong> It decodes the daemon's status stream in your browser. Enable JavaScript, or run <code>magus status</code> in your terminal.</p>
+    </div>
+  </noscript>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

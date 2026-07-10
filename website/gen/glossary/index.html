@@ -165,8 +165,16 @@ definition; follow the link for the page that covers the term in depth.</p>
 <td>The composite pipeline (lint, build, test, coverage); run with <code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</td>
 </tr>
 <tr>
-<td><strong>Ref</strong></td>
-<td>A short reference id (<code>ref1a2b3c</code>) for a target's captured output, shown on each target's line; <code>magus query ref1a2b3c</code> prints that exact output. See <a href="../output-refs/">output-refs.md</a>.</td>
+<td><strong>Output reference</strong></td>
+<td>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's captured output; it appears on each target's line, and <code>magus query ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the whole <code>magus</code> invocation). See <a href="../output-refs/">output-refs.md</a>.</td>
+</tr>
+<tr>
+<td><strong>Trace</strong></td>
+<td>OpenTelemetry's name for one whole <code>magus</code> invocation; every target it runs is a span beneath it.</td>
+</tr>
+<tr>
+<td><strong>Span</strong></td>
+<td>OpenTelemetry's name for one unit of work under a trace - a target execution, whose sub-operations are child spans. An output reference points at a span's captured output.</td>
 </tr>
 </tbody>
 </table></figure>
