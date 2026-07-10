@@ -26,7 +26,7 @@ type StatusReport struct {
 }
 
 // BuildStatus reports optional features compiled into the magus binary via build tags.
-// Populated by the caller so the bridge (internal/handler/dashboard) does not need to import
+// Populated by the caller so the bridge (internal/service/dashboard) does not need to import
 // the build-tag constants from cmd/magus.
 type BuildStatus struct {
 	SelfUpdate bool `json:"selfupdate" yaml:"selfupdate"`

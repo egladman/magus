@@ -188,7 +188,7 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 // It deliberately leaves StatusOutput.Affected unset: `magus status` queries
 // the daemon over its proc socket only and never opens a workspace, so there
 // is no VCS context here to compute an affected set from. The web bridge's
-// live Graph Explorer "affected" view (internal/handler/dashboard/routes.go, which
+// live Graph Explorer "affected" view (internal/service/dashboard/routes.go, which
 // has its own copy of this conversion) is correspondingly kept disabled
 // client-side rather than wired to a field that can never be populated from
 // this call site.

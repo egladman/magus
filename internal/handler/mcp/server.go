@@ -22,9 +22,9 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus/internal/file/watch"
-	"github.com/egladman/magus/internal/handler/dashboard"
 	"github.com/egladman/magus/internal/handler/mcp/auth"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/service/dashboard"
 )
 
 // DefaultAddress is the default host:port for the MCP Streamable HTTP server.

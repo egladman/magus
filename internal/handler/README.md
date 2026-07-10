@@ -27,7 +27,7 @@ them). Handlers that only run inside the daemon are `//go:build mcp`.
 
 Two subpackages are not 1:1 with a single proto package, by design:
 
-- `internal/handler/dashboard` (`//go:build mcp`) - the daemon's composite browser
+- `internal/service/dashboard` (`//go:build mcp`) - the daemon's composite browser
   read-API. Its `/api/v1/{graph,status,events}` routes mount MULTIPLE contracts
   (`status.v1` + `viewer.v1` events + knowledge-graph JSON), so it has no single
   proto twin. It imports the wire packages (e.g. `handler/status`) rather than
