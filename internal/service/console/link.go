@@ -1,4 +1,4 @@
-package viewer
+package console
 
 import (
 	"net/url"

@@ -9,7 +9,7 @@ import (
 // Broadcaster is a capture handler (slog.Handler) that fans each event out to any number of
 // live subscribers while retaining a backlog of everything seen so far. It is the engine
 // side of live log streaming: the invocation's capture logger includes one Broadcaster, and
-// the loopback SSE server (internal/service/viewer) subscribes to it. A browser that connects mid-run
+// the loopback SSE server (internal/handler/viewer) subscribes to it. A browser that connects mid-run
 // first replays the backlog (so it sees the run from the start) and then receives new events
 // as they are emitted, until [Broadcaster.Close] marks the run finished.
 //

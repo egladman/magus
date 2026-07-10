@@ -2,7 +2,7 @@
 // Streamable-HTTP handler, the k8s health routes, and the browser Graph
 // Explorer web bridge onto one loopback listener, applying the shared bearer
 // and DNS-rebind guards. It is the composition point that ties together
-// internal/handler/mcp, internal/httpx, and internal/service/dashboard so
+// internal/handler/mcp, internal/httpx, and internal/service/console so
 // neither the handler/mcp package nor the root magus package has to.
 //
 // The CLI injects a *Daemon into the root magus package via
@@ -12,15 +12,18 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
 
 	"github.com/egladman/magus/internal/file/watch"
+	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/handler/mcp/auth"
+	"github.com/egladman/magus/internal/handler/status"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/service/dashboard"
+	"github.com/egladman/magus/internal/service/console"
 )
 
 // Daemon assembles and runs the daemon HTTP server from a set of MCP server
@@ -109,26 +112,32 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				log.Warn("[BRIDGE] file watcher unavailable; /api/v1/events will emit heartbeats only",
 					slog.String("error", werr.Error()))
 			} else {
-				inv = dashboard.WatchInvalidate(ctx, bWatcher)
+				inv = console.WatchInvalidate(ctx, bWatcher)
 				go func() {
 					<-ctx.Done()
 					_ = bWatcher.Close()
 				}()
 			}
 
+			// The console service is pure application logic; the three route handlers below
+			// hold narrow interfaces satisfied by it and own all wire encoding.
+			svc := console.NewService(opts.Magus, opts.Config, opts.StatusBase, opts.Version)
+
+			// CORS allows the hosted explorer origin plus the two loopback origins derived
+			// from the server port. Metrics streaming is off in production (no snapshot fn).
 			siteOrigin, _ := opts.SiteOrigin()
-			bridgeOpts := dashboard.Options{
-				Magus:           opts.Magus,
-				Config:          opts.Config,
-				StatusBase:      opts.StatusBase,
-				MagusVersion:    opts.Version,
-				Addr:            addr,
-				SiteOrigin:      siteOrigin,
-				GraphInvalidate: inv,
-			}
+			port := addr.Port()
+			cors := httpx.CORSAllow(
+				siteOrigin,
+				fmt.Sprintf("http://localhost:%d", port),
+				fmt.Sprintf("http://127.0.0.1:%d", port),
+			)
+
 			// The bridge routes share the same auth and DNS-rebind middleware as /mcp.
 			bridgeMux := http.NewServeMux()
-			dashboard.Mount(bridgeMux, bridgeOpts)
+			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc)))
+			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0)))
+			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc)))
 			// Wrap every /api/ route with rebind + auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, bridgeMux)))
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))

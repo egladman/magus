@@ -5,7 +5,7 @@ import "time"
 // StatusBase holds the static portions of a StatusReport: telemetry, cache, and
 // build-flag fields. It is populated by cmd/magus (which has access to the
 // selfUpdateCompiled build-tag constant) and injected into
-// dashboard.Options so the bridge can assemble a full StatusReport without
+// console.NewService so the bridge can assemble a full StatusReport without
 // importing cmd/magus.
 type StatusBase struct {
 	Telemetry TelemetryStatus
@@ -26,7 +26,7 @@ type StatusReport struct {
 }
 
 // BuildStatus reports optional features compiled into the magus binary via build tags.
-// Populated by the caller so the bridge (internal/service/dashboard) does not need to import
+// Populated by the caller so the bridge (internal/service/console) does not need to import
 // the build-tag constants from cmd/magus.
 type BuildStatus struct {
 	SelfUpdate bool `json:"selfupdate" yaml:"selfupdate"`

@@ -3,7 +3,8 @@
 // Events, gated by a per-run bearer token, for `run --live`. It is built on the shared
 // [httpx.Server]: it binds 127.0.0.1 only, guards each route with [httpx.RequireLoopbackPeer],
 // and CORS-locks it to the single site origin serving the page. The static sibling (a JSON
-// blob for `graph open --serve`) is httpx.BlobServer.
+// blob for `graph open --serve`) is httpx.BlobServer. It lives in the same package as the
+// viewer wire encoders, so it calls EncodeEvent directly.
 package viewer
 
 import (
@@ -17,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	wire "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 )
@@ -150,7 +150,7 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 // writeEvent emits one event as an SSE data line (base64 protobuf). It returns a non-nil
 // error if the event could not be encoded or written, so the caller ends the stream.
 func writeEvent(w http.ResponseWriter, ev journal.Event) error {
-	payload, err := wire.EncodeEvent(ev)
+	payload, err := EncodeEvent(ev)
 	if err != nil {
 		return fmt.Errorf("encode event: %w", err)
 	}

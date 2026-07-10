@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/knowledge"
-	"github.com/egladman/magus/internal/service/viewer"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -186,7 +186,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		if err != nil {
 			return reportRefLookupError(ref, err)
 		}
-		events := viewer.StitchDisplayEvents(data, desc)
+		events := console.StitchDisplayEvents(data, desc)
 		var inv journal.Invocation
 		if desc.Inv != "" {
 			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out
@@ -224,7 +224,7 @@ func reportRefLookupError(ref string, err error) error {
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
 func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, o outputRefOpts) error {
-	openURL, err := viewer.LogViewerURL(o.viewerBase, desc.Ref, events, inv)
+	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, inv)
 	if err != nil {
 		return err
 	}

@@ -14,24 +14,25 @@ trivially correlated:
 
 | handler subpackage             | proto package             | owns                                              |
 |--------------------------------|---------------------------|---------------------------------------------------|
-| `internal/handler/viewer`      | `magus.viewer.v1`         | domain-event -> proto mapping, fragment/SSE encode, the log-viewer routes (blob host + live SSE) |
-| `internal/handler/status`      | `magus.status.v1`         | status-report -> proto mapping, the status-event encoder |
+| `internal/handler/viewer`      | `magus.viewer.v1`         | domain-event -> proto mapping, fragment/SSE encode, the log-viewer live SSE server |
+| `internal/handler/status`      | `magus.status.v1`         | status-report -> proto mapping + encoder, the GET /api/v1/status and /api/v1/events handlers |
+| `internal/handler/graph`       | `magus.graph.v1`          | knowledge-graph -> proto mapping, the GET /api/v1/graph handler |
 
 When you add a new wire contract `proto/magus/foo/v1`, its mapping goes in a new
 `internal/handler/foo` package - same name, no exceptions for the wire packages.
+
+Each browser-bridge handler is an `http.Handler` receiver type holding a NARROW
+consumer interface (e.g. `graphSource`, `statusSource`) that is satisfied by the
+pure-logic `internal/service/console` service. The service returns DOMAIN values; the
+handler owns the wire encoding.
 
 Wire-mapping packages are build-tag-free (they are pure mapping; a CLI path may use
 them). Handlers that only run inside the daemon are `//go:build mcp`.
 
 ## Deliberate non-mirror packages
 
-Two subpackages are not 1:1 with a single proto package, by design:
+One subpackage is not 1:1 with a single proto package, by design:
 
-- `internal/service/dashboard` (`//go:build mcp`) - the daemon's composite browser
-  read-API. Its `/api/v1/{graph,status,events}` routes mount MULTIPLE contracts
-  (`status.v1` + `viewer.v1` events + knowledge-graph JSON), so it has no single
-  proto twin. It imports the wire packages (e.g. `handler/status`) rather than
-  re-implementing their mapping. It is the composite-routes exception to the rule.
 - `internal/handler/mcp` (`//go:build mcp`) - the MCP request handlers (the tool
   implementations, the descriptor catalog, and the dispatch pipeline in `mcp.go`),
   plus the streamable-HTTP transport that mounts onto `httpx.Server`. It mirrors the

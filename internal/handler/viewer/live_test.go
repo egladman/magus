@@ -92,7 +92,7 @@ func TestLiveServerRejectsBadToken(t *testing.T) {
 	assert.NotEmpty(t, resp.Header.Get("WWW-Authenticate"))
 }
 
-// TestLiveServerURL confirms the viewer link carries the loopback addr and token in the
+// TestLiveServerViewerURL confirms the viewer link carries the loopback addr and token in the
 // fragment.
 func TestLiveServerViewerURL(t *testing.T) {
 	bc := journal.NewBroadcaster()
