@@ -1,6 +1,9 @@
-//go:build mcp
-
-package dashboard
+// Package status holds the magus.status.v1 wire contract: the code that maps the live
+// portion of the domain status report (types.StatusReport) onto the versioned protobuf
+// dashboard message and encodes it for a browser (a base64 protobuf blob on a StreamStatus
+// SSE line). It consumes domain types directly and maps them explicitly to the wire proto -
+// no intermediate DTOs, no single-use converters.
+package status
 
 import (
 	"encoding/base64"

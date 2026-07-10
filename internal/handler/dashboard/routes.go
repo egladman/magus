@@ -23,6 +23,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/handler/status"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -486,7 +487,7 @@ func handleEvents(w http.ResponseWriter, r *http.Request, opts Options) {
 	// heartbeat/graph-only.
 	var lastStatus string
 	pushStatus := func() {
-		enc, err := EncodeStatusEvent(buildStatusReport(r.Context(), opts), opts.MagusVersion)
+		enc, err := status.EncodeStatusEvent(buildStatusReport(r.Context(), opts), opts.MagusVersion)
 		if err != nil || enc == lastStatus {
 			return
 		}

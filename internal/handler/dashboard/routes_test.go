@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/handler/dashboard"
-	"github.com/egladman/magus/internal/mcp/auth"
+	"github.com/egladman/magus/internal/handler/mcp/auth"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
 	"github.com/egladman/magus/types"
 	"google.golang.org/protobuf/proto"

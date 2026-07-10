@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/mcp/auth"
+	"github.com/egladman/magus/internal/handler/mcp/auth"
 )
 
 // probeLiveBridgeTimeout bounds the real HTTP probe of the web bridge below.

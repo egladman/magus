@@ -1,6 +1,4 @@
-//go:build mcp
-
-package dashboard
+package status
 
 import (
 	"time"

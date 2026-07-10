@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/mcp"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )

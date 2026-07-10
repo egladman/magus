@@ -25,8 +25,8 @@ import (
 
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/handler/dashboard"
+	"github.com/egladman/magus/internal/handler/mcp/auth"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/mcp/auth"
 )
 
 // DefaultAddress is the default host:port for the MCP Streamable HTTP server.

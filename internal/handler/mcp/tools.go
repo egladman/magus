@@ -11,7 +11,7 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/egladman/magus/internal/mcp/origin"
+	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/types"
 )
 

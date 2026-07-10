@@ -10,7 +10,7 @@ import (
 	"net/netip"
 	"os"
 
-	internalmcp "github.com/egladman/magus/internal/mcp"
+	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 )
 
 // mcpIsCompiled is true when the binary was built with -tags mcp.
