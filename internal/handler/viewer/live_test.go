@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -111,6 +113,77 @@ func TestLiveServerViewerURL(t *testing.T) {
 	assert.Contains(t, after, "live=", "host must live in the fragment")
 	assert.Contains(t, after, "token="+ls.Token(), "token must live in the fragment")
 }
+
+// nonFlusherRecorder is an http.ResponseWriter that is deliberately NOT an http.Flusher, so
+// streamEvents takes its "streaming unsupported" branch.
+type nonFlusherRecorder struct {
+	header http.Header
+	code   int
+}
+
+func (n *nonFlusherRecorder) Header() http.Header         { return n.header }
+func (n *nonFlusherRecorder) Write(b []byte) (int, error) { return len(b), nil }
+func (n *nonFlusherRecorder) WriteHeader(code int)        { n.code = code }
+
+// TestStreamEventsRejectsNonFlusher confirms a ResponseWriter that cannot flush is turned away
+// with 500 before any subscription happens.
+func TestStreamEventsRejectsNonFlusher(t *testing.T) {
+	ls := &LiveServer{bc: journal.NewBroadcaster()}
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	w := &nonFlusherRecorder{header: make(http.Header)}
+	ls.streamEvents(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.code)
+}
+
+// flushErrWriter is a Flusher whose Write always fails, so streamEvents aborts on its first
+// backlog write.
+type flushErrWriter struct{ header http.Header }
+
+func (f *flushErrWriter) Header() http.Header       { return f.header }
+func (f *flushErrWriter) WriteHeader(int)           {}
+func (f *flushErrWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+func (f *flushErrWriter) Flush()                    {}
+
+// TestStreamEventsAbortsOnBacklogWriteError confirms streamEvents returns early (does not hang)
+// when writing a backlog event fails - e.g. the browser hung up mid-replay.
+func TestStreamEventsAbortsOnBacklogWriteError(t *testing.T) {
+	bc := journal.NewBroadcaster()
+	emit(bc, journal.Event{Kind: journal.KindOutput, Text: "backlog"})
+	ls := &LiveServer{bc: bc}
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+
+	done := make(chan struct{})
+	go func() { defer close(done); ls.streamEvents(&flushErrWriter{header: make(http.Header)}, req) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("streamEvents did not return after a backlog write error")
+	}
+}
+
+// errWriter fails every Write so writeEvent surfaces the write error to its caller.
+type errWriter struct{ header http.Header }
+
+func (e *errWriter) Header() http.Header       { return e.header }
+func (e *errWriter) WriteHeader(int)           {}
+func (e *errWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+// TestWriteEventPropagatesWriteError confirms a failed write is returned so the stream loop can
+// end; a healthy writer returns nil.
+func TestWriteEventPropagatesWriteError(t *testing.T) {
+	err := writeEvent(&errWriter{header: make(http.Header)}, journal.Event{Kind: journal.KindOutput, Text: "x"})
+	require.Error(t, err)
+
+	var ok okWriter
+	require.NoError(t, writeEvent(&ok, journal.Event{Kind: journal.KindOutput, Text: "x"}))
+}
+
+// okWriter accepts every write.
+type okWriter struct{}
+
+func (okWriter) Header() http.Header         { return http.Header{} }
+func (okWriter) WriteHeader(int)             {}
+func (okWriter) Write(b []byte) (int, error) { return len(b), nil }
 
 func recv(t *testing.T, ch <-chan string) string {
 	t.Helper()

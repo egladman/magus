@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -134,6 +135,32 @@ func TestGraph_MethodNotAllowed(t *testing.T) {
 	w := httptest.NewRecorder()
 	newHandler().ServeHTTP(w, r)
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+}
+
+func TestGraph_OptionsNoContent(t *testing.T) {
+	r := httptest.NewRequest(http.MethodOptions, "/api/v1/graph", nil)
+	w := httptest.NewRecorder()
+	newHandler().ServeHTTP(w, r)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// errSource fails both graph builds so the handler takes its 500 build-error path.
+type errSource struct{}
+
+func (errSource) Graph(context.Context, string, string) (types.KnowledgeGraphOutput, error) {
+	return types.KnowledgeGraphOutput{}, errors.New("boom")
+}
+func (errSource) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
+	return types.TargetGraphOutput{}, errors.New("boom")
+}
+
+func TestGraph_BuildError_Returns500(t *testing.T) {
+	h := NewGraphHandler(errSource{}, nil)
+	// Knowledge-graph flavor and targets flavor both surface a build error as 500.
+	for _, target := range []string{"/api/v1/graph", "/api/v1/graph?flavor=targets"} {
+		w := get(t, h, target)
+		assert.Equalf(t, http.StatusInternalServerError, w.Code, "target %s", target)
+	}
 }
 
 // --- ETag / 304 ---

@@ -50,6 +50,60 @@ func TestStatusHandler_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestStatusHandler_OptionsNoContent(t *testing.T) {
+	h := NewStatusHandler(fakeSource{}, nil)
+	r := httptest.NewRequest(http.MethodOptions, "/api/v1/status", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("want 204 for preflight, got %d", w.Code)
+	}
+	if w.Body.Len() != 0 {
+		t.Errorf("preflight body should be empty, got %q", w.Body.String())
+	}
+}
+
+func TestEventsHandler_OptionsNoContent(t *testing.T) {
+	h := NewEventsHandler(fakeSource{}, "", nil, nil, 0, 0, nil)
+	r := httptest.NewRequest(http.MethodOptions, "/api/v1/events", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("want 204 for preflight, got %d", w.Code)
+	}
+}
+
+func TestEventsHandler_MethodNotAllowed(t *testing.T) {
+	h := NewEventsHandler(fakeSource{}, "", nil, nil, 0, 0, nil)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/events", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("want 405, got %d", w.Code)
+	}
+}
+
+// nonFlusherWriter is an http.ResponseWriter that is deliberately NOT an http.Flusher, so the
+// events handler takes its "streaming not supported" branch.
+type nonFlusherWriter struct {
+	header http.Header
+	code   int
+}
+
+func (n *nonFlusherWriter) Header() http.Header         { return n.header }
+func (n *nonFlusherWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (n *nonFlusherWriter) WriteHeader(code int)        { n.code = code }
+
+func TestEventsHandler_StreamingUnsupported(t *testing.T) {
+	h := NewEventsHandler(fakeSource{}, "", nil, nil, 0, 0, nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
+	w := &nonFlusherWriter{header: make(http.Header)}
+	h.ServeHTTP(w, r)
+	if w.code != http.StatusInternalServerError {
+		t.Errorf("want 500 when ResponseWriter is not a Flusher, got %d", w.code)
+	}
+}
+
 // --- eventsHandler ---
 
 func TestEventsHandler_HeartbeatOnly(t *testing.T) {
@@ -91,6 +145,30 @@ func TestEventsHandler_StatusEvent(t *testing.T) {
 	}
 	if st.Pool == nil || st.Pool.Capacity != 4 || st.Pool.InUse != 1 {
 		t.Errorf("want pool capacity=4 in_use=1, got %+v", st.Pool)
+	}
+}
+
+// TestEventsHandler_InvalidateClosed confirms a closed graph channel does not end the stream:
+// the handler drops the channel and keeps emitting heartbeats.
+func TestEventsHandler_InvalidateClosed(t *testing.T) {
+	inv := make(chan struct{})
+	close(inv)
+	h := NewEventsHandler(fakeSource{}, "", nil, inv, 30*time.Millisecond, 0, nil)
+	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
+	if !strings.Contains(data, ": heartbeat") {
+		t.Errorf("want heartbeat after invalidate close, got %q", data)
+	}
+}
+
+// TestEventsHandler_MetricsError confirms a metrics-snapshot error suppresses the metrics frame
+// (no event: metrics) while heartbeats still flow.
+func TestEventsHandler_MetricsError(t *testing.T) {
+	h := NewEventsHandler(fakeSource{}, "",
+		func(context.Context) ([]byte, error) { return nil, io.ErrUnexpectedEOF },
+		nil, 30*time.Millisecond, 30*time.Millisecond, nil)
+	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
+	if strings.Contains(data, "event: metrics") {
+		t.Errorf("errored metrics snapshot must not emit a metrics frame, got %q", data)
 	}
 }
 

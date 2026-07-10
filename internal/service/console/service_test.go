@@ -3,9 +3,11 @@ package console
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,6 +92,67 @@ func TestServiceStatusReportPoolError(t *testing.T) {
 	assert.Nil(t, got.Pool)
 	assert.NotEmpty(t, got.PoolError)
 	assert.Equal(t, 42, got.Cache.SizeMB)
+}
+
+// TestServiceVersion checks the running version stamped at construction is returned verbatim.
+func TestServiceVersion(t *testing.T) {
+	svc := NewService(nil, config.Config{}, types.StatusBase{}, "9.9.9")
+	assert.Equal(t, "9.9.9", svc.Version())
+}
+
+// TestStatusOutputFromReply pins the proc.StatusReply -> types.StatusOutput conversion:
+// scalar fields copy across, calls and workspaces map element-wise, and Affected is left
+// unset (deferred).
+func TestStatusOutputFromReply(t *testing.T) {
+	assert.Nil(t, statusOutputFromReply(nil), "nil reply -> nil output")
+
+	loaded := time.UnixMilli(1_700_000_000_000)
+	access := time.UnixMilli(1_700_000_100_000)
+	started := time.UnixMilli(1_700_000_050_000)
+	reply := &proc.StatusReply{
+		ParentPID: 4242, DaemonVersion: "d1", Mode: "daemon", Capacity: 8, InUse: 3, Waiting: 1,
+		Calls: []proc.Call{
+			{Args: []string{"run", "build"}, Workspace: "/ws", StartedAt: started, SubOp: "spawn", Inv: "inv1"},
+		},
+		Workspaces: []proc.Workspace{
+			{Root: "/ws", LoadedAt: loaded, LastAccess: access, CacheHit: 5, CacheMiss: 2, CacheError: 1, CacheBytes: 1024},
+		},
+	}
+
+	got := statusOutputFromReply(reply)
+	require.NotNil(t, got)
+	assert.Equal(t, &types.StatusOutput{
+		ParentPID:     4242,
+		DaemonVersion: "d1",
+		Mode:          "daemon",
+		Capacity:      8,
+		InUse:         3,
+		Waiting:       1,
+		Calls: []types.StatusCall{
+			{Args: []string{"run", "build"}, Workspace: "/ws", StartedAt: started, SubOp: "spawn", Inv: "inv1"},
+		},
+		Workspaces: []types.StatusWorkspace{
+			{Root: "/ws", LoadedAt: loaded, LastAccess: access, CacheHit: 5, CacheMiss: 2, CacheError: 1, CacheBytes: 1024},
+		},
+	}, got)
+	assert.Empty(t, got.Affected, "Affected is deferred and left unset")
+}
+
+// TestResolveStatusAddr checks the address precedence: config address first, then the injected
+// daemon socket seam.
+func TestResolveStatusAddr(t *testing.T) {
+	// Config address wins outright.
+	svc := NewService(nil, config.Config{Daemon: config.Daemon{Address: "unix:///cfg.sock"}},
+		types.StatusBase{}, "1.0.0", WithDaemonSocket("unix:///seam.sock"))
+	addr, err := svc.resolveStatusAddr(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "unix:///cfg.sock", addr)
+
+	// No config address: fall back to the injected daemon socket.
+	svc = NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0", WithDaemonSocket("unix:///seam.sock"))
+	addr, err = svc.resolveStatusAddr(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "unix:///seam.sock", addr)
 }
 
 func TestIsGraphRelevant(t *testing.T) {

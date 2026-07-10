@@ -92,6 +92,73 @@ func TestEncodeJournalFragmentRoundTrip(t *testing.T) {
 	assert.Equal(t, "refabc", got.GetEvents()[1].GetRef())
 }
 
+// TestEnumMappingsExhaustive walks every domain enum value through its proto mapper so a new
+// constant added on either side (or a renamed one) is caught. The default/unknown arm maps to
+// the UNSPECIFIED zero value.
+func TestEnumMappingsExhaustive(t *testing.T) {
+	kinds := map[string]viewerv1.Kind{
+		journal.KindStarted:  viewerv1.Kind_KIND_STARTED,
+		journal.KindFinished: viewerv1.Kind_KIND_FINISHED,
+		journal.KindExec:     viewerv1.Kind_KIND_EXEC,
+		journal.KindOutput:   viewerv1.Kind_KIND_OUTPUT,
+		journal.KindResult:   viewerv1.Kind_KIND_RESULT,
+		journal.KindScope:    viewerv1.Kind_KIND_SCOPE,
+		journal.KindWarn:     viewerv1.Kind_KIND_WARN,
+		"bogus":              viewerv1.Kind_KIND_UNSPECIFIED,
+	}
+	for in, want := range kinds {
+		assert.Equal(t, want, kindToProto(in), "kindToProto(%q)", in)
+	}
+
+	streams := map[string]viewerv1.Stream{
+		journal.StreamStdout: viewerv1.Stream_STREAM_STDOUT,
+		journal.StreamStderr: viewerv1.Stream_STREAM_STDERR,
+		"bogus":              viewerv1.Stream_STREAM_UNSPECIFIED,
+	}
+	for in, want := range streams {
+		assert.Equal(t, want, streamToProto(in), "streamToProto(%q)", in)
+	}
+
+	statuses := map[string]viewerv1.Status{
+		journal.StatusPass:   viewerv1.Status_STATUS_PASS,
+		journal.StatusFail:   viewerv1.Status_STATUS_FAIL,
+		journal.StatusCached: viewerv1.Status_STATUS_CACHED,
+		"bogus":              viewerv1.Status_STATUS_UNSPECIFIED,
+	}
+	for in, want := range statuses {
+		assert.Equal(t, want, statusToProto(in), "statusToProto(%q)", in)
+	}
+
+	triggers := map[string]viewerv1.Trigger{
+		journal.TriggerRun:      viewerv1.Trigger_TRIGGER_RUN,
+		journal.TriggerAffected: viewerv1.Trigger_TRIGGER_AFFECTED,
+		journal.TriggerCI:       viewerv1.Trigger_TRIGGER_CI,
+		journal.TriggerX:        viewerv1.Trigger_TRIGGER_X,
+		journal.TriggerWatch:    viewerv1.Trigger_TRIGGER_WATCH,
+		journal.TriggerDirect:   viewerv1.Trigger_TRIGGER_DIRECT,
+		"bogus":                 viewerv1.Trigger_TRIGGER_UNSPECIFIED,
+	}
+	for in, want := range triggers {
+		assert.Equal(t, want, triggerToProto(in), "triggerToProto(%q)", in)
+	}
+}
+
+// TestInvocationToProtoMapsHeader pins the invocation-header mapping (id/command/timing/version)
+// used by the static Journal envelope.
+func TestInvocationToProtoMapsHeader(t *testing.T) {
+	p := invocationToProto(journal.Invocation{
+		ID: "inv42", StartedMs: 1000, FinishedMs: 2000, MagusVersion: "v3",
+		Command: journal.Command{Verb: "run", Args: []string{"build"}, Cwd: "/w", Trigger: journal.TriggerWatch},
+	})
+	assert.Equal(t, "inv42", p.GetId())
+	assert.Equal(t, "v3", p.GetMagusVersion())
+	assert.Equal(t, int64(1000), p.GetStartTime().AsTime().UnixMilli())
+	assert.Equal(t, int64(2000), p.GetEndTime().AsTime().UnixMilli())
+	assert.Equal(t, "run", p.GetCommand().GetVerb())
+	assert.Equal(t, "/w", p.GetCommand().GetCwd())
+	assert.Equal(t, viewerv1.Trigger_TRIGGER_WATCH, p.GetCommand().GetTrigger())
+}
+
 // TestEncodeEventRoundTrip confirms one SSE event decodes back: base64 -> proto.
 func TestEncodeEventRoundTrip(t *testing.T) {
 	ev, err := EncodeEvent(journal.Event{Kind: journal.KindOutput, Stream: journal.StreamStderr, Text: "warn: x"})
