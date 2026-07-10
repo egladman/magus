@@ -22,6 +22,8 @@
     "@codemirror/search": "6.5.11",
     "@codemirror/state": "6.5.2",
     "@codemirror/view": "6.36.8",
+    "@connectrpc/connect": "^2.1.2",
+    "@connectrpc/connect-web": "^2.1.2",
     "@lezer/highlight": "1.2.1",
     "d3-drag": "3.0.0",
     "d3-force": "3.0.0",

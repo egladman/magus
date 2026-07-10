@@ -19,3 +19,8 @@ plugins:
   - local: [go, tool, protoc-gen-go]
     out: gen/go
     opt: paths=source_relative
+  # ConnectRPC Go handlers/clients: one endpoint speaks Connect (browser-native HTTP), gRPC,
+  # and gRPC-Web. Pinned through `go tool` like protoc-gen-go so codegen needs no install.
+  - local: [go, tool, protoc-gen-connect-go]
+    out: gen/go
+    opt: paths=source_relative

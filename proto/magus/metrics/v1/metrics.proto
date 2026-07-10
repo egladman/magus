@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+// Package magus.metrics.v1 is the versioned wire contract for the DERIVED dashboard
+// metrics: magus's OTel instrument families rolled up into the numbers a developer reads
+// to judge health - operation counts, cache hit-rates, and latency percentiles - plus a
+// rolling time-series the daemon backfills so the utilization grid shows history from
+// before the page opened. A sibling of magus.status.v1 (which carries the live pool/health
+// snapshot); the dashboard streams both. No service: it rides the dashboard SSE bridge as
+// `event: metrics` (Snapshot) and `event: backfill` (the Sample ring buffer).
+package magus.metrics.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one
+// endpoint speaks Connect (browser-native HTTP), gRPC, and gRPC-Web from this one contract.
+service MetricsService {
+  // GetMetrics returns the current derived snapshot.
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+  // StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on
+  // each tick, so the dashboard's charts and utilization grid start populated and stay live.
+  rpc StreamMetrics(StreamMetricsRequest) returns (stream StreamMetricsResponse);
+}
+
+message GetMetricsRequest {}
+message GetMetricsResponse {
+  Snapshot snapshot = 1;
+}
+
+message StreamMetricsRequest {}
+message StreamMetricsResponse {
+  // The first streamed message carries the backfill history; every subsequent message
+  // carries a live snapshot.
+  oneof of {
+    Backfill backfill = 1;
+    Snapshot snapshot = 2;
+  }
+}
+
+// Snapshot is the derived-metrics view at one instant: each OTel instrument family
+// aggregated for the dashboard.
+message Snapshot {
+  google.protobuf.Timestamp captured_at = 1;
+  Latency target = 2;       // magus.target.duration + magus.target.runs
+  Latency cache_op = 3;     // magus.cache.duration + magus.cache.{hits,misses,errors}
+  Latency pool_wait = 4;    // magus.pool.wait.duration
+  Latency graph_query = 5;  // magus.graph.query.duration + magus.graph.queries
+  Remote remote = 6;        // magus.cache.remote.*
+}
+
+// Latency is an operation-family rollup: how many happened and how long they took. The
+// percentiles are interpolated from the OTel histogram's buckets server-side, so the
+// dashboard never re-derives them from raw buckets.
+message Latency {
+  int64 count = 1;  // number of observations (the operation count)
+  double p50 = 2;   // seconds
+  double p95 = 3;   // seconds
+  double p99 = 4;   // seconds
+  double max = 5;   // seconds (upper bound of the largest populated bucket)
+  double sum = 6;   // total seconds observed (for averages / throughput)
+}
+
+// Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
+// volume.
+message Remote {
+  int64 hits = 1;
+  int64 misses = 2;
+  int64 errors = 3;
+  double duration_p50 = 4;  // seconds
+  double duration_p95 = 5;  // seconds
+  int64 io_count = 6;       // number of get/put operations observed
+  int64 bytes_total = 7;    // total bytes transferred (sum of the io.size histogram)
+}
+
+// Backfill is the ring-buffer history the daemon sends once, right after a dashboard
+// connects, so the utilization grid and cache-rate trend start populated instead of empty.
+message Backfill {
+  repeated Sample samples = 1;  // oldest-first
+}
+
+// Sample is one point in the rolling utilization/activity history. The daemon appends one
+// per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid
+// square per sample by utilization.
+message Sample {
+  google.protobuf.Timestamp at = 1;
+  int32 in_use = 2;        // pool slots in use at this tick
+  int32 capacity = 3;      // pool capacity (0 = unlimited)
+  int32 waiting = 4;       // tasks queued for a slot
+  int64 cache_hits = 5;    // cumulative; diff adjacent samples for a hit rate
+  int64 cache_misses = 6;  // cumulative
+  int64 target_runs = 7;   // cumulative target executions
+}
