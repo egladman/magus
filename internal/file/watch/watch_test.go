@@ -4,12 +4,41 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// awaitEventFor re-invokes trigger on a ticker until a debounced batch containing wantPath
+// arrives, then returns; it fails the test at a generous deadline. This is the robust pattern
+// for fsnotify tests: there is no portable signal that an OS watch is "hot" after Add()
+// returns, so a single trigger can drop in the establishment gap (and stay dropped) under
+// load. Re-firing recovers it once the watch goes live. The ticker interval sits ABOVE the
+// tests' debounce window on purpose - re-triggering faster than the debounce would keep
+// resetting the timer and starve the flush, so a batch would never emit.
+func awaitEventFor(t *testing.T, w *Watcher, wantPath string, trigger func()) {
+	t.Helper()
+	const retickInterval = 200 * time.Millisecond // > the 50ms debounce used by these tests
+	deadline := time.After(5 * time.Second)
+	retick := time.NewTicker(retickInterval)
+	defer retick.Stop()
+	trigger()
+	for {
+		select {
+		case batch := <-w.Events():
+			if slices.Contains(batch.Paths, wantPath) {
+				return
+			}
+		case <-retick.C:
+			trigger()
+		case <-deadline:
+			t.Fatalf("timeout: no event for %s", wantPath)
+		}
+	}
+}
 
 func TestWatcherDetectsFileWrite(t *testing.T) {
 	t.Parallel()
@@ -28,15 +57,11 @@ func TestWatcherDetectsFileWrite(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Close()
 
-	// Write to the file to trigger an event.
-	require.NoError(t, os.WriteFile(f.Name(), []byte("hello"), 0o644))
-
-	select {
-	case batch := <-w.Events():
-		assert.Contains(t, batch.Paths, f.Name())
-	case <-time.After(3 * time.Second):
-		t.Fatal("timeout: no event received after file write")
-	}
+	// Re-write until the watcher reports it: a single write can drop in the gap between
+	// Add() returning and the OS watch becoming hot. See awaitEventFor.
+	awaitEventFor(t, w, f.Name(), func() {
+		require.NoError(t, os.WriteFile(f.Name(), []byte("hello"), 0o644))
+	})
 }
 
 func TestWatcherDebounceCoalesces(t *testing.T) {
@@ -105,19 +130,32 @@ func TestWatcherIgnoresBuiltinPaths(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Close()
 
-	// Write inside .git — should not produce an event.
+	// Write inside .git once — it must never surface in any batch.
 	gitFile := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(gitFile, []byte("ref: refs/heads/main"), 0o644))
 
-	// Write a legitimate file — should produce an event.
+	// Re-write a legitimate file until it surfaces (the single-write establishment-gap race
+	// applies here too), asserting the ignored .git file is absent from every batch we see.
 	legit := filepath.Join(dir, "main.go")
-	require.NoError(t, os.WriteFile(legit, []byte("package main"), 0o644))
-
-	select {
-	case batch := <-w.Events():
-		assert.NotContains(t, batch.Paths, gitFile, "received event for .git file; should have been ignored")
-	case <-time.After(3 * time.Second):
-		t.Fatal("timeout waiting for legitimate event")
+	deadline := time.After(5 * time.Second)
+	retick := time.NewTicker(200 * time.Millisecond)
+	defer retick.Stop()
+	writeLegit := func() {
+		require.NoError(t, os.WriteFile(legit, []byte("package main"), 0o644))
+	}
+	writeLegit()
+	for {
+		select {
+		case batch := <-w.Events():
+			assert.NotContains(t, batch.Paths, gitFile, "received event for .git file; should have been ignored")
+			if slices.Contains(batch.Paths, legit) {
+				return
+			}
+		case <-retick.C:
+			writeLegit()
+		case <-deadline:
+			t.Fatal("timeout waiting for legitimate event")
+		}
 	}
 }
 
@@ -137,34 +175,12 @@ func TestWatcherDetectsNewSubdir(t *testing.T) {
 	require.NoError(t, os.Mkdir(sub, 0o755))
 	newFile := filepath.Join(sub, "foo.go")
 
-	// Re-write loop instead of a Sleep: keep recreating the target
-	// file on a short ticker until the watcher reports it, or the
-	// deadline trips. fsnotify backends register newly-created
-	// directories asynchronously; a single write that landed before
-	// the watch was attached would silently drop on slow CI. Each
-	// WriteFile generates a fresh CREATE/WRITE the watcher will see
-	// once its watch on `sub` is registered.
-	deadline := time.After(4 * time.Second)
-	retick := time.NewTicker(50 * time.Millisecond)
-	defer retick.Stop()
-	write := func() {
+	// A newly-created directory's watch is registered asynchronously (the loop walks it off
+	// the hot path), so the first write to a file inside it can drop before the watch on
+	// `sub` is live. Re-write until it surfaces. See awaitEventFor.
+	awaitEventFor(t, w, newFile, func() {
 		require.NoError(t, os.WriteFile(newFile, []byte("package newpkg"), 0o644))
-	}
-	write()
-	for {
-		select {
-		case batch := <-w.Events():
-			for _, p := range batch.Paths {
-				if p == newFile {
-					return // success
-				}
-			}
-		case <-retick.C:
-			write()
-		case <-deadline:
-			t.Fatal("timeout: did not see event for file in new subdirectory")
-		}
-	}
+	})
 }
 
 // TestWatcherContextCancellation verifies that cancelling the context
