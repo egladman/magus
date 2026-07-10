@@ -6,18 +6,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/web"
 	"github.com/egladman/magus/types"
 )
 
@@ -230,112 +227,50 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	return nil
 }
 
-// serveMaxWait bounds how long the loopback server waits for the browser to
-// request the graph before giving up (e.g. no browser opened). serveGrace is a
-// short window kept open AFTER the first fetch so a quick reload still succeeds.
-const (
-	serveMaxWait = 2 * time.Minute
-	serveGrace   = 1500 * time.Millisecond
-)
-
-// graphOpenServe hands the graph to the hosted page over an ephemeral 127.0.0.1
-// server, then STOPS - it is a one-shot handoff, not a standing service. The
-// server binds loopback only and answers with Access-Control-Allow-Origin scoped
-// to the site origin (so only the explorer page can read it), serves the graph
-// once, waits a brief grace window for a possible reload, and shuts down. It also
-// exits on Ctrl-C or if the page never asks within serveMaxWait. The graph is
-// delivered browser <-> loopback and never leaves the machine.
+// graphOpenServe hands the graph to the hosted page over an ephemeral 127.0.0.1 server,
+// then STOPS - a one-shot handoff, not a standing service. The loopback bind, CORS lock,
+// serve-once, and grace-then-shutdown all live in internal/web (shared with the live log
+// stream); this wraps them with the graph-specific URL (#src=) and the user-facing
+// messages. The graph is delivered browser <-> loopback and never leaves the machine.
 func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges int) error {
-	origin, err := siteOrigin(base)
+	origin, err := web.Origin(base)
 	if err != nil {
 		return err
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	bs, err := web.ServeBlob(web.Config{Origin: origin}, "/graph.json", "application/json", raw)
 	if err != nil {
-		return fmt.Errorf("start loopback server: %w", err)
+		return err
 	}
-	addr, ok := ln.Addr().(*net.TCPAddr)
-	if !ok {
-		return fmt.Errorf("loopback listener has unexpected address type %T", ln.Addr())
-	}
-	srcURL := fmt.Sprintf("http://127.0.0.1:%d/graph.json", addr.Port)
+	openURL := strings.TrimRight(base, "/") + "/#src=" + url.QueryEscape(bs.SourceURL())
 
-	served := make(chan struct{})
-	var once sync.Once
-	mux := http.NewServeMux()
-	mux.HandleFunc("/graph.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Vary", "Origin")
-		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(raw)
-		once.Do(func() { close(served) }) // the page has the graph; begin teardown
-	})
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-
-	openURL := strings.TrimRight(base, "/") + "/#src=" + url.QueryEscape(srcURL)
-
-	fmt.Fprintf(os.Stderr, "handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n", nodes, edges, srcURL)
+	fmt.Fprintf(os.Stderr, "handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n", nodes, edges, bs.SourceURL())
 	fmt.Fprintf(os.Stderr, "it is served once, CORS-locked to %s, and never leaves your machine; the server stops as soon as the page has it.\n", origin)
 	if err := openBrowser(openURL); err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph open: could not open a browser (%v). Open this yourself (the server is waiting):\n  %s\n", err, openURL)
 	}
 
-	errc := make(chan error, 1)
-	go func() { errc <- srv.Serve(ln) }()
-
-	shutdown := func() {
-		sctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(sctx)
-	}
-
-	select {
-	case <-served:
-		// Keep serving briefly so a fast reload re-fetches, then stop.
-		select {
-		case <-time.After(serveGrace):
-		case <-ctx.Done():
-		}
-		shutdown()
+	switch bs.WaitServed(ctx) {
+	case web.ServeCompleted:
 		fmt.Fprintln(os.Stderr, "graph loaded; loopback server stopped.")
-		return nil
-	case <-time.After(serveMaxWait):
-		shutdown()
+	case web.ServeTimedOut:
 		fmt.Fprintln(os.Stderr, "the page never requested the graph; loopback server stopped. Re-run if your browser did not open.")
-		return nil
-	case <-ctx.Done():
-		shutdown()
+	case web.ServeCanceled:
 		fmt.Fprintln(os.Stderr, "\ncanceled; loopback server stopped.")
-		return nil
-	case err := <-errc:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("loopback server: %w", err)
-		}
-		return nil
 	}
+	return nil
 }
 
-// siteOrigin extracts the scheme://host[:port] origin from a page URL, for the
-// loopback server's CORS Allow-Origin. A "null"-safe default is deliberately not
-// used: an unparseable --url is a user error worth surfacing.
-func siteOrigin(base string) (string, error) {
-	u, err := url.Parse(base)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return "", fmt.Errorf("--url %q is not a valid absolute URL", base)
-	}
-	return u.Scheme + "://" + u.Host, nil
-}
-
-// openBrowser launches the OS default handler for a URL. It hands the URL off to
-// the platform opener (macOS `open`, Windows FileProtocolHandler, else
-// `xdg-open`) and does not wait - the browser owns the tab from there.
+// openBrowser launches a browser for a URL and does not wait - the browser owns the
+// tab from there. It honors the freedesktop/de-facto BROWSER convention first, so a
+// user can force a specific browser on any platform (e.g.
+// `BROWSER=firefox magus query ref1a2b3c --open`); only when BROWSER is unset or every
+// entry fails does it fall back to the OS default handler (macOS `open`, Windows
+// FileProtocolHandler, else `xdg-open`, which itself already respects BROWSER and the
+// desktop's default-web-browser setting on Linux).
 func openBrowser(url string) error {
+	if err := openViaBrowserEnv(url); err == nil {
+		return nil
+	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
@@ -346,4 +281,34 @@ func openBrowser(url string) error {
 		cmd = exec.Command("xdg-open", url)
 	}
 	return cmd.Start()
+}
+
+// openViaBrowserEnv tries the $BROWSER convention: a colon-separated list of commands,
+// each either containing "%s" (replaced by the URL) or taking the URL as a trailing
+// argument. The first entry that launches wins. Returns an error if BROWSER is unset
+// or no entry starts, so the caller falls back to the platform opener.
+func openViaBrowserEnv(url string) error {
+	env := strings.TrimSpace(os.Getenv("BROWSER"))
+	if env == "" {
+		return errors.New("BROWSER not set")
+	}
+	for _, entry := range strings.Split(env, ":") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		var fields []string
+		if strings.Contains(entry, "%s") {
+			fields = strings.Fields(strings.ReplaceAll(entry, "%s", url))
+		} else {
+			fields = append(strings.Fields(entry), url)
+		}
+		if len(fields) == 0 {
+			continue
+		}
+		if err := exec.Command(fields[0], fields[1:]...).Start(); err == nil {
+			return nil
+		}
+	}
+	return errors.New("no BROWSER entry launched")
 }
