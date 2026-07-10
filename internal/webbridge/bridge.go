@@ -13,6 +13,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -72,6 +74,29 @@ type Options struct {
 	// HeartbeatInterval overrides the default 25-second SSE heartbeat period.
 	// Zero uses the default. Exposed for testing; production code leaves it zero.
 	HeartbeatInterval time.Duration
+
+	// MagusVersion is the running magus version, stamped onto the status.v1 wire
+	// message pushed by the /api/v1/events `status` channel. The production mount
+	// (mcp/server.go) sets it from ServerOptions.Version. It also gates status
+	// streaming: when empty and StatusReportFn is nil, the events stream emits no
+	// status frames (so unit tests with a bare Options stay heartbeat/graph-only).
+	MagusVersion string
+
+	// StatusInterval overrides the default 2-second period at which the events
+	// stream polls pool state and pushes a `status` frame when it changed. Zero
+	// uses the default. Exposed for testing; production code leaves it zero.
+	StatusInterval time.Duration
+
+	// StatusReportFn, when non-nil, is called instead of querying the daemon socket
+	// to assemble the status report served by /api/v1/status and streamed on the
+	// events `status` channel. Intended for tests; production code leaves this nil.
+	StatusReportFn func(ctx context.Context) types.StatusReport
+
+	// MetricsSnapshotFn, when non-nil, returns the daemon's current metrics as standard OTLP
+	// protobuf (an ExportMetricsServiceRequest, aggregated across warm workspaces). The events
+	// stream base64-encodes it onto a `metrics` channel the /dashboard decodes. The caller
+	// (cmd/magus) wires this to the workspace registry; nil disables the metrics channel.
+	MetricsSnapshotFn func(ctx context.Context) ([]byte, error)
 
 	// KnowledgeGraphFn, when non-nil, is called instead of Magus.KnowledgeGraph.
 	// Intended for tests that want to drive graph-serving paths without a real
@@ -314,22 +339,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request, opts Options) {
 		return
 	}
 
-	out := types.StatusReport{
-		Telemetry: opts.StatusBase.Telemetry,
-		Cache:     opts.StatusBase.Cache,
-		Build:     opts.StatusBase.Build,
-	}
-	addr, err := resolveStatusAddr(r.Context(), opts)
-	if err != nil {
-		out.PoolError = err.Error()
-	} else {
-		reply, qerr := proc.QueryStatus(r.Context(), addr)
-		if qerr != nil {
-			out.PoolError = qerr.Error()
-		} else {
-			out.Pool = statusOutputFromReply(reply)
-		}
-	}
+	out := buildStatusReport(r.Context(), opts)
 
 	body, merr := json.Marshal(out)
 	if merr != nil {
@@ -339,6 +349,33 @@ func handleStatus(w http.ResponseWriter, r *http.Request, opts Options) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(body)
+}
+
+// buildStatusReport assembles the full status report: the static telemetry/cache/build
+// fields from opts.StatusBase merged with the live pool state. The pool is taken from
+// opts.StatusReportFn when set (tests), otherwise queried from the daemon socket; a query
+// failure is reported as PoolError rather than an error return, matching `magus status`.
+func buildStatusReport(ctx context.Context, opts Options) types.StatusReport {
+	if opts.StatusReportFn != nil {
+		return opts.StatusReportFn(ctx)
+	}
+	out := types.StatusReport{
+		Telemetry: opts.StatusBase.Telemetry,
+		Cache:     opts.StatusBase.Cache,
+		Build:     opts.StatusBase.Build,
+	}
+	addr, err := resolveStatusAddr(ctx, opts)
+	if err != nil {
+		out.PoolError = err.Error()
+		return out
+	}
+	reply, qerr := proc.QueryStatus(ctx, addr)
+	if qerr != nil {
+		out.PoolError = qerr.Error()
+		return out
+	}
+	out.Pool = statusOutputFromReply(reply)
+	return out
 }
 
 // statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput,
@@ -370,6 +407,7 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 			Workspace: c.Workspace,
 			StartedAt: c.StartedAt,
 			SubOp:     c.SubOp,
+			Inv:       c.Inv,
 		})
 	}
 	for _, ws := range r.Workspaces {
@@ -377,6 +415,10 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 			Root:       ws.Root,
 			LoadedAt:   ws.LoadedAt,
 			LastAccess: ws.LastAccess,
+			CacheHit:   ws.CacheHit,
+			CacheMiss:  ws.CacheMiss,
+			CacheError: ws.CacheError,
+			CacheBytes: ws.CacheBytes,
 		})
 	}
 	return out
@@ -395,13 +437,19 @@ func resolveStatusAddr(ctx context.Context, opts Options) (string, error) {
 // handleEvents serves GET /api/v1/events as a Server-Sent Events stream.
 //
 // Events:
-//   - event: graph, data: {"seq": N}   -- workspace graph changed (N is monotonic)
-//   - event: status, data: {"seq": N}  -- pool state changed (not yet implemented; reserved)
+//   - event: graph,  data: {"seq": N}       -- workspace graph changed (N is monotonic)
+//   - event: status, data: <base64 proto>   -- pool state changed; payload is a base64
+//     magus.status.v1.Status (see handler.EncodeStatusEvent), the same shape the /dashboard
+//     page decodes. Pushed on connect and whenever the encoded snapshot changes.
+//   - event: metrics, data: <base64 proto>  -- current metrics as base64 OTLP
+//     (ExportMetricsServiceRequest); pushed on connect and on change when MetricsSnapshotFn
+//     is set. The /dashboard decodes it with the standard OTLP client.
 //   - comment-line heartbeat every 25s
 //
-// Clients must refetch /api/v1/graph on a graph event; no diff is embedded.
-// The stream is driven by opts.Watch.Events(); when Watch is nil only
-// heartbeats are emitted.
+// Clients must refetch /api/v1/graph on a graph event; no diff is embedded (the status frame,
+// by contrast, carries the full snapshot). The graph channel is driven by opts.GraphInvalidate;
+// when it is nil only heartbeats (and status) are emitted. Status streaming is active only when
+// opts.MagusVersion is set or opts.StatusReportFn is provided.
 func handleEvents(w http.ResponseWriter, r *http.Request, opts Options) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -433,6 +481,54 @@ func handleEvents(w http.ResponseWriter, r *http.Request, opts Options) {
 
 	inv := opts.GraphInvalidate
 
+	// Status + metrics streaming: push an initial snapshot on connect, then poll on a shared
+	// ticker and re-push each channel only when its encoded payload changes. Status is gated on
+	// a version to stamp (or a test seam); metrics on the snapshot fn. A bare Options stays
+	// heartbeat/graph-only.
+	var lastStatus string
+	pushStatus := func() {
+		enc, err := handler.EncodeStatusEvent(buildStatusReport(r.Context(), opts), opts.MagusVersion)
+		if err != nil || enc == lastStatus {
+			return
+		}
+		lastStatus = enc
+		fmt.Fprintf(w, "event: status\ndata: %s\n\n", enc)
+		flusher.Flush()
+	}
+	var lastMetrics string
+	pushMetrics := func() {
+		raw, err := opts.MetricsSnapshotFn(r.Context())
+		if err != nil || len(raw) == 0 {
+			return
+		}
+		enc := base64.StdEncoding.EncodeToString(raw)
+		if enc == lastMetrics {
+			return
+		}
+		lastMetrics = enc
+		fmt.Fprintf(w, "event: metrics\ndata: %s\n\n", enc)
+		flusher.Flush()
+	}
+
+	statusOn := opts.MagusVersion != "" || opts.StatusReportFn != nil
+	metricsOn := opts.MetricsSnapshotFn != nil
+	var pollTick <-chan time.Time
+	if statusOn || metricsOn {
+		interval := opts.StatusInterval
+		if interval <= 0 {
+			interval = 2 * time.Second
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		pollTick = ticker.C
+		if statusOn {
+			pushStatus()
+		}
+		if metricsOn {
+			pushMetrics()
+		}
+	}
+
 	for {
 		select {
 		case <-r.Context().Done():
@@ -440,6 +536,13 @@ func handleEvents(w http.ResponseWriter, r *http.Request, opts Options) {
 		case <-heartbeat.C:
 			fmt.Fprintf(w, ": heartbeat\n\n")
 			flusher.Flush()
+		case <-pollTick:
+			if statusOn {
+				pushStatus()
+			}
+			if metricsOn {
+				pushMetrics()
+			}
 		case _, ok := <-inv:
 			if !ok {
 				// Channel closed; keep sending heartbeats but no more graph events.

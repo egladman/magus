@@ -3,8 +3,10 @@
 package webbridge_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +19,9 @@ import (
 
 	"github.com/egladman/magus/internal/mcp/auth"
 	"github.com/egladman/magus/internal/webbridge"
+	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
+	"github.com/egladman/magus/types"
+	"google.golang.org/protobuf/proto"
 )
 
 // testHandler builds an HTTP mux with the bridge mounted, without auth.Guard
@@ -301,6 +306,120 @@ func TestEvents_GraphEvent_WhenInvalidated(t *testing.T) {
 	}
 	if !strings.Contains(data, `"seq":`) {
 		t.Errorf("want 'seq' in SSE data, got %q", data)
+	}
+}
+
+// TestEvents_StatusEvent_Emitted verifies the events stream pushes a base64
+// magus.status.v1.Status frame on connect when status streaming is enabled (a
+// version to stamp + a StatusReportFn seam standing in for the daemon query).
+func TestEvents_StatusEvent_Emitted(t *testing.T) {
+	opts := minimalOpts()
+	opts.MagusVersion = "1.2.3"
+	opts.StatusInterval = 50 * time.Millisecond
+	opts.StatusReportFn = func(context.Context) types.StatusReport {
+		return types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, InUse: 1}}
+	}
+	h := testHandler(opts)
+
+	pr, pw := io.Pipe()
+	rr := &pipeResponseWriter{header: make(http.Header), pw: pw}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil).WithContext(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.ServeHTTP(rr, req)
+	}()
+
+	data := readUntilSSE(t, pr, "event: status")
+	cancel()
+	<-done
+
+	payload := sseDataLine(t, data)
+	raw, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		t.Fatalf("decode base64 status payload %q: %v", payload, err)
+	}
+	var st statusv1.Status
+	if err := proto.Unmarshal(raw, &st); err != nil {
+		t.Fatalf("unmarshal Status proto: %v", err)
+	}
+	if st.MagusVersion != "1.2.3" {
+		t.Errorf("want magus_version 1.2.3, got %q", st.MagusVersion)
+	}
+	if st.Health != statusv1.Health_HEALTH_HEALTHY {
+		t.Errorf("want HEALTH_HEALTHY, got %v", st.Health)
+	}
+	if st.Pool == nil || st.Pool.Capacity != 4 || st.Pool.InUse != 1 {
+		t.Errorf("want pool capacity=4 in_use=1, got %+v", st.Pool)
+	}
+}
+
+// readUntilSSE reads from pr until the accumulated output contains marker or the
+// read fails, returning everything read so far.
+func readUntilSSE(t *testing.T, pr io.Reader, marker string) string {
+	t.Helper()
+	var sb strings.Builder
+	buf := make([]byte, 512)
+	for i := 0; i < 64; i++ {
+		n, err := pr.Read(buf)
+		sb.Write(buf[:n])
+		if strings.Contains(sb.String(), marker) {
+			return sb.String()
+		}
+		if err != nil {
+			break
+		}
+	}
+	t.Fatalf("marker %q not seen in SSE output: %q", marker, sb.String())
+	return ""
+}
+
+// sseDataLine returns the payload of the first "data: " line in an SSE chunk.
+func sseDataLine(t *testing.T, chunk string) string {
+	t.Helper()
+	for _, line := range strings.Split(chunk, "\n") {
+		if rest, ok := strings.CutPrefix(line, "data: "); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	t.Fatalf("no data: line in SSE chunk: %q", chunk)
+	return ""
+}
+
+// TestEvents_MetricsEvent_Emitted verifies the events stream base64-encodes the OTLP snapshot
+// from MetricsSnapshotFn onto a `metrics` channel.
+func TestEvents_MetricsEvent_Emitted(t *testing.T) {
+	opts := minimalOpts()
+	opts.StatusInterval = 50 * time.Millisecond
+	want := []byte{0x0a, 0x02, 0x08, 0x01} // arbitrary non-empty payload
+	opts.MetricsSnapshotFn = func(context.Context) ([]byte, error) { return want, nil }
+	h := testHandler(opts)
+
+	pr, pw := io.Pipe()
+	rr := &pipeResponseWriter{header: make(http.Header), pw: pw}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil).WithContext(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.ServeHTTP(rr, req)
+	}()
+
+	data := readUntilSSE(t, pr, "event: metrics")
+	cancel()
+	<-done
+
+	raw, err := base64.StdEncoding.DecodeString(sseDataLine(t, data))
+	if err != nil {
+		t.Fatalf("decode metrics payload: %v", err)
+	}
+	if !bytes.Equal(raw, want) {
+		t.Errorf("metrics payload = %x, want %x", raw, want)
 	}
 }
 
