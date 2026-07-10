@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+// Package magus.query.v1 is the shared filter contract: magus's query DSL
+// ("kind:spell project:foo -kind:op text") in structured form. It is the single wire
+// representation of a filter, reused across magus.viewer.v1 (record filtering), and
+// the planned graph/search contracts - so one grammar backs everything. The existing
+// Go parser is the single PARSING source of truth (DSL string <-> Query); a client may
+// send either the raw string (parsed server-side) or a built Query.
+package magus.query.v1;
+
+// Term is one clause of a query: a field:value match, or free text (field empty), and
+// optionally negated (a leading "-" in the DSL). Terms are combined with AND,
+// case-insensitive.
+message Term {
+  string field = 1;  // "" = free text; else a field key (kind, project, relation, id, ...)
+  string value = 2;
+  bool negate = 3;
+}
+
+// Query is a set of ANDed terms - the parsed form of one DSL filter string.
+message Query {
+  repeated Term terms = 1;
+}

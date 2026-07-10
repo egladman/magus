@@ -1,0 +1,13 @@
+version: v2
+# protovalidate provides the (buf.validate.field) options used to constrain the RPC
+# request inputs (ref shape, non-empty invocation). buf dep update pins it in buf.lock.
+deps:
+  - buf.build/bufbuild/protovalidate
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - WIRE_JSON

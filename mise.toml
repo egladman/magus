@@ -31,3 +31,8 @@ pnpm = "10.33.0"
 # required; wasm-opt runs as tinygo's post-link optimization step.
 tinygo = "0.41.1"
 "aqua:WebAssembly/binaryen" = "129"
+# buf drives the protobuf API contract between magus and the website log viewer
+# (proto/magus/runlog/v1). The buf spell (spells/buf) forks it for generate/lint/
+# breaking; buf-breaking gates the wire contract in ci. Go codegen uses protoc-gen-go
+# (proto/buf.gen.yaml); JS uses @bufbuild/protoc-gen-es (website pnpm dep).
+"aqua:bufbuild/buf" = "1.58.0"

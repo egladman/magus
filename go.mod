@@ -45,6 +45,7 @@ require (
 
 require (
 	aead.dev/minisign v0.2.0 // indirect
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -88,3 +89,5 @@ require (
 )
 
 replace github.com/egladman/gopherbuzz => ./gopherbuzz
+
+tool google.golang.org/protobuf/cmd/protoc-gen-go

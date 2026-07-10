@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+// Package magus.viewer.v1 is the versioned wire contract for the magus log viewer
+// (the /logs/ page, or any third-party frontend generated from this schema). It is
+// one of the magus tool-page contracts - a sibling of magus.status.v1 and the planned
+// magus.graph.v1 / magus.editor.v1. magus captures one Invocation (a single `magus`
+// command, launch to exit) as a stream of Events, delivered to the viewer either as one
+// Journal in a URL fragment (a finished run / a ref), or via ListEvents (paginated) /
+// StreamEvents (live). The model follows Bazel's Build Event Protocol: an invocation
+// emits a stream of typed events, the first of which (KIND_STARTED) carries the command
+// lineage. buf-breaking gates this file so the contract cannot silently regress. The
+// on-disk store is JSONL (one Event per line); this proto is the WIRE format only.
+package magus.viewer.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "magus/query/v1/query.proto";
+
+// Kind classifies an Event. Output events carry subprocess text; the rest carry magus's
+// own structural events.
+enum Kind {
+  // 3 (STAGE) and 5 (SUMMARY) were removed pre-release: a sub-target completion is just a
+  // nested RESULT, and end-of-run counts fold onto the FINISHED lifecycle event. Their
+  // numbers are reserved so they are never reused with a different meaning.
+  reserved 3, 5;
+
+  KIND_UNSPECIFIED = 0;
+  // Lifecycle events bracket the invocation: STARTED opens it (carries the command
+  // lineage + version), FINISHED closes it (carries the overall pass/fail outcome).
+  KIND_STARTED = 7;
+  KIND_FINISHED = 8;
+  // Content events, produced between the lifecycle pair.
+  KIND_EXEC = 9;    // a subprocess is about to run: the command line (groups the output below it)
+  KIND_OUTPUT = 1;  // a subprocess stdout/stderr line
+  KIND_RESULT = 2;  // a target finished (pass/fail/cached), with its ref + duration
+  KIND_SCOPE = 4;   // the run's project scope header
+  KIND_WARN = 6;    // a magus warning
+}
+
+// Stream identifies which pipe an output event came from.
+enum Stream {
+  STREAM_UNSPECIFIED = 0;
+  STREAM_STDOUT = 1;
+  STREAM_STDERR = 2;
+}
+
+// Status is a result event's outcome.
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_PASS = 1;
+  STATUS_FAIL = 2;
+  STATUS_CACHED = 3;
+}
+
+// Trigger is how an invocation was spawned - the lineage a viewer surfaces ("this
+// failure came from `magus affected ci`").
+enum Trigger {
+  TRIGGER_UNSPECIFIED = 0;
+  TRIGGER_RUN = 1;       // magus run
+  TRIGGER_AFFECTED = 2;  // magus affected
+  TRIGGER_CI = 3;        // magus ci / affected ci
+  TRIGGER_X = 4;         // magus x (interactive picker)
+  TRIGGER_WATCH = 5;     // magus watch
+  TRIGGER_DIRECT = 6;    // a directly invoked spell/op
+}
+
+// Command is the invoking command line and context - what was asked of magus.
+message Command {
+  string verb = 1;             // the subcommand: run, affected, ci, x, watch, ...
+  repeated string args = 2;    // the argument vector after the verb (targets, projects, flags)
+  string cwd = 3;              // directory the command was invoked in
+  Trigger trigger = 4;
+}
+
+// Invocation is one `magus` command, launch to exit - the thing that produces a Journal
+// of Events. It is a projection of the stream's lifecycle events (KIND_STARTED supplies
+// the command + start; KIND_FINISHED supplies the end), offered as a parsed header so a
+// viewer need not dig through the events for the command.
+message Invocation {
+  string id = 1;
+  Command command = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;  // unset while still running
+  string magus_version = 5;
+}
+
+// Event is one line of a structured invocation log - the atom of the stream. Most events
+// are output or result; the first event of an invocation is KIND_STARTED and carries the
+// command + magus_version (the run's identity), which every other event leaves unset.
+message Event {
+  google.protobuf.Timestamp time = 1;    // when the event occurred
+  string project = 2;                    // repo-relative project path
+  string target = 3;                     // target name, as the CLI spells it (with charms)
+  Kind kind = 4;
+  Stream stream = 5;                     // output events only
+  string level = 6;                      // info|warn|error, for magus events
+  Status status = 7;                     // result events only
+  string ref = 8;                        // target-output ref, on result events
+  google.protobuf.Duration duration = 9; // how long the target ran, on result events
+  string text = 10;                      // output line or message (raw; may contain ANSI)
+
+  Command command = 11;                  // set only on the KIND_STARTED event
+  string magus_version = 12;             // set only on the KIND_STARTED event
+}
+
+// Journal bundles an invocation header with its events - the whole thing for the offline
+// URL fragment, or a page of events from ListEvents.
+message Journal {
+  Invocation invocation = 1;
+  repeated Event events = 2;
+}
+
+// ViewerService serves an invocation's captured output to a log viewer, resource-oriented
+// per AIP: Get the Invocation (the run header), List its Events (paginated), Stream them
+// (live). The offline URL-fragment path instead carries a whole Journal directly (no
+// server).
+service ViewerService {
+  // GetInvocation returns an invocation's header: its command, lineage, and timing - what
+  // a viewer shows on top. Selected by a ref (one target) or an invocation id (a run).
+  rpc GetInvocation(GetInvocationRequest) returns (GetInvocationResponse);
+  // ListEvents returns a page of an invocation's events; page through with page_token
+  // until next_page_token is empty. filter narrows them server-side (large logs).
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+  // StreamEvents streams a running invocation's events as they are produced. Reconnect
+  // with start_time set to the last seen time to resume.
+  rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
+}
+
+// Selector picks a run: one target's execution (ref) or a whole invocation.
+message Selector {
+  oneof of {
+    option (buf.validate.oneof).required = true;
+    string ref = 1 [(buf.validate.field).string.pattern = "^ref[0-9a-f]+$"];
+    string invocation = 2 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
+  }
+}
+
+message GetInvocationRequest {
+  Selector selector = 1 [(buf.validate.field).required = true];
+}
+message GetInvocationResponse {
+  Invocation invocation = 1;
+}
+
+message ListEventsRequest {
+  Selector selector = 1 [(buf.validate.field).required = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
+  string page_token = 3;
+  magus.query.v1.Query filter = 4;          // DSL content filter (project:/target:/kind:/status:/text)
+  google.protobuf.Timestamp start_time = 5; // inclusive time lower bound; unset = open
+  google.protobuf.Timestamp end_time = 6;   // exclusive time upper bound; unset = open
+}
+message ListEventsResponse {
+  repeated Event events = 1;
+  string next_page_token = 2;  // set when more events remain
+}
+
+message StreamEventsRequest {
+  string invocation = 1 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
+  magus.query.v1.Query filter = 2;          // DSL content filter
+  google.protobuf.Timestamp start_time = 3; // resume point: stream events at/after this time
+}
+message StreamEventsResponse {
+  Event event = 1;
+}

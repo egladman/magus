@@ -1,0 +1,39 @@
+// The protobuf API contract between magus and the website log viewer
+// (magus.runlog.v1). This project dogfoods magus's own `buf` spell: buf-generate
+// runs the codegen (picked up by the root `generate` target's `*-generate` glob, so
+// committed gen/ stays fresh and drift-gated), and buf-lint / buf-breaking gate the
+// wire contract - buf-breaking is the API-contract guard so a backward-incompatible
+// .proto change fails ci the same way go-vet does.
+//
+// The buf spell declares the sources (**/*.proto, buf.yaml, buf.gen.yaml) and the
+// generated outputs (gen/**) itself, so a .proto edit reruns codegen and invalidates
+// everything downstream that consumes the generated code.
+
+import "magus/spell/buf";
+
+magus.project({
+    "spells": [buf],
+    "outputs": ["gen/**"],
+});
+
+// Self-contained project targets, so `magus affected ci` gates the contract when the
+// proto changes - no other project reaches in. lint checks the schema's shape; ci
+// regenerates first so committed gen/ can never drift from the .proto.
+//
+// buf-breaking (the backward-compat gate) is DEFERRED until it can be wired correctly.
+// Requirements, all load-bearing:
+//   1. NO hardcoded "main" - resolve the default branch dynamically via the existing
+//      types.DefaultBranchReporter (vcs/git.go DefaultBranch, from origin/HEAD).
+//   2. GRACEFUL BOOTSTRAP - the very first ci (before proto/ is on the baseline) has
+//      nothing to compare against; it must SKIP, not error. Check whether the proto
+//      module (buf.yaml) exists at the default-branch ref first - this needs a NEW VCS
+//      capability (a sibling of DefaultBranchReporter, e.g. a "path exists at ref" via
+//      `git cat-file -e <ref>:proto/buf.yaml` / ls-tree / ls-remote). Absent -> skip.
+//   3. SUBDIR baseline - the module is in proto/, not the git root, so the against ref
+//      is `<gitroot>/.git#branch=<default>,subdir=proto`; resolve the git root (mind the
+//      worktree .git FILE, not a dir). The stock buf spell hardcodes ".git#branch=main"
+//      and assumes project==gitroot, so this needs a custom target, not the bare op.
+export fun lint(args: [str]) > void { buf["buf-lint"](); }
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("buf-generate"), magus.target.literal("lint"));
+}

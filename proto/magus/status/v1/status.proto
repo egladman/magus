@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+// Package magus.status.v1 is the versioned wire contract for magus's status/dashboard
+// view, scoped to LIVE state: overall health, the concurrency pool (capacity/in-use/
+// waiting slots), and what is running right now - the in-flight calls, their workspace,
+// and how long they have run. Static config (telemetry/cache/build) is deliberately NOT
+// here; that is `magus status`/config, not "what is running." Backs a native-feeling
+// /dashboard. A sibling of magus.viewer.v1. buf-breaking gates this file.
+package magus.status.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Health is the at-a-glance rollup a dashboard shows.
+enum Health {
+  HEALTH_UNSPECIFIED = 0;
+  HEALTH_HEALTHY = 1;   // daemon reachable, pool nominal
+  HEALTH_DEGRADED = 2;  // reachable but something is off (pool error, saturation)
+  HEALTH_DOWN = 3;      // no daemon / pool
+}
+
+// Status is the live snapshot.
+message Status {
+  Health health = 1;
+  Pool pool = 2;        // live concurrency; absent when no daemon/pool is running
+  string magus_version = 3;
+}
+
+// Pool is the live concurrency pool - the slots and the work occupying them.
+message Pool {
+  int32 parent_pid = 1;
+  string daemon_version = 2;
+  string mode = 3;             // "daemon" | "proc" | ""
+  int32 capacity = 4;          // total concurrency slots (0 = unlimited)
+  int32 in_use = 5;            // slots currently acquired
+  int32 waiting = 6;           // tasks queued for a slot
+  repeated Call calls = 7;     // what is running right now
+  repeated Workspace workspaces = 8;
+  repeated string affected = 9;
+}
+
+// Call is one in-flight unit of work in the pool.
+message Call {
+  repeated string args = 1;                  // the argument vector (carries the target/project)
+  string workspace = 2;
+  google.protobuf.Timestamp start_time = 3;  // when the call started
+  string sub_op = 4;                         // the sub-operation currently executing
+}
+
+// Workspace is one workspace the daemon has loaded.
+message Workspace {
+  string root = 1;
+  google.protobuf.Timestamp load_time = 2;
+  google.protobuf.Timestamp last_access_time = 3;
+}
+
+// StatusService serves the snapshot, and streams it for a live dashboard.
+service StatusService {
+  // GetStatus returns the current snapshot.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  // StreamStatus pushes a fresh snapshot whenever the pool changes (or on a heartbeat),
+  // so a dashboard reflects what is running without polling.
+  rpc StreamStatus(StreamStatusRequest) returns (stream StreamStatusResponse);
+}
+
+message GetStatusRequest {}
+message GetStatusResponse {
+  Status status = 1;
+}
+message StreamStatusRequest {}
+message StreamStatusResponse {
+  Status status = 1;
+}
