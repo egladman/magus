@@ -183,16 +183,26 @@ async function loadGraph() {
       setStatus("Could not fetch the graph from that URL (" + e.message + ")." + hint, true);
     }
   }
-  // No (usable) fragment: fall back to the committed demo graph beside this page.
-  try {
-    setStatus("Loading the magus demo graph...");
-    const r = await fetch("./graph.json");
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return { data: await r.json(), source: "demo" };
-  } catch (e) {
-    setStatus("No graph loaded. Drop a graph.json exported with `magus graph export -o json`.", true);
-    return null;
+  // Fetch the committed demo graph for the demo button (#demo) AND for any content deep link
+  // (#view/#q/#node) - those reference graph content, and the only graph available without
+  // #data/#src is the demo, so a shared "explore this view of the demo" link keeps working.
+  // A BARE /graph/ (no directive at all) is the cold visit that gets the empty state instead,
+  // deferring the graph.json download until the visitor asks. Loading via a reload into boot
+  // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
+  if (params.demo || params.view || params.q || params.node) {
+    try {
+      setStatus("Loading the magus demo graph...");
+      const r = await fetch("./graph.json");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return { data: await r.json(), source: "demo" };
+    } catch (e) {
+      setStatus("Could not load the demo graph (" + e.message + ").", true);
+    }
   }
+  // No usable fragment: DON'T auto-fetch the demo (that download is wasted on a cold visit).
+  // Return an empty graph so boot runs its full setup (interactions wired, canvas ready); boot
+  // then shows the intuitive empty state, and the demo loads only when asked (loadDemoGraph).
+  return { data: { nodes: [], links: [] }, source: "empty" };
 }
 
 function setStatus(msg, isError) {
@@ -1418,11 +1428,21 @@ function syncLayoutToggle() {
   if (forceControls) forceControls.hidden = (layoutMode === "layered");
 }
 
+// loadDemoGraph reloads into the demo via #demo=1. The reload (rather than an in-place swap)
+// re-enters boot, whose pipeline renders the demo exactly like a real graph - default
+// projection, fit-to-view, wired interactions - so there is no partial/unframed render. The
+// demo graph.json is fetched by loadGraph ONLY when this flag is present (see there), so a
+// cold visit still pays no graph download; it also makes /graph/#demo=1 a shareable demo link.
+function loadDemoGraph() {
+  location.hash = "demo=1";
+  location.reload();
+}
+
 async function readGraphFile(file) {
   if (!file) return;
-  // A user graph supersedes the demo: lift the demo gate if it's still up.
-  const gate = el("demo-gate");
-  if (gate) gate.hidden = true;
+  // A user graph supersedes the empty state: dismiss it if it's still up.
+  const empty = el("graph-empty-state");
+  if (empty) empty.hidden = true;
   try {
     replaceGraph(JSON.parse(await file.text()), "Loaded " + file.name + " (local file; it stays on your machine).");
   } catch (e) {
@@ -2918,17 +2938,17 @@ async function boot() {
   // lands centered and fully in view instead of cropped to a corner. Only for the
   // default full-graph view - a deep link (#node/#view/#q) or the perf-guard projection
   // already frames its own subset, and layered layout is framed by applyLayeredMode.
-  if (projectionUnfolded && !hasFragmentDirective && layoutMode !== "layered") {
+  if (projectionUnfolded && !hasFragmentDirective && layoutMode !== "layered" && graph.nodes.length) {
     setTimeout(() => fitView(null), 700);
   }
 
-  // Demo gate: on a fresh open of the built-in demo (no deep link, no user graph),
-  // veil the graph and invite the visitor to explore the demo or open their own file,
-  // so the explorer reads as a tool for any workspace, not a magus-only page. A deep
-  // link (#view/#q/#node) means the visitor came for a specific view - skip the gate.
-  if (loaded.source === "demo" && !hasFragmentDirective) {
-    const gate = el("demo-gate");
-    if (gate) gate.hidden = false;
+  // Empty state: nothing was loaded (no #data/#src/#live), so instead of a graph we show an
+  // intuitive prompt - the command to open your own workspace, plus a button to try the demo.
+  // The full pipeline above ran on an empty graph, so interactions are wired; the demo (or a
+  // dropped file) loads via replaceGraph and dismisses this. See loadGraph / loadDemoGraph.
+  if (loaded.source === "empty") {
+    const empty = el("graph-empty-state");
+    if (empty) empty.hidden = false;
   }
 
   bootWireEvents();
@@ -3080,14 +3100,11 @@ function bootWireEvents() {
   if (openBtn && fileInput) openBtn.addEventListener("click", () => fileInput.click());
   if (fileInput) fileInput.addEventListener("change", () => readGraphFile(fileInput.files[0]));
 
-  // Demo gate: "Explore the demo" lifts the veil to reveal the (already-loaded) demo
-  // graph; "Open a graph.json" reuses the file picker. Loading a file dismisses the
-  // gate via readGraphFile itself, so opening from here or the toolbar behaves alike.
-  const demoGate = el("demo-gate");
+  // Empty state: "Explore the magus graph" fetches the committed demo graph.json ON DEMAND
+  // (not at boot) and renders it via replaceGraph, then dismisses the empty state. A dropped
+  // file or `magus graph open` link dismisses it the same way (loadDemoGraph / readGraphFile).
   const demoExplore = el("demo-explore-btn");
-  const demoOpen = el("demo-open-btn");
-  if (demoExplore && demoGate) demoExplore.addEventListener("click", () => { demoGate.hidden = true; });
-  if (demoOpen && fileInput) demoOpen.addEventListener("click", () => fileInput.click());
+  if (demoExplore) demoExplore.addEventListener("click", () => loadDemoGraph());
 
   // Fullscreen toggle: expand the whole explorer panel (like the playground).
   // Hidden if the browser lacks the Fullscreen API rather than showing a dead

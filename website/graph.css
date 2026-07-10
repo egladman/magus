@@ -195,32 +195,52 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
 #graph-status:empty { display: none; }
 #graph-status.err { color: var(--pico-del-color); border-color: var(--pico-del-color); }
 
-/* Demo gate: a blurred veil + card shown over the demo graph on first open (see
-   graph.html). The veil blurs the live canvas behind it so the graph reads as an
-   enticing preview; the card is opaque so the buttons stay crisp and legible (which
-   is why we can blur without hiding the controls). Dismissed by JS. */
-.demo-gate {
+/* Empty state: a centered prompt shown over the (empty) canvas when nothing is loaded
+   (see graph.html). Mirrors the log viewer's empty state - an icon, a title, and two
+   "ways" cards (run a command to open your own graph, or a button to try the demo). No
+   blur/veil: there is no graph behind it on a cold open, since the demo is not fetched
+   until asked. Dismissed by JS once a graph arrives. */
+.graph-empty-state {
   position: absolute; inset: 0; z-index: 4;
-  display: flex; align-items: center; justify-content: center; padding: 1rem;
-  background: color-mix(in srgb, var(--pico-background-color) 50%, transparent);
-  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: clamp(1.5rem, 5vw, 3rem); text-align: center; color: var(--pico-muted-color);
+  background: var(--pico-background-color);
 }
-.demo-gate[hidden] { display: none; }
-.demo-gate-card {
-  max-width: 30rem; text-align: center; padding: 1.4rem 1.6rem;
+.graph-empty-state[hidden] { display: none; }
+.graph-empty-icon { width: 3rem; height: 3rem; color: var(--pico-muted-border-color); margin-bottom: 0.9rem; }
+.graph-empty-title { color: var(--pico-color); font-weight: 600; font-size: 1.15rem; margin: 0 0 0.35rem; }
+.graph-empty-sub { margin: 0 0 1.4rem; max-width: 34rem; }
+.graph-empty-ways {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+  width: 100%; max-width: 34rem; margin-inline: auto; text-align: left;
+}
+.graph-empty-way {
+  display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
   background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-card-border-color); border-radius: var(--pico-border-radius);
-  box-shadow: var(--pico-card-box-shadow);
 }
-.demo-gate-eyebrow {
-  margin: 0 0 0.35rem; color: var(--pico-primary);
-  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
-}
-.demo-gate-title { margin: 0 0 0.5rem; font-size: 1.25rem; }
-.demo-gate-body { margin: 0 0 1.1rem; color: var(--pico-muted-color); font-size: 0.9rem; line-height: 1.5; }
-.demo-gate-body code { font-size: 0.85em; }
-.demo-gate-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; }
-.demo-gate-actions button { width: auto; margin: 0; }
+.graph-empty-way-label { color: var(--pico-color); font-weight: 600; font-size: 0.85rem; }
+.graph-empty-cmd { margin: 0; }
+.graph-empty-cmd code { font-size: 0.8em; }
+.graph-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
+.graph-empty-demo { width: auto; margin: 0; align-self: flex-start; padding: 0.3rem 0.8rem; font-size: 0.85rem; }
+@media (max-width: 640px) { .graph-empty-ways { grid-template-columns: 1fr; } }
+
+/* Cold state (nothing loaded): collapse the app to just the empty-state prompt at its NATURAL
+   height, instead of a full-viewport-tall empty panel. :has() detects the visible empty state
+   (no JS); when a graph loads the empty state hides, the selector stops matching, and the grid
+   + full height return. The sidebar/canvas are empty here, so we hide them and let the prompt
+   size the panel. */
+.graph-app:has(.graph-empty-state:not([hidden])) { display: block; height: auto; min-height: 0; }
+.graph-app:has(.graph-empty-state:not([hidden])) .graph-sidebar { display: none; }
+.graph-app:has(.graph-empty-state:not([hidden])) .graph-stage { height: auto; min-height: 0; overflow: visible; }
+.graph-app:has(.graph-empty-state:not([hidden])) .graph-stage > :not(.graph-empty-state),
+/* #id-level rules beat these elements' own #id display, which a plain class selector can't. */
+.graph-app:has(.graph-empty-state:not([hidden])) #graph-canvas,
+.graph-app:has(.graph-empty-state:not([hidden])) #graph-legend,
+.graph-app:has(.graph-empty-state:not([hidden])) #legend-toggle { display: none; }
+.graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state { position: static; }
 
 /* Kind dots: shape here, color from a .k-<kind> class (data-driven, no inline
    style). The same classes color the legend swatches and the explain-card head. */
