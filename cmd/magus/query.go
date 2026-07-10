@@ -7,15 +7,14 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"net/url"
 	"os"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/service/viewer"
 	"github.com/egladman/magus/types"
 )
 
@@ -222,30 +221,10 @@ func reportRefLookupError(ref string, err error) error {
 	}
 }
 
-// buildLogViewerURL assembles the log-viewer deep link: BOTH the ref identity and the encoded
-// output ride the URL fragment (after #), which the browser NEVER transmits to a server - so
-// nothing about the run, not even its ref id, ever leaves the machine. The payload is a
-// magus.viewer.v1 Journal (protobuf, gzip+base64url) of the ref's events; the browser decodes
-// it and renders pretty from structure (the generated JS client, bundled in).
-func buildLogViewerURL(base string, desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation) (string, error) {
-	j := journal.InvocationFromEvents(desc.Ref, events)
-	// A single ref's display events are output+result only (no `started`), so
-	// InvocationFromEvents yields no command lineage; graft the resolved run's Command so the
-	// viewer's lineage header shows which command (and trigger) produced this output.
-	if inv.ID != "" {
-		j.Command = inv.Command
-	}
-	encoded, err := viewer.EncodeJournalFragment(j, events)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(desc.Ref) + "&data=" + encoded, nil
-}
-
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
 func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, o outputRefOpts) error {
-	openURL, err := buildLogViewerURL(o.viewerBase, desc, events, inv)
+	openURL, err := viewer.LogViewerURL(o.viewerBase, desc.Ref, events, inv)
 	if err != nil {
 		return err
 	}

@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/service/viewer"
 )
 
 // beginLive, when enabled, starts an ephemeral 127.0.0.1 SSE server for the current
