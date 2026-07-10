@@ -17,10 +17,10 @@ import (
 	"net/http"
 	"net/netip"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/file/watch"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/handler/mcp/auth"
 	"github.com/egladman/magus/internal/handler/status"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"

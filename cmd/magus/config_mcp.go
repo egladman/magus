@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/egladman/magus/internal/handler/mcp/auth"
+	"github.com/egladman/magus/internal/auth"
 )
 
 func configMCPCmd(args []string) error {

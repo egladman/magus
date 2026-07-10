@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/handler/mcp/auth"
+	"github.com/egladman/magus/internal/auth"
 )
 
 // probeLiveBridgeTimeout bounds the real HTTP probe of the web bridge below.
