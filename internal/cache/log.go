@@ -83,6 +83,7 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		label = project
 	}
 	dur := recordDur(r, "duration")
+	ref := recordStr(r, "ref") // target-output reference id (see internal/cache/output_store.go)
 
 	switch r.Message {
 	case "cache.hit":
@@ -91,13 +92,16 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
 		_, _ = fmt.Fprintf(h.w, "%s %s (cached, %s)\n", h.glyph(tty, "pass", colDimGreen), label, fmtDur(dur))
 		h.printRepro(tty, project, recordStr(r, "target"))
+		h.printRef(tty, ref, false)
 	case "cache.miss":
 		_, _ = fmt.Fprintf(h.w, "%s %s (ran, %s)\n", h.glyph(tty, "pass", colGreen), label, fmtDur(dur))
 		h.printRepro(tty, project, recordStr(r, "target"))
+		h.printRef(tty, ref, false)
 	case "cache.error":
 		errStr := recordStr(r, "error")
 		_, _ = fmt.Fprintf(h.w, "%s %s (ran, %s): %s\n", h.glyph(tty, "fail", colRed), label, fmtDur(dur), errStr)
 		h.printRepro(tty, project, recordStr(r, "target"))
+		h.printRef(tty, ref, true)
 	case "cache.warn":
 		_, _ = fmt.Fprintf(h.w, "%s %s\n", h.glyph(tty, "warn", colYellow), recordStr(r, "msg"))
 	case "cache.summary":
@@ -237,6 +241,32 @@ func (h *prettyHandler) printRepro(tty bool, project, target string) {
 		_, _ = fmt.Fprintf(h.w, "  \x1b[2mmagus run %s %s\x1b[0m\n", target, project)
 	} else {
 		_, _ = fmt.Fprintf(h.w, "  magus run %s %s\n", target, project)
+	}
+}
+
+// printRef prints a target's output reference id on its OWN bare, unindented line so
+// a triple-click selects exactly the ref - no "ref:" label (the "ref" prefix is
+// self-evident). Dimmed on a TTY to read as low-signal chrome; the escapes are
+// non-printing, so the copied text is still just the ref. On failure it adds the
+// retrieval + open hints - the primary nudge toward a failing target's full output.
+func (h *prettyHandler) printRef(tty bool, ref string, failed bool) {
+	if ref == "" {
+		return
+	}
+	if tty {
+		_, _ = fmt.Fprintf(h.w, "\x1b[2m%s\x1b[0m\n", ref)
+	} else {
+		_, _ = fmt.Fprintf(h.w, "%s\n", ref)
+	}
+	if !failed {
+		return
+	}
+	if tty {
+		_, _ = fmt.Fprintf(h.w, "  \x1b[2mfull output: magus query %s\x1b[0m\n", ref)
+		_, _ = fmt.Fprintf(h.w, "  \x1b[2mopen in browser: magus query %s --open\x1b[0m\n", ref)
+	} else {
+		_, _ = fmt.Fprintf(h.w, "  full output: magus query %s\n", ref)
+		_, _ = fmt.Fprintf(h.w, "  open in browser: magus query %s --open\n", ref)
 	}
 }
 

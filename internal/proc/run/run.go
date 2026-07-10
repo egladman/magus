@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox"
 )
 
@@ -71,6 +73,22 @@ func StepReplFrom(ctx context.Context) StepReplFn {
 	return fn
 }
 
+// commandLine renders name + args as a single display string for an exec event, quoting
+// any argument that contains whitespace so the command reads back unambiguously. It is for
+// display in the log viewer, not for re-execution (no shell-escaping guarantees).
+func commandLine(name string, args []string) string {
+	parts := make([]string, 0, len(args)+1)
+	parts = append(parts, name)
+	for _, a := range args {
+		if strings.ContainsAny(a, " \t\n") {
+			parts = append(parts, `"`+a+`"`)
+		} else {
+			parts = append(parts, a)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // Run executes name with args in dir, using writers from ctx (fallback: os.Stdout/Stderr).
 // Cancellation sends a graceful signal with a 5s WaitDelay before force-kill.
 func Run(ctx context.Context, dir, name string, args ...string) error {
@@ -85,6 +103,15 @@ func Run(ctx context.Context, dir, name string, args ...string) error {
 		case StepActionStep:
 		}
 	}
+	// Emit a structured exec event (the command about to run) when inside a captured target
+	// step, so the log viewer can group the output that follows under its command without
+	// parsing a "$ cmd" echo out of the text. Only fires within a step (not internal probes).
+	if project, target, ok := journal.StepFromContext(ctx); ok {
+		journal.Emit(ctx, journal.Event{
+			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
+		})
+	}
+
 	c := exec.CommandContext(ctx, name, args...)
 	c.Dir = dir
 	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go

@@ -7,9 +7,43 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestExecEmitsExecEventWithinStep confirms Exec emits a KindExec event tagged with the
+// step's project/target and the command line when run inside a captured step, and emits
+// nothing when there is no step on ctx (an internal probe).
+func TestExecEmitsExecEventWithinStep(t *testing.T) {
+	if _, err := exec.LookPath("echo"); err != nil {
+		t.Skip("'echo' not available")
+	}
+
+	// A Broadcaster is the public way to observe the captured stream; its retained
+	// backlog holds every event emitted before we subscribe.
+	rec := journal.NewBroadcaster()
+	ctx := journal.WithStep(journal.WithLogger(context.Background(), journal.NewLogger(rec)), "web", "build")
+	_, err := Exec(ctx, "echo", []string{"hello world"}, ExecOptions{Quiet: true})
+	require.NoError(t, err)
+
+	got, _, cancel := rec.Subscribe()
+	defer cancel()
+	require.Len(t, got, 1)
+	assert.Equal(t, journal.KindExec, got[0].Kind)
+	assert.Equal(t, "web", got[0].Project)
+	assert.Equal(t, "build", got[0].Target)
+	assert.Equal(t, `echo "hello world"`, got[0].Text, "args with spaces are quoted")
+
+	// No step on ctx: no exec event (internal probes stay silent).
+	noStep := journal.NewBroadcaster()
+	noCtx := journal.WithLogger(context.Background(), journal.NewLogger(noStep))
+	_, err = Exec(noCtx, "echo", []string{"hi"}, ExecOptions{Quiet: true})
+	require.NoError(t, err)
+	got2, _, cancel2 := noStep.Subscribe()
+	defer cancel2()
+	assert.Empty(t, got2)
+}
 
 // TestExecInjectsMAGUS pins that Exec exports MAGUS (the running binary's resolved
 // path) into the subprocess environment, so a spell or recipe can re-invoke magus

@@ -42,7 +42,7 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := captureStderr(t, func() {
-		err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling...")
 			fmt.Fprintln(stdout, "magus:notice: deployed api v1.2.3")
@@ -63,7 +63,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	want := errors.New("boom")
 
 	out := captureStderr(t, func() {
-		err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			for i := 0; i < maxFailTailLines+10; i++ {
 				fmt.Fprintf(stdout, "line %d\n", i)
@@ -82,14 +82,15 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	assert.NoError(t, statErr)
 }
 
-// In quiet-but-not-silent mode the prior behavior holds: full dump, log removed.
-func TestCaptureRunQuietRemovesFailureLog(t *testing.T) {
+// In quiet-but-not-silent mode the failure output is fully dumped to stderr; the
+// log is now retained (not removed) so Run can persist it under a target-output ref.
+func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
 	c := &Cache{dir: t.TempDir(), log: slog.Default(), logLevel: slog.LevelError}
 	lp := c.logPath("svc/api", "0badf00d")
 	want := errors.New("boom")
 
 	_ = captureStderr(t, func() {
-		err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "line 0")
 			return want
@@ -97,8 +98,9 @@ func TestCaptureRunQuietRemovesFailureLog(t *testing.T) {
 		require.ErrorIs(t, err, want)
 	})
 
-	_, statErr := os.Stat(lp)
-	assert.True(t, os.IsNotExist(statErr), "quiet-mode failure log should be removed")
+	data, statErr := os.ReadFile(lp)
+	require.NoError(t, statErr, "quiet-mode failure log should be retained for the output store")
+	assert.Contains(t, string(data), "line 0")
 }
 
 func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
@@ -106,7 +108,7 @@ func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
 	lp := c.logPath("svc/api", "feedface")
 
 	out := captureStderr(t, func() {
-		err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "all good, nothing to report")
 			return nil

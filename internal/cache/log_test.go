@@ -69,6 +69,38 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		), "[fail] api (ran,")
 	})
 
+	t.Run("cache.miss ref line", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		h := newTestHandler(&buf)
+		require.NoError(t, h.Handle(context.Background(), buildRecord(
+			"cache.miss",
+			slog.String("project", "api"),
+			slog.Int64("duration", int64(80*time.Millisecond)),
+			slog.String("ref", "ref1a2b3c4d"),
+		)))
+		out := buf.String()
+		assert.Contains(t, out, "\nref1a2b3c4d\n", "the ref must sit alone on its own bare line for clean copy")
+		assert.NotContains(t, out, "full output:", "a passing run gets no failure hint")
+	})
+
+	t.Run("cache.error ref line + hints", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		h := newTestHandler(&buf)
+		require.NoError(t, h.Handle(context.Background(), buildRecord(
+			"cache.error",
+			slog.String("project", "api"),
+			slog.Int64("duration", int64(5*time.Millisecond)),
+			slog.String("error", "build failed"),
+			slog.String("ref", "refdeadbeef"),
+		)))
+		out := buf.String()
+		assert.Contains(t, out, "\nrefdeadbeef\n", "the ref must be on its own bare line")
+		assert.Contains(t, out, "full output: magus query refdeadbeef")
+		assert.Contains(t, out, "open in browser: magus query refdeadbeef --open")
+	})
+
 	t.Run("cache.summary", func(t *testing.T) {
 		t.Parallel()
 		assertPlain(t, buildRecord(

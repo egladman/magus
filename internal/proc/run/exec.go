@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
 )
@@ -77,6 +78,14 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		// after the sandbox check, then executes it.
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
 		return ExecResult{Started: true, Code: 0}, nil
+	}
+	// Emit a structured exec event (the command about to run) when inside a captured target
+	// step, so the log viewer groups the output that follows under its command without
+	// parsing a "$ cmd" echo out of the text. Only fires within a step, not internal probes.
+	if project, target, ok := journal.StepFromContext(ctx); ok {
+		journal.Emit(ctx, journal.Event{
+			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
+		})
 	}
 	c := exec.CommandContext(ctx, name, args...)
 	c.Dir = opts.Dir

@@ -43,7 +43,7 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := captureStderr(t, func() {
-		err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling lots of noisy output...")
 			return nil
@@ -65,7 +65,7 @@ func TestCaptureRunCollapseReplaysOnFailure(t *testing.T) {
 	var stdoutBuf string
 	stderrOut := captureStderr(t, func() {
 		stdoutBuf = captureStdout(t, func() {
-			err := c.captureRun(context.Background(), lp, "svc/api", func(ctx context.Context) error {
+			_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 				stdout, _ := runPkg.OutputWriters(ctx)
 				fmt.Fprintln(stdout, "lint: undefined symbol foo")
 				return want
@@ -78,7 +78,9 @@ func TestCaptureRunCollapseReplaysOnFailure(t *testing.T) {
 	assert.Contains(t, stderrOut, "-- svc/api (failed) --")
 	assert.Contains(t, stdoutBuf, "lint: undefined symbol foo")
 	assert.NotContains(t, stdoutBuf, "-- svc/api (failed) --", "stdout body must stay raw (no header)")
-	// Ephemeral log removed after a collapsed failure dump (not retained like silent).
-	_, statErr := os.Stat(lp)
-	assert.True(t, os.IsNotExist(statErr), "collapse failure log should be removed after replay")
+	// The failure log is retained (Run persists it to the output store under a ref
+	// so `magus query ref...` can replay a failing target's exact output).
+	data, statErr := os.ReadFile(lp)
+	require.NoError(t, statErr, "collapse failure log should be retained after replay")
+	assert.Contains(t, string(data), "lint: undefined symbol foo")
 }
