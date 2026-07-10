@@ -1,4 +1,4 @@
-package web
+package httpx
 
 import (
 	"net/http"
@@ -19,8 +19,8 @@ func TestIsLoopbackAddr(t *testing.T) {
 	}
 }
 
-func TestRequireLoopbackGuard(t *testing.T) {
-	ok := RequireLoopback(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+func TestRequireLoopbackPeerGuard(t *testing.T) {
+	ok := RequireLoopbackPeer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	local := httptest.NewRequest(http.MethodGet, "/api", nil)
 	local.RemoteAddr = "127.0.0.1:5555"

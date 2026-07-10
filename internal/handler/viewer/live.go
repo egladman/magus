@@ -1,11 +1,10 @@
-// Package web is the ephemeral loopback transport that hands a workspace's data to a local
-// browser tool-page without any of it leaving the machine. Every shape is built on the
-// shared [Server]: it binds 127.0.0.1 only, guards the mux with [RequireLoopback], and
-// CORS-locks each route to the single site origin serving the page. Two shapes exist: a
-// one-shot [BlobServer] (a JSON blob for `graph open --serve`) and a streaming [LiveServer]
-// (the invocation journal over Server-Sent Events, gated by a per-run bearer token, for
-// `run --live`).
-package web
+// This file is the live SSE side of the viewer wire contract: an ephemeral loopback server
+// that streams one invocation's journal to a local browser tool-page over Server-Sent
+// Events, gated by a per-run bearer token, for `run --live`. It is built on the shared
+// [httpx.Server]: it binds 127.0.0.1 only, guards each route with [httpx.RequireLoopbackPeer],
+// and CORS-locks it to the single site origin serving the page. The static sibling (a JSON
+// blob for `graph open --serve`) is httpx.BlobServer.
+package viewer
 
 import (
 	"context"
@@ -14,11 +13,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/handler/viewer"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 )
 
@@ -26,38 +26,43 @@ import (
 // so a browser opened late (or reloaded) still gets the whole log before teardown.
 const liveGrace = 3 * time.Second
 
-// LiveServer streams one invocation's events to a browser over SSE, on the shared loopback
-// [server]. Start it with [StartLive] before the run, hand the browser [LiveServer.ViewerURL],
-// let the run emit into the broadcaster, then [LiveServer.Stop] when done.
+// LiveServer streams one invocation's events to a browser over SSE, on a loopback
+// [httpx.Server]. Start it with [StartLive] before the run, hand the browser
+// [LiveServer.ViewerURL], let the run emit into the broadcaster, then [LiveServer.Stop] when
+// done.
 type LiveServer struct {
-	srv   *server
-	bc    *journal.Broadcaster
-	token string
+	srv    *httpx.Server
+	bc     *journal.Broadcaster
+	token  string
+	cancel context.CancelFunc
+	done   chan struct{} // closed once the background Serve has fully shut down
 }
 
-// StartLive starts a loopback SSE server (per cfg) for bc in the background and mints a
-// random bearer token. cfg.Origin is the page allowed to read the stream. The caller owns bc
-// and must add it to the invocation's capture logger so events flow, and call
-// [LiveServer.Stop] when the run is finished.
-func StartLive(cfg Config, bc *journal.Broadcaster) (*LiveServer, error) {
-	s, err := newServer(cfg)
+// StartLive starts a loopback SSE server on an ephemeral 127.0.0.1 port for bc in the
+// background and mints a random bearer token. origin is the page allowed to read the stream.
+// The caller owns bc and must add it to the invocation's capture logger so events flow, and
+// call [LiveServer.Stop] when the run is finished.
+func StartLive(origin string, bc *journal.Broadcaster) (*LiveServer, error) {
+	s, err := httpx.NewServer(netip.AddrPort{})
 	if err != nil {
 		return nil, err
 	}
 	tokenBytes := make([]byte, 16)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		s.stop()
 		return nil, fmt.Errorf("mint stream token: %w", err)
 	}
-	ls := &LiveServer{srv: s, bc: bc, token: hex.EncodeToString(tokenBytes)}
-	s.handle("/events", "GET, OPTIONS", ls.streamEvents)
-	s.start()
+	ls := &LiveServer{srv: s, bc: bc, token: hex.EncodeToString(tokenBytes), done: make(chan struct{})}
+	s.Handle("/events", httpx.RequireLoopbackPeer(httpx.CORS(origin)(http.HandlerFunc(ls.streamEvents))))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ls.cancel = cancel
+	go func() { defer close(ls.done); _ = s.Serve(ctx) }()
 	return ls, nil
 }
 
 // Addr is the loopback "127.0.0.1:PORT" the server bound - the value the viewer connects its
 // EventSource to.
-func (ls *LiveServer) Addr() string { return ls.srv.addr() }
+func (ls *LiveServer) Addr() string { return ls.srv.Addr().String() }
 
 // Token is the per-run bearer token the viewer must present.
 func (ls *LiveServer) Token() string { return ls.token }
@@ -97,7 +102,8 @@ func (ls *LiveServer) Stop(ctx context.Context) {
 	case <-time.After(liveGrace):
 	case <-ctx.Done():
 	}
-	ls.srv.stop()
+	ls.cancel()
+	<-ls.done
 }
 
 // streamEvents streams the broadcaster's backlog then its live events as SSE, ending with a
@@ -160,7 +166,7 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 // writeEvent emits one event as an SSE data line (base64 protobuf). It returns a non-nil
 // error if the event could not be encoded or written, so the caller ends the stream.
 func writeEvent(w http.ResponseWriter, ev journal.Event) error {
-	payload, err := viewer.EncodeEvent(ev)
+	payload, err := EncodeEvent(ev)
 	if err != nil {
 		return fmt.Errorf("encode event: %w", err)
 	}

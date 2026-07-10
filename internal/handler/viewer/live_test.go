@@ -1,4 +1,4 @@
-package web
+package viewer
 
 import (
 	"bufio"
@@ -18,15 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseOrigin(t *testing.T) {
-	got, err := ParseOrigin("https://eli.gladman.cc/magus/logs/")
-	require.NoError(t, err)
-	assert.Equal(t, "https://eli.gladman.cc", got)
-
-	_, err = ParseOrigin("not-a-url")
-	assert.Error(t, err)
-}
-
 // TestLiveServerStreamsBacklogAndLive connects to a running live server, and confirms it
 // replays a pre-subscribe backlog event, streams a live event, CORS-locks to the
 // origin, and ends with a `done` event when the broadcaster closes.
@@ -39,7 +30,7 @@ func TestLiveServerStreamsBacklogAndLive(t *testing.T) {
 	bc := journal.NewBroadcaster()
 	emit(bc, journal.Event{Kind: journal.KindOutput, Text: "backlog-line"})
 
-	ls, err := StartLive(Config{Origin: "https://example.test"}, bc)
+	ls, err := StartLive("https://example.test", bc)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -87,7 +78,7 @@ func TestLiveServerStreamsBacklogAndLive(t *testing.T) {
 // TestLiveServerRejectsBadToken confirms a wrong/absent token is forbidden.
 func TestLiveServerRejectsBadToken(t *testing.T) {
 	bc := journal.NewBroadcaster()
-	ls, err := StartLive(Config{Origin: "https://example.test"}, bc)
+	ls, err := StartLive("https://example.test", bc)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -103,7 +94,7 @@ func TestLiveServerRejectsBadToken(t *testing.T) {
 // fragment.
 func TestLiveServerViewerURL(t *testing.T) {
 	bc := journal.NewBroadcaster()
-	ls, err := StartLive(Config{Origin: "https://example.test"}, bc)
+	ls, err := StartLive("https://example.test", bc)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

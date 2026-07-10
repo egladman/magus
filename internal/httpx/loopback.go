@@ -1,4 +1,4 @@
-package web
+package httpx
 
 import (
 	"net"
@@ -27,11 +27,12 @@ func IsLoopbackAddr(addr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// RequireLoopback wraps an HTTP handler (or a Connect handler mounted on one) so a
-// request whose peer is not loopback is refused before it reaches the RPC. Applied
-// once around the tool-page mux; the interceptor form for a pure Connect server checks
-// the same via the peer address.
-func RequireLoopback(next http.Handler) http.Handler {
+// RequireLoopbackPeer wraps an HTTP handler (or a Connect handler mounted on one) so a
+// request whose PEER (r.RemoteAddr) is not loopback is refused before it reaches the RPC.
+// This checks the transport peer, not the Host header (that is GuardRebind's job). Applied
+// once around the tool-page mux; the interceptor form for a pure Connect server checks the
+// same via the peer address.
+func RequireLoopbackPeer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !IsLoopbackAddr(r.RemoteAddr) {
 			http.Error(w, "forbidden: local access only", http.StatusForbidden)

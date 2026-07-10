@@ -1,9 +1,11 @@
-package web
+package httpx
 
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,7 +17,7 @@ import (
 // content type and CORS origin lock, and WaitServed reports ServeCompleted after the fetch.
 func TestStartBlobServesOnceCORSLocked(t *testing.T) {
 	raw := []byte(`{"nodes":1}`)
-	bs, err := StartBlob(Config{Origin: "https://example.test"}, "/graph.json", "application/json", raw)
+	bs, err := StartBlob("https://example.test", "/graph.json", "application/json", raw)
 	require.NoError(t, err)
 
 	resp, err := http.Get(bs.SourceURL())
@@ -37,7 +39,7 @@ func TestStartBlobServesOnceCORSLocked(t *testing.T) {
 // TestStartBlobPreflight confirms an OPTIONS preflight is answered 204 with the allowed
 // methods, without consuming the one-shot fetch.
 func TestStartBlobPreflight(t *testing.T) {
-	bs, err := StartBlob(Config{Origin: "https://example.test"}, "/graph.json", "application/json", []byte("{}"))
+	bs, err := StartBlob("https://example.test", "/graph.json", "application/json", []byte("{}"))
 	require.NoError(t, err)
 	defer bs.WaitServed(canceledCtx())
 
@@ -48,6 +50,19 @@ func TestStartBlobPreflight(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Contains(t, resp.Header.Get("Access-Control-Allow-Methods"), "GET")
 	assert.Equal(t, "https://example.test", resp.Header.Get("Access-Control-Allow-Origin"))
+}
+
+// TestStartBlobEphemeralPort confirms StartBlob binds a real ephemeral port on loopback.
+func TestStartBlobEphemeralPort(t *testing.T) {
+	bs, err := StartBlob("https://example.test", "/b", "text/plain", []byte("x"))
+	require.NoError(t, err)
+	defer bs.WaitServed(canceledCtx())
+
+	host, portStr, err := net.SplitHostPort(bs.Addr())
+	require.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", host)
+	port, _ := strconv.Atoi(portStr)
+	assert.Greater(t, port, 0, "StartBlob binds a real ephemeral loopback port")
 }
 
 func canceledCtx() context.Context {

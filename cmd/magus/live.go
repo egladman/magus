@@ -7,8 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/egladman/magus/internal/handler/viewer"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/web"
 )
 
 // beginLive, when enabled, starts an ephemeral 127.0.0.1 SSE server for the current
@@ -35,13 +36,13 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	if v := strings.TrimSpace(os.Getenv("MAGUS_LOG_VIEWER_URL")); v != "" {
 		base = v
 	}
-	origin, err := web.ParseOrigin(base)
+	origin, err := httpx.ParseOrigin(base)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "magus: --live could not derive the viewer origin (%v); continuing without it.\n", err)
 		return nil, func() {}
 	}
 	bc := journal.NewBroadcaster()
-	ls, err := web.StartLive(web.Config{Origin: origin}, bc)
+	ls, err := viewer.StartLive(origin, bc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "magus: --live could not start the log stream server (%v); continuing without it.\n", err)
 		return nil, func() {}

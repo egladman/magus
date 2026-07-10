@@ -13,8 +13,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/render"
-	"github.com/egladman/magus/internal/web"
 	"github.com/egladman/magus/types"
 )
 
@@ -229,15 +229,15 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 
 // graphOpenServe hands the graph to the hosted page over an ephemeral 127.0.0.1 server,
 // then STOPS - a one-shot handoff, not a standing service. The loopback bind, CORS lock,
-// serve-once, and grace-then-shutdown all live in internal/web (shared with the live log
+// serve-once, and grace-then-shutdown all live in internal/httpx (shared with the live log
 // stream); this wraps them with the graph-specific URL (#src=) and the user-facing
 // messages. The graph is delivered browser <-> loopback and never leaves the machine.
 func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges int) error {
-	origin, err := web.ParseOrigin(base)
+	origin, err := httpx.ParseOrigin(base)
 	if err != nil {
 		return err
 	}
-	bs, err := web.StartBlob(web.Config{Origin: origin}, "/graph.json", "application/json", raw)
+	bs, err := httpx.StartBlob(origin, "/graph.json", "application/json", raw)
 	if err != nil {
 		return err
 	}
@@ -250,11 +250,11 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 	}
 
 	switch bs.WaitServed(ctx) {
-	case web.ServeCompleted:
+	case httpx.ServeCompleted:
 		fmt.Fprintln(os.Stderr, "graph loaded; loopback server stopped.")
-	case web.ServeTimedOut:
+	case httpx.ServeTimedOut:
 		fmt.Fprintln(os.Stderr, "the page never requested the graph; loopback server stopped. Re-run if your browser did not open.")
-	case web.ServeCanceled:
+	case httpx.ServeCanceled:
 		fmt.Fprintln(os.Stderr, "\ncanceled; loopback server stopped.")
 	}
 	return nil
