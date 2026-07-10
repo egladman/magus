@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/journal"
 )
 
@@ -160,7 +160,7 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 // writeEvent emits one event as an SSE data line (base64 protobuf). It returns a non-nil
 // error if the event could not be encoded or written, so the caller ends the stream.
 func writeEvent(w http.ResponseWriter, ev journal.Event) error {
-	payload, err := handler.EncodeEvent(ev)
+	payload, err := viewer.EncodeEvent(ev)
 	if err != nil {
 		return fmt.Errorf("encode event: %w", err)
 	}

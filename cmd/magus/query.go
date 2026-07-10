@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
@@ -234,7 +234,7 @@ func buildLogViewerURL(base string, desc cache.OutputDescriptor, events []journa
 	if inv.ID != "" {
 		j.Command = inv.Command
 	}
-	encoded, err := handler.EncodeJournalFragment(j, events)
+	encoded, err := viewer.EncodeJournalFragment(j, events)
 	if err != nil {
 		return "", err
 	}

@@ -1,11 +1,11 @@
-// Package handler holds magus's over-the-wire handlers: the code that maps captured
-// DOMAIN events onto the versioned protobuf tool-page contracts and serves them to a
-// browser (a URL-fragment blob for a finished run, or a live SSE stream). Handlers
-// consume domain types straight from the repositories (e.g. the cache output store's
-// []journal.Event) and map them explicitly to the wire proto - no intermediate DTOs,
-// no single-use converters. This file is the viewer contract (magus.viewer.v1); the
-// planned graph/editor contracts get sibling files here.
-package handler
+// Package viewer holds the magus.viewer.v1 wire contract: the code that maps captured
+// DOMAIN events onto the versioned protobuf tool-page contract and encodes them for a
+// browser (a URL-fragment blob for a finished run, or a live SSE stream), plus the
+// viewer's filter DSL. It consumes domain types straight from the repositories (e.g. the
+// cache output store's []journal.Event) and maps them explicitly to the wire proto - no
+// intermediate DTOs, no single-use converters. This file is the viewer encoders; query.go
+// is the filter grammar.
+package viewer
 
 import (
 	"encoding/base64"
