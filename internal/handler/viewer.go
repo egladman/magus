@@ -63,8 +63,8 @@ func commandToProto(c journal.Command) *viewerv1.Command {
 	}
 }
 
-// JournalProto builds a Journal from an invocation's header and its events.
-func JournalProto(inv journal.Invocation, events []journal.Event) *viewerv1.Journal {
+// journalToProto builds a Journal from an invocation's header and its events.
+func journalToProto(inv journal.Invocation, events []journal.Event) *viewerv1.Journal {
 	out := &viewerv1.Journal{Invocation: invocationToProto(inv), Events: make([]*viewerv1.Event, 0, len(events))}
 	for _, e := range events {
 		out.Events = append(out.Events, eventToProto(e))
@@ -77,7 +77,7 @@ func JournalProto(inv journal.Invocation, events []journal.Event) *viewerv1.Jour
 // reverses it (base64url -> gunzip -> Journal.fromBinary). Reuses the same fragment
 // encoder graph open uses, so the tool pages share one wire envelope.
 func EncodeJournalFragment(inv journal.Invocation, events []journal.Event) (string, error) {
-	raw, err := proto.Marshal(JournalProto(inv, events))
+	raw, err := proto.Marshal(journalToProto(inv, events))
 	if err != nil {
 		return "", err
 	}

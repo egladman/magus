@@ -143,13 +143,28 @@ message GetInvocationResponse {
   Invocation invocation = 1;
 }
 
+// EventQuery filters an invocation's events server-side (for a large log). It is the viewer's
+// OWN typed query, composed from the shared query primitives plus the viewer's event fields -
+// log fields (target/stream/level) are not graph fields, so there is no generic shared Query.
+// Set fields AND together; repeated values within a field OR; matching is case-insensitive.
+// The time window (including its since resume cursor) lives here too, so one message carries
+// the whole filter.
+message EventQuery {
+  repeated string projects = 1;                 // repo-relative project paths
+  repeated string targets = 2;                  // target names
+  repeated string kinds = 3;                    // event kinds: output|result|exec|scope|warn|...
+  repeated string streams = 4;                  // stdout|stderr, for output events
+  repeated string levels = 5;                   // info|warn|error
+  string status = 6;                            // pass|fail|cached, for result events
+  repeated magus.query.v1.StringMatch text = 7; // free-text matches against an event's text
+  magus.query.v1.TimeRange time = 8;            // event time window; since doubles as stream resume
+}
+
 message ListEventsRequest {
   Selector selector = 1 [(buf.validate.field).required = true];
   int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
   string page_token = 3;
-  magus.query.v1.Query filter = 4;          // DSL content filter (project:/target:/kind:/status:/text)
-  google.protobuf.Timestamp start_time = 5; // inclusive time lower bound; unset = open
-  google.protobuf.Timestamp end_time = 6;   // exclusive time upper bound; unset = open
+  EventQuery filter = 4;  // viewer-typed content + time filter
 }
 message ListEventsResponse {
   repeated Event events = 1;
@@ -158,8 +173,7 @@ message ListEventsResponse {
 
 message StreamEventsRequest {
   string invocation = 1 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
-  magus.query.v1.Query filter = 2;          // DSL content filter
-  google.protobuf.Timestamp start_time = 3; // resume point: stream events at/after this time
+  EventQuery filter = 2;  // viewer-typed content filter; filter.time.since resumes the stream
 }
 message StreamEventsResponse {
   Event event = 1;

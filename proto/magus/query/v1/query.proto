@@ -1,23 +1,25 @@
 syntax = "proto3";
 
-// Package magus.query.v1 is the shared filter contract: magus's query DSL
-// ("kind:spell project:foo -kind:op text") in structured form. It is the single wire
-// representation of a filter, reused across magus.viewer.v1 (record filtering), and
-// the planned graph/search contracts - so one grammar backs everything. The existing
-// Go parser is the single PARSING source of truth (DSL string <-> Query); a client may
-// send either the raw string (parsed server-side) or a built Query.
+// Package magus.query.v1 holds only SHARED query PRIMITIVES - the building blocks each
+// domain composes into its own typed query message. There is deliberately NO generic
+// Query{repeated Term} bag: log fields are not graph fields, so a lowest-common-denominator
+// filter would be dishonest. The viewer composes an EventQuery from these primitives plus its
+// own event fields; a future graph contract composes a GraphQuery from these plus its own.
 package magus.query.v1;
 
-// Term is one clause of a query: a field:value match, or free text (field empty), and
-// optionally negated (a leading "-" in the DSL). Terms are combined with AND,
-// case-insensitive.
-message Term {
-  string field = 1;  // "" = free text; else a field key (kind, project, relation, id, ...)
-  string value = 2;
-  bool negate = 3;
+import "google/protobuf/timestamp.proto";
+
+// StringMatch is one negatable string comparison against whatever field the composing message
+// names it for. negate inverts the match (a leading "-" in the DSL). Matching is
+// case-insensitive; multiple matches on one field AND together.
+message StringMatch {
+  string value = 1;
+  bool negate = 2;
 }
 
-// Query is a set of ANDed terms - the parsed form of one DSL filter string.
-message Query {
-  repeated Term terms = 1;
+// TimeRange bounds a query to items between since and until (inclusive); either bound may be
+// unset for an open-ended range. since doubles as a live-stream resume cursor.
+message TimeRange {
+  google.protobuf.Timestamp since = 1;
+  google.protobuf.Timestamp until = 2;
 }

@@ -4,18 +4,18 @@
 // 	protoc        (unknown)
 // source: magus/query/v1/query.proto
 
-// Package magus.query.v1 is the shared filter contract: magus's query DSL
-// ("kind:spell project:foo -kind:op text") in structured form. It is the single wire
-// representation of a filter, reused across magus.viewer.v1 (record filtering), and
-// the planned graph/search contracts - so one grammar backs everything. The existing
-// Go parser is the single PARSING source of truth (DSL string <-> Query); a client may
-// send either the raw string (parsed server-side) or a built Query.
+// Package magus.query.v1 holds only SHARED query PRIMITIVES - the building blocks each
+// domain composes into its own typed query message. There is deliberately NO generic
+// Query{repeated Term} bag: log fields are not graph fields, so a lowest-common-denominator
+// filter would be dishonest. The viewer composes an EventQuery from these primitives plus its
+// own event fields; a future graph contract composes a GraphQuery from these plus its own.
 
 package queryv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -28,32 +28,31 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Term is one clause of a query: a field:value match, or free text (field empty), and
-// optionally negated (a leading "-" in the DSL). Terms are combined with AND,
-// case-insensitive.
-type Term struct {
+// StringMatch is one negatable string comparison against whatever field the composing message
+// names it for. negate inverts the match (a leading "-" in the DSL). Matching is
+// case-insensitive; multiple matches on one field AND together.
+type StringMatch struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Field         string                 `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"` // "" = free text; else a field key (kind, project, relation, id, ...)
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Negate        bool                   `protobuf:"varint,3,opt,name=negate,proto3" json:"negate,omitempty"`
+	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Negate        bool                   `protobuf:"varint,2,opt,name=negate,proto3" json:"negate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Term) Reset() {
-	*x = Term{}
+func (x *StringMatch) Reset() {
+	*x = StringMatch{}
 	mi := &file_magus_query_v1_query_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Term) String() string {
+func (x *StringMatch) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Term) ProtoMessage() {}
+func (*StringMatch) ProtoMessage() {}
 
-func (x *Term) ProtoReflect() protoreflect.Message {
+func (x *StringMatch) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_query_v1_query_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -65,54 +64,49 @@ func (x *Term) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Term.ProtoReflect.Descriptor instead.
-func (*Term) Descriptor() ([]byte, []int) {
+// Deprecated: Use StringMatch.ProtoReflect.Descriptor instead.
+func (*StringMatch) Descriptor() ([]byte, []int) {
 	return file_magus_query_v1_query_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Term) GetField() string {
-	if x != nil {
-		return x.Field
-	}
-	return ""
-}
-
-func (x *Term) GetValue() string {
+func (x *StringMatch) GetValue() string {
 	if x != nil {
 		return x.Value
 	}
 	return ""
 }
 
-func (x *Term) GetNegate() bool {
+func (x *StringMatch) GetNegate() bool {
 	if x != nil {
 		return x.Negate
 	}
 	return false
 }
 
-// Query is a set of ANDed terms - the parsed form of one DSL filter string.
-type Query struct {
+// TimeRange bounds a query to items between since and until (inclusive); either bound may be
+// unset for an open-ended range. since doubles as a live-stream resume cursor.
+type TimeRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Terms         []*Term                `protobuf:"bytes,1,rep,name=terms,proto3" json:"terms,omitempty"`
+	Since         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=since,proto3" json:"since,omitempty"`
+	Until         *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=until,proto3" json:"until,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Query) Reset() {
-	*x = Query{}
+func (x *TimeRange) Reset() {
+	*x = TimeRange{}
 	mi := &file_magus_query_v1_query_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Query) String() string {
+func (x *TimeRange) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Query) ProtoMessage() {}
+func (*TimeRange) ProtoMessage() {}
 
-func (x *Query) ProtoReflect() protoreflect.Message {
+func (x *TimeRange) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_query_v1_query_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -124,14 +118,21 @@ func (x *Query) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Query.ProtoReflect.Descriptor instead.
-func (*Query) Descriptor() ([]byte, []int) {
+// Deprecated: Use TimeRange.ProtoReflect.Descriptor instead.
+func (*TimeRange) Descriptor() ([]byte, []int) {
 	return file_magus_query_v1_query_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Query) GetTerms() []*Term {
+func (x *TimeRange) GetSince() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Terms
+		return x.Since
+	}
+	return nil
+}
+
+func (x *TimeRange) GetUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Until
 	}
 	return nil
 }
@@ -140,13 +141,13 @@ var File_magus_query_v1_query_proto protoreflect.FileDescriptor
 
 const file_magus_query_v1_query_proto_rawDesc = "" +
 	"\n" +
-	"\x1amagus/query/v1/query.proto\x12\x0emagus.query.v1\"J\n" +
-	"\x04Term\x12\x14\n" +
-	"\x05field\x18\x01 \x01(\tR\x05field\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\x12\x16\n" +
-	"\x06negate\x18\x03 \x01(\bR\x06negate\"3\n" +
-	"\x05Query\x12*\n" +
-	"\x05terms\x18\x01 \x03(\v2\x14.magus.query.v1.TermR\x05termsB\xb9\x01\n" +
+	"\x1amagus/query/v1/query.proto\x12\x0emagus.query.v1\x1a\x1fgoogle/protobuf/timestamp.proto\";\n" +
+	"\vStringMatch\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x12\x16\n" +
+	"\x06negate\x18\x02 \x01(\bR\x06negate\"o\n" +
+	"\tTimeRange\x120\n" +
+	"\x05since\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x120\n" +
+	"\x05until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05untilB\xb9\x01\n" +
 	"\x12com.magus.query.v1B\n" +
 	"QueryProtoP\x01Z=github.com/egladman/magus/proto/gen/go/magus/query/v1;queryv1\xa2\x02\x03MQX\xaa\x02\x0eMagus.Query.V1\xca\x02\x0eMagus\\Query\\V1\xe2\x02\x1aMagus\\Query\\V1\\GPBMetadata\xea\x02\x10Magus::Query::V1b\x06proto3"
 
@@ -164,16 +165,18 @@ func file_magus_query_v1_query_proto_rawDescGZIP() []byte {
 
 var file_magus_query_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_magus_query_v1_query_proto_goTypes = []any{
-	(*Term)(nil),  // 0: magus.query.v1.Term
-	(*Query)(nil), // 1: magus.query.v1.Query
+	(*StringMatch)(nil),           // 0: magus.query.v1.StringMatch
+	(*TimeRange)(nil),             // 1: magus.query.v1.TimeRange
+	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_magus_query_v1_query_proto_depIdxs = []int32{
-	0, // 0: magus.query.v1.Query.terms:type_name -> magus.query.v1.Term
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 0: magus.query.v1.TimeRange.since:type_name -> google.protobuf.Timestamp
+	2, // 1: magus.query.v1.TimeRange.until:type_name -> google.protobuf.Timestamp
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_magus_query_v1_query_proto_init() }

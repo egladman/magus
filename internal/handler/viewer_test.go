@@ -66,12 +66,12 @@ func TestEventToProtoCarriesStartedCommand(t *testing.T) {
 // TestEncodeJournalFragmentRoundTrip confirms the static wire envelope decodes back to
 // the same Journal: base64url -> gunzip -> proto, exactly what the JS client does.
 func TestEncodeJournalFragmentRoundTrip(t *testing.T) {
-	recs := []journal.Event{
+	events := []journal.Event{
 		{Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: "building..."},
 		{Kind: journal.KindResult, Project: "web", Target: "build", Status: journal.StatusPass, Ref: "refabc", DurMs: 10},
 	}
 	inv := journal.Invocation{ID: "inv7", MagusVersion: "v1.2.3", Command: journal.Command{Verb: "affected", Args: []string{"ci"}, Trigger: journal.TriggerCI}}
-	frag, err := EncodeJournalFragment(inv, recs)
+	frag, err := EncodeJournalFragment(inv, events)
 	require.NoError(t, err)
 
 	gzipped, err := base64.RawURLEncoding.DecodeString(frag)

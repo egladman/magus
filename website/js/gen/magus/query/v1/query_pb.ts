@@ -2,72 +2,72 @@
 // @generated from file magus/query/v1/query.proto (package magus.query.v1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.query.v1 is the shared filter contract: magus's query DSL
-// ("kind:spell project:foo -kind:op text") in structured form. It is the single wire
-// representation of a filter, reused across magus.viewer.v1 (record filtering), and
-// the planned graph/search contracts - so one grammar backs everything. The existing
-// Go parser is the single PARSING source of truth (DSL string <-> Query); a client may
-// send either the raw string (parsed server-side) or a built Query.
+// Package magus.query.v1 holds only SHARED query PRIMITIVES - the building blocks each
+// domain composes into its own typed query message. There is deliberately NO generic
+// Query{repeated Term} bag: log fields are not graph fields, so a lowest-common-denominator
+// filter would be dishonest. The viewer composes an EventQuery from these primitives plus its
+// own event fields; a future graph contract composes a GraphQuery from these plus its own.
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file magus/query/v1/query.proto.
  */
 export const file_magus_query_v1_query: GenFile = /*@__PURE__*/
-  fileDesc("ChptYWd1cy9xdWVyeS92MS9xdWVyeS5wcm90bxIObWFndXMucXVlcnkudjEiNAoEVGVybRINCgVmaWVsZBgBIAEoCRINCgV2YWx1ZRgCIAEoCRIOCgZuZWdhdGUYAyABKAgiLAoFUXVlcnkSIwoFdGVybXMYASADKAsyFC5tYWd1cy5xdWVyeS52MS5UZXJtYgZwcm90bzM");
+  fileDesc("ChptYWd1cy9xdWVyeS92MS9xdWVyeS5wcm90bxIObWFndXMucXVlcnkudjEiLAoLU3RyaW5nTWF0Y2gSDQoFdmFsdWUYASABKAkSDgoGbmVnYXRlGAIgASgIImEKCVRpbWVSYW5nZRIpCgVzaW5jZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKQoFdW50aWwYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
- * Term is one clause of a query: a field:value match, or free text (field empty), and
- * optionally negated (a leading "-" in the DSL). Terms are combined with AND,
- * case-insensitive.
+ * StringMatch is one negatable string comparison against whatever field the composing message
+ * names it for. negate inverts the match (a leading "-" in the DSL). Matching is
+ * case-insensitive; multiple matches on one field AND together.
  *
- * @generated from message magus.query.v1.Term
+ * @generated from message magus.query.v1.StringMatch
  */
-export type Term = Message<"magus.query.v1.Term"> & {
+export type StringMatch = Message<"magus.query.v1.StringMatch"> & {
   /**
-   * "" = free text; else a field key (kind, project, relation, id, ...)
-   *
-   * @generated from field: string field = 1;
-   */
-  field: string;
-
-  /**
-   * @generated from field: string value = 2;
+   * @generated from field: string value = 1;
    */
   value: string;
 
   /**
-   * @generated from field: bool negate = 3;
+   * @generated from field: bool negate = 2;
    */
   negate: boolean;
 };
 
 /**
- * Describes the message magus.query.v1.Term.
- * Use `create(TermSchema)` to create a new message.
+ * Describes the message magus.query.v1.StringMatch.
+ * Use `create(StringMatchSchema)` to create a new message.
  */
-export const TermSchema: GenMessage<Term> = /*@__PURE__*/
+export const StringMatchSchema: GenMessage<StringMatch> = /*@__PURE__*/
   messageDesc(file_magus_query_v1_query, 0);
 
 /**
- * Query is a set of ANDed terms - the parsed form of one DSL filter string.
+ * TimeRange bounds a query to items between since and until (inclusive); either bound may be
+ * unset for an open-ended range. since doubles as a live-stream resume cursor.
  *
- * @generated from message magus.query.v1.Query
+ * @generated from message magus.query.v1.TimeRange
  */
-export type Query = Message<"magus.query.v1.Query"> & {
+export type TimeRange = Message<"magus.query.v1.TimeRange"> & {
   /**
-   * @generated from field: repeated magus.query.v1.Term terms = 1;
+   * @generated from field: google.protobuf.Timestamp since = 1;
    */
-  terms: Term[];
+  since?: Timestamp;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp until = 2;
+   */
+  until?: Timestamp;
 };
 
 /**
- * Describes the message magus.query.v1.Query.
- * Use `create(QuerySchema)` to create a new message.
+ * Describes the message magus.query.v1.TimeRange.
+ * Use `create(TimeRangeSchema)` to create a new message.
  */
-export const QuerySchema: GenMessage<Query> = /*@__PURE__*/
+export const TimeRangeSchema: GenMessage<TimeRange> = /*@__PURE__*/
   messageDesc(file_magus_query_v1_query, 1);
 

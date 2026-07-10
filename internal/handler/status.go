@@ -9,13 +9,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// StatusProto maps the LIVE portion of the domain status report (types.StatusReport)
+// statusReportToProto maps the LIVE portion of the domain status report (types.StatusReport)
 // onto the magus.status.v1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
 // intentionally not on this dashboard contract - it is `magus status`/config.
-func StatusProto(r types.StatusReport, magusVersion string) *statusv1.Status {
+func statusReportToProto(r types.StatusReport, magusVersion string) *statusv1.Status {
 	s := &statusv1.Status{
-		Health:       healthFor(r),
+		Health:       deriveHealth(r),
 		MagusVersion: magusVersion,
 	}
 	if r.Pool != nil {
@@ -28,14 +28,14 @@ func StatusProto(r types.StatusReport, magusVersion string) *statusv1.Status {
 // SSE `data:` line - the live-dashboard delivery. The JS client base64-decodes then
 // Status.fromBinary.
 func EncodeStatusEvent(r types.StatusReport, magusVersion string) (string, error) {
-	raw, err := proto.Marshal(StatusProto(r, magusVersion))
+	raw, err := proto.Marshal(statusReportToProto(r, magusVersion))
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(raw), nil
 }
 
-func healthFor(r types.StatusReport) statusv1.Health {
+func deriveHealth(r types.StatusReport) statusv1.Health {
 	switch {
 	case r.Pool == nil:
 		return statusv1.Health_HEALTH_DOWN

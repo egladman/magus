@@ -780,21 +780,125 @@ func (x *GetInvocationResponse) GetInvocation() *Invocation {
 	return nil
 }
 
+// EventQuery filters an invocation's events server-side (for a large log). It is the viewer's
+// OWN typed query, composed from the shared query primitives plus the viewer's event fields -
+// log fields (target/stream/level) are not graph fields, so there is no generic shared Query.
+// Set fields AND together; repeated values within a field OR; matching is case-insensitive.
+// The time window (including its since resume cursor) lives here too, so one message carries
+// the whole filter.
+type EventQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Projects      []string               `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"` // repo-relative project paths
+	Targets       []string               `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`   // target names
+	Kinds         []string               `protobuf:"bytes,3,rep,name=kinds,proto3" json:"kinds,omitempty"`       // event kinds: output|result|exec|scope|warn|...
+	Streams       []string               `protobuf:"bytes,4,rep,name=streams,proto3" json:"streams,omitempty"`   // stdout|stderr, for output events
+	Levels        []string               `protobuf:"bytes,5,rep,name=levels,proto3" json:"levels,omitempty"`     // info|warn|error
+	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`     // pass|fail|cached, for result events
+	Text          []*v1.StringMatch      `protobuf:"bytes,7,rep,name=text,proto3" json:"text,omitempty"`         // free-text matches against an event's text
+	Time          *v1.TimeRange          `protobuf:"bytes,8,opt,name=time,proto3" json:"time,omitempty"`         // event time window; since doubles as stream resume
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventQuery) Reset() {
+	*x = EventQuery{}
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventQuery) ProtoMessage() {}
+
+func (x *EventQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventQuery.ProtoReflect.Descriptor instead.
+func (*EventQuery) Descriptor() ([]byte, []int) {
+	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *EventQuery) GetProjects() []string {
+	if x != nil {
+		return x.Projects
+	}
+	return nil
+}
+
+func (x *EventQuery) GetTargets() []string {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+func (x *EventQuery) GetKinds() []string {
+	if x != nil {
+		return x.Kinds
+	}
+	return nil
+}
+
+func (x *EventQuery) GetStreams() []string {
+	if x != nil {
+		return x.Streams
+	}
+	return nil
+}
+
+func (x *EventQuery) GetLevels() []string {
+	if x != nil {
+		return x.Levels
+	}
+	return nil
+}
+
+func (x *EventQuery) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *EventQuery) GetText() []*v1.StringMatch {
+	if x != nil {
+		return x.Text
+	}
+	return nil
+}
+
+func (x *EventQuery) GetTime() *v1.TimeRange {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
 type ListEventsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Selector      *Selector              `protobuf:"bytes,1,opt,name=selector,proto3" json:"selector,omitempty"`
 	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	Filter        *v1.Query              `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"`                        // DSL content filter (project:/target:/kind:/status:/text)
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"` // inclusive time lower bound; unset = open
-	EndTime       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`       // exclusive time upper bound; unset = open
+	Filter        *EventQuery            `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"` // viewer-typed content + time filter
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListEventsRequest) Reset() {
 	*x = ListEventsRequest{}
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[7]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -806,7 +910,7 @@ func (x *ListEventsRequest) String() string {
 func (*ListEventsRequest) ProtoMessage() {}
 
 func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[7]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -819,7 +923,7 @@ func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListEventsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{7}
+	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListEventsRequest) GetSelector() *Selector {
@@ -843,23 +947,9 @@ func (x *ListEventsRequest) GetPageToken() string {
 	return ""
 }
 
-func (x *ListEventsRequest) GetFilter() *v1.Query {
+func (x *ListEventsRequest) GetFilter() *EventQuery {
 	if x != nil {
 		return x.Filter
-	}
-	return nil
-}
-
-func (x *ListEventsRequest) GetStartTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.StartTime
-	}
-	return nil
-}
-
-func (x *ListEventsRequest) GetEndTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.EndTime
 	}
 	return nil
 }
@@ -874,7 +964,7 @@ type ListEventsResponse struct {
 
 func (x *ListEventsResponse) Reset() {
 	*x = ListEventsResponse{}
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[8]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -886,7 +976,7 @@ func (x *ListEventsResponse) String() string {
 func (*ListEventsResponse) ProtoMessage() {}
 
 func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[8]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +989,7 @@ func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListEventsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{8}
+	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListEventsResponse) GetEvents() []*Event {
@@ -919,15 +1009,14 @@ func (x *ListEventsResponse) GetNextPageToken() string {
 type StreamEventsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Invocation    string                 `protobuf:"bytes,1,opt,name=invocation,proto3" json:"invocation,omitempty"`
-	Filter        *v1.Query              `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`                        // DSL content filter
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"` // resume point: stream events at/after this time
+	Filter        *EventQuery            `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"` // viewer-typed content filter; filter.time.since resumes the stream
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamEventsRequest) Reset() {
 	*x = StreamEventsRequest{}
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[9]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -939,7 +1028,7 @@ func (x *StreamEventsRequest) String() string {
 func (*StreamEventsRequest) ProtoMessage() {}
 
 func (x *StreamEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[9]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -952,7 +1041,7 @@ func (x *StreamEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamEventsRequest.ProtoReflect.Descriptor instead.
 func (*StreamEventsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{9}
+	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StreamEventsRequest) GetInvocation() string {
@@ -962,16 +1051,9 @@ func (x *StreamEventsRequest) GetInvocation() string {
 	return ""
 }
 
-func (x *StreamEventsRequest) GetFilter() *v1.Query {
+func (x *StreamEventsRequest) GetFilter() *EventQuery {
 	if x != nil {
 		return x.Filter
-	}
-	return nil
-}
-
-func (x *StreamEventsRequest) GetStartTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.StartTime
 	}
 	return nil
 }
@@ -985,7 +1067,7 @@ type StreamEventsResponse struct {
 
 func (x *StreamEventsResponse) Reset() {
 	*x = StreamEventsResponse{}
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[10]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -997,7 +1079,7 @@ func (x *StreamEventsResponse) String() string {
 func (*StreamEventsResponse) ProtoMessage() {}
 
 func (x *StreamEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[10]
+	mi := &file_magus_viewer_v1_viewer_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1010,7 +1092,7 @@ func (x *StreamEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamEventsResponse.ProtoReflect.Descriptor instead.
 func (*StreamEventsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{10}
+	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StreamEventsResponse) GetEvent() *Event {
@@ -1068,27 +1150,32 @@ const file_magus_viewer_v1_viewer_proto_rawDesc = "" +
 	"\x15GetInvocationResponse\x12;\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\v2\x1b.magus.viewer.v1.InvocationR\n" +
-	"invocation\"\xbb\x02\n" +
+	"invocation\"\x82\x02\n" +
+	"\n" +
+	"EventQuery\x12\x1a\n" +
+	"\bprojects\x18\x01 \x03(\tR\bprojects\x12\x18\n" +
+	"\atargets\x18\x02 \x03(\tR\atargets\x12\x14\n" +
+	"\x05kinds\x18\x03 \x03(\tR\x05kinds\x12\x18\n" +
+	"\astreams\x18\x04 \x03(\tR\astreams\x12\x16\n" +
+	"\x06levels\x18\x05 \x03(\tR\x06levels\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\x12/\n" +
+	"\x04text\x18\a \x03(\v2\x1b.magus.query.v1.StringMatchR\x04text\x12-\n" +
+	"\x04time\x18\b \x01(\v2\x19.magus.query.v1.TimeRangeR\x04time\"\xcf\x01\n" +
 	"\x11ListEventsRequest\x12=\n" +
 	"\bselector\x18\x01 \x01(\v2\x19.magus.viewer.v1.SelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12'\n" +
 	"\tpage_size\x18\x02 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\x88'(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\x12-\n" +
-	"\x06filter\x18\x04 \x01(\v2\x15.magus.query.v1.QueryR\x06filter\x129\n" +
-	"\n" +
-	"start_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
-	"\bend_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\"l\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x123\n" +
+	"\x06filter\x18\x04 \x01(\v2\x1b.magus.viewer.v1.EventQueryR\x06filter\"l\n" +
 	"\x12ListEventsResponse\x12.\n" +
 	"\x06events\x18\x01 \x03(\v2\x16.magus.viewer.v1.EventR\x06events\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xb6\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x81\x01\n" +
 	"\x13StreamEventsRequest\x125\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^inv[0-9a-z]+$R\n" +
-	"invocation\x12-\n" +
-	"\x06filter\x18\x02 \x01(\v2\x15.magus.query.v1.QueryR\x06filter\x129\n" +
-	"\n" +
-	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"D\n" +
+	"invocation\x123\n" +
+	"\x06filter\x18\x02 \x01(\v2\x1b.magus.viewer.v1.EventQueryR\x06filter\"D\n" +
 	"\x14StreamEventsResponse\x12,\n" +
 	"\x05event\x18\x01 \x01(\v2\x16.magus.viewer.v1.EventR\x05event*\x9d\x01\n" +
 	"\x04Kind\x12\x14\n" +
@@ -1139,7 +1226,7 @@ func file_magus_viewer_v1_viewer_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_viewer_v1_viewer_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_magus_viewer_v1_viewer_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_magus_viewer_v1_viewer_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_magus_viewer_v1_viewer_proto_goTypes = []any{
 	(Kind)(0),                     // 0: magus.viewer.v1.Kind
 	(Stream)(0),                   // 1: magus.viewer.v1.Stream
@@ -1152,48 +1239,49 @@ var file_magus_viewer_v1_viewer_proto_goTypes = []any{
 	(*Selector)(nil),              // 8: magus.viewer.v1.Selector
 	(*GetInvocationRequest)(nil),  // 9: magus.viewer.v1.GetInvocationRequest
 	(*GetInvocationResponse)(nil), // 10: magus.viewer.v1.GetInvocationResponse
-	(*ListEventsRequest)(nil),     // 11: magus.viewer.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),    // 12: magus.viewer.v1.ListEventsResponse
-	(*StreamEventsRequest)(nil),   // 13: magus.viewer.v1.StreamEventsRequest
-	(*StreamEventsResponse)(nil),  // 14: magus.viewer.v1.StreamEventsResponse
-	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 16: google.protobuf.Duration
-	(*v1.Query)(nil),              // 17: magus.query.v1.Query
+	(*EventQuery)(nil),            // 11: magus.viewer.v1.EventQuery
+	(*ListEventsRequest)(nil),     // 12: magus.viewer.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),    // 13: magus.viewer.v1.ListEventsResponse
+	(*StreamEventsRequest)(nil),   // 14: magus.viewer.v1.StreamEventsRequest
+	(*StreamEventsResponse)(nil),  // 15: magus.viewer.v1.StreamEventsResponse
+	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 17: google.protobuf.Duration
+	(*v1.StringMatch)(nil),        // 18: magus.query.v1.StringMatch
+	(*v1.TimeRange)(nil),          // 19: magus.query.v1.TimeRange
 }
 var file_magus_viewer_v1_viewer_proto_depIdxs = []int32{
 	3,  // 0: magus.viewer.v1.Command.trigger:type_name -> magus.viewer.v1.Trigger
 	4,  // 1: magus.viewer.v1.Invocation.command:type_name -> magus.viewer.v1.Command
-	15, // 2: magus.viewer.v1.Invocation.start_time:type_name -> google.protobuf.Timestamp
-	15, // 3: magus.viewer.v1.Invocation.end_time:type_name -> google.protobuf.Timestamp
-	15, // 4: magus.viewer.v1.Event.time:type_name -> google.protobuf.Timestamp
+	16, // 2: magus.viewer.v1.Invocation.start_time:type_name -> google.protobuf.Timestamp
+	16, // 3: magus.viewer.v1.Invocation.end_time:type_name -> google.protobuf.Timestamp
+	16, // 4: magus.viewer.v1.Event.time:type_name -> google.protobuf.Timestamp
 	0,  // 5: magus.viewer.v1.Event.kind:type_name -> magus.viewer.v1.Kind
 	1,  // 6: magus.viewer.v1.Event.stream:type_name -> magus.viewer.v1.Stream
 	2,  // 7: magus.viewer.v1.Event.status:type_name -> magus.viewer.v1.Status
-	16, // 8: magus.viewer.v1.Event.duration:type_name -> google.protobuf.Duration
+	17, // 8: magus.viewer.v1.Event.duration:type_name -> google.protobuf.Duration
 	4,  // 9: magus.viewer.v1.Event.command:type_name -> magus.viewer.v1.Command
 	5,  // 10: magus.viewer.v1.Journal.invocation:type_name -> magus.viewer.v1.Invocation
 	6,  // 11: magus.viewer.v1.Journal.events:type_name -> magus.viewer.v1.Event
 	8,  // 12: magus.viewer.v1.GetInvocationRequest.selector:type_name -> magus.viewer.v1.Selector
 	5,  // 13: magus.viewer.v1.GetInvocationResponse.invocation:type_name -> magus.viewer.v1.Invocation
-	8,  // 14: magus.viewer.v1.ListEventsRequest.selector:type_name -> magus.viewer.v1.Selector
-	17, // 15: magus.viewer.v1.ListEventsRequest.filter:type_name -> magus.query.v1.Query
-	15, // 16: magus.viewer.v1.ListEventsRequest.start_time:type_name -> google.protobuf.Timestamp
-	15, // 17: magus.viewer.v1.ListEventsRequest.end_time:type_name -> google.protobuf.Timestamp
+	18, // 14: magus.viewer.v1.EventQuery.text:type_name -> magus.query.v1.StringMatch
+	19, // 15: magus.viewer.v1.EventQuery.time:type_name -> magus.query.v1.TimeRange
+	8,  // 16: magus.viewer.v1.ListEventsRequest.selector:type_name -> magus.viewer.v1.Selector
+	11, // 17: magus.viewer.v1.ListEventsRequest.filter:type_name -> magus.viewer.v1.EventQuery
 	6,  // 18: magus.viewer.v1.ListEventsResponse.events:type_name -> magus.viewer.v1.Event
-	17, // 19: magus.viewer.v1.StreamEventsRequest.filter:type_name -> magus.query.v1.Query
-	15, // 20: magus.viewer.v1.StreamEventsRequest.start_time:type_name -> google.protobuf.Timestamp
-	6,  // 21: magus.viewer.v1.StreamEventsResponse.event:type_name -> magus.viewer.v1.Event
-	9,  // 22: magus.viewer.v1.ViewerService.GetInvocation:input_type -> magus.viewer.v1.GetInvocationRequest
-	11, // 23: magus.viewer.v1.ViewerService.ListEvents:input_type -> magus.viewer.v1.ListEventsRequest
-	13, // 24: magus.viewer.v1.ViewerService.StreamEvents:input_type -> magus.viewer.v1.StreamEventsRequest
-	10, // 25: magus.viewer.v1.ViewerService.GetInvocation:output_type -> magus.viewer.v1.GetInvocationResponse
-	12, // 26: magus.viewer.v1.ViewerService.ListEvents:output_type -> magus.viewer.v1.ListEventsResponse
-	14, // 27: magus.viewer.v1.ViewerService.StreamEvents:output_type -> magus.viewer.v1.StreamEventsResponse
-	25, // [25:28] is the sub-list for method output_type
-	22, // [22:25] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	11, // 19: magus.viewer.v1.StreamEventsRequest.filter:type_name -> magus.viewer.v1.EventQuery
+	6,  // 20: magus.viewer.v1.StreamEventsResponse.event:type_name -> magus.viewer.v1.Event
+	9,  // 21: magus.viewer.v1.ViewerService.GetInvocation:input_type -> magus.viewer.v1.GetInvocationRequest
+	12, // 22: magus.viewer.v1.ViewerService.ListEvents:input_type -> magus.viewer.v1.ListEventsRequest
+	14, // 23: magus.viewer.v1.ViewerService.StreamEvents:input_type -> magus.viewer.v1.StreamEventsRequest
+	10, // 24: magus.viewer.v1.ViewerService.GetInvocation:output_type -> magus.viewer.v1.GetInvocationResponse
+	13, // 25: magus.viewer.v1.ViewerService.ListEvents:output_type -> magus.viewer.v1.ListEventsResponse
+	15, // 26: magus.viewer.v1.ViewerService.StreamEvents:output_type -> magus.viewer.v1.StreamEventsResponse
+	24, // [24:27] is the sub-list for method output_type
+	21, // [21:24] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_magus_viewer_v1_viewer_proto_init() }
@@ -1211,7 +1299,7 @@ func file_magus_viewer_v1_viewer_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_viewer_v1_viewer_proto_rawDesc), len(file_magus_viewer_v1_viewer_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

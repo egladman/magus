@@ -23,7 +23,7 @@ func TestStatusProtoMapsPool(t *testing.T) {
 			Calls: []types.StatusCall{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, SubOp: "go-build"}},
 		},
 	}
-	s := StatusProto(r, "v1.2.3")
+	s := statusReportToProto(r, "v1.2.3")
 
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, s.GetHealth())
 	assert.Equal(t, "v1.2.3", s.GetMagusVersion())
@@ -41,9 +41,9 @@ func TestStatusProtoMapsPool(t *testing.T) {
 
 // TestStatusProtoHealth derives DOWN when no pool is present and DEGRADED on a pool error.
 func TestStatusProtoHealth(t *testing.T) {
-	assert.Equal(t, statusv1.Health_HEALTH_DOWN, StatusProto(types.StatusReport{}, "v1").GetHealth())
+	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusReportToProto(types.StatusReport{}, "v1").GetHealth())
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED,
-		StatusProto(types.StatusReport{Pool: &types.StatusOutput{}, PoolError: "boom"}, "v1").GetHealth())
+		statusReportToProto(types.StatusReport{Pool: &types.StatusOutput{}, PoolError: "boom"}, "v1").GetHealth())
 }
 
 // TestEncodeStatusEventRoundTrip confirms a status snapshot decodes back: base64 -> proto.

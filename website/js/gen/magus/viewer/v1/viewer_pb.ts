@@ -18,7 +18,7 @@ import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_duration, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Query } from "../../query/v1/query_pb";
+import type { StringMatch, TimeRange } from "../../query/v1/query_pb";
 import { file_magus_query_v1_query } from "../../query/v1/query_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -26,7 +26,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/viewer/v1/viewer.proto.
  */
 export const file_magus_viewer_v1_viewer: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy92aWV3ZXIvdjEvdmlld2VyLnByb3RvEg9tYWd1cy52aWV3ZXIudjEiXQoHQ29tbWFuZBIMCgR2ZXJiGAEgASgJEgwKBGFyZ3MYAiADKAkSCwoDY3dkGAMgASgJEikKB3RyaWdnZXIYBCABKA4yGC5tYWd1cy52aWV3ZXIudjEuVHJpZ2dlciK4AQoKSW52b2NhdGlvbhIKCgJpZBgBIAEoCRIpCgdjb21tYW5kGAIgASgLMhgubWFndXMudmlld2VyLnYxLkNvbW1hbmQSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1hZ3VzX3ZlcnNpb24YBSABKAki4gIKBUV2ZW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB3Byb2plY3QYAiABKAkSDgoGdGFyZ2V0GAMgASgJEiMKBGtpbmQYBCABKA4yFS5tYWd1cy52aWV3ZXIudjEuS2luZBInCgZzdHJlYW0YBSABKA4yFy5tYWd1cy52aWV3ZXIudjEuU3RyZWFtEg0KBWxldmVsGAYgASgJEicKBnN0YXR1cxgHIAEoDjIXLm1hZ3VzLnZpZXdlci52MS5TdGF0dXMSCwoDcmVmGAggASgJEisKCGR1cmF0aW9uGAkgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEgwKBHRleHQYCiABKAkSKQoHY29tbWFuZBgLIAEoCzIYLm1hZ3VzLnZpZXdlci52MS5Db21tYW5kEhUKDW1hZ3VzX3ZlcnNpb24YDCABKAkiYgoHSm91cm5hbBIvCgppbnZvY2F0aW9uGAEgASgLMhsubWFndXMudmlld2VyLnYxLkludm9jYXRpb24SJgoGZXZlbnRzGAIgAygLMhYubWFndXMudmlld2VyLnYxLkV2ZW50ImoKCFNlbGVjdG9yEiQKA3JlZhgBIAEoCUIVukgSchAyDl5yZWZbMC05YS1mXSskSAASKwoKaW52b2NhdGlvbhgCIAEoCUIVukgSchAyDl5pbnZbMC05YS16XSskSABCCwoCb2YSBbpIAggBIksKFEdldEludm9jYXRpb25SZXF1ZXN0EjMKCHNlbGVjdG9yGAEgASgLMhkubWFndXMudmlld2VyLnYxLlNlbGVjdG9yQga6SAPIAQEiSAoVR2V0SW52b2NhdGlvblJlc3BvbnNlEi8KCmludm9jYXRpb24YASABKAsyGy5tYWd1cy52aWV3ZXIudjEuSW52b2NhdGlvbiKAAgoRTGlzdEV2ZW50c1JlcXVlc3QSMwoIc2VsZWN0b3IYASABKAsyGS5tYWd1cy52aWV3ZXIudjEuU2VsZWN0b3JCBrpIA8gBARIdCglwYWdlX3NpemUYAiABKAVCCrpIBxoFGIgnKAASEgoKcGFnZV90b2tlbhgDIAEoCRIlCgZmaWx0ZXIYBCABKAsyFS5tYWd1cy5xdWVyeS52MS5RdWVyeRIuCgpzdGFydF90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghlbmRfdGltZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiVQoSTGlzdEV2ZW50c1Jlc3BvbnNlEiYKBmV2ZW50cxgBIAMoCzIWLm1hZ3VzLnZpZXdlci52MS5FdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkilwEKE1N0cmVhbUV2ZW50c1JlcXVlc3QSKQoKaW52b2NhdGlvbhgBIAEoCUIVukgSchAyDl5pbnZbMC05YS16XSskEiUKBmZpbHRlchgCIAEoCzIVLm1hZ3VzLnF1ZXJ5LnYxLlF1ZXJ5Ei4KCnN0YXJ0X3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIj0KFFN0cmVhbUV2ZW50c1Jlc3BvbnNlEiUKBWV2ZW50GAEgASgLMhYubWFndXMudmlld2VyLnYxLkV2ZW50Kp0BCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIQCgxLSU5EX1NUQVJURUQQBxIRCg1LSU5EX0ZJTklTSEVEEAgSDQoJS0lORF9FWEVDEAkSDwoLS0lORF9PVVRQVVQQARIPCgtLSU5EX1JFU1VMVBACEg4KCktJTkRfU0NPUEUQBBINCglLSU5EX1dBUk4QBiIECAMQAyIECAUQBSpGCgZTdHJlYW0SFgoSU1RSRUFNX1VOU1BFQ0lGSUVEEAASEQoNU1RSRUFNX1NURE9VVBABEhEKDVNUUkVBTV9TVERFUlIQAipVCgZTdGF0dXMSFgoSU1RBVFVTX1VOU1BFQ0lGSUVEEAASDwoLU1RBVFVTX1BBU1MQARIPCgtTVEFUVVNfRkFJTBACEhEKDVNUQVRVU19DQUNIRUQQAyqPAQoHVHJpZ2dlchIXChNUUklHR0VSX1VOU1BFQ0lGSUVEEAASDwoLVFJJR0dFUl9SVU4QARIUChBUUklHR0VSX0FGRkVDVEVEEAISDgoKVFJJR0dFUl9DSRADEg0KCVRSSUdHRVJfWBAEEhEKDVRSSUdHRVJfV0FUQ0gQBRISCg5UUklHR0VSX0RJUkVDVBAGMqUCCg1WaWV3ZXJTZXJ2aWNlEl4KDUdldEludm9jYXRpb24SJS5tYWd1cy52aWV3ZXIudjEuR2V0SW52b2NhdGlvblJlcXVlc3QaJi5tYWd1cy52aWV3ZXIudjEuR2V0SW52b2NhdGlvblJlc3BvbnNlElUKCkxpc3RFdmVudHMSIi5tYWd1cy52aWV3ZXIudjEuTGlzdEV2ZW50c1JlcXVlc3QaIy5tYWd1cy52aWV3ZXIudjEuTGlzdEV2ZW50c1Jlc3BvbnNlEl0KDFN0cmVhbUV2ZW50cxIkLm1hZ3VzLnZpZXdlci52MS5TdHJlYW1FdmVudHNSZXF1ZXN0GiUubWFndXMudmlld2VyLnYxLlN0cmVhbUV2ZW50c1Jlc3BvbnNlMAFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
+  fileDesc("ChxtYWd1cy92aWV3ZXIvdjEvdmlld2VyLnByb3RvEg9tYWd1cy52aWV3ZXIudjEiXQoHQ29tbWFuZBIMCgR2ZXJiGAEgASgJEgwKBGFyZ3MYAiADKAkSCwoDY3dkGAMgASgJEikKB3RyaWdnZXIYBCABKA4yGC5tYWd1cy52aWV3ZXIudjEuVHJpZ2dlciK4AQoKSW52b2NhdGlvbhIKCgJpZBgBIAEoCRIpCgdjb21tYW5kGAIgASgLMhgubWFndXMudmlld2VyLnYxLkNvbW1hbmQSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1hZ3VzX3ZlcnNpb24YBSABKAki4gIKBUV2ZW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB3Byb2plY3QYAiABKAkSDgoGdGFyZ2V0GAMgASgJEiMKBGtpbmQYBCABKA4yFS5tYWd1cy52aWV3ZXIudjEuS2luZBInCgZzdHJlYW0YBSABKA4yFy5tYWd1cy52aWV3ZXIudjEuU3RyZWFtEg0KBWxldmVsGAYgASgJEicKBnN0YXR1cxgHIAEoDjIXLm1hZ3VzLnZpZXdlci52MS5TdGF0dXMSCwoDcmVmGAggASgJEisKCGR1cmF0aW9uGAkgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEgwKBHRleHQYCiABKAkSKQoHY29tbWFuZBgLIAEoCzIYLm1hZ3VzLnZpZXdlci52MS5Db21tYW5kEhUKDW1hZ3VzX3ZlcnNpb24YDCABKAkiYgoHSm91cm5hbBIvCgppbnZvY2F0aW9uGAEgASgLMhsubWFndXMudmlld2VyLnYxLkludm9jYXRpb24SJgoGZXZlbnRzGAIgAygLMhYubWFndXMudmlld2VyLnYxLkV2ZW50ImoKCFNlbGVjdG9yEiQKA3JlZhgBIAEoCUIVukgSchAyDl5yZWZbMC05YS1mXSskSAASKwoKaW52b2NhdGlvbhgCIAEoCUIVukgSchAyDl5pbnZbMC05YS16XSskSABCCwoCb2YSBbpIAggBIksKFEdldEludm9jYXRpb25SZXF1ZXN0EjMKCHNlbGVjdG9yGAEgASgLMhkubWFndXMudmlld2VyLnYxLlNlbGVjdG9yQga6SAPIAQEiSAoVR2V0SW52b2NhdGlvblJlc3BvbnNlEi8KCmludm9jYXRpb24YASABKAsyGy5tYWd1cy52aWV3ZXIudjEuSW52b2NhdGlvbiLDAQoKRXZlbnRRdWVyeRIQCghwcm9qZWN0cxgBIAMoCRIPCgd0YXJnZXRzGAIgAygJEg0KBWtpbmRzGAMgAygJEg8KB3N0cmVhbXMYBCADKAkSDgoGbGV2ZWxzGAUgAygJEg4KBnN0YXR1cxgGIAEoCRIpCgR0ZXh0GAcgAygLMhsubWFndXMucXVlcnkudjEuU3RyaW5nTWF0Y2gSJwoEdGltZRgIIAEoCzIZLm1hZ3VzLnF1ZXJ5LnYxLlRpbWVSYW5nZSKoAQoRTGlzdEV2ZW50c1JlcXVlc3QSMwoIc2VsZWN0b3IYASABKAsyGS5tYWd1cy52aWV3ZXIudjEuU2VsZWN0b3JCBrpIA8gBARIdCglwYWdlX3NpemUYAiABKAVCCrpIBxoFGIgnKAASEgoKcGFnZV90b2tlbhgDIAEoCRIrCgZmaWx0ZXIYBCABKAsyGy5tYWd1cy52aWV3ZXIudjEuRXZlbnRRdWVyeSJVChJMaXN0RXZlbnRzUmVzcG9uc2USJgoGZXZlbnRzGAEgAygLMhYubWFndXMudmlld2VyLnYxLkV2ZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJtChNTdHJlYW1FdmVudHNSZXF1ZXN0EikKCmludm9jYXRpb24YASABKAlCFbpIEnIQMg5eaW52WzAtOWEtel0rJBIrCgZmaWx0ZXIYAiABKAsyGy5tYWd1cy52aWV3ZXIudjEuRXZlbnRRdWVyeSI9ChRTdHJlYW1FdmVudHNSZXNwb25zZRIlCgVldmVudBgBIAEoCzIWLm1hZ3VzLnZpZXdlci52MS5FdmVudCqdAQoES2luZBIUChBLSU5EX1VOU1BFQ0lGSUVEEAASEAoMS0lORF9TVEFSVEVEEAcSEQoNS0lORF9GSU5JU0hFRBAIEg0KCUtJTkRfRVhFQxAJEg8KC0tJTkRfT1VUUFVUEAESDwoLS0lORF9SRVNVTFQQAhIOCgpLSU5EX1NDT1BFEAQSDQoJS0lORF9XQVJOEAYiBAgDEAMiBAgFEAUqRgoGU3RyZWFtEhYKElNUUkVBTV9VTlNQRUNJRklFRBAAEhEKDVNUUkVBTV9TVERPVVQQARIRCg1TVFJFQU1fU1RERVJSEAIqVQoGU3RhdHVzEhYKElNUQVRVU19VTlNQRUNJRklFRBAAEg8KC1NUQVRVU19QQVNTEAESDwoLU1RBVFVTX0ZBSUwQAhIRCg1TVEFUVVNfQ0FDSEVEEAMqjwEKB1RyaWdnZXISFwoTVFJJR0dFUl9VTlNQRUNJRklFRBAAEg8KC1RSSUdHRVJfUlVOEAESFAoQVFJJR0dFUl9BRkZFQ1RFRBACEg4KClRSSUdHRVJfQ0kQAxINCglUUklHR0VSX1gQBBIRCg1UUklHR0VSX1dBVENIEAUSEgoOVFJJR0dFUl9ESVJFQ1QQBjKlAgoNVmlld2VyU2VydmljZRJeCg1HZXRJbnZvY2F0aW9uEiUubWFndXMudmlld2VyLnYxLkdldEludm9jYXRpb25SZXF1ZXN0GiYubWFndXMudmlld2VyLnYxLkdldEludm9jYXRpb25SZXNwb25zZRJVCgpMaXN0RXZlbnRzEiIubWFndXMudmlld2VyLnYxLkxpc3RFdmVudHNSZXF1ZXN0GiMubWFndXMudmlld2VyLnYxLkxpc3RFdmVudHNSZXNwb25zZRJdCgxTdHJlYW1FdmVudHMSJC5tYWd1cy52aWV3ZXIudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBolLm1hZ3VzLnZpZXdlci52MS5TdHJlYW1FdmVudHNSZXNwb25zZTABYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
 
 /**
  * Command is the invoking command line and context - what was asked of magus.
@@ -301,6 +301,81 @@ export const GetInvocationResponseSchema: GenMessage<GetInvocationResponse> = /*
   messageDesc(file_magus_viewer_v1_viewer, 6);
 
 /**
+ * EventQuery filters an invocation's events server-side (for a large log). It is the viewer's
+ * OWN typed query, composed from the shared query primitives plus the viewer's event fields -
+ * log fields (target/stream/level) are not graph fields, so there is no generic shared Query.
+ * Set fields AND together; repeated values within a field OR; matching is case-insensitive.
+ * The time window (including its since resume cursor) lives here too, so one message carries
+ * the whole filter.
+ *
+ * @generated from message magus.viewer.v1.EventQuery
+ */
+export type EventQuery = Message<"magus.viewer.v1.EventQuery"> & {
+  /**
+   * repo-relative project paths
+   *
+   * @generated from field: repeated string projects = 1;
+   */
+  projects: string[];
+
+  /**
+   * target names
+   *
+   * @generated from field: repeated string targets = 2;
+   */
+  targets: string[];
+
+  /**
+   * event kinds: output|result|exec|scope|warn|...
+   *
+   * @generated from field: repeated string kinds = 3;
+   */
+  kinds: string[];
+
+  /**
+   * stdout|stderr, for output events
+   *
+   * @generated from field: repeated string streams = 4;
+   */
+  streams: string[];
+
+  /**
+   * info|warn|error
+   *
+   * @generated from field: repeated string levels = 5;
+   */
+  levels: string[];
+
+  /**
+   * pass|fail|cached, for result events
+   *
+   * @generated from field: string status = 6;
+   */
+  status: string;
+
+  /**
+   * free-text matches against an event's text
+   *
+   * @generated from field: repeated magus.query.v1.StringMatch text = 7;
+   */
+  text: StringMatch[];
+
+  /**
+   * event time window; since doubles as stream resume
+   *
+   * @generated from field: magus.query.v1.TimeRange time = 8;
+   */
+  time?: TimeRange;
+};
+
+/**
+ * Describes the message magus.viewer.v1.EventQuery.
+ * Use `create(EventQuerySchema)` to create a new message.
+ */
+export const EventQuerySchema: GenMessage<EventQuery> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1_viewer, 7);
+
+/**
  * @generated from message magus.viewer.v1.ListEventsRequest
  */
 export type ListEventsRequest = Message<"magus.viewer.v1.ListEventsRequest"> & {
@@ -320,25 +395,11 @@ export type ListEventsRequest = Message<"magus.viewer.v1.ListEventsRequest"> & {
   pageToken: string;
 
   /**
-   * DSL content filter (project:/target:/kind:/status:/text)
+   * viewer-typed content + time filter
    *
-   * @generated from field: magus.query.v1.Query filter = 4;
+   * @generated from field: magus.viewer.v1.EventQuery filter = 4;
    */
-  filter?: Query;
-
-  /**
-   * inclusive time lower bound; unset = open
-   *
-   * @generated from field: google.protobuf.Timestamp start_time = 5;
-   */
-  startTime?: Timestamp;
-
-  /**
-   * exclusive time upper bound; unset = open
-   *
-   * @generated from field: google.protobuf.Timestamp end_time = 6;
-   */
-  endTime?: Timestamp;
+  filter?: EventQuery;
 };
 
 /**
@@ -346,7 +407,7 @@ export type ListEventsRequest = Message<"magus.viewer.v1.ListEventsRequest"> & {
  * Use `create(ListEventsRequestSchema)` to create a new message.
  */
 export const ListEventsRequestSchema: GenMessage<ListEventsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_viewer_v1_viewer, 7);
+  messageDesc(file_magus_viewer_v1_viewer, 8);
 
 /**
  * @generated from message magus.viewer.v1.ListEventsResponse
@@ -370,7 +431,7 @@ export type ListEventsResponse = Message<"magus.viewer.v1.ListEventsResponse"> &
  * Use `create(ListEventsResponseSchema)` to create a new message.
  */
 export const ListEventsResponseSchema: GenMessage<ListEventsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_viewer_v1_viewer, 8);
+  messageDesc(file_magus_viewer_v1_viewer, 9);
 
 /**
  * @generated from message magus.viewer.v1.StreamEventsRequest
@@ -382,18 +443,11 @@ export type StreamEventsRequest = Message<"magus.viewer.v1.StreamEventsRequest">
   invocation: string;
 
   /**
-   * DSL content filter
+   * viewer-typed content filter; filter.time.since resumes the stream
    *
-   * @generated from field: magus.query.v1.Query filter = 2;
+   * @generated from field: magus.viewer.v1.EventQuery filter = 2;
    */
-  filter?: Query;
-
-  /**
-   * resume point: stream events at/after this time
-   *
-   * @generated from field: google.protobuf.Timestamp start_time = 3;
-   */
-  startTime?: Timestamp;
+  filter?: EventQuery;
 };
 
 /**
@@ -401,7 +455,7 @@ export type StreamEventsRequest = Message<"magus.viewer.v1.StreamEventsRequest">
  * Use `create(StreamEventsRequestSchema)` to create a new message.
  */
 export const StreamEventsRequestSchema: GenMessage<StreamEventsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_viewer_v1_viewer, 9);
+  messageDesc(file_magus_viewer_v1_viewer, 10);
 
 /**
  * @generated from message magus.viewer.v1.StreamEventsResponse
@@ -418,7 +472,7 @@ export type StreamEventsResponse = Message<"magus.viewer.v1.StreamEventsResponse
  * Use `create(StreamEventsResponseSchema)` to create a new message.
  */
 export const StreamEventsResponseSchema: GenMessage<StreamEventsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_viewer_v1_viewer, 10);
+  messageDesc(file_magus_viewer_v1_viewer, 11);
 
 /**
  * Kind classifies an Event. Output events carry subprocess text; the rest carry magus's
