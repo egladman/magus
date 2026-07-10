@@ -26,25 +26,26 @@ consumer interface (e.g. `graphSource`, `statusSource`) that is satisfied by the
 pure-logic `internal/service/console` service. The service returns DOMAIN values; the
 handler owns the wire encoding.
 
-Wire-mapping packages are build-tag-free (they are pure mapping; a CLI path may use
-them). Handlers that only run inside the daemon are `//go:build mcp`.
+MCP is always compiled in - there are no build tags. Test files use the SAME package
+as the code they test (`package status`, never `package status_test`).
 
 ## Deliberate non-mirror packages
 
 One subpackage is not 1:1 with a single proto package, by design:
 
-- `internal/handler/mcp` (`//go:build mcp`) - the MCP request handlers (the tool
-  implementations, the descriptor catalog, and the dispatch pipeline in `mcp.go`),
-  plus the streamable-HTTP transport that mounts onto `httpx.Server`. It mirrors the
-  agent-facing MCP tool surface, not a `.v1` proto package. Its `auth/` and `origin/`
-  leaves are build-tag-free so the composition root can read them.
+- `internal/handler/mcp` - the MCP request handlers (the tool implementations, the
+  descriptor catalog in `registry.go`, the dispatch pipeline in `mcp.go`, and the
+  transports in `transport.go`: the streamable-HTTP handler builder + stdio). It
+  mirrors the agent-facing MCP tool surface, not a `.v1` proto package. Its bearer
+  token store lives in `internal/auth`; the guards in `internal/httpx`.
 
 ## Layering
 
-    transport   internal/httpx            (one loopback Server + middleware)
-    presentation internal/handler/*       (this package - request -> domain -> wire)
-    repositories internal/cache, /knowledge, ... (data access)
+    transport    internal/httpx           (one loopback Server + middleware)
+    handler      internal/handler/*       (this package - request -> domain -> wire)
+    service      internal/service/*       (pure application logic - no http/proto)
+    repository   internal/cache, knowledge  (data access)
+    composition  internal/daemon          (assembles the daemon server)
 
-Keep the arrows pointing down: handlers import httpx (to mount routes) and the
-repositories (to read/write); nothing in a repository imports a handler, and nothing
-in httpx imports a handler.
+Keep the arrows pointing down: a handler imports its service, httpx (to mount routes),
+and the repositories; nothing in a repository or in httpx imports a handler.
