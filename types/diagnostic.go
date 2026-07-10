@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms, 7000=knowledge-graph extraction.
+// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms, 7000=knowledge-graph extraction, 8000=output references.
 
 // Base URLs for diagnostic documentation, keyed by code-prefix subdir.
 const (
@@ -17,6 +17,7 @@ const (
 	diagnosticServicesBase  = "https://github.com/egladman/magus/blob/main/docs/codes/services/"
 	diagnosticCharmsBase    = "https://github.com/egladman/magus/blob/main/docs/codes/charms/"
 	diagnosticKnowledgeBase = "https://github.com/egladman/magus/blob/main/docs/codes/knowledge/"
+	diagnosticOutputRefBase = "https://github.com/egladman/magus/blob/main/docs/codes/outputref/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code).
@@ -25,6 +26,8 @@ type DiagnosticCode string
 // URL returns the documentation URL for this code.
 func (c DiagnosticCode) URL() string {
 	switch {
+	case strings.HasPrefix(string(c), "MGS8"):
+		return diagnosticOutputRefBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS7"):
 		return diagnosticKnowledgeBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS6"):
@@ -64,6 +67,9 @@ const (
 	CharmPatchInvalid         DiagnosticCode = "MGS6001"
 	UnresolvableBuzzImport    DiagnosticCode = "MGS7001"
 	DanglingDocReference      DiagnosticCode = "MGS7002"
+	OutputRefMissing          DiagnosticCode = "MGS8001"
+	OutputRefAmbiguous        DiagnosticCode = "MGS8002"
+	OutputRefMalformed        DiagnosticCode = "MGS8003"
 )
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
@@ -80,6 +86,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,
+	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed,
 }
 
 // AllDiagnosticCodes returns every registered diagnostic code in ascending MGS
