@@ -4,9 +4,10 @@
 
 // Package magus.status.v1 is the versioned wire contract for magus's status/dashboard
 // view, scoped to LIVE state: overall health, the concurrency pool (capacity/in-use/
-// waiting slots), and what is running right now - the in-flight calls, their workspace,
-// and how long they have run. Static config (telemetry/cache/build) is deliberately NOT
-// here; that is `magus status`/config, not "what is running." Backs a native-feeling
+// waiting slots), what is running right now - the in-flight calls, their workspace, and
+// how long they have run - and live cache ACTIVITY (hit/miss/error tallies + real on-disk
+// size). Static CONFIG (telemetry, the cache cap/immutability, build flags) is deliberately
+// NOT here; that is `magus status`/config, not "what is happening." Backs a native-feeling
 // /dashboard. A sibling of magus.viewer.v1. buf-breaking gates this file.
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
@@ -19,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/status/v1/status.proto.
  */
 export const file_magus_status_v1_status: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy9zdGF0dXMvdjEvc3RhdHVzLnByb3RvEg9tYWd1cy5zdGF0dXMudjEibQoGU3RhdHVzEicKBmhlYWx0aBgBIAEoDjIXLm1hZ3VzLnN0YXR1cy52MS5IZWFsdGgSIwoEcG9vbBgCIAEoCzIVLm1hZ3VzLnN0YXR1cy52MS5Qb29sEhUKDW1hZ3VzX3ZlcnNpb24YAyABKAki2wEKBFBvb2wSEgoKcGFyZW50X3BpZBgBIAEoBRIWCg5kYWVtb25fdmVyc2lvbhgCIAEoCRIMCgRtb2RlGAMgASgJEhAKCGNhcGFjaXR5GAQgASgFEg4KBmluX3VzZRgFIAEoBRIPCgd3YWl0aW5nGAYgASgFEiQKBWNhbGxzGAcgAygLMhUubWFndXMuc3RhdHVzLnYxLkNhbGwSLgoKd29ya3NwYWNlcxgIIAMoCzIaLm1hZ3VzLnN0YXR1cy52MS5Xb3Jrc3BhY2USEAoIYWZmZWN0ZWQYCSADKAkiZwoEQ2FsbBIMCgRhcmdzGAEgAygJEhEKCXdvcmtzcGFjZRgCIAEoCRIuCgpzdGFydF90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZzdWJfb3AYBCABKAkifgoJV29ya3NwYWNlEgwKBHJvb3QYASABKAkSLQoJbG9hZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI0ChBsYXN0X2FjY2Vzc190aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCISChBHZXRTdGF0dXNSZXF1ZXN0IjwKEUdldFN0YXR1c1Jlc3BvbnNlEicKBnN0YXR1cxgBIAEoCzIXLm1hZ3VzLnN0YXR1cy52MS5TdGF0dXMiFQoTU3RyZWFtU3RhdHVzUmVxdWVzdCI/ChRTdHJlYW1TdGF0dXNSZXNwb25zZRInCgZzdGF0dXMYASABKAsyFy5tYWd1cy5zdGF0dXMudjEuU3RhdHVzKloKBkhlYWx0aBIWChJIRUFMVEhfVU5TUEVDSUZJRUQQABISCg5IRUFMVEhfSEVBTFRIWRABEhMKD0hFQUxUSF9ERUdSQURFRBACEg8KC0hFQUxUSF9ET1dOEAMywgEKDVN0YXR1c1NlcnZpY2USUgoJR2V0U3RhdHVzEiEubWFndXMuc3RhdHVzLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5tYWd1cy5zdGF0dXMudjEuR2V0U3RhdHVzUmVzcG9uc2USXQoMU3RyZWFtU3RhdHVzEiQubWFndXMuc3RhdHVzLnYxLlN0cmVhbVN0YXR1c1JlcXVlc3QaJS5tYWd1cy5zdGF0dXMudjEuU3RyZWFtU3RhdHVzUmVzcG9uc2UwAWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChxtYWd1cy9zdGF0dXMvdjEvc3RhdHVzLnByb3RvEg9tYWd1cy5zdGF0dXMudjEibQoGU3RhdHVzEicKBmhlYWx0aBgBIAEoDjIXLm1hZ3VzLnN0YXR1cy52MS5IZWFsdGgSIwoEcG9vbBgCIAEoCzIVLm1hZ3VzLnN0YXR1cy52MS5Qb29sEhUKDW1hZ3VzX3ZlcnNpb24YAyABKAkiggIKBFBvb2wSEgoKcGFyZW50X3BpZBgBIAEoBRIWCg5kYWVtb25fdmVyc2lvbhgCIAEoCRIMCgRtb2RlGAMgASgJEhAKCGNhcGFjaXR5GAQgASgFEg4KBmluX3VzZRgFIAEoBRIPCgd3YWl0aW5nGAYgASgFEiQKBWNhbGxzGAcgAygLMhUubWFndXMuc3RhdHVzLnYxLkNhbGwSLgoKd29ya3NwYWNlcxgIIAMoCzIaLm1hZ3VzLnN0YXR1cy52MS5Xb3Jrc3BhY2USEAoIYWZmZWN0ZWQYCSADKAkSJQoFY2FjaGUYCiABKAsyFi5tYWd1cy5zdGF0dXMudjEuQ2FjaGUiewoEQ2FsbBIMCgRhcmdzGAEgAygJEhEKCXdvcmtzcGFjZRgCIAEoCRIuCgpzdGFydF90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZzdWJfb3AYBCABKAkSEgoKaW52b2NhdGlvbhgFIAEoCSKlAQoJV29ya3NwYWNlEgwKBHJvb3QYASABKAkSLQoJbG9hZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI0ChBsYXN0X2FjY2Vzc190aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIlCgVjYWNoZRgEIAEoCzIWLm1hZ3VzLnN0YXR1cy52MS5DYWNoZSJeCgVDYWNoZRIMCgRoaXRzGAEgASgDEg4KBm1pc3NlcxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSEgoKc2l6ZV9ieXRlcxgEIAEoAxITCgtzaXplX2NhcF9tYhgFIAEoBSISChBHZXRTdGF0dXNSZXF1ZXN0IjwKEUdldFN0YXR1c1Jlc3BvbnNlEicKBnN0YXR1cxgBIAEoCzIXLm1hZ3VzLnN0YXR1cy52MS5TdGF0dXMiFQoTU3RyZWFtU3RhdHVzUmVxdWVzdCI/ChRTdHJlYW1TdGF0dXNSZXNwb25zZRInCgZzdGF0dXMYASABKAsyFy5tYWd1cy5zdGF0dXMudjEuU3RhdHVzKloKBkhlYWx0aBIWChJIRUFMVEhfVU5TUEVDSUZJRUQQABISCg5IRUFMVEhfSEVBTFRIWRABEhMKD0hFQUxUSF9ERUdSQURFRBACEg8KC0hFQUxUSF9ET1dOEAMywgEKDVN0YXR1c1NlcnZpY2USUgoJR2V0U3RhdHVzEiEubWFndXMuc3RhdHVzLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5tYWd1cy5zdGF0dXMudjEuR2V0U3RhdHVzUmVzcG9uc2USXQoMU3RyZWFtU3RhdHVzEiQubWFndXMuc3RhdHVzLnYxLlN0cmVhbVN0YXR1c1JlcXVlc3QaJS5tYWd1cy5zdGF0dXMudjEuU3RyZWFtU3RhdHVzUmVzcG9uc2UwAWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * Status is the live snapshot.
@@ -112,6 +113,13 @@ export type Pool = Message<"magus.status.v1.Pool"> & {
    * @generated from field: repeated string affected = 9;
    */
   affected: string[];
+
+  /**
+   * aggregate cache activity across the warm workspaces
+   *
+   * @generated from field: magus.status.v1.Cache cache = 10;
+   */
+  cache?: Cache;
 };
 
 /**
@@ -152,6 +160,13 @@ export type Call = Message<"magus.status.v1.Call"> & {
    * @generated from field: string sub_op = 4;
    */
   subOp: string;
+
+  /**
+   * the invocation id (inv...) this call belongs to; deep-links to its live log
+   *
+   * @generated from field: string invocation = 5;
+   */
+  invocation: string;
 };
 
 /**
@@ -181,6 +196,13 @@ export type Workspace = Message<"magus.status.v1.Workspace"> & {
    * @generated from field: google.protobuf.Timestamp last_access_time = 3;
    */
   lastAccessTime?: Timestamp;
+
+  /**
+   * this workspace's cache activity
+   *
+   * @generated from field: magus.status.v1.Cache cache = 4;
+   */
+  cache?: Cache;
 };
 
 /**
@@ -189,6 +211,51 @@ export type Workspace = Message<"magus.status.v1.Workspace"> & {
  */
 export const WorkspaceSchema: GenMessage<Workspace> = /*@__PURE__*/
   messageDesc(file_magus_status_v1_status, 3);
+
+/**
+ * Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this
+ * session plus its real on-disk size. These are running counters (not static config like
+ * the cap or immutability), so a dashboard plots hit-rate over time by sampling the stream.
+ *
+ * @generated from message magus.status.v1.Cache
+ */
+export type Cache = Message<"magus.status.v1.Cache"> & {
+  /**
+   * @generated from field: int64 hits = 1;
+   */
+  hits: bigint;
+
+  /**
+   * @generated from field: int64 misses = 2;
+   */
+  misses: bigint;
+
+  /**
+   * @generated from field: int64 errors = 3;
+   */
+  errors: bigint;
+
+  /**
+   * real on-disk size of the cache dir (0 = unknown/not computed)
+   *
+   * @generated from field: int64 size_bytes = 4;
+   */
+  sizeBytes: bigint;
+
+  /**
+   * configured cap (MAGUS_CACHE_SIZE_MB; 0 = unlimited)
+   *
+   * @generated from field: int32 size_cap_mb = 5;
+   */
+  sizeCapMb: number;
+};
+
+/**
+ * Describes the message magus.status.v1.Cache.
+ * Use `create(CacheSchema)` to create a new message.
+ */
+export const CacheSchema: GenMessage<Cache> = /*@__PURE__*/
+  messageDesc(file_magus_status_v1_status, 4);
 
 /**
  * @generated from message magus.status.v1.GetStatusRequest
@@ -201,7 +268,7 @@ export type GetStatusRequest = Message<"magus.status.v1.GetStatusRequest"> & {
  * Use `create(GetStatusRequestSchema)` to create a new message.
  */
 export const GetStatusRequestSchema: GenMessage<GetStatusRequest> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 4);
+  messageDesc(file_magus_status_v1_status, 5);
 
 /**
  * @generated from message magus.status.v1.GetStatusResponse
@@ -218,7 +285,7 @@ export type GetStatusResponse = Message<"magus.status.v1.GetStatusResponse"> & {
  * Use `create(GetStatusResponseSchema)` to create a new message.
  */
 export const GetStatusResponseSchema: GenMessage<GetStatusResponse> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 5);
+  messageDesc(file_magus_status_v1_status, 6);
 
 /**
  * @generated from message magus.status.v1.StreamStatusRequest
@@ -231,7 +298,7 @@ export type StreamStatusRequest = Message<"magus.status.v1.StreamStatusRequest">
  * Use `create(StreamStatusRequestSchema)` to create a new message.
  */
 export const StreamStatusRequestSchema: GenMessage<StreamStatusRequest> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 6);
+  messageDesc(file_magus_status_v1_status, 7);
 
 /**
  * @generated from message magus.status.v1.StreamStatusResponse
@@ -248,7 +315,7 @@ export type StreamStatusResponse = Message<"magus.status.v1.StreamStatusResponse
  * Use `create(StreamStatusResponseSchema)` to create a new message.
  */
 export const StreamStatusResponseSchema: GenMessage<StreamStatusResponse> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 7);
+  messageDesc(file_magus_status_v1_status, 8);
 
 /**
  * Health is the at-a-glance rollup a dashboard shows.

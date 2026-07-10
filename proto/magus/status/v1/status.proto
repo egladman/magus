@@ -2,9 +2,10 @@ syntax = "proto3";
 
 // Package magus.status.v1 is the versioned wire contract for magus's status/dashboard
 // view, scoped to LIVE state: overall health, the concurrency pool (capacity/in-use/
-// waiting slots), and what is running right now - the in-flight calls, their workspace,
-// and how long they have run. Static config (telemetry/cache/build) is deliberately NOT
-// here; that is `magus status`/config, not "what is running." Backs a native-feeling
+// waiting slots), what is running right now - the in-flight calls, their workspace, and
+// how long they have run - and live cache ACTIVITY (hit/miss/error tallies + real on-disk
+// size). Static CONFIG (telemetry, the cache cap/immutability, build flags) is deliberately
+// NOT here; that is `magus status`/config, not "what is happening." Backs a native-feeling
 // /dashboard. A sibling of magus.viewer.v1. buf-breaking gates this file.
 package magus.status.v1;
 
@@ -36,6 +37,7 @@ message Pool {
   repeated Call calls = 7;     // what is running right now
   repeated Workspace workspaces = 8;
   repeated string affected = 9;
+  Cache cache = 10;            // aggregate cache activity across the warm workspaces
 }
 
 // Call is one in-flight unit of work in the pool.
@@ -44,6 +46,7 @@ message Call {
   string workspace = 2;
   google.protobuf.Timestamp start_time = 3;  // when the call started
   string sub_op = 4;                         // the sub-operation currently executing
+  string invocation = 5;                     // the invocation id (inv...) this call belongs to; deep-links to its live log
 }
 
 // Workspace is one workspace the daemon has loaded.
@@ -51,6 +54,18 @@ message Workspace {
   string root = 1;
   google.protobuf.Timestamp load_time = 2;
   google.protobuf.Timestamp last_access_time = 3;
+  Cache cache = 4;             // this workspace's cache activity
+}
+
+// Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this
+// session plus its real on-disk size. These are running counters (not static config like
+// the cap or immutability), so a dashboard plots hit-rate over time by sampling the stream.
+message Cache {
+  int64 hits = 1;
+  int64 misses = 2;
+  int64 errors = 3;
+  int64 size_bytes = 4;   // real on-disk size of the cache dir (0 = unknown/not computed)
+  int32 size_cap_mb = 5;  // configured cap (MAGUS_CACHE_SIZE_MB; 0 = unlimited)
 }
 
 // StatusService serves the snapshot, and streams it for a live dashboard.
