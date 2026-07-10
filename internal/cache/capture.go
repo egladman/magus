@@ -10,31 +10,24 @@ import (
 	"github.com/egladman/magus/internal/journal"
 )
 
-// outputCollector taps a step's subprocess output as it is written, WITHOUT changing
-// what reaches the terminal or the raw log file. Each tapped writer passes bytes
-// through verbatim (so the live view and the raw logF are unaffected), then splits
-// them into lines and emits one structured output [journal.Event] per line - tagged
-// with the owning project/target/stream. Each event is both collected (for the
-// per-target output store) and emitted to the capture logger on ctx (for the
-// invocation journal + live stream).
-//
-// stdout and stderr get separate taps (distinct line buffers) but share one event
-// slice, guarded by a mutex since RunAll writes both concurrently.
-type outputCollector struct {
+// lineEmitter taps a step's subprocess output as it is written, WITHOUT changing what
+// reaches the terminal or the raw log file. Each tapped writer passes bytes through verbatim
+// (so the live view and the raw logF are unaffected), then splits them into lines and emits one
+// structured output [journal.Event] per line - tagged with the owning project/target/stream -
+// to the capture logger on ctx (the invocation journal + live stream). The per-ref output store
+// keeps the raw bytes verbatim, NOT these events, so nothing is stored twice.
+type lineEmitter struct {
 	ctx     context.Context
 	project string
 	target  string
-
-	mu     sync.Mutex
-	events []journal.Event
 }
 
-func newOutputCollector(ctx context.Context, project, target string) *outputCollector {
-	return &outputCollector{ctx: ctx, project: project, target: target}
+func newLineEmitter(ctx context.Context, project, target string) *lineEmitter {
+	return &lineEmitter{ctx: ctx, project: project, target: target}
 }
 
 // newLineTap wraps dest with a line tap tagged as the given stream ("stdout"/"stderr").
-func (c *outputCollector) newLineTap(dest io.Writer, stream string) *lineTap {
+func (c *lineEmitter) newLineTap(dest io.Writer, stream string) *lineTap {
 	return &lineTap{c: c, dest: dest, stream: stream}
 }
 
@@ -52,36 +45,24 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	return s.w.Write(p)
 }
 
-// emit builds one output event: appended to the collected slice (for the store) and
-// emitted to the ctx capture logger (for the invocation journal / live stream).
-func (c *outputCollector) emit(stream, text string) {
-	ev := journal.Event{
+// emit builds one output event and emits it to the ctx capture logger (for the invocation
+// journal / live stream). journal.Emit is concurrency-safe, so the two taps need no extra lock.
+func (c *lineEmitter) emit(stream, text string) {
+	journal.Emit(c.ctx, journal.Event{
 		Ts:      time.Now().UnixMilli(),
 		Project: c.project,
 		Target:  c.target,
 		Kind:    journal.KindOutput,
 		Stream:  stream,
 		Text:    text,
-	}
-	c.mu.Lock()
-	c.events = append(c.events, ev)
-	c.mu.Unlock()
-	journal.Emit(c.ctx, ev)
-}
-
-// collected returns the output events gathered so far (a copy is not needed; callers
-// use it after the run completes and no more writes occur).
-func (c *outputCollector) collected() []journal.Event {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.events
+	})
 }
 
 // lineTap passes writes through to dest verbatim, then buffers and splits them into
 // newline-terminated lines, emitting one event per complete line. A trailing partial
 // line is emitted by flush() after the run finishes.
 type lineTap struct {
-	c      *outputCollector
+	c      *lineEmitter
 	dest   io.Writer
 	stream string
 	buf    []byte

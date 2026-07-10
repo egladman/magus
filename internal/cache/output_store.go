@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,16 +19,15 @@ import (
 	"github.com/egladman/magus/internal/journal"
 )
 
-// RefPrefix begins every target-output reference id ("ref1a2b3c"). It doubles as
-// the `magus query` router's discriminator: a positional matching ^ref[0-9a-f]+$
-// is an output lookup, so a real free-text query like "refactor" (non-hex tail)
-// falls through to the graph grammar untouched. No delimiter - "ref" reads as
-// "reference" the way MGSxxxx codes read as diagnostics.
+// RefPrefix begins every target-output reference id ("ref1a2b3c"). No delimiter - "ref" reads
+// as "reference" the way MGSxxxx codes read as diagnostics. LooksLikeRef validates the shape of
+// the argument to `magus query output <ref>`; it is not a router (retrieval is an explicit
+// subcommand), so a shape-collision with a search term is impossible.
 const RefPrefix = "ref"
 
 // RunsDir is the cache subdir holding one union event log per invocation
 // (<cacheDir>/runs/<inv>.jsonl). Shared by the writer (magus.BeginInvocation) and the reader
-// (LookupInvocation) so the two never drift on the path.
+// (InvocationByID) so the two never drift on the path.
 const RunsDir = "runs"
 
 // refHexLen is the hex-digit count after the prefix. 8 hex = 32 bits, matched to
@@ -42,19 +40,18 @@ const refHexLen = 8
 // without unbounded growth. (Open decision in the plan; small by design.)
 const defaultOutputKeepLast = 5
 
-// OutputMeta is the derived view of a stored execution - built from its `result`
-// record plus the cache key its directory is named for. It powers `--meta`, the MCP
-// tool, and the viewer header without the caller parsing raw events.
-type OutputMeta struct {
-	Ref        string `json:"ref"`
-	CacheKey   string `json:"cache_key"`
-	Project    string `json:"project"`
-	Target     string `json:"target,omitempty"`
-	Inv        string `json:"inv,omitempty"` // invocation id of the run that produced this output
-	Failed     bool   `json:"failed"`
-	Err        string `json:"error,omitempty"`
-	Timestamp  int64  `json:"timestamp"` // unix seconds
-	DurationMs int64  `json:"duration_ms"`
+// OutputDescriptor is a stored execution's identity and outcome, written beside its verbatim
+// output blob. It gives `magus query output <ref> -o json`, the MCP tool, and the viewer header
+// the run's project/target/status/timing without anyone parsing the output bytes.
+type OutputDescriptor struct {
+	Ref         string `json:"ref"`
+	Project     string `json:"project"`
+	Target      string `json:"target,omitempty"`
+	Inv         string `json:"inv,omitempty"` // invocation id of the run that produced this output
+	Failed      bool   `json:"failed"`
+	ErrMsg      string `json:"error,omitempty"` // failure message; empty on success
+	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
+	DurationMs  int64  `json:"duration_ms"`
 }
 
 // AmbiguousRefError is returned by output lookup when a ref prefix matches more than
@@ -70,17 +67,18 @@ func (e *AmbiguousRefError) Error() string {
 		e.Prefix, len(e.Candidates), strings.Join(e.Candidates, ", "))
 }
 
-// outputStore persists per-execution captured output as STRUCTURED events under
-// <cacheDir>/outputs, keyed by a short reference id. Each execution is one JSONL file:
+// outputStore persists each execution's captured output VERBATIM under <cacheDir>/outputs,
+// keyed by a short reference id. One execution is two sibling files:
 //
-//	outputs/<cacheKey>/<ref>.jsonl   the target's output events + its result event
+//	outputs/<cacheKey>/<ref>.out    the exact bytes the process wrote
+//	outputs/<cacheKey>/<ref>.json   its OutputDescriptor (identity + outcome)
 //
-// Events ([journal.Event]) are the source of truth: `magus query ref` reconstructs
-// the raw text by concatenating the output events, `--meta` reads the result event,
-// and the web viewer ingests the JSONL directly. Grouping by cache key keeps a
-// nondeterministic target's recent runs together, so keep-last-K retention is a
-// per-directory prune (by file modtime) and a ref lookup scans a shallow tree. Safe
-// for concurrent persist calls (each mints a distinct ref).
+// The .out blob is the source of truth: OutputByRef reads it straight through - no
+// reconstruction, byte-for-byte what ran. Per-line structured events are NOT kept here; they
+// live once in the invocation journal (runs/<inv>.jsonl) for the viewer/filter/live paths, so
+// output is never stored twice. Grouping by cache key keeps a nondeterministic target's recent
+// runs together, so keep-last-K retention is a per-directory prune (by blob modtime) and a ref
+// lookup scans a shallow tree. Safe for concurrent persist calls (each mints a distinct ref).
 type outputStore struct {
 	dir string // <cacheDir>/outputs
 	seq atomic.Uint64
@@ -100,44 +98,55 @@ func (s *outputStore) mintRef(cacheKey string) string {
 	return RefPrefix + hex.EncodeToString(sum[:])[:refHexLen]
 }
 
-// persist writes the execution's events (output lines followed by the result event,
-// with the freshly minted ref stamped on it) as JSONL under outputs/<cacheKey>/, and
-// prunes the cache key's directory to keep-last-K. Returns the minted ref. Best-effort:
-// on error it returns an empty ref, and the caller keeps the run's own outcome.
-func (s *outputStore) persist(cacheKey string, output []journal.Event, result journal.Event) (string, error) {
+// outExt is the verbatim output blob; descExt is its descriptor sidecar.
+const (
+	outExt  = ".out"
+	descExt = ".json"
+)
+
+// persist writes the execution's captured output VERBATIM as outputs/<cacheKey>/<ref>.out
+// (byte-for-byte what the process wrote, so `magus query ref` is a straight read - never a
+// reconstruction) plus a <ref>.json descriptor, then prunes the cache key's directory to
+// keep-last-K. Per-line structured events are NOT stored here - they live in the invocation
+// journal, so no output is stored twice. Returns the minted ref. Best-effort: on error it
+// returns an empty ref and the caller keeps the run's own outcome.
+func (s *outputStore) persist(cacheKey string, output []byte, d OutputDescriptor) (string, error) {
 	ref := s.mintRef(cacheKey)
-	result.Ref = ref
+	d.Ref = ref
 	dir := filepath.Join(s.dir, cacheKey)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	f, err := os.Create(filepath.Join(dir, ref+".jsonl"))
+	if err := os.WriteFile(filepath.Join(dir, ref+outExt), output, 0o644); err != nil {
+		return "", err
+	}
+	descriptor, err := json.Marshal(d)
 	if err != nil {
 		return "", err
 	}
-	w := bufio.NewWriter(f)
-	for _, r := range output {
-		writeEventLine(w, r)
-	}
-	writeEventLine(w, result)
-	if err := w.Flush(); err != nil {
-		_ = f.Close()
-		return "", err
-	}
-	if err := f.Close(); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ref+descExt), descriptor, 0o644); err != nil {
 		return "", err
 	}
 	s.pruneKey(dir, defaultOutputKeepLast)
 	return ref, nil
 }
 
-func writeEventLine(w *bufio.Writer, r journal.Event) {
-	line, err := json.Marshal(r)
+// descriptorPath maps a resolved <ref>.out path to its sibling <ref>.json descriptor.
+func descriptorPath(outPath string) string {
+	return strings.TrimSuffix(outPath, outExt) + descExt
+}
+
+// readDescriptor reads and decodes a <ref>.json descriptor.
+func readDescriptor(path string) (OutputDescriptor, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return
+		return OutputDescriptor{}, err
 	}
-	_, _ = w.Write(line)
-	_ = w.WriteByte('\n')
+	var m OutputDescriptor
+	if err := json.Unmarshal(data, &m); err != nil {
+		return OutputDescriptor{}, err
+	}
+	return m, nil
 }
 
 // latestRef returns the ref of the newest execution stored for cacheKey (by file
@@ -152,7 +161,7 @@ func (s *outputStore) latestRef(cacheKey string) string {
 	var bestID string
 	var bestMod time.Time
 	for _, f := range files {
-		id, ok := strings.CutSuffix(f.Name(), ".jsonl")
+		id, ok := strings.CutSuffix(f.Name(), outExt)
 		if !ok {
 			continue
 		}
@@ -168,9 +177,9 @@ func (s *outputStore) latestRef(cacheKey string) string {
 	return bestID
 }
 
-// resolveRef resolves a ref - or a unique ref prefix, git-style - to the path of its
-// JSONL file. Exact id wins; else a unique prefix resolves; an ambiguous prefix
-// returns *AmbiguousRefError; no match returns fs.ErrNotExist.
+// resolveRef resolves a ref - or a unique ref prefix, git-style - to the path of its .out
+// blob. Exact id wins; else a unique prefix resolves; an ambiguous prefix returns
+// *AmbiguousRefError; no match returns fs.ErrNotExist.
 func (s *outputStore) resolveRef(ref string) (string, error) {
 	ref = strings.ToLower(strings.TrimSpace(ref))
 	if ref == "" {
@@ -191,7 +200,7 @@ func (s *outputStore) resolveRef(ref string) (string, error) {
 			continue
 		}
 		for _, f := range files {
-			id, ok := strings.CutSuffix(f.Name(), ".jsonl")
+			id, ok := strings.CutSuffix(f.Name(), outExt)
 			if !ok {
 				continue
 			}
@@ -214,7 +223,7 @@ func (s *outputStore) resolveRef(ref string) (string, error) {
 	default:
 		ids := make([]string, len(prefixes))
 		for i, p := range prefixes {
-			ids[i] = strings.TrimSuffix(filepath.Base(p), ".jsonl")
+			ids[i] = strings.TrimSuffix(filepath.Base(p), outExt)
 		}
 		sort.Strings(ids)
 		return "", &AmbiguousRefError{Prefix: ref, Candidates: ids}
@@ -240,49 +249,9 @@ func readEvents(path string) ([]journal.Event, error) {
 	return events, nil
 }
 
-// reconstructText rebuilds a target's raw output by concatenating its output events
-// (one line each, newline-terminated) - so `magus query ref` prints exactly what the
-// target wrote, pipe-clean.
-func reconstructText(events []journal.Event) []byte {
-	var b bytes.Buffer
-	for _, r := range events {
-		if r.Kind == journal.KindOutput {
-			b.WriteString(r.Text)
-			b.WriteByte('\n')
-		}
-	}
-	return b.Bytes()
-}
-
-// metaFrom derives the OutputMeta view from an execution's events + its cache key.
-func metaFrom(events []journal.Event, cacheKey string) OutputMeta {
-	m := OutputMeta{CacheKey: cacheKey}
-	for _, r := range events {
-		if r.Kind != journal.KindResult {
-			continue
-		}
-		m.Ref = r.Ref
-		m.Project = r.Project
-		m.Target = r.Target
-		m.Inv = r.Inv
-		m.Failed = r.Status == journal.StatusFail
-		if m.Failed {
-			m.Err = r.Text
-		}
-		m.Timestamp = r.Ts / 1000
-		m.DurationMs = r.DurMs
-	}
-	return m
-}
-
-// cacheKeyFromPath returns the cache-key directory name of a resolved ref path
-// (<store>/<cacheKey>/<ref>.jsonl).
-func cacheKeyFromPath(path string) string {
-	return filepath.Base(filepath.Dir(path))
-}
-
-// pruneKey keeps the keepLast newest executions in a cache-key directory (by file
-// modtime, newest first) and removes the rest. Best-effort.
+// pruneKey keeps the keepLast newest executions in a cache-key directory (by the .out blob's
+// modtime, newest first) and removes the rest - each blob together with its .json descriptor.
+// Best-effort.
 func (s *outputStore) pruneKey(dir string, keepLast int) {
 	if keepLast <= 0 {
 		return
@@ -297,7 +266,7 @@ func (s *outputStore) pruneKey(dir string, keepLast int) {
 	}
 	var entries []entry
 	for _, f := range files {
-		if !strings.HasSuffix(f.Name(), ".jsonl") {
+		if !strings.HasSuffix(f.Name(), outExt) {
 			continue
 		}
 		info, err := f.Info()
@@ -312,11 +281,12 @@ func (s *outputStore) pruneKey(dir string, keepLast int) {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].mod.After(entries[j].mod) })
 	for _, e := range entries[keepLast:] {
 		_ = os.Remove(e.path)
+		_ = os.Remove(descriptorPath(e.path))
 	}
 }
 
-// removeForProject deletes every stored execution whose result event names project,
-// and drops a cache-key directory once it holds nothing else. Used by Clean for a
+// removeForProject deletes every stored execution whose descriptor names project (blob +
+// descriptor), and drops a cache-key directory once it holds nothing else. Used by Clean for a
 // per-project wipe (the store is keyed by cache key, not project path).
 func (s *outputStore) removeForProject(project string) {
 	keys, err := os.ReadDir(s.dir)
@@ -334,13 +304,14 @@ func (s *outputStore) removeForProject(project string) {
 		}
 		remaining := 0
 		for _, f := range files {
-			if !strings.HasSuffix(f.Name(), ".jsonl") {
+			if !strings.HasSuffix(f.Name(), outExt) {
 				continue
 			}
 			path := filepath.Join(dir, f.Name())
-			events, _ := readEvents(path)
-			if metaFrom(events, k.Name()).Project == project {
+			meta, _ := readDescriptor(descriptorPath(path))
+			if meta.Project == project {
 				_ = os.Remove(path)
+				_ = os.Remove(descriptorPath(path))
 			} else {
 				remaining++
 			}
@@ -351,43 +322,80 @@ func (s *outputStore) removeForProject(project string) {
 	}
 }
 
-// LookupOutput resolves a ref (or unique prefix) to the target's reconstructed raw
-// output text and metadata, reading the store rooted at cacheDir without opening a
-// full cache. This is the retrieval entry point for `magus query ref...` (print path).
-func LookupOutput(cacheDir, ref string) ([]byte, OutputMeta, error) {
+// OutputByRef resolves a ref (or unique prefix) to the target's VERBATIM captured output
+// bytes plus its metadata, reading the store rooted at cacheDir without opening a full cache.
+// The bytes are read straight from the <ref>.out blob - exactly what the process wrote, no
+// reconstruction. This is the retrieval entry point for `magus query ref...` (print path).
+func OutputByRef(cacheDir, ref string) ([]byte, OutputDescriptor, error) {
 	path, err := newOutputStore(cacheDir).resolveRef(ref)
 	if err != nil {
-		return nil, OutputMeta{}, err
+		return nil, OutputDescriptor{}, err
 	}
-	events, err := readEvents(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, OutputMeta{}, err
+		return nil, OutputDescriptor{}, err
 	}
-	return reconstructText(events), metaFrom(events, cacheKeyFromPath(path)), nil
+	meta, _ := readDescriptor(descriptorPath(path)) // best-effort; missing descriptor still yields bytes
+	return raw, meta, nil
 }
 
-// LookupEvents resolves a ref (or unique prefix) to the execution's DOMAIN events
-// ([]journal.Event) plus its metadata - the structured form the handler layer maps
-// onto the wire proto. The repository returns the domain type directly; the handler
-// maps it, so there is no intermediate byte/DTO representation to keep in sync.
-func LookupEvents(cacheDir, ref string) ([]journal.Event, OutputMeta, error) {
-	path, err := newOutputStore(cacheDir).resolveRef(ref)
+// OutputEventsByRef resolves a ref to a DISPLAY projection of the execution for the viewer -
+// see stitchDisplayEvents. The verbatim blob (OutputByRef) stays the source of truth; these
+// events exist only so the handler can map them onto the wire proto the viewer renders.
+func OutputEventsByRef(cacheDir, ref string) ([]journal.Event, OutputDescriptor, error) {
+	output, d, err := OutputByRef(cacheDir, ref)
 	if err != nil {
-		return nil, OutputMeta{}, err
+		return nil, OutputDescriptor{}, err
 	}
-	events, err := readEvents(path)
-	if err != nil {
-		return nil, OutputMeta{}, err
-	}
-	return events, metaFrom(events, cacheKeyFromPath(path)), nil
+	return stitchDisplayEvents(output, d), d, nil
 }
 
-// LookupInvocation reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
+// stitchDisplayEvents assembles a display journal for the viewer: the verbatim output blob split
+// into per-line events (splitOutputLines), each stamped with the run's identity and timestamp,
+// then a trailing result event carrying its outcome. The stdout/stderr split and per-line
+// timestamps the live capture had are gone from the interleaved blob, so every line is stdout at
+// the run's timestamp and the result shares it - a render aid, never a source of truth.
+func stitchDisplayEvents(output []byte, d OutputDescriptor) []journal.Event {
+	events := splitOutputLines(output)
+	for i := range events {
+		events[i].Project = d.Project
+		events[i].Target = d.Target
+		events[i].Inv = d.Inv
+		events[i].Ts = d.TimestampMs
+	}
+	status := journal.StatusPass
+	if d.Failed {
+		status = journal.StatusFail
+	}
+	return append(events, journal.Event{
+		Kind: journal.KindResult, Project: d.Project, Target: d.Target,
+		Status: status, Ref: d.Ref, Inv: d.Inv, DurMs: d.DurationMs,
+		Ts: d.TimestampMs, Text: d.ErrMsg,
+	})
+}
+
+// splitOutputLines splits a verbatim output blob into one stdout event per line (newline
+// stripped). It is the display-only inverse of the store's verbatim write: the per-line
+// stdout/stderr split and timestamps the live capture had are gone, so this is a rendering aid,
+// never a source of truth. Empty input yields no events.
+func splitOutputLines(output []byte) []journal.Event {
+	if len(output) == 0 {
+		return nil
+	}
+	text := strings.TrimSuffix(string(output), "\n")
+	var evs []journal.Event
+	for _, line := range strings.Split(text, "\n") {
+		evs = append(evs, journal.Event{Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: line})
+	}
+	return evs
+}
+
+// InvocationByID reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
 // id and rebuilds its header: the command lineage (verb/args/trigger), timing, and outcome.
-// It is how a stored output (OutputMeta.Inv) is traced back to the run that produced it -
+// It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it -
 // `magus query <ref> --meta` and the viewer surface this lineage. Returns fs.ErrNotExist
 // when the run log has aged out.
-func LookupInvocation(cacheDir, inv string) (journal.Invocation, error) {
+func InvocationByID(cacheDir, inv string) (journal.Invocation, error) {
 	events, err := readEvents(filepath.Join(cacheDir, RunsDir, inv+".jsonl"))
 	if err != nil {
 		return journal.Invocation{}, err

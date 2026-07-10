@@ -6,6 +6,7 @@ package cache
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -40,9 +41,9 @@ type Cache struct {
 	hits           atomic.Int64
 	misses         atomic.Int64
 	errs           atomic.Int64
-	diskMu         sync.Mutex // guards the memoized on-disk size below
-	diskBytes      int64      // last computed cache size in bytes
-	diskAt         time.Time  // when diskBytes was computed (zero = never)
+	diskMu         sync.Mutex    // guards the memoized on-disk size below
+	diskBytes      int64         // last computed cache size in bytes
+	diskAt         time.Time     // when diskBytes was computed (zero = never)
 	mtimes         *mtimeStore   // mtime fast-path for source hashing
 	outputs        *outputStore  // per-execution captured-output store (target output refs)
 	exportMu       sync.RWMutex  // guards Export/Import against concurrent Run writes
@@ -308,14 +309,14 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// A hit regenerated nothing, so reuse the existing ref for this cache
 				// key rather than minting a duplicate; persist fresh only if the store
 				// has no record yet (e.g. cache imported without its output store), in
-				// which case reconstruct output events from the raw cached log (which also
-				// emits a result event via recordOutput).
+				// which case store the raw cached log verbatim (which also emits a result
+				// event via recordOutput).
 				ref := ""
 				if c.outputs != nil {
 					ref = c.outputs.latestRef(hash)
 				}
 				if ref == "" {
-					ref = c.recordOutput(ctx, s, hash, outputEventsFromRaw(logData), result.Duration, nil)
+					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil)
 				} else {
 					// The ref already exists, so recordOutput is skipped and nothing reaches the
 					// journal. A cache hit is still a target OUTCOME, so emit a cached result event
@@ -365,13 +366,13 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	lp := c.logPath(s.ProjectPath, hash)
 	// ContextWithCache lets spell bindings (magus.bust_cache) reach the active cache.
-	outputEvents, runErr := c.captureRun(ContextWithCache(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
+	rawOutput, runErr := c.captureRun(ContextWithCache(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
 	if runErr != nil {
 		result.Duration = time.Since(start)
 		c.errs.Add(1)
-		// The captured output events are persisted under a ref so the exact failing
+		// The captured output is persisted verbatim under a ref so the exact failing
 		// output stays retrievable via `magus query ref`.
-		ref := c.recordOutput(ctx, s, hash, outputEvents, result.Duration, runErr)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, runErr)
 		c.log.Error(
 			"cache.error",
 			slog.String("project", s.ProjectPath),
@@ -414,7 +415,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	result.Duration = time.Since(start)
 	c.misses.Add(1)
-	ref := c.recordOutput(ctx, s, hash, outputEvents, result.Duration, nil)
+	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil)
 	c.log.Info(
 		"cache.miss",
 		slog.String("project", s.ProjectPath),
@@ -437,64 +438,50 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 // invocation log / live stream). Persistence is best-effort: a store error logs a
 // warning and yields an empty ref, so the run's own outcome never hinges on it. runErr
 // nil means the step passed (or was a cache hit); non-nil means it failed.
-func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []journal.Event, dur time.Duration, runErr error) string {
+func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, dur time.Duration, runErr error) string {
+	nowMs := time.Now().UnixMilli()
+	inv := journal.InvocationIDFromContext(ctx)
+	target := reproTarget(s)
+
+	// The descriptor: identity + outcome of this execution, stored beside the verbatim output
+	// blob. The invocation id traces the output back to the run that produced it (`magus query
+	// output <ref> -o json` and the viewer surface this).
+	d := OutputDescriptor{
+		Project:     s.ProjectPath,
+		Target:      target,
+		Inv:         inv,
+		Failed:      runErr != nil,
+		TimestampMs: nowMs,
+		DurationMs:  dur.Milliseconds(),
+	}
+	if runErr != nil {
+		d.ErrMsg = runErr.Error()
+	}
+
+	var ref string
+	if c.outputs != nil {
+		r, err := c.outputs.persist(hash, output, d)
+		if err != nil {
+			c.log.Warn("cache.warn", slog.String("msg",
+				fmt.Sprintf("persist output for %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
+		} else {
+			ref = r
+		}
+	}
+
+	// Stream the result event to the capture logger (invocation log / live viewer), carrying
+	// the freshly minted ref. Per-line output events already reached the journal during capture.
 	result := journal.Event{
-		Ts:      time.Now().UnixMilli(),
-		Project: s.ProjectPath,
-		Target:  reproTarget(s),
-		Kind:    journal.KindResult,
-		Level:   "info",
-		Status:  journal.StatusPass,
-		DurMs:   dur.Milliseconds(),
+		Ts: nowMs, Project: s.ProjectPath, Target: target, Kind: journal.KindResult,
+		Level: "info", Status: journal.StatusPass, DurMs: dur.Milliseconds(), Inv: inv, Ref: ref,
 	}
 	if runErr != nil {
 		result.Status = journal.StatusFail
 		result.Level = "error"
 		result.Text = runErr.Error()
 	}
-
-	// Stamp the invocation id onto the PERSISTED copy so `magus query <ref> --meta` (and the
-	// viewer) can trace this output back to the run that produced it. journal.Emit stamps the
-	// streamed copy from ctx, but persist writes these events directly, so stamp them here.
-	inv := journal.InvocationIDFromContext(ctx)
-	result.Inv = inv
-	for i := range output {
-		output[i].Inv = inv
-	}
-
-	if c.outputs == nil {
-		return ""
-	}
-	ref, err := c.outputs.persist(hash, output, result)
-	if err != nil {
-		c.log.Warn("cache.warn", slog.String("msg",
-			fmt.Sprintf("persist output for %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
-		return ""
-	}
-	// The result event carries the freshly minted ref; stream it to the capture logger so
-	// the invocation log and any live viewer see the target's outcome.
-	result.Ref = ref
 	journal.Emit(ctx, result)
 	return ref
-}
-
-// outputEventsFromRaw reconstructs output events by splitting raw log bytes into
-// lines. Used on a cache hit when the store has no events for the key yet (e.g. an
-// imported cache) - lower fidelity than a live capture (all stdout, no timestamps per
-// line) but enough to give the hit an addressable ref.
-func outputEventsFromRaw(data []byte) []journal.Event {
-	if len(data) == 0 {
-		return nil
-	}
-	text := strings.TrimSuffix(string(data), "\n")
-	ts := time.Now().UnixMilli()
-	var recs []journal.Event
-	for _, line := range strings.Split(text, "\n") {
-		recs = append(recs, journal.Event{
-			Ts: ts, Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: line,
-		})
-	}
-	return recs
 }
 
 // reproTarget renders the step's target with its active charms the way the CLI
@@ -948,7 +935,7 @@ func (c *Cache) logPath(projectPath, hash string) string {
 // output is line-tapped into structured journal events tagged with project/target/
 // stream. The records are returned for the output store and streamed to the run's
 // sink; the raw paths are untouched so the live view and failure dumps stay verbatim.
-func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target string, fn func(context.Context) error) ([]journal.Event, error) {
+func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target string, fn func(context.Context) error) ([]byte, error) {
 	quiet := c.logLevel >= slog.LevelError
 	// Collapse withholds live output the same way quiet does, but at default
 	// verbosity: a passing project shows only its status line; a failing one has its
@@ -965,10 +952,13 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		return nil, fn(ctx)
 	}
 
-	col := newOutputCollector(ctx, projectPath, target)
+	col := newLineEmitter(ctx, projectPath, target)
 	// os/exec drives stdout and stderr from separate goroutines, so both taps write to the log
-	// file concurrently; guard it so lines never interleave mid-write in the durable log.
-	safeLogF := &syncWriter{w: logF}
+	// file concurrently; guard it so lines never interleave mid-write in the durable log. The
+	// same guarded stream is tee'd into rawBuf so captureRun returns the VERBATIM bytes (what
+	// the process wrote, in write order) - the output store keeps these as-is, no reconstruction.
+	var rawBuf bytes.Buffer
+	safeLogF := &syncWriter{w: io.MultiWriter(logF, &rawBuf)}
 	var stdoutTap, stderrTap *lineTap
 	if withhold {
 		stdoutTap = col.newLineTap(safeLogF, journal.StreamStdout)
@@ -1034,5 +1024,5 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		// store under a ref so the exact failing output stays retrievable via
 		// `magus query ref...`. It is overwritten on the next run of the same key.
 	}
-	return col.collected(), runErr
+	return rawBuf.Bytes(), runErr
 }
