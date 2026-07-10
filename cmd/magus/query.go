@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"net/url"
@@ -41,22 +40,21 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		kinds       string
 		refresh     bool
 		globalScope bool
-		meta        bool
 		open        bool
 		printURL    bool
-		viewerURL   string
+		viewerBase  string
 	)
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
 		fs.StringVar(&kinds, "kind", "", "restrict matches to these node kinds (comma-separated)")
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before querying")
 		fs.BoolVar(&globalScope, "global", false, "query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
-		fs.BoolVar(&meta, "meta", false, "with a ref argument, prepend a header (ref, project, target, status) before the output")
-		fs.BoolVar(&open, "open", false, "with a ref argument, open the captured output in the browser log viewer (delivered privately; never uploaded)")
+		fs.BoolVar(&open, "open", false, "with `output <ref>`, open the captured output in the browser log viewer (delivered privately; never uploaded)")
 		fs.BoolVar(&printURL, "print", false, "with --open, print the viewer URL instead of launching a browser")
-		fs.StringVar(&viewerURL, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
+		fs.StringVar(&viewerBase, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus query <terms|ref> [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -64,11 +62,11 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "relation:uses, id:build, and negation (-kind:op). Example:")
 			fmt.Fprintln(os.Stderr, "  magus query kind:spell go")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "A single argument shaped like a target-output ref (ref1a2b3c) instead prints")
-			fmt.Fprintln(os.Stderr, "that execution's exact captured output to stdout (pipe it anywhere):")
-			fmt.Fprintln(os.Stderr, "  magus query ref1a2b3c            print the output")
-			fmt.Fprintln(os.Stderr, "  magus query ref1a2b3c --meta     with a project/target/status header")
-			fmt.Fprintln(os.Stderr, "  magus query ref1a2b3c --open     open it in the browser log viewer")
+			fmt.Fprintln(os.Stderr, "`output <ref>` retrieves one target execution's captured output by its")
+			fmt.Fprintln(os.Stderr, "reference id (ref1a2b3c), shown when the target ran:")
+			fmt.Fprintln(os.Stderr, "  magus query output ref1a2b3c            print the exact bytes (pipe anywhere)")
+			fmt.Fprintln(os.Stderr, "  magus query output ref1a2b3c -o json    the descriptor + output as a record")
+			fmt.Fprintln(os.Stderr, "  magus query output ref1a2b3c --open     open it in the browser log viewer")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -81,20 +79,29 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	// Output-ref routing: a lone positional shaped like a ref id retrieves that
-	// execution's captured output. A free-text query like "refactor" (non-hex tail)
-	// is NOT a ref and falls through to the graph grammar below.
-	if len(pos) == 1 && kinds == "" && cache.LooksLikeRef(pos[0]) {
-		return queryOutputRef(ctx, root, pos[0], outputRefOpts{
-			meta: meta, open: open, printURL: printURL, viewerBase: viewerURL,
-		})
+	// Output-reference retrieval is an EXPLICIT subcommand - `magus query output <ref>` - not a
+	// shape-routed positional, so a search term can never collide with a ref id.
+	if len(pos) >= 1 && pos[0] == "output" {
+		if len(pos) != 2 {
+			fmt.Fprintln(os.Stderr, "magus query output: expected exactly one ref (e.g. magus query output ref1a2b3c)")
+			return errSilent{exitCode: 2}
+		}
+		ref := pos[1]
+		if !cache.LooksLikeRef(ref) {
+			msg := fmt.Sprintf("%q is not a target-output reference (expected ref<hex>, e.g. ref1a2b3c)", ref)
+			fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error())
+			return errSilent{exitCode: 2}
+		}
+		outOpts, oerr := outputOptionsOrDefault()
+		if oerr != nil {
+			return oerr
+		}
+		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, out: outOpts})
 	}
-	if open || meta || printURL {
-		// A ref-only flag was set, so the visitor meant to name an output ref, but the
-		// positional is not a valid ref<hex> - a malformed ref, not a search. Code it so it
-		// stops here instead of silently falling through to the graph grammar below.
-		msg := "--open/--meta/--print apply only to an output ref (magus query ref<hex>). To open the knowledge graph in a browser, use `magus graph open`."
-		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error())
+	if open || printURL {
+		// --open/--print only apply to `query output <ref>`. Set on a graph search, they were a
+		// mistake; stop rather than silently ignore them.
+		fmt.Fprintln(os.Stderr, "magus query: --open/--print apply only to `magus query output <ref>`. To open the knowledge graph in a browser, use `magus graph open`.")
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
@@ -145,18 +152,26 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// outputRefOpts carries the flags that apply when `magus query` is retrieving a
-// target-output ref rather than searching the graph.
+// outputRefOpts carries the options for `magus query output <ref>`.
 type outputRefOpts struct {
-	meta       bool   // prepend a header before the bytes
-	open       bool   // open the browser log viewer instead of printing
-	printURL   bool   // with open, print the URL instead of launching a browser
-	viewerBase string // log viewer base URL
+	open       bool          // open the browser log viewer instead of printing
+	printURL   bool          // with open, print the URL instead of launching a browser
+	viewerBase string        // log viewer base URL
+	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
 
-// queryOutputRef retrieves a target's captured output by reference id (or unique
-// prefix) and either prints it verbatim to stdout (pipe-friendly) or, with --open,
-// hands it to the browser log viewer. The bytes never leave the machine: --open
+// outputRefRecord is the -o json/yaml projection of a stored output: its descriptor plus the
+// captured output as an opaque verbatim field. The descriptor DESCRIBES the run (project/target/
+// status/timing); the output is the payload, never parsed - so structure lives in the record,
+// not in an interpretation of the bytes.
+type outputRefRecord struct {
+	cache.OutputDescriptor
+	Output string `json:"output"`
+}
+
+// queryOutputRef retrieves a target's captured output by reference id (or unique prefix). The
+// default prints the exact bytes to stdout (pipe-friendly); -o json/yaml prints the descriptor
+// record; --open hands it to the browser log viewer. The bytes never leave the machine: --open
 // rides them in a URL fragment, exactly like `magus graph open`.
 func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) error {
 	m, err := loadMagus(ctx, root)
@@ -164,30 +179,26 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		return err
 	}
 	if o.open {
-		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's structured
-		// events (not the reconstructed text) - the browser renders pretty from structure.
-		events, meta, err := m.OutputEventsByRef(ref)
+		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
+		// the browser renders pretty from structure.
+		events, desc, err := m.OutputEventsByRef(ref)
 		if err != nil {
 			return reportRefLookupError(ref, err)
 		}
 		var inv journal.Invocation
-		if meta.Inv != "" {
-			inv, _ = m.InvocationByID(meta.Inv) // best-effort lineage; omitted if the run log aged out
+		if desc.Inv != "" {
+			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out
 		}
-		return openOutputInViewer(meta, events, inv, o)
+		return openOutputInViewer(desc, events, inv, o)
 	}
-	data, meta, err := m.OutputByRef(ref)
+	data, desc, err := m.OutputByRef(ref)
 	if err != nil {
 		return reportRefLookupError(ref, err)
 	}
-	if o.meta {
-		var inv journal.Invocation
-		if meta.Inv != "" {
-			inv, _ = m.InvocationByID(meta.Inv) // best-effort; lineage omitted if the run log aged out
-		}
-		writeOutputMetaHeader(os.Stdout, meta, inv)
+	if o.out.Format == FormatJSON || o.out.Format == FormatYAML {
+		return emitFormatted(o.out, outputRefRecord{OutputDescriptor: desc, Output: string(data)})
 	}
-	_, err = os.Stdout.Write(data)
+	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
 	return err
 }
 
@@ -208,79 +219,43 @@ func reportRefLookupError(ref string, err error) error {
 	}
 }
 
-// writeOutputMetaHeader prints the --meta header: the ref, its run's identity, and the
-// lineage of the invocation that produced it (the command + trigger, from inv), each on a
-// plain line so the block stays greppable and pipe-safe, then a rule. inv may be zero (its
-// run log aged out), in which case the lineage lines are omitted.
-func writeOutputMetaHeader(w io.Writer, meta cache.OutputMeta, inv journal.Invocation) {
-	status := "ok"
-	if meta.Failed {
-		status = "failed"
-	}
-	fmt.Fprintf(w, "ref:      %s\n", meta.Ref)
-	if meta.Project != "" {
-		fmt.Fprintf(w, "project:  %s\n", meta.Project)
-	}
-	if meta.Target != "" {
-		fmt.Fprintf(w, "target:   %s\n", meta.Target)
-	}
-	fmt.Fprintf(w, "status:   %s\n", status)
-	if meta.DurationMs > 0 {
-		fmt.Fprintf(w, "duration: %dms\n", meta.DurationMs)
-	}
-	// Lineage: the command (and trigger) of the invocation that produced this output, so a
-	// ref traces back to the run - "which magus command made this, and what set it off".
-	if inv.ID != "" {
-		cmd := "magus " + inv.Command.Verb
-		if len(inv.Command.Args) > 0 {
-			cmd += " " + strings.Join(inv.Command.Args, " ")
-		}
-		fmt.Fprintf(w, "run:      %s\n", cmd)
-		if inv.Command.Trigger != "" {
-			fmt.Fprintf(w, "trigger:  %s\n", inv.Command.Trigger)
-		}
-	}
-	fmt.Fprintln(w, "----")
-}
-
 // buildLogViewerURL assembles the log-viewer deep link: BOTH the ref identity and the encoded
 // output ride the URL fragment (after #), which the browser NEVER transmits to a server - so
 // nothing about the run, not even its ref id, ever leaves the machine. The payload is a
 // magus.viewer.v1 Journal (protobuf, gzip+base64url) of the ref's events; the browser decodes
 // it and renders pretty from structure (the generated JS client, bundled in).
-func buildLogViewerURL(base string, meta cache.OutputMeta, events []journal.Event, inv journal.Invocation) (link, encoded string, err error) {
-	j := journal.InvocationFromEvents(meta.Ref, events)
-	// A single ref's persisted events are output+result only (no `started`), so
+func buildLogViewerURL(base string, desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation) (string, error) {
+	j := journal.InvocationFromEvents(desc.Ref, events)
+	// A single ref's display events are output+result only (no `started`), so
 	// InvocationFromEvents yields no command lineage; graft the resolved run's Command so the
 	// viewer's lineage header shows which command (and trigger) produced this output.
 	if inv.ID != "" {
 		j.Command = inv.Command
 	}
-	encoded, err = handler.EncodeJournalFragment(j, events)
+	encoded, err := handler.EncodeJournalFragment(j, events)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	// The encoded blob is returned too so the caller can size-check it without re-parsing the url.
-	return strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(meta.Ref) + "&data=" + encoded, encoded, nil
+	return strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(desc.Ref) + "&data=" + encoded, nil
 }
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
-// URL instead. It warns when the encoded fragment nears browser URL-length limits.
-func openOutputInViewer(meta cache.OutputMeta, events []journal.Event, inv journal.Invocation, o outputRefOpts) error {
-	openURL, encoded, err := buildLogViewerURL(o.viewerBase, meta, events, inv)
+// URL instead. It warns when the link nears browser URL-length limits.
+func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, o outputRefOpts) error {
+	openURL, err := buildLogViewerURL(o.viewerBase, desc, events, inv)
 	if err != nil {
 		return err
 	}
-	if len(encoded) > fragmentWarnBytes {
-		fmt.Fprintf(os.Stderr, "magus query: this output encodes to %d KB, near or past what Safari and older\n", len(encoded)/1024)
+	if len(openURL) > fragmentWarnBytes {
+		fmt.Fprintf(os.Stderr, "magus query: this link is %d KB, near or past what Safari and older\n", len(openURL)/1024)
 		fmt.Fprintf(os.Stderr, "Firefox accept in a URL (Chrome is fine). If the page does not load, pipe it instead:\n")
-		fmt.Fprintf(os.Stderr, "  magus query %s | less. Continuing.\n", meta.Ref)
+		fmt.Fprintf(os.Stderr, "  magus query output %s | less. Continuing.\n", desc.Ref)
 	}
 	if o.printURL {
 		fmt.Println(openURL)
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "opening the log viewer for %s; the output rides in the link fragment and never leaves your machine.\n", meta.Ref)
+	fmt.Fprintf(os.Stderr, "opening the log viewer for %s; the output rides in the link fragment and never leaves your machine.\n", desc.Ref)
 	if err := openBrowser(openURL); err != nil {
 		fmt.Fprintf(os.Stderr, "magus query: could not open a browser (%v). Re-run with --print to get the URL.\n", err)
 		return errSilent{exitCode: 1}
