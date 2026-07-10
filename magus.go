@@ -67,6 +67,30 @@ type Magus struct {
 
 	tel            observability.Provider
 	metricsCollect bool // daemon: build an always-on local metrics collector for the dashboard
+
+	daemon Daemon
+}
+
+// Daemon is the long-running server this workspace hosts (the MCP HTTP endpoint plus the
+// browser /api bridge, and whatever else the daemon grows to serve). It is injected by
+// the CLI in daemon mode ONLY - so ordinary command paths never construct one - and held
+// as an interface so the root magus package need not import the daemon/handler packages
+// (which depend on magus), breaking that cycle. The concrete *daemon.Daemon satisfies it.
+type Daemon interface {
+	Serve(ctx context.Context) error
+}
+
+// SetDaemon installs the daemon that ServeDaemon delegates to. Called once, in daemon
+// mode; other command paths leave it nil so no server is ever constructed.
+func (m *Magus) SetDaemon(d Daemon) { m.daemon = d }
+
+// ServeDaemon runs the injected daemon, blocking until ctx is cancelled or the server
+// fails. It errors if no daemon was installed via SetDaemon.
+func (m *Magus) ServeDaemon(ctx context.Context) error {
+	if m.daemon == nil {
+		return errors.New("magus: no daemon configured")
+	}
+	return m.daemon.Serve(ctx)
 }
 
 // rootMarkers lists workspace-root markers in priority order; magus markers precede go.mod.

@@ -20,11 +20,6 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-
-	"github.com/egladman/magus/internal/file/watch"
-	"github.com/egladman/magus/internal/handler/mcp/auth"
-	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/service/dashboard"
 )
 
 // DefaultAddress is the default host:port for the MCP Streamable HTTP server.
@@ -103,23 +98,18 @@ func newServer(opts ServerOptions, log *slog.Logger, agentFn func(context.Contex
 	return buildServer(opts, log, hooks, agentFn)
 }
 
-// ServeHTTP starts the MCP server as a Streamable HTTP server, blocking until
-// ctx is cancelled or the server fails. This is the transport used in daemon
-// mode — multiple MCP clients can connect concurrently.
-func ServeHTTP(ctx context.Context, opts ServerOptions) error {
+// HTTPHandler builds the MCP Streamable-HTTP handler for daemon mode: it
+// validates opts, wires per-session agent tracking, and returns the bare MCP
+// handler. It mounts no routes and opens no listener - the daemon package owns
+// the HTTP server assembly (guards, health routes, web bridge) so this package
+// need not depend on the httpx server core, the dashboard bridge, or the file
+// watcher. The returned handler is a path-agnostic http.Handler; the daemon
+// mounts it at /mcp, matching the path StreamableHTTPServer's own Start() would use.
+func HTTPHandler(opts ServerOptions) (http.Handler, error) {
 	if err := opts.validate(); err != nil {
-		return err
+		return nil, err
 	}
 	log := opts.logger()
-	addr := opts.httpAddr()
-
-	// Provision the bearer token before serving. Fail closed: if it can't be
-	// loaded or generated, the MCP endpoint never comes up. Guard re-reads the
-	// token via auth.Load on each request, so token rotations take effect
-	// without a daemon restart.
-	if _, err := auth.Resolve(log); err != nil {
-		return err
-	}
 
 	// sessionAgents maps sessionID → agent client identifier, populated by the
 	// BeforeInitialize hook and cleaned up on session unregister. This avoids
@@ -148,85 +138,7 @@ func ServeHTTP(ctx context.Context, opts ServerOptions) error {
 	}
 
 	srv := buildServer(opts, log, hooks, agentFn)
-
-	// Serve the MCP Streamable-HTTP handler and any health routes from one
-	// mux/listener so health probes share the MCP port — no second
-	// http.Server. StreamableHTTPServer is a path-agnostic http.Handler;
-	// mounting it at /mcp matches the path its own Start() would use.
-	//
-	// httpx.GuardRebind and authGuard are applied only to /mcp. Health routes
-	// are left unguarded so container orchestrators can probe them freely. The
-	// rebind check runs outermost so a forged cross-origin browser request is
-	// rejected before the bearer token is even examined; authGuard then enforces
-	// the shared secret on everything that gets past it.
-	mcpHandler := mcpserver.NewStreamableHTTPServer(srv)
-	allowed := httpx.AllowedHosts(addr)
-	httpServer, err := httpx.NewServer(addr)
-	if err != nil {
-		return err
-	}
-	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, mcpHandler)))
-	for path, h := range opts.HealthRoutes {
-		httpServer.Handle(path, h)
-	}
-
-	// Web bridge: three frozen GET routes for the browser Graph Explorer.
-	// Mounted only when:
-	//   1. bridge.enabled is unset or true (opt-out via bridge.enabled: false)
-	//   2. The bind address is loopback (non-loopback binding refuses the mount)
-	//
-	// addr is always a numeric IP:port here because the mcp_address config
-	// validator calls netip.ParseAddrPort, which rejects hostnames. IsLoopback
-	// therefore always compares against a resolved IP, never a hostname, so
-	// the loopback gate is sound: addr.Addr().IsLoopback() is exact.
-	if opts.Config.Bridge.Enabled == nil || *opts.Config.Bridge.Enabled {
-		if !addr.Addr().IsLoopback() {
-			log.Warn("[BRIDGE] refusing to mount web bridge on non-loopback address; set bridge.enabled: false to suppress this warning",
-				slog.String("addr", addr.String()))
-		} else {
-			// Start a file watcher for SSE graph-invalidation events. Non-fatal:
-			// if the watcher cannot start, the SSE stream emits only heartbeats.
-			var inv <-chan struct{}
-			bWatcher, werr := watch.New(ctx,
-				watch.WithRoot(opts.Magus.Root()),
-				watch.WithIgnore(watch.BuiltinIgnore),
-			)
-			if werr != nil {
-				log.Warn("[BRIDGE] file watcher unavailable; /api/v1/events will emit heartbeats only",
-					slog.String("error", werr.Error()))
-			} else {
-				inv = dashboard.WatchInvalidate(ctx, bWatcher)
-				go func() {
-					<-ctx.Done()
-					_ = bWatcher.Close()
-				}()
-			}
-
-			siteOrigin, _ := opts.siteOrigin()
-			bridgeOpts := dashboard.Options{
-				Magus:           opts.Magus,
-				Config:          opts.Config,
-				StatusBase:      opts.StatusBase,
-				MagusVersion:    opts.Version,
-				Addr:            addr,
-				SiteOrigin:      siteOrigin,
-				GraphInvalidate: inv,
-			}
-			// The bridge routes share the same auth and DNS-rebind middleware as /mcp.
-			bridgeMux := http.NewServeMux()
-			dashboard.Mount(bridgeMux, bridgeOpts)
-			// Wrap every /api/ route with rebind + auth.
-			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.Load, bridgeMux)))
-			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
-		}
-	}
-
-	log.Info("[AGENT] HTTP server starting", slog.String("addr", httpServer.Addr().String()))
-	if err := httpServer.Serve(ctx); err != nil {
-		log.Warn("[AGENT] shutdown error", slog.String("error", err.Error()))
-		return err
-	}
-	return nil
+	return mcpserver.NewStreamableHTTPServer(srv), nil
 }
 
 // ServeStdio runs the magus MCP server over standard I/O, blocking until

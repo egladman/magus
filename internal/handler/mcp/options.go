@@ -12,7 +12,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ServerOptions configures a magus MCP server started via ServeHTTP or ServeStdio.
+// ServerOptions configures a magus MCP server built via HTTPHandler
+// (daemon mode, assembled by internal/daemon) or served via ServeStdio.
 type ServerOptions struct {
 	// Magus is the opened workspace handle. Required. Pass the result of
 	// magus.Open; the MCP server does not open its own instance so the
@@ -31,7 +32,7 @@ type ServerOptions struct {
 	// daemon address for the magus_status tool.
 	Config config.Config
 
-	// HTTPAddr is the parsed address for ServeHTTP. Defaults to defaultAddrPort
+	// HTTPAddr is the parsed address for daemon HTTP serving. Defaults to defaultAddrPort
 	// when zero. Callers parse the config string once and pass the result here
 	// so internal/mcp never re-parses a raw string.
 	HTTPAddr netip.AddrPort
@@ -76,9 +77,9 @@ func (o ServerOptions) httpAddr() netip.AddrPort {
 // Duplicated here to avoid importing cmd/magus; keep in sync.
 const defaultExploreURL = "https://eli.gladman.cc/magus/graph/"
 
-// siteOrigin returns the scheme://host origin of the hosted Graph Explorer.
-// Used to set the bridge's CORS allowed origin.
-func (o ServerOptions) siteOrigin() (string, error) {
+// SiteOrigin returns the scheme://host origin of the hosted Graph Explorer.
+// Used by internal/daemon to set the bridge's CORS allowed origin.
+func (o ServerOptions) SiteOrigin() (string, error) {
 	u, err := url.Parse(defaultExploreURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", nil

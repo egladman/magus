@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 
+	"github.com/egladman/magus/internal/daemon"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 )
 
@@ -81,28 +82,29 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
 	// so the health handlers query this daemon, not whatever a per-request
 	// discovery scan happens to find.
 	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
+	m.SetDaemon(daemon.New(internalmcp.ServerOptions{
+		Magus:      m,
+		Logger:     slog.Default(),
+		Version:    version,
+		Config:     globalCfg,
+		HTTPAddr:   addr,
+		StatusBase: buildStatusBase(),
+		// Health endpoints share this HTTP server so k8s probes hit the
+		// same port as MCP. Set MAGUS_MCP_ADDRESS=0.0.0.0:7391 (or mcp.address)
+		// so the kubelet can reach them (default 127.0.0.1 is pod-local).
+		// /healthz aliases /livez (liveness): a liveness probe must not
+		// depend on warm-up state, or it would crash-loop pods. Use
+		// /readyz for the workspace-loaded readiness gate.
+		HealthRoutes: map[string]http.Handler{
+			"/livez":   healthHTTPHandler(probeLiveness, status),
+			"/readyz":  healthHTTPHandler(probeReadiness, status),
+			"/healthz": healthHTTPHandler(probeLiveness, status),
+		},
+	}))
 	go func() {
-		err := internalmcp.ServeHTTP(ctx, internalmcp.ServerOptions{
-			Magus:      m,
-			Logger:     slog.Default(),
-			Version:    version,
-			Config:     globalCfg,
-			HTTPAddr:   addr,
-			StatusBase: buildStatusBase(),
-			// Health endpoints share this HTTP server so k8s probes hit the
-			// same port as MCP. Set MAGUS_MCP_ADDRESS=0.0.0.0:7391 (or mcp.address)
-			// so the kubelet can reach them (default 127.0.0.1 is pod-local).
-			// /healthz aliases /livez (liveness): a liveness probe must not
-			// depend on warm-up state, or it would crash-loop pods. Use
-			// /readyz for the workspace-loaded readiness gate.
-			HealthRoutes: map[string]http.Handler{
-				"/livez":   healthHTTPHandler(probeLiveness, status),
-				"/readyz":  healthHTTPHandler(probeReadiness, status),
-				"/healthz": healthHTTPHandler(probeLiveness, status),
-			},
-		})
+		err := m.ServeDaemon(ctx)
 		if err != nil && ctx.Err() == nil {
-			// ServeHTTP exiting due to ctx cancellation is normal shutdown.
+			// ServeDaemon exiting due to ctx cancellation is normal shutdown.
 			// Any other error means MCP is gone while the daemon is still up —
 			// clients would receive no response indefinitely. Cancel the daemon
 			// context to trigger a clean restart by the process supervisor.
