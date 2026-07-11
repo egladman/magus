@@ -1,6 +1,6 @@
 // Auto-generated at build time (gen/sw.js). Template lives at website/sw.js.tmpl;
-// the render substitutes magus-a83c710d357a and /magus/ before copying into gen/.
-const VERSION = "magus-a83c710d357a";
+// the render substitutes magus-7fafed0d4b8b and /magus/ before copying into gen/.
+const VERSION = "magus-7fafed0d4b8b";
 const BASE = "/magus/";
 
 const PRECACHE = [
@@ -16,6 +16,7 @@ const PRECACHE = [
   BASE + "main.js",
   BASE + "theme.js",
   BASE + "site.css",
+  BASE + "console.css",
   BASE + "theme.css",
   // pico.min.css is same-origin (no CDN); precache so every page is styled on a
   // cold offline load. The large mermaid bundle (gen/assets/mermaid.js) is NOT

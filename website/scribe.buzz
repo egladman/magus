@@ -1610,7 +1610,7 @@ fun writeServiceWorker(site: Site) > void {
     final precached = ["search-index.json", "playground/wasm_exec.js",
         "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css",
         "logs/log-viewer.js", "logs/logs.css", "dashboard/dashboard.js", "dashboard/dashboard.css",
-        "main.js", "theme.js", "site.css", "theme.css",
+        "main.js", "theme.js", "site.css", "console.css", "theme.css",
         "assets/pico.min.css", "offline/index.html"];
     var manifest = "";
     foreach (rel in precached) {
@@ -3115,6 +3115,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // imports as external runtime imports. CSS is minified per-file (not
     // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
     os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + site.outDir + "/site.css"]);
+    // console.css: the shared console-app chrome (app bar, launcher, status bar) loaded by
+    // /dashboard/, /logs/, /graph/ but not the docs pages. Site-wide like site.css, so it
+    // is minified to gen root and enumerated in the precache/allowlist next to site.css.
+    os.execute(["sh", "-c", "esbuild console.css --minify --outfile=" + site.outDir + "/console.css"]);
     os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
     // graph.css: the /graph/ Graph Explorer page's own stylesheet (its rules are
     // page-scoped, so it loads only on /graph/, not every page like site.css).
@@ -3340,7 +3344,7 @@ fun pruneStaleOutputs(site: Site) > void {
         "index.html": true, "index.md": true, "404.html": true,
         "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
         "sw.js": true, "search-index.json": true, "site-manifest.sha256": true,
-        "site.css": true, "theme.css": true, "theme.js": true, "main.js": true,
+        "site.css": true, "console.css": true, "theme.css": true, "theme.js": true, "main.js": true,
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,
         "playground/wasm_exec.js": true, "playground/editor.js": true,
