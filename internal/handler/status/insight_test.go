@@ -12,26 +12,24 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeInsightSource is an insightSource returning canned values or a fixed error.
+// fakeInsightSource is an insightSource returning a canned view or a fixed error.
 type fakeInsightSource struct {
-	view          types.InsightView
-	report        types.VolatilityReport
-	insightErr    error
-	volatilityErr error
+	view       types.InsightView
+	insightErr error
 }
 
 func (f fakeInsightSource) Insight(context.Context) (types.InsightView, error) {
 	return f.view, f.insightErr
 }
 
-func (f fakeInsightSource) Volatility(context.Context) (types.VolatilityReport, error) {
-	return f.report, f.volatilityErr
-}
-
 // --- InsightHandler ---
 
 func TestInsightHandler_Returns200WithJSON(t *testing.T) {
-	src := fakeInsightSource{view: types.InsightView{Hotspots: types.HotspotOutput{Commits: 42}}}
+	// The folded shape: the four VCS lenses plus the volatility lens under one view.
+	src := fakeInsightSource{view: types.InsightView{
+		Hotspots:   types.HotspotOutput{Commits: 42},
+		Volatility: &types.VolatilityReport{Threshold: 0.05, Targets: []types.VolatilityTarget{{Project: "p", Target: "test", Volatile: true}}},
+	}}
 	h := NewInsightHandler(src, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
@@ -44,6 +42,9 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 	}
 	if out.Hotspots.Commits != 42 {
 		t.Errorf("want commits 42, got %d", out.Hotspots.Commits)
+	}
+	if out.Volatility == nil || out.Volatility.Threshold != 0.05 || len(out.Volatility.Targets) != 1 {
+		t.Errorf("want folded volatility lens, got %+v", out.Volatility)
 	}
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("want no-store, got %q", got)
@@ -83,45 +84,5 @@ func TestInsightHandler_OptionsNoContent(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/api/v1/insight", nil))
 	if w.Code != http.StatusNoContent {
 		t.Errorf("want 204 for preflight, got %d", w.Code)
-	}
-}
-
-// --- VolatilityHandler ---
-
-func TestVolatilityHandler_Returns200WithJSON(t *testing.T) {
-	src := fakeInsightSource{report: types.VolatilityReport{
-		Threshold: 0.05,
-		Targets:   []types.VolatilityTarget{{Project: "p", Target: "test", Score: 0.1, Volatile: true}},
-	}}
-	h := NewVolatilityHandler(src, nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/volatility", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
-	}
-	var out types.VolatilityReport
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
-	}
-	if out.Threshold != 0.05 || len(out.Targets) != 1 || out.Targets[0].Project != "p" {
-		t.Errorf("unexpected report: %+v", out)
-	}
-}
-
-func TestVolatilityHandler_ErrorReturns500(t *testing.T) {
-	h := NewVolatilityHandler(fakeInsightSource{volatilityErr: errors.New("read boom")}, nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/volatility", nil))
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("want 500, got %d", w.Code)
-	}
-}
-
-func TestVolatilityHandler_MethodNotAllowed(t *testing.T) {
-	h := NewVolatilityHandler(fakeInsightSource{}, nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/v1/volatility", nil))
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("want 405, got %d", w.Code)
 	}
 }

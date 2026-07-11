@@ -3,11 +3,12 @@ package types
 import "time"
 
 // InsightDefinition is the umbrella description shown by `magus insight`.
-const InsightDefinition = "Insight reads VCS history to show where a codebase's " +
-	"attention and risk concentrate. Lenses: hotspots (churn × complexity, the prime " +
-	"refactoring targets), coupling (projects that change together — and whether a " +
-	"dependency edge explains it), ownership (author concentration and bus factor), " +
-	"and trend (rising vs cooling activity)."
+const InsightDefinition = "Insight shows where a codebase's attention and risk concentrate. " +
+	"Four lenses read VCS history: hotspots (churn x complexity, the prime refactoring targets), " +
+	"affinity (projects that change together, and whether a dependency edge explains it), " +
+	"ownership (author concentration and bus factor), and trend (rising vs cooling activity). " +
+	"A fifth lens, volatility, reads run-outcome history instead: targets whose pass/fail record " +
+	"flaps (a Wilson-scored flakiness signal)."
 
 // InsightOptions configures an insight scan. One scan of recent history feeds every
 // lens; Dir scopes it to a subtree, Since bounds it by date, Files switches the
@@ -30,6 +31,9 @@ const (
 		"how many distinct authors it has (bus factor), and whether it has gone quiet (abandonment risk)."
 	TrendDefinition = "Trend compares the recent and earlier halves of the window: a positive " +
 		"delta is a rising hotspot (accelerating activity), a negative one is cooling."
+	VolatilityDefinition = "Volatility reads run-outcome history, not git: each (project, target) " +
+		"pair's recent pass/fail/volatile record scored by its Wilson lower bound. A pair at or above " +
+		"the configured threshold is flagged volatile - a flakiness signal, the prime stabilization targets."
 )
 
 // HotspotOutput ranks where churn meets complexity — the canonical "fix this first"
@@ -110,24 +114,28 @@ type Trend struct {
 	Delta   int    `json:"delta"   yaml:"delta"`
 }
 
-// InsightView bundles the four VCS-history lenses without the knowledge-graph axis.
-// It is what the console serves at GET /api/v1/insight: the same per-lens outputs the
-// CLI produces, computed in-daemon from one bounded git-log scan. GraphStats is omitted
-// deliberately - the console read is scan-only and never touches the knowledge graph.
+// InsightView bundles the four VCS-history lenses plus the run-outcome volatility lens,
+// without the knowledge-graph axis. It is what the console serves at GET /api/v1/insight:
+// the same per-lens outputs the CLI produces. The four git lenses come from one bounded
+// git-log scan (cached by the service); Volatility is a fresh runtime-history file read
+// folded into the same response, so the dashboard reads one endpoint for every lens.
+// GraphStats is omitted deliberately - the console read never touches the knowledge graph.
 type InsightView struct {
-	Hotspots  HotspotOutput   `json:"hotspots"  yaml:"hotspots"`
-	Affinity  AffinityOutput  `json:"affinity"  yaml:"affinity"`
-	Ownership OwnershipOutput `json:"ownership" yaml:"ownership"`
-	Trend     TrendOutput     `json:"trend"     yaml:"trend"`
+	Hotspots   HotspotOutput     `json:"hotspots"   yaml:"hotspots"`
+	Affinity   AffinityOutput    `json:"affinity"   yaml:"affinity"`
+	Ownership  OwnershipOutput   `json:"ownership"  yaml:"ownership"`
+	Trend      TrendOutput       `json:"trend"      yaml:"trend"`
+	Volatility *VolatilityReport `json:"volatility" yaml:"volatility"`
 }
 
 // InsightReport bundles every lens for the combined `magus insight report` (the
 // committable Markdown doc and its -o json form). GraphStats is the knowledge-
 // graph axis (`magus graph stats`), embedded so the report spans both axes.
 type InsightReport struct {
-	Hotspots   HotspotOutput   `json:"hotspots"    yaml:"hotspots"`
-	Affinity   AffinityOutput  `json:"affinity"    yaml:"affinity"`
-	Ownership  OwnershipOutput `json:"ownership"   yaml:"ownership"`
-	Trend      TrendOutput     `json:"trend"       yaml:"trend"`
-	GraphStats KnowledgeStats  `json:"graph_stats" yaml:"graph_stats"`
+	Hotspots   HotspotOutput     `json:"hotspots"             yaml:"hotspots"`
+	Affinity   AffinityOutput    `json:"affinity"             yaml:"affinity"`
+	Ownership  OwnershipOutput   `json:"ownership"            yaml:"ownership"`
+	Trend      TrendOutput       `json:"trend"                yaml:"trend"`
+	Volatility *VolatilityReport `json:"volatility,omitempty" yaml:"volatility,omitempty"`
+	GraphStats KnowledgeStats    `json:"graph_stats"          yaml:"graph_stats"`
 }

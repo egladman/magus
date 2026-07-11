@@ -5,10 +5,12 @@ package volatility
 import (
 	"context"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/types"
 )
 
 // contextKey is an unexported type for context values to avoid collisions.
@@ -264,4 +266,46 @@ func WithRuntime(ctx context.Context, rt *Runtime) context.Context {
 func RuntimeFromContext(ctx context.Context) *Runtime {
 	rt, _ := ctx.Value(contextKey{}).(*Runtime)
 	return rt
+}
+
+// BuildReport reads the runtime-history file at path, scores every recorded (project, target)
+// pair against cfg, and returns a deterministic VolatilityReport sorted by (project, target).
+// It is the single home for the volatility lens' compute so the console daemon read and the
+// `magus insight volatility` CLI path stay byte-identical. An empty path yields an empty report
+// carrying just the configured threshold (no error): "no history configured yet" is a valid
+// empty state, not a failure. A read/decode error on a configured path is returned.
+func BuildReport(ctx context.Context, path string, cfg Config) (types.VolatilityReport, error) {
+	report := types.VolatilityReport{Threshold: cfg.Threshold}
+	if path == "" {
+		return report, nil
+	}
+	var hist forecast.History
+	if err := hist.Load(ctx, path); err != nil {
+		return types.VolatilityReport{}, err
+	}
+	rt := NewRuntime(&hist, path, cfg, nil)
+	for project, targets := range hist.Projects {
+		for target := range targets {
+			st := rt.Stats(project, target)
+			sc := rt.Score(project, target)
+			report.Targets = append(report.Targets, types.VolatilityTarget{
+				Project:       project,
+				Target:        target,
+				Score:         sc,
+				Volatile:      sc >= cfg.Threshold,
+				Pass:          st.PassCount,
+				Fail:          st.FailCount,
+				VolatileCount: st.VolatileCount,
+				Samples:       len(st.RecentOutcomes),
+				LastPass:      rt.LastPassTime(project, target),
+			})
+		}
+	}
+	sort.Slice(report.Targets, func(i, j int) bool {
+		if report.Targets[i].Project != report.Targets[j].Project {
+			return report.Targets[i].Project < report.Targets[j].Project
+		}
+		return report.Targets[i].Target < report.Targets[j].Target
+	})
+	return report, nil
 }

@@ -249,10 +249,33 @@ func WriteInsightMarkdown(w io.Writer, r types.InsightReport) error {
 	b.Table([]string{"Delta", "Recent", "Earlier", "Project"},
 		[]md.Align{md.Right, md.Right, md.Right}, rows)
 
+	writeVolatilitySection(&b, r.Volatility)
 	writeGraphStatsSection(&b, r.GraphStats)
 
 	_, err := b.WriteTo(w)
 	return err
+}
+
+// writeVolatilitySection renders the run-outcome axis (`magus insight volatility`) into the
+// combined report: each (project, target) pair's Wilson-scored flakiness against the threshold.
+// Empty when no history was read or it held no targets (the report is best-effort here).
+func writeVolatilitySection(b *md.Builder, v *types.VolatilityReport) {
+	if v == nil || len(v.Targets) == 0 {
+		return
+	}
+	b.Heading(2, "Volatility")
+	b.Paragraph(types.VolatilityDefinition)
+	b.Paragraphf("_Threshold: %.3f (Wilson lower bound), from run-outcome history._", v.Threshold)
+	rows := make([][]string, 0, len(v.Targets))
+	for _, t := range v.Targets {
+		rows = append(rows, []string{
+			fmt.Sprintf("%.3f", t.Score), checkbox(t.Volatile),
+			strconv.Itoa(t.Pass), strconv.Itoa(t.Fail), strconv.Itoa(t.VolatileCount),
+			strconv.Itoa(t.Samples), md.Code(t.Project+":"+t.Target),
+		})
+	}
+	b.Table([]string{"Score", "Volatile", "Pass", "Fail", "Volatile runs", "Samples", "Target"},
+		[]md.Align{md.Right, md.Center, md.Right, md.Right, md.Right, md.Right}, rows)
 }
 
 // writeGraphStatsSection renders the knowledge-graph axis (`magus graph stats`)
@@ -315,7 +338,7 @@ func topFiles(files []types.FileHotspot, n int) []types.FileHotspot {
 
 func checkbox(b bool) string {
 	if b {
-		return "⚠️"
+		return "yes"
 	}
 	return ""
 }

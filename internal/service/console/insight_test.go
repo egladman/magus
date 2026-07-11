@@ -101,12 +101,16 @@ func TestServiceInsightCacheHit(t *testing.T) {
 		}),
 	)
 
+	// Insight folds the volatility lens onto the cached scan; with no history path
+	// configured that lens is an empty report carrying just the (zero) threshold.
+	want := view
+	want.Volatility = &types.VolatilityReport{}
 	for i := 0; i < 3; i++ {
 		got, err := svc.Insight(context.Background())
 		require.NoError(t, err)
-		assert.Equal(t, view, got)
+		assert.Equal(t, want, got)
 	}
-	assert.Equal(t, int64(1), calls.Load(), "3 calls within the TTL share one scan")
+	assert.Equal(t, int64(1), calls.Load(), "3 calls within the TTL share one scan (volatility rides fresh, off the scan cache)")
 }
 
 // TestServiceInsightCacheExpires checks the scan reruns once the TTL lapses.

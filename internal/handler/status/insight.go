@@ -12,17 +12,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// insightSource is the narrow consumer contract the insight and volatility handlers need from the
-// console service: assemble the VCS-history lenses and the runtime-history volatility read. It is
-// satisfied by *console.Service; the handler package holds no concrete service.
+// insightSource is the narrow consumer contract the insight handler needs from the console
+// service: assemble every insight lens (the four VCS-history lenses plus the folded-in
+// runtime-history volatility lens). It is satisfied by *console.Service; the handler package
+// holds no concrete service.
 type insightSource interface {
 	Insight(ctx context.Context) (types.InsightView, error)
-	Volatility(ctx context.Context) (types.VolatilityReport, error)
 }
 
-// InsightHandler serves GET /api/v1/insight: the four VCS-history lenses (hotspots, affinity,
-// ownership, trend) as JSON (types.InsightView), computed in-daemon from one bounded git-log
-// scan and cached by the service. A service with no workspace yields 503, not 500.
+// InsightHandler serves GET /api/v1/insight: every insight lens as JSON (types.InsightView) -
+// the four VCS-history lenses (hotspots, affinity, ownership, trend) from one bounded git-log
+// scan cached by the service, plus the run-outcome volatility lens folded in fresh. A service
+// with no workspace yields 503, not 500.
 type InsightHandler struct {
 	handler.Base
 	src insightSource
@@ -49,33 +50,6 @@ func (h *InsightHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, view)
-}
-
-// VolatilityHandler serves GET /api/v1/volatility: per-(project, target) volatility as JSON
-// (types.VolatilityReport), read from the shared runtime-history file and scored in-daemon. It is
-// a pure file read, so it does not require a workspace.
-type VolatilityHandler struct {
-	handler.Base
-	src insightSource
-}
-
-// NewVolatilityHandler returns the GET /api/v1/volatility handler reading from src.
-func NewVolatilityHandler(src insightSource, log *slog.Logger) *VolatilityHandler {
-	h := &VolatilityHandler{src: src}
-	h.Base = handler.New(h.serve, log)
-	return h
-}
-
-func (h *VolatilityHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if !allowGet(w, r) {
-		return
-	}
-	report, err := h.src.Volatility(r.Context())
-	if err != nil {
-		http.Error(w, "volatility error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, report)
 }
 
 // allowGet answers a CORS preflight (204) and rejects non-GET methods (405), returning false

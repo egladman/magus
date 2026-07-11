@@ -23,9 +23,10 @@ type insightAnalyzer interface {
 	Affinity(ctx context.Context, opts types.InsightOptions) (types.AffinityOutput, error)
 	Ownership(ctx context.Context, opts types.InsightOptions) (types.OwnershipOutput, error)
 	Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error)
+	Volatility(ctx context.Context) (types.VolatilityReport, error)
 }
 
-var insightLenses = []string{"hotspots", "affinity", "ownership", "trend", "report"}
+var insightLenses = []string{"hotspots", "affinity", "ownership", "trend", "volatility", "report"}
 
 func insightCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -42,6 +43,8 @@ func insightCmd(ctx context.Context, root string, args []string) error {
 		return insightOwnership(ctx, root, rest)
 	case "trend":
 		return insightTrend(ctx, root, rest)
+	case "volatility":
+		return insightVolatility(ctx, root, rest)
 	case "report":
 		return insightReport(ctx, root, rest)
 	case "structure":
@@ -64,15 +67,19 @@ func insightUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, types.InsightDefinition)
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "History lenses (git):")
-	fmt.Fprintln(os.Stderr, "  hotspots   churn × complexity — the prime refactoring targets (--files for per-file)")
-	fmt.Fprintln(os.Stderr, "  affinity   projects that change together, flagging hidden (undeclared) coupling")
-	fmt.Fprintln(os.Stderr, "  ownership  author concentration, bus factor, and abandonment risk")
-	fmt.Fprintln(os.Stderr, "  trend      rising vs cooling activity across the window")
+	fmt.Fprintln(os.Stderr, "VCS-history lenses (from the commit log):")
+	fmt.Fprintln(os.Stderr, "  hotspots    churn x complexity - the prime refactoring targets (--files for per-file)")
+	fmt.Fprintln(os.Stderr, "  affinity    projects that change together, flagging hidden (undeclared) coupling")
+	fmt.Fprintln(os.Stderr, "  ownership   author concentration, bus factor, and abandonment risk")
+	fmt.Fprintln(os.Stderr, "  trend       rising vs cooling activity across the window")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  report     every lens plus graph stats as one Markdown doc (commit it as INSIGHT.md)")
+	fmt.Fprintln(os.Stderr, "Run-outcome lens (from the shared runtime-history file, not git):")
+	fmt.Fprintln(os.Stderr, "  volatility  targets whose pass/fail record flaps - a Wilson-scored flakiness signal")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "History flags: --commits N, --since 90d|12w|6mo|1y. Each lens accepts -o text|json|yaml|name.")
+	fmt.Fprintln(os.Stderr, "  report      every lens plus graph stats as one Markdown doc (commit it as INSIGHT.md)")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "VCS-history flags: --commits N, --since 90d|12w|6mo|1y (the volatility lens takes neither:")
+	fmt.Fprintln(os.Stderr, "it reads run history whole, workspace-wide). Each lens accepts -o text|json|yaml|name.")
 	fmt.Fprintln(os.Stderr, "See also: `magus graph stats` for the knowledge-graph shape (god nodes, orphans, doc coverage).")
 }
 
@@ -243,6 +250,58 @@ func insightTrend(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
+// insightVolatility renders the run-outcome volatility lens. Unlike the git lenses it takes
+// no history-window flags (--commits/--since/--workspace): it reads the shared runtime-history
+// file whole, so the report is always workspace-wide. It still resolves the workspace to reach
+// the configured history path and volatility thresholds.
+func insightVolatility(ctx context.Context, root string, args []string) error {
+	if _, err := cmdParse("insight volatility", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintf(os.Stderr, "Usage: magus insight volatility [flags]\n\n%s\n\nRuns workspace-wide (no --commits/--since window). Global flags also accepted, see `magus -h`:\n", types.VolatilityDefinition)
+			fs.PrintDefaults()
+		}
+	}); err != nil {
+		return err
+	}
+	outOpts, err := ResolveOutput(global.output)
+	if err != nil {
+		return err
+	}
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	a, ok := ws.(insightAnalyzer)
+	if !ok {
+		return errors.New("insight: workspace does not support insight analysis")
+	}
+	out, err := a.Volatility(ctx)
+	if err != nil {
+		return err
+	}
+	switch outOpts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(outOpts, out)
+	case outputName:
+		for _, t := range out.Targets {
+			fmt.Printf("%s:%s\n", t.Project, t.Target)
+		}
+		return nil
+	}
+	return volatilityText(out)
+}
+
+func volatilityText(out types.VolatilityReport) error {
+	fmt.Printf("definition: %s\n\n", types.VolatilityDefinition)
+	fmt.Printf("volatility (threshold %.3f, from run-outcome history):\n", out.Threshold)
+	fmt.Printf("  %6s  %4s  %5s  %5s  %6s  %7s  %6s  %s\n", "SCORE", "VOL?", "PASS", "FAIL", "VOLCNT", "SAMPLES", "LAST", "PROJECT:TARGET")
+	for _, t := range out.Targets {
+		fmt.Printf("  %6.3f  %4s  %5d  %5d  %6d  %7d  %6s  %s:%s\n",
+			t.Score, flag3(t.Volatile), t.Pass, t.Fail, t.VolatileCount, t.Samples, ago(t.LastPass), t.Project, t.Target)
+	}
+	return nil
+}
+
 // insightReport gathers every lens and emits the combined Markdown doc (the default),
 // or the bundled struct under -o json/yaml.
 func insightReport(ctx context.Context, root string, args []string) error {
@@ -269,6 +328,11 @@ func insightReport(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	report := types.InsightReport{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}
+	// The run-outcome axis: fold in the volatility lens (best-effort - a history
+	// read error just omits the section rather than failing the whole report).
+	if vr, verr := a.Volatility(ctx); verr == nil {
+		report.Volatility = &vr
+	}
 	// The report spans both axes: add graph stats (best-effort - a graph build
 	// failure just omits the section rather than failing the whole report).
 	if g, gerr := loadKnowledgeGraph(ctx, root /*refresh*/, false /*global*/, false /*symbols*/, false); gerr == nil {

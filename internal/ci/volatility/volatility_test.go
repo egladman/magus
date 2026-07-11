@@ -1,11 +1,15 @@
 package volatility
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var testCfg = Config{
@@ -179,4 +183,58 @@ func TestLastPassTime(t *testing.T) {
 	got := rt.LastPassTime(testProject, testTarget)
 	want := now.Add(time.Minute) // second "pass" entry
 	assert.True(t, got.Equal(want), "LastPassTime = %v, want %v", got, want)
+}
+
+// TestBuildReportEmptyPath returns just the configured threshold, no error, when no
+// history file is configured - "no history yet" is a valid empty state.
+func TestBuildReportEmptyPath(t *testing.T) {
+	t.Parallel()
+	report, err := BuildReport(context.Background(), "", Config{Threshold: 0.2})
+	require.NoError(t, err)
+	assert.Equal(t, types.VolatilityReport{Threshold: 0.2}, report)
+}
+
+// TestBuildReport scores every recorded (project, target) pair and returns them sorted
+// by (project, target), with the threshold and per-target tallies carried through.
+func TestBuildReport(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	st := forecast.Stats{
+		PassCount: 2, FailCount: 1, VolatileCount: 1,
+		RecentOutcomes: []forecast.Outcome{
+			{Result: "pass", At: now.Add(-3 * time.Hour)},
+			{Result: "volatile", At: now.Add(-2 * time.Hour)},
+			{Result: "pass", At: now.Add(-1 * time.Hour)},
+			{Result: "fail", At: now},
+		},
+	}
+	hist := forecast.History{
+		Version: forecast.HistoryVersion,
+		Projects: map[string]map[string]forecast.Stats{
+			"proj/b": {"test": st},
+			"proj/a": {"test": st},
+		},
+	}
+	path := filepath.Join(t.TempDir(), "history.json")
+	require.NoError(t, hist.Save(context.Background(), path))
+
+	cfg := Config{Enabled: true, BootstrapSamples: 4, MinSamples: 4, Threshold: 0.01}
+	report, err := BuildReport(context.Background(), path, cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 0.01, report.Threshold)
+	require.Len(t, report.Targets, 2)
+
+	// Deterministic (project, target) ordering.
+	assert.Equal(t, "proj/a", report.Targets[0].Project)
+	assert.Equal(t, "proj/b", report.Targets[1].Project)
+
+	got := report.Targets[0]
+	assert.Equal(t, "test", got.Target)
+	assert.Equal(t, 2, got.Pass)
+	assert.Equal(t, 1, got.Fail)
+	assert.Equal(t, 1, got.VolatileCount)
+	assert.Equal(t, 4, got.Samples)
+	assert.Equal(t, now.Add(-1*time.Hour), got.LastPass)
+	assert.Greater(t, got.Score, 0.0, "4 samples at MinSamples=4 produce a non-zero Wilson score")
+	assert.True(t, got.Volatile, "score exceeds the 0.01 threshold")
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -116,6 +117,14 @@ func (m *Magus) Ownership(ctx context.Context, opts types.InsightOptions) (types
 		Since:      opts.Since,
 		Projects:   project.Ownership(scan, project.Midpoint(scan)),
 	}, nil
+}
+
+// Volatility is the run-outcome lens: each (project, target) pair's recent pass/fail record
+// scored by its Wilson lower bound, flagged volatile at or above the configured threshold.
+// Unlike the git-history lenses it reads the shared runtime-history file (config.HistoryPath),
+// not a commit scan - so it is workspace-wide and takes no InsightOptions window.
+func (m *Magus) Volatility(ctx context.Context) (types.VolatilityReport, error) {
+	return volatility.BuildReport(ctx, m.cfg.HistoryPath, m.volatilityConfig())
 }
 
 // Trend is the rising/cooling lens: each project's churn in the recent vs earlier

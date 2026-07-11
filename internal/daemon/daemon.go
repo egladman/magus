@@ -177,10 +177,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc, log)))
 			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0, log)))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
-			// In-daemon insight (four VCS-history lenses, cached scan) and per-target volatility
-			// (runtime-history read). Plain JSON over the same /api guards as the rest.
+			// In-daemon insight: the four VCS-history lenses (cached scan) plus the folded-in
+			// run-outcome volatility lens, all under the single "volatility" key of InsightView.
+			// Plain JSON over the same /api guards as the rest.
 			bridgeMux.Handle("/api/v1/insight", cors(status.NewInsightHandler(svc, log)))
-			bridgeMux.Handle("/api/v1/volatility", cors(status.NewVolatilityHandler(svc, log)))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
 

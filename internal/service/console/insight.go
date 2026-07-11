@@ -3,10 +3,8 @@ package console
 import (
 	"context"
 	"errors"
-	"sort"
 	"time"
 
-	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/types"
 )
@@ -31,13 +29,28 @@ type insightEntry struct {
 	at   time.Time
 }
 
-// Insight assembles the four VCS-history lenses (hotspots, affinity, ownership, trend) from
-// one bounded git-log scan, computed in-daemon via the held *magus.Magus. The result is
-// cached for insightTTL so a burst of dashboard polls does not re-shell git on every
-// request; the cache is refreshed on the first call after the TTL lapses. Assembly is
-// serialized by the cache mutex, so concurrent pollers past a cold TTL wait for one scan
-// rather than each launching their own.
+// Insight assembles the five insight lenses. The four VCS-history lenses (hotspots, affinity,
+// ownership, trend) come from one bounded git-log scan cached for insightTTL, so a burst of
+// dashboard polls does not re-shell git on every request. The fifth lens, volatility, rides
+// fresh on every call: it is a cheap runtime-history file read that changes on every run, so a
+// TTL-stale copy would mislead the dashboard. The result is one InsightView carrying every lens.
 func (s *Service) Insight(ctx context.Context) (types.InsightView, error) {
+	view, err := s.cachedScan(ctx)
+	if err != nil {
+		return types.InsightView{}, err
+	}
+	report, err := s.Volatility(ctx)
+	if err != nil {
+		return types.InsightView{}, err
+	}
+	view.Volatility = &report
+	return view, nil
+}
+
+// cachedScan returns the four VCS-history lenses, reusing a scan within the TTL. Assembly is
+// serialized by the cache mutex, so concurrent pollers past a cold TTL wait for one scan rather
+// than each launching their own. Volatility is not part of this cache - Insight folds it in fresh.
+func (s *Service) cachedScan(ctx context.Context) (types.InsightView, error) {
 	s.insightMu.Lock()
 	defer s.insightMu.Unlock()
 
@@ -83,47 +96,13 @@ func (s *Service) computeInsight(ctx context.Context) (types.InsightView, error)
 }
 
 // Volatility reports per-(project, target) volatility read from the shared runtime-history file
-// (config.HistoryPath). It is a pure file read plus the Wilson-score compute: no shell-out,
-// no workspace graph, so it works even when the service holds no Magus. A missing or unset
-// history file yields an empty report carrying just the configured threshold. Targets are
-// sorted by (project, target) for a deterministic response body.
+// (config.HistoryPath). It is a pure file read plus the Wilson-score compute via the shared
+// volatility.BuildReport: no shell-out, no workspace graph, so it works even when the service
+// holds no Magus. A missing or unset history file yields an empty report carrying just the
+// configured threshold. It is an internal method now - Insight folds it into InsightView rather
+// than a standalone HTTP route - and is kept exported so the MCP surface can read it directly.
 func (s *Service) Volatility(ctx context.Context) (types.VolatilityReport, error) {
-	cfg := s.volatilityConfig()
-	report := types.VolatilityReport{Threshold: cfg.Threshold}
-
-	path := s.config.HistoryPath
-	if path == "" {
-		return report, nil
-	}
-	var hist forecast.History
-	if err := hist.Load(ctx, path); err != nil {
-		return types.VolatilityReport{}, err
-	}
-	rt := volatility.NewRuntime(&hist, path, cfg, nil)
-	for project, targets := range hist.Projects {
-		for target := range targets {
-			st := rt.Stats(project, target)
-			sc := rt.Score(project, target)
-			report.Targets = append(report.Targets, types.VolatilityTarget{
-				Project:       project,
-				Target:        target,
-				Score:         sc,
-				Volatile:      sc >= cfg.Threshold,
-				Pass:          st.PassCount,
-				Fail:          st.FailCount,
-				VolatileCount: st.VolatileCount,
-				Samples:       len(st.RecentOutcomes),
-				LastPass:      rt.LastPassTime(project, target),
-			})
-		}
-	}
-	sort.Slice(report.Targets, func(i, j int) bool {
-		if report.Targets[i].Project != report.Targets[j].Project {
-			return report.Targets[i].Project < report.Targets[j].Project
-		}
-		return report.Targets[i].Target < report.Targets[j].Target
-	})
-	return report, nil
+	return volatility.BuildReport(ctx, s.config.HistoryPath, s.volatilityConfig())
 }
 
 // volatilityConfig mirrors magus.Magus.volatilityConfig (which is unexported) so the console can

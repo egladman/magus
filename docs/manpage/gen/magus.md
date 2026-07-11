@@ -67,7 +67,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Run a target for VCS-diff affected projects. See [**magus-affected**(1)](magus-affected.md).
 
 **insight**
-: Behavioral code analysis from VCS history. See [**magus-insight**(1)](magus-insight.md).
+: Behavioral code analysis from VCS and run-outcome history. See [**magus-insight**(1)](magus-insight.md).
 
 **graph**
 : The workspace's graphs as objects: deps, export, stats. See [**magus-graph**(1)](magus-graph.md).
