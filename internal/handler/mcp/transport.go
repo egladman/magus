@@ -66,6 +66,13 @@ Knowledge graph:
   magus_refs              - list files that reference a symbol
   magus_stats             - summarize graph composition
 
+Typical flow:
+  Discover first: magus_describe (list spells/targets/projects/workspaces), magus_where (resolve a fuzzy project name to a path).
+  Then act: magus_run_target / magus_run_affected; magus_affected_plan (CI shard plan), magus_affected_explain (why a project is affected).
+  After a run: magus_output (fetch a target's captured output by its ref), magus_tail_log (latest cache log for a project).
+  Understand the graph: magus_query (search) -> magus_explain (a node's edges and provenance) -> magus_path (shortest path); magus_refs (symbol defs and refs); magus_stats (graph shape).
+  Health and meta: magus_status, magus_doctor, magus_config_get, magus_scratchpad.
+
 Config mutation is intentionally not exposed. Use the magus CLI for that.`
 
 // agentFromRequest extracts the client name/version from an initialize request.

@@ -216,6 +216,10 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 
 		result, err := fn(ctx, req)
 
+		// Cross-link the result before measuring: a hint is output the agent
+		// reads, so its bytes belong in the output-size metric (its context cost).
+		decorateResult(result, toolName)
+
 		dur := time.Since(start)
 		ev := auditEvent{
 			Ts:      startMs,
