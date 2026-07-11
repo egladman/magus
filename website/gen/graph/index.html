@@ -26,7 +26,7 @@
 <body>
     <header class="site-header dash-bar">
     <nav class="container-fluid">
-      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li></ul>
+      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Graph Explorer</h1></li></ul>
       <div class="nav-right">
         <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="console-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links app-grid" id="console-nav-links">
@@ -44,9 +44,6 @@
 <!-- injected at build time by renderGraph() in scribe.buzz; the graph explorer wears the shared console app bar (renderConsoleChrome), not the docs nav -->
 
   <main class="container-fluid">
-    <h1 class="pg-title">Graph Explorer</h1>
-    <p class="lede">See how everything in a magus workspace connects: projects, targets, spells, and the rest.</p>
-    <p class="pg-note">Runs in your browser; nothing leaves your machine. <code>magus graph open</code> loads your own workspace here. <a href="../download/">Install magus</a>.</p>
 
     <!-- Phase 5: Views panel - question-first navigation (max 7 modes).
          Formatted like the "Query syntax and views" / "Display" disclosures below

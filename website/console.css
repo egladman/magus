@@ -39,6 +39,13 @@
 }
 .dash-bar nav { align-items: center; }
 .dash-bar .brand-mark { display: block; }
+/* App title in the bar, next to the hat (native title-bar pattern): the current app's name.
+   Resets Pico's large <h1> to a compact inline label so it reads as a title, not a page heading.
+   The page body no longer repeats the name as an <h1> + lede. */
+.dash-bar .console-app-title {
+  margin: 0; font-size: 1rem; font-weight: 600; line-height: 1;
+  color: var(--pico-color); white-space: nowrap;
+}
 /* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
    show it at every width (JS-gated, like site.css - a dead button with no toggle is worse
    than the inline links the no-js path falls back to below). */

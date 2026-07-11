@@ -1984,7 +1984,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
 fun renderConsoleChrome(app: str, root: str) > str {
     final tmpl = `  <header class="site-header dash-bar">
     <nav class="container-fluid">
-      <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li></ul>
+      <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">{{title}}</h1></li></ul>
       <div class="nav-right">
         <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="console-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links app-grid" id="console-nav-links">
@@ -2011,7 +2011,13 @@ fun renderConsoleChrome(app: str, root: str) > str {
     if (app != "graph") { cells.append({"href": root + "graph/", "icon": iconGraph, "label": "Graph explorer"}); }
     cells.append({"href": root + "playground/", "icon": iconPlay, "label": "Playground"});
     cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation"});
-    return template.render(tmpl, {"root": root, "cells": cells});
+    // The app's own name sits in the bar next to the hat (native title-bar pattern), so the
+    // page body no longer repeats it as an <h1> + lede.
+    var title = "Console";
+    if (app == "logs") { title = "Log Viewer"; }
+    if (app == "graph") { title = "Graph Explorer"; }
+    if (app == "dashboard") { title = "Dashboard"; }
+    return template.render(tmpl, {"root": root, "cells": cells, "title": title});
 }
 
 // renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
