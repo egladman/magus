@@ -97,8 +97,8 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		)))
 		out := buf.String()
 		assert.Contains(t, out, "\nrefdeadbeef\n", "the ref must be on its own bare line")
-		assert.Contains(t, out, "full output: magus query refdeadbeef")
-		assert.Contains(t, out, "open in browser: magus query refdeadbeef --open")
+		assert.Contains(t, out, "full output: magus query output refdeadbeef")
+		assert.Contains(t, out, "open in browser: magus query output refdeadbeef --open")
 	})
 
 	t.Run("cache.summary", func(t *testing.T) {

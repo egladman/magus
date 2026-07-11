@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/service/console"
@@ -314,7 +315,7 @@ func affectedUsage() {
 	fmt.Fprintln(os.Stderr, "  --base <ref>         override VCS base ref (default: MAGUS_VCS_BASE_REF or origin/main)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Use MAGUS_VCS_BASE_REF or --base to set the comparison ref.")
-	fmt.Fprintln(os.Stderr, "Use --stdin to read changed paths from a pipe (e.g. `magus watch | magus affected --stdin build`).")
+	fmt.Fprintf(os.Stderr, "Use --stdin to read changed paths from a pipe (e.g. `%s | %s`).\n", clihint.Watch, clihint.Affected.With("--stdin", "build"))
 }
 
 // hasModeFlag reports whether --name (or -name, with an optional =value) appears
@@ -372,8 +373,8 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		flagArgs = planless[1:]
 	}
 	if target == "" {
-		return fmt.Errorf("magus affected --plan: a target is required (e.g. `magus affected ci --plan`); " +
-			"run `magus describe targets` to list available targets")
+		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`); run `%s` to list available targets",
+			clihint.Affected.With("ci", "--plan"), clihint.DescribeTargets)
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 

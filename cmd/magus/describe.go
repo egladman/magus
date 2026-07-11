@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/render"
@@ -56,7 +57,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
-			fmt.Fprintln(os.Stderr, "magus describe: `describe knowledge` moved to `magus graph export`")
+			fmt.Fprintf(os.Stderr, "magus describe: `describe knowledge` moved to `%s`\n", clihint.GraphExport)
 			return errSilent{exitCode: 2}
 		}
 		fmt.Fprintf(os.Stderr, "magus describe: unknown noun %q\n", noun)

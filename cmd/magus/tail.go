@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,7 +35,7 @@ func tailCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A convenience for the LATEST log of a project/target, with -f follow. For")
 			fmt.Fprintln(os.Stderr, "a SPECIFIC past execution's exact output (any target, by the ref shown on")
-			fmt.Fprintln(os.Stderr, "its run line), use `magus query ref<hex>` - see `magus query -h`.")
+			fmt.Fprintf(os.Stderr, "its run line), use `%s` - see `magus %s -h`.\n", clihint.QueryOutput.With("ref<hex>"), clihint.QueryOutput.Head())
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "target accepts the canonical path:target form used by `magus run`:")
 			fmt.Fprintln(os.Stderr, "  (none)          cwd project, latest run of any target")

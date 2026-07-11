@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/interactive/clihint"
 )
 
 func configMCPCmd(args []string) error {
@@ -148,7 +149,7 @@ func configMCPTokenPrint(args []string) error {
 	}
 	tok, err := auth.Load()
 	if errors.Is(err, auth.ErrNoToken) {
-		return fmt.Errorf("magus config mcp token print: no token configured; run `magus config mcp token generate`")
+		return fmt.Errorf("magus config mcp token print: no token configured; run `%s`", clihint.MCPTokenGenerate)
 	}
 	if err != nil {
 		return err

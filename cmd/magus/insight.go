@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
@@ -49,7 +50,7 @@ func insightCmd(ctx context.Context, root string, args []string) error {
 		return insightReport(ctx, root, rest)
 	case "structure":
 		// Removed lens: the knowledge-graph analytics moved to the graph home.
-		fmt.Fprintln(os.Stderr, "magus insight: the structure lens moved to `magus graph stats`")
+		fmt.Fprintf(os.Stderr, "magus insight: the structure lens moved to `%s`\n", clihint.GraphStats)
 		return errSilent{exitCode: 2}
 	default:
 		fmt.Fprintf(os.Stderr, "magus insight: unknown lens %q\n", lens)

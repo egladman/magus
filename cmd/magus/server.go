@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/proc"
 )
 
@@ -17,12 +18,12 @@ func serverCmd(ctx context.Context, args []string) error {
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
-	case "start":
+	case clihint.ServerStart.Leaf():
 		return serverStart(ctx, rest)
-	case "stop":
+	case clihint.ServerStop.Leaf():
 		return serverStop(ctx, rest)
 	default:
-		return fmt.Errorf("magus server: unknown target %q (want start or stop); use `magus status` to inspect daemon state", sub)
+		return fmt.Errorf("magus server: unknown target %q (want start or stop); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
 }
 
@@ -33,7 +34,7 @@ func serverUsage() {
 	fmt.Fprintln(os.Stderr, "  start   start a persistent daemon and block until stopped")
 	fmt.Fprintln(os.Stderr, "  stop    send a graceful shutdown request to a running daemon")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Use `magus status` to inspect daemon pool state and check reachability.")
+	fmt.Fprintf(os.Stderr, "Use `%s` to inspect daemon pool state and check reachability.\n", clihint.Status)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The socket address is taken from --daemon-address, MAGUS_DAEMON_ADDRESS,")
 	fmt.Fprintln(os.Stderr, "or daemon.address in magus.yaml. When none is set, `server start` uses:")
@@ -62,7 +63,7 @@ func serverStart(ctx context.Context, args []string) error {
 		return fmt.Errorf("magus server start: daemon socket not available (no workspace found, or socket bind failed)")
 	}
 	fmt.Fprintf(os.Stderr, "magus: daemon listening on %s\n", addr)
-	fmt.Fprintln(os.Stderr, "magus: send SIGINT / SIGTERM or run `magus server stop` to shut down")
+	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", clihint.ServerStop)
 
 	// Start the MCP HTTP server alongside the daemon so MCP clients can
 	// connect without a separate process. No-op when mcp.enabled=false.

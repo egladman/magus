@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive"
 	"golang.org/x/term"
 )
@@ -237,10 +238,11 @@ func (h *prettyHandler) printRepro(tty bool, project, target string) {
 	if !interactive.Enabled() || project == "" || target == "" {
 		return
 	}
+	repro := clihint.Run.With(target, project)
 	if tty {
-		_, _ = fmt.Fprintf(h.w, "  \x1b[2mmagus run %s %s\x1b[0m\n", target, project)
+		_, _ = fmt.Fprintf(h.w, "  \x1b[2m%s\x1b[0m\n", repro)
 	} else {
-		_, _ = fmt.Fprintf(h.w, "  magus run %s %s\n", target, project)
+		_, _ = fmt.Fprintf(h.w, "  %s\n", repro)
 	}
 }
 
@@ -261,12 +263,14 @@ func (h *prettyHandler) printRef(tty bool, ref string, failed bool) {
 	if !failed {
 		return
 	}
+	full := clihint.QueryOutput.With(ref)
+	open := clihint.QueryOutput.With(ref, "--open")
 	if tty {
-		_, _ = fmt.Fprintf(h.w, "  \x1b[2mfull output: magus query %s\x1b[0m\n", ref)
-		_, _ = fmt.Fprintf(h.w, "  \x1b[2mopen in browser: magus query %s --open\x1b[0m\n", ref)
+		_, _ = fmt.Fprintf(h.w, "  \x1b[2mfull output: %s\x1b[0m\n", full)
+		_, _ = fmt.Fprintf(h.w, "  \x1b[2mopen in browser: %s\x1b[0m\n", open)
 	} else {
-		_, _ = fmt.Fprintf(h.w, "  full output: magus query %s\n", ref)
-		_, _ = fmt.Fprintf(h.w, "  open in browser: magus query %s --open\n", ref)
+		_, _ = fmt.Fprintf(h.w, "  full output: %s\n", full)
+		_, _ = fmt.Fprintf(h.w, "  open in browser: %s\n", open)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
@@ -75,12 +76,12 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "project. Target graphs are always delivered via the URL fragment (--serve")
 			fmt.Fprintln(os.Stderr, "is incompatible with --targets).")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "With --live, the explorer connects to the running daemon (magus server start)")
+			fmt.Fprintf(os.Stderr, "With --live, the explorer connects to the running daemon (%s)\n", clihint.ServerStart)
 			fmt.Fprintln(os.Stderr, "and updates automatically as files change. The host must be loopback.")
 			fmt.Fprintln(os.Stderr, "Zero-arg default: if the daemon is reachable and no mode flag is given,")
 			fmt.Fprintln(os.Stderr, "--live is chosen automatically.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "For a graph to hand to another tool, use `magus graph export -o json`.")
+			fmt.Fprintf(os.Stderr, "For a graph to hand to another tool, use `%s`.\n", clihint.GraphExport.With("-o json"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -375,14 +376,14 @@ func graphOpenLive(ctx context.Context, base string, printOnly, useTargets bool)
 	defer cancel()
 	if err := probeLiveBridge(pctx, hostPort); err != nil {
 		fmt.Fprintln(os.Stderr, "magus graph open --live: the console is not reachable.")
-		fmt.Fprintln(os.Stderr, "start it: magus server start")
+		fmt.Fprintf(os.Stderr, "start it: %s\n", clihint.ServerStart)
 		return errSilent{exitCode: 1}
 	}
 
 	token, err := auth.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph open --live: could not load the MCP token: %v\n", err)
-		fmt.Fprintln(os.Stderr, "If no token exists yet, run: magus config mcp token generate")
+		fmt.Fprintf(os.Stderr, "If no token exists yet, run: %s\n", clihint.MCPTokenGenerate)
 		return errSilent{exitCode: 1}
 	}
 

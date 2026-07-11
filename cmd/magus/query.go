@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/internal/service/console"
@@ -63,11 +64,11 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "relation:uses, id:build, and negation (-kind:op). Example:")
 			fmt.Fprintln(os.Stderr, "  magus query kind:spell go")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "`output <ref>` retrieves one target execution's captured output by its")
+			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target execution's captured output by its\n", clihint.QueryOutput.Leaf())
 			fmt.Fprintln(os.Stderr, "reference id (ref1a2b3c), shown when the target ran:")
-			fmt.Fprintln(os.Stderr, "  magus query output ref1a2b3c            print the exact bytes (pipe anywhere)")
-			fmt.Fprintln(os.Stderr, "  magus query output ref1a2b3c -o json    the descriptor + output as a record")
-			fmt.Fprintln(os.Stderr, "  magus query output ref1a2b3c --open     open it in the browser log viewer")
+			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", clihint.QueryOutput.With("ref1a2b3c"))
+			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("ref1a2b3c", "-o json"))
+			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("ref1a2b3c", "--open"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -82,9 +83,9 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 
 	// Output-reference retrieval is an EXPLICIT subcommand - `magus query output <ref>` - not a
 	// shape-routed positional, so a search term can never collide with a ref id.
-	if len(pos) >= 1 && pos[0] == "output" {
+	if len(pos) >= 1 && pos[0] == clihint.QueryOutput.Leaf() {
 		if len(pos) != 2 {
-			fmt.Fprintln(os.Stderr, "magus query output: expected exactly one ref (e.g. magus query output ref1a2b3c)")
+			fmt.Fprintf(os.Stderr, "%s: expected exactly one ref (e.g. %s)\n", clihint.QueryOutput, clihint.QueryOutput.With("ref1a2b3c"))
 			return errSilent{exitCode: 2}
 		}
 		ref := pos[1]
@@ -102,7 +103,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	if open || printURL {
 		// --open/--print only apply to `query output <ref>`. Set on a graph search, they were a
 		// mistake; stop rather than silently ignore them.
-		fmt.Fprintln(os.Stderr, "magus query: --open/--print apply only to `magus query output <ref>`. To open the knowledge graph in a browser, use `magus graph open`.")
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
