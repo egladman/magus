@@ -7,8 +7,9 @@
 // to judge health - operation counts, cache hit-rates, and latency percentiles - plus a
 // rolling time-series the daemon backfills so the utilization grid shows history from
 // before the page opened. A sibling of magus.status.v1 (which carries the live pool/health
-// snapshot); the dashboard streams both. No service: it rides the dashboard SSE bridge as
-// `event: metrics` (Snapshot) and `event: backfill` (the Sample ring buffer).
+// snapshot); the dashboard streams both. Served by MetricsService over ConnectRPC (one
+// endpoint speaks Connect, gRPC, and gRPC-Web): StreamMetrics sends one Backfill (the Sample
+// ring buffer) then a fresh Snapshot per tick.
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";

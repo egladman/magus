@@ -59,6 +59,9 @@ importers:
       mermaid:
         specifier: 11.16.0
         version: 11.16.0
+      uplot:
+        specifier: 1.6.31
+        version: 1.6.31
 
 packages:
 
@@ -496,6 +499,9 @@ packages:
   ts-dedent@2.3.0:
     resolution: {integrity: sha512-JfJeIHke7y2egdGGgRAvpCwYFUsHlM2gPcrVOxFkznt/4uzQ7HFmvE63iFHVLBJNDuyDOQgijDK/tXH/f6Msjg==}
     engines: {node: '>=6.10'}
+
+  uplot@1.6.31:
+    resolution: {integrity: sha512-sQZqSwVCbJGnFB4IQjQYopzj5CoTZJ4Br1fG/xdONimqgHmsacvCjNesdGDypNKFbrhLGIeshYhy89FxPF+H+w==}
 
   uuid@14.0.1:
     resolution: {integrity: sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew==}
@@ -1015,6 +1021,8 @@ snapshots:
   tinyexec@1.2.4: {}
 
   ts-dedent@2.3.0: {}
+
+  uplot@1.6.31: {}
 
   uuid@14.0.1: {}
 

@@ -1,0 +1,18 @@
+{
+  "//": "Type-check gate for the hand-written TS client bundles (js/*.ts). esbuild does the actual compilation (strips types, no checking); this config drives `pnpm run typecheck` (tsgo --noEmit) so the source is verified type-correct against the generated protobuf-es and ConnectRPC types. allowJs lets the side-effect import of nav.js resolve without being checked.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": []
+  },
+  "include": ["js/**/*.ts"]
+}

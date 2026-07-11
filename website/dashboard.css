@@ -89,6 +89,7 @@ body.dash-native { margin: 0; }
 .stat[data-accent="miss"]::before { background: var(--c-miss); }
 .stat[data-accent="err"]::before { background: var(--c-err); }
 .stat[data-accent="size"]::before { background: var(--c-info); }
+.stat[data-accent="info"]::before { background: var(--c-info); }
 .stat-k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
 .stat-v { font-size: 1.5rem; font-weight: 700; font-family: var(--pico-font-family-monospace); line-height: 1.1; }
 .stat[data-accent="hit"] .stat-v { color: var(--c-hit); }
@@ -137,12 +138,39 @@ body.dash-native { margin: 0; }
   color: var(--pico-muted-color);
 }
 
-/* Cache sparkline. */
-.spark-canvas { display: block; width: 100%; height: 72px; }
-.spark-legend { display: flex; gap: 1rem; font-size: 0.7rem; margin-top: 0.3rem; }
+/* Legend swatches, shared by the charts and the utilization grid. */
 .lg::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
 .lg-hit { color: var(--c-hit); } .lg-hit::before { background: var(--c-hit); }
 .lg-miss { color: var(--c-miss); } .lg-miss::before { background: var(--c-miss); }
+.lg-p50 { color: var(--c-info); } .lg-p50::before { background: var(--c-info); }
+.lg-p95 { color: var(--c-miss); } .lg-p95::before { background: var(--c-miss); }
+.lg-p99 { color: var(--c-err); } .lg-p99::before { background: var(--c-err); }
+.lg-queued { color: var(--c-miss); } .lg-queued::before { background: var(--c-miss); }
+.tile-note .lg { margin-left: 0.6rem; }
+
+/* uPlot charts. A single fixed height; width is driven by the container (setSize
+   on load / resize / theme rebuild). uPlot draws on a transparent canvas so the
+   tile background carries the theme. */
+.chart-plot { width: 100%; }
+.chart-plot .uplot, .chart-plot .u-wrap { width: 100% !important; }
+.chart-legend { display: flex; gap: 1rem; font-size: 0.7rem; margin-top: 0.3rem; }
+
+/* Latency: a responsive grid of small per-family charts, each with an exact readout. */
+.chart-grid { display: grid; gap: var(--dash-gap); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.chart { margin: 0; }
+.chart figcaption { font-size: 0.72rem; font-weight: 600; color: var(--pico-muted-color); margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.chart-readout { font-family: var(--pico-font-family-monospace); font-size: 0.72rem; color: var(--pico-color); margin-top: 0.25rem; overflow-wrap: anywhere; }
+
+/* Pool utilization grid: GitHub-contribution-style squares. The SVG scales to the
+   tile width via its viewBox; each square's fill/opacity is set inline by the
+   client from the utilization ramp. */
+.util-grid { margin: 0.1rem 0 0.55rem; }
+.util-svg { display: block; width: 100%; height: auto; max-height: 128px; }
+.util-sq { stroke: var(--pico-muted-border-color); stroke-width: 0.5; }
+.util-legend { display: flex; align-items: center; gap: 1.2rem; font-size: 0.7rem; color: var(--pico-muted-color); }
+.util-legend-scale { display: inline-flex; align-items: center; gap: 0.35rem; }
+.util-ramp { display: inline-flex; gap: 2px; }
+.util-ramp i { width: 0.7em; height: 0.7em; border-radius: 2px; background: var(--c-info); opacity: var(--u); border: 1px solid var(--pico-muted-border-color); }
 
 /* Two-up columns. */
 .dash-cols { display: grid; gap: var(--dash-gap); grid-template-columns: 1fr 1fr; }
@@ -208,3 +236,37 @@ a.row .row-cmd::after { content: " \2197"; color: var(--c-info); font-size: 0.85
   .dash-launchers { grid-template-columns: 1fr; }
   .dash-brand-page { display: none; }
 }
+
+/* uPlot base styles (vendored from uplot/dist/uPlot.min.css, MIT). Inlined here
+   rather than imported in the TS entry: the dashboard's CSS is minified as a
+   single standalone file by scribe (esbuild dashboard.css), and a JS-side CSS
+   import would emit a second, colliding gen/dashboard/dashboard.css. Kept as one
+   file, it also stays inside the site's CSP (style-src 'self') with no injected
+   stylesheet. The cursor dashes use the muted border color so they read on both
+   themes. */
+.uplot, .uplot *, .uplot *::before, .uplot *::after { box-sizing: border-box; }
+.uplot { font-family: var(--pico-font-family, system-ui, sans-serif); line-height: 1.5; width: min-content; }
+.u-title { text-align: center; font-size: 18px; font-weight: bold; }
+.u-wrap { position: relative; user-select: none; }
+.u-over, .u-under { position: absolute; }
+.u-under { overflow: hidden; }
+.uplot canvas { display: block; position: relative; width: 100%; height: 100%; }
+.u-axis { position: absolute; }
+.u-legend { font-size: 14px; margin: auto; text-align: center; }
+.u-inline { display: block; }
+.u-inline * { display: inline-block; }
+.u-inline tr { margin-right: 16px; }
+.u-legend th { font-weight: 600; }
+.u-legend th > * { vertical-align: middle; display: inline-block; }
+.u-legend .u-marker { width: 1em; height: 1em; margin-right: 4px; background-clip: padding-box !important; }
+.u-inline.u-live th::after { content: ":"; vertical-align: middle; }
+.u-inline:not(.u-live) .u-value { display: none; }
+.u-series > * { padding: 4px; }
+.u-series th { cursor: pointer; }
+.u-legend .u-off > * { opacity: 0.3; }
+.u-select { background: rgba(0,0,0,0.07); position: absolute; pointer-events: none; }
+.u-cursor-x, .u-cursor-y { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
+.u-hz .u-cursor-x, .u-vt .u-cursor-y { height: 100%; border-right: 1px dashed var(--pico-muted-border-color); }
+.u-hz .u-cursor-y, .u-vt .u-cursor-x { width: 100%; border-bottom: 1px dashed var(--pico-muted-border-color); }
+.u-cursor-pt { position: absolute; top: 0; left: 0; border-radius: 50%; border: 0 solid; pointer-events: none; will-change: transform; background-clip: padding-box !important; }
+.u-axis.u-off, .u-select.u-off, .u-cursor-x.u-off, .u-cursor-y.u-off, .u-cursor-pt.u-off { display: none; }
