@@ -270,17 +270,22 @@ html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backd
   width: auto; margin: 0; padding: 0.15rem 0.3rem; background: none; border: 0; box-shadow: none;
   cursor: pointer; display: inline-flex; line-height: 1;
 }
-.ref-pin { color: var(--pico-muted-color); }
-.ref-pin:hover { color: var(--pico-color); }
+/* Pico sets --pico-color:#fff on a bare <button> (its filled-button text color), so hovering with
+   color:var(--pico-color) turns the glyph WHITE and it vanishes in light mode. Reset that variable
+   to the real text color (--pico-contrast) and use it for hover, so the icon firms up, never fades. */
+.ref-pin { --pico-color: var(--pico-contrast); color: var(--pico-muted-color); }
+.ref-pin:hover { color: var(--pico-contrast); }
 .ref-pin[aria-pressed="true"],
 .ref-pin[aria-pressed="true"]:hover,
 .ref-pin[aria-pressed="true"]:active { color: var(--accent-warm); }
 .ref-pin svg { display: block; }
 .ref-drawer-close {
   width: auto; margin: 0; padding: 0.1rem 0.5rem; font-size: 1.2rem; line-height: 1;
-  background: none; border: 0; color: var(--pico-muted-color); cursor: pointer;
+  background: none; border: 0; box-shadow: none; cursor: pointer;
+  /* Same fix as .ref-pin: reset Pico's bare-<button> white --pico-color so the glyph never fades. */
+  --pico-color: var(--pico-contrast); color: var(--pico-muted-color);
 }
-.ref-drawer-close:hover { color: var(--pico-color); }
+.ref-drawer-close:hover, .ref-drawer-close:focus-visible { color: var(--pico-contrast); background: none; }
 /* Reference sections are inline for no-JS; with JS, ref-drawer.js relocates them into the drawer,
    so hide them until they land there (no flash at the top of the page), then show them in-drawer. */
 .js .ref-section { display: none; }

@@ -2088,7 +2088,6 @@ fun renderGraph(site: Site) > void {
     var html = f.readAll();
     f.close();
     html = html.replace("<!-- console-chrome -->", renderConsoleChrome("graph", "../"));
-    html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
     // The default (non-home) CSP meta - site.csp, not site.cspHome. The graph
     // page holds the reader's own dependency graph, so it gets the tighter
     // img-src (no external hosts), same as playground; see renderPlayground's
@@ -2109,7 +2108,6 @@ fun renderLogs(site: Site) > void {
     var html = f.readAll();
     f.close();
     html = html.replace("<!-- console-chrome -->", renderConsoleChrome("logs", "../"));
-    html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/logs");
     fs.writeFile(site.outDir + "/logs/index.html", html);
