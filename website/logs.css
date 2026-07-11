@@ -304,6 +304,8 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 .wf-axis-label, .wf-dur { fill: var(--pico-muted-color); font-size: 9px; font-family: var(--pico-font-family-monospace); }
 .wf-label { font-size: 10px; font-family: var(--pico-font-family-monospace); }
 .wf-target-label { fill: var(--log-head-fg); font-weight: 600; }
+/* Invocation group header in a multi-invocation waterfall: the command, bolded. */
+.wf-group-head { font-size: 11px; font-weight: 700; fill: var(--pico-color); font-family: var(--pico-font-family-monospace); }
 .wf-step-label { fill: var(--pico-muted-color); }
 .wf-bar { fill: var(--pico-primary); }
 .wf-bar.wf-step { fill: var(--pico-muted-color); opacity: 0.7; }

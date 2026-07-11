@@ -203,6 +203,9 @@ let currentRef = "";
 // null in heuristic/text mode. It backs Share (re-encode the exact structure) and Open in
 // graph (read project/target off the result event).
 let currentJournal = null;
+// currentJournals, when set, is a LIST of journals (multiple invocations) rendered as separate
+// groups. Takes precedence over currentJournal; the live buffer streams alongside it.
+let currentJournals = null;
 // pretty toggles the stylized structural view (default) vs the raw captured text.
 let pretty = true;
 // timeline toggles the trace-waterfall view (targets + steps on a shared time axis) over
@@ -227,6 +230,7 @@ let rawLines = null;
 function loadText(text, ref) {
   rawLines = null;
   currentJournal = null;
+  currentJournals = null; // a plain text log is a single invocation; drop any prior multi
   model = buildModel(text);
   rawText = text;
   finishLoad(ref, summarize(text));
@@ -237,7 +241,8 @@ function loadText(text, ref) {
 // but from EVENTS, so grouping and status are exact, not regex-guessed.
 function loadJournal(journal, ref) {
   currentJournal = journal;
-  const built = buildModelFromEvents(journal.events || [], journal.invocation);
+  currentJournals = null; // a single loaded journal; drop any prior multi-invocation set
+  const built = buildModelMulti(waterfallSource());
   model = { sections: built.sections, titled: built.titled };
   rawLines = built.rawLines;
   rawText = built.rawLines.join("\n");
@@ -387,9 +392,60 @@ function wfTrunc(s, max) {
 
 // waterfallSource returns the events + invocation the waterfall is built from: the loaded
 // Journal (the #data path) or, in live mode, the events seen so far.
+// waterfallSource returns the list of invocation-sources to render: one entry per invocation.
+// Usually a single loaded/streaming invocation, but the log viewer is invocation-agnostic - a
+// static currentJournals list (e.g. the multi-invocation demo) renders alongside the live
+// buffer, so several invocations show as separate groups on a shared time axis.
 function waterfallSource() {
-  if (currentJournal) return { events: currentJournal.events || [], invocation: currentJournal.invocation };
-  return { events: liveEvents, invocation: liveInvocation };
+  const out = [];
+  if (currentJournals) currentJournals.forEach((j) => out.push({ events: j.events || [], invocation: j.invocation }));
+  else if (currentJournal) return [{ events: currentJournal.events || [], invocation: currentJournal.invocation }];
+  if (currentJournals || liveEvents.length || liveInvocation) out.push({ events: liveEvents, invocation: liveInvocation });
+  return out.length ? out : [{ events: liveEvents, invocation: liveInvocation }];
+}
+
+// cmdLabel renders an invocation's command for a group header, e.g. "magus run vmlinux".
+function cmdLabel(command) {
+  if (!command) return "invocation";
+  const args = (command.args || []).join(" ");
+  return "magus " + (command.verb || "run") + (args ? " " + args : "");
+}
+
+// buildSpansMulti builds per-invocation span groups (each via buildSpans) and the combined
+// time domain across all of them - the shared axis a multi-invocation waterfall plots on.
+function buildSpansMulti(sources) {
+  const groups = [];
+  let t0 = Infinity, t1 = -Infinity;
+  for (const s of sources) {
+    const sp = buildSpans(s.events, s.invocation);
+    if (!sp.targets.length) continue;
+    groups.push({ label: cmdLabel(s.invocation && s.invocation.command), targets: sp.targets });
+    t0 = Math.min(t0, sp.t0); t1 = Math.max(t1, sp.t1);
+  }
+  if (!isFinite(t0)) t0 = 0;
+  if (!isFinite(t1) || t1 <= t0) t1 = t0 + 1;
+  return { t0, t1, groups };
+}
+
+// buildModelMulti builds the pretty-view model across all invocation sources: a single
+// invocation renders as before; several are concatenated, each preceded by a command divider.
+function buildModelMulti(sources) {
+  if (sources.length <= 1) {
+    const s = sources[0] || { events: [], invocation: null };
+    return buildModelFromEvents(s.events || [], s.invocation);
+  }
+  const sections = [];
+  const rawLines = [];
+  let titled = 0;
+  for (const s of sources) {
+    const b = buildModelFromEvents(s.events || [], s.invocation);
+    if (!b.sections.length) continue;
+    sections.push({ title: null, lines: ["", cmdLabel(s.invocation && s.invocation.command)] });
+    for (const sec of b.sections) sections.push(sec);
+    for (const l of b.rawLines) rawLines.push(l);
+    titled += b.titled;
+  }
+  return { sections, titled, rawLines, summary: sources.length + " invocations" };
 }
 
 // buildSpans reconstructs the {t0, t1, targets:[{label,status,ref,s,e,steps:[{label,s,e}]}]}
@@ -444,9 +500,7 @@ function buildSpans(events, invocation) {
 // timelineAvailable reports whether the loaded log carries enough timing to plot a waterfall
 // (at least one target span). Gates the Timeline toolbar button.
 function timelineAvailable() {
-  const src = waterfallSource();
-  if (!src.events || !src.events.length) return false;
-  return buildSpans(src.events, src.invocation).targets.length > 0;
+  return buildSpansMulti(waterfallSource()).groups.length > 0;
 }
 
 function wfTimeX(t, sp) {
@@ -458,9 +512,8 @@ function wfTimeX(t, sp) {
 // renderWaterfall draws the current invocation's span tree into the log body as inline SVG
 // (presentation attributes + CSS classes for color, no chart library, no external request).
 function renderWaterfall() {
-  const src = waterfallSource();
-  const spans = buildSpans(src.events, src.invocation);
-  if (!spans.targets.length) {
+  const multi = buildSpansMulti(waterfallSource());
+  if (!multi.groups.length) {
     const p = document.createElement("p");
     p.className = "wf-empty";
     p.textContent = "This log has no timing data to plot as a waterfall.";
@@ -468,24 +521,30 @@ function renderWaterfall() {
     return;
   }
 
-  const total = spans.t1 - spans.t0;
+  const total = multi.t1 - multi.t0;
   // dom is the visible time domain: the focus window (clamped to the run) when set, else the
-  // full run. drawWfAxis/drawWfRow scale to dom, so a focus window zooms the waterfall.
-  const dom = focusFor(spans);
+  // full span across all invocations. drawWfAxis/drawWfRow scale to dom, so a focus window
+  // zooms; the shared axis is what makes the time range meaningful across invocations.
+  const dom = focusFor(multi);
   const q = filterParsed;
   const filtering = !q.empty;
   const outOfWin = (s, e) => focusWin && (e < dom.t0 || s > dom.t1);
+  // Multiple invocations get a labelled group header each; a single one renders headerless.
+  const showHeaders = multi.groups.length > 1;
+
+  const allTargets = multi.groups.flatMap((g) => g.targets);
+  const nt = allTargets.length;
+  const nMatch = filtering ? allTargets.filter((t) => targetRelevant(q, t)).length : nt;
   const caption = document.createElement("p");
   caption.className = "wf-caption";
-  const nt = spans.targets.length;
-  const nMatch = filtering ? spans.targets.filter((t) => targetRelevant(q, t)).length : nt;
-  caption.textContent = nt + (nt === 1 ? " target" : " targets") + " over " + durMsText(total) +
+  caption.textContent = (showHeaders ? multi.groups.length + " invocations, " : "") +
+    nt + (nt === 1 ? " target" : " targets") + " over " + durMsText(total) +
     (filtering ? " - " + nMatch + " matching" : "") +
     (focusWin ? " - focused to " + durMsText(dom.t1 - dom.t0) : "");
   bodyEl.appendChild(caption);
 
   let rows = 0;
-  for (const t of spans.targets) rows += 1 + t.steps.length;
+  for (const g of multi.groups) { rows += showHeaders ? 1 : 0; for (const t of g.targets) rows += 1 + t.steps.length; }
   const h = WF_AXIS_H + rows * WF_ROW_H + 6;
 
   const root = wfSvg("svg");
@@ -498,23 +557,36 @@ function renderWaterfall() {
   drawWfAxis(root, dom, h);
 
   let y = WF_AXIS_H + 2;
-  for (const t of spans.targets) {
-    // Dim non-matching (filter) OR out-of-window (time focus) spans instead of removing them,
-    // so the row layout stays stable and the waterfall reads as a focused view.
-    const tRelevant = targetRelevant(q, t);
-    const tDim = (filtering && !tRelevant) || outOfWin(t.s, t.e);
-    drawWfRow(root, { label: t.label, s: t.s, e: t.e, status: t.status, step: false, dim: tDim }, y, dom);
-    y += WF_ROW_H;
-    for (const st of t.steps) {
-      const sRelevant = tRelevant && (q.texts.length === 0 || matchAllTexts(q, st.label) || matchAllTexts(q, t.label));
-      const sDim = (filtering && !sRelevant) || outOfWin(st.s, st.e);
-      drawWfRow(root, { label: st.label, s: st.s, e: st.e, status: "", step: true, dim: sDim }, y, dom);
+  for (const g of multi.groups) {
+    if (showHeaders) { drawWfGroupHead(root, g.label, y); y += WF_ROW_H; }
+    for (const t of g.targets) {
+      // Dim non-matching (filter) OR out-of-window (time focus) spans instead of removing them,
+      // so the row layout stays stable and the waterfall reads as a focused view.
+      const tRelevant = targetRelevant(q, t);
+      const tDim = (filtering && !tRelevant) || outOfWin(t.s, t.e);
+      drawWfRow(root, { label: t.label, s: t.s, e: t.e, status: t.status, step: false, dim: tDim }, y, dom);
       y += WF_ROW_H;
+      for (const st of t.steps) {
+        const sRelevant = tRelevant && (q.texts.length === 0 || matchAllTexts(q, st.label) || matchAllTexts(q, t.label));
+        const sDim = (filtering && !sRelevant) || outOfWin(st.s, st.e);
+        drawWfRow(root, { label: st.label, s: st.s, e: st.e, status: "", step: true, dim: sDim }, y, dom);
+        y += WF_ROW_H;
+      }
     }
   }
   attachWfBrush(root, dom, h);
   bodyEl.appendChild(root);
-  updateFocusUI(spans);
+  updateFocusUI(multi);
+}
+
+// drawWfGroupHead draws an invocation group header row (the command), spanning the label gutter.
+function drawWfGroupHead(root, label, y) {
+  const t = wfSvg("text");
+  t.setAttribute("x", "4");
+  t.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
+  t.setAttribute("class", "wf-group-head");
+  t.textContent = wfTrunc(label || "invocation", 48);
+  root.appendChild(t);
 }
 
 // focusFor clamps the active focus window to the run's span, or returns the full domain.
@@ -577,7 +649,7 @@ function updateFocusUI(spans) {
   const sel = el("time-range");
   const win = el("focus-window");
   const reset = el("focus-reset");
-  const active = timeline && spans && spans.targets && spans.targets.length > 0;
+  const active = timeline && spans && spans.groups && spans.groups.length > 0;
   if (sel) sel.disabled = !active;
   if (win) {
     if (focusWin && active) { const d = focusFor(spans); win.textContent = durMsText(d.t1 - d.t0) + " window"; win.hidden = false; }
@@ -598,10 +670,9 @@ function clearFocus() {
 function applyTimeRange(value) {
   if (value === "all" || value === "custom") { if (value === "all") focusWin = null; if (model) render(); return; }
   const secs = Number(value);
-  const src = waterfallSource();
-  const spans = buildSpans(src.events, src.invocation);
-  if (!spans.targets.length || !Number.isFinite(secs)) return;
-  focusWin = { a: spans.t1 - secs * 1000, b: spans.t1 };
+  const multi = buildSpansMulti(waterfallSource());
+  if (!multi.groups.length || !Number.isFinite(secs)) return;
+  focusWin = { a: multi.t1 - secs * 1000, b: multi.t1 };
   if (model) render();
 }
 
@@ -748,7 +819,7 @@ function scheduleLiveRender() {
   liveRenderQueued = true;
   requestAnimationFrame(() => {
     liveRenderQueued = false;
-    const built = buildModelFromEvents(liveEvents, liveInvocation);
+    const built = buildModelMulti(waterfallSource());
     model = { sections: built.sections, titled: built.titled };
     rawLines = built.rawLines;
     rawText = built.rawLines.join("\n");
@@ -875,6 +946,10 @@ function synthDemoJournal() {
 function startDemo() {
   const journal = synthDemoJournal();
   const ordered = journal.events;
+  // A SECOND, already-finished invocation shown alongside the streaming one, so the demo also
+  // showcases multi-invocation (two groups on a shared axis). Relabelled so its header differs.
+  const j2 = synthDemoJournal();
+  if (j2.invocation && j2.invocation.command) { j2.invocation.command.verb = "affected"; j2.invocation.command.args = ["ci"]; }
 
   stopDemo();
   demoActive = true;
@@ -882,6 +957,7 @@ function startDemo() {
   liveInvocation = journal.invocation; // frames the axis (start/end) and the command preamble
   livePaused = false;
   currentJournal = null; // waterfallSource then reads the live buffer, as in a real live run
+  currentJournals = [j2]; // the completed sibling invocation, rendered as its own group
   timeline = true;       // open straight into the waterfall so it visibly fills in
   currentRef = "";
   if (emptyEl) emptyEl.hidden = true;
