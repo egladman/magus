@@ -25,6 +25,8 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
+  <!-- console.css also carries the shared reference drawer, which the docs pages now use. -->
+  <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
 </head>
 <body>
@@ -51,6 +53,8 @@
         <li><a href="../dashboard/">Dashboard</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
@@ -260,6 +264,28 @@ for magusfile authors.
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22glossary%22">glossary</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a><a class="tag" href="../search/?q=tag%3A%22terminology%22">terminology</a><a class="tag" href="../search/?q=tag%3A%22concepts%22">concepts</a></div>
     <small>Last updated <time datetime="2026-07-11T13:21:06Z">July 11, 2026, 1:21 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5e5973153a496c16dd5173a06d6b4546bf8a9e70" data-tooltip="5e5973153a496c16dd5173a06d6b4546bf8a9e70" title="5e5973153a496c16dd5173a06d6b4546bf8a9e70">5e597315</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7858e3f8802b2c5e0e5289b4292a54f1c5b097bd"><code>7858e3f8</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile and volatility across the tree: the internal/ci/flake engine to internal/ci/volatility, the config key flake to volatility (env MAGUS_VOLATILITY_*, flags --volatility-*), the persisted history field FlakeCount to VolatileCount, the /api/v1/flake read to /api/v1/volatility, the report events, the --no-flake-retry flag, and docs/flaky-builds.md to docs/volatility.md; regenerate config codegen, manpages, and api.lock</li><li><a href="https://github.com/egladman/magus/commit/ebefdc8a73f6af47c94d3b4646937b227b2c1684"><code>ebefdc8a</code></a> <small><time datetime="2026-07-11T03:44:30Z">Jul 11, 2026</time></small> - unify execution-state terminology to running and queued across the tree: rename magus.pool.slots.in_use/.waiting to .running/.queued (metrics, proto Pool and Sample fields, Go InUse/Waiting plus JSON tags, TS, CLI, glossary and telemetry.md); rename Status.active_runs to runs; rename the pool-slot occupant Call/StatusCall to RunningTarget (Pool.calls to running_targets, sub_op to step, dashboard tile to Running) which frees call for RPC and host calls; rename the remote-cache op attribute to method; finish the web bridge to console rename in the doctor check, CLI strings, and comments (keeping the bridge.enabled key and [BRIDGE] tag); convert the cmd/magus/main.go log.Printf sites to structured slog; regenerate Go and TS proto</li><li><a href="https://github.com/egladman/magus/commit/b46d3594e025803d8aa21071e2e8c439b8990634"><code>b46d3594</code></a> <small><time datetime="2026-07-11T00:42:28Z">Jul 11, 2026</time></small> - give every glossary term a stable anchor by authoring terms as headings, and fill the gaps: add pool, slot, concurrency, waiting, pool mode, one-off, remote cache, snapshot, backfill, latency, percentile, health, and flake, and promote hotspot, affinity, ownership, and trend to their own entries</li><li><a href="https://github.com/egladman/magus/commit/9f9750b0a1d4b5287cfa2f2a4deb2943801cabd1"><code>9f9750b0</code></a> <small><time datetime="2026-07-10T16:46:36Z">Jul 10, 2026</time></small> - sync output-ref docs to `magus query output &lt;ref&gt;` and `-o json`; document the magus_output tool; regenerate site and catalog</li><li><a href="https://github.com/egladman/magus/commit/505bf201697d71e639f64ec60593ba56fda23391"><code>505bf201</code></a> <small><time datetime="2026-07-10T14:36:41Z">Jul 10, 2026</time></small> - adopt &#34;output reference&#34; plus trace and span glossary terms; regenerate the site and catalog</li><li><a href="https://github.com/egladman/magus/commit/ba50b51d7eeafebc3ae964262f6635c3ddd623eb"><code>ba50b51d</code></a> <small><time datetime="2026-07-10T04:19:03Z">Jul 10, 2026</time></small> - document output refs; regenerate site and catalog</li><li><a href="https://github.com/egladman/magus/commit/eeaf7cf358f7c4822aa141ca7f352ec6d203b19e"><code>eeaf7cf3</code></a> <small><time datetime="2026-07-09T04:54:16Z">Jul 9, 2026</time></small> - add a dedicated Glossary docs page; MAGUS.md links out to it instead of embedding its own glossary section</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/glossary.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/glossary.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
+  <details class="ref-section" open>
+    <summary>Look it up</summary>
+    <div class="disclosure-body">
+      <p>Open a reference right here, without leaving the page.</p>
+      <ul class="ref-links">
+        <li><a href="../glossary/">Glossary</a> - the vocabulary: target, spell, charm, op, ward, service.</li>
+        <li><a href="../conventions/">Conventions</a> - naming and layout rules for a magusfile.</li>
+        <li><a href="../config/">Configuration</a> - every magus.yaml field.</li>
+        <li><a href="../testing/">Testing</a> - how to test spells and Buzz.</li>
+      </ul>
+    </div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
     <small class="footer-group"><a href="../dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>

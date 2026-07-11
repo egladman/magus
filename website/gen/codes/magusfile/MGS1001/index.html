@@ -25,6 +25,8 @@
   <link rel="stylesheet" href="../../../assets/pico.min.css">
   <link rel="stylesheet" href="../../../theme.css">
   <link rel="stylesheet" href="../../../site.css">
+  <!-- console.css also carries the shared reference drawer, which the docs pages now use. -->
+  <link rel="stylesheet" href="../../../console.css">
   <script src="../../../theme.js"></script>
 </head>
 <body>
@@ -51,6 +53,8 @@
         <li><a href="../../../dashboard/">Dashboard</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
@@ -145,6 +149,28 @@ fires only when the scope has projects yet none declare <code>ci</code>.</li>
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS1001%22">MGS1001</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../search/?q=tag%3A%22doctor%22">doctor</a><a class="tag" href="../../../search/?q=tag%3A%22anchor%22">anchor</a><a class="tag" href="../../../search/?q=tag%3A%22affected%22">affected</a></div>
     <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de" data-tooltip="5d9e514ddc79f4e388d41f11d6894bd4afba27de" title="5d9e514ddc79f4e388d41f11d6894bd4afba27de">5d9e514d</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb476</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/9ee3dce1b3c7ab7473778d3bc86398a929467ebf"><code>9ee3dce1</code></a> <small><time datetime="2026-06-23T03:26:53Z">Jun 23, 2026</time></small> - tidy diagnostic code docs</li><li><a href="https://github.com/egladman/magus/commit/b80315e8c601f447f127e6b765e0111d6b27cc84"><code>b80315e8</code></a> <small><time datetime="2026-06-17T03:09:53Z">Jun 17, 2026</time></small> - target-level cross-project deps; needs is handles-only; pull the target graph from the buzz ast, not regex</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f"><code>b60e99be</code></a> <small><time datetime="2026-05-22T01:07:00Z">May 22, 2026</time></small> - drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b7839</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/magusfile/MGS1001.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/magusfile/MGS1001.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
+  <details class="ref-section" open>
+    <summary>Look it up</summary>
+    <div class="disclosure-body">
+      <p>Open a reference right here, without leaving the page.</p>
+      <ul class="ref-links">
+        <li><a href="../../../glossary/">Glossary</a> - the vocabulary: target, spell, charm, op, ward, service.</li>
+        <li><a href="../../../conventions/">Conventions</a> - naming and layout rules for a magusfile.</li>
+        <li><a href="../../../config/">Configuration</a> - every magus.yaml field.</li>
+        <li><a href="../../../testing/">Testing</a> - how to test spells and Buzz.</li>
+      </ul>
+    </div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
     <small class="footer-group"><a href="../../../dashboard/">Dashboard</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>

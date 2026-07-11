@@ -25,6 +25,8 @@
   <link rel="stylesheet" href="../../assets/pico.min.css">
   <link rel="stylesheet" href="../../theme.css">
   <link rel="stylesheet" href="../../site.css">
+  <!-- console.css also carries the shared reference drawer, which the docs pages now use. -->
+  <link rel="stylesheet" href="../../console.css">
   <script src="../../theme.js"></script>
 </head>
 <body>
@@ -51,6 +53,8 @@
         <li><a href="../../dashboard/">Dashboard</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
@@ -152,6 +156,28 @@ run it.</p>
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22docker%22">docker</a><a class="tag" href="../../search/?q=tag%3A%22container%22">container</a><a class="tag" href="../../search/?q=tag%3A%22image%22">image</a><a class="tag" href="../../search/?q=tag%3A%22ghcr%22">ghcr</a><a class="tag" href="../../search/?q=tag%3A%22cosign%22">cosign</a><a class="tag" href="../../search/?q=tag%3A%22install%22">install</a></div>
     <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b96</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/download/docker.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/download/docker.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
+  <details class="ref-section" open>
+    <summary>Look it up</summary>
+    <div class="disclosure-body">
+      <p>Open a reference right here, without leaving the page.</p>
+      <ul class="ref-links">
+        <li><a href="../../glossary/">Glossary</a> - the vocabulary: target, spell, charm, op, ward, service.</li>
+        <li><a href="../../conventions/">Conventions</a> - naming and layout rules for a magusfile.</li>
+        <li><a href="../../config/">Configuration</a> - every magus.yaml field.</li>
+        <li><a href="../../testing/">Testing</a> - how to test spells and Buzz.</li>
+      </ul>
+    </div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
     <small class="footer-group"><a href="../../dashboard/">Dashboard</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>

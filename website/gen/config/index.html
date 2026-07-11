@@ -25,6 +25,8 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
+  <!-- console.css also carries the shared reference drawer, which the docs pages now use. -->
+  <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
 </head>
 <body>
@@ -51,6 +53,8 @@
         <li><a href="../dashboard/">Dashboard</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
@@ -579,6 +583,28 @@
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../search/?q=tag%3A%22config%22">config</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22configuration%22">configuration</a><a class="tag" href="../search/?q=tag%3A%22environment+variables%22">environment variables</a><a class="tag" href="../search/?q=tag%3A%22flags%22">flags</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a></div>
     <small>Last updated <time datetime="2026-07-11T04:22:33Z">July 11, 2026, 4:22 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7858e3f8802b2c5e0e5289b4292a54f1c5b097bd" data-tooltip="7858e3f8802b2c5e0e5289b4292a54f1c5b097bd" title="7858e3f8802b2c5e0e5289b4292a54f1c5b097bd">7858e3f8</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401fb</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li><li><a href="https://github.com/egladman/magus/commit/17da04414fea2f059ffd41b43c09929c4a6685e0"><code>17da0441</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - Merge branch &#39;main&#39; into pwa-graph-explorer</li><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b64</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
+  <details class="ref-section" open>
+    <summary>Look it up</summary>
+    <div class="disclosure-body">
+      <p>Open a reference right here, without leaving the page.</p>
+      <ul class="ref-links">
+        <li><a href="../glossary/">Glossary</a> - the vocabulary: target, spell, charm, op, ward, service.</li>
+        <li><a href="../conventions/">Conventions</a> - naming and layout rules for a magusfile.</li>
+        <li><a href="../config/">Configuration</a> - every magus.yaml field.</li>
+        <li><a href="../testing/">Testing</a> - how to test spells and Buzz.</li>
+      </ul>
+    </div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
     <small class="footer-group"><a href="../dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>

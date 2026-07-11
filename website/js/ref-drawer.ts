@@ -9,11 +9,14 @@
   const backdrop = document.getElementById("ref-backdrop");
   if (!drawer || !backdrop) return;
 
-  // Pull the injected docs search bar (.page-tools, built by search.js) up into the drawer first,
-  // so it sits at the top - "quick search" lives in the reference panel, not the app's page body.
-  // search.js is imported before this module (see main.ts) so the element already exists.
-  const search = document.querySelector(".page-tools");
-  if (search) drawer.appendChild(search);
+  // Pull the injected docs search bar (.page-tools, built by search.js) up into the drawer, so on the
+  // CONSOLE apps "quick search" lives in the reference panel. Gated on data-relocate-search: the DOCS
+  // site keeps its prominent top search bar in place (its drawer holds only reference links), so its
+  // drawer omits the flag. search.js is imported before this module (main.ts) so the element exists.
+  if (drawer.dataset.relocateSearch === "true") {
+    const search = document.querySelector(".page-tools");
+    if (search) drawer.appendChild(search);
+  }
 
   // Then relocate the page's reference sections, in document order, and expand them by default so
   // they read as content, not folded-away toggles (still collapsible). CSS hides them inline
