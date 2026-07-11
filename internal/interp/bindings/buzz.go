@@ -41,15 +41,19 @@ func init() {
 // spell_object.go (imported spell handles), modules.go (the host module surface),
 // imports.go (project/spell import resolution), and pry.go (magus.pry).
 func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, parseMode bool) {
+	// One host-call observer for this registration, timing every magus.* native
+	// callable into magus.buzz.host.call. nil (a pure pass-through) when telemetry
+	// is disabled, so the VM's hot native-dispatch arm is untouched on one-shot runs.
+	obs := interp.NewHostCallObserver(ctx)
 	magus := vm.NewMap()
-	magus.MapSet("project", buildProject(ctx))
-	magus.MapSet("target", buildTargetNS(targets))
-	magus.MapSet("cache", buildCacheNS(ctx))
+	magus.MapSet("project", buildProject(ctx, obs))
+	magus.MapSet("target", buildTargetNS(obs, targets))
+	magus.MapSet("cache", buildCacheNS(ctx, obs))
 	// magus.needs(...): the one dependency primitive. Each argument is a TargetQuery
 	// from magus.target.literal/glob/regex; the matched targets are awaited via
 	// the Buzz VM pool (cross-project queries dispatch through CrossDispatch).
-	magus.MapSet("needs", vm.DirectValue("magus.needs", buildBuzzNeeds(targets)))
-	magus.MapSet("pry", vm.DirectValue("magus.pry", buildBuzzPry(sess, parseMode)))
+	magus.MapSet("needs", directVal(obs, "magus.needs", buildBuzzNeeds(targets)))
+	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
 	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,
 	// magus.bust_cache) is generated from the std.Magus descriptor like every other
@@ -66,10 +70,10 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// module(name) returns one with fields + per-method Buzz signatures, and raises on
 	// an unknown name. Hand-written (not declarative) because the core uses host,
 	// which std can't import.
-	magus.MapSet("modules", vm.DirectValue("magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	magus.MapSet("modules", directVal(obs, "magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return host.MapsVal(host.ModulesOutput("").Modules), nil
 	}))
-	magus.MapSet("module", vm.DirectValue("magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	magus.MapSet("module", directVal(obs, "magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		name := ""
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
@@ -84,14 +88,14 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one
 	// way to log from a magusfile - there is no separate std log module. Each level
 	// writes into the process slog logger via emitMagusLog.
-	magus.MapSet("info", vm.DirectValue("magus.info", buzzLogFn(slog.LevelInfo)))
-	magus.MapSet("debug", vm.DirectValue("magus.debug", buzzLogFn(slog.LevelDebug)))
-	magus.MapSet("warn", vm.DirectValue("magus.warn", buzzLogFn(slog.LevelWarn)))
-	magus.MapSet("error", vm.DirectValue("magus.error", buzzLogFn(slog.LevelError)))
+	magus.MapSet("info", directVal(obs, "magus.info", buzzLogFn(slog.LevelInfo)))
+	magus.MapSet("debug", directVal(obs, "magus.debug", buzzLogFn(slog.LevelDebug)))
+	magus.MapSet("warn", directVal(obs, "magus.warn", buzzLogFn(slog.LevelWarn)))
+	magus.MapSet("error", directVal(obs, "magus.error", buzzLogFn(slog.LevelError)))
 
 	// magus.hint(msg): advisory nudge (see emitMagusHint) - non-fatal, deduped,
 	// honors the hints toggle.
-	magus.MapSet("hint", vm.DirectValue("magus.hint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	magus.MapSet("hint", directVal(obs, "magus.hint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsStr() {
 			emitMagusHint(args[0].AsString())
 		}
@@ -99,7 +103,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	}))
 	// magus.fatal(msg): log at error level, then abort with exit 1 via a typed
 	// ExitError (the CLI/daemon map it to the exit status).
-	magus.MapSet("fatal", vm.DirectValue("magus.fatal", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	magus.MapSet("fatal", directVal(obs, "magus.fatal", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		emitMagusLog(ctx, slog.LevelError, argStr(args, 0), nil)
 		types.CaptureExit(ctx, 1)
 		return vm.Null, types.ExitError{Code: 1}
@@ -144,4 +148,12 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		}
 		return resolveLocalSpellImport(ctx, importPath)
 	})
+}
+
+// directVal builds a magus.* host callable timed under name via obs (from
+// interp.NewHostCallObserver). When obs is nil buzz.WrapDirect returns fn
+// unchanged, so an unobserved run pays nothing and the VM's hot native-dispatch
+// arm is untouched.
+func directVal(obs buzz.DirectObserver, name string, fn vm.Callable) vm.Value {
+	return vm.DirectValue(name, buzz.WrapDirect(name, fn, obs))
 }

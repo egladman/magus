@@ -541,6 +541,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	ctx = buzz.WithPoolRegistry(ctx, m.buzzPoolRegistry())
+	// Feed Buzz session-pool lifecycle (reuse, warm, eviction, idle) to the spine.
+	// nil when telemetry is disabled, so the pool runs unobserved on one-shot runs.
+	if po := interp.NewPoolObserver(ctx); po != nil {
+		ctx = buzz.WithPoolObserver(ctx, po)
+	}
 	// One coordinator per run so target-level cross-project deps (project imports)
 	// run their remote target at most once and detect cross-project cycles.
 	ctx = interp.WithCrossDispatch(ctx, interp.NewCrossDispatch())

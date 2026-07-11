@@ -9,6 +9,7 @@ import (
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/host"
+	"github.com/egladman/magus/internal/interp"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -68,8 +69,9 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.Descriptor, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(spellSearchPaths(dir)...))
 	defer sess.Close()
+	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)
-	if err := sess.Exec(ctx, src); err != nil {
+	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return ispell.Descriptor{}, err
 	}
 	return ispell.Resolve(ctx, sess)
@@ -130,8 +132,9 @@ func newBuzzSpellInvoker(spec ispell.Descriptor, src string) func(context.Contex
 func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequest) (any, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
+	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)
-	if err := sess.Exec(ctx, src); err != nil {
+	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return nil, fmt.Errorf("spell handler op %q: exec: %w", fn, err)
 	}
 	f, ok := sess.Exports()[fn]
@@ -157,7 +160,9 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 		return vm.Null, nil
 	})
 	args := []vm.Value{tgt, cb}
-	rv, err := sess.CallValue(ctx, f, args)
+	rv, err := interp.TimeCall(ctx, interp.ModeSpell, func() (vm.Value, error) {
+		return sess.CallValue(ctx, f, args)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("spell handler op %q: %w", fn, err)
 	}

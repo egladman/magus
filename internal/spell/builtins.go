@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
@@ -67,7 +68,12 @@ func loadBuiltins() map[string]Descriptor {
 	if err != nil {
 		panic("magus/spell: read embedded built-ins: " + err.Error())
 	}
-	ctx := context.Background()
+	// loadBuiltins runs once, lazily, off a process-init background ctx that carries
+	// no telemetry provider, so the warm recording below is nil-gated to a no-op
+	// today; withBuiltinResolve keeps the resolve "builtin" attribute correct should
+	// a provider-carrying ctx ever drive this path.
+	ctx := withBuiltinResolve(context.Background())
+	p := providerFrom(ctx)
 	out := make(map[string]Descriptor, len(entries))
 	for _, e := range entries {
 		name := strings.TrimSuffix(e.Name(), ".bo")
@@ -79,6 +85,7 @@ func loadBuiltins() map[string]Descriptor {
 		if err != nil {
 			panic("magus/spell: unmarshal built-in " + name + ": " + err.Error())
 		}
+		start := time.Now()
 		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 		if err := sess.ExecChunk(ctx, chunk); err != nil {
 			_ = sess.Close()
@@ -88,6 +95,9 @@ func loadBuiltins() map[string]Descriptor {
 		_ = sess.Close()
 		if err != nil {
 			panic("magus/spell: resolve built-in " + name + ": " + err.Error())
+		}
+		if p != nil {
+			p.RecordBuzzSpellBuiltinsWarm(ctx, time.Since(start).Seconds(), spec.Name)
 		}
 		out[name] = spec
 	}

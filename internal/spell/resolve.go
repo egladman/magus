@@ -4,12 +4,42 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
 
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
 )
+
+// builtinCtxKey marks a resolve running under the embedded built-in loader, so the
+// magus.buzz.spell.resolve "builtin" attribute distinguishes a built-in spell's
+// resolve from a workspace-local one.
+type builtinCtxKey struct{}
+
+// withBuiltinResolve marks ctx as resolving a built-in spell.
+func withBuiltinResolve(ctx context.Context) context.Context {
+	return context.WithValue(ctx, builtinCtxKey{}, true)
+}
+
+// builtinLabel returns "true"/"false" for the resolve "builtin" attribute.
+func builtinLabel(ctx context.Context) string {
+	if v, _ := ctx.Value(builtinCtxKey{}).(bool); v {
+		return "true"
+	}
+	return "false"
+}
+
+// providerFrom returns ctx's telemetry provider only when it is enabled, else nil
+// so spell instrumentation stays a true no-op off the daemon path.
+func providerFrom(ctx context.Context) observability.Provider {
+	p := observability.FromContext(ctx)
+	if p == nil || !p.Enabled() {
+		return nil
+	}
+	return p
+}
 
 // ErrNotASpell signals that a Buzz module is simply not a spell - it exports no
 // mgs_getName - rather than a malformed one. Speculative discovery (a local import
@@ -29,6 +59,16 @@ var ErrNotASpell = errors.New("magus/spell: a spell module must `export fun mgs_
 // op in mgs_listTargets is reduced to its declared command (see resolveOps); a spell
 // that does in-VM work (a cache backend) exports plain functions and declares no ops.
 func Resolve(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
+	if p := providerFrom(ctx); p != nil {
+		start := time.Now()
+		d, err := resolveSpell(ctx, sess)
+		p.RecordBuzzSpellResolve(ctx, time.Since(start).Seconds(), d.Name, builtinLabel(ctx))
+		return d, err
+	}
+	return resolveSpell(ctx, sess)
+}
+
+func resolveSpell(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
 	ex := sess.Exports()
 
 	nameFn, ok := ex["mgs_getName"]

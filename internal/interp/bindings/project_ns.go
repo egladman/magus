@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp"
 	ispell "github.com/egladman/magus/internal/spell"
@@ -23,8 +24,8 @@ import (
 //	magus.project(path, {...})  — customizes the discovered project at a workspace
 //	                              path (the rare central/monorepo form, e.g. one
 //	                              magusfile declaring options for several projects).
-func buildProject(ctx context.Context) vm.Value {
-	return vm.DirectValue("magus.project", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
+func buildProject(ctx context.Context, obs buzz.DirectObserver) vm.Value {
+	return directVal(obs, "magus.project", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 {
 			return vm.Null, nil
 		}

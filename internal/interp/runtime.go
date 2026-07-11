@@ -276,6 +276,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	// functions, which stay Env-bound. The REPL (NewBuzzReplSession) deliberately
 	// does not enable this: there a later line must resolve earlier names.
 	buzzSess.SetPromoteTopLevel(true)
+	// Feed this session's compile phases, imports, and VM faults to the spine. A
+	// no-op (session left unobserved) when telemetry is disabled on ctx.
+	AttachSessionObservers(ctx, buzzSess, ModeMagusfile)
 
 	targetMap := buzzSess.Targets()
 	if buzzHostBindingsFn != nil {
@@ -307,7 +310,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 				return nil, nil, fmt.Errorf("magusfile: %s: %w", rel, err)
 			}
 		}
-		if err := buzzSess.Exec(ctx, code); err != nil {
+		if err := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) }); err != nil {
 			_ = buzzSess.Close()
 			return nil, nil, fmt.Errorf("magusfile: exec %s: %w", rel, err)
 		}
@@ -339,7 +342,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		seen[key] = name
 		captured := val
 		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-			return buzzSess.CallValue(ctx, captured, args)
+			return TimeCall(ctx, ModeMagusfile, func() (vm.Value, error) {
+				return buzzSess.CallValue(ctx, captured, args)
+			})
 		}
 	}
 
@@ -363,6 +368,7 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session, error) {
 	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(magusSearchPaths(ctx, autoloadDir)...))
 	buzzSess.SetIncludeDirs(nil)
+	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {
 		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), false)
 	}
@@ -375,7 +381,7 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 					_ = buzzSess.Close()
 					return nil, fmt.Errorf("repl: read %s: %w", path, rerr)
 				}
-				if eerr := buzzSess.Exec(ctx, string(data)); eerr != nil {
+				if eerr := TimeExec(ctx, ModeRepl, func() error { return buzzSess.Exec(ctx, string(data)) }); eerr != nil {
 					_ = buzzSess.Close()
 					return nil, fmt.Errorf("repl: autoload %s: %w", path, eerr)
 				}

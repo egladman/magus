@@ -19,10 +19,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func buildTargetNS(targets map[string]vm.Callable) vm.Value {
+func buildTargetNS(obs buzz.DirectObserver, targets map[string]vm.Callable) vm.Value {
 	ns := vm.NewMap()
 
-	ns.MapSet("expand_globs", vm.DirectValue("magus.target.expand_globs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	ns.MapSet("expand_globs", directVal(obs, "magus.target.expand_globs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 {
 			return vm.ListValue(nil), nil
 		}
@@ -34,9 +34,9 @@ func buildTargetNS(targets map[string]vm.Callable) vm.Value {
 	// `object TargetQuery` fields — mode + pattern) consumed by magus.needs. The
 	// pattern must be a string literal so the static extractor (internal/describe)
 	// can recover the edge from source without evaluating the magusfile.
-	ns.MapSet("literal", vm.DirectValue("magus.target.literal", buildBuzzTargetHandle(types.QueryLiteral)))
-	ns.MapSet("glob", vm.DirectValue("magus.target.glob", buildBuzzTargetHandle(types.QueryGlob)))
-	ns.MapSet("regex", vm.DirectValue("magus.target.regex", buildBuzzTargetHandle(types.QueryRegex)))
+	ns.MapSet("literal", directVal(obs, "magus.target.literal", buildBuzzTargetHandle(types.QueryLiteral)))
+	ns.MapSet("glob", directVal(obs, "magus.target.glob", buildBuzzTargetHandle(types.QueryGlob)))
+	ns.MapSet("regex", directVal(obs, "magus.target.regex", buildBuzzTargetHandle(types.QueryRegex)))
 
 	return ns
 }
@@ -51,9 +51,9 @@ func buildTargetNS(targets map[string]vm.Callable) vm.Value {
 // spell); remote() just records its name on the per-Open workspace registry, and
 // magus.Open resolves it by name once the magusfile has been evaluated. The spell
 // must expose get_artifact/put_artifact handler ops (and optionally enabled()).
-func buildCacheNS(ctx context.Context) vm.Value {
+func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()
-	ns.MapSet("remote", vm.DirectValue("magus.cache.remote", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	ns.MapSet("remote", directVal(obs, "magus.cache.remote", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf("magus.cache.remote: expected an imported spell handle")
 		}

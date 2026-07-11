@@ -206,7 +206,7 @@ func TestBuildBuzzTargetHandle(t *testing.T) {
 // literal/glob/regex constructors) is proven end to end in TestTargetNamespaceEndToEnd
 // and unit-tested directly via matchBuzzTargets / buildBuzzTargetHandle above.
 func TestBuildTargetNS(t *testing.T) {
-	ns := buildTargetNS(noopTargets("go-build", "go-test", "lint"))
+	ns := buildTargetNS(nil, noopTargets("go-build", "go-test", "lint"))
 	for _, name := range []string{"expand_globs", "literal", "glob", "regex"} {
 		requireDirect(t, ns, name)
 	}
@@ -217,7 +217,7 @@ func TestBuildCacheNS(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
 		// buildCacheNS captures the ctx at construction; remote() records onto that
 		// registry regardless of the call-time ctx.
-		ns := buildCacheNS(workspace.ContextWithRegistry(context.Background(), reg))
+		ns := buildCacheNS(workspace.ContextWithRegistry(context.Background(), reg), nil)
 
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StrValue("s3-cache"))
@@ -228,21 +228,21 @@ func TestBuildCacheNS(t *testing.T) {
 	t.Run("no registry in context is a silent no-op", func(t *testing.T) {
 		// describe/parse runs have no per-Open registry; remote() must not panic and
 		// simply records nothing.
-		ns := buildCacheNS(context.Background())
+		ns := buildCacheNS(context.Background(), nil)
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StrValue("s3-cache"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, ns, "remote"), handle))
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
-		ns := buildCacheNS(context.Background())
+		ns := buildCacheNS(context.Background(), nil)
 		err := callVoidDirect(t, requireDirect(t, ns, "remote"), vm.StrValue("s3-cache"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imported spell handle")
 	})
 
 	t.Run("map without a name is rejected", func(t *testing.T) {
-		ns := buildCacheNS(context.Background())
+		ns := buildCacheNS(context.Background(), nil)
 		err := callVoidDirect(t, requireDirect(t, ns, "remote"), vm.NewMap())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no name")
