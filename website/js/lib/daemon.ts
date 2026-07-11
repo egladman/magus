@@ -45,6 +45,15 @@ export function parseHash(): HashParams {
   return params;
 }
 
+// wantsDemo reports whether the fragment requested the daemon-free demo. The
+// canonical form is a bare `#demo`; parseHash keeps a bare key with an empty value,
+// so `!== undefined` matches both `#demo` and a stray `#demo=1`. One definition so
+// every tool page (dashboard, graph explorer, log viewer) triggers its showcase on
+// the identical fragment.
+export function wantsDemo(params: HashParams): boolean {
+  return params.demo !== undefined;
+}
+
 // ---- the loopback lock -----------------------------------------------------
 
 // validateLiveHost: the host in #live= MUST be literally 127.0.0.1 or [::1].

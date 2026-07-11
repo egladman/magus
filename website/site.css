@@ -474,7 +474,7 @@ html {
   color: var(--pico-muted-color);
   background: transparent;
   border: 1px solid var(--pico-muted-border-color);
-  border-radius: 0.25rem;
+  border-radius: var(--pico-border-radius);
   box-shadow: none;
 }
 .search-wrap:has(.search-input:focus) .search-hint,
@@ -1563,6 +1563,13 @@ a code {
 
 /* Release-announcement strip (announcementBar() in the magusfile; dismissed per
    version by announcement.js). A slim primary-tinted bar above the header. */
+/* Hidden by default whenever JS is available: announcement.js adds .is-shown ONLY when
+   this release has not been dismissed. theme.js stamps .js on <html> before first paint,
+   so a returning dismisser never sees the bar flash in and back out (the old code shipped
+   it visible and hid it after reading localStorage). No-JS visitors keep the bar - the
+   .js gate simply does not match, so the base rule below renders it. */
+.js #announcement-bar { display: none; }
+.js #announcement-bar.is-shown { display: block; }
 #announcement-bar {
   /* Muted warm tint: the site's established warm accent (reserved for CTAs) mixed
      down into the page background, so the strip reads as a gentle notice and adds
@@ -1896,7 +1903,7 @@ a code {
   color: var(--pico-muted-color);
   background: var(--pico-card-sectioning-background-color);
   border-left: 3px solid var(--pico-muted-border-color);
-  border-radius: 2px;
+  border-radius: var(--pico-border-radius);
 }
 .noscript-inline {
   font-size: 0.85rem;
@@ -1922,7 +1929,7 @@ a code {
   padding: 0.6rem 1rem 0.75rem 1.1rem;
   background: var(--pico-card-sectioning-background-color);
   border-left: 4px solid var(--pico-muted-color);
-  border-radius: 3px;
+  border-radius: var(--pico-border-radius);
 }
 .admonition-title {
   margin: 0 0 0.3rem;
@@ -2028,7 +2035,7 @@ a code {
   font-size: 0.85rem;
   padding: 0.05rem 0.4rem;
   border: 1px solid var(--pico-muted-border-color);
-  border-radius: 3px;
+  border-radius: var(--pico-border-radius);
   background: var(--pico-card-sectioning-background-color);
 }
 .shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
@@ -2147,7 +2154,7 @@ a code {
   font-weight: 600;
   padding: 0.1rem 0.5rem;
   border: 1px solid var(--pico-muted-border-color);
-  border-radius: 0.25rem;
+  border-radius: var(--pico-border-radius);
   color: var(--pico-muted-color);
   line-height: 1.5;
   align-self: center;

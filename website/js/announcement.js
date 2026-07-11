@@ -1,10 +1,12 @@
-// announcement.js - dismiss the release-announcement bar per version.
+// announcement.js - reveal (and dismiss) the release-announcement bar per version.
 //
 // The bar (rendered by announcementBar() in the magusfile) carries the release
-// version in data-version. Once the reader closes it, we remember that version in
-// localStorage and keep it hidden - until a newer release changes the version, when
-// the bar reappears. No-ops when the bar is absent (no release shipped) or when
-// localStorage is unavailable (the bar just stays until navigation).
+// version in data-version. It is HIDDEN by default under .js (see site.css); this
+// script REVEALS it only when the reader has not dismissed the current version, so a
+// returning dismisser never sees it flash in and back out. On close we remember the
+// version in localStorage and re-hide - until a newer release changes the version,
+// when the bar reveals again. No-ops when the bar is absent (no release shipped); when
+// localStorage is unavailable the bar simply always reveals.
 
 (function () {
   var bar = document.getElementById("announcement-bar");
@@ -13,17 +15,16 @@
   var version = bar.getAttribute("data-version") || "";
   var KEY = "announcement-dismissed";
 
-  try {
-    if (localStorage.getItem(KEY) === version) {
-      bar.hidden = true;
-      return;
-    }
-  } catch (e) {}
+  var dismissed = false;
+  try { dismissed = localStorage.getItem(KEY) === version; } catch (e) {}
+  // Reveal only when this version is undismissed. Hidden-by-default + opt-in reveal is
+  // the inverse of the old "show then hide", so nothing paints that will be taken away.
+  if (!dismissed) bar.classList.add("is-shown");
 
   var close = bar.querySelector(".announcement-close");
   if (close) {
     close.addEventListener("click", function () {
-      bar.hidden = true;
+      bar.classList.remove("is-shown");
       try { localStorage.setItem(KEY, version); } catch (e) {}
     });
   }
