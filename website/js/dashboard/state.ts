@@ -68,9 +68,10 @@ export function clock(ms: number): string {
 // ---- connection ------------------------------------------------------------
 
 export interface ConnView {
-  // "none" is a dashboard-only state (never connected, nothing pending) layered on
+  // "none" (never connected, nothing pending) and "demo" (the daemon-free showcase
+  // fed by demo.ts, no real connection at all) are dashboard-only states layered on
   // top of the daemon module's connecting/connected/disconnected.
-  state: ConnState | "none";
+  state: ConnState | "none" | "demo";
   detail?: string;
 }
 
@@ -464,8 +465,13 @@ export interface DashboardState {
   metrics: MetricsView | null;
   samples: SampleView[];
   insight: InsightView | null;
+  // logLines is a rolling buffer of raw captured-output lines for the live-activity
+  // preview. Only the demo feed (demo.ts) synthesizes it; live mode leaves it empty,
+  // because the daemon's status SSE carries pool/health frames, not a raw-output
+  // journal - a real live tail would need a journal SSE consumer (see activity.ts).
+  logLines: string[];
 }
 
 export function initialState(): DashboardState {
-  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null };
+  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null, logLines: [] };
 }

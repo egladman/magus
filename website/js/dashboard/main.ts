@@ -8,11 +8,12 @@
 // lib/daemon.ts, shared with the graph explorer and log viewer.
 
 import {
-  parseHash, validateLiveHost, consumeLiveToken,
+  parseHash, validateLiveHost, consumeLiveToken, wantsDemo,
 } from "../lib/daemon";
 import { createStore } from "../lib/store";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
+import { startDemo, type DemoHandle } from "./demo";
 import type { Tile } from "./tiles/card";
 import { poolTile } from "./tiles/pool";
 import { utilizationTile } from "./tiles/utilization";
@@ -24,7 +25,8 @@ import { targetsTile } from "./tiles/targets";
 import { mcpTile } from "./tiles/mcp";
 import { buzzTile } from "./tiles/buzz";
 import { sandboxTile } from "./tiles/sandbox";
-import { runningTargetsTile } from "./tiles/runningTargets";
+import { attentionTile } from "./tiles/attention";
+import { activityTile } from "./tiles/activity";
 import { workspacesTile } from "./tiles/workspaces";
 import { versionsTile } from "./tiles/versions";
 import { ganttTile } from "./tiles/gantt";
@@ -61,6 +63,10 @@ function setConn(conn: ConnView): void {
 // subscribed BEFORE the tiles so the panels are revealed (width > 0) before a chart
 // tile tries to build in the same publish.
 function renderChrome(s: DashboardState): void {
+  const demoing = s.conn.state === "demo";
+
+  // Connection item: the real browser<->daemon link. In demo mode there is no connection,
+  // so the pill steps aside for the demo-data flag on the right of the status bar.
   const c = el("dash-conn");
   const map: Record<string, string> = {
     connecting: "connecting...", connected: "connected",
@@ -68,6 +74,10 @@ function renderChrome(s: DashboardState): void {
   };
   c.textContent = map[s.conn.state] || s.conn.state;
   c.dataset.state = s.conn.state;
+  c.hidden = demoing;
+
+  // Demo-data flag: the daemon-free showcase, called out on the right of the bar.
+  el("dash-demo").hidden = !demoing;
 
   if (s.status) {
     el("dash-connect").hidden = true;
@@ -88,36 +98,48 @@ function mountTiles(): void {
   const host = el("dash-panels");
   host.replaceChildren();
 
-  // Order mirrors the prior hand-authored layout, then the new metric-family tiles,
-  // then the two-up calls/workspaces, versions footer, and the Wave-3b seams.
-  const single: Tile[] = [
-    poolTile(),
-    utilizationTile(),
-    cacheStatsTile(),
-    cacheRateTile(),
-    latencyTile(),
-    remoteTile(),
-    targetsTile(),
-    mcpTile(),
-    buzzTile(),
-    sandboxTile(),
-  ];
-  for (const t of single) host.append(t.el);
+  // Board order is triage-first, so a fresh landing reads top-down as "anything wrong? ->
+  // what's running? -> instantaneous state -> live timeline -> trends -> heavy metrics
+  // (folded) -> code insight":
+  //
+  //  1. attention hero      - the headline: failing / running / queued at a glance.
+  //  2. live activity       - what's running now, with a streaming log preview + deep-link.
+  //  3. pool + cache (half)  - the two instantaneous-state summaries, side by side.
+  //  4. execution timeline   - the live gantt of runs.
+  //  5. cache rate / util    - the two live history charts.
+  //  6. per-target / remote / workspaces / versions - the denser but still legible readouts.
+  //  7. latency / buzz / sandbox / mcp - the heavy metric families, DEFAULT-COLLAPSED so
+  //     they sit out of the way until asked (see each tile's Card defaultCollapsed).
+  //  8. insight section      - the VCS/run-outcome lenses (on-demand poll).
+  const pool = poolTile();
+  const cacheStats = cacheStatsTile();
+  pool.el.classList.add("tile-half");
+  cacheStats.el.classList.add("tile-half");
 
-  // Two-up: running targets and loaded workspaces.
-  const runningTargets = runningTargetsTile();
+  const attention = attentionTile();
+  const activity = activityTile();
+  const gantt = ganttTile(); // the live execution timeline (fed by Status.runs)
+  const utilization = utilizationTile();
+  const cacheRate = cacheRateTile();
+  const targets = targetsTile();
+  const remote = remoteTile();
   const workspaces = workspacesTile();
-  const cols = document.createElement("div");
-  cols.className = "dash-cols";
-  cols.append(runningTargets.el, workspaces.el);
-  host.append(cols);
-
   const versions = versionsTile();
-  host.append(versions.el);
+  const latency = latencyTile();
+  const buzz = buzzTile();
+  const sandbox = sandboxTile();
+  const mcp = mcpTile();
 
-  // The live execution timeline (fed by Status.runs).
-  const gantt = ganttTile();
-  host.append(gantt.el);
+  // Ordered, full-width by default (pool/cacheStats opt into the half-width pair row).
+  const ordered: Tile[] = [
+    attention, activity,
+    pool, cacheStats,
+    gantt,
+    cacheRate, utilization,
+    targets, remote, workspaces, versions,
+    latency, buzz, sandbox, mcp,
+  ];
+  for (const t of ordered) host.append(t.el);
 
   // The Insight section: the five VCS/run-outcome lenses, fed by the on-demand
   // /api/v1/insight poll. Its refresh button forces an out-of-band refetch.
@@ -125,11 +147,34 @@ function mountTiles(): void {
   host.append(insight.el);
   for (const t of insight.tiles) host.append(t.el);
 
-  tiles = [...single, runningTargets, workspaces, versions, gantt, ...insight.tiles];
+  tiles = [...ordered, ...insight.tiles];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
   store.subscribe(renderChrome);
   for (const t of tiles) store.subscribe((s) => t.update(s));
+}
+
+// ---- demo mode -------------------------------------------------------------
+// The daemon-free showcase: synthesize a live-looking DashboardState (demo.ts) and
+// push it into the store, so the whole board can be shown off with nothing running.
+// No socket is opened; the connection pill reads "demo data".
+let demo: DemoHandle | null = null;
+function beginDemo(): void {
+  transport.stop();      // make sure no resume loop is racing the demo feed
+  demo?.stop();
+  setConn({ state: "demo" });
+  demo = startDemo(store);
+  // Chain the sibling apps' demos off the same `#demo` fragment so the showcase flows
+  // across all three surfaces as one unified demo. Both the graph explorer and the log
+  // viewer have their own #demo mode.
+  for (const id of ["launch-graph", "menu-graph"]) {
+    const a = opt(id) as HTMLAnchorElement | null;
+    if (a) a.href = "../graph/#demo";
+  }
+  for (const id of ["launch-logs", "menu-logs"]) {
+    const a = opt(id) as HTMLAnchorElement | null;
+    if (a) a.href = "../logs/#demo";
+  }
 }
 
 // ---- live connection lifecycle ---------------------------------------------
@@ -173,6 +218,15 @@ function showResume(host: string | null, failed: boolean): void {
   setText("dash-connect-sub", failed
     ? "The saved address didn't respond. Confirm it below, or start the daemon and open the link it prints."
     : "Resume your last daemon, or start a new one below.");
+}
+
+// wireDemoButton wires the empty-state "See a demo" button. It sets the #demo
+// fragment and reloads so the showcase re-enters through boot()'s normal path (and a
+// shared /dashboard/#demo link lands straight in the demo).
+function wireDemoButton(): void {
+  const btn = opt("dash-demo-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => { location.hash = "demo"; location.reload(); });
 }
 
 function wireResumeForm(): void {
@@ -230,6 +284,7 @@ function boot(): void {
   registerServiceWorker();
   mountTiles();
   wireResumeForm();
+  wireDemoButton();
 
   const badge = opt("offline-badge");
   const updateOffline = (): void => { if (badge) badge.hidden = navigator.onLine; };
@@ -239,6 +294,12 @@ function boot(): void {
 
   const params = parseHash();
   consumeLiveToken(params);
+
+  // A #demo fragment enters the daemon-free showcase and wins over any saved daemon.
+  if (wantsDemo(params)) {
+    beginDemo();
+    return;
+  }
 
   // A #live=host in the URL (the link magus printed) always wins.
   if (params.live !== undefined) {

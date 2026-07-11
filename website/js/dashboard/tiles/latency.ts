@@ -23,7 +23,7 @@ export function latencyTile(): Tile {
   const buildAll = () => { for (const k of LAT_KEYS) charts[k].build(); };
   const resizeAll = () => { for (const k of LAT_KEYS) charts[k].resize(); };
 
-  const card = new Card("latency", "Latency", { term: "Latency", onReveal: () => { buildAll(); resizeAll(); } });
+  const card = new Card("latency", "Latency", { term: "Latency", defaultCollapsed: true, onReveal: () => { buildAll(); resizeAll(); } });
   // The note carries the p50/p95/p99 swatch legend plus a Percentile deep-link.
   const note = h("span");
   note.append(h("span", "lg lg-p50", "p50"), h("span", "lg lg-p95", "p95"), h("span", "lg lg-p99", "p99"), document.createTextNode(" "));

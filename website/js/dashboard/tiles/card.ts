@@ -26,6 +26,17 @@ function saveCollapsed(set: Set<string>): void {
   try { localStorage.setItem(LS_COLLAPSED, JSON.stringify([...set])); } catch { /* ignore */ }
 }
 
+// A default-collapsed card (a heavy metric family) folds itself on FIRST sight only, so
+// the user's later expand sticks. `seeded` records which ids have had their default
+// applied; once seeded, the collapsed set alone (which the toggle edits) is authoritative.
+const LS_SEEDED = "magus-dashboard-collapse-seeded";
+function loadSeeded(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(LS_SEEDED) || "[]") as string[]); } catch { return new Set(); }
+}
+function saveSeeded(set: Set<string>): void {
+  try { localStorage.setItem(LS_SEEDED, JSON.stringify([...set])); } catch { /* ignore */ }
+}
+
 export interface CardOptions {
   // A magus glossary term to deep-link from the heading (linked ONCE per tile).
   term?: string;
@@ -33,6 +44,9 @@ export interface CardOptions {
   // Visible heading label if it should differ from the term.
   label?: string;
   note?: string;
+  // Fold this card on its first ever render (a dense, lower-priority metric family the
+  // board keeps out of the way until asked). One-time: a later user expand persists.
+  defaultCollapsed?: boolean;
   // Fired when a folded card is revealed (charts/grids need to refit while visible).
   onReveal?: () => void;
 }
@@ -79,6 +93,19 @@ export class Card {
 
     section.append(head, this.body);
     this.el = section;
+
+    // Seed the default-collapsed state exactly once per id, so the fold is only imposed
+    // the first time the user meets this card; after that their own toggle wins.
+    if (opts.defaultCollapsed) {
+      const seeded = loadSeeded();
+      if (!seeded.has(id)) {
+        const set = loadCollapsed();
+        set.add(id);
+        saveCollapsed(set);
+        seeded.add(id);
+        saveSeeded(seeded);
+      }
+    }
 
     if (loadCollapsed().has(id)) section.classList.add("collapsed");
     collapse.addEventListener("click", () => {

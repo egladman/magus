@@ -9,7 +9,7 @@ import { MetricGrid } from "./widgets";
 import { Card, type Tile } from "./card";
 
 export function sandboxTile(): Tile {
-  const card = new Card("sandbox", "Filesystem sandbox", { term: "Sandbox", note: "rules and access checks" });
+  const card = new Card("sandbox", "Filesystem sandbox", { term: "Sandbox", defaultCollapsed: true, note: "rules and access checks" });
   const grid = new MetricGrid([
     { caption: "Apply", items: [
       { key: "applyP50", label: "apply p50" }, { key: "applyP95", label: "apply p95" },

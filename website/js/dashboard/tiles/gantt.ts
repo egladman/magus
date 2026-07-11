@@ -157,10 +157,16 @@ export function ganttTile(): Tile {
     // left with no visible targets. Otherwise stale terminal bars clamp to
     // MIN_BAR_W stubs and pile up against the left gutter forever.
     const visibleRuns = runs
-      .map((r) => ({ ...r, targets: r.targets.filter((t) => {
-        const span = barSpan(t, now);
-        return !span || span.e >= t0;
-      }) }))
+      .map((r) => ({ ...r, targets: r.targets
+        .filter((t) => {
+          const span = barSpan(t, now);
+          return !span || span.e >= t0;
+        })
+        // Sort by start time so the timeline reads as a top-left to bottom-right cascade;
+        // queued/not-yet-started targets (no startMs) sort last, keeping their insertion
+        // order via the stable sort.
+        .sort((a, b) => (a.startMs ?? Infinity) - (b.startMs ?? Infinity)),
+      }))
       .filter((r) => r.targets.length > 0);
     const nTargets = visibleRuns.reduce((n, r) => n + r.targets.length, 0);
     empty.hidden = nTargets > 0;

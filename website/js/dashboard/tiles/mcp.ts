@@ -22,7 +22,7 @@ const columns: Column<McpToolView>[] = [
 ];
 
 export function mcpTile(): Tile {
-  const card = new Card("mcp", "MCP tools", { note: "tool I/O and latency" });
+  const card = new Card("mcp", "MCP tools", { defaultCollapsed: true, note: "tool I/O and latency" });
   const table = new SortableTable<McpToolView>(columns, { sortKey: "calls", emptyText: "No MCP tool calls recorded yet." });
   card.body.append(table.el);
 

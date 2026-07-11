@@ -9,7 +9,7 @@ import { MetricGrid } from "./widgets";
 import { Card, type Tile } from "./card";
 
 export function buzzTile(): Tile {
-  const card = new Card("buzz", "Buzz interpreter", { term: "Buzz", note: "script exec and session pool" });
+  const card = new Card("buzz", "Buzz interpreter", { term: "Buzz", defaultCollapsed: true, note: "script exec and session pool" });
   const grid = new MetricGrid([
     { caption: "Execution", items: [
       { key: "execCount", label: "exec count" }, { key: "execP50", label: "exec p50" }, { key: "execP95", label: "exec p95" },
