@@ -252,6 +252,7 @@ errors.
 - [Documentation conventions](conventions.md) - how to read the placeholders,
   shell commands, and admonitions used across these pages.
 - [Targets](targets.md) - the fuller Target-struct glossary (Path, Name, Files)
-  for magusfile authors.
+for magusfile authors.
 </content>
+
 </invoke>

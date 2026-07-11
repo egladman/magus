@@ -18,7 +18,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1688 nodes** and **2956 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1688 nodes** and **2959 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -30,7 +30,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 5 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `awesome-easley-bc1342`, `website`, `gopherbuzz` |
+| project | 5 | [`magus query kind:project`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:project) | `magus`, `website`, `gopherbuzz` |
 | target | 56 | [`magus query kind:target`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `generate` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
 | op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
@@ -74,14 +74,14 @@ graph LR
 ```
 
 - Every rounded box is a **target** you can `magus run`. **Blue** is a top-level target (nothing else depends on it — a typical entry point); **gray** ones are pulled in as dependencies.
-- Arrows show **run order**: a target's dependencies run before it, so the graph flows left → right (e.g. `preflight` runs first, `ci` last).
+- Arrows show **run order**: a target's dependencies run before it, so the graph flows left -> right (e.g. `preflight` runs first, `ci` last).
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 
-## Project: awesome-easley-bc1342
+## Project: magus
 
 <details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>awesome-easley-bc1342</code></summary>
+<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
 
 ```text
 sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz

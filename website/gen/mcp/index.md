@@ -28,19 +28,19 @@ http://127.0.0.1:7391/mcp
 
 ## Available tools
 
-| Tool                     | Purpose                                                              |
-| ------------------------ | -------------------------------------------------------------------- |
-| `magus_list_projects`    | List all projects discovered in the workspace                        |
-| `magus_list_targets`     | List registered build targets for a project                          |
-| `magus_where`            | Resolve a fuzzy project name to its absolute path                    |
-| `magus_describe_project` | Explain why a project is in the affected set                         |
-| `magus_run_target`       | Run a target (`build`, `test`, `lint`, ...) for one or more projects |
-| `magus_run_affected`     | Run a target for all VCS-changed projects                            |
-| `magus_doctor`           | Validate workspace health                                            |
-| `magus_status`           | Inspect the live concurrency pool                                    |
-| `magus_affected_plan`    | Emit a CI shard plan for the affected set                            |
-| `magus_config_get`       | Read the resolved workspace config (read-only)                       |
-| `magus_tail_log`         | Retrieve the captured build log for a project                        |
+| Tool                     | Purpose                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| `magus_list_projects`    | List all projects discovered in the workspace                         |
+| `magus_list_targets`     | List registered build targets for a project                           |
+| `magus_where`            | Resolve a fuzzy project name to its absolute path                     |
+| `magus_describe_project` | Explain why a project is in the affected set                          |
+| `magus_run_target`       | Run a target (`build`, `test`, `lint`, ...) for one or more projects  |
+| `magus_run_affected`     | Run a target for all VCS-changed projects                             |
+| `magus_doctor`           | Validate workspace health                                             |
+| `magus_status`           | Inspect the live concurrency pool                                     |
+| `magus_affected_plan`    | Emit a CI shard plan for the affected set                             |
+| `magus_config_get`       | Read the resolved workspace config (read-only)                        |
+| `magus_tail_log`         | Retrieve the captured build log for a project                         |
 | `magus_scratchpad`       | Private per-workspace scratch file for the agent's intermediate notes |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
