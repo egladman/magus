@@ -169,7 +169,7 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 	for _, p := range projects {
 		b.Heading(2, "Project: "+projectLabel(p))
 		if len(p.Cycle) > 0 {
-			b.Paragraph("> ⚠️ dependency cycle: " + strings.Join(p.Cycle, " → "))
+			b.Paragraph("> dependency cycle: " + strings.Join(p.Cycle, " -> "))
 		}
 		writeDispatchDefaults(&b, p.Path, projectLabel(p), eval)
 		if err := writeProjectGraph(&b, p); err != nil {
@@ -354,7 +354,7 @@ func writeLegend(b *md.Builder) error {
 			"target (nothing else depends on it — a typical entry point); **gray** ones are pulled in as "+
 			"dependencies.",
 		"Arrows show **run order**: a target's dependencies run before it, so the graph flows "+
-			"left → right (e.g. `preflight` runs first, `ci` last).",
+			"left -> right (e.g. `preflight` runs first, `ci` last).",
 		"A dotted arrow marks a **cross-project dependency** (the other project's target runs first).",
 		"Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.",
 	)
