@@ -236,7 +236,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	cfg, err := config.LoadWithRoot(config.ExtractFlag(args), earlyRoot)
 	stopCfgLoad()
 	if err != nil {
-		log.Printf("load config: %v", err)
+		slog.Error("load config failed", slog.String("error", err.Error()))
 		return startupResult{cleanup: cleanup}, 1
 	}
 	configgen.ApplyEnv(&cfg, os.Getenv)
@@ -292,7 +292,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
 			}
-			log.Printf("proc: forward failed (%v); running locally", fwdErr)
+			slog.Warn("proc forward failed; running locally", slog.String("error", fwdErr.Error()))
 			// Tell apart a live parent that simply won't adopt this subcommand (only
 			// run/affected adopt) from an unreachable one. When alive, keep
 			// MAGUS_DAEMON_SOCKET pointed at it: this process runs the command locally
@@ -323,7 +323,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// Parse until first non-flag arg (the subcommand).
 	if err := fs.Parse(args); err != nil && !errors.Is(err, flag.ErrHelp) {
 		stopFlags()
-		log.Print(err)
+		slog.Error("flag parse failed", slog.String("error", err.Error()))
 		return startupResult{cleanup: cleanup}, 1
 	}
 	applyDisplay()
@@ -636,16 +636,16 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	// orphans left by a previous one that crashed; sweep them before hosting anything.
 	svcJournal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
 	if jerr != nil {
-		log.Printf("daemon: service journal unavailable (crash reaping disabled): %v", jerr)
+		slog.Warn("daemon service journal unavailable; crash reaping disabled", slog.String("error", jerr.Error()))
 	} else if res := svcJournal.Sweep(ctx); res.Reaped > 0 || res.Unreapable > 0 {
-		log.Printf("daemon: reaped %d orphaned service(s) from a previous run; %d left running (no stop command)",
-			res.Reaped, res.Unreapable)
+		slog.Info("daemon reaped orphaned services from a previous run",
+			slog.Int("reaped", res.Reaped), slog.Int("left_running", res.Unreapable))
 	}
 	svcReg := service.New(service.ExecRunner{}, defaultServiceIdle, service.WithJournal(svcJournal))
 
 	if len(declared) > 0 {
 		if err := reg.preloadAndApplySandbox(ctx, declared); err != nil {
-			log.Printf("daemon: workspace union setup failed: %v", err)
+			slog.Error("daemon workspace union setup failed", slog.String("error", err.Error()))
 			return
 		}
 		reg.warmInBackground(ctx, declared)
@@ -676,13 +676,13 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		Address:         cfg.Daemon.Address,
 	})
 	if err != nil {
-		log.Printf("daemon: server init failed: %v", err)
+		slog.Error("daemon server init failed", slog.String("error", err.Error()))
 		return
 	}
 	_ = os.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
 	if err := srv.Start(); err != nil {
 		_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
-		log.Printf("daemon: server start failed: %v", err)
+		slog.Error("daemon server start failed", slog.String("error", err.Error()))
 		return
 	}
 	go func() {

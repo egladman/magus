@@ -96,22 +96,22 @@ body.dash-native { margin: 0; }
 .stat[data-accent="miss"] .stat-v { color: var(--c-miss); }
 .stat[data-accent="err"] .stat-v { color: var(--c-err); }
 
-/* Pool occupancy grid: airplane-seating cubes. Busy = filled accent, free = outlined, waiting
+/* Pool occupancy grid: airplane-seating cubes. Running = filled accent, free = outlined, queued
    = dashed. Wraps to fill the tile at any capacity. */
 .slot-grid { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.1rem 0 0.55rem; }
 .slot {
   width: 15px; height: 15px; border-radius: 3px;
   border: 1px solid var(--pico-muted-border-color); background: transparent;
 }
-.slot.busy { background: var(--c-info); border-color: var(--c-info); }
-.slot.waiting { border-style: dashed; border-color: var(--c-miss); }
+.slot.running { background: var(--c-info); border-color: var(--c-info); }
+.slot.queued { border-style: dashed; border-color: var(--c-miss); }
 .pool-legend { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); }
 .pool-legend .lg::before {
   content: ""; display: inline-block; width: 0.7em; height: 0.7em; border-radius: 2px;
   margin-right: 0.3em; vertical-align: middle; border: 1px solid var(--pico-muted-border-color);
 }
-.pool-legend .lg-busy::before { background: var(--c-info); border-color: var(--c-info); }
-.pool-legend .lg-wait::before { border-style: dashed; border-color: var(--c-miss); }
+.pool-legend .lg-running::before { background: var(--c-info); border-color: var(--c-info); }
+.pool-legend .lg-queued::before { border-style: dashed; border-color: var(--c-miss); background: transparent; }
 
 /* Tiles. */
 .tile {

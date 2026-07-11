@@ -4,7 +4,7 @@
 // loopback host and both bearing the shared token:
 //
 //   1. /api/v1/events SSE (event: status) -> magus.status.v1.Status: the instantaneous
-//      view (health, pool, in-flight calls, workspaces, live cache tallies). Its
+//      view (health, pool, running targets, workspaces, live cache tallies). Its
 //      open/close is THE connection whose state drives the connected/disconnected pill.
 //   2. magus.metrics.v1.MetricsService.StreamMetrics over ConnectRPC: the developer view
 //      (latency percentiles, remote cache, per-target/MCP/Buzz/Sandbox families). First
@@ -116,9 +116,9 @@ export class DashboardTransport {
     // not carry pool occupancy) so the grid + rate chart stay live.
     this.appendSample({
       at: Date.now(),
-      inUse: view.pool.inUse,
+      running: view.pool.running,
       capacity: view.pool.capacity,
-      waiting: view.pool.waiting,
+      queued: view.pool.queued,
       cacheHits: view.cache.hits,
       cacheMisses: view.cache.misses,
     });

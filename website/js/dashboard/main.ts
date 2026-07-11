@@ -24,7 +24,7 @@ import { targetsTile } from "./tiles/targets";
 import { mcpTile } from "./tiles/mcp";
 import { buzzTile } from "./tiles/buzz";
 import { sandboxTile } from "./tiles/sandbox";
-import { callsTile } from "./tiles/calls";
+import { runningTargetsTile } from "./tiles/runningTargets";
 import { workspacesTile } from "./tiles/workspaces";
 import { versionsTile } from "./tiles/versions";
 import { ganttPlaceholderTile, flakePlaceholderTile } from "./tiles/placeholders";
@@ -103,12 +103,12 @@ function mountTiles(): void {
   ];
   for (const t of single) host.append(t.el);
 
-  // Two-up: in-flight calls and loaded workspaces.
-  const calls = callsTile();
+  // Two-up: running targets and loaded workspaces.
+  const runningTargets = runningTargetsTile();
   const workspaces = workspacesTile();
   const cols = document.createElement("div");
   cols.className = "dash-cols";
-  cols.append(calls.el, workspaces.el);
+  cols.append(runningTargets.el, workspaces.el);
   host.append(cols);
 
   const versions = versionsTile();
@@ -120,7 +120,7 @@ function mountTiles(): void {
   const flake = flakePlaceholderTile();
   host.append(gantt.el, flake.el);
 
-  tiles = [...single, calls, workspaces, versions, gantt, flake];
+  tiles = [...single, runningTargets, workspaces, versions, gantt, flake];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
   store.subscribe(renderChrome);

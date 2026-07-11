@@ -63,9 +63,9 @@ type Provider interface {
 	RecordRemoteOp(ctx context.Context, op RemoteOp)                                          // magus.cache.remote.* metrics
 	StartSpan(ctx context.Context, name string, attrs ...Attr) (context.Context, func(error)) // end fn marks failure on non-nil error
 	RecordTargetRun(ctx context.Context, secs float64, attrs ...Attr)                         // magus.target.runs + magus.target.duration
-	RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64)                         // magus.pool.wait.duration + slots.in_use+n
-	RecordPoolRelease(ctx context.Context, n int64)                                           // slots.in_use-n
-	RecordPoolWaiting(ctx context.Context, delta int64)                                       // magus.pool.slots.waiting += delta
+	RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64)                         // magus.pool.wait.duration + slots.running+n
+	RecordPoolRelease(ctx context.Context, n int64)                                           // slots.running-n
+	RecordPoolWaiting(ctx context.Context, delta int64)                                       // magus.pool.slots.queued += delta
 
 	// MCP tool call family: magus.mcp.tool.*.
 	RecordMCPCall(ctx context.Context, c MCPCall)
@@ -97,12 +97,12 @@ type Provider interface {
 }
 
 // RemoteOp describes one completed remote cache backend operation for the
-// magus.cache.remote.* instruments. Op is "get" or "put"; Outcome is "hit" or
+// magus.cache.remote.* instruments. Method is "get" or "put"; Outcome is "hit" or
 // "miss" for a get, "stored" for a successful put, or "error" for any failure.
 // Bytes is the entry payload transferred — 0 for a miss or an error before any
 // data moved. A get hit and a put both carry a non-zero Bytes.
 type RemoteOp struct {
-	Op       string
+	Method   string
 	Outcome  string
 	Duration float64 // wall-clock seconds
 	Bytes    int64

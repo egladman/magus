@@ -1,8 +1,8 @@
 syntax = "proto3";
 
 // Package magus.status.v1 is the versioned wire contract for magus's status/dashboard
-// view, scoped to LIVE state: overall health, the concurrency pool (capacity/in-use/
-// waiting slots), what is running right now - the in-flight calls, their workspace, and
+// view, scoped to LIVE state: overall health, the concurrency pool (capacity/running/
+// queued slots), what is running right now - the running targets, their workspace, and
 // how long they have run - and live cache ACTIVITY (hit/miss/error tallies + real on-disk
 // size). Static CONFIG (telemetry, the cache cap/immutability, build flags) is deliberately
 // NOT here; that is `magus status`/config, not "what is happening." Backs a native-feeling
@@ -24,7 +24,7 @@ message Status {
   Health health = 1;
   Pool pool = 2;        // live concurrency; absent when no daemon/pool is running
   string magus_version = 3;
-  repeated Run active_runs = 4; // runs the daemon is executing right now (adopted dispatches)
+  repeated Run runs = 4; // runs the daemon is executing right now (adopted dispatches)
 }
 
 // Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
@@ -66,21 +66,21 @@ message Pool {
   string daemon_version = 2;
   string mode = 3;             // "daemon" | "proc" | ""
   int32 capacity = 4;          // total concurrency slots (0 = unlimited)
-  int32 in_use = 5;            // slots currently acquired
-  int32 waiting = 6;           // tasks queued for a slot
-  repeated Call calls = 7;     // what is running right now
+  int32 running = 5;           // slots currently running
+  int32 queued = 6;            // tasks queued for a slot
+  repeated RunningTarget running_targets = 7; // what is running right now
   repeated Workspace workspaces = 8;
   repeated string affected = 9;
   Cache cache = 10;            // aggregate cache activity across the warm workspaces
 }
 
-// Call is one in-flight unit of work in the pool.
-message Call {
+// RunningTarget is one running unit of work in the pool.
+message RunningTarget {
   repeated string args = 1;                  // the argument vector (carries the target/project)
   string workspace = 2;
-  google.protobuf.Timestamp start_time = 3;  // when the call started
-  string sub_op = 4;                         // the sub-operation currently executing
-  string invocation = 5;                     // the invocation id (inv...) this call belongs to; deep-links to its live log
+  google.protobuf.Timestamp start_time = 3;  // when the running target started
+  string step = 4;                           // the cache step currently executing
+  string invocation = 5;                     // the invocation id (inv...) this running target belongs to; deep-links to its live log
 }
 
 // Workspace is one workspace the daemon has loaded.

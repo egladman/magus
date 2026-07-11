@@ -125,7 +125,7 @@ func TestEventsHandler_GraphEvent(t *testing.T) {
 }
 
 func TestEventsHandler_StatusEvent(t *testing.T) {
-	src := fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, InUse: 1}}}
+	src := fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}}
 	h := NewEventsHandler(src, "1.2.3", nil, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: status")
 
@@ -143,8 +143,8 @@ func TestEventsHandler_StatusEvent(t *testing.T) {
 	if st.Health != statusv1.Health_HEALTH_HEALTHY {
 		t.Errorf("want HEALTH_HEALTHY, got %v", st.Health)
 	}
-	if st.Pool == nil || st.Pool.Capacity != 4 || st.Pool.InUse != 1 {
-		t.Errorf("want pool capacity=4 in_use=1, got %+v", st.Pool)
+	if st.Pool == nil || st.Pool.Capacity != 4 || st.Pool.Running != 1 {
+		t.Errorf("want pool capacity=4 running=1, got %+v", st.Pool)
 	}
 }
 

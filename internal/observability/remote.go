@@ -40,17 +40,17 @@ func (b *instrumentedBackend) GetArtifact(ctx context.Context, projectPath, hash
 	start := time.Now()
 	rc, err := b.RemoteBackend.GetArtifact(ctx, projectPath, hash)
 	if err != nil {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Op: "get", Outcome: "error", Duration: time.Since(start).Seconds()})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "error", Duration: time.Since(start).Seconds()})
 		end(err)
 		return nil, err
 	}
 	if rc == nil {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Op: "get", Outcome: "miss", Duration: time.Since(start).Seconds()})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "miss", Duration: time.Since(start).Seconds()})
 		end(nil)
 		return nil, nil //nolint:nilnil // documented miss: nil reader = not found (see GetArtifact)
 	}
 	return &countingReadCloser{ReadCloser: rc, onClose: func(n int64) {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Op: "get", Outcome: "hit", Duration: time.Since(start).Seconds(), Bytes: n})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "hit", Duration: time.Since(start).Seconds(), Bytes: n})
 		end(nil)
 	}}, nil
 }
@@ -65,7 +65,7 @@ func (b *instrumentedBackend) PutArtifact(ctx context.Context, projectPath, hash
 	if err != nil {
 		outcome = "error"
 	}
-	b.p.RecordRemoteOp(ctx, RemoteOp{Op: "put", Outcome: outcome, Duration: time.Since(start).Seconds(), Bytes: cr.n})
+	b.p.RecordRemoteOp(ctx, RemoteOp{Method: "put", Outcome: outcome, Duration: time.Since(start).Seconds(), Bytes: cr.n})
 	end(err)
 	return err
 }

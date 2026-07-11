@@ -33,35 +33,35 @@ func TestPrintStatusCompact(t *testing.T) {
 
 	assertCompact("daemon idle",
 		statusReport{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 8, InUse: 0,
+			Mode: "daemon", Capacity: 8, Running: 0,
 		}},
 		"daemon · 0/8 idle\n")
 
 	assertCompact("proc-server label",
 		statusReport{Pool: &types.StatusOutput{
-			Mode: "proc", Capacity: 8, InUse: 1,
-			Calls: []types.StatusCall{
+			Mode: "proc", Capacity: 8, Running: 1,
+			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "web"}, Workspace: "/w", StartedAt: at(400 * time.Millisecond)},
 			},
 		}},
-		"pool · 1/8 busy · web:test(0.4s)\n")
+		"pool · 1/8 running · web:test(0.4s)\n")
 
-	assertCompact("daemon busy with calls, sorted oldest first",
+	assertCompact("daemon running with targets, sorted oldest first",
 		statusReport{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 8, InUse: 3,
-			Calls: []types.StatusCall{
+			Mode: "daemon", Capacity: 8, Running: 3,
+			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(500 * time.Millisecond)},
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(2100 * time.Millisecond)},
 				{Args: []string{"lint", "ledger"}, Workspace: "/w", StartedAt: at(300 * time.Millisecond)},
 			},
 			Workspaces: []types.StatusWorkspace{{Root: "/w", LastAccess: now}},
 		}},
-		"daemon · 3/8 busy · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 ws\n")
+		"daemon · 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 ws\n")
 
-	assertCompact("daemon waiting and overflow inflight",
+	assertCompact("daemon queued and overflow running",
 		statusReport{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 8, InUse: 8, Waiting: 2,
-			Calls: []types.StatusCall{
+			Mode: "daemon", Capacity: 8, Running: 8, Queued: 2,
+			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(15 * time.Second)},
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(4 * time.Second)},
 				{Args: []string{"lint", "ledger"}, Workspace: "/w", StartedAt: at(2 * time.Second)},
@@ -73,32 +73,32 @@ func TestPrintStatusCompact(t *testing.T) {
 				{Root: "/w2", LastAccess: now},
 			},
 		}},
-		"daemon · 8/8 busy · +2 waiting · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 ws\n")
+		"daemon · 8/8 running · +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 ws\n")
 
-	assertCompact("multi-workspace inflight prefixes ws",
+	assertCompact("multi-workspace running prefixes ws",
 		statusReport{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 4, InUse: 2,
-			Calls: []types.StatusCall{
+			Mode: "daemon", Capacity: 4, Running: 2,
+			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/srv/alpha", StartedAt: at(1 * time.Second)},
 				{Args: []string{"test", "ui"}, Workspace: "/srv/beta", StartedAt: at(500 * time.Millisecond)},
 			},
 		}},
-		"daemon · 2/4 busy · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
+		"daemon · 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
 
 	assertCompact("unparsable args fall back to ?:?",
 		statusReport{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 4, InUse: 1,
-			Calls: []types.StatusCall{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
+			Mode: "daemon", Capacity: 4, Running: 1,
+			RunningTargets: []types.StatusRunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
 		}},
-		"daemon · 1/4 busy · ?:?(0.1s)\n")
+		"daemon · 1/4 running · ?:?(0.1s)\n")
 }
 
 func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	long := strings.Repeat("x", 80)
 	r := statusReport{Pool: &types.StatusOutput{
-		Mode: "daemon", Capacity: 4, InUse: 1,
-		Calls: []types.StatusCall{{
+		Mode: "daemon", Capacity: 4, Running: 1,
+		RunningTargets: []types.StatusRunningTarget{{
 			Args:      []string{"build", long},
 			Workspace: "/w",
 			StartedAt: now.Add(-time.Second),
@@ -109,8 +109,8 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	out := buf.String()
 	assert.Contains(t, out, "…", "expected truncation ellipsis")
 	for _, part := range strings.Split(strings.TrimRight(out, "\n"), " · ") {
-		assert.LessOrEqual(t, utf8.RuneCountInString(part), compactInflightBudget,
-			"part %q exceeds compactInflightBudget=%d", part, compactInflightBudget)
+		assert.LessOrEqual(t, utf8.RuneCountInString(part), compactRunningBudget,
+			"part %q exceeds compactRunningBudget=%d", part, compactRunningBudget)
 	}
 }
 

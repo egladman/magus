@@ -43,29 +43,29 @@ func sumInt64(t *testing.T, rm metricdata.ResourceMetrics, name string) (int64, 
 	return 0, false
 }
 
-// TestPoolInstrumentsCollect exercises the renamed magus.pool.slots.in_use gauge and the new
-// magus.pool.slots.waiting gauge end to end through a real local provider.
+// TestPoolInstrumentsCollect exercises the magus.pool.slots.running gauge and the
+// magus.pool.slots.queued gauge end to end through a real local provider.
 func TestPoolInstrumentsCollect(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	// Two slots acquired, one released => in_use net 1.
+	// Two slots acquired, one released => running net 1.
 	p.RecordPoolAcquire(ctx, 0.01, 2)
 	p.RecordPoolRelease(ctx, 1)
-	// Three callers begin waiting, one acquires => waiting net 2.
+	// Three callers begin waiting, one acquires => queued net 2.
 	p.RecordPoolWaiting(ctx, 3)
 	p.RecordPoolWaiting(ctx, -1)
 
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
 
-	inUse, ok := sumInt64(t, rm, "magus.pool.slots.in_use")
-	require.True(t, ok, "magus.pool.slots.in_use missing")
-	assert.Equal(t, int64(1), inUse)
+	running, ok := sumInt64(t, rm, "magus.pool.slots.running")
+	require.True(t, ok, "magus.pool.slots.running missing")
+	assert.Equal(t, int64(1), running)
 
-	waiting, ok := sumInt64(t, rm, "magus.pool.slots.waiting")
-	require.True(t, ok, "magus.pool.slots.waiting missing")
-	assert.Equal(t, int64(2), waiting)
+	queued, ok := sumInt64(t, rm, "magus.pool.slots.queued")
+	require.True(t, ok, "magus.pool.slots.queued missing")
+	assert.Equal(t, int64(2), queued)
 
 	// The old spelling must be gone.
 	_, present := sumInt64(t, rm, "magus.pool.slots.inflight")
@@ -78,7 +78,7 @@ func TestRemoteStoredOutcome(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	p.RecordRemoteOp(ctx, RemoteOp{Op: "put", Outcome: "stored", Duration: 0.02, Bytes: 512})
+	p.RecordRemoteOp(ctx, RemoteOp{Method: "put", Outcome: "stored", Duration: 0.02, Bytes: 512})
 
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)

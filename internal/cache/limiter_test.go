@@ -21,16 +21,16 @@ import (
 func TestLimiterSnapshot(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(3)
-	assert.Equal(t, LimiterStats{Capacity: 3, InUse: 0, Waiting: 0}, l.Snapshot(), "initial snapshot")
+	assert.Equal(t, LimiterStats{Capacity: 3, Running: 0, Queued: 0}, l.Snapshot(), "initial snapshot")
 
 	_ = l.Acquire(context.Background())
 	_ = l.Acquire(context.Background())
 	snap := l.Snapshot()
 	assert.Equal(t, 3, snap.Capacity)
-	assert.Equal(t, 2, snap.InUse, "after 2 acquires")
+	assert.Equal(t, 2, snap.Running, "after 2 acquires")
 
 	l.Release()
-	assert.Equal(t, 1, l.Snapshot().InUse, "after release")
+	assert.Equal(t, 1, l.Snapshot().Running, "after release")
 }
 
 func TestLimiterUnlimited(t *testing.T) {
@@ -41,7 +41,7 @@ func TestLimiterUnlimited(t *testing.T) {
 	}
 	snap := l.Snapshot()
 	assert.Equal(t, 0, snap.Capacity, "unlimited capacity")
-	assert.Equal(t, 0, snap.InUse, "unlimited in-use")
+	assert.Equal(t, 0, snap.Running, "unlimited running")
 }
 
 func TestLimiterCancelledAcquire(t *testing.T) {
@@ -73,8 +73,8 @@ func TestLimiterYield(t *testing.T) {
 			_ = l.Acquire(context.Background())
 			snap := l.Snapshot()
 			mu.Lock()
-			if snap.InUse > maxSeen {
-				maxSeen = snap.InUse
+			if snap.Running > maxSeen {
+				maxSeen = snap.Running
 			}
 			mu.Unlock()
 			l.Release()
@@ -83,9 +83,9 @@ func TestLimiterYield(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
-	// After Yield returns we have re-acquired; total in-use should be 2 again.
-	assert.Equal(t, 2, l.Snapshot().InUse, "post-yield inUse")
-	// The goroutine inside fn should have seen inUse==2 (its own + the 1 held
+	// After Yield returns we have re-acquired; total running should be 2 again.
+	assert.Equal(t, 2, l.Snapshot().Running, "post-yield running")
+	// The goroutine inside fn should have seen running==2 (its own + the 1 held
 	// by the other Acquire still outstanding).
 	assert.Equal(t, 2, maxSeen, "maxSeen inside fn")
 }
@@ -95,17 +95,17 @@ func TestLimiterAcquireN(t *testing.T) {
 	l := NewLimiter(4)
 
 	require.NoError(t, l.AcquireN(context.Background(), 3), "AcquireN(3)")
-	assert.Equal(t, 3, l.Snapshot().InUse, "after AcquireN(3)")
+	assert.Equal(t, 3, l.Snapshot().Running, "after AcquireN(3)")
 
 	l.ReleaseN(3)
-	assert.Equal(t, 0, l.Snapshot().InUse, "after ReleaseN(3)")
+	assert.Equal(t, 0, l.Snapshot().Running, "after ReleaseN(3)")
 }
 
 func TestLimiterAcquireNTooMany(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(4)
 	assert.Error(t, l.AcquireN(context.Background(), 5), "expected error when requesting more slots than capacity")
-	assert.Equal(t, 0, l.Snapshot().InUse, "after rejected AcquireN")
+	assert.Equal(t, 0, l.Snapshot().Running, "after rejected AcquireN")
 }
 
 func TestLimiterAcquireNCancel(t *testing.T) {
@@ -116,7 +116,7 @@ func TestLimiterAcquireNCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	assert.Error(t, l.AcquireN(ctx, 1), "expected error on cancelled context")
-	assert.Equal(t, 2, l.Snapshot().InUse, "cancelled AcquireN must not change inUse")
+	assert.Equal(t, 2, l.Snapshot().Running, "cancelled AcquireN must not change running")
 }
 
 // TestLimiterFairQueueing verifies FIFO fairness: a large request at the head
@@ -174,7 +174,7 @@ func TestLimiterFairQueueing(t *testing.T) {
 		_ = i
 	}
 	// Verify both completed and limiter is clean.
-	assert.Equal(t, 0, l.Snapshot().InUse, "post-fairness-test inUse")
+	assert.Equal(t, 0, l.Snapshot().Running, "post-fairness-test running")
 }
 
 // TestLimiterHooks verifies that SetHooks fires onAcquire on every
@@ -221,11 +221,11 @@ func TestLimiterHooks(t *testing.T) {
 		defer wg.Done()
 		_ = l2.Acquire(context.Background())
 	}()
-	// Wait until the goroutine is provably blocked in Acquire (Waiting==1) before
+	// Wait until the goroutine is provably blocked in Acquire (Queued==1) before
 	// releasing, so the contended path is real and the measured wait is non-zero.
 	// Without this, Release can win the race and the goroutine acquires an
 	// already-free slot in ~0ns (flaky on fast machines).
-	for l2.Snapshot().Waiting == 0 {
+	for l2.Snapshot().Queued == 0 {
 		runtime.Gosched()
 	}
 	l2.Release() // unblock the now-blocked goroutine
@@ -233,9 +233,9 @@ func TestLimiterHooks(t *testing.T) {
 	assert.NotZero(t, waitedNs, "contended acquire reported wait == 0ns")
 }
 
-// TestLimiterWaitingHook verifies the onWait hook mirrors the internal waiting counter
+// TestLimiterWaitingHook verifies the onWait hook mirrors the internal queued counter
 // exactly: it fires +n the instant a caller begins waiting and -n once its Acquire returns,
-// so the net inflight of onWait tracks Snapshot().Waiting at every step.
+// so the net inflight of onWait tracks Snapshot().Queued at every step.
 func TestLimiterWaitingHook(t *testing.T) {
 	t.Parallel()
 	l := NewLimiter(1)
@@ -253,11 +253,11 @@ func TestLimiterWaitingHook(t *testing.T) {
 		defer wg.Done()
 		_ = l.Acquire(context.Background())
 	}()
-	for l.Snapshot().Waiting == 0 {
+	for l.Snapshot().Queued == 0 {
 		runtime.Gosched()
 	}
 	// While the goroutine is provably blocked, onWait's net must equal the live waiting count.
-	assert.Equal(t, int64(l.Snapshot().Waiting), net.Load(), "onWait net must mirror Waiting")
+	assert.Equal(t, int64(l.Snapshot().Queued), net.Load(), "onWait net must mirror Queued")
 
 	l.Release() // unblock the waiter
 	wg.Wait()
@@ -284,7 +284,7 @@ func TestLimiterYieldRestoresSlotOnCancel(t *testing.T) {
 
 	assert.ErrorIs(t, err, fnErr, "fn error not returned")
 	// Slot was restored: the caller still holds exactly its one slot.
-	assert.Equal(t, 1, l.Snapshot().InUse, "post-yield inUse, want 1 (slot restored)")
+	assert.Equal(t, 1, l.Snapshot().Running, "post-yield running, want 1 (slot restored)")
 }
 
 // TestLimiterYieldNoOverReleaseOnCancel mimics a RunAll worker: acquire a slot,
@@ -300,7 +300,7 @@ func TestLimiterYieldNoOverReleaseOnCancel(t *testing.T) {
 		_ = l.Yield(ctx, func() error { cancel(); return nil })
 		l.Release() // must not panic; balanced because Yield restored the slot
 	}
-	assert.Equal(t, 0, l.Snapshot().InUse, "inUse after balanced acquire/yield/release cycles")
+	assert.Equal(t, 0, l.Snapshot().Running, "running after balanced acquire/yield/release cycles")
 	// Full capacity must still be acquirable — no permits leaked or lost.
 	assert.NoError(t, l.AcquireN(context.Background(), 2), "capacity shrank after yield cycles")
 }

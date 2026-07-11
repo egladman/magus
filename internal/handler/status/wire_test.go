@@ -19,8 +19,8 @@ func TestStatusProtoMapsPool(t *testing.T) {
 	started := time.UnixMilli(1700)
 	r := types.StatusReport{
 		Pool: &types.StatusOutput{
-			ParentPID: 42, Mode: "daemon", Capacity: 8, InUse: 3, Waiting: 1,
-			Calls: []types.StatusCall{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, SubOp: "go-build"}},
+			ParentPID: 42, Mode: "daemon", Capacity: 8, Running: 3, Queued: 1,
+			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
 		},
 	}
 	s := statusReportToProto(r, "v1.2.3")
@@ -31,24 +31,24 @@ func TestStatusProtoMapsPool(t *testing.T) {
 	p := s.GetPool()
 	require.NotNil(t, p)
 	assert.Equal(t, int32(8), p.GetCapacity())
-	assert.Equal(t, int32(3), p.GetInUse())
-	assert.Equal(t, int32(1), p.GetWaiting())
-	require.Len(t, p.GetCalls(), 1)
-	assert.Equal(t, []string{"run", "build", "api"}, p.GetCalls()[0].GetArgs())
-	assert.Equal(t, "go-build", p.GetCalls()[0].GetSubOp())
-	assert.Equal(t, int64(1700), p.GetCalls()[0].GetStartTime().AsTime().UnixMilli())
+	assert.Equal(t, int32(3), p.GetRunning())
+	assert.Equal(t, int32(1), p.GetQueued())
+	require.Len(t, p.GetRunningTargets(), 1)
+	assert.Equal(t, []string{"run", "build", "api"}, p.GetRunningTargets()[0].GetArgs())
+	assert.Equal(t, "go-build", p.GetRunningTargets()[0].GetStep())
+	assert.Equal(t, int64(1700), p.GetRunningTargets()[0].GetStartTime().AsTime().UnixMilli())
 }
 
 // TestStatusProtoMapsCacheAndInv maps per-workspace cache activity onto each Workspace,
-// the invocation id onto each Call, and the pool-wide aggregate (summed counters + the
+// the invocation id onto each RunningTarget, and the pool-wide aggregate (summed counters + the
 // configured cap) onto Pool.cache - the data the dashboard's cache tiles and per-target
 // live-log deep-links read.
 func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 	r := types.StatusReport{
 		Cache: types.CacheStatus{SizeMB: 2048},
 		Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 4, InUse: 2,
-			Calls: []types.StatusCall{{Args: []string{"run", "build"}, Inv: "inv7c3a9f2"}},
+			Mode: "daemon", Capacity: 4, Running: 2,
+			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build"}, Inv: "inv7c3a9f2"}},
 			Workspaces: []types.StatusWorkspace{
 				{Root: "/repo", CacheHit: 1284, CacheMiss: 217, CacheError: 3, CacheBytes: 734003200},
 				{Root: "/svc", CacheHit: 512, CacheMiss: 98, CacheBytes: 120586240},
@@ -58,9 +58,9 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 	p := statusReportToProto(r, "v1").GetPool()
 	require.NotNil(t, p)
 
-	// Per-call invocation id.
-	require.Len(t, p.GetCalls(), 1)
-	assert.Equal(t, "inv7c3a9f2", p.GetCalls()[0].GetInvocation())
+	// Per-running-target invocation id.
+	require.Len(t, p.GetRunningTargets(), 1)
+	assert.Equal(t, "inv7c3a9f2", p.GetRunningTargets()[0].GetInvocation())
 
 	// Per-workspace cache.
 	require.Len(t, p.GetWorkspaces(), 2)
@@ -97,14 +97,14 @@ func TestEncodeStatusEventRoundTrip(t *testing.T) {
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, got.GetHealth())
 }
 
-// TestStatusProtoMapsActiveRuns maps the daemon's live runs and their per-target execution
-// state onto the wire message's active_runs - the same status frame that carries the pool.
-func TestStatusProtoMapsActiveRuns(t *testing.T) {
+// TestStatusProtoMapsRuns maps the daemon's live runs and their per-target execution
+// state onto the wire message's runs - the same status frame that carries the pool.
+func TestStatusProtoMapsRuns(t *testing.T) {
 	started := time.UnixMilli(1_000)
 	execAt := time.UnixMilli(2_000)
 	doneAt := time.UnixMilli(5_000)
 	r := types.StatusReport{
-		ActiveRuns: []types.StatusRun{{
+		Runs: []types.StatusRun{{
 			Inv:       "inv1a2b3c",
 			Trigger:   "run",
 			StartedAt: started,
@@ -117,8 +117,8 @@ func TestStatusProtoMapsActiveRuns(t *testing.T) {
 	}
 	s := statusReportToProto(r, "v1")
 
-	require.Len(t, s.GetActiveRuns(), 1)
-	run := s.GetActiveRuns()[0]
+	require.Len(t, s.GetRuns(), 1)
+	run := s.GetRuns()[0]
 	assert.Equal(t, "inv1a2b3c", run.GetInv())
 	assert.Equal(t, "run", run.GetTrigger())
 	assert.Equal(t, int64(1_000), run.GetStartedAt().AsTime().UnixMilli())

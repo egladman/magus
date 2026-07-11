@@ -29,22 +29,22 @@ export function utilizationTile(): Tile {
   card.body.append(grid, legend);
 
   let samples: SampleView[] = [];
-  let peakInUse = 1;
+  let peakRunning = 1;
 
   // utilColor maps a sample to a fill + opacity ramp (a hand-rolled linear scale, no
-  // d3-scale dep). A queued sample (waiting > 0) switches to the miss color.
+  // d3-scale dep). A queued sample (queued > 0) switches to the miss color.
   function utilColor(s: SampleView): { fill: string; opacity: number } {
     let u: number;
-    if (s.capacity > 0) u = Math.min(1, s.inUse / s.capacity);
-    else u = s.inUse > 0 ? Math.min(1, s.inUse / Math.max(peakInUse, 1)) : 0;
-    const base = s.waiting > 0 ? cssVar("--c-miss") : cssVar("--c-info");
-    const opacity = s.inUse <= 0 && s.waiting <= 0 ? 0.06 : 0.15 + 0.85 * u;
+    if (s.capacity > 0) u = Math.min(1, s.running / s.capacity);
+    else u = s.running > 0 ? Math.min(1, s.running / Math.max(peakRunning, 1)) : 0;
+    const base = s.queued > 0 ? cssVar("--c-miss") : cssVar("--c-info");
+    const opacity = s.running <= 0 && s.queued <= 0 ? 0.06 : 0.15 + 0.85 * u;
     return { fill: base, opacity };
   }
 
   function render(): void {
-    peakInUse = 1;
-    for (const s of samples) if (s.inUse > peakInUse) peakInUse = s.inUse;
+    peakRunning = 1;
+    for (const s of samples) if (s.running > peakRunning) peakRunning = s.running;
     const SQ = 12, GAP = 3;
     const n = samples.length;
     const cols = Math.max(1, Math.ceil(n / GRID_ROWS));
@@ -71,8 +71,8 @@ export function utilizationTile(): Tile {
       r.setAttribute("fill-opacity", opacity.toFixed(3));
       r.setAttribute("class", "util-sq");
       const title = document.createElementNS(SVGNS, "title");
-      const cap = s.capacity > 0 ? `${s.inUse}/${s.capacity}` : `${s.inUse} (unlimited)`;
-      title.textContent = `${clock(s.at)} - ${cap} in use${s.waiting > 0 ? ", " + s.waiting + " waiting" : ""}`;
+      const cap = s.capacity > 0 ? `${s.running}/${s.capacity}` : `${s.running} (unlimited)`;
+      title.textContent = `${clock(s.at)} - ${cap} running${s.queued > 0 ? ", " + s.queued + " queued" : ""}`;
       r.appendChild(title);
       frag.appendChild(r);
     }

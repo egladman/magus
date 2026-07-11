@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Service assembles the read-only workspace views the web bridge serves. It holds the
+// Service assembles the read-only workspace views the console serves. It holds the
 // opened workspace plus the static status base, and exposes exported methods that return
 // domain types. Construct it with NewService; the optional test seams (With* options)
 // stand in for the workspace and daemon socket so handlers can be exercised without a
@@ -28,10 +28,10 @@ type Service struct {
 	version      string
 	daemonSocket string
 
-	// activeRunsFn returns the daemon's live runs, folded onto the status report. Nil when
+	// runsFn returns the daemon's live runs, folded onto the status report. Nil when
 	// this service is not backed by a daemon run registry (a plain CLI status query), leaving
-	// StatusReport.ActiveRuns empty.
-	activeRunsFn func() []types.StatusRun
+	// StatusReport.Runs empty.
+	runsFn func() []types.StatusRun
 
 	// Test seams. Production leaves these nil; the real Magus / daemon socket is used.
 	statusReportFn   func(ctx context.Context) types.StatusReport
@@ -65,11 +65,11 @@ func WithDescribeGraphFn(fn func() types.TargetGraphOutput) Option {
 	return func(s *Service) { s.describeGraphFn = fn }
 }
 
-// WithActiveRuns supplies the daemon's live-run source (RunRegistry.Snapshot). The status
+// WithRuns supplies the daemon's live-run source (RunRegistry.Snapshot). The status
 // report then carries the per-target execution state of every adopted run, on both the GET
 // and the SSE frame. Only the daemon sets this; a plain CLI status query omits it.
-func WithActiveRuns(fn func() []types.StatusRun) Option {
-	return func(s *Service) { s.activeRunsFn = fn }
+func WithRuns(fn func() []types.StatusRun) Option {
+	return func(s *Service) { s.runsFn = fn }
 }
 
 // NewService builds a Service from the opened workspace (m), its resolved config, the
@@ -96,8 +96,8 @@ func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
 	out := s.statusReport(ctx)
 	// Live runs come from this daemon's in-process run registry (not the pool query), so
 	// they ride the same report whether the pool is assembled from a seam or a socket query.
-	if s.activeRunsFn != nil {
-		out.ActiveRuns = s.activeRunsFn()
+	if s.runsFn != nil {
+		out.Runs = s.runsFn()
 	}
 	return out
 }
@@ -143,15 +143,15 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 		DaemonVersion: r.DaemonVersion,
 		Mode:          r.Mode,
 		Capacity:      r.Capacity,
-		InUse:         r.InUse,
-		Waiting:       r.Waiting,
+		Running:       r.Running,
+		Queued:        r.Queued,
 	}
 	for _, c := range r.Calls {
-		out.Calls = append(out.Calls, types.StatusCall{
+		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
 			Args:      c.Args,
 			Workspace: c.Workspace,
 			StartedAt: c.StartedAt,
-			SubOp:     c.SubOp,
+			Step:      c.SubOp,
 			Inv:       c.Inv,
 		})
 	}

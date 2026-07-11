@@ -1155,9 +1155,9 @@ func (x *Backfill) GetSamples() []*Sample {
 type Sample struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
-	InUse         int32                  `protobuf:"varint,2,opt,name=in_use,json=inUse,proto3" json:"in_use,omitempty"`                   // pool slots in use at this tick
+	Running       int32                  `protobuf:"varint,2,opt,name=running,proto3" json:"running,omitempty"`                            // pool slots running at this tick
 	Capacity      int32                  `protobuf:"varint,3,opt,name=capacity,proto3" json:"capacity,omitempty"`                          // pool capacity (0 = unlimited)
-	Waiting       int32                  `protobuf:"varint,4,opt,name=waiting,proto3" json:"waiting,omitempty"`                            // tasks queued for a slot
+	Queued        int32                  `protobuf:"varint,4,opt,name=queued,proto3" json:"queued,omitempty"`                              // tasks queued for a slot
 	CacheHits     int64                  `protobuf:"varint,5,opt,name=cache_hits,json=cacheHits,proto3" json:"cache_hits,omitempty"`       // cumulative; diff adjacent samples for a hit rate
 	CacheMisses   int64                  `protobuf:"varint,6,opt,name=cache_misses,json=cacheMisses,proto3" json:"cache_misses,omitempty"` // cumulative
 	TargetRuns    int64                  `protobuf:"varint,7,opt,name=target_runs,json=targetRuns,proto3" json:"target_runs,omitempty"`    // cumulative target executions
@@ -1202,9 +1202,9 @@ func (x *Sample) GetAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *Sample) GetInUse() int32 {
+func (x *Sample) GetRunning() int32 {
 	if x != nil {
-		return x.InUse
+		return x.Running
 	}
 	return 0
 }
@@ -1216,9 +1216,9 @@ func (x *Sample) GetCapacity() int32 {
 	return 0
 }
 
-func (x *Sample) GetWaiting() int32 {
+func (x *Sample) GetQueued() int32 {
 	if x != nil {
-		return x.Waiting
+		return x.Queued
 	}
 	return 0
 }
@@ -1361,12 +1361,12 @@ const file_magus_metrics_v1_metrics_proto_rawDesc = "" +
 	"\venv_dropped\x18\t \x01(\x03R\n" +
 	"envDropped\">\n" +
 	"\bBackfill\x122\n" +
-	"\asamples\x18\x01 \x03(\v2\x18.magus.metrics.v1.SampleR\asamples\"\xe4\x01\n" +
+	"\asamples\x18\x01 \x03(\v2\x18.magus.metrics.v1.SampleR\asamples\"\xe5\x01\n" +
 	"\x06Sample\x12*\n" +
-	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x15\n" +
-	"\x06in_use\x18\x02 \x01(\x05R\x05inUse\x12\x1a\n" +
-	"\bcapacity\x18\x03 \x01(\x05R\bcapacity\x12\x18\n" +
-	"\awaiting\x18\x04 \x01(\x05R\awaiting\x12\x1d\n" +
+	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x18\n" +
+	"\arunning\x18\x02 \x01(\x05R\arunning\x12\x1a\n" +
+	"\bcapacity\x18\x03 \x01(\x05R\bcapacity\x12\x16\n" +
+	"\x06queued\x18\x04 \x01(\x05R\x06queued\x12\x1d\n" +
 	"\n" +
 	"cache_hits\x18\x05 \x01(\x03R\tcacheHits\x12!\n" +
 	"\fcache_misses\x18\x06 \x01(\x03R\vcacheMisses\x12\x1f\n" +

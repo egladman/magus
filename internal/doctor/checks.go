@@ -27,7 +27,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// checkBridgeReachability probes the web bridge endpoint (/api/v1/graph) by
+// checkBridgeReachability probes the console endpoint (/api/v1/graph) by
 // issuing a real HTTP GET (a 401 proves the guarded route exists).
 func (r *runner) checkBridgeReachability() Check {
 	return probeBridgeReachability(r.opts.daemonInfo)

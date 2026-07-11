@@ -77,7 +77,7 @@ func TestServiceTargetGraph(t *testing.T) {
 
 // TestServiceStatusReportSeam checks the injected report is returned verbatim.
 func TestServiceStatusReportSeam(t *testing.T) {
-	want := types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, InUse: 1}}
+	want := types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}
 	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.2.3",
 		WithStatusReportFn(func(context.Context) types.StatusReport { return want }))
 	assert.Equal(t, want, svc.StatusReport(context.Background()))
@@ -110,7 +110,7 @@ func TestStatusOutputFromReply(t *testing.T) {
 	access := time.UnixMilli(1_700_000_100_000)
 	started := time.UnixMilli(1_700_000_050_000)
 	reply := &proc.StatusReply{
-		ParentPID: 4242, DaemonVersion: "d1", Mode: "daemon", Capacity: 8, InUse: 3, Waiting: 1,
+		ParentPID: 4242, DaemonVersion: "d1", Mode: "daemon", Capacity: 8, Running: 3, Queued: 1,
 		Calls: []proc.Call{
 			{Args: []string{"run", "build"}, Workspace: "/ws", StartedAt: started, SubOp: "spawn", Inv: "inv1"},
 		},
@@ -126,10 +126,10 @@ func TestStatusOutputFromReply(t *testing.T) {
 		DaemonVersion: "d1",
 		Mode:          "daemon",
 		Capacity:      8,
-		InUse:         3,
-		Waiting:       1,
-		Calls: []types.StatusCall{
-			{Args: []string{"run", "build"}, Workspace: "/ws", StartedAt: started, SubOp: "spawn", Inv: "inv1"},
+		Running:       3,
+		Queued:        1,
+		RunningTargets: []types.StatusRunningTarget{
+			{Args: []string{"run", "build"}, Workspace: "/ws", StartedAt: started, Step: "spawn", Inv: "inv1"},
 		},
 		Workspaces: []types.StatusWorkspace{
 			{Root: "/ws", LoadedAt: loaded, LastAccess: access, CacheHit: 5, CacheMiss: 2, CacheError: 1, CacheBytes: 1024},

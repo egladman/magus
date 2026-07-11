@@ -2642,8 +2642,8 @@ async function fetchLiveStatus() {
     const strip = el("live-status-strip");
     if (strip && status.pool) {
       const p = status.pool;
-      strip.textContent = "pool: " + p.in_use + "/" + p.capacity + " in use";
-      if (p.waiting > 0) strip.textContent += ", " + p.waiting + " waiting";
+      strip.textContent = "pool: " + p.running + "/" + p.capacity + " running";
+      if (p.queued > 0) strip.textContent += ", " + p.queued + " queued";
       strip.hidden = false;
     }
     // Affected view (deferred): types.StatusOutput.Affected exists on the wire

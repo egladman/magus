@@ -40,7 +40,7 @@ func CORS(origin string) func(http.Handler) http.Handler {
 
 // CORSAllow reflects the request Origin only when it is one of the given allow-list origins,
 // answering the OPTIONS preflight here so a route handler never touches CORS itself. It is
-// the multi-origin sibling of CORS: the browser bridge allows the hosted explorer origin plus
+// the multi-origin sibling of CORS: the console allows the hosted explorer origin plus
 // the two loopback origins derived from the server port, so an empty allow-list disables CORS
 // entirely. Empty origins are ignored. On a matched preflight it advertises the GET, POST,
 // OPTIONS methods, allows the Authorization and Content-Type headers plus the Connect

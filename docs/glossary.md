@@ -132,7 +132,7 @@ GitHub-hosted runners, then `min(NumCPU, 8)`; `magus status` and the
 
 One unit of the pool's capacity. A target acquires the slots it needs to run
 (most take one) and releases them when it finishes; the pool tracks capacity
-(total slots), in use (acquired), and waiting (blocked). See
+(total slots), running (acquired), and queued (blocked). See
 [daemon.md](daemon.md).
 
 ### Concurrency
@@ -141,10 +141,10 @@ How many targets run at once. It is bounded by the pool's capacity and set with
 `--concurrency`, `MAGUS_CONCURRENCY`, or the `concurrency` config key. See
 [daemon.md](daemon.md).
 
-### Waiting
+### Queued
 
 A target that wants a slot while the pool is full; it blocks first-in-first-out
-until a slot frees. The dashboard calls a sample with waiting > 0 **queued**.
+until a slot frees. The dashboard colors a sample with queued > 0 accordingly.
 See [daemon.md](daemon.md).
 
 ### Pool mode

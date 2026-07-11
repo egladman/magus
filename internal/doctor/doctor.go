@@ -52,10 +52,10 @@ type DaemonInfo struct {
 	ParentPID int
 	// DaemonVersion is the version string reported by the daemon.
 	DaemonVersion string
-	// Capacity / InUse / Waiting mirror the pool snapshot.
+	// Capacity / Running / Queued mirror the pool snapshot.
 	Capacity int
-	InUse    int
-	Waiting  int
+	Running  int
+	Queued   int
 	// Workspaces lists workspace roots currently loaded by the daemon.
 	Workspaces []LoadedWorkspace
 	// SockDir is the directory scanned for socket files.

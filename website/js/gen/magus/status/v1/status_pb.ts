@@ -3,8 +3,8 @@
 /* eslint-disable */
 
 // Package magus.status.v1 is the versioned wire contract for magus's status/dashboard
-// view, scoped to LIVE state: overall health, the concurrency pool (capacity/in-use/
-// waiting slots), what is running right now - the in-flight calls, their workspace, and
+// view, scoped to LIVE state: overall health, the concurrency pool (capacity/running/
+// queued slots), what is running right now - the running targets, their workspace, and
 // how long they have run - and live cache ACTIVITY (hit/miss/error tallies + real on-disk
 // size). Static CONFIG (telemetry, the cache cap/immutability, build flags) is deliberately
 // NOT here; that is `magus status`/config, not "what is happening." Backs a native-feeling
@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/status/v1/status.proto.
  */
 export const file_magus_status_v1_status: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy9zdGF0dXMvdjEvc3RhdHVzLnByb3RvEg9tYWd1cy5zdGF0dXMudjEibQoGU3RhdHVzEicKBmhlYWx0aBgBIAEoDjIXLm1hZ3VzLnN0YXR1cy52MS5IZWFsdGgSIwoEcG9vbBgCIAEoCzIVLm1hZ3VzLnN0YXR1cy52MS5Qb29sEhUKDW1hZ3VzX3ZlcnNpb24YAyABKAkiggIKBFBvb2wSEgoKcGFyZW50X3BpZBgBIAEoBRIWCg5kYWVtb25fdmVyc2lvbhgCIAEoCRIMCgRtb2RlGAMgASgJEhAKCGNhcGFjaXR5GAQgASgFEg4KBmluX3VzZRgFIAEoBRIPCgd3YWl0aW5nGAYgASgFEiQKBWNhbGxzGAcgAygLMhUubWFndXMuc3RhdHVzLnYxLkNhbGwSLgoKd29ya3NwYWNlcxgIIAMoCzIaLm1hZ3VzLnN0YXR1cy52MS5Xb3Jrc3BhY2USEAoIYWZmZWN0ZWQYCSADKAkSJQoFY2FjaGUYCiABKAsyFi5tYWd1cy5zdGF0dXMudjEuQ2FjaGUiewoEQ2FsbBIMCgRhcmdzGAEgAygJEhEKCXdvcmtzcGFjZRgCIAEoCRIuCgpzdGFydF90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZzdWJfb3AYBCABKAkSEgoKaW52b2NhdGlvbhgFIAEoCSKlAQoJV29ya3NwYWNlEgwKBHJvb3QYASABKAkSLQoJbG9hZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI0ChBsYXN0X2FjY2Vzc190aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIlCgVjYWNoZRgEIAEoCzIWLm1hZ3VzLnN0YXR1cy52MS5DYWNoZSJeCgVDYWNoZRIMCgRoaXRzGAEgASgDEg4KBm1pc3NlcxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSEgoKc2l6ZV9ieXRlcxgEIAEoAxITCgtzaXplX2NhcF9tYhgFIAEoBSISChBHZXRTdGF0dXNSZXF1ZXN0IjwKEUdldFN0YXR1c1Jlc3BvbnNlEicKBnN0YXR1cxgBIAEoCzIXLm1hZ3VzLnN0YXR1cy52MS5TdGF0dXMiFQoTU3RyZWFtU3RhdHVzUmVxdWVzdCI/ChRTdHJlYW1TdGF0dXNSZXNwb25zZRInCgZzdGF0dXMYASABKAsyFy5tYWd1cy5zdGF0dXMudjEuU3RhdHVzKloKBkhlYWx0aBIWChJIRUFMVEhfVU5TUEVDSUZJRUQQABISCg5IRUFMVEhfSEVBTFRIWRABEhMKD0hFQUxUSF9ERUdSQURFRBACEg8KC0hFQUxUSF9ET1dOEAMywgEKDVN0YXR1c1NlcnZpY2USUgoJR2V0U3RhdHVzEiEubWFndXMuc3RhdHVzLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5tYWd1cy5zdGF0dXMudjEuR2V0U3RhdHVzUmVzcG9uc2USXQoMU3RyZWFtU3RhdHVzEiQubWFndXMuc3RhdHVzLnYxLlN0cmVhbVN0YXR1c1JlcXVlc3QaJS5tYWd1cy5zdGF0dXMudjEuU3RyZWFtU3RhdHVzUmVzcG9uc2UwAWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChxtYWd1cy9zdGF0dXMvdjEvc3RhdHVzLnByb3RvEg9tYWd1cy5zdGF0dXMudjEikQEKBlN0YXR1cxInCgZoZWFsdGgYASABKA4yFy5tYWd1cy5zdGF0dXMudjEuSGVhbHRoEiMKBHBvb2wYAiABKAsyFS5tYWd1cy5zdGF0dXMudjEuUG9vbBIVCg1tYWd1c192ZXJzaW9uGAMgASgJEiIKBHJ1bnMYBCADKAsyFC5tYWd1cy5zdGF0dXMudjEuUnVuIoABCgNSdW4SCwoDaW52GAEgASgJEg8KB3RyaWdnZXIYAiABKAkSLgoKc3RhcnRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoHdGFyZ2V0cxgEIAMoCzIaLm1hZ3VzLnN0YXR1cy52MS5UYXJnZXRSdW4iwQIKCVRhcmdldFJ1bhIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRIvCgVzdGF0ZRgDIAEoDjIgLm1hZ3VzLnN0YXR1cy52MS5UYXJnZXRSdW4uU3RhdGUSLgoKc3RhcnRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCm91dHB1dF9yZWYYBiABKAkSEwoLZHVyYXRpb25fbXMYByABKAMiWwoFU3RhdGUSFQoRU1RBVEVfVU5TUEVDSUZJRUQQABIKCgZRVUVVRUQQARILCgdSVU5OSU5HEAISCgoGUEFTU0VEEAMSCgoGRkFJTEVEEAQSCgoGQ0FDSEVEEAUilQIKBFBvb2wSEgoKcGFyZW50X3BpZBgBIAEoBRIWCg5kYWVtb25fdmVyc2lvbhgCIAEoCRIMCgRtb2RlGAMgASgJEhAKCGNhcGFjaXR5GAQgASgFEg8KB3J1bm5pbmcYBSABKAUSDgoGcXVldWVkGAYgASgFEjcKD3J1bm5pbmdfdGFyZ2V0cxgHIAMoCzIeLm1hZ3VzLnN0YXR1cy52MS5SdW5uaW5nVGFyZ2V0Ei4KCndvcmtzcGFjZXMYCCADKAsyGi5tYWd1cy5zdGF0dXMudjEuV29ya3NwYWNlEhAKCGFmZmVjdGVkGAkgAygJEiUKBWNhY2hlGAogASgLMhYubWFndXMuc3RhdHVzLnYxLkNhY2hlIoIBCg1SdW5uaW5nVGFyZ2V0EgwKBGFyZ3MYASADKAkSEQoJd29ya3NwYWNlGAIgASgJEi4KCnN0YXJ0X3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgwKBHN0ZXAYBCABKAkSEgoKaW52b2NhdGlvbhgFIAEoCSKlAQoJV29ya3NwYWNlEgwKBHJvb3QYASABKAkSLQoJbG9hZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI0ChBsYXN0X2FjY2Vzc190aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIlCgVjYWNoZRgEIAEoCzIWLm1hZ3VzLnN0YXR1cy52MS5DYWNoZSJeCgVDYWNoZRIMCgRoaXRzGAEgASgDEg4KBm1pc3NlcxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSEgoKc2l6ZV9ieXRlcxgEIAEoAxITCgtzaXplX2NhcF9tYhgFIAEoBSISChBHZXRTdGF0dXNSZXF1ZXN0IjwKEUdldFN0YXR1c1Jlc3BvbnNlEicKBnN0YXR1cxgBIAEoCzIXLm1hZ3VzLnN0YXR1cy52MS5TdGF0dXMiFQoTU3RyZWFtU3RhdHVzUmVxdWVzdCI/ChRTdHJlYW1TdGF0dXNSZXNwb25zZRInCgZzdGF0dXMYASABKAsyFy5tYWd1cy5zdGF0dXMudjEuU3RhdHVzKloKBkhlYWx0aBIWChJIRUFMVEhfVU5TUEVDSUZJRUQQABISCg5IRUFMVEhfSEVBTFRIWRABEhMKD0hFQUxUSF9ERUdSQURFRBACEg8KC0hFQUxUSF9ET1dOEAMywgEKDVN0YXR1c1NlcnZpY2USUgoJR2V0U3RhdHVzEiEubWFndXMuc3RhdHVzLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5tYWd1cy5zdGF0dXMudjEuR2V0U3RhdHVzUmVzcG9uc2USXQoMU3RyZWFtU3RhdHVzEiQubWFndXMuc3RhdHVzLnYxLlN0cmVhbVN0YXR1c1JlcXVlc3QaJS5tYWd1cy5zdGF0dXMudjEuU3RyZWFtU3RhdHVzUmVzcG9uc2UwAWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * Status is the live snapshot.
@@ -44,6 +44,13 @@ export type Status = Message<"magus.status.v1.Status"> & {
    * @generated from field: string magus_version = 3;
    */
   magusVersion: string;
+
+  /**
+   * runs the daemon is executing right now (adopted dispatches)
+   *
+   * @generated from field: repeated magus.status.v1.Run runs = 4;
+   */
+  runs: Run[];
 };
 
 /**
@@ -52,6 +59,167 @@ export type Status = Message<"magus.status.v1.Status"> & {
  */
 export const StatusSchema: GenMessage<Status> = /*@__PURE__*/
   messageDesc(file_magus_status_v1_status, 0);
+
+/**
+ * Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
+ * dispatch, keyed by its invocation id. It carries the per-target execution state a
+ * dashboard renders as a live run row, so the SAME status stream that shows the pool
+ * also shows what each run's targets are doing.
+ *
+ * @generated from message magus.status.v1.Run
+ */
+export type Run = Message<"magus.status.v1.Run"> & {
+  /**
+   * invocation id (inv...); deep-links to the run's live log
+   *
+   * @generated from field: string inv = 1;
+   */
+  inv: string;
+
+  /**
+   * how the run was spawned: run | affected | ci | ...
+   *
+   * @generated from field: string trigger = 2;
+   */
+  trigger: string;
+
+  /**
+   * when the invocation opened
+   *
+   * @generated from field: google.protobuf.Timestamp started_at = 3;
+   */
+  startedAt?: Timestamp;
+
+  /**
+   * per-target execution state within this run
+   *
+   * @generated from field: repeated magus.status.v1.TargetRun targets = 4;
+   */
+  targets: TargetRun[];
+};
+
+/**
+ * Describes the message magus.status.v1.Run.
+ * Use `create(RunSchema)` to create a new message.
+ */
+export const RunSchema: GenMessage<Run> = /*@__PURE__*/
+  messageDesc(file_magus_status_v1_status, 1);
+
+/**
+ * TargetRun is the execution state of one target within a Run. It advances QUEUED ->
+ * RUNNING -> PASSED|FAILED|CACHED as the run emits journal events; a finished target
+ * carries its output reference and wall-clock duration.
+ *
+ * @generated from message magus.status.v1.TargetRun
+ */
+export type TargetRun = Message<"magus.status.v1.TargetRun"> & {
+  /**
+   * repo-relative project path
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+
+  /**
+   * target name (as the CLI spells it)
+   *
+   * @generated from field: string target = 2;
+   */
+  target: string;
+
+  /**
+   * @generated from field: magus.status.v1.TargetRun.State state = 3;
+   */
+  state: TargetRun_State;
+
+  /**
+   * when the target began running (unset while QUEUED)
+   *
+   * @generated from field: google.protobuf.Timestamp started_at = 4;
+   */
+  startedAt?: Timestamp;
+
+  /**
+   * when the target finished (unset while active)
+   *
+   * @generated from field: google.protobuf.Timestamp ended_at = 5;
+   */
+  endedAt?: Timestamp;
+
+  /**
+   * output reference, once finished
+   *
+   * @generated from field: string output_ref = 6;
+   */
+  outputRef: string;
+
+  /**
+   * wall-clock duration in ms, once finished
+   *
+   * @generated from field: int64 duration_ms = 7;
+   */
+  durationMs: bigint;
+};
+
+/**
+ * Describes the message magus.status.v1.TargetRun.
+ * Use `create(TargetRunSchema)` to create a new message.
+ */
+export const TargetRunSchema: GenMessage<TargetRun> = /*@__PURE__*/
+  messageDesc(file_magus_status_v1_status, 2);
+
+/**
+ * State is where a target sits in its lifecycle.
+ *
+ * @generated from enum magus.status.v1.TargetRun.State
+ */
+export enum TargetRun_State {
+  /**
+   * @generated from enum value: STATE_UNSPECIFIED = 0;
+   */
+  STATE_UNSPECIFIED = 0,
+
+  /**
+   * scheduled, not yet started
+   *
+   * @generated from enum value: QUEUED = 1;
+   */
+  QUEUED = 1,
+
+  /**
+   * a subprocess is executing
+   *
+   * @generated from enum value: RUNNING = 2;
+   */
+  RUNNING = 2,
+
+  /**
+   * finished successfully
+   *
+   * @generated from enum value: PASSED = 3;
+   */
+  PASSED = 3,
+
+  /**
+   * finished with an error
+   *
+   * @generated from enum value: FAILED = 4;
+   */
+  FAILED = 4,
+
+  /**
+   * satisfied from cache (no work run)
+   *
+   * @generated from enum value: CACHED = 5;
+   */
+  CACHED = 5,
+}
+
+/**
+ * Describes the enum magus.status.v1.TargetRun.State.
+ */
+export const TargetRun_StateSchema: GenEnum<TargetRun_State> = /*@__PURE__*/
+  enumDesc(file_magus_status_v1_status, 2, 0);
 
 /**
  * Pool is the live concurrency pool - the slots and the work occupying them.
@@ -84,25 +252,25 @@ export type Pool = Message<"magus.status.v1.Pool"> & {
   capacity: number;
 
   /**
-   * slots currently acquired
+   * slots currently running
    *
-   * @generated from field: int32 in_use = 5;
+   * @generated from field: int32 running = 5;
    */
-  inUse: number;
+  running: number;
 
   /**
    * tasks queued for a slot
    *
-   * @generated from field: int32 waiting = 6;
+   * @generated from field: int32 queued = 6;
    */
-  waiting: number;
+  queued: number;
 
   /**
    * what is running right now
    *
-   * @generated from field: repeated magus.status.v1.Call calls = 7;
+   * @generated from field: repeated magus.status.v1.RunningTarget running_targets = 7;
    */
-  calls: Call[];
+  runningTargets: RunningTarget[];
 
   /**
    * @generated from field: repeated magus.status.v1.Workspace workspaces = 8;
@@ -127,14 +295,14 @@ export type Pool = Message<"magus.status.v1.Pool"> & {
  * Use `create(PoolSchema)` to create a new message.
  */
 export const PoolSchema: GenMessage<Pool> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 1);
+  messageDesc(file_magus_status_v1_status, 3);
 
 /**
- * Call is one in-flight unit of work in the pool.
+ * RunningTarget is one running unit of work in the pool.
  *
- * @generated from message magus.status.v1.Call
+ * @generated from message magus.status.v1.RunningTarget
  */
-export type Call = Message<"magus.status.v1.Call"> & {
+export type RunningTarget = Message<"magus.status.v1.RunningTarget"> & {
   /**
    * the argument vector (carries the target/project)
    *
@@ -148,21 +316,21 @@ export type Call = Message<"magus.status.v1.Call"> & {
   workspace: string;
 
   /**
-   * when the call started
+   * when the running target started
    *
    * @generated from field: google.protobuf.Timestamp start_time = 3;
    */
   startTime?: Timestamp;
 
   /**
-   * the sub-operation currently executing
+   * the cache step currently executing
    *
-   * @generated from field: string sub_op = 4;
+   * @generated from field: string step = 4;
    */
-  subOp: string;
+  step: string;
 
   /**
-   * the invocation id (inv...) this call belongs to; deep-links to its live log
+   * the invocation id (inv...) this running target belongs to; deep-links to its live log
    *
    * @generated from field: string invocation = 5;
    */
@@ -170,11 +338,11 @@ export type Call = Message<"magus.status.v1.Call"> & {
 };
 
 /**
- * Describes the message magus.status.v1.Call.
- * Use `create(CallSchema)` to create a new message.
+ * Describes the message magus.status.v1.RunningTarget.
+ * Use `create(RunningTargetSchema)` to create a new message.
  */
-export const CallSchema: GenMessage<Call> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 2);
+export const RunningTargetSchema: GenMessage<RunningTarget> = /*@__PURE__*/
+  messageDesc(file_magus_status_v1_status, 4);
 
 /**
  * Workspace is one workspace the daemon has loaded.
@@ -210,7 +378,7 @@ export type Workspace = Message<"magus.status.v1.Workspace"> & {
  * Use `create(WorkspaceSchema)` to create a new message.
  */
 export const WorkspaceSchema: GenMessage<Workspace> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 3);
+  messageDesc(file_magus_status_v1_status, 5);
 
 /**
  * Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this
@@ -255,7 +423,7 @@ export type Cache = Message<"magus.status.v1.Cache"> & {
  * Use `create(CacheSchema)` to create a new message.
  */
 export const CacheSchema: GenMessage<Cache> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 4);
+  messageDesc(file_magus_status_v1_status, 6);
 
 /**
  * @generated from message magus.status.v1.GetStatusRequest
@@ -268,7 +436,7 @@ export type GetStatusRequest = Message<"magus.status.v1.GetStatusRequest"> & {
  * Use `create(GetStatusRequestSchema)` to create a new message.
  */
 export const GetStatusRequestSchema: GenMessage<GetStatusRequest> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 5);
+  messageDesc(file_magus_status_v1_status, 7);
 
 /**
  * @generated from message magus.status.v1.GetStatusResponse
@@ -285,7 +453,7 @@ export type GetStatusResponse = Message<"magus.status.v1.GetStatusResponse"> & {
  * Use `create(GetStatusResponseSchema)` to create a new message.
  */
 export const GetStatusResponseSchema: GenMessage<GetStatusResponse> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 6);
+  messageDesc(file_magus_status_v1_status, 8);
 
 /**
  * @generated from message magus.status.v1.StreamStatusRequest
@@ -298,7 +466,7 @@ export type StreamStatusRequest = Message<"magus.status.v1.StreamStatusRequest">
  * Use `create(StreamStatusRequestSchema)` to create a new message.
  */
 export const StreamStatusRequestSchema: GenMessage<StreamStatusRequest> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 7);
+  messageDesc(file_magus_status_v1_status, 9);
 
 /**
  * @generated from message magus.status.v1.StreamStatusResponse
@@ -315,7 +483,7 @@ export type StreamStatusResponse = Message<"magus.status.v1.StreamStatusResponse
  * Use `create(StreamStatusResponseSchema)` to create a new message.
  */
 export const StreamStatusResponseSchema: GenMessage<StreamStatusResponse> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 8);
+  messageDesc(file_magus_status_v1_status, 10);
 
 /**
  * Health is the at-a-glance rollup a dashboard shows.

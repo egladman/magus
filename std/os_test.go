@@ -135,12 +135,12 @@ func TestOsWithSlots(t *testing.T) {
 	ran := false
 	err := OsWithSlots(ctx, 3, cbFunc(func(context.Context) error {
 		ran = true
-		assert.Equal(t, 3, lim.Snapshot().InUse, "InUse during with_slots")
+		assert.Equal(t, 3, lim.Snapshot().Running, "Running during with_slots")
 		return nil
 	}))
 	require.NoError(t, err)
 	assert.True(t, ran, "callback did not run")
-	assert.Equal(t, 0, lim.Snapshot().InUse, "InUse after with_slots (slots not released)")
+	assert.Equal(t, 0, lim.Snapshot().Running, "Running after with_slots (slots not released)")
 }
 
 // With a held build slot, with_slots hands it back while it reserves n, so peak
@@ -151,12 +151,12 @@ func TestOsWithSlotsGivesBackHeldSlot(t *testing.T) {
 	ctx := cache.WithSlotHeld(cache.ContextWithLimiter(context.Background(), lim))
 
 	err := OsWithSlots(ctx, 3, cbFunc(func(context.Context) error {
-		assert.Equal(t, 3, lim.Snapshot().InUse, "InUse during with_slots (held slot should be handed back)")
+		assert.Equal(t, 3, lim.Snapshot().Running, "Running during with_slots (held slot should be handed back)")
 		return nil
 	}))
 	require.NoError(t, err)
 	// The held slot is reacquired on return.
-	assert.Equal(t, 1, lim.Snapshot().InUse, "InUse after with_slots (held slot reacquired)")
+	assert.Equal(t, 1, lim.Snapshot().Running, "Running after with_slots (held slot reacquired)")
 }
 
 func TestOsWithSlotsNoLimiter(t *testing.T) {

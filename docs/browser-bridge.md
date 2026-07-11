@@ -123,7 +123,7 @@ log in the address bar).
 `magus doctor` reports bridge reachability when the daemon is running:
 
 ```
-[pass] web bridge: reachable at http://127.0.0.1:7391/api/v1/graph
+[pass] console: reachable at http://127.0.0.1:7391/api/v1/graph
     bearer token: magus config mcp token print
 ```
 

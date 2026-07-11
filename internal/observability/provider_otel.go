@@ -151,21 +151,21 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("observability: pool.wait.duration histogram: %w", err)
 	}
-	poolInUse, err := meter.Int64UpDownCounter(
-		"magus.pool.slots.in_use",
-		metric.WithDescription("Number of concurrency slots currently in use."),
+	poolRunning, err := meter.Int64UpDownCounter(
+		"magus.pool.slots.running",
+		metric.WithDescription("Number of concurrency slots currently running."),
 		metric.WithUnit("{slot}"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("observability: pool.slots.in_use counter: %w", err)
+		return nil, fmt.Errorf("observability: pool.slots.running counter: %w", err)
 	}
-	poolWaiting, err := meter.Int64UpDownCounter(
-		"magus.pool.slots.waiting",
-		metric.WithDescription("Number of callers currently waiting to acquire a concurrency slot."),
+	poolQueued, err := meter.Int64UpDownCounter(
+		"magus.pool.slots.queued",
+		metric.WithDescription("Number of callers currently queued to acquire a concurrency slot."),
 		metric.WithUnit("{slot}"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("observability: pool.slots.waiting counter: %w", err)
+		return nil, fmt.Errorf("observability: pool.slots.queued counter: %w", err)
 	}
 
 	// Remote cache backend (S3, GitHub Actions, ...). These mirror the local
@@ -254,8 +254,8 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 		targetRuns:      targetRuns,
 		targetDur:       targetDur,
 		poolWait:        poolWait,
-		poolInUse:       poolInUse,
-		poolWaiting:     poolWaiting,
+		poolRunning:     poolRunning,
+		poolQueued:      poolQueued,
 		remoteHits:      remoteHits,
 		remoteMisses:    remoteMisses,
 		remoteErrs:      remoteErrs,
@@ -286,8 +286,8 @@ type otelProvider struct {
 	targetRuns      metric.Int64Counter
 	targetDur       metric.Float64Histogram
 	poolWait        metric.Float64Histogram
-	poolInUse       metric.Int64UpDownCounter
-	poolWaiting     metric.Int64UpDownCounter
+	poolRunning     metric.Int64UpDownCounter
+	poolQueued      metric.Int64UpDownCounter
 	remoteHits      metric.Int64Counter
 	remoteMisses    metric.Int64Counter
 	remoteErrs      metric.Int64Counter
@@ -345,7 +345,7 @@ func (p *otelProvider) StartSpan(ctx context.Context, name string, attrs ...Attr
 
 func (p *otelProvider) RecordRemoteOp(ctx context.Context, op RemoteOp) {
 	kv := metric.WithAttributes(
-		attribute.String("op", op.Op),
+		attribute.String("method", op.Method),
 		attribute.String("outcome", op.Outcome),
 	)
 	switch op.Outcome {
@@ -360,7 +360,7 @@ func (p *otelProvider) RecordRemoteOp(ctx context.Context, op RemoteOp) {
 	}
 	p.remoteDur.Record(ctx, op.Duration, kv)
 	if op.Bytes > 0 {
-		p.remoteBytes.Record(ctx, op.Bytes, metric.WithAttributes(attribute.String("op", op.Op)))
+		p.remoteBytes.Record(ctx, op.Bytes, metric.WithAttributes(attribute.String("method", op.Method)))
 	}
 }
 
@@ -372,15 +372,15 @@ func (p *otelProvider) RecordTargetRun(ctx context.Context, secs float64, attrs 
 
 func (p *otelProvider) RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64) {
 	p.poolWait.Record(ctx, waitSecs)
-	p.poolInUse.Add(ctx, n)
+	p.poolRunning.Add(ctx, n)
 }
 
 func (p *otelProvider) RecordPoolRelease(ctx context.Context, n int64) {
-	p.poolInUse.Add(ctx, -n)
+	p.poolRunning.Add(ctx, -n)
 }
 
 func (p *otelProvider) RecordPoolWaiting(ctx context.Context, delta int64) {
-	p.poolWaiting.Add(ctx, delta)
+	p.poolQueued.Add(ctx, delta)
 }
 
 func (p *otelProvider) Shutdown(ctx context.Context) error {

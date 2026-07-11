@@ -65,7 +65,7 @@ func TestInstrumentRemoteBackend_GetHit(t *testing.T) {
 	assert.Equal(t, "hello", string(got))
 	require.Len(t, rec.remoteOps, 1)
 	op := rec.remoteOps[0]
-	assert.Equal(t, "get", op.Op)
+	assert.Equal(t, "get", op.Method)
 	assert.Equal(t, "hit", op.Outcome)
 	assert.Equal(t, int64(5), op.Bytes)
 	assert.Equal(t, []string{"magus.cache.remote.get"}, rec.spans)
@@ -105,7 +105,7 @@ func TestInstrumentRemoteBackend_Put(t *testing.T) {
 	assert.Equal(t, "world", string(fb.put))
 	require.Len(t, rec.remoteOps, 1)
 	op := rec.remoteOps[0]
-	assert.Equal(t, "put", op.Op)
+	assert.Equal(t, "put", op.Method)
 	assert.Equal(t, "stored", op.Outcome)
 	assert.Equal(t, int64(5), op.Bytes)
 	assert.Equal(t, []string{"magus.cache.remote.put"}, rec.spans)

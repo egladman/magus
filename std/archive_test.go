@@ -240,7 +240,7 @@ func TestArchiveUncompressLimiter(t *testing.T) {
 
 	_, err := ArchiveUncompress(ctx, src, dest, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 0, lim.Snapshot().InUse, "limiter InUse after call")
+	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after call")
 }
 
 func TestArchiveUncompressNilLimiter(t *testing.T) {
@@ -348,7 +348,7 @@ func TestArchiveCompressMultiThreadZst(t *testing.T) {
 	require.NoError(t, err)
 	files, _ := result["files"].([]string)
 	require.Len(t, files, 4, "compress produced wrong file count")
-	assert.Equal(t, 0, lim.Snapshot().InUse, "limiter InUse after compress")
+	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after compress")
 
 	// Verify decompression also works multi-threaded.
 	out := t.TempDir()
@@ -463,7 +463,7 @@ func TestArchiveUncompressMultiThreadZip(t *testing.T) {
 	files, _ := result["files"].([]string)
 	sort.Strings(files)
 	require.Len(t, files, 3, "parallel zip extract files")
-	assert.Equal(t, 0, lim.Snapshot().InUse, "limiter InUse after call")
+	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after call")
 }
 
 func TestArchiveUncompressLimiterAcquiresN(t *testing.T) {
@@ -475,5 +475,5 @@ func TestArchiveUncompressLimiterAcquiresN(t *testing.T) {
 
 	_, err := ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 2})
 	require.NoError(t, err)
-	assert.Equal(t, 0, lim.Snapshot().InUse, "limiter InUse after call")
+	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after call")
 }

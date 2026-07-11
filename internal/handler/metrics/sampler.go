@@ -46,9 +46,9 @@ func (s *Service) sampleOnce(ctx context.Context) {
 	smp := &metricsv1.Sample{At: timestamppb.New(s.now())}
 
 	if rep := s.stat.StatusReport(ctx); rep.Pool != nil {
-		smp.InUse = int32(rep.Pool.InUse)
+		smp.Running = int32(rep.Pool.Running)
 		smp.Capacity = int32(rep.Pool.Capacity)
-		smp.Waiting = int32(rep.Pool.Waiting)
+		smp.Queued = int32(rep.Pool.Queued)
 	}
 	if rm, err := s.coll.Collect(ctx); err == nil {
 		c := counters(rm)

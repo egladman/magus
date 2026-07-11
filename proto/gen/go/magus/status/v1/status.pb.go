@@ -5,8 +5,8 @@
 // source: magus/status/v1/status.proto
 
 // Package magus.status.v1 is the versioned wire contract for magus's status/dashboard
-// view, scoped to LIVE state: overall health, the concurrency pool (capacity/in-use/
-// waiting slots), what is running right now - the in-flight calls, their workspace, and
+// view, scoped to LIVE state: overall health, the concurrency pool (capacity/running/
+// queued slots), what is running right now - the running targets, their workspace, and
 // how long they have run - and live cache ACTIVITY (hit/miss/error tallies + real on-disk
 // size). Static CONFIG (telemetry, the cache cap/immutability, build flags) is deliberately
 // NOT here; that is `magus status`/config, not "what is happening." Backs a native-feeling
@@ -148,7 +148,7 @@ type Status struct {
 	Health        Health                 `protobuf:"varint,1,opt,name=health,proto3,enum=magus.status.v1.Health" json:"health,omitempty"`
 	Pool          *Pool                  `protobuf:"bytes,2,opt,name=pool,proto3" json:"pool,omitempty"` // live concurrency; absent when no daemon/pool is running
 	MagusVersion  string                 `protobuf:"bytes,3,opt,name=magus_version,json=magusVersion,proto3" json:"magus_version,omitempty"`
-	ActiveRuns    []*Run                 `protobuf:"bytes,4,rep,name=active_runs,json=activeRuns,proto3" json:"active_runs,omitempty"` // runs the daemon is executing right now (adopted dispatches)
+	Runs          []*Run                 `protobuf:"bytes,4,rep,name=runs,proto3" json:"runs,omitempty"` // runs the daemon is executing right now (adopted dispatches)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -204,9 +204,9 @@ func (x *Status) GetMagusVersion() string {
 	return ""
 }
 
-func (x *Status) GetActiveRuns() []*Run {
+func (x *Status) GetRuns() []*Run {
 	if x != nil {
-		return x.ActiveRuns
+		return x.Runs
 	}
 	return nil
 }
@@ -380,19 +380,19 @@ func (x *TargetRun) GetDurationMs() int64 {
 
 // Pool is the live concurrency pool - the slots and the work occupying them.
 type Pool struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ParentPid     int32                  `protobuf:"varint,1,opt,name=parent_pid,json=parentPid,proto3" json:"parent_pid,omitempty"`
-	DaemonVersion string                 `protobuf:"bytes,2,opt,name=daemon_version,json=daemonVersion,proto3" json:"daemon_version,omitempty"`
-	Mode          string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`                 // "daemon" | "proc" | ""
-	Capacity      int32                  `protobuf:"varint,4,opt,name=capacity,proto3" json:"capacity,omitempty"`        // total concurrency slots (0 = unlimited)
-	InUse         int32                  `protobuf:"varint,5,opt,name=in_use,json=inUse,proto3" json:"in_use,omitempty"` // slots currently acquired
-	Waiting       int32                  `protobuf:"varint,6,opt,name=waiting,proto3" json:"waiting,omitempty"`          // tasks queued for a slot
-	Calls         []*Call                `protobuf:"bytes,7,rep,name=calls,proto3" json:"calls,omitempty"`               // what is running right now
-	Workspaces    []*Workspace           `protobuf:"bytes,8,rep,name=workspaces,proto3" json:"workspaces,omitempty"`
-	Affected      []string               `protobuf:"bytes,9,rep,name=affected,proto3" json:"affected,omitempty"`
-	Cache         *Cache                 `protobuf:"bytes,10,opt,name=cache,proto3" json:"cache,omitempty"` // aggregate cache activity across the warm workspaces
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ParentPid      int32                  `protobuf:"varint,1,opt,name=parent_pid,json=parentPid,proto3" json:"parent_pid,omitempty"`
+	DaemonVersion  string                 `protobuf:"bytes,2,opt,name=daemon_version,json=daemonVersion,proto3" json:"daemon_version,omitempty"`
+	Mode           string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`                                           // "daemon" | "proc" | ""
+	Capacity       int32                  `protobuf:"varint,4,opt,name=capacity,proto3" json:"capacity,omitempty"`                                  // total concurrency slots (0 = unlimited)
+	Running        int32                  `protobuf:"varint,5,opt,name=running,proto3" json:"running,omitempty"`                                    // slots currently running
+	Queued         int32                  `protobuf:"varint,6,opt,name=queued,proto3" json:"queued,omitempty"`                                      // tasks queued for a slot
+	RunningTargets []*RunningTarget       `protobuf:"bytes,7,rep,name=running_targets,json=runningTargets,proto3" json:"running_targets,omitempty"` // what is running right now
+	Workspaces     []*Workspace           `protobuf:"bytes,8,rep,name=workspaces,proto3" json:"workspaces,omitempty"`
+	Affected       []string               `protobuf:"bytes,9,rep,name=affected,proto3" json:"affected,omitempty"`
+	Cache          *Cache                 `protobuf:"bytes,10,opt,name=cache,proto3" json:"cache,omitempty"` // aggregate cache activity across the warm workspaces
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Pool) Reset() {
@@ -453,23 +453,23 @@ func (x *Pool) GetCapacity() int32 {
 	return 0
 }
 
-func (x *Pool) GetInUse() int32 {
+func (x *Pool) GetRunning() int32 {
 	if x != nil {
-		return x.InUse
+		return x.Running
 	}
 	return 0
 }
 
-func (x *Pool) GetWaiting() int32 {
+func (x *Pool) GetQueued() int32 {
 	if x != nil {
-		return x.Waiting
+		return x.Queued
 	}
 	return 0
 }
 
-func (x *Pool) GetCalls() []*Call {
+func (x *Pool) GetRunningTargets() []*RunningTarget {
 	if x != nil {
-		return x.Calls
+		return x.RunningTargets
 	}
 	return nil
 }
@@ -495,32 +495,32 @@ func (x *Pool) GetCache() *Cache {
 	return nil
 }
 
-// Call is one in-flight unit of work in the pool.
-type Call struct {
+// RunningTarget is one running unit of work in the pool.
+type RunningTarget struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Args          []string               `protobuf:"bytes,1,rep,name=args,proto3" json:"args,omitempty"` // the argument vector (carries the target/project)
 	Workspace     string                 `protobuf:"bytes,2,opt,name=workspace,proto3" json:"workspace,omitempty"`
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"` // when the call started
-	SubOp         string                 `protobuf:"bytes,4,opt,name=sub_op,json=subOp,proto3" json:"sub_op,omitempty"`             // the sub-operation currently executing
-	Invocation    string                 `protobuf:"bytes,5,opt,name=invocation,proto3" json:"invocation,omitempty"`                // the invocation id (inv...) this call belongs to; deep-links to its live log
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"` // when the running target started
+	Step          string                 `protobuf:"bytes,4,opt,name=step,proto3" json:"step,omitempty"`                            // the cache step currently executing
+	Invocation    string                 `protobuf:"bytes,5,opt,name=invocation,proto3" json:"invocation,omitempty"`                // the invocation id (inv...) this running target belongs to; deep-links to its live log
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Call) Reset() {
-	*x = Call{}
+func (x *RunningTarget) Reset() {
+	*x = RunningTarget{}
 	mi := &file_magus_status_v1_status_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Call) String() string {
+func (x *RunningTarget) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Call) ProtoMessage() {}
+func (*RunningTarget) ProtoMessage() {}
 
-func (x *Call) ProtoReflect() protoreflect.Message {
+func (x *RunningTarget) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_status_v1_status_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -532,40 +532,40 @@ func (x *Call) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Call.ProtoReflect.Descriptor instead.
-func (*Call) Descriptor() ([]byte, []int) {
+// Deprecated: Use RunningTarget.ProtoReflect.Descriptor instead.
+func (*RunningTarget) Descriptor() ([]byte, []int) {
 	return file_magus_status_v1_status_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *Call) GetArgs() []string {
+func (x *RunningTarget) GetArgs() []string {
 	if x != nil {
 		return x.Args
 	}
 	return nil
 }
 
-func (x *Call) GetWorkspace() string {
+func (x *RunningTarget) GetWorkspace() string {
 	if x != nil {
 		return x.Workspace
 	}
 	return ""
 }
 
-func (x *Call) GetStartTime() *timestamppb.Timestamp {
+func (x *RunningTarget) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.StartTime
 	}
 	return nil
 }
 
-func (x *Call) GetSubOp() string {
+func (x *RunningTarget) GetStep() string {
 	if x != nil {
-		return x.SubOp
+		return x.Step
 	}
 	return ""
 }
 
-func (x *Call) GetInvocation() string {
+func (x *RunningTarget) GetInvocation() string {
 	if x != nil {
 		return x.Invocation
 	}
@@ -884,13 +884,12 @@ var File_magus_status_v1_status_proto protoreflect.FileDescriptor
 
 const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\n" +
-	"\x1cmagus/status/v1/status.proto\x12\x0fmagus.status.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc0\x01\n" +
+	"\x1cmagus/status/v1/status.proto\x12\x0fmagus.status.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb3\x01\n" +
 	"\x06Status\x12/\n" +
 	"\x06health\x18\x01 \x01(\x0e2\x17.magus.status.v1.HealthR\x06health\x12)\n" +
 	"\x04pool\x18\x02 \x01(\v2\x15.magus.status.v1.PoolR\x04pool\x12#\n" +
-	"\rmagus_version\x18\x03 \x01(\tR\fmagusVersion\x125\n" +
-	"\vactive_runs\x18\x04 \x03(\v2\x14.magus.status.v1.RunR\n" +
-	"activeRuns\"\xa2\x01\n" +
+	"\rmagus_version\x18\x03 \x01(\tR\fmagusVersion\x12(\n" +
+	"\x04runs\x18\x04 \x03(\v2\x14.magus.status.v1.RunR\x04runs\"\xa2\x01\n" +
 	"\x03Run\x12\x10\n" +
 	"\x03inv\x18\x01 \x01(\tR\x03inv\x12\x18\n" +
 	"\atrigger\x18\x02 \x01(\tR\atrigger\x129\n" +
@@ -918,28 +917,28 @@ const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\n" +
 	"\x06FAILED\x10\x04\x12\n" +
 	"\n" +
-	"\x06CACHED\x10\x05\"\xe0\x02\n" +
+	"\x06CACHED\x10\x05\"\xfd\x02\n" +
 	"\x04Pool\x12\x1d\n" +
 	"\n" +
 	"parent_pid\x18\x01 \x01(\x05R\tparentPid\x12%\n" +
 	"\x0edaemon_version\x18\x02 \x01(\tR\rdaemonVersion\x12\x12\n" +
 	"\x04mode\x18\x03 \x01(\tR\x04mode\x12\x1a\n" +
-	"\bcapacity\x18\x04 \x01(\x05R\bcapacity\x12\x15\n" +
-	"\x06in_use\x18\x05 \x01(\x05R\x05inUse\x12\x18\n" +
-	"\awaiting\x18\x06 \x01(\x05R\awaiting\x12+\n" +
-	"\x05calls\x18\a \x03(\v2\x15.magus.status.v1.CallR\x05calls\x12:\n" +
+	"\bcapacity\x18\x04 \x01(\x05R\bcapacity\x12\x18\n" +
+	"\arunning\x18\x05 \x01(\x05R\arunning\x12\x16\n" +
+	"\x06queued\x18\x06 \x01(\x05R\x06queued\x12G\n" +
+	"\x0frunning_targets\x18\a \x03(\v2\x1e.magus.status.v1.RunningTargetR\x0erunningTargets\x12:\n" +
 	"\n" +
 	"workspaces\x18\b \x03(\v2\x1a.magus.status.v1.WorkspaceR\n" +
 	"workspaces\x12\x1a\n" +
 	"\baffected\x18\t \x03(\tR\baffected\x12,\n" +
 	"\x05cache\x18\n" +
-	" \x01(\v2\x16.magus.status.v1.CacheR\x05cache\"\xaa\x01\n" +
-	"\x04Call\x12\x12\n" +
+	" \x01(\v2\x16.magus.status.v1.CacheR\x05cache\"\xb0\x01\n" +
+	"\rRunningTarget\x12\x12\n" +
 	"\x04args\x18\x01 \x03(\tR\x04args\x12\x1c\n" +
 	"\tworkspace\x18\x02 \x01(\tR\tworkspace\x129\n" +
 	"\n" +
-	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12\x15\n" +
-	"\x06sub_op\x18\x04 \x01(\tR\x05subOp\x12\x1e\n" +
+	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12\x12\n" +
+	"\x04step\x18\x04 \x01(\tR\x04step\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x05 \x01(\tR\n" +
 	"invocation\"\xcc\x01\n" +
@@ -992,7 +991,7 @@ var file_magus_status_v1_status_proto_goTypes = []any{
 	(*Run)(nil),                   // 3: magus.status.v1.Run
 	(*TargetRun)(nil),             // 4: magus.status.v1.TargetRun
 	(*Pool)(nil),                  // 5: magus.status.v1.Pool
-	(*Call)(nil),                  // 6: magus.status.v1.Call
+	(*RunningTarget)(nil),         // 6: magus.status.v1.RunningTarget
 	(*Workspace)(nil),             // 7: magus.status.v1.Workspace
 	(*Cache)(nil),                 // 8: magus.status.v1.Cache
 	(*GetStatusRequest)(nil),      // 9: magus.status.v1.GetStatusRequest
@@ -1004,16 +1003,16 @@ var file_magus_status_v1_status_proto_goTypes = []any{
 var file_magus_status_v1_status_proto_depIdxs = []int32{
 	0,  // 0: magus.status.v1.Status.health:type_name -> magus.status.v1.Health
 	5,  // 1: magus.status.v1.Status.pool:type_name -> magus.status.v1.Pool
-	3,  // 2: magus.status.v1.Status.active_runs:type_name -> magus.status.v1.Run
+	3,  // 2: magus.status.v1.Status.runs:type_name -> magus.status.v1.Run
 	13, // 3: magus.status.v1.Run.started_at:type_name -> google.protobuf.Timestamp
 	4,  // 4: magus.status.v1.Run.targets:type_name -> magus.status.v1.TargetRun
 	1,  // 5: magus.status.v1.TargetRun.state:type_name -> magus.status.v1.TargetRun.State
 	13, // 6: magus.status.v1.TargetRun.started_at:type_name -> google.protobuf.Timestamp
 	13, // 7: magus.status.v1.TargetRun.ended_at:type_name -> google.protobuf.Timestamp
-	6,  // 8: magus.status.v1.Pool.calls:type_name -> magus.status.v1.Call
+	6,  // 8: magus.status.v1.Pool.running_targets:type_name -> magus.status.v1.RunningTarget
 	7,  // 9: magus.status.v1.Pool.workspaces:type_name -> magus.status.v1.Workspace
 	8,  // 10: magus.status.v1.Pool.cache:type_name -> magus.status.v1.Cache
-	13, // 11: magus.status.v1.Call.start_time:type_name -> google.protobuf.Timestamp
+	13, // 11: magus.status.v1.RunningTarget.start_time:type_name -> google.protobuf.Timestamp
 	13, // 12: magus.status.v1.Workspace.load_time:type_name -> google.protobuf.Timestamp
 	13, // 13: magus.status.v1.Workspace.last_access_time:type_name -> google.protobuf.Timestamp
 	8,  // 14: magus.status.v1.Workspace.cache:type_name -> magus.status.v1.Cache

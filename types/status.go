@@ -14,7 +14,7 @@ type StatusBase struct {
 }
 
 // StatusReport is the canonical JSON/YAML shape returned by `magus status -o json`.
-// It is also served verbatim by GET /api/v1/status on the browser bridge so both
+// It is also served verbatim by GET /api/v1/status on the console so both
 // consumers share one definition. Fields are exported so pkg types can be read from
 // internal packages without importing cmd/magus.
 type StatusReport struct {
@@ -23,10 +23,10 @@ type StatusReport struct {
 	Build     BuildStatus     `json:"build" yaml:"build"`
 	Pool      *StatusOutput   `json:"pool,omitempty" yaml:"pool,omitempty"`
 	PoolError string          `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
-	// ActiveRuns are the invocations the daemon is executing right now (adopted
+	// Runs are the invocations the daemon is executing right now (adopted
 	// dispatches), each with its per-target execution state. Empty when nothing is
 	// running or when reported by a process that is not the daemon.
-	ActiveRuns []StatusRun `json:"active_runs,omitempty" yaml:"active_runs,omitempty"`
+	Runs []StatusRun `json:"runs,omitempty" yaml:"runs,omitempty"`
 }
 
 // TargetRunState is where a target sits in its lifecycle within a run. Values match the
@@ -92,21 +92,21 @@ type StatusOutput struct {
 	ParentPID     int               `json:"parent_pid" yaml:"parent_pid"`
 	DaemonVersion string            `json:"daemon_version,omitempty" yaml:"daemon_version,omitempty"`
 	Mode          string            `json:"mode,omitempty" yaml:"mode,omitempty"` // "daemon", "proc", or ""
-	Capacity      int               `json:"capacity" yaml:"capacity"`
-	InUse         int               `json:"in_use" yaml:"in_use"`
-	Waiting       int               `json:"waiting" yaml:"waiting"`
-	Calls         []StatusCall      `json:"calls,omitempty" yaml:"calls,omitempty"`
-	Workspaces    []StatusWorkspace `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
-	Affected      []string          `json:"affected,omitempty" yaml:"affected,omitempty"`
+	Capacity       int                   `json:"capacity" yaml:"capacity"`
+	Running        int                   `json:"running" yaml:"running"`
+	Queued         int                   `json:"queued" yaml:"queued"`
+	RunningTargets []StatusRunningTarget `json:"running_targets,omitempty" yaml:"running_targets,omitempty"`
+	Workspaces     []StatusWorkspace     `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
+	Affected       []string              `json:"affected,omitempty" yaml:"affected,omitempty"`
 }
 
-// StatusCall describes one in-flight call in the pool.
-type StatusCall struct {
+// StatusRunningTarget describes one running target in the pool.
+type StatusRunningTarget struct {
 	Args      []string  `json:"args" yaml:"args"`
 	Workspace string    `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 	StartedAt time.Time `json:"started_at,omitempty" yaml:"started_at,omitempty"`
-	SubOp     string    `json:"sub_op,omitempty" yaml:"sub_op,omitempty"`
-	Inv       string    `json:"inv,omitempty" yaml:"inv,omitempty"` // invocation id; deep-links to this call's live log
+	Step      string    `json:"step,omitempty" yaml:"step,omitempty"`
+	Inv       string    `json:"inv,omitempty" yaml:"inv,omitempty"` // invocation id; deep-links to this running target's live log
 }
 
 // StatusWorkspace describes one workspace currently loaded by the daemon.

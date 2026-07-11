@@ -87,16 +87,16 @@ const HEALTH: Record<number, { label: string; cls: string }> = {
 };
 
 export interface HealthView { label: string; cls: string; }
-export interface PoolView { capacity: number; inUse: number; waiting: number; mode: string; }
+export interface PoolView { capacity: number; running: number; queued: number; mode: string; }
 export interface CacheView { hits: number; misses: number; errors: number; hitRate: number | null; sizeBytes: number | bigint; }
-export interface CallView { args: string[]; subOp: string; startTime?: Timestamp; invocation: string; }
+export interface RunningTargetView { args: string[]; step: string; startTime?: Timestamp; invocation: string; }
 export interface WorkspaceView { root: string; hits?: number; misses?: number; errors?: number; lastAccessTime?: Timestamp; }
 
 export interface StatusView {
   health: HealthView;
   pool: PoolView;
   cache: CacheView;
-  calls: CallView[];
+  runningTargets: RunningTargetView[];
   workspaces: WorkspaceView[];
   magusVersion: string;
   daemonVersion: string;
@@ -116,13 +116,13 @@ export function mapStatus(st: Status): StatusView {
     health: HEALTH[st.health] || HEALTH[Health.UNSPECIFIED],
     pool: {
       capacity: pool ? pool.capacity : 0,
-      inUse: pool ? pool.inUse : 0,
-      waiting: pool ? pool.waiting : 0,
+      running: pool ? pool.running : 0,
+      queued: pool ? pool.queued : 0,
       mode: (pool && pool.mode) || "",
     },
     cache: mapCache(pool && pool.cache),
-    calls: ((pool && pool.calls) || []).map((c) => ({
-      args: c.args || [], subOp: c.subOp || "", startTime: c.startTime, invocation: c.invocation || "",
+    runningTargets: ((pool && pool.runningTargets) || []).map((c) => ({
+      args: c.args || [], step: c.step || "", startTime: c.startTime, invocation: c.invocation || "",
     })),
     workspaces: ((pool && pool.workspaces) || []).map((w) => ({
       root: w.root,
@@ -276,9 +276,9 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 
 export interface SampleView {
   at: number;        // ms
-  inUse: number;
+  running: number;
   capacity: number;  // 0 = unlimited
-  waiting: number;
+  queued: number;
   cacheHits: number;
   cacheMisses: number;
 }
@@ -286,9 +286,9 @@ export interface SampleView {
 export function mapSample(s: ProtoSample): SampleView {
   return {
     at: tsMillis(s.at),
-    inUse: s.inUse,
+    running: s.running,
     capacity: s.capacity,
-    waiting: s.waiting,
+    queued: s.queued,
     cacheHits: Number(s.cacheHits),
     cacheMisses: Number(s.cacheMisses),
   };

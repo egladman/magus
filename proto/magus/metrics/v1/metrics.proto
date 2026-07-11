@@ -163,9 +163,9 @@ message Backfill {
 // square per sample by utilization.
 message Sample {
   google.protobuf.Timestamp at = 1;
-  int32 in_use = 2;        // pool slots in use at this tick
+  int32 running = 2;       // pool slots running at this tick
   int32 capacity = 3;      // pool capacity (0 = unlimited)
-  int32 waiting = 4;       // tasks queued for a slot
+  int32 queued = 4;        // tasks queued for a slot
   int64 cache_hits = 5;    // cumulative; diff adjacent samples for a hit rate
   int64 cache_misses = 6;  // cumulative
   int64 target_runs = 7;   // cumulative target executions

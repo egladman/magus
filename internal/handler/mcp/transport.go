@@ -121,7 +121,7 @@ func newServer(opts Options, log *slog.Logger, agentFn func(context.Context) str
 // HTTPHandler builds the MCP Streamable-HTTP handler for daemon mode: it
 // validates opts, wires per-session agent tracking, and returns the bare MCP
 // handler. It mounts no routes and opens no listener - the daemon package owns
-// the HTTP server assembly (guards, health routes, web bridge) so this package
+// the HTTP server assembly (guards, health routes, console) so this package
 // need not depend on the httpx server core, the dashboard bridge, or the file
 // watcher. The returned handler is a path-agnostic http.Handler; the daemon
 // mounts it at /mcp, matching the path StreamableHTTPServer's own Start() would use.

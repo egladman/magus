@@ -14,30 +14,30 @@ import (
 type leafEntry struct {
 	target   string        // target name
 	duration time.Duration // zero when StartedAt was unset upstream
-	subop    string        // current sub-op label, e.g. "archive.uncompress foo.tar.zst [4×]"
+	step     string        // current cache step label, e.g. "archive.uncompress foo.tar.zst [4×]"
 }
 
 const (
-	inflightLineWidth = 70 // max chars per leaf line before truncation
+	runningLineWidth = 70 // max chars per leaf line before truncation
 )
 
 type cellKind int
 
 const (
-	cellActive         cellKind = iota // in-use worker slot
-	cellIdle                           // capacity slot, not active
+	cellRunning        cellKind = iota // running slot
+	cellIdle                           // capacity slot, not running
 	cellOutOfPool                      // CPU thread outside configured capacity
 	cellOverSubscribed                 // configured capacity slot beyond NumCPU
 )
 
-func cellState(i, inUse, capacity, numCPU int) cellKind {
-	active := i < inUse
+func cellState(i, running, capacity, numCPU int) cellKind {
+	isRunning := i < running
 	inPool := i < capacity
 	inMachine := i < numCPU
 
 	switch {
-	case active:
-		return cellActive
+	case isRunning:
+		return cellRunning
 	case inPool && !inMachine:
 		return cellOverSubscribed
 	case inPool:
@@ -79,7 +79,7 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 	fmt.Fprintln(w)
 
 	// Grid rows. No per-cell animation — the header carries no motion
-	// and the spinner lives on the inflight tree below.
+	// and the spinner lives on the running tree below.
 	for r := 0; r < rows; r++ {
 		var sb strings.Builder
 		sb.WriteString("  ")
@@ -89,9 +89,9 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 				sb.WriteString("  ")
 				continue
 			}
-			kind := cellState(i, pool.InUse, pool.Capacity, numCPU)
+			kind := cellState(i, pool.Running, pool.Capacity, numCPU)
 			switch kind {
-			case cellActive:
+			case cellRunning:
 				sb.WriteString(ansiBrightGreen + "●" + ansiReset + " ")
 			case cellIdle:
 				sb.WriteString("○ ")
@@ -104,13 +104,13 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 		fmt.Fprintln(w, sb.String())
 	}
 
-	if len(pool.Calls) > 0 {
+	if len(pool.RunningTargets) > 0 {
 		spinner := spinnerFrames[animFrame%len(spinnerFrames)]
 		fmt.Fprintf(w, "\n  %s running\n", spinner)
-		drawInflightTree(w, pool.Calls, time.Now())
+		drawRunningTree(w, pool.RunningTargets, time.Now())
 	}
 
-	fmt.Fprintf(w, "\n  %s●%s active  ○ idle  %s·%s cpu\n",
+	fmt.Fprintf(w, "\n  %s●%s running  ○ idle  %s·%s cpu\n",
 		ansiBrightGreen, ansiReset, ansiDimGrey, ansiReset)
 }
 
@@ -124,26 +124,26 @@ func poolHeader(pool *types.StatusOutput, numCPU int) string {
 	if pool.DaemonVersion != "" {
 		parts = append(parts, pool.DaemonVersion)
 	}
-	parts = append(parts, fmt.Sprintf("%d/%d busy", pool.InUse, pool.Capacity))
+	parts = append(parts, fmt.Sprintf("%d/%d running", pool.Running, pool.Capacity))
 	parts = append(parts, fmt.Sprintf("%d cpu", numCPU))
 	out := strings.Join(parts, " · ")
-	if pool.Waiting > 0 {
-		out += fmt.Sprintf("  (+%d waiting)", pool.Waiting)
+	if pool.Queued > 0 {
+		out += fmt.Sprintf("  (+%d queued)", pool.Queued)
 	}
 	return out
 }
 
-// drawInflightTree renders calls grouped by workspace → project → target; collapses workspace when single.
-func drawInflightTree(w io.Writer, inflight []types.StatusCall, now time.Time) {
+// drawRunningTree renders running targets grouped by workspace → project → target; collapses workspace when single.
+func drawRunningTree(w io.Writer, running []types.StatusRunningTarget, now time.Time) {
 	const indent = "  "
 	// Group: workspace → project → []leafEntry
 	type projMap map[string][]leafEntry
 	wsGroups := map[string]projMap{}
-	for _, e := range inflight {
-		project, target := parseInflight(e.Args)
+	for _, e := range running {
+		project, target := parseRunning(e.Args)
 		if project == "" && target == "" {
 			project = "(?)"
-			target = truncate(strings.Join(e.Args, " "), inflightLineWidth)
+			target = truncate(strings.Join(e.Args, " "), runningLineWidth)
 		}
 		ws := workspaceLabel(e.Workspace)
 		var dur time.Duration
@@ -153,7 +153,7 @@ func drawInflightTree(w io.Writer, inflight []types.StatusCall, now time.Time) {
 		if wsGroups[ws] == nil {
 			wsGroups[ws] = projMap{}
 		}
-		wsGroups[ws][project] = append(wsGroups[ws][project], leafEntry{target: target, duration: dur, subop: e.SubOp})
+		wsGroups[ws][project] = append(wsGroups[ws][project], leafEntry{target: target, duration: dur, step: e.Step})
 	}
 
 	wsKeys := make([]string, 0, len(wsGroups))
@@ -204,14 +204,14 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 		for j, lf := range leaves {
 			vLast := j == len(leaves)-1
 			vPrefix, actIndent := branchPrefix(vIndent, vLast)
-			line := truncate(lf.target, inflightLineWidth)
+			line := truncate(lf.target, runningLineWidth)
 			if d := formatDur(lf.duration); d != "" {
 				line += " " + ansiDimGrey + "(" + d + ")" + ansiReset
 			}
 			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
-			if lf.subop != "" {
+			if lf.step != "" {
 				actPrefix, _ := branchPrefix(actIndent, true)
-				fmt.Fprintf(w, "%s%s%s%s\n", actPrefix, ansiDimGrey, truncate(lf.subop, inflightLineWidth), ansiReset)
+				fmt.Fprintf(w, "%s%s%s%s\n", actPrefix, ansiDimGrey, truncate(lf.step, runningLineWidth), ansiReset)
 			}
 		}
 	}
@@ -253,7 +253,7 @@ func workspaceLabel(root string) string {
 	return filepath.Base(root)
 }
 
-func parseInflight(args []string) (project, target string) {
+func parseRunning(args []string) (project, target string) {
 	i := 0
 	for i < len(args) && strings.HasPrefix(args[i], "-") {
 		i++

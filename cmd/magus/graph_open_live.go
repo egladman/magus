@@ -12,15 +12,15 @@ import (
 	"github.com/egladman/magus/internal/auth"
 )
 
-// probeLiveBridgeTimeout bounds the real HTTP probe of the web bridge below.
+// probeLiveBridgeTimeout bounds the real HTTP probe of the console below.
 const probeLiveBridgeTimeout = 2 * time.Second
 
-// probeLiveBridge issues a real HTTP GET to the web bridge's guarded
+// probeLiveBridge issues a real HTTP GET to the console's guarded
 // /api/v1/graph route to confirm it is actually up, mirroring the doctor
 // bridge check (internal/doctor/checks_mcp.go probeBridgeReachability). A
 // daemon-status probe alone is not enough: daemonStatus("") accepts ANY
 // reachable proc socket (Mode=="proc"), which is a different transport than
-// the web bridge this URL targets - a proc-mode daemon with no bridge running
+// the console this URL targets - a proc-mode daemon with no bridge running
 // would otherwise let a token be printed for an address nothing is listening
 // on. A 401/403 response proves the guarded route exists (auth runs before
 // the handler); connection refused/timeout means the bridge is down.
@@ -43,7 +43,7 @@ func probeLiveBridge(ctx context.Context, addr string) error {
 	}
 }
 
-// liveBridgeReachable reports whether the web bridge is actually up, for the
+// liveBridgeReachable reports whether the console is actually up, for the
 // zero-arg auto-switch in graphOpen. It never emits a token; it only decides
 // whether to attempt live mode at all.
 func liveBridgeReachable(ctx context.Context) bool {
@@ -63,13 +63,13 @@ func liveBridgeReachable(ctx context.Context) bool {
 func graphOpenLive(ctx context.Context, base string, printOnly, useTargets bool) error {
 	hostPort := mcpAddrString()
 
-	// Probe the ACTUAL web bridge (not just the proc socket) so we never emit a
+	// Probe the ACTUAL console (not just the proc socket) so we never emit a
 	// URL and token for a transport nothing is listening on. Explicit --live
 	// with no reachable bridge is an error; magus never auto-starts a daemon.
 	pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
 	defer cancel()
 	if err := probeLiveBridge(pctx, hostPort); err != nil {
-		fmt.Fprintln(os.Stderr, "magus graph open --live: the web bridge is not reachable.")
+		fmt.Fprintln(os.Stderr, "magus graph open --live: the console is not reachable.")
 		fmt.Fprintln(os.Stderr, "start it: magus server start")
 		return errSilent{exitCode: 1}
 	}

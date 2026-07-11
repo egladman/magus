@@ -107,7 +107,7 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 	}
 
 	// Zero-arg default: when no explicit delivery mode is chosen and no --targets,
-	// probe the ACTUAL web bridge first (not just the proc socket - a proc daemon
+	// probe the ACTUAL console first (not just the proc socket - a proc daemon
 	// can be up with no bridge running). If it is reachable, use --live for an
 	// always-fresh view; otherwise fall through to fragment mode.
 	if !useLive && !serve {

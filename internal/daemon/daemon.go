@@ -1,6 +1,6 @@
 // Package daemon assembles the magus daemon HTTP server: it mounts the MCP
 // Streamable-HTTP handler, the k8s health routes, and the browser Graph
-// Explorer web bridge onto one loopback listener, applying the shared bearer
+// Explorer console onto one loopback listener, applying the shared bearer
 // and DNS-rebind guards. It is the composition point that ties together
 // internal/handler/mcp, internal/httpx, and internal/service/console so
 // neither the handler/mcp package nor the root magus package has to.
@@ -33,22 +33,22 @@ import (
 // Daemon assembles and runs the daemon HTTP server from a set of MCP server
 // options. It satisfies magus.Daemon.
 type Daemon struct {
-	opts       mcp.Options
-	activeRuns func() []types.StatusRun
+	opts mcp.Options
+	runs func() []types.StatusRun
 }
 
 // Option customizes a Daemon.
 type Option func(*Daemon)
 
-// WithActiveRuns supplies the daemon's live-run source (the run registry's Snapshot). When
+// WithRuns supplies the daemon's live-run source (the run registry's Snapshot). When
 // set, /api/v1/status and the status SSE frame carry the per-target execution state of every
 // adopted run alongside the pool - the same status surface, more live state.
-func WithActiveRuns(fn func() []types.StatusRun) Option {
-	return func(d *Daemon) { d.activeRuns = fn }
+func WithRuns(fn func() []types.StatusRun) Option {
+	return func(d *Daemon) { d.runs = fn }
 }
 
 // New returns a Daemon that will serve the MCP endpoint (plus health routes and
-// the web bridge) described by opts.
+// the console) described by opts.
 func New(opts mcp.Options, options ...Option) *Daemon {
 	d := &Daemon{opts: opts}
 	for _, o := range options {
@@ -116,7 +116,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 		httpServer.Handle(path, h)
 	}
 
-	// Web bridge: three frozen GET routes for the browser Graph Explorer.
+	// Console: three frozen GET routes for the browser Graph Explorer.
 	// Mounted only when:
 	//   1. bridge.enabled is unset or true (opt-out via bridge.enabled: false)
 	//   2. The bind address is loopback (non-loopback binding refuses the mount)
@@ -127,7 +127,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 	// the loopback gate is sound: addr.Addr().IsLoopback() is exact.
 	if opts.Config.Bridge.Enabled == nil || *opts.Config.Bridge.Enabled {
 		if !addr.Addr().IsLoopback() {
-			log.Warn("[BRIDGE] refusing to mount web bridge on non-loopback address; set bridge.enabled: false to suppress this warning",
+			log.Warn("[BRIDGE] refusing to mount console on non-loopback address; set bridge.enabled: false to suppress this warning",
 				slog.String("addr", addr.String()))
 		} else {
 			// Start a file watcher for SSE graph-invalidation events. Non-fatal:
@@ -150,10 +150,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			// The console service is pure application logic; the three route handlers below
 			// hold narrow interfaces satisfied by it and own all wire encoding. When a live-run
-			// source is set, the status report also carries the daemon's active runs.
+			// source is set, the status report also carries the daemon's runs.
 			var svcOpts []console.Option
-			if s.activeRuns != nil {
-				svcOpts = append(svcOpts, console.WithActiveRuns(s.activeRuns))
+			if s.runs != nil {
+				svcOpts = append(svcOpts, console.WithRuns(s.runs))
 			}
 			svc := console.NewService(opts.Magus, opts.Config, opts.StatusBase, opts.Version, svcOpts...)
 
@@ -207,7 +207,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			} else {
 				log.Info("[BRIDGE] metrics service off (workspace not collecting metrics)")
 			}
-			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
+			log.Info("[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}
 	}
 

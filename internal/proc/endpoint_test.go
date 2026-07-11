@@ -178,8 +178,8 @@ func TestQueryStatus(t *testing.T) {
 	assert.Equal(t, 4, status.Capacity)
 	// The handler yields its admission slot for the duration of the forwarded run
 	// (so the adopted build's own RunAll competes for the full pool), so no slot is
-	// held while the handler blocks; the in-flight call is still tracked in Calls.
-	assert.Equal(t, 0, status.InUse)
+	// held while the handler blocks; the running call is still tracked in Calls.
+	assert.Equal(t, 0, status.Running)
 	require.Len(t, status.Calls, 1)
 	require.Len(t, status.Calls[0].Args, 3)
 	assert.Equal(t, "widget", status.Calls[0].Args[2])
@@ -196,22 +196,22 @@ func TestRunChildSyncSlotLending(t *testing.T) {
 	require.NoError(t, lim.Acquire(ctx))
 
 	snap := lim.Snapshot()
-	require.Equal(t, 2, snap.InUse, "before lend")
+	require.Equal(t, 2, snap.Running, "before lend")
 
 	// RunChildSync should release one slot (lending), run fn, then re-acquire.
-	var inUseDuringFn int
+	var runningDuringFn int
 	err := RunChildSync(ctx, lim, func() error {
-		inUseDuringFn = lim.Snapshot().InUse
+		runningDuringFn = lim.Snapshot().Running
 		return nil
 	})
 	require.NoError(t, err)
 
-	// During fn, the lent slot was released: only 1 in use.
-	assert.Equal(t, 1, inUseDuringFn, "inUse during fn")
+	// During fn, the lent slot was released: only 1 running.
+	assert.Equal(t, 1, runningDuringFn, "running during fn")
 
 	// After RunChildSync, the slot is re-acquired: back to 2.
 	snap = lim.Snapshot()
-	assert.Equal(t, 2, snap.InUse, "after RunChildSync")
+	assert.Equal(t, 2, snap.Running, "after RunChildSync")
 }
 
 // TestRunChildSyncNoLendWithoutSlot verifies that a slotless caller (no
@@ -222,15 +222,15 @@ func TestRunChildSyncNoLendWithoutSlot(t *testing.T) {
 	lim := cache.NewLimiter(2)
 	ctx := context.Background() // no SlotHeld marker
 	require.NoError(t, lim.Acquire(ctx))
-	var inUseDuringFn int
+	var runningDuringFn int
 	err := RunChildSync(ctx, lim, func() error {
-		inUseDuringFn = lim.Snapshot().InUse
+		runningDuringFn = lim.Snapshot().Running
 		return nil
 	})
 	require.NoError(t, err)
 	// No lending: the one outstanding slot stays held throughout.
-	assert.Equal(t, 1, inUseDuringFn, "inUse during fn (no lend without slot)")
-	assert.Equal(t, 1, lim.Snapshot().InUse, "after RunChildSync")
+	assert.Equal(t, 1, runningDuringFn, "running during fn (no lend without slot)")
+	assert.Equal(t, 1, lim.Snapshot().Running, "after RunChildSync")
 }
 
 func TestRunChildSyncNilLimiter(t *testing.T) {

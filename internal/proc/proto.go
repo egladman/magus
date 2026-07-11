@@ -74,8 +74,8 @@ type StatusReply struct {
 	DaemonVersion string      `json:"daemon_version,omitempty"`
 	Mode          string      `json:"mode,omitempty"` // "daemon" (multi-workspace) | "proc" (per-process)
 	Capacity      int         `json:"capacity"`
-	InUse         int         `json:"in_use"`
-	Waiting       int         `json:"waiting"`
+	Running       int         `json:"running"`
+	Queued        int         `json:"queued"`
 	Calls         []Call      `json:"calls,omitempty"`
 	Workspaces    []Workspace `json:"workspaces,omitempty"` // nil for per-process proc servers
 }

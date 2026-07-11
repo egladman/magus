@@ -135,8 +135,8 @@ func buildDaemonInfo(ctx context.Context, _ types.WorkspaceRepository) doctor.Da
 	di.ParentPID = reply.ParentPID
 	di.DaemonVersion = reply.DaemonVersion
 	di.Capacity = reply.Capacity
-	di.InUse = reply.InUse
-	di.Waiting = reply.Waiting
+	di.Running = reply.Running
+	di.Queued = reply.Queued
 	for _, w := range reply.Workspaces {
 		di.Workspaces = append(di.Workspaces, doctor.LoadedWorkspace{
 			Root:       w.Root,

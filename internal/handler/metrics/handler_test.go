@@ -56,7 +56,7 @@ func TestGetMetrics(t *testing.T) {
 func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
 	stat := fakeStatus{rep: types.StatusReport{Pool: &types.StatusOutput{
-		InUse: 3, Capacity: 8, Waiting: 2,
+		Running: 3, Capacity: 8, Queued: 2,
 	}}}
 	svc := NewService(fakeCollector{rm: fixtureRM()}, stat,
 		WithClock(func() time.Time { return at }),
@@ -69,16 +69,16 @@ func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 	require.Len(t, samples, 1)
 	want := &metricsv1.Sample{
 		At:          samples[0].At, // timestamp compared separately below
-		InUse:       3,
+		Running:     3,
 		Capacity:    8,
-		Waiting:     2,
+		Queued:      2,
 		CacheHits:   7,
 		CacheMisses: 3,
 		TargetRuns:  10,
 	}
-	require.Equal(t, want.InUse, samples[0].InUse)
+	require.Equal(t, want.Running, samples[0].Running)
 	require.Equal(t, want.Capacity, samples[0].Capacity)
-	require.Equal(t, want.Waiting, samples[0].Waiting)
+	require.Equal(t, want.Queued, samples[0].Queued)
 	require.Equal(t, want.CacheHits, samples[0].CacheHits)
 	require.Equal(t, want.CacheMisses, samples[0].CacheMisses)
 	require.Equal(t, want.TargetRuns, samples[0].TargetRuns)

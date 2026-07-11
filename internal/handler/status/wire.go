@@ -39,8 +39,8 @@ func statusReportToProto(r types.StatusReport, magusVersion string) *statusv1.St
 			s.Pool.Cache = agg
 		}
 	}
-	for _, run := range r.ActiveRuns {
-		s.ActiveRuns = append(s.ActiveRuns, runToProto(run))
+	for _, run := range r.Runs {
+		s.Runs = append(s.Runs, runToProto(run))
 	}
 	return s
 }
@@ -111,13 +111,13 @@ func poolToProto(p *types.StatusOutput) *statusv1.Pool {
 		DaemonVersion: p.DaemonVersion,
 		Mode:          p.Mode,
 		Capacity:      int32(p.Capacity),
-		InUse:         int32(p.InUse),
-		Waiting:       int32(p.Waiting),
+		Running:       int32(p.Running),
+		Queued:        int32(p.Queued),
 		Affected:      p.Affected,
 	}
-	for _, c := range p.Calls {
-		out.Calls = append(out.Calls, &statusv1.Call{
-			Args: c.Args, Workspace: c.Workspace, StartTime: tsFromTime(c.StartedAt), SubOp: c.SubOp,
+	for _, c := range p.RunningTargets {
+		out.RunningTargets = append(out.RunningTargets, &statusv1.RunningTarget{
+			Args: c.Args, Workspace: c.Workspace, StartTime: tsFromTime(c.StartedAt), Step: c.Step,
 			Invocation: c.Inv,
 		})
 	}

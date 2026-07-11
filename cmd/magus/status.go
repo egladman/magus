@@ -187,7 +187,7 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 // statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput.
 // It deliberately leaves StatusOutput.Affected unset: `magus status` queries
 // the daemon over its proc socket only and never opens a workspace, so there
-// is no VCS context here to compute an affected set from. The web bridge's
+// is no VCS context here to compute an affected set from. The console's
 // live Graph Explorer "affected" view (internal/service/console, which
 // has its own copy of this conversion) is correspondingly kept disabled
 // client-side rather than wired to a field that can never be populated from
@@ -201,12 +201,12 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 		DaemonVersion: r.DaemonVersion,
 		Mode:          r.Mode,
 		Capacity:      r.Capacity,
-		InUse:         r.InUse,
-		Waiting:       r.Waiting,
+		Running:       r.Running,
+		Queued:        r.Queued,
 	}
 	for _, c := range r.Calls {
-		out.Calls = append(out.Calls, types.StatusCall{
-			Args: c.Args, Workspace: c.Workspace, StartedAt: c.StartedAt, SubOp: c.SubOp,
+		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
+			Args: c.Args, Workspace: c.Workspace, StartedAt: c.StartedAt, Step: c.SubOp,
 		})
 	}
 	for _, w := range r.Workspaces {
@@ -296,14 +296,14 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 				label = "daemon"
 			}
 			fmt.Fprintf(w, "%s pid %d\n", label, r.Pool.ParentPID)
-			fmt.Fprintf(w, "capacity: %d   in-use: %d   waiting: %d\n",
-				r.Pool.Capacity, r.Pool.InUse, r.Pool.Waiting)
-			if len(r.Pool.Calls) == 0 {
-				fmt.Fprintln(w, "no calls in flight")
+			fmt.Fprintf(w, "capacity: %d   running: %d   queued: %d\n",
+				r.Pool.Capacity, r.Pool.Running, r.Pool.Queued)
+			if len(r.Pool.RunningTargets) == 0 {
+				fmt.Fprintln(w, "nothing running")
 			} else {
 				fmt.Fprintf(w, "\n%-4s  %-30s  %s\n", "#", "workspace", "args")
 				fmt.Fprintln(w, strings.Repeat("-", 60))
-				for i, e := range r.Pool.Calls {
+				for i, e := range r.Pool.RunningTargets {
 					ws := e.Workspace
 					if ws == "" {
 						ws = "-"
@@ -325,19 +325,19 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 	}
 }
 
-// compactInflightMax caps how many inflight entries the compact line shows
+// compactRunningMax caps how many running entries the compact line shows
 // before collapsing the tail into "+N more". Three keeps the line readable in
 // a narrow sidebar pane while still surfacing the slowest work.
-const compactInflightMax = 3
+const compactRunningMax = 3
 
-// compactInflightBudget bounds a single "project:target(dur)" entry so one
+// compactRunningBudget bounds a single "project:target(dur)" entry so one
 // pathological label can't blow the line out.
-const compactInflightBudget = 32
+const compactRunningBudget = 32
 
 // printStatusCompact renders the report as one densely-packed line. The format
 // targets multiplexer sidebars: ANSI-free, no telemetry/cache config (those are
-// static), oldest inflight calls first so the long-running work stays visible.
-// now is the reference time for per-call durations (parameterised for tests).
+// static), oldest running targets first so the long-running work stays visible.
+// now is the reference time for per-target durations (parameterised for tests).
 func printStatusCompact(w io.Writer, r statusReport, now time.Time) {
 	if r.Pool == nil {
 		fmt.Fprintln(w, "daemon: off")
@@ -350,18 +350,18 @@ func printStatusCompact(w io.Writer, r statusReport, now time.Time) {
 	}
 	parts := []string{label}
 
-	if p.Capacity > 0 || p.InUse > 0 {
-		state := "busy"
-		if p.InUse == 0 && len(p.Calls) == 0 {
+	if p.Capacity > 0 || p.Running > 0 {
+		state := "running"
+		if p.Running == 0 && len(p.RunningTargets) == 0 {
 			state = "idle"
 		}
-		parts = append(parts, fmt.Sprintf("%d/%d %s", p.InUse, p.Capacity, state))
+		parts = append(parts, fmt.Sprintf("%d/%d %s", p.Running, p.Capacity, state))
 	}
-	if p.Waiting > 0 {
-		parts = append(parts, fmt.Sprintf("+%d waiting", p.Waiting))
+	if p.Queued > 0 {
+		parts = append(parts, fmt.Sprintf("+%d queued", p.Queued))
 	}
 
-	parts = append(parts, compactInflightParts(p.Calls, now)...)
+	parts = append(parts, compactRunningParts(p.RunningTargets, now)...)
 
 	if n := len(p.Workspaces); n > 0 {
 		parts = append(parts, fmt.Sprintf("%d ws", n))
@@ -369,20 +369,20 @@ func printStatusCompact(w io.Writer, r statusReport, now time.Time) {
 	fmt.Fprintln(w, strings.Join(parts, " · "))
 }
 
-func compactInflightParts(calls []types.StatusCall, now time.Time) []string {
-	if len(calls) == 0 {
+func compactRunningParts(targets []types.StatusRunningTarget, now time.Time) []string {
+	if len(targets) == 0 {
 		return nil
 	}
 
 	wsSet := map[string]struct{}{}
-	for _, c := range calls {
+	for _, c := range targets {
 		wsSet[c.Workspace] = struct{}{}
 	}
 	showWS := len(wsSet) > 1
 
 	// Sort by duration descending (oldest first); zero durations sort last.
-	sorted := make([]types.StatusCall, len(calls))
-	copy(sorted, calls)
+	sorted := make([]types.StatusRunningTarget, len(targets))
+	copy(sorted, targets)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		di := durationOf(sorted[i], now)
 		dj := durationOf(sorted[j], now)
@@ -396,13 +396,13 @@ func compactInflightParts(calls []types.StatusCall, now time.Time) []string {
 		}
 	})
 
-	out := make([]string, 0, compactInflightMax+1)
-	limit := compactInflightMax
+	out := make([]string, 0, compactRunningMax+1)
+	limit := compactRunningMax
 	if len(sorted) < limit {
 		limit = len(sorted)
 	}
 	for i := 0; i < limit; i++ {
-		out = append(out, formatCompactCall(sorted[i], showWS, now))
+		out = append(out, formatCompactRunningTarget(sorted[i], showWS, now))
 	}
 	if extra := len(sorted) - limit; extra > 0 {
 		out = append(out, fmt.Sprintf("+%d more", extra))
@@ -410,15 +410,15 @@ func compactInflightParts(calls []types.StatusCall, now time.Time) []string {
 	return out
 }
 
-func durationOf(c types.StatusCall, now time.Time) time.Duration {
+func durationOf(c types.StatusRunningTarget, now time.Time) time.Duration {
 	if c.StartedAt.IsZero() {
 		return 0
 	}
 	return now.Sub(c.StartedAt)
 }
 
-func formatCompactCall(c types.StatusCall, showWS bool, now time.Time) string {
-	project, target := parseInflight(c.Args)
+func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now time.Time) string {
+	project, target := parseRunning(c.Args)
 	if project == "" && target == "" {
 		project = "?"
 		target = "?"
@@ -430,7 +430,7 @@ func formatCompactCall(c types.StatusCall, showWS bool, now time.Time) string {
 	if d := formatDur(durationOf(c, now)); d != "" {
 		label += "(" + d + ")"
 	}
-	return truncate(label, compactInflightBudget)
+	return truncate(label, compactRunningBudget)
 }
 
 func resolveStatusSocket(ctx context.Context, explicit string) (string, error) {

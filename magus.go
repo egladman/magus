@@ -73,7 +73,7 @@ type Magus struct {
 }
 
 // Daemon is the long-running server this workspace hosts (the MCP HTTP endpoint plus the
-// browser /api bridge, and whatever else the daemon grows to serve). It is injected by
+// console API routes, and whatever else the daemon grows to serve). It is injected by
 // the CLI in daemon mode ONLY - so ordinary command paths never construct one - and held
 // as an interface so the root magus package need not import the daemon/handler packages
 // (which depend on magus), breaking that cycle. The concrete *daemon.Daemon satisfies it.

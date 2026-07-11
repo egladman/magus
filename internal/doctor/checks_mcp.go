@@ -74,7 +74,7 @@ func (*runner) checkMCPTokens() Check {
 // independent of whether the proc daemon is reachable (the bridge lives on the
 // MCP HTTP server, which has a distinct lifecycle from the proc socket).
 func probeBridgeReachability(d *DaemonInfo) Check {
-	const name = "web bridge"
+	const name = "console"
 	if d == nil {
 		return Check{Name: name, Status: StatusOK, Message: "daemon info unavailable; bridge check skipped"}
 	}

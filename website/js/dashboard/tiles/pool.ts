@@ -1,6 +1,6 @@
 // pool.ts - the concurrency pool as an occupancy grid: one cube per capacity slot,
-// filled when in use, dashed cubes for tasks queued waiting on a slot (an
-// airplane-seating read). An unlimited pool (capacity 0) shows one cube per in-use
+// filled when running, dashed cubes for tasks queued on a slot (an
+// airplane-seating read). An unlimited pool (capacity 0) shows one cube per running
 // slot. The heading deep-links the Pool glossary term.
 
 import type { DashboardState, PoolView } from "../state";
@@ -13,27 +13,27 @@ export function poolTile(): Tile {
   const grid = h("div", "slot-grid");
   grid.setAttribute("aria-label", "Concurrency slots");
   const legend = h("div", "pool-legend");
-  const waitLg = h("span", "lg lg-wait");
-  waitLg.hidden = true;
-  const waitCount = h("span", undefined, "0");
-  waitLg.append(document.createTextNode("waiting "), waitCount);
-  legend.append(h("span", "lg lg-busy", "in use"), h("span", "lg lg-free", "free"), waitLg);
+  const queuedLg = h("span", "lg lg-queued");
+  queuedLg.hidden = true;
+  const queuedCount = h("span", undefined, "0");
+  queuedLg.append(document.createTextNode("queued "), queuedCount);
+  legend.append(h("span", "lg lg-running", "running"), h("span", "lg lg-free", "free"), queuedLg);
   card.body.append(grid, legend);
 
   function render(pool: PoolView): void {
-    const cap = pool.capacity, used = pool.inUse, waiting = pool.waiting;
-    card.setNote(cap > 0 ? `${used} / ${cap} slots` : `${used} in use, unlimited`);
+    const cap = pool.capacity, used = pool.running, queued = pool.queued;
+    card.setNote(cap > 0 ? `${used} / ${cap} slots` : `${used} running, unlimited`);
     const slots = cap > 0 ? cap : used;
-    const total = Math.min(slots + waiting, SLOT_CAP);
+    const total = Math.min(slots + queued, SLOT_CAP);
     const frag = document.createDocumentFragment();
     for (let i = 0; i < total; i++) {
       const s = h("div");
-      s.className = "slot" + (i < used ? " busy" : i >= slots ? " waiting" : "");
+      s.className = "slot" + (i < used ? " running" : i >= slots ? " queued" : "");
       frag.append(s);
     }
     grid.replaceChildren(frag);
-    waitLg.hidden = waiting === 0;
-    waitCount.textContent = String(waiting);
+    queuedLg.hidden = queued === 0;
+    queuedCount.textContent = String(queued);
   }
 
   return {

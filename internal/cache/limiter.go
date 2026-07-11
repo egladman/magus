@@ -14,8 +14,8 @@ import (
 type Limiter struct {
 	sem     *semaphore.Weighted
 	cap     int
-	inUse   atomic.Int64
-	waiting atomic.Int64
+	running atomic.Int64
+	queued  atomic.Int64
 
 	onAcquire atomic.Pointer[func(waitNs int64, n int)]
 	onRelease atomic.Pointer[func(n int)]
@@ -25,10 +25,10 @@ type Limiter struct {
 // SetHooks installs optional callbacks fired on every Acquire/Release. Must not block.
 // Stored atomically so a SetHooks racing with concurrent Acquire/Release is safe.
 //
-// onWait mirrors the internal waiting counter exactly: it fires with +n the instant a caller
+// onWait mirrors the internal queued counter exactly: it fires with +n the instant a caller
 // begins waiting for n slots (before the blocking Acquire) and with -n once that Acquire
 // returns, whether it acquired or the context was cancelled. Net inflight of onWait tracks
-// [Limiter.Snapshot]'s Waiting.
+// [Limiter.Snapshot]'s Queued.
 func (l *Limiter) SetHooks(onAcquire func(waitNs int64, n int), onRelease func(n int), onWait func(delta int)) {
 	l.onAcquire.Store(&onAcquire)
 	l.onRelease.Store(&onRelease)
@@ -68,12 +68,12 @@ func (l *Limiter) AcquireN(ctx context.Context, n int) error {
 	if n > l.cap {
 		return fmt.Errorf("limiter: acquire %d exceeds capacity %d", n, l.cap)
 	}
-	l.waiting.Add(int64(n))
+	l.queued.Add(int64(n))
 	if fn := l.onWait.Load(); fn != nil && *fn != nil {
 		(*fn)(n)
 	}
 	defer func() {
-		l.waiting.Add(-int64(n))
+		l.queued.Add(-int64(n))
 		if fn := l.onWait.Load(); fn != nil && *fn != nil {
 			(*fn)(-n)
 		}
@@ -82,7 +82,7 @@ func (l *Limiter) AcquireN(ctx context.Context, n int) error {
 	if err := l.sem.Acquire(ctx, int64(n)); err != nil {
 		return err
 	}
-	l.inUse.Add(int64(n))
+	l.running.Add(int64(n))
 	if fn := l.onAcquire.Load(); fn != nil && *fn != nil {
 		(*fn)(time.Since(start).Nanoseconds(), n)
 	}
@@ -99,7 +99,7 @@ func (l *Limiter) ReleaseN(n int) {
 	if l.sem == nil {
 		return
 	}
-	l.inUse.Add(-int64(n))
+	l.running.Add(-int64(n))
 	l.sem.Release(int64(n))
 	if fn := l.onRelease.Load(); fn != nil && *fn != nil {
 		(*fn)(n)
@@ -130,8 +130,8 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 // LimiterStats is a point-in-time view of the concurrency pool.
 type LimiterStats struct {
 	Capacity int // total slots; 0 = unlimited
-	InUse    int // currently acquired slots
-	Waiting  int // slots currently blocked in Acquire/AcquireN
+	Running  int // currently acquired slots
+	Queued   int // slots currently blocked in Acquire/AcquireN
 }
 
 // Capacity returns the limiter's slot capacity. 0 means unlimited.
@@ -141,7 +141,7 @@ func (l *Limiter) Capacity() int { return l.cap }
 func (l *Limiter) Snapshot() LimiterStats {
 	return LimiterStats{
 		Capacity: l.cap,
-		InUse:    int(l.inUse.Load()),
-		Waiting:  int(l.waiting.Load()),
+		Running:  int(l.running.Load()),
+		Queued:   int(l.queued.Load()),
 	}
 }

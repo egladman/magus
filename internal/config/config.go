@@ -183,7 +183,7 @@ type MCP struct {
 	Address string `yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 }
 
-// Bridge controls the read-only browser web bridge.
+// Bridge controls the read-only console.
 // The bridge mounts three GET-only endpoints on the MCP HTTP server
 // (/api/v1/graph, /api/v1/status, /api/v1/events) so a browser running the
 // hosted Graph Explorer can read the current workspace. Loopback only; bearer
