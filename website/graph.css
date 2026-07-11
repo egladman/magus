@@ -555,7 +555,7 @@ main .display-help > summary:not([role]), main .display-help[open] > summary:not
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.1rem 0.5rem;
-  border-radius: 0.25rem;
+  border-radius: var(--pico-border-radius);
   background: var(--pico-primary-background, #0172ad);
   color: var(--pico-primary-inverse, #fff);
   line-height: 1.5;
@@ -578,7 +578,7 @@ main .display-help > summary:not([role]), main .display-help[open] > summary:not
   color: #fff;
   padding: 0.25rem 0.75rem;
   font-size: 0.8rem;
-  border-radius: 0.25rem;
+  border-radius: var(--pico-border-radius);
   margin-bottom: 0.25rem;
 }
 .live-remember-row {

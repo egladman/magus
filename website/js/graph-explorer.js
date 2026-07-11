@@ -25,7 +25,7 @@ import { select } from "d3-selection";
 // be copy-pasted into all three tool pages; they now live in one audited module.
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
 // graph explorer only uses these four primitives.)
-import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered } from "./lib/daemon";
+import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered, wantsDemo } from "./lib/daemon";
 
 // The node kinds the graph can emit. Each gets a stable legend color via a CSS
 // custom property (--gk-<kind>) defined for both themes in graph.css, so the
@@ -147,8 +147,11 @@ function hashParams() {
   const h = location.hash.replace(/^#/, "");
   const out = {};
   for (const part of h.split("&")) {
+    if (!part) continue;
     const eq = part.indexOf("=");
-    if (eq < 0) continue;
+    // Keep a bare token (no "=") with an empty value, matching lib/daemon's parseHash,
+    // so the shared `#demo` fragment (which has no "=") is detected by wantsDemo.
+    if (eq < 0) { out[part] = ""; continue; }
     out[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
   }
   return out;
@@ -194,7 +197,7 @@ async function loadGraph() {
   // A BARE /graph/ (no directive at all) is the cold visit that gets the empty state instead,
   // deferring the graph.json download until the visitor asks. Loading via a reload into boot
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
-  if (params.demo || params.view || params.q || params.node) {
+  if (wantsDemo(params) || params.view || params.q || params.node) {
     try {
       setStatus("Loading the magus demo graph...");
       const r = await fetch("./graph.json");
@@ -1433,13 +1436,14 @@ function syncLayoutToggle() {
   if (forceControls) forceControls.hidden = (layoutMode === "layered");
 }
 
-// loadDemoGraph reloads into the demo via #demo=1. The reload (rather than an in-place swap)
-// re-enters boot, whose pipeline renders the demo exactly like a real graph - default
-// projection, fit-to-view, wired interactions - so there is no partial/unframed render. The
-// demo graph.json is fetched by loadGraph ONLY when this flag is present (see there), so a
-// cold visit still pays no graph download; it also makes /graph/#demo=1 a shareable demo link.
+// loadDemoGraph reloads into the demo via the shared bare `#demo` fragment (the same one
+// the dashboard and log viewer use). The reload (rather than an in-place swap) re-enters
+// boot, whose pipeline renders the demo exactly like a real graph - default projection,
+// fit-to-view, wired interactions - so there is no partial/unframed render. The demo
+// graph.json is fetched by loadGraph ONLY when this flag is present (see there), so a cold
+// visit still pays no graph download; it also makes /graph/#demo a shareable demo link.
 function loadDemoGraph() {
-  location.hash = "demo=1";
+  location.hash = "demo";
   location.reload();
 }
 
